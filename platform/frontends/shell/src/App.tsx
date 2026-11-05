@@ -1,4 +1,4 @@
-import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxCounts, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import {
   Button,
   CentreMenu,
@@ -37,6 +37,11 @@ import {
   fromServer,
   AppSearch,
   HOME_CHANNEL,
+  InboxClient,
+  INBOX_MORE,
+  inboxNeeds,
+  itemOfNeed,
+  withInbox,
   cardsFor,
   choosePreview,
   chooseLive,
@@ -79,6 +84,7 @@ import {
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
+import { InboxView } from './inbox/InboxView.js';
 
 export interface HostProps {
   session: Session;
@@ -167,6 +173,12 @@ export function Host({
   const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
   const [agentsWhy, setAgentsWhy] = useState(false);
+  /** The Inbox (ADR 0026): whether its view is open, the counts in its label, and Home's first items on this floor. */
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxCounts, setInboxCounts] = useState<InboxCounts | undefined>(undefined);
+  const [inboxForHome, setInboxForHome] = useState<InboxItem[]>([]);
+  /** Bumped when the stream says an item changed, so the view's tab loads again. */
+  const [inboxVersion, setInboxVersion] = useState(0);
   const [switching, setSwitching] = useState(false);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
@@ -177,7 +189,7 @@ export function Host({
   /** Which floor the loaded catalogue is for. */
   const manifestFloor = useRef<string | undefined>(undefined);
   /** What Home can ask for: the same as pressing a row or an action in the stream. */
-  const homeAsks = useRef<{ open(id: string): void; act(id: string, index: number): void } | null>(null);
+  const homeAsks = useRef<{ open(id: string): void; act(id: string, index: number): void; openItem(id: string): void } | null>(null);
   const cards = useRef<SurfaceMounter | null>(null);
   /** Find over apps' content, asked a moment after the person stops typing. */
   const search = useMemo(
@@ -233,6 +245,13 @@ export function Host({
   const floorRef = useRef<Workspace>(floor ?? home);
   floorRef.current = floor ?? home;
   const floorId = (floor ?? home).id;
+  const inbox = useMemo(() => new InboxClient({ getToken: session.getToken, floor: () => floorRef.current.id, fetchImpl, baseUrl: eventsUrl }), [session, fetchImpl, eventsUrl]);
+  /** Loads the counts and the items Home lists; quietly keeps the last ones when the events service can't answer. */
+  const refreshInbox = useCallback(() => {
+    void inbox.counts().then(setInboxCounts, () => undefined);
+    void Promise.all([inbox.list('you'), inbox.list('teams')]).then(([you, teams]) => setInboxForHome([...you, ...teams]), () => undefined);
+  }, [inbox]);
+  useEffect(refreshInbox, [refreshInbox, floorId]);
   const manifest = catalogue?.floor === floorId ? catalogue.apps : null;
 
   /** Goes to a path on the current floor; `to` goes to another floor instead. */
@@ -374,6 +393,24 @@ export function Host({
       }
     },
     [manifest, navigate, tell],
+  );
+
+  /**
+   * Opens an inbox item as a notification's button would: raises its intent, or opens its app at its
+   * path. One on another floor opens there, its intent waiting for that floor's apps.
+   */
+  const openInboxItem = useCallback(
+    (item: InboxItem) => {
+      const intent: Intent | undefined = item.open ? { type: item.open.type, payload: item.open.payload ?? {} } : undefined;
+      const there = item.workspace ? session.floors.find((f) => f.id === item.workspace!.id) : undefined;
+      const app = manifest?.find((a) => a.id === item.app);
+      if (there && there.id !== floorRef.current.id) {
+        if (intent) raiseOnArrival.current = { floor: there.id, intent };
+        navigate('/', there);
+      } else if (intent) raise(intent).catch(() => undefined);
+      else if (app) navigate(hrefFor(app, item.path));
+    },
+    [session, manifest, navigate, raise],
   );
 
   // An action pressed on another floor's notification, raised now that its floor's apps are here.
@@ -653,12 +690,21 @@ export function Host({
     cards.current ??= new SurfaceMounter(importEntry);
     const send = () =>
       bus.emit<HomeState>(HOME_CHANNEL.state, {
-        needs: needsFor(shell.notifications, { muted: shell.muted, apps: manifest, floors: session.floors, here: here.id }),
+        // Open inbox items on this floor first (at most five, then a row for the rest), above the notifications that need you.
+        needs: [
+          ...inboxNeeds(inboxForHome, { manifest, here: here.id, total: inboxForHome.filter((i) => i.state === 'open' && !i.redacted && (i.workspace?.id ?? here.id) === here.id).length }),
+          ...needsFor(shell.notifications, { muted: shell.muted, apps: manifest, floors: session.floors, here: here.id }),
+        ],
         cards: cardsFor(manifest, here, shell.recent),
       });
     const offs = [
       bus.on(HOME_CHANNEL.ready, send),
-      bus.on<{ id: string }>(HOME_CHANNEL.open, ({ id }) => homeAsks.current?.open(id)),
+      bus.on<{ id: string }>(HOME_CHANNEL.open, ({ id }) => {
+        if (id === INBOX_MORE) return setInboxOpen(true);
+        const item = itemOfNeed(id);
+        if (item) return homeAsks.current?.openItem(item);
+        homeAsks.current?.open(id);
+      }),
       bus.on<{ id: string; index: number }>(HOME_CHANNEL.act, ({ id, index }) => homeAsks.current?.act(id, index)),
       bus.on<{ el: HTMLElement; app: string; done?: (shown: boolean) => void }>(HOME_CHANNEL.mountCard, ({ el, app, done }) => {
         const entry = manifest.find((a) => a.id === app);
@@ -673,7 +719,7 @@ export function Host({
       offs.forEach((off) => off());
       shell.removeEventListener('ui-notifications', send);
     };
-  }, [bus, manifest, floor, home, session, contextFor, importEntry]);
+  }, [bus, manifest, floor, home, session, contextFor, importEntry, inboxForHome]);
 
   // Domain events on this floor, for the apps here, each on the bus by its topic: apps' `refreshOn` hears them.
   const followed = manifest && floor ? topicsFor(manifest).join(',') : '';
@@ -707,11 +753,15 @@ export function Host({
         tell(fromServer(n));
       },
       onState: (state) => shell.setStream(state),
+      onInbox: () => {
+        refreshInbox();
+        setInboxVersion((v) => v + 1);
+      },
     });
     feed.current = f;
     f.start();
     return () => f.stop();
-  }, [session, fetchImpl, eventsUrl, tell]);
+  }, [session, fetchImpl, eventsUrl, tell, refreshInbox]);
 
   // Hand the Shell its data and listen to what it asks for.
   useEffect(() => {
@@ -721,10 +771,11 @@ export function Host({
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
-    shell.functions = previewApps.length || featureApps.some((a) => a.previews.some(choosable)) ? [...alphaFunctions, PREVIEWS_FUNCTION] : alphaFunctions;
+    const functions = withInbox(alphaFunctions, inboxCounts);
+    shell.functions = previewApps.length || featureApps.some((a) => a.previews.some(choosable)) ? [...functions, PREVIEWS_FUNCTION] : functions;
     shell.canSwitchWorkspace = false;
     shell.version = versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit());
-  }, [catalogue, session, floor, previewApps, featureApps]);
+  }, [catalogue, session, floor, previewApps, featureApps, inboxCounts]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
   useEffect(() => {
@@ -781,7 +832,12 @@ export function Host({
         navigate('/', there);
       } else raise(intent).catch(() => undefined);
     };
-    homeAsks.current = { open: openNotification, act: actOn };
+    // Opening an inbox item raises its intent, as a notification's button does, or opens its app at its path; one on another floor opens there.
+    const openItem = (id: string) => {
+      const item = inboxForHome.find((i) => i.id === id);
+      if (item) openInboxItem(item);
+    };
+    homeAsks.current = { open: openNotification, act: actOn, openItem };
     const onOpenNotification = (e: Event) => openNotification((e as CustomEvent<{ notification: { id: string } }>).detail.notification.id);
     const onAction = (e: Event) => {
       const { notification, index } = (e as CustomEvent<{ notification: { id: string }; index: number }>).detail;
@@ -802,6 +858,7 @@ export function Host({
       const { id } = (e as CustomEvent<{ id: string }>).detail;
       if (id === 'sign-out') void session.signOut();
       else if (id === 'previews') setPreviewsOpen(true);
+      else if (id === 'inbox') setInboxOpen(true);
       else if (id === AGENTS_UNAVAILABLE) setAgentsWhy(true);
     };
     const onSetting = (e: Event) => {
@@ -878,7 +935,7 @@ export function Host({
       shell.removeEventListener('ui-nav', onNav);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp]);
+  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, inboxForHome, openInboxItem]);
 
   // The open app is a pull request's preview: say so, with the way back.
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
@@ -950,6 +1007,25 @@ export function Host({
         cancelLabel="Cancel"
       >
         <div ref={setRequestStage} className="request-stage" />
+      </Dialog>
+      <Dialog open={inboxOpen} onClose={() => setInboxOpen(false)} size="read" heading="Inbox" summary="Work that waits on you and your teams." cancelLabel="Close">
+        {inboxOpen && manifest ? (
+          <InboxView
+            client={inbox}
+            manifest={manifest}
+            floors={session.floors}
+            here={floorId}
+            me={session.user.id}
+            counts={inboxCounts}
+            version={inboxVersion}
+            fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
+            onChanged={refreshInbox}
+            onOpen={(item) => {
+              setInboxOpen(false);
+              openInboxItem(item);
+            }}
+          />
+        ) : null}
       </Dialog>
       <Dialog
         open={agentsWhy}

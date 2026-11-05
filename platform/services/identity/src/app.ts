@@ -7,8 +7,9 @@ import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { mapFor } from './map.ts';
-import { peopleRoutes, principalsOf } from './people.ts';
-import { Caller, choice, Floor, IdParams, PersonMap, Preferences, ref, refused } from './schemas.ts';
+import { meRoutes, type AccountSource } from './me.ts';
+import { DirectoryAnswer, DirectoryQuery, findInDirectory, peopleRoutes, principalsOf, signedInPeople } from './people.ts';
+import { Caller, choice, Floor, IdParams, PersonMap, ref, refused } from './schemas.ts';
 import { MemoryPreferenceStore, type PreferenceStore } from './store.ts';
 import { TeamDirectory } from './teams.ts';
 import { floorsFor, MemoryWorkspaceStore, rollupFor, type WorkspaceStore } from './workspaces.ts';
@@ -26,6 +27,8 @@ export interface IdentityOptions {
   workspaces?: WorkspaceStore;
   /** Where people are kept, and where departments were before they became teams. Without it the admin API answers 503. */
   directory?: Directory;
+  /** Where each person's own account is read and changed (me.ts). Without it the account answers 503. */
+  accounts?: AccountSource;
   /** Where apps' own sign-ins are made. Without it issuing one answers 503. */
   appClients?: AppClients;
   /** Where admins' changes are recorded, with the floor they're about. Without it nothing is audited. */
@@ -49,7 +52,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, appClients, audit, verifyService, callers, grants }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -172,35 +175,8 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
         async (req) => callerFromHeaders(req.headers)!,
       );
 
-      app.get(
-        '/me/preferences',
-        {
-          schema: {
-            summary: 'What the caller has chosen for the shell',
-            response: { 200: { ...ref(Preferences), description: 'Their preferences; empty when they have chosen nothing' }, 401: unauthenticated },
-          },
-        },
-        async (req) => store.get(callerFromHeaders(req.headers)!.id),
-      );
-
-      app.put(
-        '/me/preferences',
-        {
-          schema: {
-            summary: "Replace the caller's preferences",
-            body: ref(Preferences),
-            response: {
-              200: { ...ref(Preferences), description: 'Saved, as sent' },
-              400: refused("A field it doesn't know, or a value out of range"),
-              401: unauthenticated,
-            },
-          },
-        },
-        async (req) => {
-          await store.put(callerFromHeaders(req.headers)!.id, req.body);
-          return req.body;
-        },
-      );
+      // Preferences and the caller's account: me.ts.
+      await app.register(meRoutes({ store, accounts }));
 
       // Every floor the caller can stand on; their own is made the first time they ask.
       app.get(
@@ -226,14 +202,8 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       );
 
       // The caller's map of the org, for Auspex: their floors with who's there and why they can come in, and every other team as a closed door.
-      let names: { list: { id: string; name: string }[]; at: number } | undefined;
-      const everyone = async () => {
-        if (!teams) return [];
-        if (names && Date.now() - names.at < 30_000) return names.list;
-        const list = (await teams.people()).filter((p) => p.enabled).map((p) => ({ id: p.id, name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.username }));
-        names = { list, at: Date.now() };
-        return list;
-      };
+      const signedIn = signedInPeople(teams);
+      const everyone = async () => (await signedIn()).map((p) => ({ id: p.id, name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.username }));
       app.get(
         '/me/map',
         {
@@ -263,6 +233,32 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
             people: folks.length ? folks.map((p) => p.id) : [caller.id],
             principals: principalsOf(caller.id, all, mine),
           });
+        },
+      );
+
+      // People and teams by name, for the person choosing who to share with or mention (the SDK's searchPrincipals).
+      app.get(
+        '/me/directory',
+        {
+          schema: {
+            summary: 'Find people and teams to share with',
+            description: [
+              'What the people picker asks as someone types (searchPrincipals in the SDK,',
+              'since 1.15): people whose name, email or username has `q` in it, and',
+              'every team whose name does, each sorted by name, first `limit` of each.',
+              'With `ids` instead, the people and teams with those ids, to name who',
+              "something is shared with. Teams the caller isn't on are found too, as on",
+              'their map: a team names only itself and where it sits. People whose',
+              "sign-in is turned off aren't listed.",
+            ].join(' '),
+            querystring: DirectoryQuery,
+            response: { 200: DirectoryAnswer, 400: refused('A query it does not know, or a value out of range'), 401: unauthenticated },
+          },
+        },
+        async (req) => {
+          await teams?.ready();
+          const [all, folks] = await Promise.all([workspaces.teams(), signedIn()]);
+          return findInDirectory(folks, all, req.query);
         },
       );
 

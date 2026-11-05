@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.8.0
+  version: 1.9.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -301,7 +301,907 @@ components:
         workspace:
           $ref: "#/components/schemas/EventFloor"
         payload: {}
+    InboxRef:
+      type: object
+      required:
+        - kind
+        - id
+      properties:
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: '"ref", or a DocumentRef, EntityRef or UnitRef kind'
+        app:
+          type: string
+          maxLength: 40
+        id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        label:
+          type: string
+          maxLength: 200
+      additionalProperties: true
+      maxProperties: 12
+      description: A reference back to the thing in the app (the SDK's Ref and its kin), carried as found
+    InboxOwner:
+      type: object
+      required:
+        - kind
+        - id
+      properties:
+        kind:
+          enum:
+            - person
+            - team
+        id:
+          type: string
+          minLength: 1
+          maxLength: 100
+        role:
+          enum:
+            - lead
+          description: "For a team item: only the team's leads take it"
+      additionalProperties: false
+      description: Who an item waits on
+    NewInboxItem:
+      type: object
+      required:
+        - kind
+        - owner
+        - title
+        - subject
+      properties:
+        kind:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,39}$
+          description: One of the kinds the app's manifest declares (inbox.kinds)
+        owner:
+          $ref: "#/components/schemas/InboxOwner"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        detail:
+          type: string
+          maxLength: 1000
+        subject:
+          $ref: "#/components/schemas/InboxRef"
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxRef"
+          maxItems: 5
+        open:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9.-]*$
+              maxLength: 80
+              description: An intent type some app handles
+            payload:
+              description: The app's own; at most 1024 bytes as JSON
+          additionalProperties: false
+        path:
+          type: string
+          pattern: ^/
+          maxLength: 500
+          description: Where in the app Open goes when there is no intent
+        due:
+          type: string
+          maxLength: 40
+          pattern: ^\d{4}-\d{2}-\d{2}([T ][0-9:.]+(Z|[+-]\d{2}:?\d{2})?)?$
+          description: An ISO date, or date and time
+        allow:
+          type: object
+          properties:
+            decline:
+              type: boolean
+              default: true
+            handOn:
+              type: boolean
+              default: true
+            selfComplete:
+              type: boolean
+              default: false
+              description: Whether the person may mark it done in the shell
+          additionalProperties: false
+        from:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The person on whose behalf the app made it
+        reopen:
+          type: boolean
+          description: Opens a closed item again
+      additionalProperties: false
+    InboxChange:
+      type: object
+      properties:
+        state:
+          enum:
+            - done
+            - withdrawn
+          description: "Closes it: the work was done, or the app took it back"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        detail:
+          type: string
+          maxLength: 1000
+        due:
+          type: string
+          maxLength: 40
+          pattern: ^\d{4}-\d{2}-\d{2}([T ][0-9:.]+(Z|[+-]\d{2}:?\d{2})?)?$
+          description: An ISO date, or date and time
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxRef"
+          maxItems: 5
+        note:
+          type: string
+          maxLength: 500
+          description: Why, kept in the item's history
+      additionalProperties: false
+    InboxItem:
+      type: object
+      required:
+        - id
+        - app
+        - key
+        - kind
+        - owner
+        - state
+        - allow
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        app:
+          type: string
+        key:
+          type: string
+        kind:
+          type: string
+        owner:
+          $ref: "#/components/schemas/InboxOwner"
+        takenBy:
+          type: string
+        takenAt:
+          type: string
+          format: date-time
+        state:
+          enum:
+            - open
+            - done
+            - declined
+            - handed-on
+            - withdrawn
+          description: "handed-on is never set: handing on changes the owner and keeps it open"
+        title:
+          type: string
+          description: Left out of a leads-only item shown to a member
+        detail:
+          type: string
+        subject:
+          $ref: "#/components/schemas/InboxRef"
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxRef"
+        open:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9.-]*$
+              maxLength: 80
+              description: An intent type some app handles
+            payload:
+              description: The app's own; at most 1024 bytes as JSON
+          additionalProperties: false
+        path:
+          type: string
+        due:
+          type: string
+          format: date-time
+        overdue:
+          type: boolean
+        allow:
+          type: object
+          required:
+            - decline
+            - handOn
+            - selfComplete
+          properties:
+            decline:
+              type: boolean
+            handOn:
+              type: boolean
+            selfComplete:
+              type: boolean
+        from:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+        closedBy:
+          type: string
+        closeNote:
+          type: string
+        workspace:
+          $ref: "#/components/schemas/EventFloor"
+        redacted:
+          type: boolean
+          description: "A leads-only item shown to a member: that it's there, not what it is"
+    InboxHistory:
+      type: object
+      required:
+        - at
+        - action
+      properties:
+        at:
+          type: string
+          format: date-time
+        by:
+          type: string
+          description: A person's id; none when the app did it
+        action:
+          enum:
+            - created
+            - updated
+            - taken
+            - released
+            - declined
+            - handed-on
+            - done
+            - withdrawn
+            - reopened
+        from:
+          type: string
+          description: person:<id> or team:<id>
+        to:
+          type: string
+        note:
+          type: string
+    InboxCounts:
+      type: object
+      required:
+        - you
+        - teams
+        - overdue
+      properties:
+        you:
+          type: integer
+          description: Open items on the person, or taken by them
+        teams:
+          type: integer
+          description: Untaken items of the person's teams they could take
+        overdue:
+          type: integer
+          description: Of `you`, those past due
 paths:
+  /inbox/items/{app}/{key}:
+    put:
+      summary: Put an item in someone's inbox, or change it (services only, inbox:write)
+      description: "Keyed by the app's own id for the work: putting the same key again changes the one item. The item is on the call's floor (x-workspace-id), where the grant is checked. The owner is a person who can sign in, or a team that is not archived. A closed item is reopened only with reopen. No notification is sent: the Inbox count and Home show it (ADR 0026)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewInboxItem"
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: app
+          required: true
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          in: path
+          name: key
+          required: true
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid item, a kind the manifest does not declare, an unknown owner or floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a signed-in service, not this app's item, or no inbox:write on that floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The item is closed; send reopen to open it again
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or people can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    patch:
+      summary: Change an item the app made, or close it as done or withdrawn (services only, inbox:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxChange"
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: app
+          required: true
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          in: path
+          name: key
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "403":
+          description: Not a signed-in service, not this app's item, or no inbox:write on that floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or people can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    get:
+      summary: An item the app made, with its history and notes (services only, inbox:write)
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: app
+          required: true
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          in: path
+          name: key
+          required: true
+      responses:
+        "200":
+          description: The item and every change to it
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/InboxItem"
+                  - type: object
+                    required:
+                      - history
+                    properties:
+                      history:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InboxHistory"
+                description: The item and every change to it
+        "403":
+          description: Not a signed-in service, not this app's item, or no inbox:write on that floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or people can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox:
+    get:
+      summary: "The caller's inbox: one tab, newest first"
+      description: "you: open items on the caller, or team items they took. teams: untaken items of the teams they're on; a leads-only item is shown whole to a lead standing on that team (x-workspace-id) and redacted to anyone else on it. done: items closed in the last 30 days that the caller owned or acted on. To page, pass the last id shown as before."
+      parameters:
+        - schema:
+            enum:
+              - you
+              - teams
+              - done
+            default: you
+          in: query
+          name: tab
+          required: false
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: floor
+          required: false
+          description: Only items on this floor
+        - schema:
+            type: string
+            maxLength: 40
+          in: query
+          name: before
+          required: false
+          description: The last item's id already shown
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: Items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InboxItem"
+                description: Items
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's teams can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/counts:
+    get:
+      summary: How many items wait on the caller and on their teams, for the shell's count
+      responses:
+        "200":
+          description: Counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxCounts"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's teams can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}:
+    get:
+      summary: One item the caller can see, with its history
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item and every change to it
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/InboxItem"
+                  - type: object
+                    required:
+                      - history
+                    properties:
+                      history:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InboxHistory"
+                description: The item and every change to it
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/take:
+    post:
+      summary: "Take a team item: it becomes the caller’s, shown to the team as taken"
+      description: Publishes platform.inbox.taken with { item, app, key, by } and records inbox.taken in the audit log.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed, or someone took it first (takenBy names who)
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/release:
+    post:
+      summary: Give a taken item back to its team
+      description: Publishes platform.inbox.released with { item, app, key, by } and records inbox.released in the audit log.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/decline:
+    post:
+      summary: Decline an item, saying why
+      description: Publishes platform.inbox.declined with { item, app, key, by } and records inbox.declined in the audit log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - note
+              properties:
+                note:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                  description: "Why: the app and the sender need to know"
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/hand-on:
+    post:
+      summary: Hand an item on to another person or team
+      description: Publishes platform.inbox.handed-on with { item, app, key, by, to } and records inbox.handed-on in the audit log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - to
+              properties:
+                to:
+                  type: string
+                  pattern: ^(person|team):[A-Za-z0-9_.:-]{1,100}$
+                  description: person:<id> or team:<id>
+                note:
+                  type: string
+                  maxLength: 500
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: An unknown person or team, or the owner it already has
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/done:
+    post:
+      summary: Mark an item done, where the app lets people do that
+      description: Publishes platform.inbox.done with { item, app, key, by } and records inbox.done in the audit log.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /notifications:
     post:
       summary: Notify people (services only)
@@ -456,7 +1356,7 @@ paths:
   /notifications/stream:
     get:
       summary: Each new notification for the caller, as server-sent events
-      description: Events are named "notification" and carry a Notification as JSON. Comment lines are sent as keep-alives. Read with fetch so the sign-in token can be sent; reload the list after reconnecting.
+      description: 'Events are named "notification" and carry a Notification as JSON. Events named "inbox" carry { id, change } (added, changed or closed) when an inbox item the caller can see changes: reload the counts, and the list if it is showing. Comment lines are sent as keep-alives. Read with fetch so the sign-in token can be sent; reload the list after reconnecting.'
       responses:
         "200":
           description: An open event stream

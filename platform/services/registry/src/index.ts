@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, floorPlaces, loadConfigOrExit, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorPlaces, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
 import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
@@ -39,6 +39,7 @@ loadConfigOrExit('registry', [
   { name: 'PILLAR_APPS', about: 'the apps that ship with AUGUR, which register themselves.' },
   { name: 'FRONTENDS_BUCKET_SECRET', about: 'the registry’s key to the bucket apps’ frontends are kept in by version.', secret: true },
   { name: 'FRONTENDS_S3_URL', about: 'where that bucket is.' },
+  { name: 'ALERT_WEBHOOK_TOKEN', about: 'what the deployment’s Grafana sends with its alerts, so they reach deployment admins as notices (ADR 0059).', secret: true },
 ]);
 
 const port = Number(process.env.PORT ?? 8082);
@@ -93,7 +94,7 @@ if (!knownTimeZone(timeZone)) throw new Error(`DEPLOYMENT_TIME_ZONE is a time zo
 const portalUrl = process.env.PORTAL_URL?.replace(/\/+$/, '') || undefined;
 if (portalUrl && !/^https?:\/\//.test(portalUrl)) throw new Error('PORTAL_URL is an http(s) address.');
 updates.start();
-// What this deployment runs, signed and sent to Backstage after each change and once a day (ADR 0019).
+// What this deployment runs, signed and sent to Backstage after each change and every 15 minutes (ADRs 0019, 0059).
 const reporting = reportingFrom(process.env);
 
 // Live on the workbench loads apps only from machines on the workbench's own tailnet, the one in PLATFORM_URL.
@@ -112,7 +113,7 @@ if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fr
 
 // Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
 // this deployment ships with, which register themselves like any other.
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, reporting, tailnet, timeZone });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
 await app.listen({ port, host: '0.0.0.0' });
 
 // Deployment admins hear when a release is available and how each update ended, in the shell (ADR 0044).

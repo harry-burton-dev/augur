@@ -15,6 +15,23 @@ export interface Preferences {
   recent?: string[];
   /** App ids whose notifications land in the stream silently and never on Home. */
   muted?: string[];
+  /** What their away status says, and when it ends (ISO date-time); away ends then by itself. */
+  awayMessage?: string;
+  awayUntil?: string;
+  /** Their time zone (IANA, such as Europe/London); without it, the organisation's, then the browser's. */
+  timeZone?: string;
+  /** How AUGUR reaches them beyond the shell. */
+  notifications?: NotificationChoices;
+}
+
+/** How a person wants to hear about things (ADR 0036, Notifications). */
+export interface NotificationChoices {
+  /** An email for each thing that needs them; on unless false. */
+  email?: boolean;
+  /** One email gathering the rest; none unless chosen. */
+  digest?: 'off' | 'daily' | 'weekly';
+  /** Hours (HH:MM, their time zone) when nothing is said out loud: no toast, no email. */
+  quietHours?: { from: string; to: string };
 }
 
 /** Where each person's preferences are kept. */

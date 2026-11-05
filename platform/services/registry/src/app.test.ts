@@ -415,11 +415,22 @@ describe('registry', () => {
       expect(res.statusCode).toBe(201);
     });
 
+    it('takes the inbox kinds an app declares, refuses a kind twice, and tells platform services which', async () => {
+      const app = await buildApp({ verifyService, floors });
+      const put = (inbox: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['inbox:write'], inbox } });
+      expect((await put({ kinds: [] })).statusCode).toBe(400);
+      expect((await put({ kinds: [{ id: 'Review', label: 'To review' }] })).statusCode).toBe(400);
+      expect((await put({ kinds: [{ id: 'review', label: 'To review' }, { id: 'review', label: 'Again' }] })).json().message).toContain('"review" twice');
+      expect((await put({ kinds: [{ id: 'review', label: 'To review', icon: 'document' }] })).statusCode).toBe(201);
+      const grants = await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers: as('platform-events') });
+      expect(grants.json().inboxKinds).toEqual(['review']);
+    });
+
     it('tells platform services what an app is granted, and nothing once it is off', async () => {
       const app = await buildApp({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
       const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers });
-      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w1', scopes: ['notifications:send'] });
+      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w1', scopes: ['notifications:send'], inboxKinds: [] });
       expect((await grants(as('app-library'))).statusCode).toBe(403);
       expect((await grants(admin)).statusCode).toBe(403);
       await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } });
@@ -636,7 +647,7 @@ describe('registry', () => {
     it('checks a call that names no floor on the organisation’s', async () => {
       const { app, set } = await setup({ ...library, scopes: ['notifications:send'] });
       const unnamed = async () => (await app.inject({ method: 'GET', url: '/v1/apps/library/grants', headers: as('platform-events') })).json();
-      expect(await unnamed()).toEqual({ app: 'library', workspace: 'o', scopes: ['notifications:send'] });
+      expect(await unnamed()).toEqual({ app: 'library', workspace: 'o', scopes: ['notifications:send'], inboxKinds: [] });
       // Off for the organisation but on for one team: naming no floor no longer gets it through.
       await set('o', 'off');
       await set('f', 'on');

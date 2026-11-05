@@ -33,7 +33,7 @@ Fill in `infra/deploy/.env`:
 - `PLATFORM_VERSION`: the same release, without `augur@`, for example `0.1.1`.
 - `PLATFORM_URL`: `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`.
 - `TS_AUTHKEY`: the key from the admin console.
-- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `FOLIO_CLIENT_SECRET`, `FOLIO_DATABASE_PASSWORD`, `FOLIO_BUCKET_SECRET`, `AUSPEX_CLIENT_SECRET`, `ATLAS_CLIENT_SECRET`, `ATLAS_DATABASE_PASSWORD`: long random strings, each different. Compose refuses to start without them. `openssl rand -hex 32` makes one. The `FOLIO_` ones are for Artifacts (Folio in code), the document libraries every deployment ships with; `AUSPEX_` is Explorer's and `ATLAS_` Data Atlas's. `ATLAS_BUCKET_SECRET` is one more, though optional: without it the storage job works it out from `APP_SECRETS_KEY`.
+- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `FOLIO_CLIENT_SECRET`, `FOLIO_DATABASE_PASSWORD`, `FOLIO_BUCKET_SECRET`, `AUSPEX_CLIENT_SECRET`, `ATLAS_CLIENT_SECRET`, `ATLAS_DATABASE_PASSWORD`, `MANDATE_CLIENT_SECRET`, `MANDATE_DATABASE_PASSWORD`: long random strings, each different. Compose refuses to start without them. `openssl rand -hex 32` makes one. The `FOLIO_` ones are for Artifacts (Folio in code), the document libraries every deployment ships with; `AUSPEX_` is Explorer's, `ATLAS_` Data Atlas's and `MANDATE_` Mandate's. `ATLAS_BUCKET_SECRET` and `MANDATE_BUCKET_SECRET` are two more, though optional: without it the storage job works it out from `APP_SECRETS_KEY`.
 - **Database logins**: `POSTGRES_PASSWORD` is Postgres's admin login, used only by the storage job and backups. Each platform service (identity, registry, events, models) and Keycloak connects with its own login, which owns only its own schema (Keycloak: its own database) and can't read anyone else's. The storage job makes them from the `*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins, so changing one in `.env` and running `pc up -d` changes it.
 - `PLATFORM_ADMIN_USER`, `PLATFORM_ADMIN_PASSWORD`, `PLATFORM_ADMIN_EMAIL`, `PLATFORM_ADMIN_FIRST_NAME`, `PLATFORM_ADMIN_LAST_NAME` and `PLATFORM_ADMIN_DEPARTMENT` (`Platform` unless you change it): you. This is the first person who can sign in, as an admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one.
 - `ORG_NAME`, optional: what the organisation's own floor is called (`Organisation` unless you set it).
@@ -164,7 +164,7 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 
 ### Logs, memory and health
 
-- **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES` in `.env`), so they can't fill the disk. `pc logs` reads them as before. For anything longer, turn on the observability profile ([Traces, metrics and logs](#traces-metrics-and-logs)).
+- **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES` in `.env`), so they can't fill the disk. `pc logs` reads them as before. For anything longer, look in the deployment's Grafana, which keeps 72 hours ([Traces, metrics and logs](#traces-metrics-and-logs)).
 - **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its Java heap from it), Artifacts' rendition worker (`FOLIO_WORKER_MEM_LIMIT`, 4g; reading a large upload is what needs it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g). A container that goes over is stopped and started again by Docker, and `pc ps` shows it restarting. Raise the limit in `.env` and `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
 - **Health**: every AUGUR service, the front door, Postgres, Keycloak and Garage have a healthcheck, and `pc ps` shows each as `healthy`. Keycloak's is its own readiness check on its management port, which isn't reachable from outside the container. The front door, identity and the realm job wait for Keycloak to be healthy, and the storage job for Garage. Keycloak's first start after an upgrade can take a few minutes while it migrates its database; Compose waits up to five.
 
@@ -210,7 +210,7 @@ The policy reaches the machine within a minute, with no restart. `public.sh on` 
 
 ## Traces, metrics and logs
 
-Each service can send OpenTelemetry to a collector: the `observability` profile's Grafana stack on the server, or your organisation's own. It's off until `OTEL_EXPORTER_OTLP_ENDPOINT` is set. See [observability.md](observability.md).
+Each service sends OpenTelemetry to the deployment's own Grafana stack (otel-lgtm), which also runs AUGUR's alert rules, or to your organisation's collector. Set `GRAFANA_ADMIN_PASSWORD` and `ALERT_WEBHOOK_TOKEN` in `.env`. See [observability.md](observability.md).
 
 ## Sample data
 

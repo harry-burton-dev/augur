@@ -123,7 +123,7 @@ Admin → **Upgrade Centre** (it replaced Updates) shows it as **The line**: eac
 
 An app can ship a feature before it's everyone's, on any server, production included: it lists it in its manifest's `previews` (SDK 1.7), with an `id`, a `name`, a sentence of `detail` and, if you like, its last day, `until`. The app asks `ctx.previewOn('<id>')` and works as before when the answer is no; its service can ask the registry the same for a person (`GET /v1/apps/<id>/feature-previews/people/<person>`).
 
-Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feature previews**: **Off**, **For those who turn it on**, or **On for everyone**. Until an admin chooses, a preview server makes it opt-in and a production server keeps it off. People turn the opt-in ones on for themselves in the shell's **Previews** (in the band), which mounts the app again with it; while one is on, the app says **Preview on** above it, with the way back. After its `until` day a preview is off for everyone, and Admin says the app should drop it or make it everyone's. Each choice an admin makes is in Activity as `app.preview-set`.
+Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feature previews**: **Off**, **For those who turn it on**, **On for everyone**, or **On for chosen floors**. Chosen floors try a feature on one team (or a few) first, without a release: it's on there and on every floor beneath them, personal floors included when the org is chosen, and off everywhere else. Nobody turns a floor preview on or off for themselves; the shell's **Previews** says it's on for some floors only. The app still just asks `ctx.previewOn('<id>')`: the shell's catalogue for the floor someone stands on already says. Its service passes the floor too (`?workspace=<floor>` on the call above); without it, floor previews count as off. Until an admin chooses, a preview server makes it opt-in and a production server keeps it off. People turn the opt-in ones on for themselves in the shell's **Previews** (in the band), which mounts the app again with it; while one is on, the app says **Preview on** above it, with the way back. After its `until` day a preview is off for everyone, and Admin says the app should drop it or make it everyone's. Each choice an admin makes is in Activity as `app.preview-set`.
 
 ## The live dev loop
 
@@ -148,7 +148,7 @@ For the kits on their own: the React kits' Storybook is in the `augur-kit` repos
 
 ## What's left to build
 
-Signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, and the pipeline feed still calls its stages branches, so servers on older releases keep reading the feeds.
+Signed promotion records, and clearing old dev builds' images from the registry. Feature previews move onto OpenFeature and flagd in the beta (ADR 0021, amended); apps' calls stay the same. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, and the pipeline feed still calls its stages branches, so servers on older releases keep reading the feeds.
 
 ## Once, in GitHub (the repository's owner)
 

@@ -13,6 +13,7 @@ import {
   identifyService,
   packageVersion,
   recordAudit,
+  ruleChain,
   SCOPES,
   ServiceAuthUnavailable,
   problemDetails,
@@ -51,6 +52,7 @@ import { AfterWatch, PlatformUpdates, strings, Upgrade as UpgradeSchema, Upgrade
 import { AUGUR_UNIT, resolvedState } from './desired-state.ts';
 import { overviewBuilder, overviewRoutes } from './overview.ts';
 import { reportRoutes, ReportSender, type Reporting } from './report.ts';
+import { alertRoutes, type AlertRouteOptions } from './alerts.ts';
 import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
@@ -138,6 +140,8 @@ export interface RegistryOptions {
   reportFetch?: typeof fetch;
   /** The workbench's own tailnet, from PLATFORM_URL: Live on the workbench loads only from machines on it. */
   tailnet?: string;
+  /** Grafana's alerts as notices (ADR 0059): its token, and how a notice is sent. Refused without a token. */
+  alerts?: AlertRouteOptions;
   /** The deployment's time zone (DEPLOYMENT_TIME_ZONE), which upgrade windows are in unless a unit names its own. */
   timeZone?: string;
   now?: () => Date;
@@ -226,6 +230,7 @@ export const buildApp = async ({
   reporting = { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).' },
   reportFetch,
   tailnet,
+  alerts = {},
   timeZone = 'UTC',
   now = () => new Date(),
 }: RegistryOptions = {}) => {
@@ -315,7 +320,7 @@ export const buildApp = async ({
             // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code:
             // for a developer trying one of its pull requests, that build's. And the feature previews on for this person (SDK 1.7).
             .map((r) => {
-              const on = previewsOnFor(r, optIns, updates.ring, at);
+              const on = previewsOnFor(r, optIns, updates.ring, at, place ? ruleChain(place) : []);
               const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
@@ -607,13 +612,19 @@ export const buildApp = async ({
               'for that an admin has granted, on floors where it is on (see',
               "/manifest); nothing where it is off, on a floor that doesn't exist, or",
               "anywhere while it is turned off. Without a workspace, on the organisation's",
-              'floor, as the gateway checks a call that names none (ADR 0007).',
+              'floor, as the gateway checks a call that names none (ADR 0007). With them, the',
+              'inbox kinds its manifest declares, which the events service checks items against.',
             ].join(' '),
             params: params('id'),
             querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor the call is for' })) }),
             response: {
               200: Type.Object(
-                { app: Type.String(), workspace: Type.Optional(Type.String()), scopes: Type.Array(ref(ScopeSchema)) },
+                {
+                  app: Type.String(),
+                  workspace: Type.Optional(Type.String()),
+                  scopes: Type.Array(ref(ScopeSchema)),
+                  inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
+                },
                 { description: "The app's grants" },
               ),
               403: refused('Not a platform service'),
@@ -638,7 +649,7 @@ export const buildApp = async ({
             return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now.' });
           }
           const on = place ? floorState(found, place, await store.rules(found.entry.id)).on : false;
-          return { app: found.entry.id, workspace: workspace ?? place?.id, scopes: on ? usableScopes(found) : [] };
+          return { app: found.entry.id, workspace: workspace ?? place?.id, scopes: on ? usableScopes(found) : [], inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id) };
         },
       );
 
@@ -646,7 +657,19 @@ export const buildApp = async ({
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
-      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
+      /** A floor's rule chain for feature previews targeted at floors: undefined for no such floor, null when floors can't be looked up. */
+      const chainOf = floors
+        ? async (workspace: string) => {
+            try {
+              const place = await floors(workspace);
+              return place && ruleChain(place);
+            } catch (err) {
+              if (!(err instanceof FloorsUnavailable)) throw err;
+              return null;
+            }
+          }
+        : undefined;
+      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
       await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
@@ -655,6 +678,8 @@ export const buildApp = async ({
       await app.register(reportRoutes({ reporting, store, sender, overview, now }));
       sender.start();
       app.addHook('onClose', async () => sender.stop());
+      // Grafana's alerts, told to deployment admins (ADR 0059).
+      await app.register(alertRoutes(alerts));
 
       app.put(
         '/apps/:id',

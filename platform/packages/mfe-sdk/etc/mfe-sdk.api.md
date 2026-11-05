@@ -33,6 +33,9 @@ export interface AppManifestEntry {
     icon?: string;
     // (undocumented)
     id: string;
+    inbox?: {
+        kinds: InboxKind[];
+    };
     maxUpload?: number;
     menu?: AppMenuCategory[];
     // (undocumented)
@@ -83,6 +86,27 @@ export const createEventBus: () => EventBus;
 
 // @public
 export const defineMicroFrontend: (mfe: MicroFrontend) => MicroFrontend;
+
+// @public
+export const DIRECTORY_PATH = "/api/identity/v1/me/directory";
+
+// @public
+export interface DirectoryPrincipal {
+    detail?: string;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    kind: 'person' | 'team';
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export class DirectoryUnavailable extends Error {
+    constructor(message: string, status: number);
+    // (undocumented)
+    readonly status: number;
+}
 
 // @public
 export const DOCUMENT_OPEN = "document.open";
@@ -177,6 +201,111 @@ export interface Focus {
     label: string;
     ref: Ref;
 }
+
+// @public
+export const INBOX_TOPICS: {
+    readonly taken: "platform.inbox.taken";
+    readonly released: "platform.inbox.released";
+    readonly declined: "platform.inbox.declined";
+    readonly handedOn: "platform.inbox.handed-on";
+    readonly done: "platform.inbox.done";
+};
+
+// @public
+export interface InboxChange {
+    // (undocumented)
+    change: 'added' | 'changed' | 'closed';
+    // (undocumented)
+    id: string;
+}
+
+// @public
+export interface InboxCounts {
+    // (undocumented)
+    overdue: number;
+    // (undocumented)
+    teams: number;
+    // (undocumented)
+    you: number;
+}
+
+// @public
+export interface InboxItem {
+    // (undocumented)
+    allow: {
+        decline: boolean;
+        handOn: boolean;
+        selfComplete: boolean;
+    };
+    // (undocumented)
+    app: string;
+    // (undocumented)
+    closedAt?: string;
+    // (undocumented)
+    closedBy?: string;
+    // (undocumented)
+    closeNote?: string;
+    // (undocumented)
+    createdAt: string;
+    // (undocumented)
+    detail?: string;
+    // (undocumented)
+    due?: string;
+    from?: string;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    key: string;
+    kind: string;
+    open?: {
+        type: string;
+        payload?: unknown;
+    };
+    // (undocumented)
+    overdue?: boolean;
+    // (undocumented)
+    owner: InboxOwner;
+    // (undocumented)
+    path?: string;
+    redacted?: boolean;
+    // (undocumented)
+    refs?: (Ref | DocumentRef | EntityRef | UnitRef)[];
+    // (undocumented)
+    state: InboxState;
+    // (undocumented)
+    subject?: Ref | DocumentRef | EntityRef | UnitRef;
+    // (undocumented)
+    takenAt?: string;
+    takenBy?: string;
+    title?: string;
+    // (undocumented)
+    updatedAt: string;
+    // (undocumented)
+    workspace?: {
+        id: string;
+        path: string[];
+    };
+}
+
+// @public
+export interface InboxKind {
+    icon?: string;
+    id: string;
+    label: string;
+}
+
+// @public
+export interface InboxOwner {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    kind: 'person' | 'team';
+    // (undocumented)
+    role?: 'lead';
+}
+
+// @public
+export type InboxState = 'open' | 'done' | 'declined' | 'handed-on' | 'withdrawn';
 
 // @public
 export interface Intent<T = unknown> {
@@ -285,6 +414,9 @@ export interface MountContext {
 }
 
 // @public
+export const namePrincipals: (ctx: Pick<MountContext, "fetch">, refs: readonly Pick<DirectoryPrincipal, "kind" | "id">[]) => Promise<DirectoryPrincipal[]>;
+
+// @public
 export interface NotificationAction {
     // (undocumented)
     intent: Intent;
@@ -319,6 +451,12 @@ export const pickDocument: (ctx: Pick<MountContext, "request">, pick?: DocumentP
 // @public
 export const pickEntities: (ctx: Pick<MountContext, "request">, pick?: EntityPick) => Promise<EntityRef[]>;
 
+// @public (undocumented)
+export interface PrincipalSearch {
+    kinds?: 'people' | 'teams' | 'both';
+    limit?: number;
+}
+
 // @public
 export interface ProposalReceipt {
     proposal: string;
@@ -350,6 +488,9 @@ export interface SearchAnswer {
     // (undocumented)
     results: SearchResult[];
 }
+
+// @public
+export const searchPrincipals: (ctx: Pick<MountContext, "fetch">, query: string, search?: PrincipalSearch) => Promise<DirectoryPrincipal[]>;
 
 // @public (undocumented)
 export interface SearchResult {
