@@ -83,6 +83,22 @@ To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml -
 - **An app whose code lives on another site** (its manifest's `entry` is a full address such as `https://apps.example.org/maps/entry.js`, not a path like `/apps/maps/entry.js`) needs that site allowed in two places. In Admin, **Apps**, **Where apps load from**, add `https://apps.example.org`: until then the registry refuses to register the app. And add it to `APP_ORIGINS` in `.env` (space separated), then `pc up -d web`, so the browser will run its code. The site must serve the entry with a CORS header such as `Access-Control-Allow-Origin: PLATFORM_URL`. Removing a site in Admin stops offering its apps straight away; they show as **Blocked** in Apps until it's allowed again.
 - **Stop**: `pc down`. Data stays in the `pgdata`, `garage-meta` and `garage-data` volumes; `pc down -v` deletes them.
 
+## Email
+
+AUGUR sends email through the organisation's own SMTP relay ([ADR 0035](decisions/0035-email-through-the-organisations-relay.md)). Without one, AUGUR still works: nobody can reset a forgotten password or have their address checked, so an admin passes on one-time passwords by hand, as before.
+
+Set it in `.env`, then `pc up -d`:
+
+- `SMTP_HOST`: the relay, for example `smtp.example.org`.
+- `SMTP_FROM`: the address email comes from, which the relay must accept. The product's name (`ORG_PRODUCT_NAME`) is shown as the sender.
+- `SMTP_PORT` and `SMTP_SECURITY`: `587` with `starttls` unless you say otherwise; `465` with `tls`; or `none` for a relay on a trusted network that takes plain SMTP.
+- `SMTP_USER` and `SMTP_PASSWORD`, if the relay wants a sign-in. `SMTP_PASSWORD` is a secret: keep it out of anything you share.
+- `SMTP_REPLY_TO`, optional: where replies go, if not to `SMTP_FROM`.
+
+The realm job (below) points Keycloak at the relay on every `up`, and with a relay it turns on **Forgot password** on the sign-in page and checking a new address by email. `pc logs keycloak-config` says when the relay changed. Without `SMTP_HOST` the job leaves a relay set by hand in Keycloak's console as it is, and offers those two only if there is one. Keycloak's emails use AUGUR's email theme and the realm's languages. To check it works, use **Forgot password** on the sign-in page for your own account.
+
+On the local stack (`infra/docker-compose.yml`) every email goes to Mailpit instead, at http://localhost:8025, and never leaves your machine.
+
 ## Backups
 
 The `backup` container dumps the whole database every night at 02:00 UTC into `infra/deploy/backups/`, as `platform-YYYY-MM-DD.sql.gz`, and keeps the last 14 days. It also takes one when it first starts. Everything lives in that dump: the platform's data, apps' schemas, people's preferences, and Keycloak's users. Apps' files go beside it as `objects-YYYY-MM-DD.tar.gz`. Change the time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `.env`.
