@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Email comes from the organisation's sender
+
+**From** unreleased
+
+AUGUR's email now comes from the sender set in Admin → Organisation: the organisation's name unless an admin changed it, rather than the product's name. Once an address is set there, it replaces `SMTP_FROM`. Nothing to do. The realm job now also reads identity's database, using the `IDENTITY_DATABASE_PASSWORD` identity already uses. After changing the sender, run `pc up -d` so Keycloak's emails pick it up.
+
 ### Time limits between services and on database queries
 
 **From** unreleased

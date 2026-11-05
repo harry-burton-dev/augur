@@ -199,7 +199,7 @@ AUGUR sends email through the organisation's own SMTP relay ([ADR 0035](decision
 Set it in `.env`, then `pc up -d`:
 
 - `SMTP_HOST`: the relay, for example `smtp.example.org`.
-- `SMTP_FROM`: the address email comes from, which the relay must accept. The product's name (`ORG_PRODUCT_NAME`) is shown as the sender.
+- `SMTP_FROM`: the address email comes from until an admin sets the organisation's sender address in Admin → Organisation. The relay must accept whichever address is used.
 - `SMTP_PORT` and `SMTP_SECURITY`: `587` with `starttls` unless you say otherwise; `465` with `tls`; or `none` for a relay on a trusted network that takes plain SMTP.
 - `SMTP_USER` and `SMTP_PASSWORD`, if the relay wants a sign-in. `SMTP_PASSWORD` is a secret: keep it out of anything you share.
 - `SMTP_REPLY_TO`, optional: where replies go, if not to `SMTP_FROM`.
@@ -209,6 +209,8 @@ The realm job (below) points Keycloak at the relay on every `up`, and with a rel
 Admin → Status has an **Email** section: whether email can be sent, the relay and the address mail comes from, and when the relay was last checked (at most every 5 minutes). When the relay is set but doesn't answer, it says what to check: the sign-in, the host and port, or the security setting. The gateway reads the same `SMTP_*` settings for this check and sends nothing.
 
 AUGUR's own services send email through one sender in the service kit (`@augur/service-kit/mail`, [ADR 0065](decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md)): Nodemailer to the relay, from React Email templates. Without a relay it says why instead of failing.
+
+**Who email is from.** Admin → Organisation sets the sender: a name (the organisation's name until changed) and, optionally, an address. AUGUR's own email uses them within a minute. Keycloak's emails (password resets, address checks) use them from the next run of the realm job, which reads them from identity's database: run `pc up -d` after changing them. Without an address, email comes from `SMTP_FROM`. If the relay refuses the new address, Admin → Status says so.
 
 On the local stack (`infra/docker-compose.yml`) every email goes to Mailpit instead, at http://localhost:8025, and never leaves your machine.
 

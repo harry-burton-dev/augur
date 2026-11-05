@@ -108,7 +108,9 @@ services:
       SMTP_PORT: "1025"
       SMTP_SECURITY: none
       SMTP_FROM: augur@localhost
-    depends_on: [keycloak, mailpit]
+      # For the organisation's email sender (Admin → Organisation), which replaces SMTP_FROM.
+      DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
+    depends_on: [keycloak, mailpit, postgres]
 
   # Catches every email the local stack sends, so nothing reaches a real inbox (ADR 0065).
   # Its inbox is http://localhost:8025.
