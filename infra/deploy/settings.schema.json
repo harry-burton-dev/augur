@@ -535,7 +535,8 @@
       "description": "The organisation's SMTP relay. Empty: AUGUR sends no email, offers no password reset or address check, and says so.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -544,7 +545,8 @@
       "description": "The relay's port. Empty: 587, or 465 with SMTP_SECURITY tls.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -553,7 +555,8 @@
       "description": "starttls (the default), tls from the start, or none for a relay on a trusted network.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -562,7 +565,8 @@
       "description": "The address email comes from, which the relay must accept. The product's name is shown as the sender.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -580,7 +584,8 @@
       "description": "The relay's sign-in, if it wants one.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -589,7 +594,8 @@
       "writeOnly": true,
       "description": "That sign-in's password.",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },

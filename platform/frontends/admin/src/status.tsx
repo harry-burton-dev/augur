@@ -1,6 +1,6 @@
 import { Details, Dialog, Notice, Section, Status as StatusMark, Table, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AdminApi, BackupStatus, ComponentStatus, PlatformUpdates, PublicAccess } from './api.js';
+import type { AdminApi, BackupStatus, ComponentStatus, EmailStatus, PlatformUpdates, PublicAccess } from './api.js';
 import { Page } from './parts.js';
 
 /** How often the screen asks the gateway again while it is open. The gateway itself checks every 30 seconds. */
@@ -29,6 +29,10 @@ export const headline = (components: ComponentStatus[], backups?: BackupStatus):
   return { heading: 'Everything is running', summary: 'Every part of AUGUR answered its last check.' };
 };
 
+/** Whether email can be sent, as a status mark and its words. Off isn't a fault: a deployment may have no relay yet. */
+export const emailMark = (e: Pick<EmailStatus, 'state'>): { status: StatusName; label: string } =>
+  e.state === 'ok' ? { status: 'done', label: 'Email can be sent' } : e.state === 'off' ? { status: 'paused', label: 'Email is off' } : { status: 'warning', label: 'Email needs a look' };
+
 /** What to try for a part that's down, by kind. */
 const advice = (c: ComponentStatus) =>
   c.kind === 'sign-in'
@@ -53,6 +57,7 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
   const [components, setComponents] = useState<ComponentStatus[]>([]);
   const [backups, setBackups] = useState<BackupStatus>();
   const [publicAccess, setPublicAccess] = useState<PublicAccess>();
+  const [email, setEmail] = useState<EmailStatus>();
   const [updates, setUpdates] = useState<PlatformUpdates>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -72,6 +77,7 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
         had.current = s.components.length;
         setBackups(s.backups);
         setPublicAccess(s.publicAccess);
+        setEmail(s.email);
         setError('');
       } catch (err) {
         if (!quiet || !had.current) setError((err as Error).message);
@@ -153,6 +159,24 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
             ]}
           />
           {backups.problem ? <p className="admin-flat">{backups.problem}</p> : null}
+        </Section>
+      ) : null}
+      {email ? (
+        <Section label="Email" count={-1} limit={0}>
+          <span data-email={email.state}>
+            <StatusMark {...emailMark(email)} />
+          </span>
+          {email.relay || email.from ? (
+            <Details
+              limit={0}
+              items={[
+                ...(email.relay ? [{ label: 'Relay', value: email.relay }] : []),
+                ...(email.from ? [{ label: 'Sent from', value: email.from }] : []),
+                ...(email.checkedAt ? [{ label: 'Last checked', value: when(email.checkedAt) }] : []),
+              ]}
+            />
+          ) : null}
+          {email.problem ? <p className="admin-flat">{email.problem}</p> : null}
         </Section>
       ) : null}
       {c ? (

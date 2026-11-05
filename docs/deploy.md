@@ -206,6 +206,10 @@ Set it in `.env`, then `pc up -d`:
 
 The realm job (below) points Keycloak at the relay on every `up`, and with a relay it turns on **Forgot password** on the sign-in page and checking a new address by email. `pc logs keycloak-config` says when the relay changed. Without `SMTP_HOST` the job leaves a relay set by hand in Keycloak's console as it is, and offers those two only if there is one. Keycloak's emails use AUGUR's email theme and the realm's languages. To check it works, use **Forgot password** on the sign-in page for your own account.
 
+Admin → Status has an **Email** section: whether email can be sent, the relay and the address mail comes from, and when the relay was last checked (at most every 5 minutes). When the relay is set but doesn't answer, it says what to check: the sign-in, the host and port, or the security setting. The gateway reads the same `SMTP_*` settings for this check and sends nothing.
+
+AUGUR's own services send email through one sender in the service kit (`@augur/service-kit/mail`, [ADR 0065](decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md)): Nodemailer to the relay, from React Email templates. Without a relay it says why instead of failing.
+
 On the local stack (`infra/docker-compose.yml`) every email goes to Mailpit instead, at http://localhost:8025, and never leaves your machine.
 
 ## Backups
