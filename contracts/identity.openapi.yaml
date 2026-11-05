@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.16.0
+  version: 1.21.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -470,8 +470,397 @@ components:
           maxItems: 100
           uniqueItems: true
           description: App ids whose notifications land in the stream silently and never on Home
+        quietKinds:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}:[a-z][a-z0-9-]{0,39}$
+          maxItems: 200
+          uniqueItems: true
+          description: Kinds of notification, as "<app>:<kind>", that land in the stream silently and never on Home or as a toast
+        pinned:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 12
+          uniqueItems: true
+          description: App ids they keep first on Home and in the list of apps, in their order
+        startFloor:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: The floor id AUGUR opens on when an address names none; their own floor without it
+        awayMessage:
+          type: string
+          maxLength: 140
+          description: What their away status says
+        awayUntil:
+          type: string
+          format: date-time
+          description: When being away ends by itself
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: IANA, such as Europe/London; without it the organisation's, then the browser's
+        dateFormat:
+          type: string
+          minLength: 2
+          maxLength: 35
+          pattern: ^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$
+          description: The region whose way of writing dates, times and numbers they want, as a language tag such as en-GB; without it their language’s, then the browser’s (since 1.20)
+        clock:
+          type: string
+          enum:
+            - "12"
+            - "24"
+          description: A 12- or 24-hour clock; without it, as their date format writes it (since 1.20)
+        notifications:
+          type: object
+          properties:
+            email:
+              type: boolean
+              description: An email for each thing that needs them; on unless false
+            digest:
+              type: string
+              enum:
+                - off
+                - daily
+                - weekly
+              description: One email gathering the rest; off unless chosen
+            quietHours:
+              type: object
+              required:
+                - from
+                - to
+              properties:
+                from:
+                  type: string
+                  pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+                to:
+                  type: string
+                  pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+              additionalProperties: false
+              description: "HH:MM in their time zone: no toasts and no email between them"
+          additionalProperties: false
       additionalProperties: false
       description: Every field is optional; what's missing takes the shell's default.
+    AccountProfile:
+      type: object
+      required:
+        - username
+        - firstName
+        - lastName
+        - emailVerified
+        - managed
+      properties:
+        username:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        jobTitle:
+          type: string
+        phone:
+          type: string
+        pronouns:
+          type: string
+        picture:
+          type: string
+          description: A link to their picture in AUGUR’s storage
+        locale:
+          type: string
+          description: Their language (the user profile’s locale), which sign-in pages use too
+        managed:
+          type: array
+          items:
+            type: string
+            enum:
+              - firstName
+              - lastName
+              - email
+              - jobTitle
+              - phone
+              - pronouns
+              - picture
+              - locale
+          description: Fields their organisation’s sign-in sets at every sign-in, so they can’t be changed here
+        managedBy:
+          type: string
+          description: That sign-in’s name
+        languages:
+          type: array
+          items:
+            type: string
+          description: The languages this deployment offers, the first its default (since 1.20)
+    AccountProfileChanges:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        lastName:
+          type: string
+          maxLength: 120
+        jobTitle:
+          type: string
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 40
+          pattern: ^[+0-9 ()-]*$
+        pronouns:
+          type: string
+          maxLength: 40
+        picture:
+          type: string
+          maxLength: 2048
+          description: A link, or empty to take it away
+        locale:
+          type: string
+          maxLength: 35
+          description: One of `languages`, or empty for the deployment’s default (since 1.20)
+      additionalProperties: false
+      minProperties: 1
+      description: Only what changes. An empty string takes a fact away. The email address changes through the email action.
+    AccountSecurity:
+      type: object
+      required:
+        - password
+        - codeApps
+        - passkeys
+        - recoveryCodes
+        - twoStep
+        - linked
+        - canLink
+        - actions
+      properties:
+        password:
+          type: object
+          required:
+            - set
+          properties:
+            set:
+              type: boolean
+            createdAt:
+              type: string
+              format: date-time
+            managedBy:
+              type: string
+              description: The organisation’s sign-in that holds it, when they have no password here
+        codeApps:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - type
+              - removeAction
+              - removable
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                description: otp, webauthn, webauthn-passwordless or recovery-authn-codes
+              label:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+              removeAction:
+                type: string
+                description: "The kc_action that removes it: delete_credential:<id>"
+              removable:
+                type: boolean
+              reason:
+                type: string
+                description: Why it can’t be removed
+        passkeys:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - type
+              - removeAction
+              - removable
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                description: otp, webauthn, webauthn-passwordless or recovery-authn-codes
+              label:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+              removeAction:
+                type: string
+                description: "The kc_action that removes it: delete_credential:<id>"
+              removable:
+                type: boolean
+              reason:
+                type: string
+                description: Why it can’t be removed
+        recoveryCodes:
+          anyOf:
+            - type: object
+              required:
+                - id
+                - type
+                - removeAction
+                - removable
+              properties:
+                id:
+                  type: string
+                type:
+                  type: string
+                  description: otp, webauthn, webauthn-passwordless or recovery-authn-codes
+                label:
+                  type: string
+                createdAt:
+                  type: string
+                  format: date-time
+                removeAction:
+                  type: string
+                  description: "The kc_action that removes it: delete_credential:<id>"
+                removable:
+                  type: boolean
+                reason:
+                  type: string
+                  description: Why it can’t be removed
+            - type: "null"
+        twoStep:
+          type: object
+          required:
+            - required
+            - set
+          properties:
+            required:
+              type: boolean
+              description: Their role signs in with a second step
+            set:
+              type: boolean
+              description: They have a code app or a passkey
+            reason:
+              type: string
+        linked:
+          type: array
+          items:
+            type: object
+            required:
+              - provider
+              - name
+            properties:
+              provider:
+                type: string
+              name:
+                type: string
+              username:
+                type: string
+        canLink:
+          type: array
+          items:
+            type: object
+            required:
+              - alias
+              - name
+              - action
+            properties:
+              alias:
+                type: string
+              name:
+                type: string
+              action:
+                type: string
+                description: idp_link:<alias>
+        actions:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - action
+              - available
+            properties:
+              id:
+                type: string
+                enum:
+                  - password
+                  - code-app
+                  - passkey
+                  - recovery-codes
+                  - email
+              action:
+                type: string
+                description: The kc_action that opens Keycloak’s screen for it
+              available:
+                type: boolean
+              reason:
+                type: string
+                description: Why not, and who can change it
+      description: "How they sign in. Each change is made on Keycloak’s own screen: sign in again with kc_action set to its action, and come back."
+    AccountSession:
+      type: object
+      required:
+        - id
+        - startedAt
+        - lastSeenAt
+        - clients
+      properties:
+        id:
+          type: string
+          description: The sign-in session, as the sid claim in their tokens names it
+        startedAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+        clients:
+          type: array
+          items:
+            type: string
+          description: What it’s signed in to
+        rememberMe:
+          type: boolean
+    AccountSignIn:
+      type: object
+      required:
+        - time
+        - kind
+        - event
+      properties:
+        time:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum:
+            - signed-in
+            - failed
+            - changed
+        event:
+          type: string
+          description: Keycloak’s event type
+        ipAddress:
+          type: string
+        client:
+          type: string
+        error:
+          type: string
 paths:
   /workspaces/{id}:
     get:
@@ -807,7 +1196,7 @@ paths:
                       - app-notes
                 description: The app's client
         "400":
-          description: Not an app id, or not 64 hex characters
+          description: Not an app id, one AUGUR keeps for itself, or not 64 hex characters
           content:
             application/problem+json:
               schema:
@@ -859,7 +1248,7 @@ paths:
                     type: string
                 description: The app's client and its secret
         "400":
-          description: Not an app id
+          description: Not an app id, or one AUGUR keeps for itself
           content:
             application/problem+json:
               schema:
@@ -1096,7 +1485,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /me/preferences:
     get:
-      summary: What the caller has chosen for the shell
+      summary: What the caller has chosen for AUGUR
       responses:
         "200":
           description: Their preferences; empty when they have chosen nothing
@@ -1131,6 +1520,321 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/profile:
+    get:
+      summary: The caller's profile
+      description: Who they are, from the sign-in service’s user profile (ADR 0039), with the facts their organisation’s sign-in sets marked.
+      responses:
+        "200":
+          description: Their profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountProfile"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    patch:
+      summary: Change the caller's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountProfileChanges"
+      responses:
+        "200":
+          description: Their profile, changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountProfile"
+        "400":
+          description: A value the user profile refuses
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A fact their organisation’s sign-in sets
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/security:
+    get:
+      summary: How the caller signs in
+      description: Their password, code apps, passkeys and recovery codes, whether their role needs two-step sign-in, the organisation sign-ins their account is linked to, and the kc_action that changes each.
+      responses:
+        "200":
+          description: How they sign in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSecurity"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/sessions:
+    get:
+      summary: Where the caller is signed in
+      description: Most recently used first. The shell marks its own by the sid claim in its token.
+      responses:
+        "200":
+          description: Their sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sessions
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AccountSession"
+                description: Their sessions
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Sign the caller out everywhere
+      description: Every session, or every one but `keep` (the one they’re using) to sign out everywhere else.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+          in: query
+          name: keep
+          required: false
+          description: A session to leave signed in
+      responses:
+        "200":
+          description: How many sessions ended
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ended
+                properties:
+                  ended:
+                    type: integer
+                description: How many sessions ended
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/sessions/{id}:
+    delete:
+      summary: Sign the caller out of one session
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Signed out there
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: Not one of their sessions, or it has ended
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/sign-ins:
+    get:
+      summary: The caller's recent sign-ins
+      description: Sign-ins, failed sign-ins and changes to how they sign in, newest first, for as long as the sign-in service keeps them.
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          in: query
+          name: max
+          required: false
+      responses:
+        "200":
+          description: Newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - signIns
+                properties:
+                  signIns:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AccountSignIn"
+                description: Newest first
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/leave:
+    get:
+      summary: Whether the caller has asked to leave
+      responses:
+        "200":
+          description: Their open request to leave; empty when they have none
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestedAt:
+                    type: string
+                    format: date-time
+                  note:
+                    type: string
+                description: Their open request to leave; empty when they have none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Ask to leave
+      description: "People don’t delete their own account (ADR 0040): they ask, and an admin’s leaver flow turns the account off, ends their sessions and hands on what they own. Admins are told, and it is recorded in Activity. Asking again keeps the first time and replaces the note."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 500
+                  description: Anything the admin should know
+              additionalProperties: false
+      responses:
+        "201":
+          description: Their open request to leave; empty when they have none
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestedAt:
+                    type: string
+                    format: date-time
+                  note:
+                    type: string
+                description: Their open request to leave; empty when they have none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take back a request to leave
+      responses:
+        "204":
+          description: Taken back, or there was none
+          content:
+            application/json:
+              schema:
+                description: Taken back, or there was none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/data:
+    get:
+      summary: A copy of everything AUGUR keeps about the caller
+      description: "One JSON document (ADR 0040): who they are, how and where they sign in (never a secret), what they have chosen, whether they asked to leave, and what each other service keeps about them. A part that can’t be read is named in `missing`, with why. Recorded in Activity."
+      responses:
+        "200":
+          description: Their data, as a download
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+                description: Their data, as a download
         "401":
           description: No signed-in caller
           content:

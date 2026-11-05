@@ -71,7 +71,7 @@ export interface AppServerOptions {
   version?: string;
   /** The major version of the API it serves, its route prefix. */
   api?: string;
-  /** Checks the caller the gateway signed for this app. In production it is on by default; in dev `x-user-*` headers are believed. */
+  /** Checks the caller the gateway signed for this app. On by default; off only under `pnpm dev:app` and tests (callerCheckFromEnv). */
   callers?: CallerCheck;
 }
 
@@ -120,6 +120,8 @@ export interface AppNotice {
   link?: string;
   actions?: NotificationAction[];
   level?: NotificationLevel;
+  /** One of the app's `notifications.kinds`, so people can choose how it reaches them. */
+  kind?: string;
 }
 
 export type AppNotify = (notice: AppNotice) => Promise<void>;

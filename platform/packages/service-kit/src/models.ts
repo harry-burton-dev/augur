@@ -41,6 +41,12 @@ export interface AskModelOptions {
 }
 
 /**
+ * How long a call to the model gateway may take: the provider itself may take a minute or more
+ * (MODEL_TIMEOUT_SECONDS on the models service), so not a service call's few seconds.
+ */
+export const MODEL_CALL_TIMEOUT_MS = 180_000;
+
+/**
  * Asks the model, through the platform's model gateway, as the app: no app
  * holds a provider's key. Needs the `models:use` scope, counts against the
  * app's calls a day, and is recorded in the audit log. Throws ServiceCallError
@@ -55,6 +61,7 @@ export const askModel = async ({ modelsUrl, credentials, workspace, messages, to
     what: 'ask the model',
     workspace,
     fetchImpl,
+    timeoutMs: MODEL_CALL_TIMEOUT_MS,
   })) as ModelAnswer;
 
 export interface EmbedTextsOptions {
@@ -90,4 +97,5 @@ export const embedTexts = async ({ modelsUrl, credentials, workspace, input, fet
     what: 'turn text into vectors',
     workspace,
     fetchImpl,
+    timeoutMs: MODEL_CALL_TIMEOUT_MS,
   })) as Embedded;

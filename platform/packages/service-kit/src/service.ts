@@ -1,4 +1,5 @@
 import { WORKSPACE_HEADERS } from './caller.js';
+import { serviceTimeoutMs, withDeadline } from './deadline.js';
 import { type ServiceIdentity, type ServiceVerifier, type TokenSource } from './apps.js';
 
 /**
@@ -26,10 +27,11 @@ export const identifyService = async (headers: Record<string, string | string[] 
 export class ServiceCallError extends Error {}
 
 export interface CallOptions {
-  method: 'PUT' | 'POST';
+  method: 'PUT' | 'POST' | 'PATCH' | 'GET';
   url: string;
   credentials: ServiceCredentials;
-  body: unknown;
+  /** Sent as JSON; none for a GET. */
+  body?: unknown;
   /** What is being done, for the error message: "register library". */
   what: string;
   /** The floor the call is for, sent as X-Workspace-Id. */
@@ -38,20 +40,22 @@ export interface CallOptions {
   /** Delay before the first retry; doubles after each. */
   retryMs?: number;
   fetchImpl?: typeof fetch;
+  /** How long each attempt may take: serviceTimeoutMs() (a few seconds) unless the call needs longer. */
+  timeoutMs?: number;
 }
 
 /**
  * Calls another service, retrying while it is unreachable or failing. A refusal
  * (4xx: bad input, wrong token, a conflict) is not retried.
  */
-export async function callService({ method, url, credentials, body, what, workspace, attempts = 1, retryMs = 500, fetchImpl = fetch }: CallOptions): Promise<unknown> {
+export async function callService({ method, url, credentials, body, what, workspace, attempts = 1, retryMs = 500, fetchImpl = fetch, timeoutMs = serviceTimeoutMs() }: CallOptions): Promise<unknown> {
   let lastError = '';
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const res = await fetchImpl(url, {
+      const res = await withDeadline(fetchImpl, timeoutMs)(url, {
         method,
-        headers: { 'content-type': 'application/json', ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
-        body: JSON.stringify(body),
+        headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       const reply = (await res.json().catch(() => ({}))) as { message?: string };
       if (res.ok) return reply;

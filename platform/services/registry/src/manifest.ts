@@ -14,6 +14,42 @@ export const MAX_SETTINGS = 10;
 /** How many feature previews one app may offer at once. */
 export const MAX_FEATURE_PREVIEWS = 8;
 
+/** How many kinds of inbox item one app may declare. */
+export const MAX_INBOX_KINDS = 10;
+
+/**
+ * A kind of work the app puts in people's inboxes (ADR 0026), with the words and icon the shell
+ * shows for it, so nothing in the Inbox is the platform's guess. An item of a kind the manifest
+ * doesn't declare is refused.
+ */
+export const inboxKindSchema = Type.Object(
+  {
+    id: Type.String({ pattern: '^[a-z][a-z0-9-]{0,39}$', description: 'How the app\'s service names it: "assignment"' }),
+    label: Type.String({ minLength: 1, maxLength: 40, description: 'What the Inbox shows for it: "Assigned to you"' }),
+    icon: Type.Optional(Type.String({ maxLength: 40, description: 'A UI kit icon name' })),
+  },
+  { additionalProperties: false },
+);
+export type InboxKind = Static<typeof inboxKindSchema>;
+
+/** How many kinds of notification one app may declare. */
+export const MAX_NOTIFICATION_KINDS = 10;
+
+/**
+ * A kind of notification the app's service sends (ADR 0036), named so each person can choose,
+ * in Account's Notifications, which kinds reach them out loud and which wait quietly.
+ * A notification of a kind the manifest doesn't declare is refused.
+ */
+export const notificationKindSchema = Type.Object(
+  {
+    id: Type.String({ pattern: '^[a-z][a-z0-9-]{0,39}$', description: 'How the app\'s service names it: "comment"' }),
+    label: Type.String({ minLength: 1, maxLength: 40, description: 'What Account shows for it: "Comments on your documents"' }),
+    detail: Type.Optional(Type.String({ maxLength: 120, description: 'A sentence on when it is sent' })),
+  },
+  { additionalProperties: false },
+);
+export type NotificationKind = Static<typeof notificationKindSchema>;
+
 /** What an app may be sent in one request when its manifest doesn't say: enough for any form, not for files. */
 export const DEFAULT_UPLOAD_MB = 10;
 /** The most any app may ask for. */
@@ -174,6 +210,18 @@ export const appEntrySchema = Type.Object(
     settings: Type.Optional(
       Type.Array(appSettingSchema, { maxItems: MAX_SETTINGS, description: 'Settings the app offers admins in Admin, Apps; its service reads them from the registry' }),
     ),
+    inbox: Type.Optional(
+      Type.Object(
+        { kinds: Type.Array(inboxKindSchema, { minItems: 1, maxItems: MAX_INBOX_KINDS }) },
+        { additionalProperties: false, description: "The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)" },
+      ),
+    ),
+    notifications: Type.Optional(
+      Type.Object(
+        { kinds: Type.Array(notificationKindSchema, { minItems: 1, maxItems: MAX_NOTIFICATION_KINDS }) },
+        { additionalProperties: false, description: 'The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)' },
+      ),
+    ),
     scopes: Type.Optional(
       Type.Array(Type.Enum([...SCOPES]), {
         uniqueItems: true,
@@ -268,14 +316,14 @@ export const menuWarnings = (entry: Pick<AppEntry, 'name' | 'icon' | 'menu' | 'a
  * "/" is the shell's own: Title, where every app is a chapter.
  */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0', icon: 'home', description: 'What needs you', category: 'platform' },
+  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0 || ^2.0.0', icon: 'home', description: 'What needs you', category: 'platform' },
   {
     id: 'admin',
     name: 'Admin',
     route: '/admin',
     entry: '/apps/admin/entry.js',
     version: PLATFORM_APP_VERSIONS.admin,
-    sdk: '^1.0.0',
+    sdk: '^1.0.0 || ^2.0.0',
     icon: 'admin',
     description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
@@ -329,7 +377,7 @@ export const platformApps: AppEntry[] = [
     route: '/upgrades',
     entry: '/apps/upgrades/entry.js',
     version: PLATFORM_APP_VERSIONS.upgrades,
-    sdk: '^1.9.0',
+    sdk: '^1.9.0 || ^2.0.0',
     icon: 'download',
     description: 'What this deployment runs, and upgrading it',
     requiredRole: 'admin',
@@ -385,13 +433,23 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
   return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
 };
 
-/** What's wrong with the settings and feature previews an app offers, or undefined when nothing is. */
+/** What's wrong with the settings, feature previews, inbox kinds and notification kinds an app offers, or undefined when nothing is. */
 export const settingsProblem = (entry: AppEntry): string | undefined => {
   const previews = new Set<string>();
   for (const preview of entry.previews ?? []) {
     if (previews.has(preview.id)) return `${entry.name} offers the preview "${preview.id}" twice.`;
     previews.add(preview.id);
     if (preview.until && Number.isNaN(Date.parse(`${preview.until}T00:00:00Z`))) return `${entry.name}'s preview "${preview.id}" runs until "${preview.until}", which isn't a day.`;
+  }
+  const kinds = new Set<string>();
+  for (const kind of entry.inbox?.kinds ?? []) {
+    if (kinds.has(kind.id)) return `${entry.name} declares the inbox kind "${kind.id}" twice.`;
+    kinds.add(kind.id);
+  }
+  const told = new Set<string>();
+  for (const kind of entry.notifications?.kinds ?? []) {
+    if (told.has(kind.id)) return `${entry.name} declares the notification kind "${kind.id}" twice.`;
+    told.add(kind.id);
   }
   const seen = new Set<string>();
   for (const setting of entry.settings ?? []) {

@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appEyebrow, appStatus, floorStatus, floorTree, kindOf, kindWords, refusedKindNote, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
+import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kindWords, refusedKindNote, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
 import { headline, stateOf } from './status.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { placeOf, portalLink } from './line.js';
@@ -246,6 +246,7 @@ describe('Status', () => {
       state: 'ok',
       lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 },
       offsite: { at: '2026-10-22T02:01:00Z', ok: true, keepDays: 30 },
+      pointInTime: { at: '2026-10-22T11:00:00Z', ok: true, earliest: '2026-10-16T02:01:00Z', lastTest: { at: '2026-10-19T02:03:00Z', ok: true } },
       lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, from: 'offsite', people: 3 },
     };
     gateway((_m, url) =>
@@ -260,6 +261,7 @@ describe('Status', () => {
     expect(el.textContent).toContain('Backups restore cleanly');
     expect(el.textContent).toContain('30 days kept');
     expect(el.textContent).toContain('Restored from the copy off the server, 3 people');
+    expect(el.textContent).toContain('Any moment since');
     expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
     expect(el.textContent).toContain('AUGUR 0.13.2 is out.');
     await openRow(el, 'library');
@@ -314,6 +316,10 @@ describe('Apps', () => {
     expect(appStatus({ ...library, blocked: 'Not allowed.' })).toMatchObject({ status: 'warning', label: 'Blocked' });
     expect(scopeWords(['notifications:send', 'audit:write'])).toBe('Notify people, Write to the activity log');
     expect(scopeWords(undefined)).toBe('Nothing beyond registering itself');
+    const kinds = { kinds: [{ id: 'assignment', label: 'Assigned to you' }, { id: 'review', label: 'To review' }] };
+    expect(inboxWords({ scopes: ['inbox:write'], grantedScopes: ['inbox:write'], inbox: kinds })).toBe('Assigned to you, To review');
+    expect(inboxWords({ scopes: ['inbox:write'], grantedScopes: [], inbox: kinds })).toMatch(/until it’s allowed to put work in people’s inboxes/);
+    expect(inboxWords({ scopes: [] })).toBeUndefined();
     const kept = (version: string, entry = library.entry) => ({ version, entry: { ...library, version, entry }, registeredBy: 'library', registeredAt: '', serving: false });
     expect(rollbackNote(library, kept('0.1.0'))).toMatch(/loads from the same address as 0.2.0/);
     expect(rollbackNote(library, kept('0.1.0', '/apps/library/0.1.0/entry.js'))).toBe('');

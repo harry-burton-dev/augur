@@ -27,7 +27,6 @@ platform/                 everything the platform owns; never imports from apps/
     home/                 Home, the landing app
     admin/                Admin screens
   packages/
-    ui-kit/               the Lit web components, frozen until SDK 2
     mfe-sdk/              the contract between shell and apps
     service-kit/          helpers every backend service uses
     records/              the rules every app's records share (levels, lifecycle, access, tags, links, publishing up)
@@ -46,7 +45,7 @@ infra/
   service.Dockerfile      builds any service; web.Dockerfile builds the frontends
   keycloak/               local sign-in realm and test users
   deploy/                 the server stack: compose, nginx, Tailscale, backups, Postgres init
-scripts/                  repo tooling: create-app, dev-app, register-app, boundary/manifest/version checks
+scripts/                  repo tooling: dev-app, register-app, boundary/manifest/version checks
 docs/                     how-to guides (below)
 .changeset/               pending release notes; one per PR
 .github/workflows/        CI, releases, dev builds, previews and feeds (docs/ci-cd.md)
@@ -69,7 +68,6 @@ Home and Admin are built like any app: one ES module the shell imports.
 | Package | Purpose |
 | --- | --- |
 | `@augur/kit-common`, `@augur/app-kit`, `@augur/shell-kit` | Common (with the tokens), Quill (the React kit apps build with) and Aerie (the shell's own; only the shell may import it), ADR 0015. They live in the [augur-kit](https://github.com/harry-burton-dev/augur-kit) repository with their Storybook (ADR 0046), and come here as packages from GitHub Packages: set `NODE_AUTH_TOKEN` to a token with `read:packages` before `pnpm install`. |
-| `@augur/ui-kit` | The Lit components every screen uses today, frozen until SDK 2. Its own Storybook: `pnpm --filter @augur/ui-kit storybook`. |
 | `@augur/mfe-sdk` | What an app gets from the shell: `defineMicroFrontend`, the mount context (`ctx.person`, `ctx.workspace`, `ctx.fetch`, `notify`, `raise`/`request` intents, event bus), and the manifest types. Breaking it breaks apps, so it is versioned carefully. |
 | `@augur/service-kit` | For backend services: read the caller the gateway verified, sign in as the service itself, register an app, send notifications and audit entries, check floors and grants, logging. |
 | `@augur/records` | The rules every app's records share, for services and frontends alike: levels a tree is built from, lifecycles, read/edit/manage down a tree, tags, relationships, and publishing up the floors with one owner. See [App patterns](docs/app-patterns.md). |
@@ -92,7 +90,6 @@ AUGUR was codenamed "platform" until October 2026. Packages, page titles and eve
 
 - **`platform/` vs `apps/`** is the architecture, not the brand: what AUGUR itself owns against the apps that run on it. The boundary check and the build depend on it.
 - **Running servers' identifiers** stay as they are, because changing them would sign everyone out or lose data: the Keycloak realm `platform` (it is in every token's issuer) and its clients (`platform-api`, `platform-identity`, …), the Postgres database and user `platform`, the Compose project `name: platform` (Docker names the data volumes after it), the `PLATFORM_*` keys in `.env`, and the default Tailscale name `platform`. See [upgrade.md](docs/upgrade.md#renamed-to-augur).
-- The shell's import map also answers to `@platform/ui-kit`, so an app built before the rename still loads through SDK 1.x.
 
 ## Rules between parts
 
@@ -101,7 +98,7 @@ AUGUR was codenamed "platform" until October 2026. Packages, page titles and eve
 - Only the gateway reads sign-in tokens. Services trust the caller and floor the gateway passes on, never what the browser claims.
 - Each service and app signs in as itself (its own Keycloak client and secret) and can only do what the registry grants it on that floor.
 - Services talk through their OpenAPI contracts or events, never another service's tables.
-- Every visual comes from `@augur/ui-kit`.
+- Every visual comes from the kits: Quill (`@augur/app-kit`) in apps, Aerie (`@augur/shell-kit`) in the shell, both on Common, with AUGUR's tokens.
 
 ## Working on it
 
@@ -113,7 +110,7 @@ pnpm check:boundaries
 
 - One service with live reload: `pnpm --filter @augur/registry dev`. Without `DATABASE_URL`, registry and events keep data in memory.
 - Full local stack: `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @augur/shell dev` and open http://localhost:5173. Sign in as `alex` (admin) or `sam`; see [infra/keycloak](infra/keycloak/README.md).
-- New app: `pnpm create-app <id>`, then `pnpm dev:app <id>` runs it in a stand-in shell.
+- New app: make a repository from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), then `pnpm dev:app ../augur-<id>` runs it in a stand-in shell.
 - Every PR needs a changeset: `pnpm changeset` (or `pnpm changeset --empty`).
 
 ## Guides
@@ -122,7 +119,7 @@ pnpm check:boundaries
 | --- | --- |
 | [Artifacts](docs/folio.md) | Using Artifacts, the document libraries, and running it as an admin |
 | [Data Atlas](docs/atlas.md) | The org's entities and the ontology, and running Data Atlas in a deployment |
-| [Build an app](docs/build-an-app.md) | From `create-app` to an app in the shell |
+| [Build an app](docs/build-an-app.md) | From the app template to an app in the shell |
 | [Ship an app](docs/ship-an-app.md) | From a pull request's preview to servers updating the app by themselves |
 | [App previews](docs/app-previews.md) | Trying a pull request's build of an app on a real server |
 | [Deploy](docs/deploy.md) | Running the stack on a server with Docker Compose and Tailscale |

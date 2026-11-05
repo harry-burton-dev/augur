@@ -140,7 +140,7 @@ describe('pull requests’ previews', () => {
 });
 
 describe('live on the workbench', () => {
-  const entry = 'https://laptop.tail1234.ts.net/@fs/home/me/augur/apps/notes/frontend/src/entry.ts';
+  const entry = 'https://laptop.tail1234.ts.net/@fs/home/me/augur/apps/notes/frontend/src/entry.tsx';
   const live = (t: Awaited<ReturnType<typeof setup>>, id: string, url: string | null) => t.server.inject({ method: 'PUT', url: '/v1/previews/notes/live', headers: person(id), payload: { url } });
   const catalogue = async (t: Awaited<ReturnType<typeof setup>>, id: string) => (await t.server.inject({ method: 'GET', url: '/v1/manifest', headers: person(id) })).json();
 
@@ -154,6 +154,8 @@ describe('live on the workbench', () => {
     const elsewhere = await live(t, 'u-2', 'https://laptop.tail9999.ts.net/entry.ts');
     expect(elsewhere.statusCode).toBe(400);
     expect(elsewhere.json().message).toContain('tail1234.ts.net');
+    // An entry with no JSX in it is still taken.
+    expect((await live(t, 'u-2', entry.replace(/\.tsx$/, '.ts'))).statusCode).toBe(204);
     expect((await live(t, 'u-2', entry)).statusCode).toBe(204);
     expect((await t.server.inject({ method: 'GET', url: '/v1/previews', headers: person('u-2') })).json().apps[0]).toMatchObject({ app: 'notes', live: entry });
     expect((await catalogue(t, 'u-2')).find((a: { id: string }) => a.id === 'notes')).toMatchObject({ entry });

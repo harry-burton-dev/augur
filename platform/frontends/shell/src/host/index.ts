@@ -4,11 +4,11 @@ export { AppMounter, MountError, importEntry, type ImportEntry } from './mount.j
 export { routeIntent, IntentError, RequestBroker, type OpenRequest } from './intents.js';
 export { toShellNotification, usableActions, NotificationActions, MAX_ACTIONS } from './notifications.js';
 export { startSession, CALLBACK_PATH, SIGN_IN_AGAIN_PATH, SessionError, type Authenticator, type Session, type SignedIn } from './session.js';
-export { NotificationFeed, fromServer, parseEvents, type ServerNotification } from './feed.js';
+export { NotificationFeed, fromServer, isQuiet, parseEvents, type ServerNotification } from './feed.js';
 export { screenFor, hasOrbit, titleMenu, titleTarget, orbitMenu, orbitIndexOf, areaOf, backFrom, upFrom, navsFor, navTarget, titleFor, productName, escapeIsFree, findPages, type Screen } from './menus.js';
 export { PreferenceSync, applyPreferences, type Preferences } from './preferences.js';
 export { floorFromPath, floorHref, floorBySlug, ownFloor, loadFloors, FloorsError, type FloorLocation } from './floors.js';
-export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, SurfaceMounter, type HomeNeed, type HomeCard, type HomeState } from './home.js';
+export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, settingsOf, SurfaceMounter, type HomeNeed, type HomeCard, type HomeState } from './home.js';
 export {
   loadPreviews,
   choosePreview,
@@ -26,3 +26,24 @@ export {
 } from './previews.js';
 export { AppSearch, readAnswer, SEARCH_BUDGET_MS, RESULTS_PER_APP, MIN_QUERY, type FoundIn, type FindUpdate } from './find.js';
 export { toastFor, withToast, MAX_TOASTS, type ShellToast } from './toasts.js';
+export {
+  InboxClient,
+  InboxError,
+  INBOX_FUNCTION,
+  INBOX_MORE,
+  UNREACHABLE as INBOX_UNREACHABLE,
+  appNameOf,
+  dueLine,
+  inboxLabel,
+  inboxNeeds,
+  itemOfNeed,
+  kindOf,
+  menuFor,
+  openProblem,
+  ordered,
+  subjectLabel,
+  withInbox,
+  type InboxMenuEntry,
+  type InboxTab,
+  type InboxVerb,
+} from './inbox.js';

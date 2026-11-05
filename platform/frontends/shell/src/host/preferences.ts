@@ -11,6 +11,23 @@ export interface Preferences {
   recent?: string[];
   /** App ids whose notifications land in the stream silently and never on Home. */
   muted?: string[];
+  /** Kinds of notification, as "<app>:<kind>", that land in the stream silently and never on Home or as a toast. */
+  quietKinds?: string[];
+  /** App ids kept first on Home and in the list of apps, in their order. */
+  pinned?: string[];
+  /** The floor id the shell opens on when an address names none; their own without it. */
+  startFloor?: string;
+  /** What their away status says, and when away ends by itself (ISO date-time). */
+  awayMessage?: string;
+  awayUntil?: string;
+  /** Their time zone (IANA); without it, the browser's. */
+  timeZone?: string;
+  /** The region whose way of writing dates and times they want (a language tag such as en-GB); without it, their language's, then the browser's. */
+  dateFormat?: string;
+  /** A 12- or 24-hour clock; without it, as their date format writes it. */
+  clock?: '12' | '24';
+  /** How AUGUR reaches them beyond the shell (identity's Preferences). */
+  notifications?: { email?: boolean; digest?: 'off' | 'daily' | 'weekly'; quietHours?: { from: string; to: string } };
 }
 
 const RECENT = 6;

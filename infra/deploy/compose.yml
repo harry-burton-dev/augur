@@ -23,17 +23,23 @@ x-logging: &logging
     max-size: ${LOG_MAX_SIZE:-10m}
     max-file: "${LOG_MAX_FILES:-3}"
 
-# OpenTelemetry (ADR 0034, docs/observability.md): every Node service loads the service kit's telemetry
-# first. It does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT names a collector, such as the
-# `observability` profile's at http://otel-lgtm:4318.
+# OpenTelemetry (ADR 0034, 0059, docs/observability.md): every Node service loads the service kit's
+# telemetry first and sends to the deployment's own otel-lgtm, or to the collector OTEL_EXPORTER_OTLP_ENDPOINT
+# names. OTEL_SDK_DISABLED=true turns it off (and OTEL_LGTM_REPLICAS=0 stops otel-lgtm).
 x-telemetry: &telemetry
   NODE_OPTIONS: --import @augur/service-kit/telemetry
-  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-lgtm:4318}
+  OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-}
   # A collector's key, and which traces to keep (the SDK's defaults when empty).
   OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
   OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
   OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
-  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production}
+  # How long one service waits for another before it says that one can't be reached (5 seconds unless set).
+  SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
+  # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
+  DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
+  # Which deployment it came from: its ring, and the name it reports to Backstage under.
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production},deployment.name=${DEPLOYMENT_ID:-${SERVER_RING:-production}}
 
 x-service: &service
   <<: *hardened
@@ -136,25 +142,34 @@ services:
       keycloak: { condition: service_healthy }
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.
+  # Archives every change (its WAL) into wal-archive as it goes, so the database can be put back as it was
+  # at any moment since the oldest base backup (ADR 0064; postgres/start.sh; docs/deploy.md, "Restore to a
+  # point in time").
   postgres:
     logging: *logging
     image: pgvector/pgvector:0.8.0-pg16
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/augur/start.sh"]
     environment:
       POSTGRES_USER: platform
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: platform
+      # At most this many seconds of changes wait before they're archived (when there are any).
+      PITR_ARCHIVE_SECONDS: ${PITR_ARCHIVE_SECONDS:-900}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./postgres:/etc/augur:ro
+      - wal-archive:/wal-archive
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  # A dump of the whole database every night into infra/deploy/backups, keeping 14 days,
-  # and once a week a test restore of the newest into a throwaway database. Once OFFSITE_REPOSITORY is
+  # A dump of the whole database every night into infra/deploy/backups, keeping 14 days, with a base backup
+  # for the archived WAL to be replayed onto (the newest PITR_KEEP_DAYS kept; ADR 0064), and once a week a
+  # test restore of the newest of each into a throwaway database. Once OFFSITE_REPOSITORY is
   # set, each night's dump and apps' files are also copied off the server with restic, encrypted before
   # they leave, and the weekly restore test restores from that copy (ADR 0060; docs/deploy.md, "Backups").
   backup:
@@ -177,6 +192,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${OFFSITE_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${OFFSITE_REGION:-}
       OFFSITE_KEEP_DAILY: ${OFFSITE_KEEP_DAILY:-30}
+      PITR_KEEP_DAYS: ${PITR_KEEP_DAYS:-7}
     volumes:
       - ./backup:/backup:ro
       - ./backups:/backups
@@ -185,6 +201,8 @@ services:
       - garage-data:/objects/data:ro
       # restic, put there by backup-tools.
       - backup-tools:/tools:ro
+      # Postgres's archived WAL: pruned to the oldest base backup, copied off the server, replayed in tests.
+      - wal-archive:/wal-archive
     depends_on:
       postgres: { condition: service_healthy }
       backup-tools: { condition: service_completed_successfully }
@@ -329,6 +347,14 @@ services:
       REALM_LANGUAGES: ${REALM_LANGUAGES:-}
       # The product's name, as the realm's display name: the sign-in pages, emails and passkeys show it.
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
+      # The organisation's SMTP relay (ADR 0035). Without SMTP_HOST AUGUR sends no email and says so.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     depends_on:
       keycloak: { condition: service_healthy }
 
@@ -391,6 +417,8 @@ services:
       KEYCLOAK_URL: http://keycloak:8080/sso
       # What the top floor, the whole organisation, is called.
       ORG_NAME: ${ORG_NAME:-Organisation}
+      # The languages people may choose in Account, the same ones keycloak-config offers at sign-in.
+      REALM_LANGUAGES: ${REALM_LANGUAGES:-}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
     depends_on:
       <<: *own-login
@@ -424,6 +452,8 @@ services:
       # What this server runs, signed and reported to that Backstage under this name (ADR 0019).
       DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
+      # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
       SERVER_RING: ${SERVER_RING:-}
       # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
@@ -464,6 +494,7 @@ services:
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
+      INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
@@ -648,22 +679,31 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker]
 
-  # Optional: somewhere to look at the services' traces, metrics and logs (ADR 0034,
-  # docs/observability.md). Grafana's all-in-one OpenTelemetry stack, for one server: add observability to
-  # COMPOSE_PROFILES and set OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-lgtm:4318 in .env.
-  # Grafana answers on the server itself only, at http://127.0.0.1:3001.
+  # Where the deployment watches itself (ADR 0034, 0059, docs/observability.md): Grafana's all-in-one
+  # OpenTelemetry stack, for one server, keeping 72 hours. It runs AUGUR's alert rules and dashboard
+  # (observability/) and tells deployment admins through the registry. Grafana answers on the server
+  # itself only, at http://127.0.0.1:3001. A deployment with its own collector sets OTEL_LGTM_REPLICAS=0.
   otel-lgtm:
     logging: *logging
     image: grafana/otel-lgtm:0.37.0
-    profiles: [observability]
     restart: unless-stopped
+    deploy:
+      replicas: ${OTEL_LGTM_REPLICAS:-1}
     mem_limit: ${OTEL_LGTM_MEM_LIMIT:-2g}
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h
     ports:
       - 127.0.0.1:3001:3000
     volumes:
       - otel-lgtm:/data
+      - ./observability/lgtm/loki.yaml:/otel-lgtm/loki-config.yaml:ro
+      - ./observability/lgtm/tempo.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./observability/grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
+      - ./observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/augur.yaml:ro
+      - ./observability/grafana/dashboards:/otel-lgtm/augur-dashboards:ro
 
 networks:
   default:
@@ -678,4 +718,6 @@ volumes:
   garage-data:
   # restic, for the backup container (backup-tools fills it on every `up`).
   backup-tools:
+  # Postgres's archived changes (WAL), gzipped: postgres writes them, the backup container prunes and copies them.
+  wal-archive:
   otel-lgtm:

@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { withDeadline } from './deadline.js';
 
 /**
  * Each app's service signs in to the platform as itself: a Keycloak client
@@ -9,7 +10,7 @@ import { createRemoteJWKSet, errors, jwtVerify, type JWTVerifyGetKey } from 'jos
  */
 
 /** What an app can be granted. An app always may register itself; everything else it asks for in its manifest's `scopes`. */
-export const SCOPES = ['notifications:send', 'audit:write', 'models:use', 'events:publish', 'events:subscribe', 'people:read'] as const;
+export const SCOPES = ['notifications:send', 'audit:write', 'models:use', 'events:publish', 'events:subscribe', 'people:read', 'inbox:write'] as const;
 export type Scope = (typeof SCOPES)[number];
 
 /** The audience every app and platform service token is issued for. */
@@ -54,7 +55,7 @@ export const clientCredentials = ({ tokenUrl, clientId, clientSecret, fetchImpl 
   const fetchToken = async () => {
     let res: Response;
     try {
-      res = await fetchImpl(tokenUrl, {
+      res = await withDeadline(fetchImpl)(tokenUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_type: 'client_credentials', client_id: clientId, client_secret: clientSecret }),

@@ -71,11 +71,24 @@ export const SCOPE_WORDS: Record<string, string> = {
   'events:publish': 'Tell other services what happened',
   'events:subscribe': 'Hear what other services did',
   'people:read': 'Look up people and teams',
+  'inbox:write': 'Put work in people’s inboxes',
 };
 
 /** What an app may do on AUGUR, as a fact's value. */
 export const scopeWords = (scopes: string[] | undefined) =>
   scopes?.length ? scopes.map((s) => SCOPE_WORDS[s] ?? s).join(', ') : 'Nothing beyond registering itself';
+
+/**
+ * The kinds of work an app puts in people's inboxes, as a fact's value; none when its manifest declares none.
+ * Declared but not allowed stays visible, saying what's missing (explain, never hide).
+ */
+export const inboxWords = (app: Pick<CatalogueApp, 'inbox' | 'scopes' | 'grantedScopes'>): string | undefined => {
+  const kinds = app.inbox?.kinds ?? [];
+  if (!kinds.length) return undefined;
+  const labels = kinds.map((k) => k.label).join(', ');
+  const granted = app.grantedScopes ?? app.scopes ?? [];
+  return granted.includes('inbox:write') ? labels : `${labels}. None reach anyone until it’s allowed to ${SCOPE_WORDS['inbox:write']!.toLowerCase()}.`;
+};
 
 /** A floor an app can be set on, in tree order: the org first, then each team below the one it sits in. */
 export interface AppFloor {

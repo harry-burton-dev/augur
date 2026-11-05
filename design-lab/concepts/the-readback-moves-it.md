@@ -12,3 +12,5 @@ First found in: [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-t
 Could steer: The apprentice (Q), the kitchen brigade (J), Mandate delegation.
 
 In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): a working set changes owner only on readback, with the agent's supervision moving with it (combined V1).
+
+Used in [`2026-11-05-the-quick-reference-handbook`](../runs/2026-11-05-the-quick-reference-handbook/) (ops track): an SBAR hand-off after a night upgrade, owned by the giver until the taker reads it back (hand-off V1).

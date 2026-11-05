@@ -212,6 +212,9 @@ export const Caller = Type.Object(
   { $id: 'Caller' },
 );
 
+/** A time of day, 00:00 to 23:59. */
+const HHMM = '^([01][0-9]|2[0-3]):[0-5][0-9]$';
+
 /** Refused, not dropped, when unknown: a misspelt setting should fail loudly, not vanish. */
 export const Preferences = Type.Object(
   {
@@ -227,6 +230,48 @@ export const Preferences = Type.Object(
         uniqueItems: true,
         description: 'App ids whose notifications land in the stream silently and never on Home',
       }),
+    ),
+    quietKinds: Type.Optional(
+      Type.Array(Type.String({ pattern: '^[a-z][a-z0-9-]{1,39}:[a-z][a-z0-9-]{0,39}$' }), {
+        maxItems: 200,
+        uniqueItems: true,
+        description: 'Kinds of notification, as "<app>:<kind>", that land in the stream silently and never on Home or as a toast',
+      }),
+    ),
+    pinned: Type.Optional(
+      Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+        maxItems: 12,
+        uniqueItems: true,
+        description: 'App ids they keep first on Home and in the list of apps, in their order',
+      }),
+    ),
+    startFloor: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: 'The floor id AUGUR opens on when an address names none; their own floor without it' })),
+    awayMessage: Type.Optional(Type.String({ maxLength: 140, description: 'What their away status says' })),
+    awayUntil: Type.Optional(Type.String({ format: 'date-time', description: 'When being away ends by itself' })),
+    timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: "IANA, such as Europe/London; without it the organisation's, then the browser's" })),
+    dateFormat: Type.Optional(
+      Type.String({
+        minLength: 2,
+        maxLength: 35,
+        pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$',
+        description: 'The region whose way of writing dates, times and numbers they want, as a language tag such as en-GB; without it their language’s, then the browser’s (since 1.20)',
+      }),
+    ),
+    clock: Type.Optional(choice(['12', '24'], { description: 'A 12- or 24-hour clock; without it, as their date format writes it (since 1.20)' })),
+    notifications: Type.Optional(
+      Type.Object(
+        {
+          email: Type.Optional(Type.Boolean({ description: 'An email for each thing that needs them; on unless false' })),
+          digest: Type.Optional(choice(['off', 'daily', 'weekly'], { description: 'One email gathering the rest; off unless chosen' })),
+          quietHours: Type.Optional(
+            Type.Object(
+              { from: Type.String({ pattern: HHMM }), to: Type.String({ pattern: HHMM }) },
+              { additionalProperties: false, description: 'HH:MM in their time zone: no toasts and no email between them' },
+            ),
+          ),
+        },
+        { additionalProperties: false },
+      ),
     ),
   },
   { $id: 'Preferences', additionalProperties: false, description: "Every field is optional; what's missing takes the shell's default." },

@@ -4,7 +4,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
 // One ES module at dist/entry.js: the registry's entry URL for the Upgrade Centre.
-// React, the kits and Lit stay external; the shell serves them through its import map.
+// React and the kits stay external; the shell serves them through its import map.
 // Its Tailwind stylesheet is inlined and added to the page when it mounts.
 export default defineConfig({
   plugins: [react(), tailwindcss()],

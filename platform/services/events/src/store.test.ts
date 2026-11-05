@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import type { InboxSignal } from './inbox.ts';
 import { MemoryEventStore, PgEventStore, type DomainEvent, type EventStore, type Notification } from './store.ts';
 
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs' as const, title: 'Review the budget paper', link: '/doc/7' };
@@ -142,7 +143,111 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
   });
 };
 
+const assignment = { kind: 'assignment', owner: { kind: 'person' as const, id: 'u-1' }, title: 'Plan the move', subject: { kind: 'ref', app: 'mandate', id: 'i-1' } };
+const forTeam = { ...assignment, owner: { kind: 'team' as const, id: 't-1' }, title: 'Someone on Finance: review it' };
+const place = { id: 't-1', path: ['o', 't-1'] };
+
+/** The same Inbox from every store. */
+const behavesLikeAnInbox = (make: () => EventStore, reset: () => Promise<void> = async () => {}) => {
+  let store: EventStore;
+  beforeEach(async () => {
+    await reset();
+    store = make();
+  });
+
+  it('keeps one item per app and key, changed in place, and reopens a closed one only when asked', async () => {
+    const first = await store.inbox.put('mandate', 'k1', assignment, place);
+    expect(first).toMatchObject({ created: true, item: { state: 'open', title: 'Plan the move', allow: { decline: true, handOn: true, selfComplete: false }, workspace: place } });
+    const again = await store.inbox.put('mandate', 'k1', { ...assignment, title: 'Plan the office move' });
+    expect(again).toMatchObject({ created: false, item: { title: 'Plan the office move' } });
+    if (!('item' in again) || !('item' in first)) throw new Error('expected items');
+    expect(again.item.id).toBe(first.item.id);
+    // Another app may use the same key.
+    expect(await store.inbox.put('folio', 'k1', assignment)).toMatchObject({ created: true });
+    expect(await store.inbox.patch('mandate', 'k1', { state: 'withdrawn', note: 'Superseded' })).toMatchObject({ item: { state: 'withdrawn', closeNote: 'Superseded' } });
+    expect(await store.inbox.put('mandate', 'k1', assignment)).toMatchObject({ closed: { state: 'withdrawn' } });
+    expect(await store.inbox.patch('mandate', 'k1', { title: 'Late' })).toMatchObject({ closed: { state: 'withdrawn' } });
+    expect(await store.inbox.patch('mandate', 'nope', {})).toEqual({ missing: true });
+    expect(await store.inbox.put('mandate', 'k1', { ...assignment, reopen: true })).toMatchObject({ created: false, item: { state: 'open' } });
+    expect((await store.inbox.history(first.item.id)).map((h) => h.action)).toEqual(['created', 'updated', 'withdrawn', 'reopened']);
+  });
+
+  it('lets one member take a team item; a second taker hears who has it', async () => {
+    const put = await store.inbox.put('mandate', 'team', forTeam, place);
+    if (!('item' in put)) throw new Error('expected an item');
+    const [a, b] = await Promise.all([store.inbox.act(put.item.id, { action: 'taken', by: 'u-2' }), store.inbox.act(put.item.id, { action: 'taken', by: 'u-3' })]);
+    const won = [a, b].filter((r) => 'item' in r);
+    const lost = [a, b].filter((r) => 'takenBy' in r);
+    expect([won.length, lost.length]).toEqual([1, 1]);
+    const taker = 'item' in won[0] ? won[0].item.takenBy : undefined;
+    expect(lost[0]).toEqual({ takenBy: taker });
+    // Taken: in the taker's For you, out of the team's list.
+    expect((await store.inbox.list({ person: taker!, teams: ['t-1'], tab: 'you', limit: 10 })).map((i) => i.key)).toEqual(['team']);
+    expect(await store.inbox.list({ person: 'u-4', teams: ['t-1'], tab: 'teams', limit: 10 })).toEqual([]);
+    expect(await store.inbox.act(put.item.id, { action: 'released', by: taker! })).toMatchObject({ item: { owner: { kind: 'team', id: 't-1' } } });
+    expect((await store.inbox.list({ person: 'u-4', teams: ['t-1'], tab: 'teams', limit: 10 })).map((i) => i.key)).toEqual(['team']);
+  });
+
+  it('hands on, declines and lists each tab, newest first, with counts', async () => {
+    const a = await store.inbox.put('mandate', 'a', assignment);
+    await store.inbox.put('mandate', 'b', { ...assignment, due: '2000-01-01T00:00:00.000Z' });
+    await store.inbox.put('mandate', 'c', forTeam);
+    await store.inbox.put('mandate', 'd', { ...forTeam, owner: { kind: 'team', id: 't-1', role: 'lead' } });
+    await store.inbox.put('mandate', 'e', { ...forTeam, owner: { kind: 'team', id: 't-2' } });
+    if (!('item' in a)) throw new Error('expected an item');
+    expect((await store.inbox.list({ person: 'u-1', teams: [], tab: 'you', limit: 10 })).map((i) => i.key)).toEqual(['b', 'a']);
+    expect((await store.inbox.list({ person: 'u-1', teams: [], tab: 'you', before: 'nonsense', limit: 10 })).map((i) => i.key)).toEqual([]);
+    const page = await store.inbox.list({ person: 'u-1', teams: [], tab: 'you', limit: 1 });
+    expect((await store.inbox.list({ person: 'u-1', teams: [], tab: 'you', before: page[0].id, limit: 10 })).map((i) => i.key)).toEqual(['a']);
+    expect((await store.inbox.list({ person: 'u-1', teams: ['t-1'], tab: 'teams', limit: 10 })).map((i) => i.key)).toEqual(['d', 'c']);
+    expect(await store.inbox.counts('u-1', ['t-1'], [])).toEqual({ you: 2, teams: 1, overdue: 1 });
+    expect(await store.inbox.counts('u-1', ['t-1'], ['t-1'])).toEqual({ you: 2, teams: 2, overdue: 1 });
+
+    const handed = await store.inbox.act(a.item.id, { action: 'handed-on', by: 'u-1', to: { kind: 'person', id: 'u-5' }, note: 'Yours now' });
+    expect(handed).toMatchObject({ item: { state: 'open', owner: { kind: 'person', id: 'u-5' } } });
+    expect((await store.inbox.list({ person: 'u-5', teams: [], tab: 'you', limit: 10 })).map((i) => i.key)).toEqual(['a']);
+    expect(await store.inbox.act(a.item.id, { action: 'declined', by: 'u-5', note: 'Not mine either' })).toMatchObject({ item: { state: 'declined', closedBy: 'u-5', closeNote: 'Not mine either' } });
+    expect(await store.inbox.act(a.item.id, { action: 'done', by: 'u-5' })).toMatchObject({ closed: { state: 'declined' } });
+    // Done shows it to whoever closed it and to whoever acted on it on the way.
+    expect((await store.inbox.list({ person: 'u-5', teams: [], tab: 'done', limit: 10 })).map((i) => i.key)).toEqual(['a']);
+    expect((await store.inbox.list({ person: 'u-1', teams: [], tab: 'done', limit: 10 })).map((i) => i.key)).toEqual(['a']);
+    expect(await store.inbox.list({ person: 'u-9', teams: [], tab: 'done', limit: 10 })).toEqual([]);
+    expect((await store.inbox.history(a.item.id)).map((h) => [h.action, h.by, h.from, h.to, h.note])).toEqual([
+      ['created', undefined, undefined, 'person:u-1', undefined],
+      ['handed-on', 'u-1', 'person:u-1', 'person:u-5', 'Yours now'],
+      ['declined', 'u-5', undefined, undefined, 'Not mine either'],
+    ]);
+  });
+
+  it('tells listeners who may hear of each change, before and after it', async () => {
+    const heard: InboxSignal[] = [];
+    const stop = store.inbox.onChange((s) => heard.push(s));
+    const put = await store.inbox.put('mandate', 'sig', forTeam);
+    if (!('item' in put)) throw new Error('expected an item');
+    await store.inbox.act(put.item.id, { action: 'taken', by: 'u-2' });
+    await store.inbox.act(put.item.id, { action: 'handed-on', by: 'u-2', to: { kind: 'person', id: 'u-3' } });
+    await expect.poll(() => heard.map((s) => [s.change, [...s.principals].sort()])).toEqual([
+      ['added', ['team:t-1']],
+      ['changed', ['person:u-2', 'team:t-1']],
+      ['changed', ['person:u-2', 'person:u-3', 'team:t-1']],
+    ]);
+    stop();
+  });
+
+  it('forgets items closed longer ago than it keeps them, with their history', async () => {
+    const put = await store.inbox.put('mandate', 'old', assignment);
+    await store.inbox.put('mandate', 'live', assignment);
+    if (!('item' in put)) throw new Error('expected an item');
+    await store.inbox.act(put.item.id, { action: 'done', by: 'u-1' });
+    expect(await store.inbox.prune(90)).toBe(0);
+    expect(await store.inbox.prune(-1)).toBe(1);
+    expect(await store.inbox.get(put.item.id)).toBeUndefined();
+    expect(await store.inbox.byKey('mandate', 'live')).toMatchObject({ state: 'open' });
+  });
+};
+
 describe('MemoryEventStore', () => behavesLikeAStore(() => new MemoryEventStore()));
+describe('MemoryEventStore inbox', () => behavesLikeAnInbox(() => new MemoryEventStore()));
 
 // Runs wherever DATABASE_URL points at a Postgres; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
@@ -165,9 +270,25 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
   behavesLikeAStore(
     () => store,
     async () => {
-      await admin.query('truncate events.notifications, events.audit, events.team_notices, events.domain_events');
+      await admin.query('truncate events.notifications, events.audit, events.team_notices, events.domain_events, events.inbox_items, events.inbox_history');
     },
   );
+
+  describe('inbox', () =>
+    behavesLikeAnInbox(
+      () => store,
+      async () => {
+        await admin.query('truncate events.inbox_items, events.inbox_history');
+      },
+    ));
+
+  it('tells another instance of each inbox change', async () => {
+    const heard: InboxSignal[] = [];
+    const stop = other.inbox.onChange((s) => heard.push(s));
+    await store.inbox.put('mandate', 'across', assignment);
+    await expect.poll(() => heard.map((s) => s.change)).toEqual(['added']);
+    stop();
+  });
 
   it('tells another instance about a notification too big to send whole', async () => {
     const heard: Notification[] = [];

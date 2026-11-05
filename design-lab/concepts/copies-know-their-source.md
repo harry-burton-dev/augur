@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-label`](../runs/2026-11-03-the-label/) (custody
 Could steer: The groundskeeper (K), the edition (S), Data Atlas Triage.
 
 In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): working-set pieces are links, never copies.
+
+In [`2026-11-05-the-type-specimen`](../runs/2026-11-05-the-type-specimen/) (data track): a `quotes` row records where a run's count was copied (a briefing), so a correction can reach it.

@@ -1,4 +1,4 @@
-import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxCounts, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import {
   Button,
   CentreMenu,
@@ -35,9 +35,16 @@ import {
   floorFromPath,
   floorHref,
   fromServer,
+  isQuiet,
   AppSearch,
   HOME_CHANNEL,
+  InboxClient,
+  INBOX_MORE,
+  inboxNeeds,
+  itemOfNeed,
+  withInbox,
   cardsFor,
+  settingsOf,
   choosePreview,
   chooseLive,
   chooseFeaturePreview,
@@ -76,9 +83,16 @@ import {
   type ServerNotification,
   type Session,
 } from './host/index.js';
+import { AccountApi } from './account/api.js';
+import type { Preferences } from './host/preferences.js';
+import { formatsFrom, languageOf, setFormats } from './host/formats.js';
+import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
+import { ACTION_STATUS } from './host/session.js';
+import { productName } from './host/menus.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
+import { InboxView } from './inbox/InboxView.js';
 
 export interface HostProps {
   session: Session;
@@ -103,14 +117,32 @@ const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name,
 /**
  * Agents aren't built yet: they are still being designed and have nothing
  * behind them. Rather than hiding them (Nothing is obtuse, docs/shell-principles.md),
- * the Shell keeps them in its functions under an id it doesn't open itself, and
- * pressing them says why. Once Aerie's functions take `unavailable` as its navs
- * do, this becomes that.
+ * the Shell keeps them in its functions as unavailable, so they look it and say
+ * why on hover and focus, and pressing them does nothing.
  */
-export const AGENTS_UNAVAILABLE = 'agents-unavailable';
+export const AGENTS_WHY =
+  'Not here yet: they’re still being designed and arrive with a later release of AUGUR, so nobody can turn them on.';
+/**
+ * Account opens the shell's Account area (ADR 0036), which the host draws, and Settings has moved into it
+ * (Appearance), so the Shell's own small Account and Settings views aren't offered.
+ */
+export const ACCOUNT_AREA = 'account-area';
+/** Where the Account area is in the address: `?account=<section>`, so a reload and Keycloak's screens come back to it. */
+export const ACCOUNT_PARAM = 'account';
 /** What the Shell offers; floors replace Switch workspace. */
-export const alphaFunctions = defaultFunctions.map((f) => (f.id === 'agents' ? { ...f, id: AGENTS_UNAVAILABLE } : f));
+export const alphaFunctions = defaultFunctions
+  .filter((f) => f.id !== 'settings')
+  .map((f) => (f.id === 'agents' ? { ...f, unavailable: AGENTS_WHY } : f.id === 'account' ? { ...f, id: ACCOUNT_AREA } : f));
 /** For an app's developers: its pull requests' previews, to switch to for themselves. */
+/** The stream again after the person changed which kinds are quiet: each notification from the events service marked as its kind now is. */
+const requieted = (list: ShellNotification[], known: ReadonlyMap<string, ServerNotification>, quiet: readonly string[]) =>
+  list.map((n) => {
+    const server = known.get(n.id);
+    const q = !!server && isQuiet(server, quiet);
+    return q === !!n.quiet ? n : { ...n, quiet: q };
+  });
+/** Pinned apps first, in their order, then the few opened most recently. */
+const keptClose = (pinned: string[] = [], recent: string[] = []) => [...new Set([...pinned, ...recent.slice(0, 6)])];
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
 /** How long an app may take to mount before its place says it's opening. */
@@ -166,10 +198,28 @@ export function Host({
   /** Apps' feature previews, and whether each is on for this person (SDK 1.7). */
   const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
-  const [agentsWhy, setAgentsWhy] = useState(false);
+  /** The Account area's open section, from `?account=`; null when it's closed. */
+  const [accountSection, setAccountSection] = useState<AccountSection | null>(() => {
+    const s = new URLSearchParams(window.location.search).get(ACCOUNT_PARAM);
+    return isAccountSection(s) ? s : null;
+  });
+  /** How the last of Keycloak's screens went, said once in the Account area. */
+  const [actionStatus] = useState(() => new URLSearchParams(window.location.search).get(ACTION_STATUS));
+  const accountApi = useMemo(() => new AccountApi({ getToken: session.getToken, fetchImpl }), [session, fetchImpl]);
+  /** The preferences the Account area shows; the shell's own copy is in `prefs`. */
+  const [chosen, setChosen] = useState<Preferences>({});
+  const pinned = chosen.pinned;
+  /** The Inbox (ADR 0026): whether its view is open, the counts in its label, and Home's first items on this floor. */
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxCounts, setInboxCounts] = useState<InboxCounts | undefined>(undefined);
+  const [inboxForHome, setInboxForHome] = useState<InboxItem[]>([]);
+  /** Bumped when the stream says an item changed, so the view's tab loads again. */
+  const [inboxVersion, setInboxVersion] = useState(0);
   const [switching, setSwitching] = useState(false);
   /** Notifications from the events service, by id; those raised in the browser by ctx.notify are not here. */
   const fromEvents = useRef(new Map<string, ServerNotification>());
+  /** The kinds of notification the person made quiet, as "<app>:<kind>", read as each one arrives. */
+  const quietRef = useRef<string[]>([]);
   /** What each notification's buttons raise; the Shell only has their labels. */
   const actions = useRef(new NotificationActions());
   /** An action pressed on a notification from another floor: raised once that floor's catalogue has loaded. */
@@ -177,7 +227,7 @@ export function Host({
   /** Which floor the loaded catalogue is for. */
   const manifestFloor = useRef<string | undefined>(undefined);
   /** What Home can ask for: the same as pressing a row or an action in the stream. */
-  const homeAsks = useRef<{ open(id: string): void; act(id: string, index: number): void } | null>(null);
+  const homeAsks = useRef<{ open(id: string): void; act(id: string, index: number): void; openItem(id: string): void } | null>(null);
   const cards = useRef<SurfaceMounter | null>(null);
   /** Find over apps' content, asked a moment after the person stops typing. */
   const search = useMemo(
@@ -211,6 +261,43 @@ export function Host({
       }),
     [preferencesUrl, session, fetchImpl, tell],
   );
+  /** Their language, from their sign-in (Keycloak's locale) until they choose another in Account. */
+  const language = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    void session.getToken().then(
+      (token) => {
+        language.current ??= languageOf(token);
+        setFormats(formatsFrom(prefs.current, language.current));
+      },
+      () => undefined,
+    );
+  }, [session, prefs]);
+  /** A language chosen in Account: dates follow it at once, unless they chose a date format of their own. */
+  const chooseLanguage = useCallback(
+    (locale: string | undefined) => {
+      language.current = locale;
+      setFormats(formatsFrom(prefs.current, locale));
+    },
+    [prefs],
+  );
+  /** Applies one choice from the Account area at once, and saves it. */
+  const choose = useCallback(
+    <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
+      prefs.set(key, value);
+      const now = prefs.current;
+      setChosen(now);
+      applyPreferences(now);
+      setFormats(formatsFrom(now, language.current));
+      const shell = shellRef.current;
+      if (!shell) return;
+      shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
+      shell.away = !!now.away;
+      shell.muted = now.muted ?? [];
+      if (key === 'recent' || key === 'pinned') shell.recent = keptClose(now.pinned, key === 'recent' ? [] : shell.recent);
+      if (key === 'quietKinds') shell.notifications = requieted(shell.notifications, fromEvents.current, (quietRef.current = now.quietKinds ?? []));
+    },
+    [prefs],
+  );
 
   /** The catalogue, and the floor it's for: until the new floor's arrives, nothing is shown from the last one's. */
   const [catalogue, setCatalogue] = useState<{ floor: string; apps: AppManifestEntry[] } | null>(null);
@@ -224,7 +311,11 @@ export function Host({
     if (!slug) window.history.replaceState(window.history.state, '', `${floorHref(home.slug, path)}${window.location.search}`);
     return window.location.pathname;
   }, [home]);
+  /** Whether they came to the front door, an address naming no floor and no place: only then does their start floor apply. */
+  const arrivedBare = useRef(window.location.pathname === '/' || window.location.pathname === '');
   const [pathname, setPathname] = useState(settled);
+  const startFrom = useRef({ floors: session.floors, own: home.id });
+  startFrom.current = { floors: session.floors, own: home.id };
   const [attempt, setAttempt] = useState(0);
 
   /** The floor the location names, and where on it. An unknown floor is undefined. */
@@ -233,6 +324,13 @@ export function Host({
   const floorRef = useRef<Workspace>(floor ?? home);
   floorRef.current = floor ?? home;
   const floorId = (floor ?? home).id;
+  const inbox = useMemo(() => new InboxClient({ getToken: session.getToken, floor: () => floorRef.current.id, fetchImpl, baseUrl: eventsUrl }), [session, fetchImpl, eventsUrl]);
+  /** Loads the counts and the items Home lists; quietly keeps the last ones when the events service can't answer. */
+  const refreshInbox = useCallback(() => {
+    void inbox.counts().then(setInboxCounts, () => undefined);
+    void Promise.all([inbox.list('you'), inbox.list('teams')]).then(([you, teams]) => setInboxForHome([...you, ...teams]), () => undefined);
+  }, [inbox]);
+  useEffect(refreshInbox, [refreshInbox, floorId]);
   const manifest = catalogue?.floor === floorId ? catalogue.apps : null;
 
   /** Goes to a path on the current floor; `to` goes to another floor instead. */
@@ -245,8 +343,23 @@ export function Host({
     [],
   );
 
+  /** Opens the Account area at a section, or closes it (null), keeping the address in step. */
+  const showAccount = useCallback((section: AccountSection | null) => {
+    const url = new URL(window.location.href);
+    if (section) url.searchParams.set(ACCOUNT_PARAM, section);
+    else url.searchParams.delete(ACCOUNT_PARAM);
+    url.searchParams.delete(ACTION_STATUS);
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.pushState(null, '', next);
+    setAccountSection(section);
+  }, []);
+
   useEffect(() => {
-    const onPop = () => setPathname(settled());
+    const onPop = () => {
+      const s = new URLSearchParams(window.location.search).get(ACCOUNT_PARAM);
+      setAccountSection(isAccountSection(s) ? s : null);
+      setPathname(settled());
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [settled]);
@@ -376,6 +489,24 @@ export function Host({
     [manifest, navigate, tell],
   );
 
+  /**
+   * Opens an inbox item as a notification's button would: raises its intent, or opens its app at its
+   * path. One on another floor opens there, its intent waiting for that floor's apps.
+   */
+  const openInboxItem = useCallback(
+    (item: InboxItem) => {
+      const intent: Intent | undefined = item.open ? { type: item.open.type, payload: item.open.payload ?? {} } : undefined;
+      const there = item.workspace ? session.floors.find((f) => f.id === item.workspace!.id) : undefined;
+      const app = manifest?.find((a) => a.id === item.app);
+      if (there && there.id !== floorRef.current.id) {
+        if (intent) raiseOnArrival.current = { floor: there.id, intent };
+        navigate('/', there);
+      } else if (intent) raise(intent).catch(() => undefined);
+      else if (app) navigate(hrefFor(app, item.path));
+    },
+    [session, manifest, navigate, raise],
+  );
+
   // An action pressed on another floor's notification, raised now that its floor's apps are here.
   useEffect(() => {
     const pending = raiseOnArrival.current;
@@ -424,6 +555,18 @@ export function Host({
     }),
     [session, bus, raise, request, floor, home, fetchImpl, tell],
   );
+
+  /** Apps' own settings in Account's Home and apps, mounted like Home's cards (ADR 0036). */
+  const mountSettings = useCallback(
+    (el: HTMLElement, id: string) => {
+      const app = manifest?.find((a) => a.id === id);
+      if (!app) return Promise.resolve(false);
+      cards.current ??= new SurfaceMounter(importEntry);
+      return cards.current.mountSurface(el, app, settingsOf(app, floor ?? home), contextFor(app, '/'));
+    },
+    [manifest, floor, home, contextFor, importEntry],
+  );
+  const unmountSettings = useCallback((el: HTMLElement) => void cards.current?.unmount(el), []);
 
   // The answering app mounts once per request. Its context is read when it opens, so the
   // catalogue loading again, or anything else that makes a new context, doesn't mount it a
@@ -653,12 +796,21 @@ export function Host({
     cards.current ??= new SurfaceMounter(importEntry);
     const send = () =>
       bus.emit<HomeState>(HOME_CHANNEL.state, {
-        needs: needsFor(shell.notifications, { muted: shell.muted, apps: manifest, floors: session.floors, here: here.id }),
-        cards: cardsFor(manifest, here, shell.recent),
+        // Open inbox items on this floor first (at most five, then a row for the rest), above the notifications that need you.
+        needs: [
+          ...inboxNeeds(inboxForHome, { manifest, here: here.id, total: inboxForHome.filter((i) => i.state === 'open' && !i.redacted && (i.workspace?.id ?? here.id) === here.id).length }),
+          ...needsFor(shell.notifications, { muted: shell.muted, apps: manifest, floors: session.floors, here: here.id }),
+        ],
+        cards: cardsFor(manifest, here, keptClose(pinned, shell.recent)),
       });
     const offs = [
       bus.on(HOME_CHANNEL.ready, send),
-      bus.on<{ id: string }>(HOME_CHANNEL.open, ({ id }) => homeAsks.current?.open(id)),
+      bus.on<{ id: string }>(HOME_CHANNEL.open, ({ id }) => {
+        if (id === INBOX_MORE) return setInboxOpen(true);
+        const item = itemOfNeed(id);
+        if (item) return homeAsks.current?.openItem(item);
+        homeAsks.current?.open(id);
+      }),
       bus.on<{ id: string; index: number }>(HOME_CHANNEL.act, ({ id, index }) => homeAsks.current?.act(id, index)),
       bus.on<{ el: HTMLElement; app: string; done?: (shown: boolean) => void }>(HOME_CHANNEL.mountCard, ({ el, app, done }) => {
         const entry = manifest.find((a) => a.id === app);
@@ -673,7 +825,7 @@ export function Host({
       offs.forEach((off) => off());
       shell.removeEventListener('ui-notifications', send);
     };
-  }, [bus, manifest, floor, home, session, contextFor, importEntry]);
+  }, [bus, manifest, floor, home, session, contextFor, importEntry, inboxForHome, pinned]);
 
   // Domain events on this floor, for the apps here, each on the bus by its topic: apps' `refreshOn` hears them.
   const followed = manifest && floor ? topicsFor(manifest).join(',') : '';
@@ -699,19 +851,23 @@ export function Host({
           actions.current.remember(n.id, n.actions);
         });
         const local = shell.notifications.filter((n) => !known.has(n.id));
-        shell.notifications = [...list.map(fromServer), ...local];
+        shell.notifications = [...list.map((n) => fromServer(n, quietRef.current)), ...local];
       },
       onNotification: (n) => {
         known.set(n.id, n);
         actions.current.remember(n.id, n.actions);
-        tell(fromServer(n));
+        tell(fromServer(n, quietRef.current));
       },
       onState: (state) => shell.setStream(state),
+      onInbox: () => {
+        refreshInbox();
+        setInboxVersion((v) => v + 1);
+      },
     });
     feed.current = f;
     f.start();
     return () => f.stop();
-  }, [session, fetchImpl, eventsUrl, tell]);
+  }, [session, fetchImpl, eventsUrl, tell, refreshInbox]);
 
   // Hand the Shell its data and listen to what it asks for.
   useEffect(() => {
@@ -721,10 +877,11 @@ export function Host({
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
-    shell.functions = previewApps.length || featureApps.some((a) => a.previews.some(choosable)) ? [...alphaFunctions, PREVIEWS_FUNCTION] : alphaFunctions;
+    const functions = withInbox(alphaFunctions, inboxCounts);
+    shell.functions = previewApps.length || featureApps.some((a) => a.previews.some(choosable)) ? [...functions, PREVIEWS_FUNCTION] : functions;
     shell.canSwitchWorkspace = false;
     shell.version = versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit());
-  }, [catalogue, session, floor, previewApps, featureApps]);
+  }, [catalogue, session, floor, previewApps, featureApps, inboxCounts]);
 
   // What this person chose last time: motion, density, away, and the apps they used most recently.
   useEffect(() => {
@@ -732,11 +889,27 @@ export function Host({
     void prefs.load().then((p) => {
       const shell = shellRef.current;
       if (!live || !shell) return;
-      applyPreferences(p);
-      shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts };
-      shell.away = !!p.away;
+      // Away with an end ends by itself once that time has passed.
+      if (p.away && p.awayUntil && Date.parse(p.awayUntil) <= Date.now()) {
+        prefs.set('away', false);
+        prefs.set('awayUntil', undefined);
+      }
+      const now = prefs.current;
+      applyPreferences(now);
+      setFormats(formatsFrom(now, language.current));
+      setChosen(now);
+      shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
+      shell.away = !!now.away;
       shell.muted = p.muted ?? [];
-      shell.recent = [...new Set([...shell.recent, ...(p.recent ?? [])])].slice(0, 6);
+      shell.recent = keptClose(now.pinned, [...shell.recent, ...(p.recent ?? [])]);
+      shell.notifications = requieted(shell.notifications, fromEvents.current, (quietRef.current = now.quietKinds ?? []));
+      // Arriving at the front door opens the floor they chose to start on, when it's still one of theirs.
+      const { floors, own } = startFrom.current;
+      const start = now.startFloor ? floors.find((f) => f.id === now.startFloor) : undefined;
+      if (arrivedBare.current && start && start.id !== own && floorRef.current.id === own && floorFromPath(window.location.pathname).path === '/') {
+        window.history.replaceState(window.history.state, '', `${floorHref(start.slug, '/')}${window.location.search}`);
+        setPathname(window.location.pathname);
+      }
     });
     return () => {
       live = false;
@@ -781,7 +954,12 @@ export function Host({
         navigate('/', there);
       } else raise(intent).catch(() => undefined);
     };
-    homeAsks.current = { open: openNotification, act: actOn };
+    // Opening an inbox item raises its intent, as a notification's button does, or opens its app at its path; one on another floor opens there.
+    const openItem = (id: string) => {
+      const item = inboxForHome.find((i) => i.id === id);
+      if (item) openInboxItem(item);
+    };
+    homeAsks.current = { open: openNotification, act: actOn, openItem };
     const onOpenNotification = (e: Event) => openNotification((e as CustomEvent<{ notification: { id: string } }>).detail.notification.id);
     const onAction = (e: Event) => {
       const { notification, index } = (e as CustomEvent<{ notification: { id: string }; index: number }>).detail;
@@ -802,13 +980,18 @@ export function Host({
       const { id } = (e as CustomEvent<{ id: string }>).detail;
       if (id === 'sign-out') void session.signOut();
       else if (id === 'previews') setPreviewsOpen(true);
-      else if (id === AGENTS_UNAVAILABLE) setAgentsWhy(true);
+      else if (id === 'inbox') setInboxOpen(true);
+      else if (id === ACCOUNT_AREA) {
+        shell.close();
+        showAccount('profile');
+      }
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
       if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts') prefs.set(key, !!value);
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
+      setChosen(prefs.current);
     };
     // Home and Title in the band: straight there, from whatever screen you're on.
     const onNav = (e: Event) => {
@@ -878,7 +1061,7 @@ export function Host({
       shell.removeEventListener('ui-nav', onNav);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp]);
+  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, showAccount, inboxForHome, openInboxItem]);
 
   // The open app is a pull request's preview: say so, with the way back.
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
@@ -922,6 +1105,29 @@ export function Host({
         onDone={toastDone}
       />
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
+      {accountSection ? (
+        <AccountArea
+          section={accountSection}
+          onSection={showAccount}
+          onClose={() => showAccount(null)}
+          api={accountApi}
+          prefs={chosen}
+          onPreference={choose}
+          onLanguage={chooseLanguage}
+          onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
+          onSignOut={() => void session.signOut()}
+          apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
+          floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
+          ownFloor={home.id}
+          appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
+          mountSettings={mountSettings}
+          unmountSettings={unmountSettings}
+          shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
+          product={productName()}
+          version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
+          actionStatus={actionStatus}
+        />
+      ) : null}
       {screen && screen.kind !== 'app' && manifest?.length ? (
         <CentreMenu
           key={screen.kind === 'orbit' ? `orbit:${screen.app.id}` : 'title'}
@@ -951,14 +1157,25 @@ export function Host({
       >
         <div ref={setRequestStage} className="request-stage" />
       </Dialog>
-      <Dialog
-        open={agentsWhy}
-        onClose={() => setAgentsWhy(false)}
-        size="glance"
-        heading="Agents aren’t here yet"
-        summary="They’re still being designed, so nothing is behind them yet. They arrive with a later release of AUGUR: until then nobody can turn them on, here or in Settings."
-        cancelLabel="Close"
-      />
+      <Dialog open={inboxOpen} onClose={() => setInboxOpen(false)} size="read" heading="Inbox" summary="Work that waits on you and your teams." cancelLabel="Close">
+        {inboxOpen && manifest ? (
+          <InboxView
+            client={inbox}
+            manifest={manifest}
+            floors={session.floors}
+            here={floorId}
+            me={session.user.id}
+            counts={inboxCounts}
+            version={inboxVersion}
+            fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
+            onChanged={refreshInbox}
+            onOpen={(item) => {
+              setInboxOpen(false);
+              openInboxItem(item);
+            }}
+          />
+        ) : null}
+      </Dialog>
       <Dialog
         open={previewsOpen}
         onClose={() => setPreviewsOpen(false)}
@@ -1066,7 +1283,7 @@ function LiveFromMyMachine({ app, busy, onChoose }: { app: PreviewApp; busy: boo
     >
       <label>
         <small>Live from my machine: the address <code>pnpm dev:app {app.app} --live</code> prints</small>
-        <input type="url" value={entry} placeholder="https://your-machine.ts.net/…/entry.ts" onChange={(e) => setEntry(e.currentTarget.value)} />
+        <input type="url" value={entry} placeholder="https://your-machine.ts.net/…/entry.tsx" onChange={(e) => setEntry(e.currentTarget.value)} />
       </label>
       <Button kind="secondary" size="sm" busy={busy} disabled={!entry.trim()} reason="Paste the address first." onPress={() => entry.trim() && onChoose(entry.trim())}>
         Load it

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
+import { INBOX_CHANNEL, inboxMigration, MemoryInboxStore, PgInboxStore, type InboxStore } from './inbox.ts';
 import { runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
@@ -21,6 +22,8 @@ export interface Notification {
   actions?: NotificationAction[];
   /** The sender's name for this news: a person has at most one per app and key. */
   key?: string;
+  /** One of the app's `notifications.kinds`. */
+  kind?: string;
   createdAt: string;
   readAt?: string;
   /** The floor it's from; none for one about the platform as a whole. */
@@ -94,6 +97,8 @@ export const topicMatches = (topic: string, wanted: string[]) =>
   wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
 
 export interface EventStore {
+  /** The Inbox's items (ADR 0026), in the same database. */
+  readonly inbox: InboxStore;
   /**
    * Adds one notification per recipient and tells every listener, on every instance.
    * With a key, skips anyone who already has one from that app with that key.
@@ -101,6 +106,8 @@ export interface EventStore {
   addNotifications(n: NewNotification, floor?: EventFloor): Promise<Notification[]>;
   /** A person's unread notifications, newest first. */
   unread(recipient: string, limit: number): Promise<Notification[]>;
+  /** Every notification a person has, read or not, newest first: for a copy of their data. */
+  notificationsOf(recipient: string, limit: number): Promise<Notification[]>;
   /** Marks a person's notification read or unread; false when they have no such notification. */
   setRead(recipient: string, id: string, read: boolean): Promise<boolean>;
   appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string): Promise<AuditEntry>;
@@ -133,6 +140,7 @@ const fromInput = (n: NewNotification, recipient: string, id: string, createdAt:
   ...(n.link ? { link: n.link } : {}),
   ...(n.actions?.length ? { actions: n.actions } : {}),
   ...(n.key ? { key: n.key } : {}),
+  ...(n.kind ? { kind: n.kind } : {}),
   createdAt,
   ...(floor ? { workspace: floor } : {}),
 });
@@ -141,6 +149,7 @@ const under = (floor: EventFloor | undefined, workspace: string) => !!floor?.pat
 
 /** For tests, and for running locally without Postgres. Forgets everything on restart. */
 export class MemoryEventStore implements EventStore {
+  readonly inbox = new MemoryInboxStore();
   private notifications: Notification[] = [];
   private entries: AuditEntry[] = [];
   private emitter = new EventEmitter().setMaxListeners(0);
@@ -159,6 +168,13 @@ export class MemoryEventStore implements EventStore {
   async unread(recipient: string, limit: number) {
     return this.notifications
       .filter((n) => n.recipient === recipient && !n.readAt)
+      .reverse()
+      .slice(0, limit);
+  }
+
+  async notificationsOf(recipient: string, limit: number) {
+    return this.notifications
+      .filter((n) => n.recipient === recipient)
       .reverse()
       .slice(0, limit);
   }
@@ -318,6 +334,13 @@ export const migrations: Migration[] = [
       alter table events.notifications add column key text;
       create unique index notifications_once on events.notifications (recipient, app, key) where key is not null;`,
   },
+  inboxMigration,
+  {
+    id: '008_notification_kinds',
+    sql: `
+      -- Which of the app's declared kinds a notification is (ADR 0036): people choose how each kind reaches them.
+      alter table events.notifications add column kind text;`,
+  },
 ];
 
 const CHANNEL = 'events_notification';
@@ -335,6 +358,7 @@ type NotificationRow = {
   link: string | null;
   actions: NotificationAction[] | null;
   key: string | null;
+  kind: string | null;
   created_at: Date;
   read_at: Date | null;
   workspace_id: string | null;
@@ -366,6 +390,7 @@ const fromRow = (r: NotificationRow): Notification => ({
   ...(r.link ? { link: r.link } : {}),
   ...(r.actions?.length ? { actions: r.actions } : {}),
   ...(r.key ? { key: r.key } : {}),
+  ...(r.kind ? { kind: r.kind } : {}),
   createdAt: r.created_at.toISOString(),
   ...(r.read_at ? { readAt: r.read_at.toISOString() } : {}),
   ...floorFrom(r.workspace_id, r.workspace_path),
@@ -405,8 +430,11 @@ export class PgEventStore implements EventStore {
   private emitter = new EventEmitter().setMaxListeners(0);
   private listening?: pg.PoolClient;
   private closed = false;
+  readonly inbox: PgInboxStore;
 
-  constructor(private readonly pool: pg.Pool) {}
+  constructor(private readonly pool: pg.Pool) {
+    this.inbox = new PgInboxStore(pool);
+  }
 
   static async connect(connectionString: string) {
     const store = new PgEventStore(steadyPool(new pg.Pool({ connectionString })));
@@ -444,6 +472,7 @@ export class PgEventStore implements EventStore {
     client.on('end', () => again('it ended'));
     client.on('notification', (msg) => {
       if (msg.channel === EVENT_CHANNEL && msg.payload) return void this.heardEvent(msg.payload);
+      if (msg.channel === INBOX_CHANNEL && msg.payload) return void this.inbox.heard(msg.payload);
       if (msg.channel !== CHANNEL || !msg.payload) return;
       const sent = JSON.parse(msg.payload) as Notification | { ref: string };
       if (!('ref' in sent)) return void this.emitter.emit('notification', sent);
@@ -455,6 +484,7 @@ export class PgEventStore implements EventStore {
     });
     await client.query(`listen ${CHANNEL}`);
     await client.query(`listen ${EVENT_CHANNEL}`);
+    await client.query(`listen ${INBOX_CHANNEL}`);
   }
 
   private heardEvent(payload: string) {
@@ -476,11 +506,11 @@ export class PgEventStore implements EventStore {
     try {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
-        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key)
-         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10 from unnest($1::text[]) as r
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind)
+         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11 from unnest($1::text[]) as r
          on conflict (recipient, app, key) where key is not null do nothing
          returning *`,
-        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null],
+        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null, n.kind ?? null],
       );
       const added = rows.map(fromRow);
       // Delivered when the transaction commits. Postgres caps a payload at 8000 bytes; a bigger one goes by id.
@@ -503,6 +533,11 @@ export class PgEventStore implements EventStore {
       'select * from events.notifications where recipient = $1 and read_at is null order by created_at desc, id limit $2',
       [recipient, limit],
     );
+    return rows.map(fromRow);
+  }
+
+  async notificationsOf(recipient: string, limit: number) {
+    const { rows } = await this.pool.query<NotificationRow>('select * from events.notifications where recipient = $1 order by created_at desc, id limit $2', [recipient, limit]);
     return rows.map(fromRow);
   }
 

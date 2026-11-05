@@ -8,9 +8,11 @@
 //   - a setting's guide section (`x-docs`) doesn't exist or doesn't name it;
 //   - a service's code reads a setting the schema doesn't have, or doesn't list that service for;
 //   - a default, in the schema or compose.yml, hard-codes one deployment (an owner, a tailnet host,
-//     an email address) where the setting should be required or worked out.
-//   node scripts/check-settings.mjs
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+//     an email address) where the setting should be required or worked out;
+//   - the install guide's list of settings to fill in (docs/deploy.md, between the `settings` markers)
+//     isn't the one the schema makes.
+//   node scripts/check-settings.mjs            (--write rewrites that list from the schema)
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { parse } from 'yaml';
 
@@ -18,8 +20,8 @@ const root = new URL('..', import.meta.url).pathname;
 
 /** Ids kept on purpose so live servers keep working (AGENTS.md, Names): not a deployment's literal. */
 export const KEPT_IDS = ['ghcr.io/harry-burton-dev/im-platform'];
-/** What the operating system sets, not AUGUR. */
-const OS_KEYS = new Set(['PATH', 'HOME', 'HOSTNAME']);
+/** What the operating system or the test runner (Vitest) sets, not AUGUR. */
+const OS_KEYS = new Set(['PATH', 'HOME', 'HOSTNAME', 'VITEST']);
 
 const keyPattern = '[A-Z][A-Z0-9_]*';
 
@@ -102,6 +104,34 @@ export const deploymentLiterals = (value) => {
   const email = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/.exec(text);
   if (email && !/@example\.(org|com|net)$/.test(email[0])) found.push('an email address');
   return found;
+};
+
+/** The install guide's settings list, made from the schema (docs/deploy.md, First start). */
+export const INSTALL_GUIDE = 'docs/deploy.md';
+const START = '<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->';
+const END = '<!-- /settings -->';
+
+/** The list itself: what a person fills in by hand, then the secrets the preflight makes. */
+export const installList = (schema) => {
+  const props = schema.properties ?? {};
+  const byHand = (schema.required ?? []).filter((key) => !props[key]?.['x-generate']);
+  const made = Object.keys(props).filter((key) => props[key]['x-generate']);
+  const cell = (text) => text.replace(/\|/g, '\\|').replace(/</g, '&lt;');
+  return [
+    '| Setting | What to put |',
+    '| --- | --- |',
+    ...byHand.map((key) => `| \`${key}\` | ${cell(props[key]?.description ?? '')}${props[key]?.writeOnly ? ' A secret.' : ''} |`),
+    '',
+    `The preflight (step 3) fills in these ${made.length} secrets, each with 64 random hex characters: ${made.map((k) => `\`${k}\``).join(', ')}.`,
+  ].join('\n');
+};
+
+/** `markdown` with its settings list replaced by `list`, or undefined when it has no markers. */
+export const withInstallList = (markdown, list) => {
+  const from = markdown.indexOf(START);
+  const to = markdown.indexOf(END);
+  if (from < 0 || to < from) return undefined;
+  return `${markdown.slice(0, from + START.length)}\n${list}\n${markdown.slice(to)}`;
 };
 
 const strings = (node, out = []) => {
@@ -195,6 +225,14 @@ export const settingsProblems = ({ schema, files, code }) => {
   for (const value of strings(parse(composeText, { merge: true })))
     for (const what of deploymentLiterals(value)) problems.push(`compose.yml hard-codes ${what} in "${value}"; make it a setting that's required or worked out.`);
 
+  // The install guide's settings list.
+  const guide = files[INSTALL_GUIDE];
+  if (guide !== undefined) {
+    const made = withInstallList(guide, installList(schema));
+    if (made === undefined) problems.push(`${INSTALL_GUIDE} has no settings list (its markers are gone).`);
+    else if (made !== guide) problems.push(`${INSTALL_GUIDE}'s settings list isn't the schema's: run pnpm check:settings --write.`);
+  }
+
   return problems;
 };
 
@@ -226,6 +264,12 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   }
   code['service-kit'] = walk(join(root, 'platform/packages/service-kit/src')).map((f) => readFileSync(f, 'utf8')).join('\n');
 
+  if (process.argv.includes('--write')) {
+    const made = withInstallList(files[INSTALL_GUIDE], installList(schema));
+    if (made === undefined) throw new Error(`${INSTALL_GUIDE} has no settings list markers.`);
+    writeFileSync(join(root, INSTALL_GUIDE), made);
+    files[INSTALL_GUIDE] = made;
+  }
   const problems = settingsProblems({ schema, files, code });
   if (problems.length) {
     console.error(`${problems.length} problem(s) with the deployment's settings (infra/deploy/settings.schema.json):\n${problems.map((p) => `  - ${p}`).join('\n')}`);

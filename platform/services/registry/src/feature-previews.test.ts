@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { callerHeaders } from '@augur/service-kit';
+import { callerHeaders, FloorsUnavailable, type FloorPlace } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { ended } from './feature-previews.ts';
@@ -79,6 +79,61 @@ describe('feature previews', () => {
     const ask = (authorization: string) => t.app.inject({ method: 'GET', url: '/v1/apps/notes/feature-previews/people/u-2', headers: { authorization } });
     expect((await ask('Bearer app-notes')).json()).toEqual({ on: ['board'] });
     expect((await ask('Bearer app-other')).statusCode).toBe(403);
+  });
+
+  it('turns a preview on for chosen floors and the floors beneath them, and nowhere else; audited', async () => {
+    // The org, Finance with Payroll below it, Legal, and someone's own floor.
+    const places: Record<string, FloorPlace> = {
+      o: { id: 'o', kind: 'org', path: ['o'], org: 'o' },
+      f: { id: 'f', kind: 'team', path: ['o', 'f'], org: 'o' },
+      p: { id: 'p', kind: 'team', path: ['o', 'f', 'p'], org: 'o' },
+      l: { id: 'l', kind: 'team', path: ['o', 'l'], org: 'o' },
+      m: { id: 'm', kind: 'personal', path: ['m'], org: 'o' },
+    };
+    const entries: { action: string; detail?: Record<string, unknown> }[] = [];
+    let down = false;
+    const floors = async (id: string) => {
+      if (down) throw new FloorsUnavailable('identity is down');
+      return id === 'org' ? places.o : places[id];
+    };
+    const app = await buildApp({ verifyService, floors, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring: 'production' }), audit: async (e) => void entries.push(e) });
+    await app.inject({ method: 'PUT', url: '/v1/apps/notes', headers: service, payload: { ...notes, floors: ['personal', 'team', 'org'] } });
+    const on = (id: string) => callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: [], workspace: { id, kind: places[id].kind, role: 'member' } });
+    const set = (payload: Record<string, unknown>) => app.inject({ method: 'PUT', url: '/v1/apps/notes/feature-previews/board', headers: admin, payload });
+    const catalogue = async (id: string) => (await app.inject({ method: 'GET', url: `/v1/manifest?workspace=${id}`, headers: on(id) })).json().find((a: { id: string }) => a.id === 'notes');
+
+    expect((await set({ mode: 'floors' })).json().error).toBe('bad_floors');
+    expect((await set({ mode: 'everyone', floors: ['f'] })).json().error).toBe('bad_floors');
+    expect((await set({ mode: 'floors', floors: ['nowhere'] })).json()).toMatchObject({ error: 'bad_floors', message: expect.stringContaining('"nowhere"') });
+    down = true;
+    expect((await set({ mode: 'floors', floors: ['f'] })).statusCode).toBe(503);
+    down = false;
+
+    const view = (await set({ mode: 'floors', floors: ['f'] })).json();
+    expect(view.previews[0]).toMatchObject({ id: 'board', mode: 'floors', floors: ['f'], chosen: true });
+    expect(entries.at(-1)).toMatchObject({ action: 'app.preview-set', detail: { preview: 'board', mode: 'floors', floors: ['f'] } });
+    // On for Finance and Payroll beneath it; not for Legal, the org above, or someone's own floor.
+    expect((await catalogue('f')).previewsOn).toEqual(['board']);
+    expect((await catalogue('p')).previewsOn).toEqual(['board']);
+    expect((await catalogue('l')).previewsOn).toBeUndefined();
+    expect((await catalogue('o')).previewsOn).toBeUndefined();
+    expect((await catalogue('m')).previewsOn).toBeUndefined();
+    // Nobody turns it on for themselves, and the Previews list says whether it's on where they stand.
+    expect((await app.inject({ method: 'PUT', url: '/v1/feature-previews/notes/board', headers: on('l'), payload: { on: true } })).json()).toMatchObject({ error: 'not_opt_in', message: expect.stringContaining('chosen floors') });
+    const listed = async (id: string) => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers: on(id) })).json().apps[0].previews[0];
+    expect(await listed('p')).toMatchObject({ mode: 'floors', on: true });
+    expect(await listed('l')).toMatchObject({ mode: 'floors', on: false });
+    expect((await listed('p')).floors).toBeUndefined();
+    // The app's own service asks with the floor the person stands on.
+    const ask = async (workspace?: string) => (await app.inject({ method: 'GET', url: `/v1/apps/notes/feature-previews/people/u-2${workspace ? `?workspace=${workspace}` : ''}`, headers: service })).json().on;
+    expect(await ask('p')).toEqual(['board']);
+    expect(await ask('l')).toEqual([]);
+    expect(await ask()).toEqual([]);
+    // The org turns it on for everyone beneath it, personal floors included.
+    await set({ mode: 'floors', floors: ['o'] });
+    expect((await catalogue('m')).previewsOn).toEqual(['board']);
+    // Another mode drops the floors.
+    expect((await set({ mode: 'everyone' })).json().previews[0].floors).toBeUndefined();
   });
 
   it('ends a preview after its last day', () => {

@@ -56,13 +56,12 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   upgrade note in docs/upgrade.md.
 
 ## Structure (ADR 0002)
-- `platform/` owns the shell, SDK, UI kit, services. `apps/` holds apps, which
+- `platform/` owns the shell, SDK and services. `apps/` holds apps, which
   are moving to their own repositories (ADR 0012). Nothing in `platform/`
   imports an app and apps never import each other: `pnpm check:boundaries`.
 - Apps reach AUGUR only through `@augur/*` packages, the gateway, the
   manifest and domain events.
-- Shared hot spots: `platform/packages/mfe-sdk`, `platform/packages/ui-kit`
-  (including `src/components/icon.ts`), `platform/services/gateway`. Keep
+- Shared hot spots: `platform/packages/mfe-sdk`, `platform/services/gateway`. Keep
   changes there in their own small PR and merge it first.
 - The React kits (Common, Quill, Aerie) and their tokens live in the
   `augur-kit` repository (ADR 0046) and arrive here as packages from GitHub
@@ -77,7 +76,8 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   the token files in `augur-kit`'s `packages/kit-common/tokens/` (`common`,
   `shell`, `app`; ADR 0015). New `floor-*` tokens must
   also be copied into the design tool Wave is made in (tell Harry).
-- Icons come from Lucide through `icon.ts`. Never hand-write SVG.
+- Icons come from Lucide through Common's `Icon` (`icon.tsx` in `augur-kit`).
+  Never hand-write SVG.
 - App layout and interaction rules agreed with Harry live in
   docs/app-patterns.md. A live design session writes each agreed rule there
   in the same PR.
@@ -93,6 +93,9 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - Shell or kit changes: run the contract tests in `platform/contract`.
 - Every PR carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`),
   see docs/versioning.md.
+- When an admin upgrading must act or know something because of your change, add a note at
+  the top of "Release notes that need you" in docs/upgrade.md, starting `**From** unreleased`
+  (`pnpm check:upgrade-notes`); the Version packages PR writes its release in.
 
 ## Pull requests and releases
 - Open pull requests against `main`, the only

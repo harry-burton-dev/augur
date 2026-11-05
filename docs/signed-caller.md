@@ -23,15 +23,18 @@ app.get('/v1/claims', async (req, reply) => {
 
 The hook drops every `x-user-*` header a request brings, and the floor's kind and role. It puts back the caller from a valid signed token, so `callerFromHeaders` reads only what the gateway said. A request with a bad, expired or someone else's token gets 401. One with no token has no caller, which is how another service's own calls arrive: they prove who they are with their own sign-in, as before.
 
-New apps from `pnpm create-app` have the hook already. An app that hasn't added it keeps working, because the gateway still sends the plain headers beside the token, but it is trusting the network.
+New apps made from augur-app-template have the hook already (the service kit's `appServer`). An app that hasn't added it keeps working, because the gateway still sends the plain headers beside the token, but it is trusting the network.
 
 ## Where the key comes from
 
-The gateway publishes its public key at `/api/gateway/v1/caller-keys`, with no sign-in needed. `callerCheckFromEnv` fetches it from:
+The gateway publishes its public key at `/api/gateway/v1/caller-keys`, with no sign-in needed. `callerCheckFromEnv` fetches it from `CALLER_KEYS_URL` when set (an app hosted outside the compose network sets this to `https://<your platform>/api/gateway/v1/caller-keys`), otherwise from `GATEWAY_URL` plus that path. `GATEWAY_URL` defaults to `http://gateway:8080`.
 
-- `CALLER_KEYS_URL`, when set. An app hosted outside the compose network sets this to `https://<your platform>/api/gateway/v1/caller-keys`.
-- Otherwise, in production (`NODE_ENV=production`, which every image sets), `GATEWAY_URL` plus that path. `GATEWAY_URL` defaults to `http://gateway:8080`.
-- Otherwise (local dev and tests), nothing is checked and `x-user-*` headers are believed, as `pnpm dev:app` sends them.
+It fails closed. A service checks callers unless it is told plainly not to, so a container that lost a setting still believes only the gateway. It believes `x-user-*` headers as they come only:
+
+- with `AUGUR_INSECURE_DEV_CALLERS=1`, which `pnpm dev:app` sets for the app's service, so the stand-in shell's person gets through;
+- inside Vitest (`NODE_ENV=test` and `VITEST`, which it sets). `NODE_ENV=test` alone is not enough.
+
+In production (`NODE_ENV=production`, which every image, every compose service and the app runner set, and `scripts/production-env.test.mjs` holds them to) it always checks, whatever else is set. Never put `AUGUR_INSECURE_DEV_CALLERS` in a deployment's `.env`: it does nothing there, and nothing passes it on.
 
 The gateway makes a new key each time it starts. A service sees a key id it doesn't know and fetches the key again, so nothing needs restarting. More than one gateway behind a load balancer must sign with the same key: give each the same `CALLER_SIGNING_KEY` (`openssl rand -hex 32`, in `.env`), which also keeps the key the same across the gateway's restarts.
 

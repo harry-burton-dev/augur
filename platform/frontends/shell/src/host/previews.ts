@@ -1,3 +1,5 @@
+import { writeDate } from './formats.js';
+
 /** A pull request's build of an app, running beside it on this server for the app's developers. */
 export interface Preview {
   pr: number;
@@ -76,7 +78,7 @@ export async function chooseLive(fetchImpl: typeof fetch, url: string, token: st
 }
 
 /** Where a preview stands, in a few words: what it is and when it goes. */
-export const previewLine = (p: Preview) => `#${p.pr}${p.title ? ` ${p.title}` : ''} · ${p.version} · until ${new Date(p.endsAt).toLocaleDateString()}`;
+export const previewLine = (p: Preview) => `#${p.pr}${p.title ? ` ${p.title}` : ''} · ${p.version} · until ${writeDate(p.endsAt, { dateStyle: 'medium' })}`;
 
 /** One of an app's feature previews, as the person stands with it (SDK 1.7). */
 export interface FeaturePreviewState {
@@ -85,7 +87,7 @@ export interface FeaturePreviewState {
   detail?: string;
   until?: string;
   /** Who gets it: nobody, those who turn it on, or everyone. An admin chooses in Admin → Apps. */
-  mode: 'off' | 'opt-in' | 'everyone';
+  mode: 'off' | 'opt-in' | 'everyone' | 'floors';
   ended?: boolean;
   on: boolean;
 }
@@ -130,8 +132,9 @@ export const choosable = (p: FeaturePreviewState) => p.mode === 'opt-in' && !p.e
 
 /** Where a feature preview stands for this person, in a few words, saying why when they can't change it. */
 export const featureLine = (p: FeaturePreviewState) => {
-  if (p.ended) return `Ended${p.until ? ` on ${new Date(`${p.until}T00:00:00Z`).toLocaleDateString()}` : ''}`;
+  if (p.ended) return `Ended${p.until ? ` on ${writeDate(`${p.until}T00:00:00Z`, { dateStyle: 'medium', timeZone: 'UTC' })}` : ''}`;
   if (p.mode === 'everyone') return 'On for everyone: an admin chose that';
+  if (p.mode === 'floors') return p.on ? 'On here: an admin chose this floor' : 'On for some floors only: an admin chose which';
   if (p.mode === 'off') return 'Off for now: an admin hasn’t opened it';
-  return `${p.on ? 'On for you' : 'Off'}${p.until ? ` · until ${new Date(`${p.until}T00:00:00Z`).toLocaleDateString()}` : ''}`;
+  return `${p.on ? 'On for you' : 'Off'}${p.until ? ` · until ${writeDate(`${p.until}T00:00:00Z`, { dateStyle: 'medium', timeZone: 'UTC' })}` : ''}`;
 };

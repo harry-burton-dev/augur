@@ -33,10 +33,16 @@ export interface AppManifestEntry {
     icon?: string;
     // (undocumented)
     id: string;
+    inbox?: {
+        kinds: InboxKind[];
+    };
     maxUpload?: number;
     menu?: AppMenuCategory[];
     // (undocumented)
     name: string;
+    notifications?: {
+        kinds: NotificationKind[];
+    };
     orbit?: boolean;
     previews?: FeaturePreview[];
     previewsOn?: string[];
@@ -200,6 +206,111 @@ export interface Focus {
 }
 
 // @public
+export const INBOX_TOPICS: {
+    readonly taken: "platform.inbox.taken";
+    readonly released: "platform.inbox.released";
+    readonly declined: "platform.inbox.declined";
+    readonly handedOn: "platform.inbox.handed-on";
+    readonly done: "platform.inbox.done";
+};
+
+// @public
+export interface InboxChange {
+    // (undocumented)
+    change: 'added' | 'changed' | 'closed';
+    // (undocumented)
+    id: string;
+}
+
+// @public
+export interface InboxCounts {
+    // (undocumented)
+    overdue: number;
+    // (undocumented)
+    teams: number;
+    // (undocumented)
+    you: number;
+}
+
+// @public
+export interface InboxItem {
+    // (undocumented)
+    allow: {
+        decline: boolean;
+        handOn: boolean;
+        selfComplete: boolean;
+    };
+    // (undocumented)
+    app: string;
+    // (undocumented)
+    closedAt?: string;
+    // (undocumented)
+    closedBy?: string;
+    // (undocumented)
+    closeNote?: string;
+    // (undocumented)
+    createdAt: string;
+    // (undocumented)
+    detail?: string;
+    // (undocumented)
+    due?: string;
+    from?: string;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    key: string;
+    kind: string;
+    open?: {
+        type: string;
+        payload?: unknown;
+    };
+    // (undocumented)
+    overdue?: boolean;
+    // (undocumented)
+    owner: InboxOwner;
+    // (undocumented)
+    path?: string;
+    redacted?: boolean;
+    // (undocumented)
+    refs?: (Ref | DocumentRef | EntityRef | UnitRef)[];
+    // (undocumented)
+    state: InboxState;
+    // (undocumented)
+    subject?: Ref | DocumentRef | EntityRef | UnitRef;
+    // (undocumented)
+    takenAt?: string;
+    takenBy?: string;
+    title?: string;
+    // (undocumented)
+    updatedAt: string;
+    // (undocumented)
+    workspace?: {
+        id: string;
+        path: string[];
+    };
+}
+
+// @public
+export interface InboxKind {
+    icon?: string;
+    id: string;
+    label: string;
+}
+
+// @public
+export interface InboxOwner {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    kind: 'person' | 'team';
+    // (undocumented)
+    role?: 'lead';
+}
+
+// @public
+export type InboxState = 'open' | 'done' | 'declined' | 'handed-on' | 'withdrawn';
+
+// @public
 export interface Intent<T = unknown> {
     // (undocumented)
     payload: T;
@@ -316,10 +427,18 @@ export interface NotificationAction {
 }
 
 // @public
+export interface NotificationKind {
+    detail?: string;
+    id: string;
+    label: string;
+}
+
+// @public
 export interface NotifyMessage {
     actions?: NotificationAction[];
     // (undocumented)
     body?: string;
+    kind?: string;
     needsYou?: boolean;
     // (undocumented)
     title: string;

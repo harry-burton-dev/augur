@@ -3,7 +3,9 @@ import { SignJWT } from 'jose';
 import { createPrivateKey } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { callerFromHeaders, callerHeaders, type Caller } from './caller.js';
-import { CALLER_TOKEN_HEADER, callerCheckFor, callerSigner, signedCallerHeaders, signedCallers, type CallerCheck } from './signed-caller.js';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { CALLER_KEYS_PATH, CALLER_TOKEN_HEADER, callerCheckFor, callerCheckFromEnv, callerSigner, signedCallerHeaders, signedCallers, type CallerCheck } from './signed-caller.js';
 
 const sam: Caller = { id: 'u1', name: 'Sam Okafor', email: 'sam@example.org', departments: ['Research'], roles: ['editor'], signedInAt: '2026-10-23T22:00:00.000Z', workspace: { id: 'w1', kind: 'team', role: 'lead' } };
 
@@ -93,5 +95,50 @@ describe('signed caller', () => {
     const seed = 'ab'.repeat(32);
     expect(await callerSigner(seed).keys()).toEqual(await callerSigner(seed).keys());
     expect(() => callerSigner('abcd')).toThrow(/64 hex/);
+  });
+});
+
+describe('callerCheckFromEnv', () => {
+  it('fails closed: callers are checked unless a service is plainly told not to', () => {
+    expect(callerCheckFromEnv('identity', {})).toBeDefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'production' })).toBeDefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'development' })).toBeDefined();
+    expect(callerCheckFromEnv('identity', { AUGUR_INSECURE_DEV_CALLERS: 'true' })).toBeDefined();
+    // A container that somehow got NODE_ENV=test is still not a test runner.
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test' })).toBeDefined();
+  });
+
+  it('believes x-user-* headers only under pnpm dev:app or Vitest', () => {
+    expect(callerCheckFromEnv('identity', { AUGUR_INSECURE_DEV_CALLERS: '1' })).toBeUndefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test', VITEST: 'true' })).toBeUndefined();
+    expect(callerCheckFromEnv('identity')).toBeUndefined();
+  });
+
+  it('always checks in production, and wherever CALLER_KEYS_URL is set', () => {
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'production', AUGUR_INSECURE_DEV_CALLERS: '1' })).toBeDefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'production', VITEST: 'true' })).toBeDefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test', VITEST: 'true', CALLER_KEYS_URL: 'http://gateway:8080/keys' })).toBeDefined();
+  });
+
+  it('checks against the key the gateway at GATEWAY_URL publishes', async () => {
+    const signer = callerSigner();
+    const asked: string[] = [];
+    const gateway = createServer(async (req, res) => {
+      asked.push(req.url ?? '');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(await signer.keys()));
+    });
+    await new Promise<void>((done) => gateway.listen(0, '127.0.0.1', done));
+    try {
+      const { port } = gateway.address() as AddressInfo;
+      const app = await service(callerCheckFromEnv('identity', { GATEWAY_URL: `http://127.0.0.1:${port}/` }));
+      const signed = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: await signedCallerHeaders(signer, sam, 'identity') });
+      expect(signed.json().caller).toEqual(sam);
+      expect(asked).toEqual([CALLER_KEYS_PATH]);
+      const claimed = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: callerHeaders({ ...sam, roles: ['admin'] }) });
+      expect(claimed.json().caller).toBeNull();
+    } finally {
+      gateway.close();
+    }
   });
 });

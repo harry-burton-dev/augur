@@ -60,7 +60,7 @@ const toTime = (t: ShellNotification['time']) => (t instanceof Date ? t.getTime(
 /** Everything unread that needs you, newest first, leaving out what the person muted. */
 export function needsFor(notifications: ShellNotification[], { muted, apps, floors, here }: { muted: string[]; apps: AppManifestEntry[]; floors: Workspace[]; here: string }): HomeNeed[] {
   return notifications
-    .filter((n) => n.level === 'needs' && !muted.includes(n.app))
+    .filter((n) => n.level === 'needs' && !n.quiet && !muted.includes(n.app))
     .sort((a, b) => toTime(b.time) - toTime(a.time))
     .map((n) => {
       const floor = n.floor && n.floor !== here ? floors.find((f) => f.id === n.floor) : undefined;
@@ -84,6 +84,16 @@ export function needsFor(notifications: ShellNotification[], { muted, apps, floo
 export function cardOf(app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'role'>): ManifestSurface | undefined {
   const fits = (app.surfaces ?? []).filter((s) => s.slot === 'card' && s.floor === floor.kind && (!s.role || s.role === floor.role));
   return fits.find((s) => s.role) ?? fits[0];
+}
+
+/**
+ * An app's own settings for the person (ADR 0036), shown as a section of Account's Home and apps:
+ * the `settings` surface for this kind of floor, or else its personal one, since what a person
+ * chooses for themselves follows them.
+ */
+export function settingsOf(app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'role'>): ManifestSurface | undefined {
+  const all = (app.surfaces ?? []).filter((s) => s.slot === 'settings' && (!s.role || s.role === floor.role));
+  return all.find((s) => s.floor === floor.kind) ?? all.find((s) => s.floor === 'personal');
 }
 
 /**
@@ -132,10 +142,14 @@ export class SurfaceMounter {
   }
 
   /** Mounts `app`'s card for the floor into `el`. False when there is none, or it failed; Home then says so in the tile. */
-  async mount(el: HTMLElement, app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'role'>, ctx: MountContext): Promise<boolean> {
-    const card = cardOf(app, floor);
-    if (!card || incompatibility(app)) return false;
-    const surface = (await this.entryOf(app))?.surfaces?.[card.module];
+  mount(el: HTMLElement, app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'role'>, ctx: MountContext): Promise<boolean> {
+    return this.mountSurface(el, app, cardOf(app, floor), ctx);
+  }
+
+  /** Mounts one of `app`'s surfaces (a card, its settings) into `el`. False when there is none, or it failed. */
+  async mountSurface(el: HTMLElement, app: AppManifestEntry, which: ManifestSurface | undefined, ctx: MountContext): Promise<boolean> {
+    if (!which || incompatibility(app)) return false;
+    const surface = (await this.entryOf(app))?.surfaces?.[which.module];
     if (!isSurface(surface) || !el.isConnected) return false;
     await this.unmount(el);
     this.mounted.set(el, surface);

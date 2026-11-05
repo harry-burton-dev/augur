@@ -24,6 +24,14 @@ describe('parseEvents', () => {
   });
 });
 
+describe('parseEvents for the Inbox', () => {
+  it('reads inbox events beside notifications on the same stream', () => {
+    const text = `${sse(n('1'))}event: inbox\ndata: {"id":"i-1","change":"added"}\n\n`;
+    expect(parseEvents(text).events.map((e) => e.id)).toEqual(['1']);
+    expect(parseEvents<{ id: string; change: string }>(text, 'inbox').events).toEqual([{ id: 'i-1', change: 'added' }]);
+  });
+});
+
 describe('fromServer', () => {
   it('becomes a Shell notification', () => {
     expect(fromServer(n('1'))).toEqual({ id: '1', app: 'library', level: 'needs', title: 'Note 1', detail: undefined, time: '2026-10-18T19:00:00.000Z' });
@@ -31,6 +39,12 @@ describe('fromServer', () => {
 
   it('keeps the floor it came from, for the gauge and its tag', () => {
     expect(fromServer({ ...n('2'), workspace: { id: 'fin', path: ['org', 'fin'] } }).floor).toBe('fin');
+  });
+
+  it('lands a kind the person made quiet without a pulse', () => {
+    expect(fromServer({ ...n('3'), kind: 'comment' }, ['library:comment']).quiet).toBe(true);
+    expect(fromServer({ ...n('4'), kind: 'approval' }, ['library:comment']).quiet).toBeUndefined();
+    expect(fromServer(n('5'), ['library:comment']).quiet).toBeUndefined();
   });
 });
 

@@ -1,5 +1,14 @@
 # @augur/home
 
+## 0.3.4
+
+### Patch Changes
+
+- eb6aed9: AUGUR serves kit 0.5.1 (Quill 0.7.0, Aerie 0.6.0): apps get the Tiptap editor with mentions as chips (ADR 0058), a date field with a real calendar, and the people picker that SDK 1.12's `searchPrincipals` answers. In Admin, the activity filters' dates open that calendar.
+- Updated dependencies [7518ce8]
+- Updated dependencies [cceb953]
+  - @augur/mfe-sdk@1.12.0
+
 ## 0.3.3
 
 ### Patch Changes

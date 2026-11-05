@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-analysts-bench`](../runs/2026-11-03-the-analyst
 Could steer: Mandate decision kinds, approvals, Upgrade Centre windows, the commission (V).
 
 Related: [ask only what changes](ask-only-what-changes.md), [the technique fits the question](the-technique-fits-the-question.md), [dark when normal](dark-when-normal.md). Needs Harry's decision.
+
+Used in [`2026-11-05-the-quick-reference-handbook`](../runs/2026-11-05-the-quick-reference-handbook/) (ops track): sign in, time out and sign out around a 2am upgrade procedure, and one fixed time out before the one-way restore (card V3, combined U-1).

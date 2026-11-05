@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.31.0
+  version: 1.34.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -1160,7 +1160,7 @@ components:
               enum:
                 - started
                 - changed
-                - daily
+                - heartbeat
                 - export
             ok:
               type: boolean
@@ -1582,6 +1582,8 @@ components:
         - off
         - opt-in
         - everyone
+        - floors
+      description: "Who gets a feature preview: nobody, those who turn it on, everyone, or chosen floors and the floors beneath them"
     FeaturePreviewsAdmin:
       type: object
       required:
@@ -1609,6 +1611,11 @@ components:
                     $ref: "#/components/schemas/FeaturePreviewMode"
                   ended:
                     type: boolean
+                  floors:
+                    type: array
+                    items:
+                      type: string
+                    description: "With mode floors: the floors it is on for"
                   chosen:
                     type: boolean
                     description: An admin chose its mode; false means the server's default
@@ -1716,12 +1723,74 @@ components:
             $ref: "#/components/schemas/AppSetting"
           maxItems: 10
           description: Settings the app offers admins in Admin, Apps; its service reads them from the registry
+        inbox:
+          type: object
+          required:
+            - kinds
+          properties:
+            kinds:
+              type: array
+              items:
+                type: object
+                required:
+                  - id
+                  - label
+                properties:
+                  id:
+                    type: string
+                    pattern: ^[a-z][a-z0-9-]{0,39}$
+                    description: "How the app's service names it: \"assignment\""
+                  label:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                    description: 'What the Inbox shows for it: "Assigned to you"'
+                  icon:
+                    type: string
+                    maxLength: 40
+                    description: A UI kit icon name
+                additionalProperties: false
+              minItems: 1
+              maxItems: 10
+          additionalProperties: false
+          description: The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)
+        notifications:
+          type: object
+          required:
+            - kinds
+          properties:
+            kinds:
+              type: array
+              items:
+                type: object
+                required:
+                  - id
+                  - label
+                properties:
+                  id:
+                    type: string
+                    pattern: ^[a-z][a-z0-9-]{0,39}$
+                    description: "How the app's service names it: \"comment\""
+                  label:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                    description: 'What Account shows for it: "Comments on your documents"'
+                  detail:
+                    type: string
+                    maxLength: 120
+                    description: A sentence on when it is sent
+                additionalProperties: false
+              minItems: 1
+              maxItems: 10
+          additionalProperties: false
+          description: The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)
         scopes:
           type: array
           items:
             $ref: "#/components/schemas/Scope"
           uniqueItems: true
-          maxItems: 6
+          maxItems: 7
           description: What the app's service asks to do on AUGUR, such as "notifications:send". An app may always register itself.
         floors:
           type: array
@@ -1811,7 +1880,8 @@ components:
         - events:publish
         - events:subscribe
         - people:read
-      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing."
+        - inbox:write
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items."
     AppMenuCategory:
       type: object
       required:
@@ -2213,7 +2283,7 @@ paths:
   /apps/{id}/grants:
     get:
       summary: What an app may do on a floor (platform services only)
-      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007).
+      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007). With them, the inbox and notification kinds its manifest declares, which the events service checks against.
       parameters:
         - schema:
             type: string
@@ -2237,6 +2307,8 @@ paths:
                 required:
                   - app
                   - scopes
+                  - inboxKinds
+                  - notificationKinds
                 properties:
                   app:
                     type: string
@@ -2246,6 +2318,16 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Scope"
+                  inboxKinds:
+                    type: array
+                    items:
+                      type: string
+                    description: The ids of the inbox kinds the app's manifest declares
+                  notificationKinds:
+                    type: array
+                    items:
+                      type: string
+                    description: The ids of the notification kinds the app's manifest declares
                 description: The app's grants
         "403":
           description: Not a platform service
@@ -2268,7 +2350,7 @@ paths:
   /feature-previews:
     get:
       summary: Apps' feature previews, and whether each is on for the caller (SDK 1.7)
-      description: Every app the caller can open that lists `previews` in its manifest. A preview is on for everyone, for those who turned it on (opt-in), or off; one past its `until` day is ended and off. On a preview server one nobody chose for is opt-in, on a production server off.
+      description: Every app the caller can open that lists `previews` in its manifest. A preview is on for everyone, for chosen floors and the floors beneath them, for those who turned it on (opt-in), or off; one past its `until` day is ended and off. On a preview server one nobody chose for is opt-in, on a production server off. Floor-targeted ones are on when the caller's floor (X-Workspace-Id, checked by the gateway) is one of them or beneath one.
       responses:
         "200":
           description: The apps with feature previews
@@ -2393,7 +2475,7 @@ paths:
   /apps/{id}/feature-previews/{preview}:
     put:
       summary: Set who gets one of an app's feature previews (admins)
-      description: "`null` goes back to the server's default. Kept when the app registers new versions. Audited as app.preview-set."
+      description: "`null` goes back to the server's default. `floors` turns it on for the floors listed in `floors` and the floors beneath them, and for nobody else. Kept when the app registers new versions. Audited as app.preview-set."
       requestBody:
         required: true
         content:
@@ -2407,6 +2489,16 @@ paths:
                   anyOf:
                     - $ref: "#/components/schemas/FeaturePreviewMode"
                     - type: "null"
+                floors:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  description: The floors it is on for, with mode `floors` (and only then)
               additionalProperties: false
       parameters:
         - schema:
@@ -2426,6 +2518,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeaturePreviewsAdmin"
+        "400":
+          description: Mode `floors` without floors, floors with another mode, or a floor that does not exist (error bad_floors)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
@@ -2438,10 +2536,24 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors can't be looked up right now, so they can't be checked
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /apps/{id}/feature-previews/people/{person}:
     get:
       summary: Which of an app's feature previews are on for one person (the app's own service, or admins)
+      description: With `workspace`, the floor they stand on, so previews targeted at floors count too; without it those are off.
       parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: The floor they stand on
         - schema:
             type: string
           in: path
@@ -3217,6 +3329,73 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /platform/alerts:
+    post:
+      summary: Grafana's alerts, told to deployment admins as notices (ALERT_WEBHOOK_TOKEN only)
+      description: ADR 0059. The deployment's Grafana posts here when one of AUGUR's alert rules starts or stops firing, with ALERT_WEBHOOK_TOKEN as its bearer token. Each alert becomes one notice to deployment admins, keyed by its fingerprint and start, so a repeat tells nobody twice; a resolved alert says it cleared and how long it lasted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - alerts
+              properties:
+                alerts:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - status
+                    properties:
+                      status:
+                        type: string
+                      labels:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      annotations:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      startsAt:
+                        type: string
+                      endsAt:
+                        type: string
+                      fingerprint:
+                        type: string
+                    additionalProperties: true
+                  maxItems: 100
+              additionalProperties: true
+              description: "Grafana's webhook contact point body: the alerts that started or stopped firing"
+        description: "Grafana's webhook contact point body: the alerts that started or stopped firing"
+      responses:
+        "202":
+          description: Taken
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - told
+                properties:
+                  told:
+                    type: integer
+                    description: Notices sent
+                description: Taken
+        "401":
+          description: No ALERT_WEBHOOK_TOKEN, or not this one
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Notices can't be sent right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /apps/{id}:
     put:
       summary: Register an app, or update it
@@ -3662,7 +3841,7 @@ paths:
                   items:
                     $ref: "#/components/schemas/Scope"
                   uniqueItems: true
-                  maxItems: 6
+                  maxItems: 7
               additionalProperties: false
       parameters:
         - schema:

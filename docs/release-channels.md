@@ -123,31 +123,32 @@ Admin → **Upgrade Centre** (it replaced Updates) shows it as **The line**: eac
 
 An app can ship a feature before it's everyone's, on any server, production included: it lists it in its manifest's `previews` (SDK 1.7), with an `id`, a `name`, a sentence of `detail` and, if you like, its last day, `until`. The app asks `ctx.previewOn('<id>')` and works as before when the answer is no; its service can ask the registry the same for a person (`GET /v1/apps/<id>/feature-previews/people/<person>`).
 
-Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feature previews**: **Off**, **For those who turn it on**, or **On for everyone**. Until an admin chooses, a preview server makes it opt-in and a production server keeps it off. People turn the opt-in ones on for themselves in the shell's **Previews** (in the band), which mounts the app again with it; while one is on, the app says **Preview on** above it, with the way back. After its `until` day a preview is off for everyone, and Admin says the app should drop it or make it everyone's. Each choice an admin makes is in Activity as `app.preview-set`.
+Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feature previews**: **Off**, **For those who turn it on**, **On for everyone**, or **On for chosen floors**. Chosen floors try a feature on one team (or a few) first, without a release: it's on there and on every floor beneath them, personal floors included when the org is chosen, and off everywhere else. Nobody turns a floor preview on or off for themselves; the shell's **Previews** says it's on for some floors only. The app still just asks `ctx.previewOn('<id>')`: the shell's catalogue for the floor someone stands on already says. Its service passes the floor too (`?workspace=<floor>` on the call above); without it, floor previews count as off. Until an admin chooses, a preview server makes it opt-in and a production server keeps it off. People turn the opt-in ones on for themselves in the shell's **Previews** (in the band), which mounts the app again with it; while one is on, the app says **Preview on** above it, with the way back. After its `until` day a preview is off for everyone, and Admin says the app should drop it or make it everyone's. Each choice an admin makes is in Activity as `app.preview-set`.
 
 ## The live dev loop
 
-Vite and Storybook already change what you see as you save. `pnpm dev:app <id>` runs the real shell and kit with your app's frontend from source (hot reload) and its service beside it. Three switches make more of it live:
+Vite and Storybook already change what you see as you save. `pnpm dev:app <id>` runs the real shell and kit with your app's frontend from source (hot reload) and its service beside it. Two switches make more of it live:
 
-- `--kit` also rebuilds the Lit kit and the shared modules the shell serves as you change them, and reloads the page. The React kits are in the `augur-kit` repository: work on a part there, in its Storybook.
 - `DEV_PREVIEWS=all` (or ids, comma separated) turns the app's feature previews on for the stand-in person.
 - `DEV_HOST=0.0.0.0` opens the dev server to other machines on the tailnet (any `*.ts.net` name, plus `DEV_ALLOWED_HOSTS`), such as your phone.
+
+The kits are in the `augur-kit` repository: work on a part there, in its Storybook.
 
 ### Live on the workbench
 
 `pnpm dev:app <id> --live` puts your app's frontend, from source on your machine, into the workbench's real shell: real sign-in, floors, data and the installed service, for you alone.
 
 1. Once, on your machine: `tailscale serve --bg 5173`, so the dev server answers on `https://<your machine>.<tailnet>.ts.net`.
-2. Run `pnpm dev:app <id> --live`. It prints the address of the app's entry, such as `https://laptop.tail1234.ts.net/@fs/…/apps/<id>/frontend/src/entry.ts`.
+2. Run `pnpm dev:app <id> --live`. It prints the address of the app's entry, such as `https://laptop.tail1234.ts.net/@fs/…/apps/<id>/frontend/src/entry.tsx`.
 3. On the workbench, open the shell's **Previews**, find the app, paste it into **Live from my machine** and press **Load it**. Save a file and the page reloads. **Back to …** stops it.
 
-Only the app's developers (Admin → Apps) can, only on the workbench, and only from a machine on the workbench's own tailnet: the registry refuses it unless `SERVER_RING=dev`, and only there does the front door's Content Security Policy let the shell load scripts from `https://*.<tailnet>.ts.net` (and its reload socket from `wss://*.<tailnet>.ts.net`), where `<tailnet>` comes from `PLATFORM_URL`. Never all of `*.ts.net`: every Tailscale user's machines are under it. A workbench whose `PLATFORM_URL` isn't `https://<machine>.<tailnet>.ts.net` loads from no machine. Anywhere else Previews still shows it, saying why. The address must be https on a name on that tailnet and end in `.js` or `.ts`. It's kept in memory, so a registry restart puts you back on the app. The app's service is the installed one: to try service changes, open a pull request and use its preview. The kit and shared modules your entry imports come from your machine too, so a kit change shows as you make it.
+Only the app's developers (Admin → Apps) can, only on the workbench, and only from a machine on the workbench's own tailnet: the registry refuses it unless `SERVER_RING=dev`, and only there does the front door's Content Security Policy let the shell load scripts from `https://*.<tailnet>.ts.net` (and its reload socket from `wss://*.<tailnet>.ts.net`), where `<tailnet>` comes from `PLATFORM_URL`. Never all of `*.ts.net`: every Tailscale user's machines are under it. A workbench whose `PLATFORM_URL` isn't `https://<machine>.<tailnet>.ts.net` loads from no machine. Anywhere else Previews still shows it, saying why. The address must be https on a name on that tailnet and end in `.js`, `.ts` or `.tsx`. It's kept in memory, so a registry restart puts you back on the app. The app's service is the installed one: to try service changes, open a pull request and use its preview. The kit and shared modules your entry imports come from your machine too, so a kit change shows as you make it.
 
-For the kits on their own: the React kits' Storybook is in the `augur-kit` repository (`pnpm storybook` there), which publishes it to Chromatic (ADR 0016, ADR 0046) when a part, a token or a story changes. `pnpm --filter @augur/ui-kit storybook` here shows the frozen Lit kit.
+For the kits on their own: the React kits' Storybook is in the `augur-kit` repository (`pnpm storybook` there), which publishes it to Chromatic (ADR 0016, ADR 0046) when a part, a token or a story changes.
 
 ## What's left to build
 
-Signed promotion records, clearing old dev builds' images from the registry, and giving a feature preview to chosen teams. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, and the pipeline feed still calls its stages branches, so servers on older releases keep reading the feeds.
+Signed promotion records, and clearing old dev builds' images from the registry. Feature previews move onto OpenFeature and flagd in the beta (ADR 0021, amended); apps' calls stay the same. Admin calls the channels **Preview** and **Production**; the release files and the registry's API still say beta and stable, and the pipeline feed still calls its stages branches, so servers on older releases keep reading the feeds.
 
 ## Once, in GitHub (the repository's owner)
 

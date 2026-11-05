@@ -86,6 +86,37 @@ describe('events', () => {
     expect((await send({ ...available, key: 'available:augur:0.15.1' })).json()).toEqual({ sent: 2 });
   });
 
+  it('keeps the kind of a notification, refusing one the app doesn’t declare', async () => {
+    const declared: Record<string, string[] | undefined> = { library: ['comment'] };
+    const app = await buildApp({ verifyService, notificationKinds: async (id) => declared[id] });
+    const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
+    expect((await post({ ...review, kind: 'comment' })).statusCode).toBe(202);
+    const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
+    expect(n.kind).toBe('comment');
+    const refused = await post({ ...review, kind: 'gossip' });
+    expect([refused.statusCode, refused.json().message]).toEqual([400, expect.stringContaining('notifications.kinds')]);
+    expect((await post({ ...review, kind: 'Not A Kind' })).statusCode).toBe(400);
+    // A registry too old to say lets any kind through.
+    declared.library = undefined;
+    expect((await post({ ...review, kind: 'gossip' })).statusCode).toBe(202);
+  });
+
+  it('gives identity, and only identity, what it keeps about one person', async () => {
+    const app = await buildApp({ verifyService });
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
+    await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: { actor: { id: 'u-2', kind: 'user' }, app: 'identity', action: 'account.updated' } });
+    const res = await app.inject({ method: 'GET', url: '/v1/people/u-2/data', headers: platform });
+    expect(res.statusCode).toBe(200);
+    const data = res.json();
+    expect(data.notifications).toMatchObject([{ title: 'Review the budget paper' }]);
+    expect(data.notifications[0].recipient).toBeUndefined();
+    expect(data.audit).toMatchObject([{ action: 'account.updated' }]);
+    expect(data.inbox).toEqual([]);
+    const registry = await serviceHeaders({ name: 'registry', getToken: async () => 'platform-registry' });
+    expect((await app.inject({ method: 'GET', url: '/v1/people/u-2/data', headers: registry })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/v1/people/u-2/data', headers: sam })).statusCode).toBe(403);
+  });
+
   it('carries up to two actions, each an intent with a small payload', async () => {
     const app = await buildApp({ verifyService });
     const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
@@ -298,13 +329,16 @@ describe('events', () => {
         app.inject({ method: 'POST', url: '/v1/audit', headers: { ...headers, ...(workspace ? { 'x-workspace-id': workspace } : {}) }, payload: entry });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-9' });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'department.member-added', target: 'w-legal', detail: { person: 'u-2' } }, 'w-legal');
-      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-9' });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-9', detail: { username: 'jo', firstName: { from: 'Jo', to: 'Joanne' }, lastName: { from: 'S', to: 'T' }, departments: { from: [], to: ['w-legal'] } } });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.password-reset', target: 'u-9' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.blocked', target: 'notes' }, 'w-legal');
       const { events } = (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=platform.*', headers: as('notes') })).json();
       expect(events).toMatchObject([
         { topic: 'platform.person.disabled', publisher: 'identity', payload: { person: 'u-9' } },
         { topic: 'platform.team.member-added', payload: { team: 'w-legal', person: 'u-2' }, workspace: { id: 'w-legal' } },
+        // What changed, never the values: a follower asks identity for those.
+        { topic: 'platform.person.changed', publisher: 'identity', payload: { person: 'u-9', changed: ['name', 'teams'] } },
         { topic: 'platform.app.turned-off', publisher: 'registry', payload: { app: 'notes' } },
         { topic: 'platform.app.blocked', payload: { app: 'notes' }, workspace: { id: 'w-legal' } },
       ]);

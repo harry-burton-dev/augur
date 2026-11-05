@@ -1,4 +1,6 @@
 import { serviceHeaders, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
+import { BoundedMap } from './cache.js';
 
 /** Where a floor sits, as identity tells the platform's services. */
 export interface FloorPlace {
@@ -33,13 +35,13 @@ export type FloorLookup = (id: string) => Promise<FloorPlace | undefined>;
  * lookup isn't remembered.
  */
 export const floorPlaces = ({ identityUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: FloorPlacesOptions): FloorLookup => {
-  const cache = new Map<string, { place: FloorPlace | undefined; at: number }>();
+  const cache = new BoundedMap<string, { place: FloorPlace | undefined; at: number }>();
   return async (id) => {
     const hit = cache.get(id);
     if (hit && now() - hit.at < ttlMs) return hit.place;
     let res: Response;
     try {
-      res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(id)}`, { headers: await serviceHeaders(credentials) });
+      res = await withDeadline(fetchImpl)(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(id)}`, { headers: await serviceHeaders(credentials) });
     } catch (err) {
       throw new FloorsUnavailable(`Identity could not be reached (${(err as Error).message}).`);
     }
@@ -61,7 +63,7 @@ export type MemberLookup = (team: string) => Promise<string[]>;
 export const floorMembers = ({ identityUrl, credentials, fetchImpl = fetch }: Omit<FloorPlacesOptions, 'ttlMs' | 'now'>): MemberLookup => async (team) => {
   let res: Response;
   try {
-    res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(team)}/people`, { headers: await serviceHeaders(credentials) });
+    res = await withDeadline(fetchImpl)(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(team)}/people`, { headers: await serviceHeaders(credentials) });
   } catch (err) {
     throw new FloorsUnavailable(`Identity could not be reached (${(err as Error).message}).`);
   }

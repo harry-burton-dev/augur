@@ -19,6 +19,8 @@ import {
   type GrantLookup,
   type MemberLookup,
   type AudienceLookup,
+  type DirectorySearch,
+  type PrincipalLookup,
   type NewAuditEntry,
   type Scope,
   type ServiceIdentity,
@@ -27,6 +29,7 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
+import { inboxRoutes, releaseLeaver, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { MemoryEventStore, topicMatches, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
@@ -46,6 +49,14 @@ export interface EventsOptions {
   members?: MemberLookup;
   /** Who an audience reaches now, from identity, for platform services' notifications (ADR 0044). */
   audience?: AudienceLookup;
+  /** Who can sign in, from identity's directory: an inbox item's owner must be someone who can. */
+  directory?: DirectorySearch;
+  /** Which teams a person is on, from identity: their teams' inbox items, and who hears of a change. */
+  principals?: PrincipalLookup;
+  /** The inbox kinds each app's manifest declares, from the registry; without it kinds aren't checked. */
+  inboxKinds?: InboxKindLookup;
+  /** The notification kinds each app's manifest declares, from the registry; without it kinds aren't checked. */
+  notificationKinds?: InboxKindLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
@@ -58,11 +69,17 @@ const ACTION_PAYLOAD_BYTES = 1024;
 /** Each event carries ids and a little context; anything bigger is fetched from the publisher's API. */
 const EVENT_PAYLOAD_BYTES = 16 * 1024;
 
+/** What a person.updated entry says changed, in the words followers use: never the values, which a follower fetches. */
+const PERSON_FIELDS: Record<string, string> = { firstName: 'name', lastName: 'name', email: 'email', roles: 'roles', departments: 'teams' };
+const changedOf = (detail: Record<string, unknown> | undefined) => [...new Set(Object.keys(detail ?? {}).flatMap((k) => (PERSON_FIELDS[k] ? [PERSON_FIELDS[k]] : [])))];
+
 /**
  * The platform's own domain events, published as identity and the registry record
  * the change in the audit log, so the two can't disagree. Keyed by "<service> <action>".
  */
 const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntry) => Record<string, unknown> }> = {
+  'identity person.added': { topic: 'platform.person.joined', payload: (e) => ({ person: e.target }) },
+  'identity person.updated': { topic: 'platform.person.changed', payload: (e) => ({ person: e.target, changed: changedOf(e.detail) }) },
   'identity person.disabled': { topic: 'platform.person.disabled', payload: (e) => ({ person: e.target }) },
   'identity person.enabled': { topic: 'platform.person.enabled', payload: (e) => ({ person: e.target }) },
   'identity department.created': { topic: 'platform.team.created', payload: (e) => ({ team: e.target, name: e.detail?.name }) },
@@ -108,7 +125,7 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -184,6 +201,10 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         return undefined;
       };
 
+      // ---- the Inbox: work that waits on someone (ADR 0026) ----
+
+      inboxRoutes(app, { inbox: store.inbox, store, floors, directory, principals, kinds: inboxKinds, signedIn, fromService, floorOf });
+
       // ---- notifications ----
 
       app.post(
@@ -218,6 +239,18 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const big = notification.actions?.find((a) => a.intent.payload !== undefined && Buffer.byteLength(JSON.stringify(a.intent.payload)) > ACTION_PAYLOAD_BYTES);
         if (big) return reply.code(400).send({ error: 'bad_request', message: `The payload of “${big.label}” is over ${ACTION_PAYLOAD_BYTES} bytes. Send an id and let the app look the rest up.` });
         if (!toTeam && !principals && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
+        if (notification.kind) {
+          let declared: string[] | undefined;
+          try {
+            declared = notificationKinds ? await notificationKinds(notification.app) : undefined;
+          } catch (err) {
+            if (!(err instanceof GrantsUnavailable)) throw err;
+            return reply.code(503).send({ error: 'unavailable', message: 'The kinds of notification the app declares can’t be checked right now.' });
+          }
+          if (declared && !declared.includes(notification.kind)) {
+            return reply.code(400).send({ error: 'bad_request', message: `${notification.app} doesn’t declare the notification kind "${notification.kind}" in its manifest (notifications.kinds).` });
+          }
+        }
         if (principals) {
           // Reaching people by role or across the org is the platform's: an app names the people it means.
           if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send to an audience. Name the recipients.' });
@@ -347,7 +380,9 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
           schema: {
             summary: 'Each new notification for the caller, as server-sent events',
             description: [
-              'Events are named "notification" and carry a Notification as JSON.',
+              'Events are named "notification" and carry a Notification as JSON. Events named',
+              '"inbox" carry { id, change } (added, changed or closed) when an inbox item the caller',
+              'can see changes: reload the counts, and the list if it is showing.',
               'Comment lines are sent as keep-alives. Read with fetch so the sign-in',
               'token can be sent; reload the list after reconnecting.',
             ].join(' '),
@@ -364,10 +399,21 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const unsubscribe = store.subscribe((n) => {
           if (n.recipient === caller.id) res.write(`event: notification\ndata: ${JSON.stringify(forCaller(n))}\n\n`);
         });
+        // Who the caller is to the Inbox: themselves and their teams, asked as each change comes (identity's answer is cached).
+        const me = `person:${caller.id}`;
+        const stopInbox = store.inbox.onChange((s) => {
+          if (s.principals.includes(me)) return void res.write(`event: inbox\ndata: ${JSON.stringify({ id: s.id, change: s.change })}\n\n`);
+          if (!s.principals.some((p) => p.startsWith('team:'))) return;
+          void teamsOf(caller, principals).then(
+            (teams) => s.principals.some((p) => teams.includes(p.slice(5)) && p.startsWith('team:')) && res.write(`event: inbox\ndata: ${JSON.stringify({ id: s.id, change: s.change })}\n\n`),
+            () => undefined,
+          );
+        });
         const heartbeat = setInterval(() => res.write(': still here\n\n'), heartbeatMs);
         req.raw.on('close', () => {
           clearInterval(heartbeat);
           unsubscribe();
+          stopInbox();
         });
         },
       );
@@ -545,6 +591,10 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const platformEvent = service.kind === 'platform' ? PLATFORM_EVENTS[`${req.body.app} ${req.body.action}`] : undefined;
         if (platformEvent) {
           await store.publish(req.body.app, [{ topic: platformEvent.topic, id: `audit-${entry.id}`, payload: platformEvent.payload(req.body), floor: place }]);
+          // Someone who leaves a team, or can no longer sign in, gives back the team work they'd taken.
+          const leaver = platformEvent.topic === 'platform.person.disabled' ? { person: req.body.target } : platformEvent.topic === 'platform.team.member-removed' ? { person: req.body.detail?.person, team: req.body.target } : undefined;
+          if (typeof leaver?.person === 'string' && leaver.person)
+            await releaseLeaver(store, leaver.person, typeof leaver.team === 'string' ? leaver.team : undefined).catch((err: unknown) => req.log.error({ err }, 'could not give back a leaver’s inbox items'));
         }
         return reply.code(201).send(entry);
         },
@@ -587,6 +637,49 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
             return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the whole audit log; a lead can read their own floor’s.' });
           }
           return store.audit({ app: forApp, actor, since, until, before, workspace, limit });
+        },
+      );
+
+      // A copy of what the events service keeps about one person (ADR 0040), for identity to put in their download.
+      app.get(
+        '/people/:id/data',
+        {
+          schema: {
+            summary: 'What the events service keeps about one person (identity only)',
+            description: [
+              'Their notifications, read or not; the inbox items waiting on them and those',
+              'they finished; and the audit entries naming them as the actor: at most',
+              '`limit` of each, newest first. Only identity asks, to build the copy of',
+              "someone's data they download from Account (ADR 0040).",
+            ].join(' '),
+            params: Type.Object({ id: Type.String({ minLength: 1, maxLength: 100 }) }),
+            querystring: Type.Object({ limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000, default: 1000 })) }),
+            response: {
+              200: Type.Object(
+                {
+                  notifications: Type.Array(ref(NotificationSchema)),
+                  inbox: Type.Array(Type.Unknown(), { description: 'InboxItem, as the Inbox gives it to them' }),
+                  audit: Type.Array(ref(AuditEntry)),
+                },
+                { description: 'Their data here' },
+              ),
+              403: refused('Not identity'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await fromService(req, reply, undefined, 'audit:write');
+          if (!service) return reply;
+          if (service.kind !== 'platform' || service.name !== 'identity') return reply.code(403).send({ error: 'forbidden', message: 'Only identity reads a person’s data, for their own download.' });
+          const { id } = req.params;
+          const limit = req.query.limit ?? 1000;
+          const [notifications, open, done, audit] = await Promise.all([
+            store.notificationsOf(id, limit),
+            store.inbox.list({ person: id, teams: [], tab: 'you', limit }),
+            store.inbox.list({ person: id, teams: [], tab: 'done', limit }),
+            store.audit({ actor: id, limit }),
+          ]);
+          return { notifications: notifications.map(forCaller), inbox: [...open, ...done].slice(0, limit), audit };
         },
       );
     },

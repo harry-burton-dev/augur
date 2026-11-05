@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GrantsUnavailable, registryGrants } from './grants.js';
+import { GrantsUnavailable, registryGrants, registryInboxKinds, registryNotificationKinds } from './grants.js';
 
 describe('registry grants', () => {
   it('asks once per app and floor while the answer is fresh, as a platform service', async () => {
@@ -24,5 +24,16 @@ describe('registry grants', () => {
     expect(await unknown('nope')).toEqual([]);
     const down = registryGrants({ registryUrl: 'http://registry', credentials: { name: 'events', getToken: async () => 'events-token' }, fetchImpl: (async () => new Response(null, { status: 502 })) as typeof fetch });
     await expect(down('library')).rejects.toBeInstanceOf(GrantsUnavailable);
+  });
+
+  it('names the inbox kinds an app declares; none for an app it doesn’t know; undefined from an older registry', async () => {
+    const credentials = { name: 'events', getToken: async () => 'events-token' };
+    const answer = (body: object | null, status = 200) => (async () => (body ? Response.json(body, { status }) : new Response(null, { status }))) as typeof fetch;
+    expect(await registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [], inboxKinds: ['review'] }) })('library')).toEqual(['review']);
+    expect(await registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer(null, 404) })('nope')).toEqual([]);
+    expect(await registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [] }) })('library')).toBeUndefined();
+    await expect(registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer(null, 502) })('library')).rejects.toBeInstanceOf(GrantsUnavailable);
+    expect(await registryNotificationKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [], inboxKinds: ['review'], notificationKinds: ['comment'] }) })('library')).toEqual(['comment']);
+    expect(await registryNotificationKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [], inboxKinds: [] }) })('library')).toBeUndefined();
   });
 });

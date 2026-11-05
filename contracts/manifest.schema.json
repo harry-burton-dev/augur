@@ -195,6 +195,88 @@
       "maxItems": 10,
       "description": "Settings the app offers admins in Admin, Apps; its service reads them from the registry"
     },
+    "inbox": {
+      "type": "object",
+      "required": [
+        "kinds"
+      ],
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,39}$",
+                "description": "How the app's service names it: \"assignment\""
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "description": "What the Inbox shows for it: \"Assigned to you\""
+              },
+              "icon": {
+                "type": "string",
+                "maxLength": 40,
+                "description": "A UI kit icon name"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 10
+        }
+      },
+      "additionalProperties": false,
+      "description": "The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)"
+    },
+    "notifications": {
+      "type": "object",
+      "required": [
+        "kinds"
+      ],
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,39}$",
+                "description": "How the app's service names it: \"comment\""
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "description": "What Account shows for it: \"Comments on your documents\""
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 120,
+                "description": "A sentence on when it is sent"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 10
+        }
+      },
+      "additionalProperties": false,
+      "description": "The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)"
+    },
     "scopes": {
       "type": "array",
       "items": {
@@ -204,11 +286,12 @@
           "models:use",
           "events:publish",
           "events:subscribe",
-          "people:read"
+          "people:read",
+          "inbox:write"
         ]
       },
       "uniqueItems": true,
-      "maxItems": 6,
+      "maxItems": 7,
       "description": "What the app's service asks to do on AUGUR, such as \"notifications:send\". An app may always register itself."
     },
     "floors": {

@@ -28,6 +28,16 @@ outboxRelay({ pool: db, eventsUrl: EVENTS_URL, credentials: appCredentialsFromEn
 
 Each outbox row has its own event id, so if a send is repeated the events service keeps one. Without a database change to go with it, `publishEvents({ eventsUrl, credentials, events })` sends at once.
 
+### Entity bindings
+
+When people link one of an app's things to an entity in Data Atlas, the app keeps the link and publishes it in one shape, so Atlas reads every app's the same way (ADR 0025, ADR 0066):
+
+| Topic | Payload |
+| --- | --- |
+| `<app>.<type>.entity-bound`, `<app>.<type>.entity-unbound` | `{ <type>: id, entity, role?, ...more ids }` |
+
+`mandate.intent.entity-bound { intent, entity, role }` and `folio.record.entity-bound { record, library, level, link, entity, role }` are two. `outboxBinding(client, binding, 'bound' | 'unbound', workspace)` in the service kit writes one to the outbox, and `readBinding(event)` reads any app's back, or answers undefined for an event that isn't one.
+
 ## Following
 
 Add `events:subscribe` to `scopes`. Keep your place (the last `seq` you handled) in your own database, and handle each event so that doing it twice does no harm: if your handler throws, the same event comes again on the next poll.
@@ -60,14 +70,20 @@ It's a hint, not a record. There's no `after` and no catching up: a screen that 
 
 ## The platform's topics
 
-The events service publishes these as identity and the registry record the change in the audit log, so the two always agree:
+The events service publishes these as identity and the registry record the change in the audit log, so the two always agree, and the Inbox's as people act on items:
 
 | Topic | Payload | When |
 | --- | --- | --- |
+| `platform.person.joined` | `{ person }` | An admin adds someone. Each team they start in follows as `platform.team.member-added` |
+| `platform.person.changed` | `{ person, changed }` | An admin changes someone's details. `changed` lists which, of `name`, `email`, `roles` and `teams`, never the values: ask identity for those |
 | `platform.person.disabled`, `platform.person.enabled` | `{ person }` | An admin turns someone's sign-in off or on |
 | `platform.team.created`, `platform.team.renamed` | `{ team, name }` | A team is made or renamed |
-| `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team |
+| `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team, however an admin did it, on that team's floor |
 | `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on, everywhere or on one floor (the event's floor), or removes it |
 | `platform.app.blocked`, `platform.app.rule-cleared` | `{ app }` | An admin blocks an app on a floor and every floor below it, or clears a floor's rule so it follows the floor above |
+| `platform.inbox.taken`, `.released`, `.declined`, `.done` | `{ item, app, key, by }` | Someone takes a team's inbox item, gives it back, declines it or marks it done ([The Inbox](inbox.md)) |
+| `platform.inbox.handed-on` | `{ item, app, key, by, to }` | Someone hands an item on; `to` is `person:<id>` or `team:<id>` |
+
+Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own profile in their account (`PATCH /v1/me/profile`, docs/account.md) and the lifecycle events of ADR 0040 (`left`, `deleted`) aren't sent yet.
 
 `PLATFORM_TOPICS` in the service kit names them. The API is in [contracts/events.openapi.yaml](../contracts/events.openapi.yaml).

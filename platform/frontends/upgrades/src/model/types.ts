@@ -201,7 +201,7 @@ export interface ReportingView {
   deployment?: string;
   /** The key Backstage checks the record with, for the `augur.dev/report-key` annotation. */
   publicKey?: string;
-  last?: { at: string; reason: 'started' | 'changed' | 'daily' | 'export'; ok: boolean; problem?: string };
+  last?: { at: string; reason: 'started' | 'changed' | 'heartbeat' | 'daily' | 'export'; ok: boolean; problem?: string };
 }
 
 export interface AppJob {

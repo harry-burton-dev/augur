@@ -36,12 +36,14 @@ export interface AppRecord {
   upstream?: string;
 }
 
-/** Who gets a feature preview: nobody, those who turn it on, or everyone. */
-export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone';
+/** Who gets a feature preview: nobody, those who turn it on, everyone, or chosen floors and those beneath them. */
+export type FeaturePreviewMode = 'off' | 'opt-in' | 'everyone' | 'floors';
 
 /** An admin's choice for one of an app's feature previews. */
 export interface FeaturePreviewSetting {
   mode: FeaturePreviewMode;
+  /** With mode `floors`: the floors it is on for. */
+  floors?: string[];
   setBy: string;
   setAt: string;
 }
@@ -367,7 +369,7 @@ export interface AppStore {
   /** Uses one of an app's previews instead of the app, or with `null` goes back to the app. */
   choosePreview(person: string, app: string, pr: number | null): Promise<void>;
   /** Sets who gets one of the app's feature previews, or with `null` puts it back to the server's default. Undefined when there is no such app. */
-  setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string): Promise<AppRecord | undefined>;
+  setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string, floors?: string[]): Promise<AppRecord | undefined>;
   /** Who turned which feature previews on: one person's, or of one app, or everyone's. */
   featureOptIns(filter?: { person?: string; app?: string }): Promise<FeatureOptIn[]>;
   /** Turns one of an app's feature previews on or off for one person. */
@@ -411,12 +413,12 @@ export class MemoryAppStore implements AppStore {
   private choices: PreviewChoice[] = [];
   private optIns: FeatureOptIn[] = [];
 
-  async setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string) {
+  async setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string, floors?: string[]) {
     const record = this.apps.get(id);
     if (!record) return undefined;
     const previews = { ...record.featurePreviews };
     if (mode === null) delete previews[preview];
-    else previews[preview] = { mode, setBy: by, setAt: new Date().toISOString() };
+    else previews[preview] = { mode, ...(mode === 'floors' && floors ? { floors: [...floors] } : {}), setBy: by, setAt: new Date().toISOString() };
     if (Object.keys(previews).length) record.featurePreviews = previews;
     else delete record.featurePreviews;
     return structuredClone(record);
@@ -1362,12 +1364,13 @@ export class PgAppStore implements AppStore {
     return rows.map((r) => ({ person: r.person_id, app: r.app_id, pr: r.pr }));
   }
 
-  async setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string) {
+  async setFeaturePreview(id: string, preview: string, mode: FeaturePreviewMode | null, by: string, floors?: string[]) {
+    // The setting is one jsonb value per preview, so floors need no migration; jsonb_strip_nulls leaves them out for other modes.
     const { rows } = await this.pool.query<AppRow>(
       mode === null
         ? 'update registry.apps set feature_previews = feature_previews - $2 where id = $1 returning *'
-        : `update registry.apps set feature_previews = feature_previews || jsonb_build_object($2::text, jsonb_build_object('mode', $3::text, 'setBy', $4::text, 'setAt', $5::text)) where id = $1 returning *`,
-      mode === null ? [id, preview] : [id, preview, mode, by, new Date().toISOString()],
+        : `update registry.apps set feature_previews = feature_previews || jsonb_build_object($2::text, jsonb_strip_nulls(jsonb_build_object('mode', $3::text, 'floors', $6::jsonb, 'setBy', $4::text, 'setAt', $5::text))) where id = $1 returning *`,
+      mode === null ? [id, preview] : [id, preview, mode, by, new Date().toISOString(), mode === 'floors' && floors ? JSON.stringify(floors) : null],
     );
     return rows[0] && fromAppRow(rows[0]);
   }

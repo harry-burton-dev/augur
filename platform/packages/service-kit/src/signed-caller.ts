@@ -127,14 +127,22 @@ export const callerCheckFor = (signer: CallerSigner, audience: string): CallerCh
   return callerCheck({ audience, keys: async (header, token) => (await keys)(header, token) });
 };
 
+/** The setting that lets a service believe `x-user-*` headers unchecked: `pnpm dev:app` and local runs only. */
+export const INSECURE_DEV_CALLERS = 'AUGUR_INSECURE_DEV_CALLERS';
+
 /**
- * Checks callers against the gateway's published key in production, or anywhere
- * CALLER_KEYS_URL is set. Elsewhere (local dev, tests) it returns undefined and
- * `x-user-*` headers are believed as they come, as `pnpm dev:app` sends them.
+ * Checks callers against the gateway's published key: at CALLER_KEYS_URL when set, otherwise at
+ * GATEWAY_URL (default `http://gateway:8080`). It fails closed: a service checks callers unless it is
+ * told plainly not to, with AUGUR_INSECURE_DEV_CALLERS=1 (as `pnpm dev:app` sets) or inside Vitest
+ * (NODE_ENV=test and VITEST, both of which it sets; NODE_ENV=test alone is not enough). Then it
+ * returns undefined and `x-user-*` headers are believed as they come. In production
+ * (NODE_ENV=production, which every image, compose service and app container sets) callers are
+ * always checked.
  */
 export const callerCheckFromEnv = (audience: string, env = process.env): CallerCheck | undefined => {
-  const url = env.CALLER_KEYS_URL ?? (env.NODE_ENV === 'production' ? `${(env.GATEWAY_URL ?? 'http://gateway:8080').replace(/\/+$/, '')}${CALLER_KEYS_PATH}` : undefined);
-  if (!url) return undefined;
+  const unchecked = env.NODE_ENV !== 'production' && (env[INSECURE_DEV_CALLERS] === '1' || (env.NODE_ENV === 'test' && Boolean(env.VITEST)));
+  if (unchecked && !env.CALLER_KEYS_URL) return undefined;
+  const url = env.CALLER_KEYS_URL || `${(env.GATEWAY_URL || 'http://gateway:8080').replace(/\/+$/, '')}${CALLER_KEYS_PATH}`;
   // A new gateway key is fetched as soon as a token names it, at most every few seconds.
   return callerCheck({ audience, keys: createRemoteJWKSet(new URL(url), { cooldownDuration: 5_000 }) });
 };
@@ -158,7 +166,7 @@ interface HookReply {
  * gateway signed. It drops any `x-user-*` headers a request brings, then puts
  * back the caller from a valid signed token. A request with a bad token is
  * refused; one without a token is treated as having no caller, which is how a
- * service's own calls arrive. Without a check (local dev) it changes nothing.
+ * service's own calls arrive. Without a check (AUGUR_INSECURE_DEV_CALLERS=1, tests) it changes nothing.
  *
  * A call from inside the service's own container (loopback) is believed as it
  * comes: only someone who can already run commands there can make one, and it

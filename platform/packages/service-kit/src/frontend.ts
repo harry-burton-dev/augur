@@ -3,6 +3,10 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { serviceHeaders, ServiceCallError, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
+
+/** A whole frontend goes up in one call, so it gets longer than a service call's few seconds. */
+const PUBLISH_TIMEOUT_MS = 120_000;
 
 /** One file of an app's built frontend, by its path inside `dist/` ("entry.js", "assets/x.js"). */
 export interface FrontendFile {
@@ -176,7 +180,7 @@ export async function publishFrontend({ registryUrl, credentials, app, version, 
   let lastError = '';
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const res = await fetchImpl(url, { method: 'PUT', headers: { 'content-type': 'application/gzip', ...(await serviceHeaders(credentials)) }, body: new Uint8Array(tarball) });
+      const res = await withDeadline(fetchImpl, PUBLISH_TIMEOUT_MS)(url, { method: 'PUT', headers: { 'content-type': 'application/gzip', ...(await serviceHeaders(credentials)) }, body: new Uint8Array(tarball) });
       const reply = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
       if (res.ok) return true;
       if (res.status === 501) return false;

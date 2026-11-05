@@ -4,34 +4,43 @@ This takes you from nothing to an app running in AUGUR's shell. An app is three 
 
 ## 1. Start it
 
+Every app starts from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), in a repository of its own ([ADR 0012](decisions/0012-apps-in-own-repositories.md)). On GitHub, **Use this template** to make `augur-expenses`, clone it next to your AUGUR checkout, and name it:
+
 ```sh
-pnpm install
-pnpm create-app expenses --name "Expenses"
+export NODE_AUTH_TOKEN=<a token with read:packages>   # AUGUR's packages come from GitHub Packages
+pnpm make-app expenses --name "Expenses"
+pnpm install && pnpm test
 ```
 
-The id is the app's folder, its route (`/expenses`) and its prefix behind the gateway (`/api/expenses`): 2 to 40 lowercase letters, digits and dashes. `create-app` writes:
+The id is the app's route (`/expenses`) and its prefix behind the gateway (`/api/expenses`): 2 to 40 lowercase letters, digits and dashes. The template's README is the whole path, from here to its first release, in 15 minutes. What it gives you:
 
 | Path | What it is |
 | --- | --- |
-| `apps/expenses/manifest.json` | How the registry lists the app |
-| `apps/expenses/frontend/` | `@apps/expenses-frontend`: `src/entry.ts` and its test |
-| `apps/expenses/service/` | `@apps/expenses`: a Fastify service with `/healthz` and `GET /v1/greeting`, and their tests |
-| `.changeset/new-app-expenses.md` | The app's first release, 0.1.0 |
+| `manifest.json` | How the registry lists the app, with `$schema` pointing at AUGUR's published schema |
+| `frontend/` | `@apps/expenses-frontend`: a React app on the app kit's starter, `src/entry.tsx` and its test |
+| `service/` | `@apps/expenses`: a Fastify service on the service kit's starter, with `/healthz` and `GET /v1/greeting`, and their tests |
+| `service/src/api-types.ts` | The wire types, written once, which the service answers with and the frontend reads |
+| `run/index.ts` | A stub of its scenarios for the run suite (augur-run, [ADR 0050](decisions/0050-alpha-proving-run.md)) |
+| `.github/workflows/` | CI on every pull request; previews, dev builds and releases ([Ship an app](ship-an-app.md)) |
+| `.changeset/first-release.md` | The app's first release, 0.1.0 |
 
 The new app already works: the frontend asks its service who you are and shows the answer, and has a button that sends you a notification.
 
 ## 2. Run it
 
+From your AUGUR checkout (after its own `pnpm install`):
+
 ```sh
-pnpm dev:app expenses
+pnpm dev:app ../augur-expenses
 ```
 
-Open http://localhost:5173/expenses. This is the real shell and the real UI kit, with your frontend loaded from source and your service running beside it on port 8090 (`APP_SERVICE_PORT` changes it). Edit either and it reloads.
+Open http://localhost:5173/expenses. This is the real shell and the real UI kit, with your frontend loaded from source and your service running beside it on port 8090 (`APP_SERVICE_PORT` changes it). Edit either and it reloads. An app still in this repository's `apps/` runs by its id instead: `pnpm dev:app <id>`.
 
 Nothing else of the platform runs, so the shell stands in for it:
 
-- You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app expenses` adds roles.
-- `pnpm dev:app expenses --kit` also rebuilds the UI kit and its tokens as you change them and reloads the page; `DEV_PREVIEWS=all` turns your feature previews on; `DEV_HOST=0.0.0.0` opens it to your other machines on the tailnet ([release-channels.md](release-channels.md#the-live-dev-loop)).
+- You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app ../augur-expenses` adds roles.
+- `DEV_PREVIEWS=all` turns your feature previews on; `DEV_HOST=0.0.0.0` opens it to your other machines on the tailnet ([release-channels.md](release-channels.md#the-live-dev-loop)). The React kits are in the augur-kit repository: work on them in its Storybook.
+- Your inbox items show in the stand-in shell's Inbox: put one in from the browser console ([inbox.md](inbox.md#trying-it-with-pnpm-devapp)).
 - You're on your own floor (`/@me/expenses`); `/@org/expenses` puts your app on the org's.
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is Home and your app. Home (`/@me/home`) shows what your app's `ctx.notify({ needsYou: true })` sends, and your glance card if you have one. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
@@ -42,22 +51,18 @@ To try your app with the rest of the platform, use the full local stack (see the
 
 ## 3. The frontend
 
-`src/entry.ts` default-exports a micro frontend. The shell calls `mount(el, ctx)` when someone opens your app, and `unmount(el)` before the next one opens. Render into `el` and nowhere else.
+`src/entry.tsx` default-exports what the shell mounts. `defineReactApp` from the app kit makes it: the shell calls `mount(el, ctx)` when someone opens your app and `unmount(el)` before the next one opens, and each part of your app reads `ctx` with `useAppContext()`. React and the kits are served by the shell to every app, so they stay out of your bundle (`isSharedModule` in `vite.config.ts`).
 
-```ts
-import { defineMicroFrontend, type MountContext } from '@augur/mfe-sdk';
-import { html, render } from 'lit';
-import '@augur/ui-kit';
+```tsx
+import { defineReactApp } from '@augur/app-kit';
+import type { MountContext } from '@augur/mfe-sdk';
+import manifest from '../../manifest.json';
+import { App, places } from './app.js';
 
-export default defineMicroFrontend({
-  mount(el: HTMLElement, ctx: MountContext) {
-    render(html`<ui-heading heading="Expenses"></ui-heading>`, el);
-  },
-  unmount(el: HTMLElement) {
-    render(html``, el);
-  },
-});
+export default defineReactApp<MountContext>({ name: manifest.name, App, routes: places });
 ```
+
+`places` are the app's places on the address bar (`placeRoutes`, `place('/claims/:claim', Claim)`), and `useData` loads what each shows, kept per floor and refreshed by `refreshOn`. Add a `Glance` for a card on Home, a `Picker` to answer requests, and `intents` to open at a place. An app can also default-export `defineMicroFrontend` from the SDK and render into `el` itself.
 
 Everything you need from outside your app comes through `ctx`:
 
@@ -76,7 +81,7 @@ Everything you need from outside your app comes through `ctx`:
 
 **What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only apps the deployment's own team wrote or reviewed are installed this way ([ADR 0024](decisions/0024-apps-are-trusted-code.md)). Apps from anyone else will run sandboxed, with a token limited to their own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
 
-Build screens from the kit's components (run `pnpm --filter @augur/ui-kit storybook` to see them) and its tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of the kit or Lit: the shell serves one copy to every app, and `vite.config.ts` keeps `lit`, `lit/*` and `@augur/ui-kit` out of your bundle. Anything else you import, you bundle.
+Build screens from Quill's parts (`@augur/app-kit`, which also carries all of Common; see them in the `augur-kit` repository's Storybook) and AUGUR's tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of React or the kit: the shell serves one copy to every app, and `vite.config.ts` keeps them out of your bundle (`isSharedModule`). Anything else you import, you bundle. Lit and the Lit kit (`@augur/ui-kit`) went with SDK 2: an app that still imports them doesn't load.
 
 ### The app kit
 
@@ -86,30 +91,30 @@ Apps show more than the shell does, but each thing in them still says little: **
 - **Marks before words, words before sentences.** A colour never stands alone.
 - **Counts until asked.** Show five, then "8 more".
 - **Things open; text doesn't link.** A row has at most two actions, as words.
-- **Explain on demand.** The reason sits behind the line (`ui-note why="…"`), not in a paragraph above the form.
-- **Nothing is obtuse.** A control you can't use now stays, dimmed, and says why: give every `ui-button` and `ui-icon-button` that can be disabled a `reason` ("Only its leads can pass it down."), and list rows, list actions and menu entries a `reason` too. It stays focusable and shows on hover and focus. If it's only waiting for a request, use `busy` instead. `pnpm check:reasons` fails a platform screen that disables a control without one, and the kit warns on localhost.
+- **Explain on demand.** The reason sits behind the line (`<Note why="…">`), not in a paragraph above the form.
+- **Nothing is obtuse.** A control you can't use now stays, dimmed, and says why: give every `Button` and `IconButton` that can be disabled a `reason` ("Only its leads can pass it down."), and list rows, list actions and menu entries a `reason` too. It stays focusable and shows on hover and focus. If it's only waiting for a request, use `busy` instead. `pnpm check:reasons` fails a platform screen that disables a control without one, and the kit warns on localhost.
 - **One heading, one primary.**
 
 | Part | For |
 | --- | --- |
-| `ui-notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
-| `ui-note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
-| `ui-can` | What you can do from here (up to two actions), and who can do the rest |
-| `ui-app-frame` | The page: the slate ground, an optional `rail` slot (folds to icons), the main column, an optional `aside` slot and an optional `drawer` slot at the right edge (folds away; says more about what's on screen). `measure` is `wide`, `read` or `full`; set `screen` to the screen's id and the main column and drawer change together |
-| `ui-tile` in `ui-tiles` | One thing you walk into, by its icon or picture and name alone. Its actions open in a `ui-radial-menu` on right-click, never on the tile. `add` makes the dashed tile that makes another; `rank` (`high`, `mid`, `low`) says how high it is, which sets its hover |
-| `ui-toolbar` | Above a grid: a search (`ui-search`), filters in its slot, and one `add` (`ui-add`) |
-| `ui-radial-menu` | An object's actions in a ring around it: `show(target)`, then `ui-select` with the action or `ui-close` |
-| `ui-page-head` | The trail of what it's inside, eyebrow, title, one line of summary, and its `.actions`: two show (one primary at most), the rest go in ⋯ |
-| `ui-section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
-| `ui-card` in `ui-cards` | One thing in a grid. Its floor is a dot in the floor's colour with the floor's name (never a coloured edge), `.meta` takes up to three facts, `note` is the one line that changes what you'd do. A `ui-tally` goes in its `tally` slot. `unavailable` with a `reason` keeps it in the grid, locked, saying why |
-| `ui-tally` | Counts drawn as segments, one per thing. Mark the counts that need attention `loud`; only those, and the total, are said in words |
-| `ui-details` | The properties of the thing that's open. Empty values say "Not known"; `explained` marks the one someone asked about |
-| `ui-timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
-| `ui-path` | Line of sight: steps from the top floor down to `here`, each opening on `ui-open` |
-| `ui-ref`, `ui-refs` | Things from other apps (an `EntityRef`, `DocumentRef`, intent, person or team) as chips: the kind's icon, the name, a floor dot when it's kept elsewhere. On `ui-open`, raise the matching intent (`openEntity`, `openDocument`); `removable` fires `ui-remove`. Give `closed-count` and `closed-reason` for the ones the person can't open |
-| `ui-date` | A day, value YYYY-MM-DD. It shows "Fri 13 Nov · in 15 days", reads "13 nov", "friday", "end of month" or "+2w", and `empty` says what no day means ("Today", "Still holds"). `.quick` takes up to four choices. Works in `ui-dialog` like a text field |
-| `ui-people-picker` | Give it `.search` (people and teams by name, through the SDK) and, if some can't be chosen, `.check` returning why. Fires `ui-pick`; with `multiple`, chosen ones gather as chips in `.value` |
-| `ui-editor` | For writing more than a line. Its value is Markdown with mentions as `[@Name](person:id)` links, and `.refs` lists them. Give `.mentionSource` to turn on `@` and `#`. `guide="2 sentences"` counts and never blocks. Show what it writes with `ui-prose` |
+| `Notice` | One sentence in a page that needs attention, with one action: `tone` needs, warning, refused or info |
+| `Note` | A quiet line that explains; `why` keeps the longer reason one press away; `live` for an action's result ("Saved.") |
+| `AppFrame` | The page: the app's name and icon, an optional `rail` of `RailLink`s (folds to a strip), the main column, an optional `aside` and an optional `drawer` at the right edge, usually `About` (folds away; says more about what's on screen) |
+| `KindTile`, `AddTile` in `Tiles` | One thing you walk into, by its kind's shape and name alone; `AddTile` makes another. Its actions open in a `RadialMenu` on right-click, never on the tile |
+| `RadialMenu` | An object's actions in a ring around it |
+| `PageHead` | The trail of what it's inside, eyebrow, title, one line of summary, and its `actions`: two show (one primary at most), the rest go in ⋯ |
+| `Section` | A labelled part with its count, one quiet `action` and a `why`; shows five children and folds the rest behind "3 more" |
+| `Card` in `Cards` | One thing in a grid. Its floor is a dot in the floor's colour with the floor's name (never a coloured edge), `meta` takes up to three facts, `note` is the one line that changes what you'd do. `unavailable` with a `reason` keeps it in the grid, locked, saying why |
+| `Tally` | Counts drawn as segments, one per thing. Mark the counts that need attention `loud`; only those, and the total, are said in words |
+| `Details` | The properties of the thing that's open. Empty values say "Not known" |
+| `Timeline` | History as `{ at, who, what }`, grouped Today, Yesterday, Tue 27 Oct |
+| `Path` | Line of sight: steps from the top floor down to here, each opening with `onOpen` |
+| `Ref`, `Refs` | Things from other apps (an `EntityRef`, `DocumentRef`, intent, person or team) as chips: the kind's icon, the name, a floor dot when it's kept elsewhere. In `onOpen`, raise the matching intent (`openEntity`, `openDocument`); `onRemove` makes them removable. Give `closedCount` and `closedReason` for the ones the person can't open |
+| `DateField` | A day, value YYYY-MM-DD. It shows "Fri 13 Nov · in 15 days", reads "13 nov", "friday", "end of month" or "+2w", and `empty` says what no day means ("Today", "Still holds"). `quick` takes up to four choices. Works in a `Dialog` like a text field |
+| `PeoplePicker` | Give it `search` (people and teams by name, through the SDK) and, if some can't be chosen, `check` returning why. `onPick` fires; with `multiple`, chosen ones gather as chips (`onChange`) |
+| `Editor` | For writing more than a line. Its value is Markdown with mentions as `[@Name](person:id)` links (`readMentions`). Give `mentionSource` to turn on `@` and `#`. `guide="2 sentences"` counts and never blocks. Show what it writes with `Prose` |
+
+Events are callbacks (`onOpen`, `onAction`), and behaviour comes from React Aria. For an app's own layout, use Tailwind with only AUGUR's tokens (`@import '@augur/app-kit/theme.css'`), as the platform frontends do.
 
 ## 4. The service
 
@@ -203,7 +208,7 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).
 - `requiredRole` hides the app from anyone without that role. `handles` lists the intent types it answers. `menu` gives the app an Orbit, and `areas` (SDK 1.5) names the broad parts of the app Title lists under it, each menu group naming its `area`; an app that draws its own menu inside it sets `"orbit": false` (SDK 1.4) to open straight away; an app that shows the same on every floor, as Admin does, sets `"sameOnEveryFloor": true` (SDK 1.6), and the shell's floor gauge rests while it's open, saying why; an app that follows the address itself, as one built on the app kit's `placeRoutes` does, sets `"followsAddress": true` and gives `navigated(el, path)` (SDK 1.11), and the shell keeps it mounted on Back, Forward and its own links while it stays open on the same floor, calling `navigated` with the new path (it needs both: the shell's own moves, such as Find, push the address without a popstate) (an intent, a request, another floor or a changed preview still mounts it again); see [platform/frontends](../platform/frontends/README.md#title-and-orbit). How the shell draws menus follows the [shell principles](shell-principles.md).
 - `previews` (SDK 1.7) lists features the app is trying before they're everyone's: `[{ "id": "board-view", "name": "Board view", "detail": "Tasks as columns.", "until": "2027-01-31" }]`. Ask `ctx.previewOn('board-view')` and keep working when it's false; admins decide who gets each, and people turn opt-in ones on in the shell's Previews ([release-channels.md](release-channels.md#feature-previews)).
-- `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`), `models:use` to ask an AI model through the model gateway (`askModel`, see [Agents and models](agents.md)), `events:publish` and `events:subscribe` to tell other services what happened and hear what they did (see [Domain events](domain-events.md)), `people:read` to ask who someone stands for and find people and teams to share with (see [Sharing](#sharing)). Scopes are checked on the floor your service names (`X-Workspace-Id`, which the service kit's calls take as `workspace`); a call that names none is checked on the organisation's floor, as the gateway does. So if your app is off for the organisation and on only for some teams, name the team's floor when you notify or audit for it. An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope. A new version that asks for more scopes is still served, but gets the new ones only once an admin allows them in Admin, Apps.
+- `scopes` is what the app's service asks to do on the platform: `notifications:send` to notify people from the service (`notify` in the service kit), `audit:write` to add to the audit log (`recordAudit`), `models:use` to ask an AI model through the model gateway (`askModel`, see [Agents and models](agents.md)), `events:publish` and `events:subscribe` to tell other services what happened and hear what they did (see [Domain events](domain-events.md)), `people:read` to ask who someone stands for and find people and teams to share with (see [Sharing](#sharing)). `inbox:write` to put work that waits on someone in their inbox, and close it when it's done (`inboxItem`, see [The Inbox](inbox.md)). Scopes are checked on the floor your service names (`X-Workspace-Id`, which the service kit's calls take as `workspace`); a call that names none is checked on the organisation's floor, as the gateway does. So if your app is off for the organisation and on only for some teams, name the team's floor when you notify or audit for it. An app may always register itself, and may only send for itself. Without the scope, the call is refused with a 403. `ctx.notify` in the frontend needs no scope. A new version that asks for more scopes is still served, but gets the new ones only once an admin allows them in Admin, Apps.
 - `category` (SDK 1.11) says what kind of app it is ([ADR 0032](decisions/0032-platform-apps-and-pillar-apps.md)): `platform`, for using and managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only apps that ship with AUGUR (`PILLAR_APPS`) or that the app runner installed from the signed app feed can be either, and the registry's own apps (Home, Admin, the Upgrade Centre) are always platform apps. Any other app may send it and still registers, but it's just an app: the shell and `GET /v1/me/apps` get no kind for it, and Admin, Apps shows the claim and why it isn't used. Leave it out unless your app is one of those. Ask for `"sdk": "^1.11.0"` when you set it, so an older deployment refuses the release with a reason instead of the registry refusing the manifest. A value other than the two is refused when the app registers.
 - `floors` is the kinds of floor the app works on: `personal` (someone's own), `team` (any team, at any depth) and `org`. Leave it out for all three. The shell never offers the app on another kind.
 - `surfaces` says what the app shows on each kind of floor, for the shell to place: a `page`, a `card` on the floor's page, a `panel`, the floor's `settings` or `admin`, each from a `module` the entry exposes. `role` limits one to members or leads there; `rollup` means it shows the floor and the teams below it that the person is on (identity's `GET /v1/me/workspaces/{id}/rollup`). Each surface's floor must be in `floors`. When several match, the most specific floor wins, then a role condition, then manifest order. The shell places `card`s on Home (SDK 1.2); the other slots are checked and kept, and placed later.
@@ -212,17 +217,26 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 
 A `card` surface puts a tile on Home on that kind of floor: a quick look at the app's state with one way in, never a whole screen. Home shows up to six, the apps the person opened most recently first. The `module` names a key of `surfaces` on the entry's default export, and the card is mounted with the same `ctx` as the app (at path `/`), so `ctx.fetch`, `ctx.raise` and `ctx.workspace` work as they do in the app:
 
-```ts
+```tsx
 export default defineMicroFrontend({
   mount(el, ctx) { /* the app */ },
   surfaces: {
     './TeamClaims': {
       async mount(el, ctx) {
         const { waiting } = await (await ctx.fetch('/api/expenses/v1/summary')).json();
-        render(html`<ui-facts .items=${[{ value: waiting, label: 'Waiting for you' }]}></ui-facts>
-          <ui-button kind="secondary" @click=${() => ctx.raise({ type: 'expense.open', payload: {} })}>Open claims</ui-button>`, el);
+        const root = createRoot(el);
+        roots.set(el, root);
+        root.render(
+          <>
+            <Facts items={[{ value: waiting, label: 'Waiting for you' }]} />
+            <Button kind="secondary" onPress={() => ctx.raise({ type: 'expense.open', payload: {} })}>Open claims</Button>
+          </>,
+        );
       },
-      unmount(el) { render(html``, el); },
+      unmount(el) {
+        roots.get(el)?.unmount();
+        roots.delete(el);
+      },
     },
   },
 });
@@ -232,6 +246,8 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
 
 - `search: true` puts the app's content in the shell's Find; see [Find](#find) below. SDK 1.3.
 - `maxUpload` is the largest request, in MB (1 to 2048), the gateway lets through to your service; 10 without it. Bodies stream through the gateway and are never held there, and one past the limit gets 413 before your service sees it. An admin can lower it in Admin, Apps. The manifest the shell gives your frontend has the limit in force, so check a file against it before sending. SDK 1.4.
+- `inbox` (SDK 1.12) declares the kinds of work your service puts in people's inboxes: `{ "kinds": [{ "id": "assignment", "label": "Assigned to you", "icon": "compass" }] }`, up to 10, each id once. The Inbox shows the label and icon on each item, and an item of a kind you didn't declare is refused. It goes with `inbox:write` ([The Inbox](inbox.md)).
+- `notifications` (SDK 1.13) declares the kinds of notification your service sends: `{ "kinds": [{ "id": "comment", "label": "Comments on your documents", "detail": "When someone comments on one you own" }] }`, up to 10, each id once. Send each notification with its `kind`. Account, Notifications lists them under your app, and each person chooses which kinds reach them out loud and which wait quietly ([Your account](account.md)). A notification of a kind you didn't declare is refused. It goes with `notifications:send`.
 - `settings` are what admins can change about your app, in Admin, Apps: up to 10, each a whole number with an `id`, a `label`, an optional `detail` and `unit`, and its `min`, `max` and `default`. Your service reads them as itself with `appSettings({ registryUrl, credentials, app })` from the service kit, which gives each id's value: an admin's, or the default. Ask again each time you use one, since an admin can change it at any time; changes are in the activity log. If a newer version narrows a range past an admin's value, the default is used until an admin sets it again.
 
   ```json
@@ -327,7 +343,7 @@ await explainEntity(ctx, ship); // the same, with why it shows from this floor m
 
 When no app the person can open handles `entity.pick`, `pickEntities` rejects with an `IntentError`: keep the control that would use it in sight, disabled, saying so.
 
-An app that shows documents can offer what a passage names with `entity.propose` (`proposeEntity`, SDK 1.5). Data Atlas asks the person what kind of thing it is and files it in the floor's Triage, where a lead decides; nothing is added to what's known until then. `ui-reader`'s `marked()` gives the selected words, the block they're in and its text:
+An app that shows documents can offer what a passage names with `entity.propose` (`proposeEntity`, SDK 1.5). Data Atlas asks the person what kind of thing it is and files it in the floor's Triage, where a lead decides; nothing is added to what's known until then. Quill's `Reader`, through its ref, has `marked()`, which gives the selected words, the block they're in and its text:
 
 ```ts
 import { proposeEntity } from '@augur/mfe-sdk';
@@ -341,15 +357,17 @@ if (passage) {
 
 ### Binding your things to entities
 
-An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox (ADR 0025, docs/domain-events.md). Publish `<app>.bound` when someone links one of your things to an entity and `<app>.unbound` when they take the link away. The payload is an `EntityBinding` (SDK 1.10): your thing as a `Ref`, plus the `EntityRef`.
+An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox, in the same transaction as the link (ADR 0025, ADR 0066, docs/domain-events.md). The topic is `<app>.<type>.entity-bound` when someone links one of your things to an entity and `<app>.<type>.entity-unbound` when they take the link away; the payload is the thing's id under its type, the entity's id, and a role. The service kit writes both:
 
 ```ts
-import type { EntityBinding, Ref } from '@augur/mfe-sdk';
+import { bindingTopics, outboxBinding } from '@augur/service-kit';
 
-const task: Ref = { kind: 'ref', app: 'intent', type: 'task', id: 't-41', label: 'Brief the desk' };
-const binding: EntityBinding = { subject: task, entity: ship };
-// in the same transaction as the link: outbox.add('intent.bound', binding)
+// inside the transaction that saves the link:
+await outboxBinding(tx, { app: 'expenses', type: 'claim', id: claim.id, entity: ship.id, role: 'about' }, 'bound', floorId);
+// → expenses.claim.entity-bound { claim: 'c-41', entity: 'ent_…', role: 'about' }
 ```
+
+Ask for `events:publish`; `bindingTopics('expenses', 'claim')` names the two topics. Send ids only: a thing another app needs more ids to open can carry them in `more` (Artifacts sends `library` and `level`), never titles. A follower reads any app's binding events with `readBinding(event)`. In the browser, `EntityBinding` (a `Ref` and an `EntityRef`) is how a frontend passes the same link around.
 
 A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`. Data Atlas follows the events to answer "what points at this entity", so binding still works while Atlas is off.
 
@@ -359,6 +377,10 @@ Two parts of the SDK are reserved now so that adding them later won't break apps
 
 - **`marking`** is optional on `Ref`, `DocumentRef`, `UnitRef` and `EntityRef`. It's a `{ scheme, label }` protective marking. Whether a deployment marks its information is still open (PER-149), so nothing sets markings or enforces them. If a ref you're handed has a marking, keep it as you found it when you store or pass that ref on.
 - **`ctx.focus`** is the working context someone chose inside a floor, such as "Operation Alpha · Phase 2": a `Ref` to the thing plus a label. The shell doesn't offer working contexts yet, so it's always undefined, and undefined means the whole floor. An app that will narrow what it shows to a working context can say so with `focus: true` in its manifest. Today that changes nothing.
+
+### Work that waits on someone
+
+When someone has to do something (approve, review, take an assignment), put an item in their inbox or their team's with `inboxItem` from the service kit, rather than a `needs` notification that vanishes when read. Declare the kinds you use in the manifest's `inbox.kinds`, follow `platform.inbox.*` to hear when someone declined or handed one on, and close the item from your service when the work is done. See [The Inbox](inbox.md).
 
 ### Sharing
 
@@ -481,7 +503,7 @@ Each build of a version's frontend is kept in a folder of its own, `/apps/expens
 
 [Ship an app](ship-an-app.md) walks the whole loop, from a pull request's preview to servers taking the release by themselves.
 
-You don't release an app by hand. Merging the Version packages PR that moves its version releases it on its own: a signed service image, a signed frontend and the GitHub release `app/<id>@<version>` ([Versioning](versioning.md#app-releases)). A deployment's app runner can install and update it from there, with no new AUGUR release. The app made by `pnpm create-app` already copies its manifest into its build and gives the registry its frontend when it starts, as the release needs.
+You don't release an app by hand. Merging the Version packages PR that moves its version releases it on its own: a signed service image, a signed frontend and the GitHub release `app/<id>@<version>` ([Versioning](versioning.md#app-releases)). A deployment's app runner can install and update it from there, with no new AUGUR release. The app made from augur-app-template already copies its manifest into its build and gives the registry its frontend when it starts, as the release needs.
 
 Before that, every push to a pull request that changes the app makes a preview, which a server with the app installed runs beside it for the app's developers to switch to ([app-previews.md](app-previews.md)). A preview signs in as the app but keeps its data apart, and sees `APP_PREVIEW=pr-<number>` in its settings; the service kit marks its notifications ("Preview #12: …") and audit entries (`preview: 12`) with it.
 
