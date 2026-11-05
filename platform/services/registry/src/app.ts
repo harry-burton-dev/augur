@@ -30,7 +30,6 @@ import {
 import { APP_CATEGORIES, SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
 import { platformUpgradeRoutes } from './platform-upgrades.ts';
-export { UPGRADE_SIGN_IN_MS } from './platform-upgrades.ts';
 import { describeApi } from './contract.ts';
 import {
   AllowedOrigin,

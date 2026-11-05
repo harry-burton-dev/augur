@@ -65,7 +65,7 @@ everything.
 
 | Job | Pull request runs it when it changes | On a push | What it does |
 |---|---|---|---|
-| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, licences, repository security (below), script tests, the hotfix rule, a changeset, build, the API reports and (when `platform/packages` changed) publint and Are the Types Wrong on the packed packages (ADR 0052), manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
+| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, licences, repository security (below), script tests, the hotfix rule, a changeset, build, a dead-code warning (Knip, ADR 0069), the API reports and (when `platform/packages` changed) publint and Are the Types Wrong on the packed packages (ADR 0052), manifests, migrations (frozen once on `main`), typecheck, tests against Postgres (on a push to `main`, with coverage) |
 | `scan` | always | never | gitleaks on the pull request's commits; OSV-Scanner, failing only on vulnerabilities the pull request brings in (ADR 0043) |
 | `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, the Folio pin (`release/shipped-apps.json`, `infra/shipped-app.sh`), the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio (from the release AUGUR ships) on and off, and axe on the shell once (ADR 0063) |
 | `deploy-images` | `infra`, `.dockerignore`, any `package.json`, the workspace file or the lockfile | never | the compose files are valid; the four main images build, the web image serves the shipped apps' frontends, and none runs as root; nginx and its Content Security Policy; the backup and restore scripts |
@@ -75,6 +75,14 @@ from each SDK minor whose bundle differed from the one before (a folder stands f
 identical minors it starts), and runs only the contract spec. An ordinary pull request runs today's build (Folio on and off) and only the
 oldest and newest frozen builds (`CONTRACT_FROZEN=edges`); the Version packages pull request and a
 run by hand run every one, so nothing is released without the full set passing.
+
+**Dead code and coverage (ADR 0069).** Knip (`knip.json`, `pnpm knip`) lists files, exports and
+dependencies nothing uses. It takes seconds, so it runs on every run, as a warning with its list in the
+run's summary; once `main` is clean it becomes a failing check. On a push to `main` the tests also
+measure coverage with Vitest's v8 provider, and `pnpm coverage:summary` writes one table of it, a row
+per package, to the run's summary. No number fails a run and nothing is sent to a coverage service. A
+pull request's tests don't measure coverage, so they cost what they did; run
+`pnpm turbo run test -- --coverage.enabled` to see it locally.
 
 **The turbo cache.** Turbo keeps each task's output in `TURBO_CACHE_DIR`, saved to GitHub's cache
 under the commit. A pull request restores its own last run or, failing that, `main`'s; a task whose
