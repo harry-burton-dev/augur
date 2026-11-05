@@ -1,15 +1,11 @@
 {
-  "version": "0.22.0",
-  "name": "Ibis",
+  "version": "0.23.0",
+  "name": "Jacana",
   "channel": "beta",
   "released": "2026-11-05",
   "upgradeFrom": ">=0.19.0",
   "changed": [
-    "@augur/app-kit",
-    "@augur/kit-common",
-    "@augur/kit-bundle",
     "@augur/app-tools",
-    "@augur/mfe-sdk",
     "@augur/service-kit",
     "@augur/events",
     "@augur/gateway",
@@ -19,9 +15,7 @@
     "@augur/storage",
     "@augur/updater",
     "@augur/admin",
-    "@augur/home",
-    "@augur/shell",
-    "@augur/upgrades"
+    "@augur/shell"
   ],
   "breaking": [],
   "settings": {
@@ -133,6 +127,7 @@
       "AUGUR_DEV_SIGNER",
       "DOMAIN_EVENTS_KEEP_DAYS",
       "INBOX_KEEP_DAYS",
+      "INBOX_DONE_DAYS",
       "CALLER_SIGNING_KEY",
       "COMPOSE_PROFILES",
       "PLATFORM_DIR",
@@ -147,7 +142,9 @@
       "SERVICE_CALL_TIMEOUT_SECONDS",
       "DATABASE_STATEMENT_TIMEOUT_SECONDS",
       "GRAFANA_ADMIN_PASSWORD",
-      "ALERT_WEBHOOK_TOKEN"
+      "ALERT_WEBHOOK_TOKEN",
+      "ATLAS_MAP_TILES",
+      "ATLAS_MAP_ATTRIBUTION"
     ],
     "required": [
       "PLATFORM_VERSION",
@@ -189,7 +186,9 @@
       "ALERT_WEBHOOK_TOKEN"
     ],
     "added": [
-      "FOCUS_DEPTH"
+      "INBOX_DONE_DAYS",
+      "ATLAS_MAP_TILES",
+      "ATLAS_MAP_ATTRIBUTION"
     ],
     "removed": []
   },
@@ -207,7 +206,7 @@
       "version": "0.5.6"
     },
     "@augur/app-tools": {
-      "version": "0.4.1"
+      "version": "0.4.2"
     },
     "@augur/clients": {
       "version": "0.1.0"
@@ -219,37 +218,37 @@
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.16.0"
+      "version": "0.17.0"
     },
     "@augur/events": {
-      "version": "0.9.2"
+      "version": "0.10.0"
     },
     "@augur/gateway": {
-      "version": "0.12.0"
+      "version": "0.12.1"
     },
     "@augur/identity": {
-      "version": "1.4.0"
+      "version": "1.5.0"
     },
     "@augur/models": {
-      "version": "0.3.7"
+      "version": "0.3.8"
     },
     "@augur/registry": {
-      "version": "0.19.0"
+      "version": "0.19.1"
     },
     "@augur/storage": {
-      "version": "0.4.5"
+      "version": "0.5.0"
     },
     "@augur/updater": {
-      "version": "0.9.3"
+      "version": "0.9.4"
     },
     "@augur/admin": {
-      "version": "0.17.0"
+      "version": "0.18.0"
     },
     "@augur/home": {
       "version": "0.4.1"
     },
     "@augur/shell": {
-      "version": "0.18.0"
+      "version": "0.19.0"
     },
     "@augur/sign-in-theme": {
       "version": "0.1.0"
