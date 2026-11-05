@@ -1,5 +1,39 @@
 # @augur/registry
 
+## 0.16.0
+
+### Minor Changes
+
+- b4cad59: Feature previews can be turned on for chosen floors: Admin → Apps picks the floors, the preview is on there and on the floors beneath them, and off everywhere else, without a release (ADR 0021, amended). `ctx.previewOn` is unchanged; an app's service passes `?workspace=` when it asks the registry for a person.
+- 8606741: The deployment watches itself (ADR 0059). otel-lgtm now runs in every deployment, keeps 72 hours, and its Grafana loads AUGUR's alert rules (a part down, server errors, browser errors, backups) and dashboard from `infra/deploy/observability/`. Each alert, and its all-clear, reaches deployment admins as a notice through the registry's new webhook (`POST /v1/platform/alerts`, contract 1.32.0, with `ALERT_WEBHOOK_TOKEN`). Before upgrading, set `GRAFANA_ADMIN_PASSWORD` and `ALERT_WEBHOOK_TOKEN` in `.env`; a server with its own collector sets `OTEL_LGTM_REPLICAS=0`. `OTEL_SDK_DISABLED=true` now also stops the shell sending browser errors. See docs/upgrade.md, "The deployment watches itself".
+- 0ec750c: The Inbox's items (ADR 0026, PER-146): apps' services put work that waits on a person or a team in their inbox with the new `inbox:write` scope (`inboxItem`, `updateInboxItem`, `getInboxItem` in the service kit), keyed by the app's own id, and close it when it's done or withdraw it. People list theirs (`/v1/inbox`, `/v1/inbox/counts`) and take, release, decline, hand on or mark done; each step is in the item's history and the audit log, and published as `platform.inbox.*`. The notification stream also carries `inbox` events, so the shell's count stays live. Closed items are kept `INBOX_KEEP_DAYS` (90) days. Admin names the scope "Put work in people's inboxes". Events API 1.9.0.
+- 7518ce8: Apps declare the kinds of work they put in people's inboxes in their manifest's `inbox.kinds` (SDK 1.12: `id`, `label`, `icon`, up to 10), and the events service refuses an item of a kind the app doesn't declare. The registry names them in an app's grants (`inboxKinds`), read with `registryInboxKinds` from the service kit. The SDK gains the Inbox's types (`InboxItem`, `InboxKind`, `InboxCounts`, `InboxChange`) and `INBOX_TOPICS`.
+- 8606741: The registry sends its signed record to Backstage at least every 15 minutes, not once a day, so Backstage can raise the alarm when a deployment goes quiet (ADR 0059). The record's reason for a send with nothing new is `heartbeat` (contract 1.32.0), and the Upgrade Centre calls it the regular record.
+
+### Patch Changes
+
+- 9ad4399: Mandate ships with AUGUR, like Artifacts, Explorer and Data Atlas: a `mandate` container with its own sign-in, login and schema (`MANDATE_*` in `.env`). On a server whose app runner installed it, AUGUR's container takes over the same schema, the updater stops the runner's copy, and Admin → Apps stops listing it as an installed app.
+- 873a050: The app manifest's schema is written in TypeBox and published as contracts/manifest.schema.json, and a manifest may carry "$schema" pointing at it.
+- 03e7d87: Every deployment setting is described once, in infra/deploy/settings.schema.json, and CI checks compose.yml, .env.example, the guides and the services' code against it (`pnpm check:settings`). Settings the guides named but compose never passed now reach their services: FEED_SIGNER (registry), IMAGE_SIGNER, IMAGE_SIGNER_ISSUER and AUGUR_DEV_SIGNER (updater), DOMAIN_EVENTS_KEEP_DAYS (events), MODEL_TIMEOUT_SECONDS (models), CALLER_SIGNING_KEY (gateway), and OTEL_EXPORTER_OTLP_HEADERS, OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG (every service). An empty DOMAIN_EVENTS_KEEP_DAYS or MODEL_TIMEOUT_SECONDS keeps its default, and AUGUR_DEV_SIGNER follows the repository a fork's IMAGE_SIGNER names.
+- 46619f9: The registry API's schemas are TypeBox, and contracts/registry.openapi.yaml is generated from them (ADR 0055). The contract now names every refusal the routes already sent, and the fields they already answered with.
+- 5622ece: Close two address-check bypasses (PER-209). An app's entry is judged as the browser resolves it, so `/\evil.example/x.js` no longer passes as a path on AUGUR, and the manifest schema refuses backslashes and control characters in `entry`. Where an app's service is reached is now an allow-list: on AUGUR's own network only `app-<id>` containers, and never loopback, link-local or Docker's default range, however the address is written.
+- 83858e8: AUGUR's repository is now `harry-burton-dev/augur`. The registry reads the release list from the new address by default, and app-tools names it when a release has no `GITHUB_REPOSITORY`. Images and the feed stay at `ghcr.io/harry-burton-dev/im-platform`, and releases signed under the old name are still trusted.
+- 566f261: The service kit has one migration runner, `runMigrations(pool, { schema, migrations })`, and the events, identity, models and registry services use it in place of their own copies; what they do at start is unchanged. New migrations are linted with Squawk (ADR 0053), which catches drops, renames and type changes the old check missed.
+- 7517bd7: `release/shipped-apps.json` is now the one list of the apps that ship with AUGUR. The updater reads it from its image to restart them in order and check each comes back, and refuses an upgrade with an image for a part the server runs that it doesn't know, instead of restarting it unchecked. `pnpm check:release` fails when a compose file disagrees with it. The registry refuses an app whose id a part of AUGUR answers to (a platform service, a platform app, a deployment service or a path the front door serves), saying which, and storage makes no schema under such an id (`RESERVED_APP_IDS` in the service kit).
+
+  The updater restarts AUGUR's own Keycloak image first, giving it up to five minutes to be ready, and keeps it running when going back to a release from before that image.
+
+- Updated dependencies [7dbdf7b]
+- Updated dependencies [2dbdc22]
+- Updated dependencies [0ec750c]
+- Updated dependencies [7518ce8]
+- Updated dependencies [dec1a40]
+- Updated dependencies [cceb953]
+- Updated dependencies [566f261]
+- Updated dependencies [7517bd7]
+  - @augur/service-kit@0.13.0
+  - @augur/mfe-sdk@1.12.0
+
 ## 0.15.0
 
 ### Minor Changes
