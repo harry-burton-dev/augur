@@ -11,7 +11,7 @@ const release = (version: string, more: Partial<AppRelease['manifest']> = {}, ch
   id: 'notes',
   version,
   channel,
-  manifest: { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', version, sdk: '^1.0.0', ...more },
+  manifest: { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', version, sdk: '^1.0.0 || ^2.0.0', ...more },
   service: { image: `ghcr.io/o/r/apps/notes@${digest('a')}` },
   frontend: null,
   signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' },
