@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
-import { callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, notify, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, steadyPool } from '@augur/service-kit';
+import { callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, notify, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, startupLog, steadyPool } from '@augur/service-kit';
 import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { KeycloakAccounts, type AccountSource } from './me.ts';
@@ -10,6 +10,8 @@ import { PgWorkspaceStore } from './workspaces.ts';
 import { PgOrganisationStore } from './organisation.ts';
 import { PgLifecycleStore } from './lifecycle.ts';
 import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
+
+const log = startupLog('identity');
 
 // Every setting identity reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('identity', [
@@ -57,7 +59,7 @@ const ownSecret = process.env.SERVICE_CLIENT_SECRET;
 // (realm-job.ts) holds it, sets the realm up and gives identity's own client its rights.
 const keycloakAdmin = !ownSecret && KEYCLOAK_ADMIN_USER && KEYCLOAK_ADMIN_PASSWORD ? { user: KEYCLOAK_ADMIN_USER, password: KEYCLOAK_ADMIN_PASSWORD } : undefined;
 if (ownSecret && production && process.env.KEYCLOAK_ADMIN_PASSWORD) {
-  console.warn("Keycloak's admin password is in identity's settings but identity never uses it: take KEYCLOAK_ADMIN_PASSWORD out of identity's environment. The realm job is the only part that needs it.");
+  log.warn("Keycloak's admin password is in identity's settings but identity never uses it: take KEYCLOAK_ADMIN_PASSWORD out of identity's environment. The realm job is the only part that needs it.");
 }
 let directory: Directory | undefined;
 let keycloakEvents: ((path: string) => Promise<KcEvent[]>) | undefined;
@@ -83,30 +85,30 @@ if (ownSecret || keycloakAdmin) {
     retrying(() => keycloak.hasRights(IDENTITY_RIGHTS))
       .then((ok) => {
         if (!ok) {
-          console.error(
+          log.error(
             `identity's own sign-in (${IDENTITY_CLIENT}) doesn't have the rights it needs in the ${KEYCLOAK_REALM} realm (${IDENTITY_RIGHTS.join(', ')}), so admins can't manage people. ` +
               'Run the realm job, which gives them: pc run --rm keycloak-config (docs/deploy.md, "The realm job").',
           );
         }
       })
-      .catch((err: Error) => console.error(`The sign-in service couldn't be reached: people can't be managed until it can (${err.message}).`));
+      .catch((err: Error) => log.error(`The sign-in service couldn't be reached: people can't be managed until it can (${err.message}).`));
   } else {
-    console.warn("SERVICE_CLIENT_SECRET is not set: identity manages people as Keycloak's own admin. That's for a local stack only.");
+    log.warn("SERVICE_CLIENT_SECRET is not set: identity manages people as Keycloak's own admin. That's for a local stack only.");
   }
 } else {
-  console.warn('Neither SERVICE_CLIENT_SECRET nor KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD is set: admins cannot manage people and departments.');
+  log.warn('Neither SERVICE_CLIENT_SECRET nor KEYCLOAK_ADMIN_USER and KEYCLOAK_ADMIN_PASSWORD is set: admins cannot manage people and departments.');
 }
 
 // Identity signs in as itself (platform-identity) to write the audit log.
 const { EVENTS_URL } = process.env;
 const credentials = platformCredentialsFromEnv('identity');
 const audit = EVENTS_URL && credentials ? auditTo(EVENTS_URL, credentials) : undefined;
-if (!audit) console.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: admins’ changes to people and departments are not audited.');
+if (!audit) log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: admins’ changes to people and departments are not audited.');
 
 // What apps are granted, so one with people:read can look people up for sharing.
 const { REGISTRY_URL } = process.env;
 const grants = REGISTRY_URL && credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
-if (!grants) console.warn('REGISTRY_URL or SERVICE_CLIENT_SECRET is not set: apps can’t look people up.');
+if (!grants) log.warn('REGISTRY_URL or SERVICE_CLIENT_SECRET is not set: apps can’t look people up.');
 
 // Admins hear when someone asks to leave; a person's download carries what the events service keeps about them.
 const tell = EVENTS_URL && credentials ? (notification: Parameters<typeof notify>[0]['notification']) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) : undefined;
@@ -120,11 +122,11 @@ if (keycloakEvents && audit) {
   const events = keycloakEvents;
   const copy = () =>
     copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at) }).catch((err: Error) =>
-      console.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
+      log.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
     );
   setInterval(copy, 60_000).unref();
   void copy();
 }
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation, lifecycle });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle });
 await app.listen({ port, host: '0.0.0.0' });
