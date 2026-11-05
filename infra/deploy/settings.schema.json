@@ -827,6 +827,20 @@
       ],
       "x-docs": "docs/deploy.md#the-ui-kit"
     },
+    "FOCUS_DEPTH": {
+      "type": "string",
+      "enum": [
+        "veil",
+        "lens",
+        "scrim"
+      ],
+      "description": "How the shell and every app draw what's behind something in focus: veil or lens blur it, scrim only dims it, for desktops without a GPU such as virtual desktops. Unset, each app chooses (veil unless it says).",
+      "default": "",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/deploy.md#desktops-without-a-gpu"
+    },
     "GITHUB_READ_USER": {
       "type": "string",
       "description": "The GitHub account the deployment's read key (secrets/github-read-key) belongs to.",

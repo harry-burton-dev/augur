@@ -55,6 +55,9 @@ ENV KIT_URL=/kit/
 # The product's name in the shell's page (its title, and a meta tag the shell reads for the tab), also
 # written by kit-url.envsh. A deployment sets its own in ORG_PRODUCT_NAME.
 ENV ORG_PRODUCT_NAME=AUGUR
+# How focus is drawn (FOCUS_DEPTH: veil, lens or scrim), as the shell's augur-depth meta, also written by
+# kit-url.envsh. Empty leaves it to each app.
+ENV FOCUS_DEPTH=
 COPY --chmod=755 infra/deploy/kit-url.envsh /docker-entrypoint.d/16-kit-url.envsh
 # What the front door holds callers to (infra/deploy/nginx.conf). Requests a second from one address,
 # and the burst let through at once, for the API and for sign-in; the largest upload in MB; and
