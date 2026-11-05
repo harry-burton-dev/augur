@@ -44,6 +44,6 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from identity.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels']);
+    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests']);
   });
 });
