@@ -3,7 +3,11 @@ apiVersion: backstage.io/v1alpha1
 kind: Location
 metadata:
   name: augur
-  description: "Everything in the augur repository: register this one file in Backstage"
+  description: "AUGUR and the apps that ship with it, each from its own repository: register this one file in Backstage"
 spec:
   targets:
     - ./augur.yaml
+    - https://github.com/harry-burton-dev/augur-atlas/blob/main/catalog-info.yaml
+    - https://github.com/harry-burton-dev/augur-auspex/blob/main/catalog-info.yaml
+    - https://github.com/harry-burton-dev/augur-folio/blob/main/catalog-info.yaml
+    - https://github.com/harry-burton-dev/augur-mandate/blob/main/catalog-info.yaml

@@ -7,13 +7,15 @@
   "description": "The release steps every AUGUR app shares: dev builds, previews, signed bundles and the app-release.json a deployment installs from, as the augur-app command for an app in its own repository.",
   "exports": {
     ".": "./src/release.mjs",
-    "./manifest.schema.json": "./manifest.schema.json"
+    "./manifest.schema.json": "./manifest.schema.json",
+    "./catalog": "./src/catalog.mjs"
   },
   "bin": {
     "augur-app": "./bin/augur-app.mjs"
   },
   "files": [
     "src/release.mjs",
+    "src/catalog.mjs",
     "bin",
     "manifest.schema.json"
   ],
