@@ -76,6 +76,13 @@ export interface Jobs {
   define<Input = void>(name: string, run: JobRun<Input>, options?: JobOptions<Input>): Job<Input>;
   /** A job that runs on a cron schedule (`m h dom mon dow`, or with seconds first), defined before `launch`. */
   schedule(name: string, cron: string, run: (ctx: JobContext) => Promise<void>): Job<never>;
+  /**
+   * A job another process runs, in any language that has DBOS (the Artifacts worker's renditions, in
+   * Python), from the queue `<app>.<name>`. Its input goes as portable JSON, as one argument. This
+   * process queues it and never runs it. `workerConcurrency` is how many runs each of those
+   * processes takes at once.
+   */
+  elsewhere<Input>(name: string, options?: { concurrency?: number; workerConcurrency?: number }): Job<Input>;
   /** Queues a run and returns its id. Given an `id`, starting it again returns the same run. */
   start<Input>(job: Job<Input>, input: Input, options?: { id?: string }): Promise<string>;
   /** Stops a run that hasn't finished. It stops at its next step. */
@@ -145,6 +152,7 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
   const record = recorder(app, log, audit);
   const workflows = new Map<string, (input: unknown) => Promise<void>>();
   const queues = new Map<string, number | undefined>();
+  const remote = new Map<string, { concurrency?: number; workerConcurrency?: number }>();
   const schedules: { name: string; cron: string; workflow: (at: Date) => Promise<void> }[] = [];
   let launching: Promise<void> | undefined;
   const queueOf = (name: string) => (queues.get(name) === undefined ? app : `${app}.${name}`);
@@ -191,8 +199,22 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
       return { name } as Job<never>;
     },
 
+    elsewhere(name, limits = {}) {
+      if (launching) throw new Error(`The job ${name} must be defined before the jobs are launched.`);
+      if (workflows.has(name) || remote.has(name)) throw new Error(`There's already a job called ${name}.`);
+      remote.set(name, limits);
+      return { name };
+    },
+
     async start(job, input, { id } = {}) {
       await this.launch();
+      if (remote.has(job.name)) {
+        const handle = await DBOS.enqueueWorkflowWithOptionsPortable(
+          { queueName: `${app}.${job.name}`, workflowName: job.name, appVersion: JOBS_VERSION, ...(id ? { workflowID: id } : {}) },
+          [input],
+        );
+        return handle.workflowID;
+      }
       const workflow = workflows.get(job.name);
       if (!workflow) throw new Error(`There's no job called ${job.name}.`);
       const handle = await DBOS.startWorkflow(workflow, { queueName: queueOf(job.name), ...(id ? { workflowID: id } : {}) })(input);
@@ -222,6 +244,8 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
           systemDatabaseSchemaName: schema,
           applicationVersion: JOBS_VERSION,
           logger: dbosLogger(log),
+          // Queues another process works (`elsewhere`) are left to it.
+          listenQueues: [app, ...[...queues].filter(([, c]) => c !== undefined).map(([name]) => `${app}.${name}`)],
         });
         try {
           await DBOS.launch();
@@ -233,6 +257,8 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
         }
         await DBOS.registerQueue(app);
         for (const [name, concurrency] of queues) if (concurrency !== undefined) await DBOS.registerQueue(`${app}.${name}`, { concurrency });
+        // The limits are kept with the queue, so the other process's workers keep to them too.
+        for (const [name, limits] of remote) await DBOS.registerQueue(`${app}.${name}`, limits);
         await DBOS.applySchedules(schedules.map(({ name, cron, workflow }) => ({ scheduleName: name, workflowFn: workflow, schedule: cron })));
         // A schedule whose job is gone stops with it.
         const ours = new Set(schedules.map((s) => s.name));
@@ -267,6 +293,7 @@ export const memoryJobs = ({ app, log = console, audit }: Omit<JobsOptions, 'dat
   const runs = new Map<string, { job: string; state: JobState; error?: string; done: Promise<void> }>();
   const defined = new Map<string, { run: (input: unknown, ctx: JobContext) => Promise<void>; floor?: (input: unknown) => string | undefined }>();
   const scheduled = new Map<string, (ctx: JobContext) => Promise<void>>();
+  const elsewhereNames = new Set<string>();
   let launched = false;
   let next = 0;
 
@@ -305,7 +332,19 @@ export const memoryJobs = ({ app, log = console, audit }: Omit<JobsOptions, 'dat
       scheduled.set(name, run);
       return { name } as Job<never>;
     },
+    elsewhere(name) {
+      if (defined.has(name) || scheduled.has(name) || elsewhereNames.has(name)) throw new Error(`There's already a job called ${name}.`);
+      elsewhereNames.add(name);
+      return { name };
+    },
     async start(job, input, { id } = {}) {
+      if (elsewhereNames.has(job.name)) {
+        // Nothing here runs it: it waits, and says so.
+        const runId = id ?? `${job.name}-${++next}`;
+        if (!runs.has(runId)) runs.set(runId, { job: job.name, state: 'queued', done: Promise.resolve() });
+        log.info({ job: job.name, runId }, `${job.name} runs in another process, which doesn't run without a database`);
+        return runId;
+      }
       const found = defined.get(job.name);
       if (!found) throw new Error(`There's no job called ${job.name}.`);
       const runId = id ?? `${job.name}-${++next}`;
