@@ -5,11 +5,11 @@ import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { KeycloakAccounts, type AccountSource } from './me.ts';
 import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
-import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
-import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
-import { MemoryOrganisationStore, PgOrganisationStore, type OrganisationStore } from './organisation.ts';
-import { MemoryLifecycleStore, PgLifecycleStore, type LifecycleStore } from './lifecycle.ts';
-import { copySignIns, MemorySignInCursorStore, PgSignInCursorStore, type KcEvent, type SignInCursorStore } from './sign-ins.ts';
+import { PgPreferenceStore } from './store.ts';
+import { PgWorkspaceStore } from './workspaces.ts';
+import { PgOrganisationStore } from './organisation.ts';
+import { PgLifecycleStore } from './lifecycle.ts';
+import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
 
 // Every setting identity reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('identity', [
@@ -33,30 +33,18 @@ const production = process.env.NODE_ENV === 'production';
 // What the org's own floor is called; people see it as the top floor.
 const orgName = process.env.ORG_NAME || 'Organisation';
 
-let store: PreferenceStore;
-let workspaces: WorkspaceStore;
-let organisation: OrganisationStore;
-let signInCursor: SignInCursorStore;
-let lifecycle: LifecycleStore;
-if (process.env.DATABASE_URL) {
-  const pool = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL }));
-  const prefs = new PgPreferenceStore(pool);
-  await prefs.migrate();
-  store = prefs;
-  workspaces = new PgWorkspaceStore(pool, { orgName });
-  organisation = new PgOrganisationStore(pool);
-  signInCursor = new PgSignInCursorStore(pool);
-  lifecycle = new PgLifecycleStore(pool);
-} else if (production) {
-  throw new Error("DATABASE_URL is not set: identity needs Postgres to keep people's preferences and teams.");
-} else {
-  console.warn("DATABASE_URL is not set: keeping people's preferences and teams in memory until identity restarts.");
-  store = new MemoryPreferenceStore();
-  workspaces = new MemoryWorkspaceStore({ orgName });
-  organisation = new MemoryOrganisationStore();
-  signInCursor = new MemorySignInCursorStore();
-  lifecycle = new MemoryLifecycleStore();
+// Identity keeps people's preferences, teams and the organisation's settings in Postgres, locally too: the
+// dev stack's (`docker compose -f infra/docker-compose.yml up -d postgres`). There is no in-memory copy.
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is not set: identity keeps people's preferences and teams in Postgres. Locally, start the dev stack's (docker compose -f infra/docker-compose.yml up -d postgres).");
 }
+const pool = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL }));
+const store = new PgPreferenceStore(pool);
+await store.migrate();
+const workspaces = new PgWorkspaceStore(pool, { orgName });
+const organisation = new PgOrganisationStore(pool);
+const signInCursor = new PgSignInCursorStore(pool);
+const lifecycle = new PgLifecycleStore(pool);
 
 // Locally this is the dev stack's Keycloak and its admin/admin console login.
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER = production ? undefined : 'admin' } = process.env;

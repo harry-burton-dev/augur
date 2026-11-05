@@ -170,6 +170,12 @@ export interface AuditQuery {
   before?: string;
   /** Only what happened on this floor and the floors below it. */
   workspace?: string;
+  /** Only entries about this (an id). */
+  target?: string;
+  /** Only entries by, about or naming this person. */
+  person?: string;
+  /** Only sign-ins, or only every other change. */
+  kind?: 'change' | 'sign-in';
   limit: number;
 }
 
@@ -607,6 +613,22 @@ export class AdminApi {
   /** A new secret for the app's own sign-in; the old one stops working. */
   issueSignIn = (id: string) => this.call<IssuedSignIn>('POST', `/api/identity/v1/admin/apps/${encodeURIComponent(id)}/credential`);
 
+  /** The entries the filters show, as a CSV file (the events service's GET /audit/export; each export is recorded). */
+  exportAudit = async (query: Omit<AuditQuery, 'before' | 'limit'>): Promise<{ blob: Blob; filename: string }> => {
+    const url = `/api/events/v1/audit/export?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`;
+    let res: Response;
+    try {
+      res = await this.fetchImpl(url, { method: 'GET', headers: { authorization: `Bearer ${await this.getToken()}` } });
+    } catch {
+      throw new Error('AUGUR can’t be reached. Check your connection and try again.');
+    }
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      throw new ApiError(data.message ?? `The export didn’t work (${res.status}). Try again.`, res.status, data.error);
+    }
+    const filename = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'activity.csv';
+    return { blob: await res.blob(), filename };
+  };
   audit = (query: AuditQuery) =>
     this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
 

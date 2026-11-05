@@ -8,7 +8,7 @@ The portal is one for the whole company, above every AUGUR deployment, and lives
 
 | File | What's in it |
 | --- | --- |
-| `catalog/all.yaml` | One Location listing the rest. Register this file in Backstage, at `dev`. |
+| `catalog/all.yaml` | One Location listing the rest. Register this file in Backstage, at `main`. |
 | `catalog/augur.yaml` | The AUGUR domain, the `augur-core` team, the `augur-platform` system with each frontend, package and service, the APIs from `contracts/`, and the third-party parts of the stack (Postgres, Garage, Keycloak, Tailscale, backups, the Docker proxy). |
 | `catalog/apps/<id>.yaml` | Each app as a system: its frontend and service, the intents it handles as an API of type `augur-intent`, and its database and bucket. |
 | `mkdocs.yml` | Every guide in `docs/` as one TechDocs site, on the platform system. |

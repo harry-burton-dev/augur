@@ -350,6 +350,18 @@ describe('Activity', () => {
     expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
   });
 
+  it('writes sign-ins, leavers and Activity’s own upkeep as sentences', () => {
+    const signIn = (action: string, detail: Record<string, unknown> = {}) => sentence(entry(action, { actor: { id: 'u-2', kind: 'user' }, target: 'u-2', detail: { kind: 'sign-in', ...detail } }), names);
+    expect(signIn('sign-in.succeeded', { method: 'password' })).toBe('Sam Okafor signed in');
+    expect(signIn('sign-in.succeeded', { method: 'federated' })).toBe('Sam Okafor signed in through the organisation’s sign-in');
+    expect(signIn('sign-in.failed')).toBe('Someone failed to sign in as Sam Okafor');
+    expect(signIn('account.two-step-added')).toBe('Sam Okafor added a second step to their sign-in');
+    expect(sentence(entry('sign-in.failed-unknown', { actor: { id: 'identity', kind: 'service' }, detail: { kind: 'sign-in', count: 4 } }), names)).toBe('4 times, someone tried to sign in with a name nobody has');
+    expect(sentence(entry('person.left', { target: 'u-2', detail: { handOverTo: 'u-1' } }), names)).toBe('Alex Rivera marked Sam Okafor as a leaver, handing their work to Alex Rivera');
+    expect(sentence(entry('audit.exported', { app: 'events' }), names)).toBe('Alex Rivera downloaded Activity');
+    expect(sentence(entry('audit.pruned', { app: 'events', actor: { id: 'events', kind: 'service' }, detail: { removed: 12, keepDays: 365 } }), names)).toBe('12 entries older than 365 days were removed');
+  });
+
   it('turns a period into a time range', () => {
     const now = new Date(2026, 9, 22, 15, 30);
     expect(rangeFor('today', now)).toEqual({ since: new Date(2026, 9, 22).toISOString() });
@@ -364,12 +376,40 @@ describe('Activity', () => {
     const el = await open('/activity');
     const first = new URL(sent.find((c) => c.url.includes('/audit'))!.url, 'http://x');
     expect(first.searchParams.get('limit')).toBe('50');
+    // Changes by default; sign-ins have their own kind.
+    expect(first.searchParams.get('kind')).toBe('change');
     expect(first.searchParams.get('since')).toBeTruthy();
     expect(rowsOf(el)[0]?.[1]).toBe('Alex Rivera gave Sam Okafor a new password');
     await press(button('Show older', el));
     expect(sent.at(-1)!.url).toContain('before=51');
     expect(rowsOf(el)).toHaveLength(53);
     expect(button('Show older', el)).toBeUndefined();
+  });
+
+  it('downloads everything the filters show as a CSV file, and says why when it can’t', async () => {
+    const made = vi.fn((_: Blob) => 'blob:activity');
+    Object.assign(URL, { createObjectURL: made, revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    let fail = false;
+    const { sent } = gateway((_m, url) => {
+      if (url.startsWith('/api/events/v1/audit/export'))
+        return fail
+          ? Response.json({ error: 'forbidden', message: 'Only an admin can export the whole audit log; a lead can export their own floor’s.' }, { status: 403 })
+          : new Response('id,at\r\n1,2026-10-22\r\n', { headers: { 'content-type': 'text/csv', 'content-disposition': 'attachment; filename="activity-2026-10-22.csv"' } });
+      return url.startsWith('/api/events/v1/audit') ? Response.json([entry('person.password-reset', { target: 'u-2' })]) : undefined;
+    });
+    const el = await open('/activity');
+    await press(button('Download CSV', el));
+    const asked = new URL(sent.find((c) => c.url.includes('/audit/export'))!.url, 'http://x');
+    // The same filters as the list, without its paging.
+    expect(asked.searchParams.get('since')).toBeTruthy();
+    expect(asked.searchParams.has('limit')).toBe(false);
+    expect(made).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    fail = true;
+    await press(button('Download CSV', el));
+    expect(el.textContent).toContain('Only an admin can export the whole audit log');
+    click.mockRestore();
   });
 });
 
