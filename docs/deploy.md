@@ -148,9 +148,11 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
 
 - **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
 - **Test a restore now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test`. The result is in `infra/deploy/backups/restore-test.json`.
-- **Restore**: stop everything but Postgres, load the dump, then start again. The dump drops and recreates each database itself.
+- **Restore**: stop everything but Postgres (the apps that ship with AUGUR and the updater too, so nothing writes while the dump loads), wait for Postgres to say `healthy`, load the dump, then start again. The dump drops and recreates each database itself. Anything saved since that backup is lost, in every app and in sign-in: check Admin → Activity first. `pc stop` stops AUGUR's own Tailscale node too, so reach the server some other way. After an upgrade that went back, follow [upgrade-went-back.md](upgrade-went-back.md) instead: it says which file and when.
   ```sh
-  pc stop tailscale web gateway identity registry events keycloak backup
+  pc stop
+  pc up -d postgres
+  pc ps postgres            # again until it says healthy
   gunzip -c infra/deploy/backups/platform-2026-10-18.sql.gz | pc exec -T postgres psql -U platform -d postgres
   pc up -d
   ```

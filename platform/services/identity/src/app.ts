@@ -7,7 +7,7 @@ import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { mapFor } from './map.ts';
-import { meRoutes, type AccountSource } from './me.ts';
+import { meRoutes, type AccountSource, type MeOptions } from './me.ts';
 import { DirectoryAnswer, DirectoryQuery, findInDirectory, peopleRoutes, principalsOf, signedInPeople } from './people.ts';
 import { Caller, choice, Floor, IdParams, PersonMap, ref, refused } from './schemas.ts';
 import { MemoryPreferenceStore, type PreferenceStore } from './store.ts';
@@ -39,6 +39,10 @@ export interface IdentityOptions {
   callers?: CallerCheck;
   /** What apps are granted, from the registry, so an app with `people:read` can look people up. */
   grants?: GrantLookup;
+  /** Tells people through the events service, as identity (an admin hears when someone asks to leave). */
+  tell?: MeOptions['tell'];
+  /** What other services keep about a person, for the copy of their data they download. */
+  dataFrom?: MeOptions['dataFrom'];
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -52,7 +56,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -176,7 +180,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       );
 
       // Preferences and the caller's account: me.ts.
-      await app.register(meRoutes({ store, accounts }));
+      await app.register(meRoutes({ store, accounts, audit: audit && ((entry) => audit(entry)), tell, dataFrom }));
 
       // Every floor the caller can stand on; their own is made the first time they ask.
       app.get(

@@ -233,7 +233,7 @@ describe('an upgrade', () => {
     const { outcome, steps, last } = await run(target(), fake.server);
     expect(outcome).toBe('rolled-back');
     expect(steps.slice(-3)).toEqual(['roll-forward failed', 'roll-back running', 'roll-back done → rolled-back']);
-    expect(last.message).toBe('Back on 0.2.0: registry came back on 0.4.0, not 0.5.0. If 0.2.0 has trouble with data 0.3.0 changed, restore platform-2026-10-23T120000Z.sql.gz (docs/upgrade.md, Going back).');
+    expect(last.message).toBe('Back on 0.2.0: registry came back on 0.4.0, not 0.5.0. If 0.2.0 has trouble with data 0.3.0 changed, restore platform-2026-10-23T120000Z.sql.gz: docs/upgrade-went-back.md says how, and what to check first.');
     expect(fake.env()).toContain('PLATFORM_VERSION=0.2.0');
     expect(fake.did.slice(-3)).toEqual(['env 0.2.0', 'up postgres keycloak', 'up storage identity registry web']);
   });

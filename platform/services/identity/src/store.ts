@@ -40,12 +40,25 @@ export interface NotificationChoices {
   quietHours?: { from: string; to: string };
 }
 
-/** Where each person's preferences are kept. */
+/** Someone has asked to leave (ADR 0040): an admin's leaver flow acts on it; they may take it back until then. */
+export interface LeaveRequest {
+  requestedAt: string;
+  /** What they said, for the admin who acts on it. */
+  note?: string;
+}
+
+/** Where each person's preferences are kept, and whether they have asked to leave. */
 export interface PreferenceStore {
   /** A person's preferences; empty when they have chosen nothing. */
   get(person: string): Promise<Preferences>;
   /** Replaces a person's preferences. */
   put(person: string, prefs: Preferences): Promise<void>;
+  /** Their request to leave, if they have one open. */
+  leaveRequest(person: string): Promise<LeaveRequest | undefined>;
+  /** Records a request to leave, keeping the first one's time when they ask again. */
+  requestLeave(person: string, note?: string): Promise<LeaveRequest>;
+  /** Takes a request back; false when there was none. */
+  withdrawLeave(person: string): Promise<boolean>;
 }
 
 /** For tests, and for running identity locally without Postgres. Forgets everything on restart. */
@@ -58,6 +71,23 @@ export class MemoryPreferenceStore implements PreferenceStore {
 
   async put(person: string, prefs: Preferences) {
     this.prefs.set(person, structuredClone(prefs));
+  }
+
+  private leaving = new Map<string, LeaveRequest>();
+
+  async leaveRequest(person: string) {
+    const r = this.leaving.get(person);
+    return r ? { ...r } : undefined;
+  }
+
+  async requestLeave(person: string, note?: string) {
+    const r = { requestedAt: this.leaving.get(person)?.requestedAt ?? new Date().toISOString(), ...(note ? { note } : {}) };
+    this.leaving.set(person, r);
+    return { ...r };
+  }
+
+  async withdrawLeave(person: string) {
+    return this.leaving.delete(person);
   }
 }
 
@@ -76,6 +106,16 @@ export const migrations: Migration[] = [
       );`,
   },
   ...workspaceMigrations,
+  {
+    id: '004_leave_requests',
+    sql: `
+      -- Someone asking to leave (ADR 0040), until an admin's leaver flow acts on it or they take it back.
+      create table identity.leave_requests (
+        person text primary key,
+        note text,
+        requested_at timestamptz not null default now()
+      );`,
+  },
 ];
 
 export class PgPreferenceStore implements PreferenceStore {
@@ -103,6 +143,28 @@ export class PgPreferenceStore implements PreferenceStore {
        on conflict (person) do update set prefs = excluded.prefs, updated_at = now()`,
       [person, prefs],
     );
+  }
+
+  async leaveRequest(person: string) {
+    const { rows } = await this.pool.query<{ note: string | null; requested_at: Date }>('select note, requested_at from identity.leave_requests where person = $1', [person]);
+    const r = rows[0];
+    return r ? { requestedAt: r.requested_at.toISOString(), ...(r.note ? { note: r.note } : {}) } : undefined;
+  }
+
+  async requestLeave(person: string, note?: string) {
+    const { rows } = await this.pool.query<{ note: string | null; requested_at: Date }>(
+      `insert into identity.leave_requests (person, note) values ($1, $2)
+       on conflict (person) do update set note = excluded.note
+       returning note, requested_at`,
+      [person, note ?? null],
+    );
+    const r = rows[0]!;
+    return { requestedAt: r.requested_at.toISOString(), ...(r.note ? { note: r.note } : {}) };
+  }
+
+  async withdrawLeave(person: string) {
+    const { rowCount } = await this.pool.query('delete from identity.leave_requests where person = $1', [person]);
+    return (rowCount ?? 0) > 0;
   }
 
   close() {

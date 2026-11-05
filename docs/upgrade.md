@@ -143,7 +143,9 @@ What changes for people:
 **Going back** is a restore of the backup from step 1, which puts Keycloak's database back as it was before 26.8 (anything changed since is lost): set `PLATFORM_VERSION` back, check out that release's deploy files, then
 
 ```sh
-pc stop tailscale web gateway identity registry events keycloak backup
+pc stop
+pc up -d postgres
+pc ps postgres            # again until it says healthy
 gunzip -c infra/deploy/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
 pc up -d --remove-orphans
 ```
@@ -488,6 +490,8 @@ Two optional touches:
 - **Address**: to be at `https://augur.<tailnet>.ts.net`, set `TS_HOSTNAME=augur` and change `PLATFORM_URL` to match in `.env`, then in the Keycloak console update the **shell** client's redirect URIs and web origins to the new address before `pc up -d`. Everyone signs in again.
 
 ## Going back
+
+**If an upgrade went back by itself, didn't install, or kept running after its watch saw a problem**, start from [upgrade-went-back.md](upgrade-went-back.md), a printable card for that night: four checks, and when a restore is worth it.
 
 **Upgrade Centre → Go back** does this for you while no release between is breaking ([release-channels.md](release-channels.md#going-back)). By hand:
 

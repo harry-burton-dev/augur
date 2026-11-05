@@ -40,6 +40,7 @@ Nothing else of the platform runs, so the shell stands in for it:
 
 - You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app ../augur-expenses` adds roles.
 - `DEV_PREVIEWS=all` turns your feature previews on; `DEV_HOST=0.0.0.0` opens it to your other machines on the tailnet ([release-channels.md](release-channels.md#the-live-dev-loop)). The React kits are in the augur-kit repository: work on them in its Storybook.
+- Your inbox items show in the stand-in shell's Inbox: put one in from the browser console ([inbox.md](inbox.md#trying-it-with-pnpm-devapp)).
 - You're on your own floor (`/@me/expenses`); `/@org/expenses` puts your app on the org's.
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
 - The catalogue is Home and your app. Home (`/@me/home`) shows what your app's `ctx.notify({ needsYou: true })` sends, and your glance card if you have one. `ctx.raise` and `ctx.request` reach your app when it `handles` the intent, and otherwise fail the way they do when no app handles one.
