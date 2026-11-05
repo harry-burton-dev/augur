@@ -322,6 +322,13 @@ describe('settings', () => {
     expect(env.OIDC_ISSUER).toBe('https://augur.example/sso/realms/platform');
   });
 
+  it('runs apps in production, so their service checks the gateway\u2019s signed caller', () => {
+    const env = containerEnv(ENV, 'team-notes', { database: false, bucket: false });
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.GATEWAY_URL).toBe('http://gateway:8080');
+    expect(env.AUGUR_INSECURE_DEV_CALLERS).toBeUndefined();
+  });
+
   it('puts every container on the platform’s network with no added powers', () => {
     const project = appsProject({ apps: { notes: { active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: false, bucket: false } } } } }, 'net');
     expect(project.networks).toEqual({ platform: { external: true, name: 'net' } });
