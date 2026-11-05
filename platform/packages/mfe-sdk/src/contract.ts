@@ -120,6 +120,18 @@ export interface AppManifestEntry {
    */
   notifications?: { kinds: NotificationKind[] };
   /**
+   * What the app links its things to elsewhere in AUGUR (SDK 2.1). `entities: true` says it binds
+   * its things to entities and publishes the binding events (ADR 0066), so the entity catalogue
+   * follows them and shows what uses each entity.
+   */
+  links?: { entities?: boolean };
+  /**
+   * With `links.entities`, the types of thing the app binds, as its topics name them (SDK 2.1):
+   * each is published on `<app id>.<type>.entity-bound` and `-unbound`. Lowercase, up to 10, and
+   * never `entity` or `role`, which the events' payload uses.
+   */
+  bindings?: string[];
+  /**
    * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
    * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
    * apps that ship with AUGUR or come from its signed app feed can be either;

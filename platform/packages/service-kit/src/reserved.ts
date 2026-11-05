@@ -45,7 +45,7 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
 
 /** Beginnings an app's id may not have, and what they're kept for. */
 export const RESERVED_APP_ID_PREFIXES: Readonly<Record<string, string>> = {
-  'augur-': 'the platform’s own buckets',
+  'augur-': 'AUGUR’s own buckets',
   'pg-': 'the database’s own schemas',
 };
 

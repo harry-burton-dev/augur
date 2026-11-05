@@ -30,7 +30,6 @@ import {
 import { APP_CATEGORIES, SDK_VERSION } from '@augur/mfe-sdk';
 import { appRunnerRoutes } from './app-runner.ts';
 import { platformUpgradeRoutes } from './platform-upgrades.ts';
-export { UPGRADE_SIGN_IN_MS } from './platform-upgrades.ts';
 import { describeApi } from './contract.ts';
 import {
   AllowedOrigin,
@@ -81,7 +80,6 @@ import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts'
 import { upstreamProblem } from './upstreams.ts';
 import semver from 'semver';
 import {
-  MemoryAppStore,
   RouteTakenError,
   UnknownVersionError,
   type AppRecord,
@@ -98,7 +96,7 @@ export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
 
 export interface RegistryOptions {
-  store?: AppStore;
+  store: AppStore;
   /** Checks apps' and platform services' own sign-in tokens. Without it only admins can change the catalogue. */
   verifyService?: ServiceVerifier;
   /** Where changes to the catalogue are recorded, with the floor a change is about. Without it nothing is audited. */
@@ -199,7 +197,7 @@ const RULE_ACTIONS: Record<FloorRule['state'] | 'inherit', string> = { on: 'app.
  * registers itself, and each person is shown only the apps their roles allow.
  */
 export const buildApp = async ({
-  store = new MemoryAppStore(),
+  store,
   verifyService,
   audit,
   floors,
@@ -217,7 +215,7 @@ export const buildApp = async ({
   alerts = {},
   timeZone = 'UTC',
   now = () => new Date(),
-}: RegistryOptions = {}) => {
+}: RegistryOptions) => {
   const isPillar = (id: string) => pillars.includes(id);
   /** The apps the app runner installed from the signed app feed, whose kind is honoured too. */
   const feedApps = async () => new Set((await store.installedApps()).map((i) => i.app));
@@ -653,6 +651,46 @@ export const buildApp = async ({
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
             requiredRole: found.entry.requiredRole ?? null,
           };
+        },
+      );
+
+      /**
+       * The apps that link their things to entities (manifest links.entities, SDK 2.1) and the types
+       * they bind, so a follower such as the entity catalogue subscribes to exactly those topics
+       * (`<app>.<type>.entity-bound` and `-unbound`, ADR 0066) rather than every event each app sends.
+       */
+      app.get(
+        '/entity-links',
+        {
+          schema: {
+            summary: 'The apps that bind their things to entities, and the types they bind (services only)',
+            description: [
+              'Every registered app whose manifest sets links.entities, with the types of thing it names in',
+              'bindings, each published on <app>.<type>.entity-bound and <app>.<type>.entity-unbound (ADR 0066).',
+              'An app that sets links.entities without bindings has no types listed: follow its <app>.* topics',
+              "and read each event with the service kit's readBinding. For any service, AUGUR's own or an app's.",
+            ].join(' '),
+            response: {
+              200: Type.Array(
+                Type.Object({
+                  app: Type.String({ description: "The app's id" }),
+                  types: Type.Array(Type.String(), { description: 'The types of thing it binds (its manifest\'s bindings)' }),
+                }),
+                { description: 'The apps that link to entities, by id' },
+              ),
+              403: refused('Not a service'),
+              503: refused("The sign-in service that checks the caller's token can't be reached right now"),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          if (!service) return reply.code(403).send({ error: 'forbidden', message: 'Only a service can ask which apps link to entities.' });
+          return (await store.records())
+            .filter((r) => r.entry.links?.entities)
+            .map((r) => ({ app: r.entry.id, types: r.entry.bindings ?? [] }))
+            .sort((a, b) => a.app.localeCompare(b.app));
         },
       );
 

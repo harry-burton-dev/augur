@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { KEPT_VERSIONS, MemoryAppStore, PgAppStore, RouteTakenError, UnknownVersionError, type AppStore } from './store.ts';
+import { KEPT_VERSIONS, PgAppStore, RouteTakenError, UnknownVersionError, type AppStore } from './store.ts';
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0' };
 
@@ -285,7 +285,6 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
   });
 };
 
-describe('MemoryAppStore', () => behavesLikeAStore(() => new MemoryAppStore()));
 
 // Runs wherever DATABASE_URL points at a Postgres; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
