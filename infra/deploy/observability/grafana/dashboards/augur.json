@@ -86,7 +86,7 @@
       "id": 2,
       "title": "Calls a minute, by part",
       "type": "timeseries",
-      "description": "Calls the gateway answered, AUGUR's own (platform) and apps' apart, by status class.",
+      "description": "Calls the gateway answered, AUGUR's own services and apps' apart, by status class.",
       "gridPos": {
         "x": 0,
         "y": 7,

@@ -1350,7 +1350,7 @@
     "SERVICE_CLIENT_SECRETS": {
       "type": "string",
       "writeOnly": true,
-      "description": "Every platform service's and shipped app's sign-in secret, for identity's realm job (keycloak-config) to make their Keycloak clients.",
+      "description": "Every AUGUR service's and shipped app's sign-in secret, for identity's realm job (keycloak-config) to make their Keycloak clients.",
       "x-internal": "compose",
       "x-services": [
         "keycloak-config"
@@ -1488,7 +1488,7 @@
     },
     "PLATFORM_DATABASE_LOGINS": {
       "type": "string",
-      "description": "The platform services that get a database login of their own.",
+      "description": "The AUGUR services that get a database login of their own.",
       "x-internal": "compose",
       "x-services": [
         "storage"
