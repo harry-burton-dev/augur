@@ -1,5 +1,5 @@
 import type { SelectOption } from '@augur/app-kit';
-import type { AppInstalls, AppJob, AppJobStepState, AppPolicy, AvailableApp, FeaturePreviewMode, FeaturePreviews, InstalledApp } from './api.js';
+import type { AppJob, AppJobStepState, AvailableApp, FeaturePreviewMode, FeaturePreviews } from './api.js';
 
 /** How often Apps asks again while the app runner has a job waiting or under way. */
 export const JOB_REFRESH_MS = 4_000;
@@ -17,20 +17,6 @@ export const STEP_WORDS: Record<AppJobStepState['step'], string> = {
   retire: 'Stop the old version a little later',
   remove: 'Stop and remove its containers',
 };
-
-/**
- * Which releases an app follows: production (stable) only, preview (beta) too, or dev builds too, of
- * every merge into main. A production server takes neither of the last two, and the list says so.
- */
-export const channelChoices = (ring: AppInstalls['ring'] = 'preview'): SelectOption[] => [
-  { value: 'stable', label: 'Production releases' },
-  ring === 'production'
-    ? { value: 'beta', label: 'Preview releases too', detail: 'Not on a production server', disabled: true }
-    : { value: 'beta', label: 'Preview releases too' },
-  ring === 'production'
-    ? { value: 'dev', label: 'Dev builds too', detail: 'Not on a production server', disabled: true }
-    : { value: 'dev', label: 'Dev builds too', detail: 'Every merge into main, with a backup before each' },
-];
 
 const MODE_LABELS: Record<FeaturePreviewMode, string> = { off: 'Off', 'opt-in': 'For those who turn it on', everyone: 'On for everyone', floors: 'On for chosen floors' };
 
@@ -59,12 +45,6 @@ export const featureHint = (preview: FeaturePreviews['previews'][number], floorN
     .filter(Boolean)
     .join(' ');
 
-export const POLICY_CHOICES: SelectOption[] = [
-  { value: 'automatic', label: 'Automatic', detail: 'Installs fixes and features that ask for nothing new' },
-  { value: 'ask', label: 'Ask first', detail: 'Every new version waits for you' },
-  { value: 'hold', label: 'Hold', detail: 'Stays on its version; nothing is offered' },
-];
-
 /** What a release asks to be allowed, in words. */
 export const asksWords = (asks: AvailableApp['asks'], scopeWords: (s: string[]) => string) =>
   [
@@ -85,16 +65,6 @@ export const jobWords = (job: AppJob): string => {
   if (job.state === 'cancelled') return `${what} was cancelled`;
   return job.message ?? (job.action === 'install' ? `Installed ${job.release?.version ?? ''}`.trim() : 'Removed');
 };
-
-/** Why an installed app's newer version is waiting for an admin; empty when it isn't. */
-export const waitingWhy = (app: InstalledApp): string[] => {
-  if (!app.update || jobOpen(app.job) || app.policy === 'hold') return [];
-  if (app.update.needs.length) return app.update.needs;
-  if (app.job?.state === 'failed' && app.job.release?.version === app.update.version) return [`It didn’t install last time: ${app.job.message ?? 'see its steps'}`];
-  return app.policy === 'ask' ? ['It’s set to ask first.'] : [];
-};
-
-export const policyHint = (policy: AppPolicy) => POLICY_CHOICES.find((c) => c.value === policy)?.detail ?? '';
 
 /** Names as a person says them: "A", "A and B", "A, B and C". */
 export const listWords = (names: string[]) => (names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);

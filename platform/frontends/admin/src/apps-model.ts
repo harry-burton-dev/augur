@@ -3,9 +3,6 @@ import { APP_CATEGORIES, SDK_VERSION, type AppCategory } from '@augur/mfe-sdk';
 import semver from 'semver';
 import type { AppVersion, CatalogueApp, Department, FloorRule } from './api.js';
 
-/** A change to how an app takes releases, kept in this tab while its admin enters their password again. */
-export const FOLLOW_KEY = 'augur.app-follow';
-
 /** Where an app stands: off, on, or on but unable to open on this deployment. */
 export const appStatus = (app: CatalogueApp, sdkVersion = SDK_VERSION): { status: StatusName; label: string; why?: string } => {
   if (!app.enabled) return { status: 'paused', label: 'Off', why: 'Nobody is offered it until it’s turned on.' };

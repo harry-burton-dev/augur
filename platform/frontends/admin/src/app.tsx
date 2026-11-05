@@ -101,7 +101,7 @@ export function AdminApp({ api, me, path: start }: { api: AdminApi; me: string; 
         ) : screen === 'departments' ? (
           <Departments key={path} api={api} adding={adding} />
         ) : screen === 'apps' ? (
-          <Apps api={api} />
+          <Apps api={api} openUpgrades={openUpgrades} upgradesName={upgrades?.name ?? 'Upgrade Centre'} />
         ) : screen === 'organisation' ? (
           <Organisation api={api} />
         ) : screen === 'status' ? (

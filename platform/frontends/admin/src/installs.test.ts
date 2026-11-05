@@ -1,15 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { channelChoices, featureHint, featureModeChoices } from './installs.js';
-
-describe('which releases an app follows', () => {
-  it('offers preview releases on a preview server, and shows why not on a production one', () => {
-    expect(channelChoices('preview').map((c) => [c.value, c.disabled ?? false])).toEqual([['stable', false], ['beta', false], ['dev', false]]);
-    const production = channelChoices('production');
-    expect(production.find((c) => c.value === 'beta')).toMatchObject({ disabled: true, detail: 'Not on a production server' });
-    expect(production.find((c) => c.value === 'dev')).toMatchObject({ disabled: true, detail: 'Not on a production server' });
-    expect(production.find((c) => c.value === 'stable')?.label).toBe('Production releases');
-  });
-});
+import { featureHint, featureModeChoices } from './installs.js';
 
 describe('who gets a feature preview', () => {
   const preview = { id: 'board', name: 'Board view', mode: 'opt-in' as const, ended: false, chosen: false, optedIn: 2 };

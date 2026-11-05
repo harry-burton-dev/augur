@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### An app's updates are in the Upgrade Centre only
+
+**From** unreleased
+
+Admin → Apps no longer has an installed app's **New releases**, **When one is out**, waiting version, history or **Go back**, nor a **Needs you** list of app updates: they were a second copy of what the Upgrade Centre (`/upgrades`) does, and they now live only there. Admin → Apps keeps installing new apps from their releases, each job's steps, developers and previews, and **Remove from the server**, and links to the Upgrade Centre from each installed app. Nothing changes on the server; each app keeps the channel and policy it had.
+
 ### Data Atlas can draw a base map from a file you keep
 
 **From** augur@0.23.0
@@ -268,7 +274,7 @@ The updater does nothing else in those 10 minutes, so an app install asked for m
 
 AUGUR and every installed app now have one record each saying how they take new releases ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)): **Automatic**, **Ask first** or **Hold**; how far Automatic goes (patch releases only, or minor ones too); an optional pin, a version range such as `0.13.x`; and the weekly windows an automatic upgrade may start in. A major release, a 0.x minor, one that needs a setting only a person can give, or one an earlier try didn't finish always waits for an admin, and nothing starts by itself until an admin has upgraded AUGUR on that server once. An upgrade an admin asks for starts at once, whatever the window.
 
-Until an admin changes it, **AUGUR on a production server installs its patch releases by itself on Sunday at 02:00, for two hours**, in the deployment's time zone. On a preview server or the workbench it installs them at any time. Apps keep what they had: patch and minor releases, at any time, with the channel and policy set in Admin → Apps. To change any of it, use the Upgrade Centre (the API is `PUT /platform/units/<unit>/desired-state` in contracts/registry.openapi.yaml); to keep AUGUR's upgrades to the ones you start, set its policy to Ask first.
+Until an admin changes it, **AUGUR on a production server installs its patch releases by itself on Sunday at 02:00, for two hours**, in the deployment's time zone. On a preview server or the workbench it installs them at any time. Apps keep what they had: patch and minor releases, at any time, with the channel and policy set on each app's page in the Upgrade Centre. To change any of it, use the Upgrade Centre (the API is `PUT /platform/units/<unit>/desired-state` in contracts/registry.openapi.yaml); to keep AUGUR's upgrades to the ones you start, set its policy to Ask first.
 
 - Set `DEPLOYMENT_TIME_ZONE` in `.env` to your time zone, such as `Europe/London`. Without it windows are in UTC.
 - A failed upgrade or one that went back by itself stays in the Upgrade Centre's **Needs you** for every admin until one of them marks it looked at.
@@ -474,12 +480,12 @@ An install (a first install, an upgrade or going back to an older version alike)
 
 Admin → Apps lists, under the catalogue, the apps this repository has released that aren't installed, with **Install**; it says what each one asks for, and asks for your password again before anything is installed or removed. The registry reads the releases every 15 minutes, or at once with **Check for releases**: the same GitHub releases Updates reads, with the same token (`APP_FEED_URL` points it elsewhere, and `off` turns it off; it's off by itself when `RELEASE_FEED_URL` is a mirror).
 
-Open an installed app to choose how it takes new releases:
+How an installed app takes new releases, installing a newer one, going back and its history are on its page in the **Upgrade Centre** (`/upgrades`); Admin → Apps links there. In its settings:
 
-- **New releases**: **Production releases**, **Preview releases too**, or **Dev builds too** (every merge into `main`; not on a production server).
-- **When one is out**: **Automatic** (the default) installs a newer version by itself when it's a fix or a feature that asks for nothing new: no major version or 0.x minor, no new scopes, storage, kinds of floor or bigger uploads, an SDK range this AUGUR opens, and the same signer. Anything else waits under **Needs you** with why. **Ask first** makes every version wait for you, and **Hold** offers none. A version that failed to install isn't tried again by itself.
+- **Releases from**: **Production**, **Preview**, or **Dev builds** (every merge into `main`; not on a production server).
+- **How new releases arrive**: **Automatic** (the default) installs a newer version by itself when it's a fix or a feature that asks for nothing new: no major version or 0.x minor, no new scopes, storage, kinds of floor or bigger uploads, an SDK range this AUGUR opens, and the same signer. Anything else waits under **Needs you** with why. **Ask first** makes every version wait for you, and **Hold** offers none. A version that failed to install isn't tried again by itself.
 
-The same page follows each job step by step, and **Remove from the server** stops an app's containers; its data stays, and removing it from the catalogue too stops it being listed. Every install, update, removal and choice is in Activity.
+Admin → Apps still follows each job step by step on the installed app, keeps its developers and previews, and **Remove from the server** stops an app's containers; its data stays, and removing it from the catalogue too stops it being listed. Every install, update, removal and choice is in Activity.
 
 Scripts can do the same through the registry (`/api/registry/v1/app-runner/…` in `contracts/registry.openapi.yaml`), with an `app-release.json` in place of a version from the feed:
 
