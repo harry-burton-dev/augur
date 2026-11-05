@@ -80,6 +80,12 @@ One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT
 
 From this release Postgres archives its changes as it makes them, and the backup container takes a base backup each night beside the dump, so the database can go back to any moment in the last 7 days (ADR 0064; [deploy.md](deploy.md#restore-to-a-point-in-time)). The Upgrade Centre doesn't restart Postgres or the backup container: after upgrading, run `pc up -d postgres backup` once. Postgres restarts with archiving on (a few seconds without the database), then the backup container takes the first base backup and tests a replay. Until then Admin → Status says "Backups need a look" and why. It needs disk for 7 base backups, each about the size of the database, beside the dumps.
 
+### SDK 2: the shell stops serving Lit
+
+**From** unreleased
+
+From the release on SDK 2.0 the shell no longer serves `lit` or `@augur/ui-kit`. Nothing to do for the apps that ship with AUGUR: Home, Admin, the Upgrade Centre, Explorer, Artifacts, Mandate and Data Atlas never used them, and their manifests accept SDK 2. An app of your own that imports Lit stops loading: move it to React and Quill first (docs/build-an-app.md). An app of your own that doesn't import Lit keeps working once its manifest's `sdk` range also accepts 2, say `^1.4.0 || ^2.0.0`; until then the shell shows it as made for an older version.
+
 ### The deployment watches itself
 
 **From** augur@0.19.0

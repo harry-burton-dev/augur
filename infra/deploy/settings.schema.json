@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://augur.invalid/infra/deploy/settings.schema.json",
   "title": "AUGUR deployment settings",
-  "$comment": "Every setting a deployment can set in infra/deploy/.env, and every one AUGUR's services read, described once. As a JSON Schema it describes .env as an object of strings: `required`, `default`, and `writeOnly` for a secret. AUGUR's own keywords: `x-services`, the compose services that read it (`compose` for Docker Compose itself); `x-via`, for a service that gets it another way (a compose file of its own such as identity-repair.yml, `.env` when it reads the deployment's .env itself, or `default` when it keeps its own default in a deployment); `x-docs`, the guide section that explains it; `x-internal`, for one compose or the code sets and nobody puts in .env. `pnpm check:settings` (scripts/check-settings.mjs) holds compose.yml, .env.example, the guides and the services' code to it.",
+  "$comment": "Every setting a deployment can set in infra/deploy/.env, and every one AUGUR's services read, described once. As a JSON Schema it describes .env as an object of strings: `required`, `default`, and `writeOnly` for a secret. AUGUR's own keywords: `x-services`, the compose services that read it (`compose` for Docker Compose itself); `x-via`, for a service that gets it another way (a compose file of its own such as identity-repair.yml, `.env` when it reads the deployment's .env itself, or `default` when it keeps its own default in a deployment); `x-docs`, the guide section that explains it; `x-internal`, for one compose or the code sets and nobody puts in .env; `x-generate`, for a secret nobody needs to know, which `node scripts/preflight.mjs --install --fill-secrets` makes (64 random hex characters). `pattern`, `minLength`, `enum` and `format` are checked by the install preflight. `pnpm check:settings` (scripts/check-settings.mjs) holds compose.yml, .env.example, the guides and the services' code to it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -41,6 +41,7 @@
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
       "description": "An app's own database login, for an app named in APP_STORAGE: <ID> is its id in capitals with _ for -.",
       "x-services": [
         "storage"
@@ -53,6 +54,7 @@
     "^[A-Z][A-Z0-9_]*_BUCKET_SECRET$": {
       "type": "string",
       "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
       "description": "An app's own bucket key (64 hex), for an app named in APP_STORAGE.",
       "x-services": [
         "storage"
@@ -89,6 +91,7 @@
     },
     "PLATFORM_URL": {
       "type": "string",
+      "pattern": "^https://[^/]+$",
       "description": "AUGUR's address: https://<TS_HOSTNAME>.<your tailnet>.ts.net.",
       "x-services": [
         "web",
@@ -113,6 +116,7 @@
     "TS_AUTHKEY": {
       "type": "string",
       "writeOnly": true,
+      "pattern": "^tskey-",
       "description": "A Tailscale auth key.",
       "x-services": [
         "tailscale"
@@ -122,6 +126,8 @@
     "POSTGRES_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Postgres's admin login, used only by the storage job and backups.",
       "x-services": [
         "postgres",
@@ -133,6 +139,8 @@
     "KEYCLOAK_ADMIN_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Keycloak's own admin's password, read by Keycloak on its first start and by identity's realm job (keycloak-config) on every up.",
       "x-services": [
         "keycloak",
@@ -153,6 +161,8 @@
     "IDENTITY_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Identity's own database login.",
       "x-services": [
         "identity",
@@ -163,6 +173,8 @@
     "REGISTRY_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "The registry's own database login.",
       "x-services": [
         "registry",
@@ -173,6 +185,8 @@
     "EVENTS_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "The events service's own database login.",
       "x-services": [
         "events",
@@ -183,6 +197,8 @@
     "MODELS_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "The model gateway's own database login.",
       "x-services": [
         "models",
@@ -193,6 +209,8 @@
     "KEYCLOAK_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Keycloak's own database login.",
       "x-services": [
         "keycloak",
@@ -203,6 +221,8 @@
     "GARAGE_RPC_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
       "description": "Garage's nodes' shared secret.",
       "x-services": [
         "garage"
@@ -212,6 +232,8 @@
     "GARAGE_ADMIN_TOKEN": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Garage's admin API token, which the storage job makes buckets with.",
       "x-services": [
         "garage",
@@ -222,6 +244,8 @@
     "FRONTENDS_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
       "description": "The registry's key to the bucket apps' frontends are kept in by version (64 hex).",
       "x-services": [
         "registry",
@@ -260,6 +284,8 @@
     "IDENTITY_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Identity's own sign-in.",
       "x-services": [
         "keycloak",
@@ -270,6 +296,8 @@
     "REGISTRY_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "The registry's own sign-in.",
       "x-services": [
         "keycloak-config",
@@ -280,6 +308,8 @@
     "EVENTS_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "The events service's own sign-in.",
       "x-services": [
         "keycloak-config",
@@ -290,6 +320,8 @@
     "MODELS_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "The model gateway's own sign-in; needed before models can be used.",
       "x-services": [
         "keycloak-config",
@@ -310,6 +342,8 @@
     "FOLIO_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Artifacts' own sign-in.",
       "x-services": [
         "keycloak-config",
@@ -320,6 +354,8 @@
     "FOLIO_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Artifacts' own database login.",
       "x-services": [
         "folio",
@@ -331,6 +367,8 @@
     "FOLIO_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
       "description": "Artifacts' bucket key (64 hex).",
       "x-services": [
         "folio",
@@ -342,6 +380,8 @@
     "AUSPEX_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Explorer's own sign-in.",
       "x-services": [
         "keycloak-config",
@@ -352,6 +392,8 @@
     "ATLAS_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Data Atlas's own sign-in.",
       "x-services": [
         "keycloak-config",
@@ -362,6 +404,8 @@
     "ATLAS_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Data Atlas's own database login.",
       "x-services": [
         "atlas",
@@ -372,6 +416,8 @@
     "ATLAS_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
       "description": "Data Atlas's bucket key (made for every app; Data Atlas keeps nothing there). Worked out from APP_SECRETS_KEY when unset.",
       "x-services": [
         "storage"
@@ -381,6 +427,8 @@
     "MANDATE_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Mandate's own sign-in. On a server whose app runner installed Mandate before, the updater sets it to the one the runner gave it.",
       "x-services": [
         "keycloak-config",
@@ -391,6 +439,8 @@
     "MANDATE_DATABASE_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Mandate's own database login. On a server whose app runner installed Mandate before, the updater sets it to the one the runner gave it, so its data stays.",
       "x-services": [
         "mandate",
@@ -401,6 +451,8 @@
     "MANDATE_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
       "description": "Mandate's bucket key (made for every app; Mandate keeps nothing there). Worked out from APP_SECRETS_KEY when unset.",
       "x-services": [
         "storage"
@@ -427,6 +479,7 @@
     },
     "PLATFORM_ADMIN_EMAIL": {
       "type": "string",
+      "format": "email",
       "description": "That person's email address.",
       "x-services": [
         "keycloak"
@@ -803,6 +856,11 @@
     },
     "SERVER_RING": {
       "type": "string",
+      "enum": [
+        "dev",
+        "preview",
+        "production"
+      ],
       "description": "dev (the workbench), preview or production: what kind of server this is.",
       "default": "production",
       "x-services": [
@@ -1065,6 +1123,10 @@
     },
     "SEED_ALLOWED": {
       "type": "string",
+      "enum": [
+        "true",
+        "false"
+      ],
       "description": "true lets a deployment admin fill this deployment with synthetic sample data (pnpm seed). Never where real people work.",
       "default": "false",
       "x-services": [
@@ -1075,6 +1137,8 @@
     "GRAFANA_ADMIN_PASSWORD": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Grafana's admin password (otel-lgtm), at least 16 characters. Required, as Grafana would otherwise take admin/admin. The updater makes it up on upgrade.",
       "x-services": [
         "otel-lgtm"
@@ -1084,6 +1148,8 @@
     "ALERT_WEBHOOK_TOKEN": {
       "type": "string",
       "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
       "description": "Grafana's key to tell deployment admins of an alert through the registry. The updater makes it up on upgrade.",
       "x-services": [
         "registry",
@@ -1576,10 +1642,11 @@
     },
     "REALM_LANGUAGES": {
       "type": "string",
-      "description": "The languages offered at sign-in, comma separated, the first the default (say en,de,fr). Empty offers English only.",
+      "description": "The languages offered at sign-in and in Account, comma separated, the first the default (say en,de,fr). Empty offers English only.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "identity"
       ],
       "x-docs": "docs/deploy.md#whats-in-it"
     },

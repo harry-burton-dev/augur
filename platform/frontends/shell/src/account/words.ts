@@ -1,3 +1,4 @@
+import { writeDate, type Formats } from '../host/formats.js';
 import type { SignIn } from './api.js';
 
 /** A credential's kind, in words, for one without its own label. */
@@ -10,9 +11,8 @@ export const clientWords = (clients: string[], shellClient: string, product: str
   return [...new Set(clients.map((c) => (c === shellClient ? product : c)))].join(', ');
 };
 
-/** "5 Nov, 09:14", in the reader's time zone. */
-export const dayAndTime = (iso: string, timeZone?: string) =>
-  new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...(timeZone ? { timeZone } : {}) }).format(new Date(iso));
+/** "5 Nov, 09:14", written the reader's way and in their time zone. */
+export const dayAndTime = (iso: string, formats?: Formats) => writeDate(iso, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }, formats);
 
 /** "just now", "4 min ago", "2 h ago", "3 days ago". */
 export const ago = (iso: string, now = Date.now()) => {
@@ -57,5 +57,29 @@ export const timeZones = (): string[] => {
     return intl.supportedValuesOf?.('timeZone') ?? ['UTC'];
   } catch {
     return ['UTC'];
+  }
+};
+
+/** Ways of writing dates offered beside their language's, as language tags: the regions people most often ask for. */
+export const DATE_REGIONS = ['en-GB', 'en-US', 'en-AU', 'en-CA', 'en-IE', 'en-IN', 'en-NZ', 'en-ZA', 'de-DE', 'de-CH', 'fr-FR', 'fr-CA', 'es-ES', 'es-MX', 'it-IT', 'nl-NL', 'pt-PT', 'pt-BR', 'sv-SE', 'da-DK', 'nb-NO', 'fi-FI', 'pl-PL', 'ja-JP', 'zh-CN', 'ko-KR'];
+
+/** A language tag's name in English, and in itself when that differs: "German (Deutsch)". */
+export const languageName = (tag: string) => {
+  try {
+    const english = new Intl.DisplayNames(['en'], { type: 'language' }).of(tag) ?? tag;
+    const own = new Intl.DisplayNames([tag], { type: 'language' }).of(tag);
+    return own && own.toLowerCase() !== english.toLowerCase() ? `${english} (${own})` : english;
+  } catch {
+    return tag;
+  }
+};
+
+
+/** A region's tag in words: "English (United Kingdom)". */
+export const regionName = (tag: string) => {
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(tag) ?? tag;
+  } catch {
+    return tag;
   }
 };

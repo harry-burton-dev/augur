@@ -1,6 +1,5 @@
 // The kit's own CSS (tokens, Common, Quill) is linked from the kit bundle, before this (vite.config.ts).
 import '@augur/shell-kit/kit.css';
-import '@augur/ui-kit/base.css';
 import './shell.css';
 import { createRoot } from 'react-dom/client';
 import { Host } from './App.js';

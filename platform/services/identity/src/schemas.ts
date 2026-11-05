@@ -249,6 +249,15 @@ export const Preferences = Type.Object(
     awayMessage: Type.Optional(Type.String({ maxLength: 140, description: 'What their away status says' })),
     awayUntil: Type.Optional(Type.String({ format: 'date-time', description: 'When being away ends by itself' })),
     timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: "IANA, such as Europe/London; without it the organisation's, then the browser's" })),
+    dateFormat: Type.Optional(
+      Type.String({
+        minLength: 2,
+        maxLength: 35,
+        pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$',
+        description: 'The region whose way of writing dates, times and numbers they want, as a language tag such as en-GB; without it their language’s, then the browser’s (since 1.20)',
+      }),
+    ),
+    clock: Type.Optional(choice(['12', '24'], { description: 'A 12- or 24-hour clock; without it, as their date format writes it (since 1.20)' })),
     notifications: Type.Optional(
       Type.Object(
         {

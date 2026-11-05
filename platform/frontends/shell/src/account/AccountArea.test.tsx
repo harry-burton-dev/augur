@@ -185,6 +185,14 @@ describe('the Account area', () => {
     expect(button('Ask to leave')).toBeTruthy();
   });
 
+  it('says when only one language is offered, and offers ways of writing dates and a clock', async () => {
+    const { text } = await open('region', { prefs: { dateFormat: 'en-US', clock: '24' } });
+    expect(text()).toContain('Your organisation offers only English. A deployment admin can offer more.');
+    expect(text()).toContain('Write dates as in');
+    expect(text()).toContain('12-hour');
+    expect(text()).toContain('Time zone');
+  });
+
   it('says once how the last of Keycloak’s screens went', async () => {
     const { text } = await open('security', { actionStatus: 'cancelled' });
     expect(text()).toContain('Nothing changed.');

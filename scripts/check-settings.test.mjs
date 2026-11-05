@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { composeServices, deploymentLiterals, envExampleKeys, keysRead, section, settingsProblems, slug } from './check-settings.mjs';
+import { composeServices, deploymentLiterals, envExampleKeys, installList, keysRead, section, settingsProblems, slug, withInstallList } from './check-settings.mjs';
 
 const compose = `
 x-telemetry: &telemetry
@@ -38,7 +38,7 @@ const schema = {
 const files = {
   'infra/deploy/compose.yml': compose,
   'infra/deploy/.env.example': 'POSTGRES_PASSWORD=\n# RELEASE_FEED_URL=\n# OTEL_EXPORTER_OTLP_ENDPOINT=\n# NOTES_BUCKET_SECRET=\n',
-  'docs/deploy.md': '# Deploy\n\n## First start\n\nSet `POSTGRES_PASSWORD`, and `OTEL_EXPORTER_OTLP_ENDPOINT` for traces.\n\n## Later\n',
+  'docs/deploy.md': withInstallList('# Deploy\n\n## First start\n\nSet `POSTGRES_PASSWORD`, and `OTEL_EXPORTER_OTLP_ENDPOINT` for traces.\n\n<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->\n<!-- /settings -->\n\n## Later\n', installList(schema)),
   'docs/upgrade.md': "# Upgrading\n\n### The Updates page\n\n`RELEASE_FEED_URL` points at a mirror's feed.\n",
 };
 
@@ -137,4 +137,14 @@ test('finds a guide’s section by its anchor, as GitHub makes it', () => {
   assert.doesNotMatch(section(md, 'one'), /other/);
   assert.equal(section(md, 'three'), undefined);
   assert.deepEqual(envExampleKeys('A=1\n# B=\n#  not a key\nC_D=x\n'), ['A', 'B', 'C_D']);
+});
+
+test('the install guide’s settings list is made from the schema', () => {
+  const s = { required: ['PLATFORM_URL', 'POSTGRES_PASSWORD'], properties: { PLATFORM_URL: { description: 'https://<host> | the address' }, POSTGRES_PASSWORD: { writeOnly: true, 'x-generate': true } } };
+  const list = installList(s);
+  assert.match(list, /\| `PLATFORM_URL` \| https:\/\/&lt;host> \\\| the address \|/);
+  assert.match(list, /fills in these 1 secrets, each with 64 random hex characters: `POSTGRES_PASSWORD`\./);
+  const guide = 'Before\n<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->\nold\n<!-- /settings -->\nAfter\n';
+  assert.equal(withInstallList(guide, 'new'), guide.replace('old', 'new'));
+  assert.equal(withInstallList('no markers', 'new'), undefined);
 });
