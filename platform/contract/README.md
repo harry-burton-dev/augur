@@ -5,7 +5,7 @@ The shell's promise to apps, tested in a browser. A reference app (`reference-ap
 It runs against every build of the reference app:
 
 - **source**: built with today's SDK.
-- **`frozen/sdk-<major>.<minor>/entry.js`**: the reference app as it was built against an earlier SDK minor. These are never rebuilt or replaced, so they stand for apps that were released and not touched since. A shell change that breaks any of them breaks real apps, and fails CI. A folder also stands for every later minor whose build was byte-for-byte the same, so it is named for the oldest of them: `sdk-1.3` for 1.3 to 1.8.
+- **`frozen/sdk-<major>.<minor>/entry.js`**: the reference app as it was built against an earlier SDK minor. These are never rebuilt or replaced, so they stand for apps that were released and not touched since. A shell change that breaks any of them breaks real apps, and fails CI. A folder also stands for every later minor whose build was byte-for-byte the same, so it is named for the oldest of them.
 
 ```sh
 pnpm build   # Folio's frontend and service too
@@ -23,4 +23,4 @@ On an ordinary pull request CI runs today's build and only the oldest and newest
 
 When a release bumps the SDK's minor, keep that release's build: `pnpm build && pnpm --filter @augur/contract-tests freeze`, and commit the new `frozen/` folder. When the build is byte-for-byte the newest kept one, `freeze` says so and keeps nothing: that folder already stands for it. A new part of the mount context gets a check in the reference app and the spec in the same pull request that adds it, with `since('<minor>')` so builds from before it skip it; the frozen builds don't use it, which is the point.
 
-SDK 2.0 is a major. Its only break is that the shell stops serving Lit and the Lit kit, so an app built against 1.x that never imported them still runs, and the pillar apps say so with ranges like `^1.4.0 || ^2.0.0`. At the cut the older 1.x folders retired from `frozen/` and `sdk-1.3`, the newest 1.x build kept, stays as the stand-in for those apps; the reference manifest's range covers both majors so it opens on the 2.0 shell. It retires when the pillar apps are rebuilt on 2.x (PER-290 to PER-293). From then on each 2.x minor is frozen as above.
+SDK 2.0 is a major: the shell stops serving Lit and the Lit kit. Every 1.x frozen build was the Lit reference app, so at the cut the `sdk-1.*` folders retired from `frozen/` and the reference manifest accepts both majors until the 2.0 release, when `freeze` keeps `sdk-2.0` and the range narrows to `^2.0.0`. A 1.x app that never imported Lit still runs on a 2.0 shell once its range also accepts 2, as the pillar apps' do (`^1.4.0 || ^2.0.0`); the contract tests no longer stand for those builds, which retire when the pillar apps are rebuilt on 2.x. From then on each 2.x minor is frozen as above.
