@@ -109,6 +109,7 @@ describe.runIf(process.env.DATABASE_URL)('a platform service’s database login'
   afterAll(async () => {
     for (const name of [service, other]) {
       await admin.query(`drop schema if exists ${name} cascade`);
+      await admin.query(`drop schema if exists ${jobsSchemaFor(name)} cascade`);
       await admin.query(`drop owned by ${serviceRoleFor(name)}`).catch(() => {});
       await admin.query(`drop role if exists ${serviceRoleFor(name)}`);
     }
@@ -150,6 +151,8 @@ describe.runIf(process.env.DATABASE_URL)('a platform service’s database login'
       expect((await client.query('select count(*)::int as n from recent')).rows).toEqual([{ n: 1 }]);
       await expect(client.query(`select * from ${other}.secrets`)).rejects.toThrow(/permission denied/);
       await expect(client.query(`create schema ${service}_more`)).rejects.toThrow(/permission denied/);
+      // Its jobs schema is its own too.
+      await client.query(`create table ${jobsSchemaFor(service)}.runs (id int)`);
     } finally {
       await client.end();
     }

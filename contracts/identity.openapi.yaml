@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.25.0
+  version: 1.26.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -948,6 +948,59 @@ components:
           type: string
         error:
           type: string
+    NoticeSettings:
+      type: object
+      required:
+        - person
+        - language
+        - timeZone
+        - emailOn
+        - digest
+        - quietKinds
+        - muted
+      properties:
+        person:
+          type: string
+        email:
+          type: string
+          description: Their confirmed address; absent when they have none or haven’t confirmed it
+        language:
+          type: string
+          description: Their language, else the deployment’s first
+        timeZone:
+          type: string
+          description: Their time zone, else the organisation’s
+        emailOn:
+          type: boolean
+          description: An email for each thing that needs them
+        digest:
+          type: string
+          enum:
+            - off
+            - daily
+            - weekly
+        quietHours:
+          type: object
+          required:
+            - from
+            - to
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+          description: HH:MM in their time zone
+        quietKinds:
+          type: array
+          items:
+            type: string
+          description: Kinds, as <app>:<kind>, set to Quiet
+        muted:
+          type: array
+          items:
+            type: string
+          description: Apps they muted
+      description: How a person wants their notices emailed
 paths:
   /workspaces/{id}:
     get:
@@ -1550,6 +1603,58 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notice-settings:
+    get:
+      summary: How people want their notices emailed (the events service only)
+      description: "For each person named in ids, or everyone who chose the digest given: their confirmed address, language, time zone (theirs, else the organisation’s) and choices in Account → Notifications. A person without an account is left out."
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: ids
+          required: false
+          description: Comma-separated person ids, at most 200
+        - schema:
+            type: string
+            enum:
+              - daily
+              - weekly
+          in: query
+          name: digest
+          required: false
+      responses:
+        "200":
+          description: Their settings
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                properties:
+                  people:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NoticeSettings"
+                description: Their settings
+        "400":
+          description: Neither ids nor digest, or too many ids
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the events service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now
           content:
             application/problem+json:
               schema:
