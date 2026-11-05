@@ -32,9 +32,9 @@ The gateway publishes its public key at `/api/gateway/v1/caller-keys`, with no s
 It fails closed. A service checks callers unless it is told plainly not to, so a container that lost a setting still believes only the gateway. It believes `x-user-*` headers as they come only:
 
 - with `AUGUR_INSECURE_DEV_CALLERS=1`, which `pnpm dev:app` sets for the app's service, so the stand-in shell's person gets through;
-- under a test runner (`NODE_ENV=test`, which Vitest sets).
+- inside Vitest (`NODE_ENV=test` and `VITEST`, which it sets). `NODE_ENV=test` alone is not enough.
 
-In production (`NODE_ENV=production`, which every image and the app runner set) it always checks, whatever else is set. Never put `AUGUR_INSECURE_DEV_CALLERS` in a deployment's `.env`: it does nothing there, and nothing passes it on.
+In production (`NODE_ENV=production`, which every image, every compose service and the app runner set, and `scripts/production-env.test.mjs` holds them to) it always checks, whatever else is set. Never put `AUGUR_INSECURE_DEV_CALLERS` in a deployment's `.env`: it does nothing there, and nothing passes it on.
 
 The gateway makes a new key each time it starts. A service sees a key id it doesn't know and fetches the key again, so nothing needs restarting. More than one gateway behind a load balancer must sign with the same key: give each the same `CALLER_SIGNING_KEY` (`openssl rand -hex 32`, in `.env`), which also keeps the key the same across the gateway's restarts.
 
