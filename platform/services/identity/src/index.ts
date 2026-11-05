@@ -50,6 +50,8 @@ const lifecycle = new PgLifecycleStore(pool);
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER = production ? undefined : 'admin' } = process.env;
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD ?? (production ? undefined : 'admin');
 const IDENTITY_CLIENT = 'platform-identity';
+// The shell's public client in the realm (infra/deploy/keycloak/platform-realm.json).
+const SHELL_CLIENT = 'shell';
 const ownSecret = process.env.SERVICE_CLIENT_SECRET;
 // Keycloak's master admin is only for a local stack without secrets. On a server the realm job
 // (realm-job.ts) holds it, sets the realm up and gives identity's own client its rights.
@@ -64,7 +66,14 @@ let accounts: AccountSource | undefined;
 if (ownSecret || keycloakAdmin) {
   // Identity manages people as its own client, whose rights stop at people, departments and apps'
   // sign-ins in this realm (IDENTITY_RIGHTS): it can't change how anyone signs in.
-  const keycloak = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, signIn: ownSecret ? { client: { id: IDENTITY_CLIENT, secret: ownSecret } } : { admin: keycloakAdmin! } });
+  // An invite's link ends in AUGUR itself: the shell's client, at the address people sign in from (OIDC_ISSUER's).
+  const origin = process.env.OIDC_ISSUER ? new URL(process.env.OIDC_ISSUER).origin : undefined;
+  const keycloak = new KeycloakDirectory({
+    url: KEYCLOAK_URL,
+    realm: KEYCLOAK_REALM,
+    signIn: ownSecret ? { client: { id: IDENTITY_CLIENT, secret: ownSecret } } : { admin: keycloakAdmin! },
+    ...(origin ? { invite: { clientId: SHELL_CLIENT, redirectUri: `${origin}/` } } : {}),
+  });
   directory = keycloak;
   appClients = new KeycloakAppClients(keycloak);
   accounts = new KeycloakAccounts(keycloak);

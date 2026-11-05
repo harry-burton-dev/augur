@@ -45,7 +45,7 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from identity.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor', 'lifecycle_001_people']);
+    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor', 'lifecycle_001_people', 'lifecycle_002_invites']);
   });
 
   it('keeps the organisation settings in one row', async () => {
@@ -81,6 +81,10 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
     await lc.enabled('p-1');
     await lc.disabled('p-2', 'leaver', '2026-11-06T10:00:00.000Z');
     await lc.left('p-2', { at: '2026-11-06T10:00:01.000Z', by: 'a-1', handOverTo: 'p-1' });
+    await lc.invited('p-3', 'email', { at: '2026-11-06T10:00:00.000Z', expiresAt: '2026-11-09T10:00:00.000Z' });
+    await lc.invited('p-3', 'email');
+    await lc.invited('p-3', 'email', { at: '2026-11-07T10:00:00.000Z', expiresAt: '2026-11-10T10:00:00.000Z' });
+    expect((await lc.get(['p-3'])).get('p-3')).toEqual({ invite: { method: 'email', count: 2, sentAt: '2026-11-07T10:00:00.000Z', expiresAt: '2026-11-10T10:00:00.000Z' } });
     expect(await lc.get(['p-1'])).toEqual(new Map([['p-1', { joinedAt: '2026-11-05T09:00:00.000Z', lastSignInAt: '2026-11-06T09:00:00.000Z' }]]));
     expect((await lc.get()).get('p-2')).toEqual({ disabledAt: '2026-11-06T10:00:00.000Z', disabledCause: 'leaver', left: { at: '2026-11-06T10:00:01.000Z', by: 'a-1', handOverTo: 'p-1' } });
   });
