@@ -1,6 +1,7 @@
 # Where AUGUR's alerts go (ADR 0059): into the registry, which raises a notice for deployment admins and
 # another when the alert clears. Grafana fills $ALERT_WEBHOOK_TOKEN from compose; the registry refuses
-# alerts without it. Email through the deployment's relay joins this once SMTP settings land (PER-189).
+# alerts without it. Alerts reach people by email through those notices, as every notice does once the events service
+# emails them (ADR 0044, 0065), so Grafana keeps no address list or relay settings of its own.
 apiVersion: 1
 contactPoints:
   - orgId: 1

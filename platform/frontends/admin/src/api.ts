@@ -183,12 +183,25 @@ export interface PublicAccess {
   until?: string;
 }
 
+/** Whether AUGUR can send email through the organisation's relay (ADR 0035, 0065). */
+export interface EmailStatus {
+  state: 'off' | 'ok' | 'attention';
+  /** Why, and who can change it, when it isn't ok. */
+  problem?: string;
+  /** host:port, never its sign-in. */
+  relay?: string;
+  from?: string;
+  checkedAt?: string;
+}
+
 export interface PlatformStatus {
   components: ComponentStatus[];
   /** Absent when the gateway isn't told where backups are. */
   backups?: BackupStatus;
   /** Absent when the gateway isn't told where to look. */
   publicAccess?: PublicAccess;
+  /** Absent from a gateway older than the mail sender. */
+  email?: EmailStatus;
 }
 
 /** One change in a changelog, and the parts it moved (registry's changes.ts). */

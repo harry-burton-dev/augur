@@ -251,7 +251,7 @@ describe('Status', () => {
     };
     gateway((_m, url) =>
       url === '/api/gateway/v1/status'
-        ? Response.json({ components, backups, publicAccess: { open: true, until: '2026-10-28T18:00:00Z' } })
+        ? Response.json({ components, backups, publicAccess: { open: true, until: '2026-10-28T18:00:00Z' }, email: { state: 'attention', relay: 'relay.example.org:587', from: 'augur@example.org', problem: 'AUGUR can’t reach the relay. Check SMTP_HOST.' } })
         : url === '/api/registry/v1/platform/updates'
           ? Response.json({ running: { version: '0.13.1', channel: 'stable' }, channel: 'stable', feed: 'on', newer: [], needsYou: [], available: { version: '0.13.2', channel: 'stable', breaking: [], parts: [] } })
           : undefined,
@@ -264,6 +264,9 @@ describe('Status', () => {
     expect(el.textContent).toContain('Any moment since');
     expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
     expect(el.textContent).toContain('AUGUR 0.13.2 is out.');
+    expect(el.querySelector('[data-email]')!.textContent).toContain('Email needs a look');
+    expect(el.textContent).toContain('relay.example.org:587');
+    expect(el.textContent).toContain('Check SMTP_HOST.');
     await openRow(el, 'library');
     const dialog = document.querySelector('.augur-dialog')!;
     expect(dialog.textContent).toContain('It can’t be reached.');
