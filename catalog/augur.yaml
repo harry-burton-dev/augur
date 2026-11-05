@@ -498,7 +498,7 @@ metadata:
   name: postgres
   description: "Postgres with pgvector: the platform schema, each app's schema and Keycloak's"
   annotations:
-    augur.dev/image: pgvector/pgvector:0.8.0-pg16
+    augur.dev/image: pgvector/pgvector:0.8.7-pg16-bookworm
 spec:
   type: database
   owner: group:default/augur-core
