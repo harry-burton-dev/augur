@@ -39,8 +39,10 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} changed ${names.person(target)}’s ${what.length ? what.join(' and ') : 'details'}`;
     }
     case 'person.enabled':
+      if (d.outside) return `${names.person(target)}’s sign-in was turned back on in the sign-in service, not in AUGUR`;
       return `${who} turned on ${names.person(target)}’s sign-in`;
     case 'person.disabled':
+      if (d.outside) return `${names.person(target)}’s sign-in was turned off in the sign-in service, not in AUGUR`;
       return `${who} turned off ${names.person(target)}’s sign-in`;
     case 'person.password-reset':
       return `${who} gave ${names.person(target)} a new password`;
