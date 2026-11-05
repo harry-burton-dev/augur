@@ -153,7 +153,7 @@ services:
   # point in time").
   postgres:
     logging: *logging
-    image: pgvector/pgvector:0.8.0-pg16
+    image: pgvector/pgvector:0.8.7-pg16-bookworm
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/etc/augur/start.sh"]
     environment:
@@ -300,7 +300,7 @@ services:
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:?set PLATFORM_ADMIN_EMAIL in .env}
       PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:?set PLATFORM_ADMIN_FIRST_NAME in .env}
       PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?set PLATFORM_ADMIN_LAST_NAME in .env}
-      PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
+      PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Administration}
       # Shown on the sign-in pages and in emails: the organisation's name (as identity has it) and, if
       # set, a link to its logo. The product's name is the realm's display name (keycloak-config sets it).
       ORG_NAME: ${ORG_NAME:-Organisation}
@@ -511,6 +511,17 @@ services:
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
       INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
+      # How many days back the Inbox's Done tab looks (30 when empty; docs/inbox.md).
+      INBOX_DONE_DAYS: ${INBOX_DONE_DAYS:-}
+      # Notices that need someone are emailed through the organisation's relay, linking back here (docs/notifications.md).
+      PLATFORM_URL: ${PLATFORM_URL}
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
@@ -615,6 +626,11 @@ services:
       <<: [*atlas-storage, *env]
       PORT: 8086
       SERVICE_CLIENT_SECRET: ${ATLAS_CLIENT_SECRET}
+      # The map's base map: a PMTiles file in ./maps, as the container sees it (docs/atlas.md, "Maps").
+      ATLAS_MAP_TILES: ${ATLAS_MAP_TILES:-}
+      ATLAS_MAP_ATTRIBUTION: ${ATLAS_MAP_ATTRIBUTION:-}
+    volumes:
+      - ./maps:/maps:ro
     depends_on: *shipped-app
 
   # Mandate, intent passed down the floors: the fourth app every deployment ships with. Its aims and the
@@ -702,7 +718,7 @@ services:
   # itself only, at http://127.0.0.1:3001. A deployment with its own collector sets OTEL_LGTM_REPLICAS=0.
   otel-lgtm:
     logging: *logging
-    image: grafana/otel-lgtm:0.37.0
+    image: grafana/otel-lgtm:0.39.0
     restart: unless-stopped
     deploy:
       replicas: ${OTEL_LGTM_REPLICAS:-1}

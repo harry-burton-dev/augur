@@ -84,6 +84,10 @@ FROM quay.io/keycloak/keycloak:26.8.1 AS keycloak
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/augur"
 LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 COPY --from=sign-in-theme /repo/platform/frontends/sign-in-theme/dist_keycloak/augur-theme.jar /opt/keycloak/providers/augur-theme.jar
+# Keycloak's email listener, which the realm job turns on with a relay, emails people when their password,
+# code app or passkeys change. Failed sign-ins are left out: they say nothing a person can act on, and an
+# attacker could fill someone's inbox with them.
+ENV KC_SPI_EVENTS_LISTENER__EMAIL__EXCLUDE_EVENTS=LOGIN_ERROR
 
 # The default target, and so the last stage: a service by package name (the top of this file).
 FROM node:22-alpine AS service

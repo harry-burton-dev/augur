@@ -127,6 +127,7 @@ export interface NoticeEmailProps {
     };
     // (undocumented)
     heading: string;
+    lang?: string;
     lines: string[];
     productName: string;
     why?: string;

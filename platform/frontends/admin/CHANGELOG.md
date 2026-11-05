@@ -1,5 +1,17 @@
 # @augur/admin
 
+## 0.18.0
+
+### Minor Changes
+
+- 697fe20: Admins invite people by email: a link that lasts 72 hours to confirm their email and choose a password, sent again from their details, with Invite expired shown after. Without email the one-time password stays, and Admin says why (docs/people.md).
+- fdbfa23: Admin → Organisation keeps the idle-account days: a warning after 60 days without a sign-in and a turn-off at 90 by default. They are kept now and applied by the sign-in service in a later release.
+
+### Patch Changes
+
+- 255db6f: The realm job keeps Keycloak's idle-account Workflow in step with Admin → Organisation: a warning email after the warning days without a sign-in, and the sign-in turned off at the turn-off days, never for deployment admins and never without email. Identity records such a turn-off as being idle.
+- b5dc60c: Identity notices a sign-in turned off or on in Keycloak itself within five minutes: it ends their sessions, keeps the change and records it in Activity as the sign-in service's doing.
+
 ## 0.17.0
 
 ### Minor Changes

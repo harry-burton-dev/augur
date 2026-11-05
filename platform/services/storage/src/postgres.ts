@@ -123,6 +123,10 @@ export async function provisionServiceDatabase(sql: Sql, { service, password }: 
   await sql.query(`grant connect on database ${pg.escapeIdentifier(rows[0].db)} to ${quoted}`);
   await sql.query(`create schema if not exists ${schema} authorization ${quoted}`);
   await sql.query(`alter schema ${schema} owner to ${quoted}`);
+  // Its jobs' runs and schedules (the kit's jobs on DBOS), as an app's are: events sends notices by email this way.
+  const jobs = pg.escapeIdentifier(jobsSchemaFor(service));
+  await sql.query(`create schema if not exists ${jobs} authorization ${quoted}`);
+  await sql.query(`alter schema ${jobs} owner to ${quoted}`);
   await sql.query(`alter role ${quoted} set search_path = ${schema}, public`);
   return handOverSchema(sql, service, role);
 }

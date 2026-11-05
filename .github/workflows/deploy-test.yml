@@ -18,7 +18,7 @@ on:
         description: The AUGUR release to test, such as 0.14.0 (default the newest)
         required: false
       from:
-        description: The release to upgrade from (default the one before it, dev builds aside)
+        description: The release to upgrade from (default the newest one before it that isn't halted, dev builds aside)
         required: false
 concurrency: deploy-test-${{ inputs.to || github.sha }}
 permissions:
@@ -49,7 +49,18 @@ jobs:
           # Newest first, dev builds aside.
           list=$(gh release list --limit 100 --json tagName --jq '[.[].tagName | select(startswith("augur@") and (contains("-dev.") | not)) | ltrimstr("augur@")]')
           to=${TO:-$(jq -r '.[0]' <<<"$list")}
-          from=${FROM:-$(jq -r --arg to "$to" 'index($to) as $i | if $i == null then empty else .[$i + 1] // empty end' <<<"$list")}
+          from=$FROM
+          if [ -z "$from" ]; then
+            # The newest release before it that isn't halted: no server upgrades from a halted one (docs/release-channels.md).
+            for v in $(jq -r --arg to "$to" 'index($to) as $i | if $i == null then empty else .[$i + 1:][] end' <<<"$list"); do
+              if gh release view "augur@$v" --json assets --jq '.assets[].name' | grep -qx halted.json; then
+                echo "augur@$v is halted, so the upgrade starts from the release before it." >> "$GITHUB_STEP_SUMMARY"
+                continue
+              fi
+              from=$v
+              break
+            done
+          fi
           echo "to=$to" >> "$GITHUB_OUTPUT"
           echo "from=$from" >> "$GITHUB_OUTPUT"
           echo "Deploy test of augur@$to, upgrading from ${from:+augur@}${from:-nothing}" >> "$GITHUB_STEP_SUMMARY"

@@ -72,7 +72,15 @@ export class TeamDirectory implements Directory {
     return (await this.withTeams([await this.signIn.person(id)]))[0];
   }
 
-  async createPerson(person: NewPerson, temporaryPassword: string) {
+  canEmail() {
+    return this.signIn.canEmail();
+  }
+
+  sendInvite(id: string, lifespanSeconds: number) {
+    return this.signIn.sendInvite(id, lifespanSeconds);
+  }
+
+  async createPerson(person: NewPerson, temporaryPassword?: string) {
     await this.checkTeams(person.departments);
     const created = await this.signIn.createPerson({ ...person, departments: [] }, temporaryPassword);
     await this.moveTo(created.id, person.departments, []);

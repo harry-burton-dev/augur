@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.23.0
+  version: 1.26.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -295,6 +295,32 @@ components:
             - disabled
             - left
           description: "Where their account is in its life (ADR 0040): invited until their first sign-in, then active; disabled while their sign-in is off; left for good"
+        invite:
+          type: object
+          required:
+            - method
+            - expired
+            - count
+          properties:
+            method:
+              type: string
+              enum:
+                - email
+                - temporary-password
+            sentAt:
+              type: string
+              format: date-time
+            expiresAt:
+              type: string
+              format: date-time
+            expired:
+              type: boolean
+              description: Still invited, and the link has run out
+            count:
+              type: integer
+              minimum: 0
+              description: Invite emails sent
+          description: How they were asked to start, when AUGUR made the account
         lastSignInAt:
           type: string
           format: date-time
@@ -367,6 +393,12 @@ components:
             maxLength: 100
           maxItems: 50
           uniqueItems: true
+        start:
+          type: string
+          enum:
+            - email
+            - temporary-password
+          description: "How they start: an invite email with a link to choose a password (the default when email works), or a one-time password an admin gives them"
       additionalProperties: false
     PersonChanges:
       type: object
@@ -680,6 +712,7 @@ components:
         - linked
         - canLink
         - actions
+        - emails
       properties:
         password:
           type: object
@@ -847,6 +880,22 @@ components:
               reason:
                 type: string
                 description: Why not, and who can change it
+        emails:
+          type: object
+          required:
+            - on
+            - verified
+          properties:
+            on:
+              type: boolean
+              description: This deployment emails people when their password, code app or passkeys change
+            address:
+              type: string
+              description: Where those emails go
+            verified:
+              type: boolean
+              description: They have confirmed that address
+          description: Emails about changes to how they sign in
       description: "How they sign in. Each change is made on Keycloak’s own screen: sign in again with kc_action set to its action, and come back."
     AccountSession:
       type: object
@@ -899,6 +948,59 @@ components:
           type: string
         error:
           type: string
+    NoticeSettings:
+      type: object
+      required:
+        - person
+        - language
+        - timeZone
+        - emailOn
+        - digest
+        - quietKinds
+        - muted
+      properties:
+        person:
+          type: string
+        email:
+          type: string
+          description: Their confirmed address; absent when they have none or haven’t confirmed it
+        language:
+          type: string
+          description: Their language, else the deployment’s first
+        timeZone:
+          type: string
+          description: Their time zone, else the organisation’s
+        emailOn:
+          type: boolean
+          description: An email for each thing that needs them
+        digest:
+          type: string
+          enum:
+            - off
+            - daily
+            - weekly
+        quietHours:
+          type: object
+          required:
+            - from
+            - to
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+          description: HH:MM in their time zone
+        quietKinds:
+          type: array
+          items:
+            type: string
+          description: Kinds, as <app>:<kind>, set to Quiet
+        muted:
+          type: array
+          items:
+            type: string
+          description: Apps they muted
+      description: How a person wants their notices emailed
 paths:
   /workspaces/{id}:
     get:
@@ -1317,7 +1419,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /organisation:
     get:
-      summary: The organisation's name, time zone and email sender
+      summary: The organisation's name, time zone, email sender and idle-account days
       description: For anyone signed in, and any service signed in as itself, so every part of AUGUR shows the same name and times (ADR 0042).
       responses:
         "200":
@@ -1330,6 +1432,7 @@ paths:
                   - name
                   - timeZone
                   - sender
+                  - idle
                 properties:
                   name:
                     type: string
@@ -1354,6 +1457,28 @@ paths:
                         maxLength: 254
                         description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
                     additionalProperties: false
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
                   updatedAt:
                     type: string
                     format: date-time
@@ -1440,6 +1565,25 @@ paths:
                         - type: "null"
                       description: null takes the address away
                   additionalProperties: false
+                idle:
+                  type: object
+                  properties:
+                    on:
+                      type: boolean
+                      description: Whether accounts nobody signs in to are warned and then turned off
+                    warningDays:
+                      type: integer
+                      minimum: 7
+                      maximum: 723
+                      description: Days without a sign-in before the warning email
+                    turnOffDays:
+                      type: integer
+                      minimum: 14
+                      maximum: 730
+                      description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                  additionalProperties: false
+                  minProperties: 1
+                  description: Only what changes; the warning stays at least a week before the turn-off
               additionalProperties: false
               minProperties: 1
               description: Only what changes
@@ -1455,6 +1599,7 @@ paths:
                   - name
                   - timeZone
                   - sender
+                  - idle
                 properties:
                   name:
                     type: string
@@ -1479,6 +1624,28 @@ paths:
                         maxLength: 254
                         description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
                     additionalProperties: false
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
                   updatedAt:
                     type: string
                     format: date-time
@@ -1488,7 +1655,7 @@ paths:
                     description: Who last changed them
                 description: The settings now
         "400":
-          description: A name with a slash or only spaces, an unknown time zone, or a sender that is not one line or not an email address
+          description: A name with a slash or only spaces, an unknown time zone, a sender that is not one line or not an email address, or idle days out of bounds or with less than a week between warning and turn-off
           content:
             application/problem+json:
               schema:
@@ -1501,6 +1668,58 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notice-settings:
+    get:
+      summary: How people want their notices emailed (the events service only)
+      description: "For each person named in ids, or everyone who chose the digest given: their confirmed address, language, time zone (theirs, else the organisation’s) and choices in Account → Notifications. A person without an account is left out."
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: ids
+          required: false
+          description: Comma-separated person ids, at most 200
+        - schema:
+            type: string
+            enum:
+              - daily
+              - weekly
+          in: query
+          name: digest
+          required: false
+      responses:
+        "200":
+          description: Their settings
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                properties:
+                  people:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NoticeSettings"
+                description: Their settings
+        "400":
+          description: Neither ids nor digest, or too many ids
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the events service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now
           content:
             application/problem+json:
               schema:
@@ -2111,7 +2330,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
-      summary: Add someone, with a one-time password they replace at first sign-in
+      summary: "Add someone: an invite email, or a one-time password they replace at first sign-in"
+      description: "`start` is `email` by default when the sign-in service can send email, else `temporary-password`. An invite emails a link that works for 72 hours to confirm their email and choose a password. If the account is made but the email can’t be sent, the answer is still 201, with `invite.error`."
       requestBody:
         required: true
         content:
@@ -2120,22 +2340,41 @@ paths:
               $ref: "#/components/schemas/NewPerson"
       responses:
         "201":
-          description: Added. The password is returned once and kept nowhere it can be read again.
+          description: Added. A one-time password is returned once and kept nowhere it can be read again.
           content:
             application/json:
               schema:
                 type: object
                 required:
                   - person
-                  - temporaryPassword
+                  - invite
                 properties:
                   person:
                     $ref: "#/components/schemas/Person"
+                  invite:
+                    type: object
+                    required:
+                      - method
+                    properties:
+                      method:
+                        type: string
+                        enum:
+                          - email
+                          - temporary-password
+                      sentTo:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
+                        description: "The account was made but the email couldn’t be sent: resend it, or give a one-time password"
+                    description: How they start
                   temporaryPassword:
                     type: string
-                description: Added. The password is returned once and kept nowhere it can be read again.
+                description: Added. A one-time password is returned once and kept nowhere it can be read again.
         "400":
-          description: A field is missing or wrong, or a role or department doesn't exist
+          description: A field is missing or wrong, a role or department doesn't exist, or an invite was asked for and email isn't set up
           content:
             application/problem+json:
               schema:
@@ -2258,6 +2497,111 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/lifecycle:
+    get:
+      summary: What the account lifecycle can do on this deployment
+      description: "For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites."
+      responses:
+        "200":
+          description: What works
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - email
+                properties:
+                  email:
+                    type: boolean
+                description: What works
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/invite:
+    post:
+      summary: Send someone a new invite email
+      description: A new link that works for 72 hours; the old one stops working. Recorded as `person.invite-resent`.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - invite
+                properties:
+                  invite:
+                    type: object
+                    required:
+                      - method
+                    properties:
+                      method:
+                        type: string
+                        enum:
+                          - email
+                          - temporary-password
+                      sentTo:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
+                        description: "The account was made but the email couldn’t be sent: resend it, or give a one-time password"
+                    description: How they start
+                description: Sent
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: They have already set up, or they have left
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Email isn't set up, or the sign-in service couldn't send it
           content:
             application/problem+json:
               schema:

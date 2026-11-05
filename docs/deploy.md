@@ -61,7 +61,7 @@ The preflight (step 3) fills in these 26 secrets, each with 64 random hex charac
 
 - `PLATFORM_VERSION` is the release you checked out, without `augur@`, for example `0.19.0`.
 - `PLATFORM_URL` is `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`, with no trailing slash.
-- `PLATFORM_ADMIN_*` is you: the first person who can sign in, as an admin and deployment admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one. `PLATFORM_ADMIN_DEPARTMENT` is your department (`Platform` unless you change it).
+- `PLATFORM_ADMIN_*` is you: the first person who can sign in, as an admin and deployment admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one. `PLATFORM_ADMIN_DEPARTMENT` is your department (`Administration` unless you change it). People see its name, so give it the one your organisation uses.
 - `SERVER_RING` says what kind of server this is: `production` (the default), `preview` for a staging server, or `dev` for the workbench you build on ([release-channels.md](release-channels.md#server-rings)).
 - `ORG_NAME`, optional: what the organisation is called at first start (`Organisation` unless you set it). After that an admin changes it in Admin → Organisation, with the organisation's time zone and email sender, and `ORG_NAME` is no longer read by identity (ADR 0042). The sign-in pages still show `ORG_NAME` for now.
 - `ORG_PRODUCT_NAME`, optional: what people see the product called, in the browser tab, on the sign-in pages and in emails (`AUGUR` unless you set it, for example `Example, built on AUGUR`). The realm job makes it the realm's display name, and the web container writes it into the shell's page, so a change takes effect at the next `pc up -d`.
@@ -213,6 +213,8 @@ Admin → Status has an **Email** section: whether email can be sent, the relay 
 AUGUR's own services send email through one sender in the service kit (`@augur/service-kit/mail`, [ADR 0065](decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md)): Nodemailer to the relay, from React Email templates. Without a relay it says why instead of failing.
 
 **Who email is from.** Admin → Organisation sets the sender: a name (the organisation's name until changed) and, optionally, an address. AUGUR's own email uses them within a minute. Keycloak's emails (password resets, address checks) use them from the next run of the realm job, which reads them from identity's database: run `pc up -d` after changing them. Without an address, email comes from `SMTP_FROM`. If the relay refuses the new address, Admin → Status says so.
+
+**Emails about people's security.** With a relay, Keycloak emails each person when their password, code app or passkeys change, from its own email listener, which the realm job turns on. Failed sign-ins aren't emailed. People see this in Account → Sign-in and security, which says where the emails go or why there are none. There is no switch to turn these emails off.
 
 On the local stack (`infra/docker-compose.yml`) every email goes to Mailpit instead, at http://localhost:8025, and never leaves your machine.
 

@@ -91,8 +91,15 @@ export class DirectoryError extends Error {
 export interface Directory {
   people(): Promise<Person[]>;
   person(id: string): Promise<Person>;
-  /** Adds someone who must choose their own password when they first sign in with `temporaryPassword`. */
-  createPerson(person: NewPerson, temporaryPassword: string): Promise<Person>;
+  /**
+   * Adds someone. With `temporaryPassword` they sign in with it and choose their own; without one they have no
+   * password until they follow an invite (`sendInvite`), which has them confirm their email and choose one.
+   */
+  createPerson(person: NewPerson, temporaryPassword?: string): Promise<Person>;
+  /** Whether the sign-in service can send email: the realm has a relay (ADR 0035). */
+  canEmail(): Promise<boolean>;
+  /** Emails someone a link to confirm their email and choose a password, working for `lifespanSeconds`. */
+  sendInvite(id: string, lifespanSeconds: number): Promise<void>;
   updatePerson(id: string, changes: PersonChanges): Promise<Person>;
   /** Gives someone a new one-time password; they choose their own at next sign-in. */
   resetPassword(id: string, temporaryPassword: string): Promise<void>;
@@ -156,7 +163,21 @@ export class MemoryDirectory implements Directory {
     return structuredClone(this.known(id));
   }
 
-  async createPerson(person: NewPerson) {
+  /** Whether this directory can send email, and who it has sent invites to, for tests. */
+  emailWorks = false;
+  readonly invitesSent: { id: string; lifespanSeconds: number }[] = [];
+
+  async canEmail() {
+    return this.emailWorks;
+  }
+
+  async sendInvite(id: string, lifespanSeconds: number) {
+    this.known(id);
+    if (!this.emailWorks) throw new DirectoryError('The sign-in service has no email relay, so it can’t send an invite.', 503);
+    this.invitesSent.push({ id, lifespanSeconds });
+  }
+
+  async createPerson(person: NewPerson, _temporaryPassword?: string) {
     if ([...this.folks.values()].some((p) => p.username === person.username)) {
       throw new DirectoryError(`Someone already has the username “${person.username}”.`, 409);
     }
@@ -231,6 +252,9 @@ export class MemoryDirectory implements Directory {
   }
 }
 
+/** What an invited person does from the link: confirm their email and choose a password (ADR 0040). */
+export const INVITE_ACTIONS = ['VERIFY_EMAIL', 'UPDATE_PASSWORD'];
+
 export interface KeycloakConfig {
   /** Keycloak's internal address with its path, e.g. http://keycloak:8080/sso. */
   url: string;
@@ -242,6 +266,8 @@ export interface KeycloakConfig {
    * master realm, which only the realm job (realm-job.ts) and a local stack without secrets use.
    */
   signIn: { client: { id: string; secret: string } } | { admin: { user: string; password: string } };
+  /** Where an invite's link leads once they've set up: the shell's client and address, so they land in AUGUR. */
+  invite?: { clientId: string; redirectUri: string };
   fetchImpl?: typeof fetch;
 }
 
@@ -370,7 +396,7 @@ export class KeycloakDirectory implements Directory {
     try {
       res = await this.fetchImpl(url, {
         method,
-        headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {
@@ -509,16 +535,17 @@ export class KeycloakDirectory implements Directory {
     for (const d of have.filter((d) => !want.includes(d))) await this.removeMember(d, id);
   }
 
-  async createPerson(person: NewPerson, temporaryPassword: string): Promise<Person> {
+  async createPerson(person: NewPerson, temporaryPassword?: string): Promise<Person> {
     const { location } = await this.call('POST', '/users', {
       username: person.username,
       firstName: person.firstName,
       lastName: person.lastName,
       email: person.email,
-      emailVerified: true,
       enabled: true,
-      credentials: [{ type: 'password', value: temporaryPassword, temporary: true }],
-      requiredActions: ['UPDATE_PASSWORD'],
+      // A one-time password read out by an admin vouches for the address; an invite has them confirm it.
+      ...(temporaryPassword
+        ? { emailVerified: true, credentials: [{ type: 'password', value: temporaryPassword, temporary: true }], requiredActions: ['UPDATE_PASSWORD'] }
+        : { emailVerified: false, requiredActions: INVITE_ACTIONS }),
     }).catch((err: unknown) => {
       if (!(err instanceof DirectoryError) || err.status !== 409) throw err;
       throw new DirectoryError(
@@ -543,6 +570,20 @@ export class KeycloakDirectory implements Directory {
     if (changes.roles) await this.setRoles(id, changes.roles, current.roles);
     if (changes.departments) await this.setDepartments(id, changes.departments, current.departments);
     return this.person(id);
+  }
+
+  async canEmail() {
+    const { data: realm } = await this.call<{ smtpServer?: { host?: string } }>('GET', '');
+    return Boolean(realm.smtpServer?.host);
+  }
+
+  async sendInvite(id: string, lifespanSeconds: number) {
+    const q = new URLSearchParams({ lifespan: String(lifespanSeconds), ...(this.config.invite ? { client_id: this.config.invite.clientId, redirect_uri: this.config.invite.redirectUri } : {}) });
+    await this.call('PUT', `/users/${encodeURIComponent(id)}/execute-actions-email?${q}`, INVITE_ACTIONS, 'That person isn’t in the directory.').catch((err: unknown) => {
+      // Keycloak answers 500 when its relay refuses the mail: say what that means here.
+      if (err instanceof DirectoryError && err.status === 503) throw new DirectoryError('The sign-in service couldn’t send the invite email. Check Admin → Status, Email.', 503);
+      throw err;
+    });
   }
 
   async endSessions(id: string) {

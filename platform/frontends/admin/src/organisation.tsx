@@ -6,6 +6,13 @@ import { Page, Problem } from './parts.js';
 /** Whether an organisation's name would work: the server refuses a slash, and a name of only spaces. */
 export const orgNameCheck = (value: string) => (value.includes('/') ? { state: 'error' as const, message: 'The organisation’s name can’t have a / in it.' } : null);
 
+/** Identity's bounds for idle accounts: a warning after at least a week, and a week more before the turn-off. */
+export const IDLE_LIMITS = { minWarningDays: 7, noticeDays: 7, maxTurnOffDays: 730 } as const;
+
+/** Whether a number of days would work: whole days, within what identity takes. */
+export const daysCheck = (min: number, max: number) => (value: string) =>
+  /^\d+$/.test(value.trim()) && Number(value) >= min && Number(value) <= max ? null : { state: 'error' as const, message: `Whole days, from ${min} to ${max}.` };
+
 /** What the form changes, from what it holds now: only what differs, so an unchanged form sends nothing. */
 export const changesFrom = (now: Settings, values: Record<string, string>): OrganisationChanges => {
   const name = (values.name ?? now.name).trim();
@@ -18,6 +25,13 @@ export const changesFrom = (now: Settings, values: Record<string, string>): Orga
   if ((senderName && senderName !== now.sender.name) || senderAddress !== (now.sender.address ?? '')) {
     changes.sender = { name: senderName || now.sender.name, address: senderAddress || null };
   }
+  const idle: NonNullable<OrganisationChanges['idle']> = {};
+  if (values.idleOn !== undefined && (values.idleOn === 'on') !== now.idle.on) idle.on = values.idleOn === 'on';
+  for (const key of ['warningDays', 'turnOffDays'] as const) {
+    const raw = values[key]?.trim();
+    if (raw && Number(raw) !== now.idle[key]) idle[key] = Number(raw);
+  }
+  if (Object.keys(idle).length) changes.idle = idle;
   return changes;
 };
 
@@ -72,7 +86,7 @@ export function Organisation({ api }: { api: AdminApi }) {
   return (
     <Page
       heading="Organisation"
-      summary="Its name, the time zone dates are shown in, and who AUGUR’s email says it is from. Only an admin changes them; every change is in Activity."
+      summary="Its name, the time zone dates are shown in, who AUGUR’s email says it is from, and when idle accounts are turned off. Only an admin changes them; every change is in Activity."
       actions={actions}
       onAction={(a) => (a.id === 'retry' ? void load() : setEditing(true))}
     >
@@ -100,6 +114,21 @@ export function Organisation({ api }: { api: AdminApi }) {
               Without an address, email goes from the mail relay’s own. AUGUR’s email picks up a change within a minute; sign-in emails pick it up when the server next restarts its services. Admin → Status says whether email can be sent.
             </Notice>
           </Section>
+          <Section label="Idle accounts" count={-1} limit={0}>
+            <Details
+              items={
+                settings.idle.on
+                  ? [
+                      { label: 'Warned', value: `After ${settings.idle.warningDays} days without a sign-in`, note: 'By email' },
+                      { label: 'Turned off', value: `After ${settings.idle.turnOffDays} days without a sign-in` },
+                    ]
+                  : [{ label: 'Idle accounts', value: 'Never turned off' }]
+              }
+            />
+            <Notice tone="info" heading="Changes apply when AUGUR next starts or upgrades.">
+              The sign-in service counts from each person’s next sign-in, and deployment admins are never turned off. Without email nobody could be warned, so nobody is turned off: Admin → Status says whether email works.
+            </Notice>
+          </Section>
           <p className="admin-quiet">{changed(settings)}</p>
         </>
       ) : null}
@@ -122,6 +151,26 @@ export function Organisation({ api }: { api: AdminApi }) {
               <Select name="timeZone" label="Time zone" required options={zoneOptions} defaultValue={settings.timeZone} empty="The list of time zones couldn’t be loaded." />
               <TextField name="senderName" label="Email from" required maxLength={100} defaultValue={settings.sender.name} hint="The name people see on email from AUGUR" />
               <TextField name="senderAddress" label="Sender address" optional type="email" maxLength={254} defaultValue={settings.sender.address ?? ''} hint="Optional. Without one, email goes from the mail relay’s own address" />
+              <Select
+                name="idleOn"
+                label="Idle accounts"
+                required
+                options={[
+                  { value: 'on', label: 'Warn, then turn off' },
+                  { value: 'off', label: 'Never turn off' },
+                ]}
+                defaultValue={settings.idle.on ? 'on' : 'off'}
+              />
+              <TextField name="warningDays" label="Warn after (days)" required maxLength={3} defaultValue={String(settings.idle.warningDays)} validate={daysCheck(IDLE_LIMITS.minWarningDays, IDLE_LIMITS.maxTurnOffDays - IDLE_LIMITS.noticeDays)} hint="Days without a sign-in before the warning email" />
+              <TextField
+                name="turnOffDays"
+                label="Turn off after (days)"
+                required
+                maxLength={3}
+                defaultValue={String(settings.idle.turnOffDays)}
+                validate={daysCheck(IDLE_LIMITS.minWarningDays + IDLE_LIMITS.noticeDays, IDLE_LIMITS.maxTurnOffDays)}
+                hint={`At least ${IDLE_LIMITS.noticeDays} days after the warning. Every sign-in starts the count again`}
+              />
             </>
           }
         />

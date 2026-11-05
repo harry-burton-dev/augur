@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
+import { digestMigration, PgDigestStore, type DigestStore } from './digests.ts';
+import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
 import { PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
@@ -141,6 +143,10 @@ export const topicMatches = (topic: string, wanted: string[]) =>
 export interface EventStore {
   /** The Inbox's items (ADR 0026), in the same database. */
   readonly inbox: InboxStore;
+  /** The notifications waiting to be emailed (ADR 0044, D7). */
+  readonly emails: EmailOutbox;
+  /** Each person's last daily and weekly digest. */
+  readonly digests: DigestStore;
   /**
    * Adds one notification per recipient and tells every listener, on every instance.
    * With a key, skips anyone who already has one from that app with that key.
@@ -148,6 +154,8 @@ export interface EventStore {
   addNotifications(n: NewNotification, floor?: EventFloor): Promise<Notification[]>;
   /** A person's unread notifications, newest first. */
   unread(recipient: string, limit: number): Promise<Notification[]>;
+  /** One of a person's notifications, read or not; undefined when they have no such one. */
+  notification(recipient: string, id: string): Promise<Notification | undefined>;
   /** Every notification a person has, read or not, newest first: for a copy of their data. */
   notificationsOf(recipient: string, limit: number): Promise<Notification[]>;
   /** Marks a person's notification read or unread; false when they have no such notification. */
@@ -282,6 +290,8 @@ export const migrations: Migration[] = [
       create index audit_target on events.audit (target, at desc);
       create index audit_detail_person on events.audit ((detail->>'person'));`,
   },
+  emailMigration,
+  digestMigration,
 ];
 
 const CHANNEL = 'events_notification';
@@ -372,13 +382,20 @@ export class PgEventStore implements EventStore {
   private listening?: pg.PoolClient;
   private closed = false;
   readonly inbox: PgInboxStore;
+  readonly emails: PgEmailOutbox;
+  readonly digests: PgDigestStore;
 
-  constructor(private readonly pool: pg.Pool) {
-    this.inbox = new PgInboxStore(pool);
+  constructor(
+    private readonly pool: pg.Pool,
+    options: { inboxDoneDays?: number } = {},
+  ) {
+    this.inbox = new PgInboxStore(pool, options.inboxDoneDays);
+    this.emails = new PgEmailOutbox(pool);
+    this.digests = new PgDigestStore(pool);
   }
 
-  static async connect(connectionString: string) {
-    const store = new PgEventStore(steadyPool(new pg.Pool({ connectionString })));
+  static async connect(connectionString: string, options: { inboxDoneDays?: number } = {}) {
+    const store = new PgEventStore(steadyPool(new pg.Pool({ connectionString })), options);
     await store.migrate();
     await store.listen();
     return store;
@@ -447,8 +464,9 @@ export class PgEventStore implements EventStore {
     try {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
-        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind)
-         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11 from unnest($1::text[]) as r
+        // One that needs someone is due to be emailed at once; the notice-emails job decides whether, and when.
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind, email_due)
+         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, case when $3 = 'needs' then now() end from unnest($1::text[]) as r
          on conflict (recipient, app, key) where key is not null do nothing
          returning *`,
         [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null, n.kind ?? null],
@@ -467,6 +485,13 @@ export class PgEventStore implements EventStore {
     } finally {
       client.release();
     }
+  }
+
+  async notification(recipient: string, id: string) {
+    // Ids are uuids; anything else is no notification of theirs, not an error.
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+    const { rows } = await this.pool.query<NotificationRow>('select * from events.notifications where id = $1 and recipient = $2', [id, recipient]);
+    return rows[0] ? fromRow(rows[0]) : undefined;
   }
 
   async unread(recipient: string, limit: number) {

@@ -14,6 +14,9 @@ import { incompatibility } from './manifest.js';
 export type InboxTab = 'you' | 'teams' | 'done';
 export type InboxVerb = 'take' | 'release' | 'decline' | 'hand-on' | 'done';
 
+/** The events service's counts, and how many days back its Done tab looks (INBOX_DONE_DAYS; an older events service doesn't say). */
+export type ShellInboxCounts = InboxCounts & { doneDays?: number };
+
 /** The Inbox's place among the shell's functions, after Find. */
 export const INBOX_FUNCTION = { id: 'inbox', label: 'Inbox', icon: 'inbox' } as const;
 
@@ -87,7 +90,7 @@ export class InboxClient {
   }
 
   counts() {
-    return this.call<InboxCounts>('/inbox/counts');
+    return this.call<ShellInboxCounts>('/inbox/counts');
   }
 
   act(id: string, verb: InboxVerb, body?: { note?: string; to?: string }) {

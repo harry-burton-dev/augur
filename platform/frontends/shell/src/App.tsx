@@ -1,4 +1,4 @@
-import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxCounts, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import {
   Button,
   CentreMenu,
@@ -40,6 +40,7 @@ import {
   HOME_CHANNEL,
   InboxClient,
   INBOX_MORE,
+  type ShellInboxCounts,
   inboxNeeds,
   itemOfNeed,
   withInbox,
@@ -85,7 +86,7 @@ import {
 } from './host/index.js';
 import { AccountApi } from './account/api.js';
 import type { Preferences } from './host/preferences.js';
-import { currentFormats, formatsFrom, languageOf, setFormats } from './host/formats.js';
+import { currentFormats, formatsFrom, languageOf, loadOrgTimeZone, setFormats } from './host/formats.js';
 import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { ACTION_STATUS } from './host/session.js';
@@ -104,6 +105,8 @@ export interface HostProps {
   preferencesUrl?: string;
   /** Where the registry lists the pull requests' previews a developer may try, through the gateway. */
   previewsUrl?: string;
+  /** Identity's organisation settings, for the time zone people follow until they choose their own. */
+  organisationUrl?: string;
   /** Where the registry lists apps' feature previews and takes a person's choice of them (SDK 1.7). */
   featurePreviewsUrl?: string;
   fetchImpl?: typeof fetch;
@@ -129,6 +132,8 @@ export const AGENTS_WHY =
 export const ACCOUNT_AREA = 'account-area';
 /** Where the Account area is in the address: `?account=<section>`, so a reload and Keycloak's screens come back to it. */
 export const ACCOUNT_PARAM = 'account';
+/** What a notice email links to: `?notice=<id>` opens that notification as clicking it in the Shell would (ADR 0044, D7). */
+export const NOTICE_PARAM = 'notice';
 /** What the Shell offers; floors replace Switch workspace. */
 export const alphaFunctions = defaultFunctions
   .filter((f) => f.id !== 'settings')
@@ -168,6 +173,7 @@ export function Host({
   manifestUrl = '/api/registry/v1/manifest',
   eventsUrl = '/api/events/v1',
   preferencesUrl = '/api/identity/v1/me/preferences',
+  organisationUrl = '/api/identity/v1/organisation',
   previewsUrl = '/api/registry/v1/previews',
   featurePreviewsUrl = '/api/registry/v1/feature-previews',
   fetchImpl = fetch,
@@ -211,7 +217,7 @@ export function Host({
   const pinned = chosen.pinned;
   /** The Inbox (ADR 0026): whether its view is open, the counts in its label, and Home's first items on this floor. */
   const [inboxOpen, setInboxOpen] = useState(false);
-  const [inboxCounts, setInboxCounts] = useState<InboxCounts | undefined>(undefined);
+  const [inboxCounts, setInboxCounts] = useState<ShellInboxCounts | undefined>(undefined);
   const [inboxForHome, setInboxForHome] = useState<InboxItem[]>([]);
   /** Bumped when the stream says an item changed, so the view's tab loads again. */
   const [inboxVersion, setInboxVersion] = useState(0);
@@ -263,20 +269,26 @@ export function Host({
   );
   /** Their language, from their sign-in (Keycloak's locale) until they choose another in Account. */
   const language = useRef<string | undefined>(undefined);
+  /** The organisation's time zone, which times follow until someone chooses their own (ADR 0039, 0042). */
+  const orgZone = useRef<string | undefined>(undefined);
+  const [orgTimeZone, setOrgTimeZone] = useState<string | undefined>(undefined);
   useEffect(() => {
     void session.getToken().then(
-      (token) => {
+      async (token) => {
         language.current ??= languageOf(token);
-        setFormats(formatsFrom(prefs.current, language.current));
+        setFormats(formatsFrom(prefs.current, language.current, orgZone.current));
+        orgZone.current = await loadOrgTimeZone(fetchImpl, organisationUrl, token);
+        setOrgTimeZone(orgZone.current);
+        setFormats(formatsFrom(prefs.current, language.current, orgZone.current));
       },
       () => undefined,
     );
-  }, [session, prefs]);
+  }, [session, prefs, fetchImpl, organisationUrl]);
   /** A language chosen in Account: dates follow it at once, unless they chose a date format of their own. */
   const chooseLanguage = useCallback(
     (locale: string | undefined) => {
       language.current = locale;
-      setFormats(formatsFrom(prefs.current, locale));
+      setFormats(formatsFrom(prefs.current, locale, orgZone.current));
     },
     [prefs],
   );
@@ -287,7 +299,7 @@ export function Host({
       const now = prefs.current;
       setChosen(now);
       applyPreferences(now);
-      setFormats(formatsFrom(now, language.current));
+      setFormats(formatsFrom(now, language.current, orgZone.current));
       const shell = shellRef.current;
       if (!shell) return;
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
@@ -900,7 +912,7 @@ export function Host({
       }
       const now = prefs.current;
       applyPreferences(now);
-      setFormats(formatsFrom(now, language.current));
+      setFormats(formatsFrom(now, language.current, orgZone.current));
       setChosen(now);
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
       shell.away = !!now.away;
@@ -1067,6 +1079,27 @@ export function Host({
     };
   }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, showAccount, inboxForHome, openInboxItem]);
 
+  // A notice email's link: once the apps on this floor are known, open the notification it names, read or not, on its own floor.
+  const noticeAsked = useRef(new URLSearchParams(window.location.search).get(NOTICE_PARAM));
+  useEffect(() => {
+    const id = noticeAsked.current;
+    const f = feed.current;
+    if (!id || !manifest || !homeAsks.current || !f) return;
+    noticeAsked.current = null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete(NOTICE_PARAM);
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    const cant = (detail: string) => tell({ id: `notice:${id}`, app: 'shell', level: 'info', title: 'That notification can’t be opened', detail, time: Date.now() });
+    f.get(id).then(
+      (n) => {
+        if (!n) return cant('It was sent to someone else, or it has gone. Notifications go after a while, and when the person they were for is removed.');
+        fromEvents.current.set(n.id, n);
+        homeAsks.current?.open(n.id);
+      },
+      (err: Error) => cant(`Notifications couldn’t be reached (${err.message}). Try the link again in a moment.`),
+    );
+  }, [manifest, tell]);
+
   // The open app is a pull request's preview: say so, with the way back.
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
   const previewOf = previewPr(openApp?.version);
@@ -1118,6 +1151,7 @@ export function Host({
           prefs={chosen}
           onPreference={choose}
           onLanguage={chooseLanguage}
+          orgTimeZone={orgTimeZone}
           onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
           onSignOut={() => void session.signOut()}
           apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}

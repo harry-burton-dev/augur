@@ -9,7 +9,7 @@ import { SCHEMAS } from './schemas.ts';
 
 export const info = {
   title: 'Events',
-  version: '1.11.0',
+  version: '1.13.0',
   description: [
     "Notifications for the Shell's stream, and AUGUR's audit log.",
     'People reach it through the gateway, which passes the caller in x-user-*',

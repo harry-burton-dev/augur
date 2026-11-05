@@ -163,10 +163,18 @@ on_version() {
   if [ -n "$wrong" ]; then echo "Not on $want:"$'\n'"$wrong" >&2; return 1; fi
 }
 
-# A container that keeps restarting is a failure even when its neighbours look fine.
+# The containers that aren't running well: restarting, stopped or unhealthy (one-off jobs aside), one
+# "<service> is <state> <status>" line each.
+not_running() {
+  pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and (.Service != "keycloak-config") and (.Service != "backup-tools") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]'
+}
+
+# A container that keeps restarting is a failure even when its neighbours look fine. Services named after
+# the call are excused: the release before may have shipped one broken, which this release can't change.
 no_restarts() {
-  local bad
-  bad=$(pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and (.Service != "keycloak-config") and (.Service != "backup-tools") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]')
+  local bad excused
+  bad=$(not_running)
+  for excused in "$@"; do bad=$(grep -v "^$excused is " <<<"$bad" || true); done
   if [ -n "$bad" ]; then echo "$bad" >&2; return 1; fi
 }
 
@@ -296,7 +304,14 @@ case "$mode" in
     use "$from"
     up
     old=$(wait_ready "augur@$from")
-    no_restarts
+    # The release before is judged by its own deploy test. What it shipped broken is reported and excused
+    # on it (here and going back), never on this release.
+    sleep 15
+    broken_before=$(not_running | cut -d' ' -f1)
+    if [ -n "$broken_before" ]; then
+      echo "::warning::augur@$from runs with these not running well, excused on it: $(echo $broken_before)" >&2
+      not_running >&2
+    fi
     on_version "$from"
     tables > "$work/before"
     keycloak_from=$(keycloak_version)
@@ -318,7 +333,8 @@ case "$mode" in
     if [ "$keycloak_from" != "$keycloak_to" ]; then restore_keycloak "$keycloak_from" "$keycloak_to"; fi
     up
     wait_ready "Back to augur@$from" >/dev/null
-    no_restarts
+    # shellcheck disable=SC2086 # one service name per word
+    no_restarts $broken_before
     on_version "$from"
     tables > "$work/back"
     kept "$work/after" "$work/back"

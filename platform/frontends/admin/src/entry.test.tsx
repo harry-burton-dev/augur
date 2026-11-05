@@ -8,7 +8,7 @@ import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kind
 import { headline, stateOf } from './status.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { placeOf, portalLink } from './line.js';
-import { changesFrom, orgNameCheck, zoneLabel } from './organisation.js';
+import { changesFrom, daysCheck, orgNameCheck, zoneLabel } from './organisation.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -157,7 +157,8 @@ describe('People', () => {
     await type(fieldNamed('Last name'), 'Smith');
     await type(fieldNamed('Email'), 'jo@example.org');
     await press(button('Add'));
-    expect(sent.find((c) => c.method === 'POST')!.body).toEqual({ firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: [], departments: [] });
+    // Email isn't set up here, so a one-time password it is.
+    expect(sent.find((c) => c.method === 'POST')!.body).toEqual({ start: 'temporary-password', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: [], departments: [] });
     expect(document.querySelector('[data-password]')!.textContent!.trim()).toBe('abcd-efgh-jkmn');
     await press(button('Done'));
     expect(document.querySelector('[data-password]')).toBeNull();
@@ -224,6 +225,29 @@ describe('People', () => {
     expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/They’ve left: signed out everywhere\. Apps keep what they own/);
   });
 
+  it('invites by email when email works, says until when, and sends a new invite from their details', async () => {
+    const invitee = { ...sam, id: 'u-3', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', enabled: true, invited: true, state: 'invited', invite: { method: 'email', expired: false, count: 1 } };
+    const { sent } = gateway((method, url) => {
+      if (url === '/api/identity/v1/admin/lifecycle') return Response.json({ email: true });
+      if (url === '/api/identity/v1/admin/people' && method === 'POST')
+        return Response.json({ person: invitee, invite: { method: 'email', sentTo: 'jo@example.org', expiresAt: '2026-11-08T09:00:00Z' } }, { status: 201 });
+      if (url === '/api/identity/v1/admin/people/u-3/invite') return Response.json({ invite: { method: 'email', sentTo: 'jo@example.org', expiresAt: '2026-11-08T10:00:00Z' } });
+      return undefined;
+    });
+    const el = await open('/people/new');
+    await type(fieldNamed('First name'), 'Jo');
+    await type(fieldNamed('Last name'), 'Smith');
+    await type(fieldNamed('Email'), 'jo@example.org');
+    await press(button('Add'));
+    expect((sent.find((c) => c.method === 'POST')!.body as { start: string }).start).toBe('email');
+    expect(document.querySelector('[data-password]')).toBeNull();
+    expect(el.querySelector('[data-notice]')!.textContent).toContain('Invite sent to jo@example.org');
+    await openRow(el, 'Jo Smith');
+    await press(button('Send a new invite'));
+    expect(sent.some((c) => c.url === '/api/identity/v1/admin/people/u-3/invite' && c.method === 'POST')).toBe(true);
+    expect(document.querySelector('[data-live-result]')!.textContent).toContain('New invite sent to jo@example.org');
+  });
+
   it('shows each account’s state and last sign-in, and keeps a leaver from coming back', async () => {
     const leaver = { ...sam, state: 'left', left: { at: '2026-11-03T09:00:00Z', by: 'u-1', handOverTo: 'u-1' } };
     gateway((method, url) => (url === '/api/identity/v1/admin/people' && method === 'GET' ? Response.json([{ ...alex, state: 'active', lastSignInAt: '2026-11-04T09:00:00Z' }, leaver]) : undefined));
@@ -271,13 +295,18 @@ describe('Departments', () => {
 });
 
 describe('Organisation', () => {
-  const org = { name: 'Northwind', timeZone: 'UTC', sender: { name: 'Northwind' } };
+  const org = { name: 'Northwind', timeZone: 'UTC', sender: { name: 'Northwind' }, idle: { on: true, warningDays: 60, turnOffDays: 90 } };
 
   it('sends only what changed, and takes a sender address away when it’s emptied', () => {
     expect(changesFrom(org, { name: ' Northwind ', timeZone: 'UTC', senderName: 'Northwind', senderAddress: '' })).toEqual({});
     expect(changesFrom(org, { name: 'Northwind Trading', timeZone: 'Europe/London', senderName: 'Northwind', senderAddress: '' })).toEqual({ name: 'Northwind Trading', timeZone: 'Europe/London' });
     expect(changesFrom(org, { senderAddress: 'augur@northwind.example' })).toEqual({ sender: { name: 'Northwind', address: 'augur@northwind.example' } });
     expect(changesFrom({ ...org, sender: { name: 'Northwind', address: 'a@b.example' } }, { senderAddress: '' })).toEqual({ sender: { name: 'Northwind', address: null } });
+    expect(changesFrom(org, { idleOn: 'on', warningDays: '60', turnOffDays: '120' })).toEqual({ idle: { turnOffDays: 120 } });
+    expect(changesFrom(org, { idleOn: 'off', warningDays: '60', turnOffDays: '90' })).toEqual({ idle: { on: false } });
+    expect(daysCheck(7, 723)('3')?.state).toBe('error');
+    expect(daysCheck(7, 723)('6.5')?.state).toBe('error');
+    expect(daysCheck(7, 723)('60')).toBeNull();
     expect(orgNameCheck('North/wind')?.state).toBe('error');
     expect(orgNameCheck('Northwind')).toBeNull();
   });
@@ -371,6 +400,7 @@ describe('Activity', () => {
     expect(sentence(entry('app.blocked', { app: 'registry', target: 'library', detail: { workspace: 'd-1' } }), names)).toBe('Alex Rivera blocked Library for Finance and every team below it');
     expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: { name: 'Old' }, to: { name: 'Northwind' } } }), names)).toBe('Alex Rivera renamed the organisation to Northwind');
     expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: {}, to: { timeZone: 'Europe/London', sender: { name: 'N' } } } }), names)).toBe('Alex Rivera changed the organisation’s time zone and email sender');
+    expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: {}, to: { idle: { on: false } } } }), names)).toBe('Alex Rivera changed the organisation’s idle-account days');
     expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
   });
 
@@ -382,6 +412,9 @@ describe('Activity', () => {
     expect(signIn('account.two-step-added')).toBe('Sam Okafor added a second step to their sign-in');
     expect(sentence(entry('sign-in.failed-unknown', { actor: { id: 'identity', kind: 'service' }, detail: { kind: 'sign-in', count: 4 } }), names)).toBe('4 times, someone tried to sign in with a name nobody has');
     expect(sentence(entry('person.left', { target: 'u-2', detail: { handOverTo: 'u-1' } }), names)).toBe('Alex Rivera marked Sam Okafor as a leaver, handing their work to Alex Rivera');
+    expect(sentence(entry('person.disabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true } }), names)).toBe('Sam Okafor’s sign-in was turned off in the sign-in service, not in AUGUR');
+    expect(sentence(entry('person.disabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true, cause: 'idle', days: 90 } }), names)).toBe('Sam Okafor’s sign-in was turned off after 90 days without a sign-in');
+    expect(sentence(entry('person.enabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true } }), names)).toBe('Sam Okafor’s sign-in was turned back on in the sign-in service, not in AUGUR');
     expect(sentence(entry('audit.exported', { app: 'events' }), names)).toBe('Alex Rivera downloaded Activity');
     expect(sentence(entry('audit.pruned', { app: 'events', actor: { id: 'events', kind: 'service' }, detail: { removed: 12, keepDays: 365 } }), names)).toBe('12 entries older than 365 days were removed');
   });

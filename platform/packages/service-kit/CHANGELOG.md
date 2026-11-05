@@ -1,5 +1,20 @@
 # @augur/service-kit
 
+## 0.17.1
+
+### Patch Changes
+
+- 4cfab7e: Jobs start with a login that can't create schemas, as every service and app has on a server. DBOS's first step, `create schema if not exists`, is refused by Postgres from such a login even when the storage service has already made the schema, so the events service didn't start on 0.23.0. The kit now records that step as done when the schema is there.
+
+## 0.17.0
+
+### Minor Changes
+
+- 1a8561d: The events service emails people the notifications that need them, as they chose in Account → Notifications: not
+  when email is off, the app is muted or the kind is Quiet, and after their quiet hours. From the organisation's
+  sender, in their language, with a link back to the notification. The service kit's notice template takes a `lang`.
+- c678672: `startupLog(service)`: a service's log for what it says before its Fastify app is up, or in a job with none. The lines are pino's JSON, like Fastify's own, so OpenTelemetry sends them with the service's other logs.
+
 ## 0.16.0
 
 ### Minor Changes

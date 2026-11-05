@@ -111,4 +111,16 @@ describe('NotificationFeed', () => {
       'DELETE /api/events/v1/notifications/abc/read',
     ]);
   });
+
+  it('gets one notification for a notice email’s link, or nothing when it isn’t theirs', async () => {
+    let status = 200;
+    const fetchImpl = vi.fn(async () => (status === 200 ? new Response(JSON.stringify(n('abc'))) : new Response(null, { status }))) as unknown as typeof fetch;
+    const feed = new NotificationFeed({ getToken: async () => 't', fetchImpl, onList: () => {}, onNotification: () => {}, onState: () => {} });
+    expect(await feed.get('abc')).toMatchObject({ id: 'abc', link: '/doc/7' });
+    expect(vi.mocked(fetchImpl).mock.calls[0][0]).toBe('/api/events/v1/notifications/abc');
+    status = 404;
+    expect(await feed.get('abc')).toBeUndefined();
+    status = 503;
+    await expect(feed.get('abc')).rejects.toThrow('answered 503');
+  });
 });

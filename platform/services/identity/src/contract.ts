@@ -10,7 +10,7 @@ import { SCHEMAS } from './schemas.ts';
 
 export const info = {
   title: 'Identity',
-  version: '1.23.0',
+  version: '1.26.0',
   description: [
     "Who people are. Reached through the gateway, which verifies the caller's",
     'sign-in token and passes the caller on in x-user-* headers.',

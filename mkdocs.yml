@@ -8,6 +8,7 @@ plugins:
 nav:
   - Your account: account.md
   - Agents and models: agents.md
+  - For alpha testers: alpha-testers.md
   - API contracts: api-contracts.md
   - App patterns: app-patterns.md
   - Previews of pull requests: app-previews.md
@@ -100,6 +101,7 @@ nav:
       - 0058. Quill's Editor is built on Tiptap, and keeps writing the same small Markdown: decisions/0058-editor-on-tiptap.md
       - 0059. A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence: decisions/0059-grafana-alerting-and-faro.md
       - 0060. Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names: decisions/0060-off-server-backups-with-restic.md
+      - 0061. Recurring times are RFC 5545 recurrence rules, read with rrule and swept by a scheduled job: decisions/0061-recurring-times-as-rrules.md
       - 0062. Data Atlas checks what it keeps against SHACL shapes, with rdf-validate-shacl: decisions/0062-ontology-checks-with-shacl.md
       - 0063. Accessibility is checked by axe in CI, failing on serious findings: decisions/0063-accessibility-checked-by-axe.md
       - "0064. The database can be restored to a point in time: Postgres archives its WAL, and restic copies it off the server": decisions/0064-point-in-time-restore-with-postgres-wal-archiving.md
@@ -108,3 +110,5 @@ nav:
       - 0067. Update control stays in the registry for now, behind a checked seam, and leaves as its own service: decisions/0067-update-control-stays-in-the-registry-behind-a-seam.md
       - 0068. A deployment chooses how depth is drawn, and scrim blurs nothing: decisions/0068-a-deployment-chooses-how-depth-is-drawn.md
       - 0069. Knip finds dead code, and Vitest's v8 coverage is reported on main: decisions/0069-knip-finds-dead-code-and-vitest-measures-coverage.md
+      - 0070. Data Atlas draws military symbols for its kinds with milsymbol: decisions/0070-military-symbols-with-milsymbol.md
+      - 0071. Data Atlas draws maps with MapLibre GL JS from the deployment's own PMTiles file: decisions/0071-data-atlas-maps-with-maplibre-and-pmtiles.md

@@ -12,7 +12,19 @@ import type { Person } from './directory.ts';
 export type PersonState = 'invited' | 'active' | 'disabled' | 'left';
 export type DisabledCause = 'admin' | 'idle' | 'leaver' | 'outside';
 
+export type InviteMethod = 'email' | 'temporary-password';
+
+export interface Invite {
+  method: InviteMethod;
+  /** When the last invite email went; none for a one-time password, or when the email couldn't be sent. */
+  sentAt?: string;
+  expiresAt?: string;
+  /** Invite emails sent. */
+  count: number;
+}
+
 export interface Lifecycle {
+  invite?: Invite;
   joinedAt?: string;
   lastSignInAt?: string;
   disabledAt?: string;
@@ -23,10 +35,12 @@ export interface Lifecycle {
 export interface LifecycleStore {
   /** What is kept about these people (all of them when no ids are given). */
   get(ids?: string[]): Promise<Map<string, Lifecycle>>;
+  /** How they were asked to start; with `sent`, an invite email went (again) and lasts until `expiresAt`. */
+  invited(person: string, method: InviteMethod, sent?: { at: string; expiresAt: string }): Promise<void>;
   /** They signed in at `at`: the first one also makes them joined. */
   signedIn(person: string, at: string): Promise<void>;
-  /** Their sign-in went off, and why. */
-  disabled(person: string, cause: DisabledCause, at: string): Promise<void>;
+  /** Their sign-in went off, and why (no cause: it was already off when identity started noticing). */
+  disabled(person: string, cause: DisabledCause | undefined, at: string): Promise<void>;
   /** Their sign-in came back on. */
   enabled(person: string): Promise<void>;
   /** They left. */
@@ -42,9 +56,10 @@ export const stateOf = (p: Pick<Person, 'enabled' | 'invited'>, l: Lifecycle = {
 };
 
 /** A person with their state and what is kept about their account's life. */
-export const withLifecycle = <P extends Person>(p: P, l: Lifecycle = {}) => ({
+export const withLifecycle = <P extends Person>(p: P, l: Lifecycle = {}, now = new Date()) => ({
   ...p,
   state: stateOf(p, l),
+  ...(l.invite ? { invite: { ...l.invite, expired: stateOf(p, l) === 'invited' && !!l.invite.expiresAt && new Date(l.invite.expiresAt) < now } } : {}),
   ...(l.lastSignInAt ? { lastSignInAt: l.lastSignInAt } : {}),
   ...(l.joinedAt ? { joinedAt: l.joinedAt } : {}),
   ...(!p.enabled && !l.left && l.disabledCause ? { disabledCause: l.disabledCause } : {}),
@@ -68,10 +83,24 @@ export const lifecycleMigrations: Migration[] = [
         updated_at timestamptz not null default now()
       );`,
   },
+  {
+    id: 'lifecycle_002_invites',
+    sql: `
+      -- How each person was asked to start: an invite email (and when it runs out), or a one-time password.
+      alter table identity.person_lifecycle
+        add column invite_method text check (invite_method in ('email', 'temporary-password')),
+        add column invite_sent_at timestamptz,
+        add column invite_expires_at timestamptz,
+        add column invite_count int not null default 0;`,
+  },
 ];
 
 interface Row {
   person: string;
+  invite_method: InviteMethod | null;
+  invite_sent_at: Date | null;
+  invite_expires_at: Date | null;
+  invite_count: number;
   joined_at: Date | null;
   last_sign_in_at: Date | null;
   disabled_at: Date | null;
@@ -95,6 +124,9 @@ export class PgLifecycleStore implements LifecycleStore {
       rows.map((r): [string, Lifecycle] => [
         r.person,
         {
+          ...(r.invite_method
+            ? { invite: { method: r.invite_method, count: r.invite_count, ...(r.invite_sent_at ? { sentAt: iso(r.invite_sent_at), expiresAt: iso(r.invite_expires_at) } : {}) } }
+            : {}),
           ...(r.joined_at ? { joinedAt: iso(r.joined_at) } : {}),
           ...(r.last_sign_in_at ? { lastSignInAt: iso(r.last_sign_in_at) } : {}),
           ...(r.disabled_at ? { disabledAt: iso(r.disabled_at) } : {}),
@@ -102,6 +134,19 @@ export class PgLifecycleStore implements LifecycleStore {
           ...(r.left_at ? { left: { at: iso(r.left_at)!, by: r.left_by ?? '', ...(r.handover_to ? { handOverTo: r.handover_to } : {}) } } : {}),
         },
       ]),
+    );
+  }
+
+  async invited(person: string, method: InviteMethod, sent?: { at: string; expiresAt: string }) {
+    await this.pool.query(
+      `insert into identity.person_lifecycle (person, invite_method, invite_sent_at, invite_expires_at, invite_count) values ($1, $2, $3, $4, $5)
+       on conflict (person) do update set
+         invite_method = excluded.invite_method,
+         invite_sent_at = coalesce(excluded.invite_sent_at, person_lifecycle.invite_sent_at),
+         invite_expires_at = coalesce(excluded.invite_expires_at, person_lifecycle.invite_expires_at),
+         invite_count = person_lifecycle.invite_count + excluded.invite_count,
+         updated_at = now()`,
+      [person, method, sent?.at ?? null, sent?.expiresAt ?? null, sent ? 1 : 0],
     );
   }
 
@@ -116,11 +161,11 @@ export class PgLifecycleStore implements LifecycleStore {
     );
   }
 
-  async disabled(person: string, cause: DisabledCause, at: string) {
+  async disabled(person: string, cause: DisabledCause | undefined, at: string) {
     await this.pool.query(
       `insert into identity.person_lifecycle (person, disabled_at, disabled_cause) values ($1, $2, $3)
        on conflict (person) do update set disabled_at = excluded.disabled_at, disabled_cause = excluded.disabled_cause, updated_at = now()`,
-      [person, at, cause],
+      [person, at, cause ?? null],
     );
   }
 
