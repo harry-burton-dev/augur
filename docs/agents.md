@@ -7,7 +7,7 @@ The gateway:
 - records every call in the audit log (`model.called`: who, for which app, which model, how many messages, which tools; never what was said) **before** making it, and makes no call it can't record;
 - gives each app a number of calls a day (UTC), 500 unless an admin changes it; the shell's own assistant counts as one app, `assistant`;
 - is **off** until an admin turns it on in Admin, and can't be turned on until the server has a model.
-- lets a person talk to an AI app's agent only where that app is granted `models:use` on their floor, and only when they have the role its manifest's `requiredRole` names, as the gateway holds the app's own API to it. Without the role the call is refused, saying which role is needed.
+- lets a person talk to an AI app's agent only where that app is granted `models:use` on their floor, and only when they have the role its manifest's `requiredRole` names, the same rule the gateway applies to the app's own API. Without the role the call is refused, saying which role is needed.
 
 The shell's own Agents aren't built yet. The Shell shows them as unavailable, saying they arrive with a later release, so nobody can turn them on (`AGENTS_WHY` in the shell's `App.tsx`).
 
