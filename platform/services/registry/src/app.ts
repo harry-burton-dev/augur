@@ -613,7 +613,7 @@ export const buildApp = async ({
               "/manifest); nothing where it is off, on a floor that doesn't exist, or",
               "anywhere while it is turned off. Without a workspace, on the organisation's",
               'floor, as the gateway checks a call that names none (ADR 0007). With them, the',
-              'inbox kinds its manifest declares, which the events service checks items against.',
+              'inbox and notification kinds its manifest declares, which the events service checks against.',
             ].join(' '),
             params: params('id'),
             querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor the call is for' })) }),
@@ -624,6 +624,7 @@ export const buildApp = async ({
                   workspace: Type.Optional(Type.String()),
                   scopes: Type.Array(ref(ScopeSchema)),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
+                  notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
                 },
                 { description: "The app's grants" },
               ),
@@ -649,7 +650,13 @@ export const buildApp = async ({
             return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now.' });
           }
           const on = place ? floorState(found, place, await store.rules(found.entry.id)).on : false;
-          return { app: found.entry.id, workspace: workspace ?? place?.id, scopes: on ? usableScopes(found) : [], inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id) };
+          return {
+            app: found.entry.id,
+            workspace: workspace ?? place?.id,
+            scopes: on ? usableScopes(found) : [],
+            inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
+            notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
+          };
         },
       );
 
