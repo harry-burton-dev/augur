@@ -56,12 +56,40 @@ export const OffsiteCopy = Type.Object(
   { $id: 'OffsiteCopy', description: "The last copy of the night's backup off the server, with restic (ADR 0060)" },
 );
 
+export const PointInTime = Type.Object(
+  {
+    at: Type.String({ format: 'date-time', description: 'When the backup container last looked (hourly)' }),
+    ok: Type.Boolean(),
+    bases: Type.Optional(Type.Integer({ description: 'Base backups kept, one a night' })),
+    earliest: Type.Optional(Type.String({ format: 'date-time', description: 'The earliest moment the database can be restored to: when the oldest base backup was taken' })),
+    archivedAt: Type.Optional(Type.String({ format: 'date-time', description: 'When Postgres last archived a WAL file' })),
+    copiedAt: Type.Optional(Type.String({ format: 'date-time', description: 'When the WAL archive was last copied off the server' })),
+    problem: Type.Optional(Type.String()),
+    lastTest: Type.Optional(
+      Type.Object(
+        {
+          at: Type.String({ format: 'date-time' }),
+          ok: Type.Boolean(),
+          base: Type.Optional(Type.String({ description: 'The base backup the changes were replayed onto' })),
+          seconds: Type.Optional(Type.Integer()),
+          mark: Type.Optional(Type.String({ description: 'The moment marked on the live database before the test' })),
+          reached: Type.Optional(Type.String({ description: 'The last change the replay reached' })),
+          problem: Type.Optional(Type.String()),
+        },
+        { description: 'The weekly test: the newest base backup restored and every archived change since replayed onto it' },
+      ),
+    ),
+  },
+  { $id: 'PointInTime', description: 'Restoring the database to a point in time: archived WAL replayed onto a nightly base backup (ADR 0064)' },
+);
+
 export const BackupStatus = Type.Object(
   {
     state: Type.Enum(['ok', 'attention'], { description: '"attention" when backups cannot be relied on right now' }),
     problem: Type.Optional(Type.String({ description: 'Why, in words an admin can act on' })),
     lastBackup: Type.Optional(ref(BackupRun)),
     offsite: Type.Optional(ref(OffsiteCopy)),
+    pointInTime: Type.Optional(ref(PointInTime)),
     lastRestoreTest: Type.Optional(
       Type.Intersect([
         ref(BackupRun),
@@ -152,4 +180,4 @@ export const Refusal = Type.Unsafe<{ error: string; message: string; [extension:
 export const refused = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Refusal) } } });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, OffsiteCopy, BackupStatus, Seeding, BrowserTelemetry];
+export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, OffsiteCopy, PointInTime, BackupStatus, Seeding, BrowserTelemetry];

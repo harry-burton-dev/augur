@@ -93,6 +93,9 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - Shell or kit changes: run the contract tests in `platform/contract`.
 - Every PR carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`),
   see docs/versioning.md.
+- When an admin upgrading must act or know something because of your change, add a note at
+  the top of "Release notes that need you" in docs/upgrade.md, starting `**From** unreleased`
+  (`pnpm check:upgrade-notes`); the Version packages PR writes its release in.
 
 ## Pull requests and releases
 - Open pull requests against `main`, the only

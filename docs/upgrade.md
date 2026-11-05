@@ -52,17 +52,37 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 ## Release notes that need you
 
-- **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
+Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
+
+Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
+
+### Each service signs in as itself
+
+**From** augur@0.2.0
+
+`SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
+
+### Restoring the database to a point in time
+
+**From** unreleased
+
+From this release Postgres archives its changes as it makes them, and the backup container takes a base backup each night beside the dump, so the database can go back to any moment in the last 7 days (ADR 0064; [deploy.md](deploy.md#restore-to-a-point-in-time)). The Upgrade Centre doesn't restart Postgres or the backup container: after upgrading, run `pc up -d postgres backup` once. Postgres restarts with archiving on (a few seconds without the database), then the backup container takes the first base backup and tests a replay. Until then Admin → Status says "Backups need a look" and why. It needs disk for 7 base backups, each about the size of the database, beside the dumps.
 
 ### The deployment watches itself
+
+**From** augur@0.19.0
 
 otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72 hours and runs AUGUR's alert rules ([observability.md](observability.md#alerts)). Its alerts reach deployment admins as notices through the registry, with `ALERT_WEBHOOK_TOKEN`: the updater makes it up when you upgrade from the Upgrade Centre; by hand, add it to `.env` (`openssl rand -hex 32`) before `pc up -d`. Set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) too, to sign in to Grafana. It takes up to 2 GB of memory (`OTEL_LGTM_MEM_LIMIT`); a server with its own collector sets `OTEL_EXPORTER_OTLP_ENDPOINT` to it and `OTEL_LGTM_REPLICAS=0`. The `observability` profile does nothing now and can come out of `COMPOSE_PROFILES`. The registry's report to Backstage now goes every 15 minutes.
 
 ### Email through your relay (optional)
 
+**From** augur@0.19.0
+
 AUGUR can now send email through the organisation's SMTP relay: password resets and address checks from the sign-in pages. Nothing changes until you add `SMTP_HOST` and `SMTP_FROM` (and `SMTP_USER` and `SMTP_PASSWORD` if the relay wants a sign-in) to `.env` and run `pc up -d`; see [Email](deploy.md#email). `pc logs keycloak-config` then says the relay is set.
 
 ### Mandate ships with AUGUR
+
+**From** augur@0.19.0
 
 Mandate, intent passed down the floors, now ships with every release like Artifacts, Explorer and Data Atlas: a new container, `mandate`, at the release `release/shipped-apps.json` pins. Admin → Apps no longer lists it as something to install, and it's upgraded with AUGUR from now on.
 
@@ -74,17 +94,25 @@ Going back to a release before this one: Mandate's data stays in the database, a
 
 ### Settings the guides named now reach their services
 
+**From** augur@0.19.0
+
 Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([deploy.md](deploy.md#settings-and-secrets)).
 
 ### AUGUR's sign-in pages and emails
+
+**From** augur@0.19.0
 
 Keycloak now runs from AUGUR's own image (`ghcr.io/harry-burton-dev/im-platform/keycloak`, tagged and signed like the others) instead of Keycloak's, with the same Keycloak version and AUGUR's sign-in and email theme (ADR 0041). The realm job turns the theme on. Nothing to do: the pages show `ORG_NAME`, as identity does. Optional, in `.env`: `ORG_LOGO_URL` for a logo on the sign-in pages, and `REALM_LANGUAGES` (say `en,de,fr`) to offer more languages than English (docs/deploy.md, "What's in it"). Going back to a release before this one puts Keycloak's own image back: sign-in shows Keycloak's own look again, and Keycloak's log says it can't find the `augur` theme each time a page is shown, which is harmless.
 
 ### Log limits, memory limits and healthchecks
 
+**From** augur@0.18.0
+
 Every container's log is now capped at three files of 10 MB, and Keycloak, Artifacts' rendition worker and the observability stack have memory limits (2 GB, 4 GB and 2 GB). Keycloak and Garage have healthchecks, and the containers that need them wait until they're healthy. Nothing to do on most servers: the upgrade recreates each container with its limits. Existing logs bigger than the cap go when the container is recreated. On a server with less than 8 GB of memory, set `KEYCLOAK_MEM_LIMIT` and `FOLIO_WORKER_MEM_LIMIT` lower in `.env` first (docs/deploy.md, "Logs, memory and health").
 
 ### Keycloak 26.8 and the realm job
+
+**From** augur@0.18.0
 
 This release moves Keycloak from 26.0.8 to 26.8.1 and keeps the realm as code (ADRs 0037, 0038 and 0057). Keycloak migrates its database on its first start on 26.8, and **that can't be undone**: going back to the release before means restoring Keycloak's database from the backup you take first. Take this release by hand, with the steps above, rather than leaving it to an upgrade window.
 
@@ -110,15 +138,21 @@ pc up -d --remove-orphans
 
 ### Artifacts, Explorer and Data Atlas come from their own repositories
 
+**From** augur@0.19.0
+
 Since augur@0.17.0, AUGUR no longer builds Artifacts, Explorer and Data Atlas itself. Each one is released in its own repository (`augur-folio`, `augur-auspex`, `augur-atlas`), and AUGUR's release takes the release `release/shipped-apps.json` pins, checks that repository signed it, and signs it again as AUGUR's ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)). Nothing changes on the server: the images keep their names under `PLATFORM_IMAGES`, they still come with each AUGUR release, and the apps keep their tables and buckets. An app the app runner installs (Mandate) moves the same way, and the updater takes a backup before its first release from the new repository (docs/ship-an-app.md, "An app in its own repository").
 
 **Going back** to a release that built them here (0.16.x) is the usual code step in [Going back](#going-back): check out `augur@0.16.1`, set `PLATFORM_VERSION=0.16.1`, `pc up -d --remove-orphans`. No restore is needed. Neither 0.17.0 nor the apps' releases in it are breaking, so their migrations only add ([versioning.md](versioning.md#database-migrations)), and 0.17.0's deploy test went from 0.16.1 to 0.17.0 and back on the same data. Going back past 0.18.0 is the exception: Keycloak 26.8's database needs the restore in "Keycloak 26.8 and the realm job" first.
 
 ### Sample data, where you allow it
 
+**From** augur@0.18.0
+
 `pnpm seed` (docs/seed.md) fills a deployment with synthetic sample people, floors, documents and entities, and only where `.env` sets `SEED_ALLOWED=true`; nothing changes on a server that doesn't. To use it on a server that already exists, also add its sign-in client, which Keycloak doesn't import into an existing realm: open the Keycloak admin console (`KEYCLOAK_CONSOLE=open`, deploy.md), choose the `platform` realm, **Clients → Import client**, and import the `platform-cli` entry from `infra/deploy/keycloak/platform-realm.json`. Then close the console again.
 
 ### AUGUR's repository gets a new name
+
+**From** augur@0.15.0
 
 AUGUR's repository was renamed from `im-platform` to `augur` on 5 November 2026 (Linear PER-162). Every release is signed by the repository's workflows, so from this release the updater and registry take AUGUR's releases, dev builds and feed signed under either name. A server must run this release **before** the rename, or it refuses everything released after it.
 
@@ -126,12 +160,16 @@ Nothing else moves. Images and the feed stay at `ghcr.io/harry-burton-dev/im-pla
 
 ### The first upgrade on each server is yours, and a 0.x minor waits for you
 
+**From** augur@0.15.0
+
 Two defaults changed ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md), amended 2 November):
 
 - **Automatic waits for one upgrade by hand.** On each server, AUGUR doesn't upgrade by itself, dev builds included, until an admin has upgraded it there once from the Upgrade Centre and it finished. Until then **Needs you** says so, with **Upgrade**. A server where an admin has already upgraded AUGUR and it finished carries on as before.
 - **A 0.x minor counts as a major.** Under semver a 0.x minor (0.3 to 0.4) may break things, so Automatic takes only 0.x patches, for AUGUR and apps alike. A 0.x minor waits under **Needs you** for an admin, whatever the record says about minors.
 
 ### Reporting to Backstage
+
+**From** augur@0.15.0
 
 From this release a deployment can tell the company's Backstage what it runs ([ADR 0019](decisions/0019-deployment-reporting.md)). Nothing changes until you set it up; until then the Upgrade Centre's Reporting section, under Worth knowing on its front page, says reporting isn't set up and what to set.
 
@@ -145,11 +183,15 @@ An air-gapped server sets `DEPLOYMENT_ID` and no `PORTAL_URL`: nothing is sent, 
 
 ### Each upgrade is watched for 10 minutes
 
+**From** augur@0.15.0
+
 An upgrade to a newer release isn't done once every part answers: the updater watches it for 10 more minutes ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)). Every half minute it signs in as itself, with a fresh token (so Keycloak and its database must both work), and checks how AUGUR's own services' calls went at the gateway (`GET /traffic`, which only the deployment's own network reaches; apps are counted apart, so an app's errors can't send AUGUR back). Every two minutes it checks that every part is still ready. If sign-in fails twice in a row, a part stops answering, or more than 5% of at least 20 calls fail, it goes back to the release it came from by itself, as it does when a part doesn't come up, and the Upgrade Centre says what it saw. If a breaking release lies between, it doesn't go back by itself: it says what it saw, and the release keeps running for you to decide (Going back, below). Going back to an earlier release isn't watched. With fewer than 20 calls in the 10 minutes, as is usual in a night-time window, the result says it was too quiet to judge errors, and a light watch goes on ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md), amended 2 November). Every 5 minutes the updater signs in and counts AUGUR's calls since its last look, until there have been 20, for at most a day. If more than 5% of them failed, or sign-in fails twice in a row, AUGUR doesn't go back by itself, because by then people's work is on the new release: it shows in **Needs you** with what it saw, for an admin to decide (Going back, below). The registry keeps the count, so a restarted updater carries on. Asking for another upgrade ends it.
 
 The updater does nothing else in those 10 minutes, so an app install asked for meanwhile starts after. Both sides need this release: an older updater ignores the watch, and an older gateway has no `/traffic`, so only sign-in is watched.
 
 ### Upgrades follow each unit's policy and window
+
+**From** augur@0.15.0
 
 AUGUR and every installed app now have one record each saying how they take new releases ([ADR 0020](decisions/0020-upgrade-policy-windows-watch.md)): **Automatic**, **Ask first** or **Hold**; how far Automatic goes (patch releases only, or minor ones too); an optional pin, a version range such as `0.13.x`; and the weekly windows an automatic upgrade may start in. A major release, a 0.x minor, one that needs a setting only a person can give, or one an earlier try didn't finish always waits for an admin, and nothing starts by itself until an admin has upgraded AUGUR on that server once. An upgrade an admin asks for starts at once, whatever the window.
 
@@ -160,25 +202,37 @@ Until an admin changes it, **AUGUR on a production server installs its patch rel
 
 ### Each platform service gets its own database login
 
+**From** augur@0.15.0
+
 Identity, the registry, events, models and Keycloak stop connecting as Postgres's admin login (`platform`). Each gets a login that owns only its own schema, or for Keycloak its own database. The release adds five required settings: `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD` and `KEYCLOAK_DATABASE_PASSWORD`. The Upgrade Centre makes them up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`). On the first `up`, the storage job makes the logins and hands each one the tables its service made while it ran as `platform`. The upgrade's backup comes first, as always. Going back to the earlier release still works, because that release connects as `platform` again.
 
 ### A call that names no floor is checked on the organisation's
+
+**From** augur@0.15.0
 
 An app's service calls (notifications, audit, models, people lookups) that name no floor used to get the app's scopes wherever it was on at all. Now they're checked on the organisation's floor, as the gateway already checked people's calls. Nothing changes for an app that is on for the whole organisation, which is every app AUGUR ships with unless you turned one off. If you turned an app off for the organisation and on for some teams, its service must now name the team's floor to send there. A refused call shows in that app's service log (`pc logs <app>`) as a 403 saying it isn't granted the scope.
 
 ### Only a deployment admin can upgrade
 
+**From** augur@0.15.0
+
 Upgrading AUGUR, going back to an earlier release, taking back a waiting upgrade, and changing how a unit takes updates (policy, pin, windows) now need the `deployment-admin` role, not just `admin` (ADR 0022). The first admin (`PLATFORM_ADMIN_USER`) has held it since the deployment-admin release, because identity gives it to them when nobody else has it. Anyone else who upgrades needs it in Admin, People. Someone without it sees the Upgrade Centre's buttons refused with the role named.
 
 ### Apps follow the same rule
+
+**From** augur@0.15.0
 
 Installing, upgrading or removing an app, and changing how it takes new releases (Admin, Apps: "New releases" and "When one is out"), now need `deployment-admin` too, as AUGUR's own upgrades do (ADR 0022). Changing how any unit takes updates, AUGUR included, now asks for your password again if you last entered it more than 10 minutes ago, as an upgrade does. A plain `admin` still sees everything and can mark results looked at.
 
 ### Keycloak's admin leaves identity
 
+**From** augur@0.15.0
+
 Identity no longer gets `KEYCLOAK_ADMIN_PASSWORD`. Its own sign-in already holds its rights on every server that has started identity before, so there's nothing to do. Keep the password in `.env`: Keycloak reads it on a new server, and it's the way back in if every deployment admin loses their one-time code. If identity's log ever says its sign-in can't manage the realm, see **Keycloak's admin** in deploy.md.
 
 ### The signed feed
+
+**From** augur@0.15.0
 
 From this release the registry checks the release feed before it believes it ([ADR 0017](decisions/0017-signed-release-feed.md)). The Feed workflow signs it with cosign, keyless, as the Release workflow signs images, and gives it an expiry two weeks out; it runs again every Monday, so a feed that stops being renewed runs out. The registry turns down a feed that isn't signed by `feed.yml` on `main` or a release branch, whose signature doesn't verify, or that has expired. It keeps running what it runs, and the Upgrade Centre says why. Nothing to set for the publisher's feed: the registry's image now carries cosign, and checks offline when `infra/deploy/releases/trusted_root.json` is there.
 
@@ -190,9 +244,13 @@ A release its publisher **halted** (the Halt rollout workflow, [release-channels
 
 ### Installing a halted release to test going back
 
+**From** augur@0.18.0
+
 On a **dev or preview** server only, a deployment admin can install a halted release on purpose, to prove AUGUR goes back by itself from a broken one ([ADR 0051](decisions/0051-install-a-halted-release-on-request.md)). In the Upgrade Centre, open AUGUR and choose **Install … for a test** beside the halted release; it asks for the reason and may ask for your password again (the API is `PUT /v1/platform/upgrade/halted` with `version` and `reason`). On a production server the action stays visible but can't be used, and says why. The release must be newer than the one the server runs, able to upgrade from it, and have no breaking release in between, because going back by itself is the point. The watch then judges it like any other upgrade. A production server (`SERVER_RING=production`) always refuses, and every request, allowed or refused, is in the audit log (`platform.halted-install-requested`, `platform.halted-install-refused`). Automatic policies never take a halted release, so it doesn't come back after the server went back.
 
 ### The read key
+
+**From** augur@0.6.0
 
 While the repository is private, a deployment needs one **read key**: a GitHub token that can read this repository's packages and nothing else. With it, the registry checks GitHub for new AUGUR releases (the Upgrade Centre) and new app releases (Admin → Apps) itself, and the updater pulls both. The releases are listed in a feed the Release workflow keeps beside the images, `ghcr.io/harry-burton-dev/im-platform/feed`, so the one token GitHub's container registry accepts covers everything. It replaces the two tokens servers needed before (`release-feed-token` and `image-pull-token`), which still work until you swap them.
 
@@ -222,25 +280,37 @@ A deployment that pulls from a mirror ([mirror.md](mirror.md)) has no use for a 
 
 ### Auspex is called Explorer
 
+**From** augur@0.15.0
+
 Auspex now shows as **Explorer**, a platform app. Its container, `.env` name (`AUSPEX_CLIENT_SECRET`), sign-in and address (`/auspex`) haven't changed, so there's nothing to do.
 
 ### Server rings
+
+**From** augur@0.9.0
 
 A new required setting, `SERVER_RING`: `preview` on the server that runs what's on its way to production, `production` on every other (docs/release-channels.md). **Upgrade to …** has a field for it. A production server follows stable releases only, and runs no pull requests' builds unless `ALLOW_PR_PREVIEWS=on`.
 
 ### Data Atlas ships with AUGUR
 
+**From** augur@0.7.0
+
 Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Upgrade Centre makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
 
 ### Auspex ships with AUGUR
+
+**From** augur@0.7.0
 
 Auspex, which shows people where they are on AUGUR, who's there, and why they can or can't use each app, is now part of every release: a new container, `auspex`, and its frontend inside `web`. It keeps nothing of its own (no schema, no bucket) and puts itself in Admin, Apps on its first start. It needs one new setting, `AUSPEX_CLIENT_SECRET`, its sign-in: an upgrade from the Upgrade Centre makes it up for you. Upgrading by hand, add it to `.env` first (`openssl rand -hex 32`). See [auspex.md](auspex.md).
 
 ### Folio is called Artifacts
 
+**From** augur@0.6.0
+
 Folio now shows as **Artifacts** everywhere people see it, and opens straight into its own side menu, with **All apps** in the top bar as the way back. Its containers, `.env` names (`FOLIO_*`), schema, bucket and address (`/folio`) haven't changed, so there's nothing to do.
 
 ### Apps' frontends by version
+
+**From** augur@0.6.0
 
 Each version of an app's frontend is now kept on its own, at `/apps/<id>/<version>/`, so holding an app at an older version in Admin, Apps gives people that version's code as well as its manifest. The `storage` container makes a bucket for them (`augur-frontends`), the registry writes each version there as the app gives it, and the front door serves it from Garage. Folio gives its own on every start. This release changes `compose.yml` and Garage's `garage.toml`, so it's upgraded by hand, not from the Updates page. Before upgrading, add to `.env`:
 
@@ -250,6 +320,8 @@ Then upgrade as usual. Without it nothing breaks: apps are served from where the
 
 ### Folio ships with AUGUR
 
+**From** augur@0.4.0
+
 Folio, the document libraries, is now part of every release: three new containers start (`folio`, its rendition worker `folio-worker`, and Folio's frontend inside `web`), and Folio puts itself in Admin, Apps on its first start. There's nothing to install or allow in Admin. This release changes `compose.yml`, so it's upgraded by hand, not from the Updates page. Before upgrading, add to `.env` (`openssl rand -hex 32` for each):
 
 - `FOLIO_CLIENT_SECRET`: Folio's sign-in, which identity makes in Keycloak on the next start.
@@ -258,6 +330,8 @@ Folio, the document libraries, is now part of every release: three new container
 Then upgrade as usual. The worker's image is large (about 2 GB: the models that read PDFs and Word files come with it, so nothing is fetched at run time). If you'd rather not offer Folio yet, turn it off in Admin, Apps, org-wide or floor by floor; it can be turned off but not removed. Its files are in the nightly backup with the other apps'.
 
 ### The Updates page
+
+**From** augur@0.3.0
 
 Admin gets an **Updates** page, under AUGUR (since replaced by the **Upgrade Centre**, [release-channels.md](release-channels.md)). It reads this repository's GitHub releases, and while the repository is private it needs a read-only token to see them. [The read key](#the-read-key) now does this, and the steps below are how servers did it before:
 
@@ -273,6 +347,8 @@ Admin gets an **Updates** page, under AUGUR (since replaced by the **Upgrade Cen
 Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel of the release you run), and `RELEASE_FEED_URL` for a mirror ([mirror.md](mirror.md)), or `off` to check nothing.
 
 ### The updater
+
+**From** augur@0.3.0
 
 An optional container that runs an upgrade asked for with **Upgrade to …** in the Upgrade Centre. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the settings it needs are set, takes a backup and test-restores it, pulls, then restarts AUGUR's Keycloak (waiting up to five minutes, as its first start on a new Keycloak minor migrates its database), reruns storage’s set-up and restarts identity, registry, events, models, the apps that ship with AUGUR (in the order `release/shipped-apps.json` lists them, which its image carries), gateway and web in turn, waiting for each to answer on its new version. A release with an image for something the server runs that this updater doesn't know is refused before anything changes, so no part is restarted without being checked; the page says which, and that release is upgraded by hand. Going back to a release from before AUGUR's own Keycloak image leaves Keycloak running; it takes Keycloak's own image the next time it's recreated. If one doesn't answer, it puts every part back on the release you were on, and the page says why and which backup was taken. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
 
@@ -299,6 +375,8 @@ Docker must be listening on `/var/run/docker.sock` (rootless Docker isn't). From
 To see what the watch after an upgrade would see right now, after an upgrade by hand say, run one look of it: `pc exec -T updater node dist/index.js check`. It signs in as the updater, reads AUGUR's calls at the gateway for the last 10 minutes and asks every part whether it's ready, then prints one line of JSON: `ok`, what it looked at, and each problem in a sentence. It exits 1 when there's any. Unlike the watch, it doesn't let sign-in miss once or wait for a part to come back.
 
 ### The app runner
+
+**From** augur@0.6.0
 
 The updater can also install, upgrade and remove apps that don't ship with AUGUR, from their own signed releases ([Versioning](versioning.md#app-releases)), with no change to `compose.yml` or `.env` per app. It runs them in a Compose project of its own, `augur-apps`, which it writes in `infra/deploy/apps/` (`compose.yml`, a settings file per container and `state.json`). Don't edit those: they're rewritten on every install.
 
@@ -343,6 +421,8 @@ Apps join the platform's network: the one the updater itself is on, usually `pla
 
 ### Images from releases (the first `augur@` release)
 
+**From** augur@0.2.0
+
 The server stops building images and pulls the ones CI built and signed for the release instead. Once, before this upgrade:
 
 1. Sign the server in to GitHub's container registry, as in [deploy.md](deploy.md#before-you-start) (a token with only **read:packages**).
@@ -353,6 +433,8 @@ The web container now listens on 8080 and every image runs as an unprivileged us
 
 ### The model gateway
 
+**From** augur@0.2.0
+
 A new service, `models`, starts with the upgrade. Nothing changes until you want Agents: models are off, and stay off until an admin turns them on in Admin. To get it ready, add to `.env`:
 
 - `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`): its own sign-in, which identity makes in Keycloak on the next start. Without it no model calls are made, because none could be recorded.
@@ -362,13 +444,19 @@ Then upgrade as usual.
 
 ### Upload limits
 
+**From** augur@0.3.0
+
 Uploads now stream through the front door and the gateway without being held, and the gateway holds each app to its own limit: its manifest's `maxUpload`, or less where an admin lowered it in Admin, Apps. An app that doesn't say gets 10 MB at once, where everything got 50 MB before; the platform's own services keep their own limits. Nothing to add to `.env`. Upgrade as usual.
 
 ### Signed caller
 
+**From** augur@0.3.0
+
 The gateway now signs the person it passes on, and the platform's services believe only the signed caller (see [Signed caller](signed-caller.md)). Nothing to add to `.env`: the gateway makes its key when it starts and services fetch it from the gateway. Upgrade as usual. An app with its own service should add the service kit's `signedCallers` hook; until it does, it keeps working on the plain headers.
 
 ### App storage
+
+**From** augur@0.3.0
 
 Apps can now keep their own database schema and files (see [App storage](app-storage.md)). Two new containers start: `garage`, the object store, and `storage`, which sets up each app's storage and stops. Postgres moves to the same version with pgvector added (`pgvector/pgvector:0.8.0-pg16`), so the data carries over as it is. Before upgrading, add to `.env` (`openssl rand -hex 32` for each):
 
@@ -377,6 +465,8 @@ Apps can now keep their own database schema and files (see [App storage](app-sto
 Then upgrade as usual. No app uses storage yet, so `APP_STORAGE` can stay unset.
 
 ### Renamed to AUGUR
+
+**From** augur@0.2.0
 
 Nothing to do beyond the usual upgrade. The shell, page title and Admin say AUGUR, and packages are `@augur/*`. Your server's identifiers are left alone so nobody is signed out and no data moves: the Keycloak realm is still `platform`, the database and Compose project are still `platform`, the `.env` keys keep their `PLATFORM_` names, and your address stays `https://platform.<tailnet>.ts.net`.
 

@@ -246,6 +246,7 @@ describe('Status', () => {
       state: 'ok',
       lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 },
       offsite: { at: '2026-10-22T02:01:00Z', ok: true, keepDays: 30 },
+      pointInTime: { at: '2026-10-22T11:00:00Z', ok: true, earliest: '2026-10-16T02:01:00Z', lastTest: { at: '2026-10-19T02:03:00Z', ok: true } },
       lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, from: 'offsite', people: 3 },
     };
     gateway((_m, url) =>
@@ -260,6 +261,7 @@ describe('Status', () => {
     expect(el.textContent).toContain('Backups restore cleanly');
     expect(el.textContent).toContain('30 days kept');
     expect(el.textContent).toContain('Restored from the copy off the server, 3 people');
+    expect(el.textContent).toContain('Any moment since');
     expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
     expect(el.textContent).toContain('AUGUR 0.13.2 is out.');
     await openRow(el, 'library');
