@@ -511,6 +511,8 @@ services:
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
       INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
+      # How many days back the Inbox's Done tab looks (30 when empty; docs/inbox.md).
+      INBOX_DONE_DAYS: ${INBOX_DONE_DAYS:-}
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is

@@ -251,6 +251,7 @@ export const InboxCounts = Type.Object(
     you: Type.Integer({ description: 'Open items on the person, or taken by them' }),
     teams: Type.Integer({ description: "Untaken items of the person's teams they could take" }),
     overdue: Type.Integer({ description: 'Of `you`, those past due' }),
+    doneDays: Type.Integer({ minimum: 1, description: "How many days back the done tab looks (the deployment's INBOX_DONE_DAYS)" }),
   },
   { $id: 'InboxCounts' },
 );
