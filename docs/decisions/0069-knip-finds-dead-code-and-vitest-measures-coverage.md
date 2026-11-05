@@ -1,4 +1,4 @@
-# 0068. Knip finds dead code, and Vitest's v8 coverage is reported on main
+# 0069. Knip finds dead code, and Vitest's v8 coverage is reported on main
 
 - **Status:** Proposed
 - **Date:** 2026-11-05

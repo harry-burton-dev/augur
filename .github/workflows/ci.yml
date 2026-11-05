@@ -128,7 +128,7 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `tasks=${n}\ntests=${Math.min(n, 2)}\n`);
           '
       - run: pnpm build --concurrency=${{ steps.fit.outputs.tasks }}
-      # Dead code: files, exports and dependencies nothing uses (Knip, knip.json, ADR 0068). A few seconds, so on
+      # Dead code: files, exports and dependencies nothing uses (Knip, knip.json, ADR 0069). A few seconds, so on
       # every run; a warning with its list in the run's summary until main is clean, then a failing check.
       - name: Is there dead code? (a warning for now)
         run: |
@@ -169,7 +169,7 @@ jobs:
           # Into main, a migration already on main is frozen too: dev builds have run it on the workbench.
           MIGRATIONS_FROZEN_AT: ${{ github.base_ref == 'main' && 'origin/main' || '' }}
       - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
-      # On a push to main the tests also measure coverage (Vitest's v8 coverage, ADR 0068) and the next step
+      # On a push to main the tests also measure coverage (Vitest's v8 coverage, ADR 0069) and the next step
       # writes a table of it to the run's summary. Only there: a pull request's tests stay as fast as they were.
       - run: pnpm turbo run test --concurrency=${{ steps.fit.outputs.tests }} ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '-- --coverage.enabled --coverage.reporter=json-summary' || '' }}
         env:

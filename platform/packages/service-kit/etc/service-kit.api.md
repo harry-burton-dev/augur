@@ -168,6 +168,13 @@ export interface Binding {
     type: string;
 }
 
+// @public
+export interface BindingApp {
+    // (undocumented)
+    app: string;
+    types: string[];
+}
+
 // @public (undocumented)
 export type BindingChange = 'bound' | 'unbound';
 
@@ -1274,6 +1281,9 @@ export interface RegisterOptions {
     // (undocumented)
     retryMs?: number;
 }
+
+// @public
+export const registryBindingApps: (input: GrantsOptions) => (() => Promise<BindingApp[]>);
 
 // @public
 export const registryGrants: (input: GrantsOptions) => GrantLookup;

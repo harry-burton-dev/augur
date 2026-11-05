@@ -34,46 +34,6 @@ export interface ModelStore {
   usage(since: string): Promise<Usage[]>;
 }
 
-const byDayThenApp = (a: Usage, b: Usage) => b.day.localeCompare(a.day) || a.app.localeCompare(b.app);
-
-/** For tests, and for running locally without Postgres. Forgets everything on restart. */
-export class MemoryModelStore implements ModelStore {
-  private current: ModelSettings = { ...DEFAULT_SETTINGS };
-  private used = new Map<string, Usage>();
-
-  async settings() {
-    return { ...this.current };
-  }
-
-  async saveSettings({ enabled, dailyLimit }: Pick<ModelSettings, 'enabled' | 'dailyLimit'>, by: string) {
-    this.current = { enabled, dailyLimit, updatedBy: by, updatedAt: new Date().toISOString() };
-    return { ...this.current };
-  }
-
-  private row(app: string, day: string) {
-    const key = `${day} ${app}`;
-    let row = this.used.get(key);
-    if (!row) this.used.set(key, (row = { day, app, calls: 0, inputTokens: 0, outputTokens: 0 }));
-    return row;
-  }
-
-  async take(app: string, day: string, limit: number) {
-    if ((this.used.get(`${day} ${app}`)?.calls ?? 0) >= limit) return false;
-    this.row(app, day).calls++;
-    return true;
-  }
-
-  async addTokens(app: string, day: string, inputTokens: number, outputTokens: number) {
-    const row = this.row(app, day);
-    row.inputTokens += inputTokens;
-    row.outputTokens += outputTokens;
-  }
-
-  async usage(since: string) {
-    return [...this.used.values()].filter((u) => u.day >= since).map((u) => ({ ...u })).sort(byDayThenApp);
-  }
-}
-
 export const migrations: Migration[] = [
   {
     id: '001-settings-and-usage',
