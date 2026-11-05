@@ -7,13 +7,13 @@ import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { mapFor } from './map.ts';
-import { MemoryOrganisationStore, organisationRoutes, type OrganisationStore } from './organisation.ts';
+import { organisationRoutes, type OrganisationStore } from './organisation.ts';
 import { meRoutes, type AccountSource, type MeOptions } from './me.ts';
 import { DirectoryAnswer, DirectoryQuery, findInDirectory, peopleRoutes, principalsOf, signedInPeople } from './people.ts';
 import { Caller, choice, Floor, IdParams, PersonMap, ref, refused } from './schemas.ts';
-import { MemoryPreferenceStore, type PreferenceStore } from './store.ts';
+import type { PreferenceStore } from './store.ts';
 import { TeamDirectory } from './teams.ts';
-import { floorsFor, MemoryWorkspaceStore, rollupFor, type WorkspaceStore } from './workspaces.ts';
+import { floorsFor, rollupFor, type WorkspaceStore } from './workspaces.ts';
 
 /** Names the organisation's floor in `/workspaces/:id`; floor ids are random hex, so it can't clash with one. */
 const ORG_FLOOR = 'org';
@@ -23,9 +23,9 @@ export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
 
 export interface IdentityOptions {
-  store?: PreferenceStore;
+  store: PreferenceStore;
   /** The org, its teams and everyone's own floor. */
-  workspaces?: WorkspaceStore;
+  workspaces: WorkspaceStore;
   /** Where people are kept, and where departments were before they became teams. Without it the admin API answers 503. */
   directory?: Directory;
   /** Where each person's own account is read and changed (me.ts). Without it the account answers 503. */
@@ -47,7 +47,7 @@ export interface IdentityOptions {
   /** The languages the deployment offers people (REALM_LANGUAGES). */
   languages?: string[];
   /** The organisation's settings beside its floor's name (ADR 0042). */
-  organisation?: OrganisationStore;
+  organisation: OrganisationStore;
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -61,7 +61,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation = new MemoryOrganisationStore() }: IdentityOptions = {}) => {
+export const buildApp = async ({ store, workspaces, directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation }: IdentityOptions) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
