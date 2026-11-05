@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { lineView, PipelineReader, pipelineUrlFor, type Pipeline } from './pipeline.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const pipeline: Pipeline = {
   schema: 'augur.pipeline/v1',
@@ -22,7 +24,7 @@ const pipeline: Pipeline = {
 
 const serving = (body: unknown, status = 200) => async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-describe('the pipeline feed', () => {
+describe.runIf(DATABASE_URL)('the pipeline feed', () => {
   it('sits beside the release feed on the container registry, and nowhere for a mirror', () => {
     expect(pipelineUrlFor('oci://ghcr.io/o/r/feed:latest')).toBe('oci://ghcr.io/o/r/feed:pipeline');
     expect(pipelineUrlFor('https://mirror.example/feed.json')).toBe('off');
@@ -59,7 +61,7 @@ describe('the pipeline feed', () => {
 
   it('goes on the Upgrade Centre’s page, with the company’s portal', async () => {
     const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
-    const server = await buildApp({ pipeline: new PipelineReader('https://x.example/pipeline.json', { fetchImpl: serving(pipeline) }), portalUrl: 'https://portal.example' });
+    const server = await db.app({ pipeline: new PipelineReader('https://x.example/pipeline.json', { fetchImpl: serving(pipeline) }), portalUrl: 'https://portal.example' });
     const page = (await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json();
     expect(page.portalUrl).toBe('https://portal.example');
     expect(page.line).toMatchObject({ feed: 'on', repository: 'o/r', units: [{ id: 'augur' }, { id: 'mandate' }], pulls: { versionPackages: { number: 9 } } });

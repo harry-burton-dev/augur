@@ -26,20 +26,24 @@ x-logging: &logging
 # OpenTelemetry (ADR 0034, 0059, docs/observability.md): every Node service loads the service kit's
 # telemetry first and sends to the deployment's own otel-lgtm, or to the collector OTEL_EXPORTER_OTLP_ENDPOINT
 # names. OTEL_SDK_DISABLED=true turns it off (and OTEL_LGTM_REPLICAS=0 stops otel-lgtm).
-x-telemetry: &telemetry
-  NODE_OPTIONS: --import @augur/service-kit/telemetry
+# The OTEL_* settings alone are shared with the Artifacts rendition worker, which is Python and sends through
+# DBOS (augur-folio's decision 0002).
+x-otel: &otel
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-lgtm:4318}
   OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-}
   # A collector's key, and which traces to keep (the SDK's defaults when empty).
   OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
   OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
   OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
+  # Which deployment it came from: its ring, and the name it reports to Backstage under.
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production},deployment.name=${DEPLOYMENT_ID:-${SERVER_RING:-production}}
+x-telemetry: &telemetry
+  <<: *otel
+  NODE_OPTIONS: --import @augur/service-kit/telemetry
   # How long one service waits for another before it says that one can't be reached (5 seconds unless set).
   SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
   # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
   DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
-  # Which deployment it came from: its ring, and the name it reports to Backstage under.
-  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production},deployment.name=${DEPLOYMENT_ID:-${SERVER_RING:-production}}
 
 x-service: &service
   <<: *hardened
@@ -641,7 +645,8 @@ services:
     # Reading an uploaded file (Docling, torch) can take as much memory as it finds: this keeps it to its share.
     mem_limit: ${FOLIO_WORKER_MEM_LIMIT:-4g}
     environment:
-      <<: *folio-storage
+      # Its traces and logs go where the services' do (OTEL_SDK_DISABLED=true turns them off).
+      <<: [*folio-storage, *otel]
     depends_on: [folio]
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back

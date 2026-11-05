@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createPublicKey, verify } from 'node:crypto';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { deploymentKey, publicKeyLine, reportingFrom, ReportSender, signReport, reportOf } from './report.ts';
-import { MemoryAppStore } from './store.ts';
 import { UpdateChecker } from './updates.ts';
 import type { Overview } from './overview.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -31,7 +32,7 @@ const overview = (extra: Partial<Overview> = {}): Overview => ({
   ...extra,
 });
 
-describe('reporting what this deployment runs (ADR 0019)', () => {
+describe.runIf(DATABASE_URL)('reporting what this deployment runs (ADR 0019)', () => {
   it('sends with DEPLOYMENT_ID and PORTAL_URL, exports only without PORTAL_URL, and says why it is off', () => {
     expect(reportingFrom({ DEPLOYMENT_ID: 'augur-workbench', PORTAL_URL: 'https://portal.example/' })).toMatchObject({ mode: 'send', url: 'https://portal.example/api/augur/reports' });
     expect(reportingFrom({ DEPLOYMENT_ID: 'augur-workbench' })).toMatchObject({ mode: 'file' });
@@ -51,7 +52,7 @@ describe('reporting what this deployment runs (ADR 0019)', () => {
     });
     expect(JSON.stringify(report)).not.toContain('u-1');
 
-    const store = new MemoryAppStore();
+    const store = db.store;
     const key = await deploymentKey(store);
     expect(await deploymentKey(store)).toEqual(key);
     const signed = signReport(report, key);
@@ -66,7 +67,7 @@ describe('reporting what this deployment runs (ADR 0019)', () => {
     let current = overview();
     const sender = new ReportSender({
       reporting: reportingFrom({ DEPLOYMENT_ID: 'augur-workbench', PORTAL_URL: 'https://portal.example' }),
-      store: new MemoryAppStore(),
+      store: db.store,
       overview: async () => current,
       now: () => now,
       log: { info: () => {}, warn: () => {} },
@@ -91,7 +92,7 @@ describe('reporting what this deployment runs (ADR 0019)', () => {
 
   it('shows admins the mode and public key, and exports the signed record as a file', async () => {
     const updates = new UpdateChecker({ running: { version: '0.13.2', channel: 'stable' }, ring: 'production' });
-    const app = await buildApp({ updates, reporting: reportingFrom({ DEPLOYMENT_ID: 'augur-demo' }), now: () => at });
+    const app = await db.app({ updates, reporting: reportingFrom({ DEPLOYMENT_ID: 'augur-demo' }), now: () => at });
     expect((await app.inject({ method: 'GET', url: '/v1/platform/reporting', headers: editor })).statusCode).toBe(403);
     const view = (await app.inject({ method: 'GET', url: '/v1/platform/reporting', headers: admin })).json();
     expect(view).toMatchObject({ mode: 'file', deployment: 'augur-demo', publicKey: expect.stringMatching(/^MCowBQYDK2Vw/) });
@@ -100,7 +101,7 @@ describe('reporting what this deployment runs (ADR 0019)', () => {
     expect(file.headers['content-disposition']).toBe('attachment; filename="augur-demo-2026-11-02.json"');
     expect(JSON.parse(file.json().payload)).toMatchObject({ deployment: 'augur-demo', reason: 'export', units: [{ unit: 'augur', running: '0.13.2' }] });
 
-    const off = await buildApp({ updates });
+    const off = await db.app({ updates });
     expect((await off.inject({ method: 'GET', url: '/v1/platform/reporting/export', headers: admin })).json()).toMatchObject({ error: 'reporting_off', message: expect.stringContaining('DEPLOYMENT_ID') });
   });
 });

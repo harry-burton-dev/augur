@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // Writes the changeset a Renovate PR needs (ADR 0033): a patch for every workspace package whose
 // files the PR changes, or an empty one when it only touches tooling outside them (workflows, the
-// root lockfile). Run by .github/workflows/renovate-changeset.yml on renovate/* branches.
+// root lockfile). A version moved in pnpm-workspace.yaml's catalog counts as a change to every package that
+// asks the catalog for it. Run by .github/workflows/renovate-changeset.yml on renovate/* branches.
 //
 // node scripts/renovate-changeset.mjs <base-ref> <branch> [title]
 // Does nothing when the branch already carries a changeset of its own.
 import { execFileSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { catalogUsers, changedCatalogEntries } from './shared-versions.mjs';
 
 /** The packages a list of changed files belongs to: each file goes to the deepest package that holds it. */
 export function packagesTouched(files, packages) {
@@ -43,7 +46,12 @@ function main() {
     name: p.name,
     dir: p.path === root ? '' : p.path.slice(root.length + 1),
   }));
-  const names = packagesTouched(files, packages);
+  // A catalog bump changes only pnpm-workspace.yaml, but every package that takes that version changes with it.
+  const workspaceDiff = files.includes('pnpm-workspace.yaml') ? git('diff', '-U9999', `${base}...HEAD`, '--', 'pnpm-workspace.yaml') : '';
+  const manifests = Object.fromEntries(packages.map((p) => [p.dir, JSON.parse(readFileSync(join(root, p.dir, 'package.json'), 'utf8'))]));
+  const names = [...new Set([...packagesTouched(files, packages), ...catalogUsers(changedCatalogEntries(workspaceDiff), manifests)])]
+    .filter((name) => packages.some((p) => p.name === name && p.dir !== ''))
+    .sort();
   const file = changesetFile(branch);
   writeFileSync(file, changesetText(names, title ? `Dependency updates: ${title}` : 'Dependency updates.'));
   console.log(`Wrote ${file}: ${names.length ? names.join(', ') : 'empty (no package changed)'}`);
