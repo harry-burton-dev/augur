@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.22.0
+  version: 1.23.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -287,6 +287,44 @@ components:
         createdAt:
           type: string
           format: date-time
+        state:
+          type: string
+          enum:
+            - invited
+            - active
+            - disabled
+            - left
+          description: "Where their account is in its life (ADR 0040): invited until their first sign-in, then active; disabled while their sign-in is off; left for good"
+        lastSignInAt:
+          type: string
+          format: date-time
+          description: Their last sign-in that AUGUR has seen
+        joinedAt:
+          type: string
+          format: date-time
+          description: Their first sign-in that AUGUR has seen
+        disabledCause:
+          type: string
+          enum:
+            - admin
+            - idle
+            - leaver
+            - outside
+          description: Why their sign-in is off, when AUGUR knows
+        left:
+          type: object
+          required:
+            - at
+            - by
+          properties:
+            at:
+              type: string
+              format: date-time
+            by:
+              type: string
+            handOverTo:
+              type: string
+          description: When they left, who ran the leaver flow, and who took on their work
     NewPerson:
       type: object
       required:
@@ -2213,7 +2251,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: The change would lock the caller out, or the email is taken
+          description: The change would lock the caller out, the email is taken, or they have left and the change would turn their sign-in back on
           content:
             application/problem+json:
               schema:
@@ -2326,7 +2364,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: The caller is the leaver
+          description: The caller is the leaver, or they have already left
           content:
             application/problem+json:
               schema:
