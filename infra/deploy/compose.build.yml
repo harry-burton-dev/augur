@@ -34,6 +34,8 @@ services:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${SHIPPED_APPS_VERSION:-beta}
   atlas:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${SHIPPED_APPS_VERSION:-beta}
+  mandate:
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/mandate:${SHIPPED_APPS_VERSION:-beta}
   keycloak:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], target: keycloak }
   updater:

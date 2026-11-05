@@ -370,6 +370,16 @@ An app that lets people share things with each other asks identity two things, a
 
 - **Who someone stands for.** `identityPrincipals` from `@augur/service-kit` gives a person's principals: `person:<id>`, `team:<id>` for each team they're on, `tree:<id>` for each of those teams and every team above it, and `org`. Keep, with each thing, the principals who may see it (`tree:<finance>` for "Finance and the teams below it"), and a person may see it when the two lists overlap. Answers are kept for 30 seconds, so someone added to a team can see its things within that time.
 - **Who to share with.** `identityDirectory` finds people and teams by name for the app's share dialog, and names the ones it has already shared with by id.
+- **The share dialog itself** needs no scope: the person choosing is signed in, so the frontend asks as them. Hand `searchPrincipals` from `@augur/mfe-sdk` to Quill's `PeoplePicker`, and name who a thing is already shared with by id with `namePrincipals`:
+
+  ```tsx
+  import { namePrincipals, searchPrincipals } from '@augur/mfe-sdk';
+  import { PeoplePicker } from '@augur/app-kit';
+
+  <PeoplePicker label="Share with" multiple search={(q) => searchPrincipals(ctx, q)} value={chosen} onChange={setChosen} />;
+  ```
+
+  It finds people by name or email and teams by name, the teams a person isn't on as well (as on their map, a team names only itself and where it sits), never people whose sign-in is off. When the directory can't answer it rejects with `DirectoryUnavailable`, whose message the picker shows as it is. Keep a principal as `person:<id>` or `team:<id>`; check the share on your service before you keep it.
 - **Who an audience reaches.** `identityAudience` gives the ids of everyone who stands for at least one of some principals, so the app can tell them something was sent to them (`notify` takes at most 500 people a call). A team from the directory carries its `path`, the ids of the teams it sits in and its own, so an app can tell whether one team is inside another.
 
 The platform has a **publisher** role for people who may put things out beyond their own team, to the whole org or to any team. An app checks it in the caller's `roles`; an admin gives it in Admin, People. Identity adds the role to the sign-in service when it starts, so a server set up before it gets it too.

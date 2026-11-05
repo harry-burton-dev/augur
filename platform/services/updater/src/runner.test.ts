@@ -280,6 +280,23 @@ describe('the app runner', () => {
     expect(t.calls.did.at(-1)).toBe('upstream notes null');
   });
 
+  it('hands an app that now ships with AUGUR over: its containers stop, its data is left alone', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.did.length = 0;
+    expect(await t.runner.handOver(['folio', 'atlas'])).toEqual([]);
+    expect(t.running.has('app-notes-blue')).toBe(true);
+
+    expect(await t.runner.handOver(['folio', 'notes'])).toEqual(['notes']);
+    expect(t.running.size).toBe(0);
+    expect(t.state().apps).toEqual({});
+    expect(t.calls.did.at(-1)).toBe('upstream notes null');
+    // No storage is dropped: AUGUR's container uses the same schema.
+    expect(t.did.filter((d) => d.startsWith('drop'))).toEqual([]);
+    // Once handed over, nothing more happens.
+    expect(await t.runner.handOver(['notes'])).toEqual([]);
+  });
+
   it('cleans up after a job it was partway through when it restarted', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
