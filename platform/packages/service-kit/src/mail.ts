@@ -6,7 +6,7 @@
  *
  * Import it from `@augur/service-kit/mail`, so services that never email don't load Nodemailer or React.
  */
-import { createTransport, type Transporter } from 'nodemailer';
+import { createTransport } from 'nodemailer';
 import type { NoticeEmailProps } from './mail-templates.js';
 
 export type { NoticeEmailProps } from './mail-templates.js';
@@ -37,8 +37,24 @@ export const NO_RELAY =
 /** How long a relay check is trusted before it is asked again. */
 export const MAIL_CHECK_MS = 5 * 60_000;
 
-/** The part of a Nodemailer transport the sender uses, so tests can stand in for the relay. */
-export type MailTransport = Pick<Transporter, 'sendMail' | 'verify'>;
+/** One message as the sender hands it to the transport. */
+export interface MailMessage {
+  from: { name: string; address: string };
+  replyTo?: string;
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+}
+
+/**
+ * The part of a Nodemailer transport the sender uses, so tests can stand in for the relay. Our own type, so a
+ * Nodemailer major never changes the service kit's surface (ADR 0052).
+ */
+export interface MailTransport {
+  sendMail(message: MailMessage): Promise<{ messageId?: string }>;
+  verify(): Promise<unknown>;
+}
 
 export interface MailerOptions {
   /** The relay (`mailRelayFromEnv`); without one, nothing is sent and `status` says why. */
