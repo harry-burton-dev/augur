@@ -64,10 +64,14 @@ The events service publishes these as identity and the registry record the chang
 
 | Topic | Payload | When |
 | --- | --- | --- |
+| `platform.person.joined` | `{ person }` | An admin adds someone. Each team they start in follows as `platform.team.member-added` |
+| `platform.person.changed` | `{ person, changed }` | An admin changes someone's details. `changed` lists which, of `name`, `email`, `roles` and `teams`, never the values: ask identity for those |
 | `platform.person.disabled`, `platform.person.enabled` | `{ person }` | An admin turns someone's sign-in off or on |
 | `platform.team.created`, `platform.team.renamed` | `{ team, name }` | A team is made or renamed |
-| `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team |
+| `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team, however an admin did it, on that team's floor |
 | `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on, everywhere or on one floor (the event's floor), or removes it |
 | `platform.app.blocked`, `platform.app.rule-cleared` | `{ app }` | An admin blocks an app on a floor and every floor below it, or clears a floor's rule so it follows the floor above |
+
+Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own name or email in their account (in Keycloak, ADR 0039) and the lifecycle events of ADR 0040 (`left`, `deleted`) aren't sent yet.
 
 `PLATFORM_TOPICS` in the service kit names them. The API is in [contracts/events.openapi.yaml](../contracts/events.openapi.yaml).
