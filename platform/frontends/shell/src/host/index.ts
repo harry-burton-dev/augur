@@ -8,7 +8,7 @@ export { NotificationFeed, fromServer, parseEvents, type ServerNotification } fr
 export { screenFor, hasOrbit, titleMenu, titleTarget, orbitMenu, orbitIndexOf, areaOf, backFrom, upFrom, navsFor, navTarget, titleFor, productName, escapeIsFree, findPages, type Screen } from './menus.js';
 export { PreferenceSync, applyPreferences, type Preferences } from './preferences.js';
 export { floorFromPath, floorHref, floorBySlug, ownFloor, loadFloors, FloorsError, type FloorLocation } from './floors.js';
-export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, SurfaceMounter, type HomeNeed, type HomeCard, type HomeState } from './home.js';
+export { HOME_CHANNEL, MAX_CARDS, needsFor, cardOf, cardsFor, settingsOf, SurfaceMounter, type HomeNeed, type HomeCard, type HomeState } from './home.js';
 export {
   loadPreviews,
   choosePreview,

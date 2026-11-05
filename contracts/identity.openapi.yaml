@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.16.0
+  version: 1.17.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
 components:
   schemas:
@@ -470,6 +470,20 @@ components:
           maxItems: 100
           uniqueItems: true
           description: App ids whose notifications land in the stream silently and never on Home
+        pinned:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 12
+          uniqueItems: true
+          description: App ids they keep first on Home and in the list of apps, in their order
+        startFloor:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: The floor id AUGUR opens on when an address names none; their own floor without it
         awayMessage:
           type: string
           maxLength: 140

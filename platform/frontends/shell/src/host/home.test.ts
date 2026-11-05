@@ -1,7 +1,7 @@
 import { createEventBus, type AppManifestEntry, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import type { ShellNotification } from '@augur/shell-kit';
 import { describe, expect, it, vi } from 'vitest';
-import { cardOf, cardsFor, needsFor, SurfaceMounter } from './home.js';
+import { cardOf, cardsFor, needsFor, settingsOf, SurfaceMounter } from './home.js';
 
 const app = (id: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -56,6 +56,14 @@ describe('glance cards', () => {
     expect(cardOf(a, { kind: 'team', role: 'lead' })?.module).toBe('./Everyone');
     expect(cardOf(a, { kind: 'org', role: 'member' })).toBeUndefined();
     expect(cardOf(a, me)).toBeUndefined();
+  });
+
+  it('finds an app’s own settings for this kind of floor, or else its personal ones', () => {
+    const settings = (floor: 'personal' | 'team' | 'org', module: string) => ({ floor, slot: 'settings' as const, module });
+    const a = app('claims', { surfaces: [settings('personal', './Mine'), settings('team', './Team'), card('team')] });
+    expect(settingsOf(a, finance)?.module).toBe('./Team');
+    expect(settingsOf(a, { kind: 'org', role: 'member' })?.module).toBe('./Mine');
+    expect(settingsOf(app('plain', { surfaces: [card('personal')] }), me)).toBeUndefined();
   });
 
   it('orders cards by the apps opened most recently, then the catalogue, at most six', () => {

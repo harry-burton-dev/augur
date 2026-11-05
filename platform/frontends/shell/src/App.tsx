@@ -43,6 +43,7 @@ import {
   itemOfNeed,
   withInbox,
   cardsFor,
+  settingsOf,
   choosePreview,
   chooseLive,
   chooseFeaturePreview,
@@ -131,6 +132,8 @@ export const alphaFunctions = defaultFunctions
   .filter((f) => f.id !== 'settings')
   .map((f) => (f.id === 'agents' ? { ...f, id: AGENTS_UNAVAILABLE } : f.id === 'account' ? { ...f, id: ACCOUNT_AREA } : f));
 /** For an app's developers: its pull requests' previews, to switch to for themselves. */
+/** Pinned apps first, in their order, then the few opened most recently. */
+const keptClose = (pinned: string[] = [], recent: string[] = []) => [...new Set([...pinned, ...recent.slice(0, 6)])];
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
 /** How long an app may take to mount before its place says it's opening. */
@@ -197,6 +200,7 @@ export function Host({
   const accountApi = useMemo(() => new AccountApi({ getToken: session.getToken, fetchImpl }), [session, fetchImpl]);
   /** The preferences the Account area shows; the shell's own copy is in `prefs`. */
   const [chosen, setChosen] = useState<Preferences>({});
+  const pinned = chosen.pinned;
   /** The Inbox (ADR 0026): whether its view is open, the counts in its label, and Home's first items on this floor. */
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inboxCounts, setInboxCounts] = useState<InboxCounts | undefined>(undefined);
@@ -259,6 +263,7 @@ export function Host({
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
       shell.away = !!now.away;
       shell.muted = now.muted ?? [];
+      if (key === 'recent' || key === 'pinned') shell.recent = keptClose(now.pinned, key === 'recent' ? [] : shell.recent);
     },
     [prefs],
   );
@@ -275,7 +280,11 @@ export function Host({
     if (!slug) window.history.replaceState(window.history.state, '', `${floorHref(home.slug, path)}${window.location.search}`);
     return window.location.pathname;
   }, [home]);
+  /** Whether they came to the front door, an address naming no floor and no place: only then does their start floor apply. */
+  const arrivedBare = useRef(window.location.pathname === '/' || window.location.pathname === '');
   const [pathname, setPathname] = useState(settled);
+  const startFrom = useRef({ floors: session.floors, own: home.id });
+  startFrom.current = { floors: session.floors, own: home.id };
   const [attempt, setAttempt] = useState(0);
 
   /** The floor the location names, and where on it. An unknown floor is undefined. */
@@ -516,6 +525,18 @@ export function Host({
     [session, bus, raise, request, floor, home, fetchImpl, tell],
   );
 
+  /** Apps' own settings in Account's Home and apps, mounted like Home's cards (ADR 0036). */
+  const mountSettings = useCallback(
+    (el: HTMLElement, id: string) => {
+      const app = manifest?.find((a) => a.id === id);
+      if (!app) return Promise.resolve(false);
+      cards.current ??= new SurfaceMounter(importEntry);
+      return cards.current.mountSurface(el, app, settingsOf(app, floor ?? home), contextFor(app, '/'));
+    },
+    [manifest, floor, home, contextFor, importEntry],
+  );
+  const unmountSettings = useCallback((el: HTMLElement) => void cards.current?.unmount(el), []);
+
   // The answering app mounts once per request. Its context is read when it opens, so the
   // catalogue loading again, or anything else that makes a new context, doesn't mount it a
   // second time under the person's hands (it reaches the current floor through getWorkspace).
@@ -749,7 +770,7 @@ export function Host({
           ...inboxNeeds(inboxForHome, { manifest, here: here.id, total: inboxForHome.filter((i) => i.state === 'open' && !i.redacted && (i.workspace?.id ?? here.id) === here.id).length }),
           ...needsFor(shell.notifications, { muted: shell.muted, apps: manifest, floors: session.floors, here: here.id }),
         ],
-        cards: cardsFor(manifest, here, shell.recent),
+        cards: cardsFor(manifest, here, keptClose(pinned, shell.recent)),
       });
     const offs = [
       bus.on(HOME_CHANNEL.ready, send),
@@ -773,7 +794,7 @@ export function Host({
       offs.forEach((off) => off());
       shell.removeEventListener('ui-notifications', send);
     };
-  }, [bus, manifest, floor, home, session, contextFor, importEntry, inboxForHome]);
+  }, [bus, manifest, floor, home, session, contextFor, importEntry, inboxForHome, pinned]);
 
   // Domain events on this floor, for the apps here, each on the bus by its topic: apps' `refreshOn` hears them.
   const followed = manifest && floor ? topicsFor(manifest).join(',') : '';
@@ -848,7 +869,14 @@ export function Host({
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
       shell.away = !!now.away;
       shell.muted = p.muted ?? [];
-      shell.recent = [...new Set([...shell.recent, ...(p.recent ?? [])])].slice(0, 6);
+      shell.recent = keptClose(now.pinned, [...shell.recent, ...(p.recent ?? [])]);
+      // Arriving at the front door opens the floor they chose to start on, when it's still one of theirs.
+      const { floors, own } = startFrom.current;
+      const start = now.startFloor ? floors.find((f) => f.id === now.startFloor) : undefined;
+      if (arrivedBare.current && start && start.id !== own && floorRef.current.id === own && floorFromPath(window.location.pathname).path === '/') {
+        window.history.replaceState(window.history.state, '', `${floorHref(start.slug, '/')}${window.location.search}`);
+        setPathname(window.location.pathname);
+      }
     });
     return () => {
       live = false;
@@ -1056,6 +1084,11 @@ export function Host({
           onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
           onSignOut={() => void session.signOut()}
           apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name }))}
+          floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
+          ownFloor={home.id}
+          appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
+          mountSettings={mountSettings}
+          unmountSettings={unmountSettings}
           shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
           product={productName()}
           version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
