@@ -57,6 +57,8 @@ export const describe = (e: AuditEntry, names: Names): string => {
     case 'person.left':
       if (d.lastDay) return `${names.person(target)} left after their last day, ${shortDay(`${String(d.lastDay)}T12:00:00`)}${d.handOverTo ? `, handing their work to ${names.person(String(d.handOverTo))}` : ''}`;
       return d.handOverTo ? `${who} marked ${names.person(target)} as a leaver, handing their work to ${names.person(String(d.handOverTo))}` : `${who} marked ${names.person(target)} as a leaver`;
+    case 'person.deleted':
+      return d.now ? `${who} deleted a leaver’s account; only its id is kept` : 'A leaver’s account was deleted after the organisation’s retention period; only its id is kept';
     case 'sign-in.succeeded':
       return d.method === 'federated' ? `${names.person(target)} signed in through the organisation’s sign-in` : d.method === 'passkey' ? `${names.person(target)} signed in with a passkey` : `${names.person(target)} signed in`;
     case 'sign-in.failed':

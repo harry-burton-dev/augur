@@ -115,6 +115,8 @@ export interface Directory {
   lockout(id: string): Promise<Lockout>;
   /** Lifts a lockout, so they can sign in again at once. */
   unlock(id: string): Promise<void>;
+  /** Deletes their account for good (ADR 0072); one already gone is no error. */
+  deletePerson(id: string): Promise<void>;
   departments(): Promise<Department[]>;
   createDepartment(name: string, parentId?: string): Promise<Department>;
   renameDepartment(id: string, name: string): Promise<Department>;
@@ -244,6 +246,10 @@ export class MemoryDirectory implements Directory {
   async unlock(id: string) {
     this.known(id);
     this.lockedOut.delete(id);
+  }
+
+  async deletePerson(id: string) {
+    this.folks.delete(id);
   }
 
   async departments() {
@@ -656,6 +662,12 @@ export class KeycloakDirectory implements Directory {
       'That person isn’t in the directory.',
     );
     return { locked: Boolean(data.disabled), failures: data.numFailures ?? 0, ...(data.lastFailure ? { lastFailureAt: new Date(data.lastFailure).toISOString() } : {}) };
+  }
+
+  async deletePerson(id: string) {
+    await this.call('DELETE', `/users/${encodeURIComponent(id)}`).catch((err: unknown) => {
+      if (!(err instanceof DirectoryError) || err.status !== 404) throw err;
+    });
   }
 
   async unlock(id: string) {

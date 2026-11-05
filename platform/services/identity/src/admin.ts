@@ -2,11 +2,12 @@ import { randomInt } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
+import { callerFromHeaders, signedInRecently, type NewAuditEntry } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type Person as DirectoryPerson } from './directory.ts';
 import { choice, Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, ref, refused, Role, TeamLevels } from './schemas.ts';
 import { withLifecycle, type IdlePolicy, type LifecycleStore } from './lifecycle.ts';
 import { addDays, runLeaver, todayIn } from './leavers.ts';
+import { deleteAccount } from './deletion.ts';
 import { organisationSettings, type OrganisationStore } from './organisation.ts';
 import type { PreferenceStore } from './store.ts';
 import { DEFAULT_LEVELS, MAX_TEAM_DEPTH, type WorkspaceStore } from './workspaces.ts';
@@ -42,7 +43,12 @@ interface AdminOptions {
   lifecycle?: LifecycleStore;
   /** The organisation's idle-account days and time zone, for when an idle sign-in turns off and when a last day ends. */
   organisation?: OrganisationStore;
+  /** Removes a deleted person's personal values from Activity (the events service); without it nobody can be deleted. */
+  redact?: (person: string) => Promise<unknown>;
 }
+
+/** How recently a deployment admin must have entered their password to delete an account now. */
+const DELETE_SIGN_IN_MS = 10 * 60_000;
 
 /** How far ahead a leaver's last day can be set (PER-194 spec 5). */
 const LAST_DAY_AHEAD = 90;
@@ -57,7 +63,7 @@ const LEAVER_NOTE = 500;
  * can give or take away that role, or change a deployment admin's sign-in.
  */
 export const adminRoutes =
-  ({ directory, workspaces, audit, store, lifecycle, organisation }: AdminOptions) =>
+  ({ directory, workspaces, audit, store, lifecycle, organisation, redact }: AdminOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     app.addHook('onRequest', async (req, reply) => {
@@ -111,7 +117,7 @@ export const adminRoutes =
     /** Whether, and when, idle sign-ins turn off here; unknown (and not shown) when it can't be read. */
     const idlePolicy = async (): Promise<IdlePolicy | undefined> => {
       const [settings, canEmail] = await Promise.all([org().catch(() => undefined), dir().canEmail().catch(() => undefined)]);
-      return settings && canEmail !== undefined ? { ...settings.idle, canEmail } : undefined;
+      return settings && canEmail !== undefined ? { ...settings.idle, canEmail, ...(redact ? { leaverDeleteAfterDays: settings.security.leaverRetentionDays } : {}) } : undefined;
     };
     /** People as admins see them: with their state and what is kept about their account's life. */
     const decorate = async <P extends DirectoryPerson>(people: P[]) => {
@@ -477,6 +483,49 @@ export const adminRoutes =
         }
         await record(req, 'person.leave-cancelled', p.id, { username: p.username });
         return one(p);
+      },
+    );
+
+    app.delete(
+      '/people/:id',
+      {
+        schema: {
+          summary: 'Delete a leaver’s account now, without waiting for the retention period (deployment admins only)',
+          description: [
+            'Only for someone who has left, by a deployment admin who entered their password in the last 10 minutes',
+            '(401 sign_in_again otherwise). Runs the same steps as deletion after retention (ADR 0072): Activity loses their',
+            'personal values, identity forgets their preferences and teams, Keycloak deletes the account, then',
+            '`person.deleted` is recorded, which followers hear as `platform.person.deleted`. It can’t be undone.',
+          ].join(' '),
+          params: IdParams,
+          response: {
+            200: Type.Object({ deleted: Type.Literal(true) }, { description: 'Deleted; only their id is kept, in Activity' }),
+            ...guarded,
+            401: refused('sign_in_again: enter the password again first'),
+            403: refused('Not a deployment admin'),
+            404: refused('No such person'),
+            409: refused('They haven’t left'),
+            503: refused('Activity couldn’t be cleaned of their details, so nothing was deleted yet'),
+          },
+        },
+      },
+      async (req, reply) => {
+        const me = callerFromHeaders(req.headers)!;
+        if (!isDeploymentAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only a deployment admin can delete an account.' });
+        if (!signedInRecently(me, DELETE_SIGN_IN_MS)) return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to delete an account. It’s asked for anything this drastic.' });
+        if (!lifecycle || !redact) return reply.code(503).send({ error: 'unavailable', message: 'Accounts can’t be deleted here yet: identity can’t reach Activity to remove their details.' });
+        const kept = (await lifecycle.get([req.params.id])).get(req.params.id);
+        if (!kept?.left) {
+          await dir().person(req.params.id);
+          return reply.code(409).send({ error: 'conflict', message: 'They haven’t left. Run the leaver flow first.' });
+        }
+        try {
+          await deleteAccount({ directory: dir(), lifecycle, store, workspaces, redact, audit: (e) => record(req, e.action, e.target!, e.detail) ?? Promise.resolve() }, req.params.id, me.id);
+        } catch (err) {
+          req.log.error({ err: (err as Error).message }, 'account not deleted');
+          return reply.code(503).send({ error: 'unavailable', message: `Not deleted yet: ${(err as Error).message} It’s tried again within five minutes.` });
+        }
+        return { deleted: true as const };
       },
     );
 

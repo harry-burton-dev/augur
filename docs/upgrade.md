@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Leavers' accounts are deleted after the retention period
+
+**From** unreleased
+
+Identity now deletes a leaver's account once the organisation's leaver retention has passed (Admin → Organisation, Security and retention; 90 days unless a deployment admin changed it; ADR 0072). It can't be undone: Activity loses their personal values and Keycloak deletes the account. Anyone who left more than that many days before you upgrade is deleted within five minutes of identity starting. If you want to keep someone longer, raise the retention before upgrading. Apps that follow `platform.person.deleted` should delete or anonymise what they keep about that person.
+
 ### The organisation's logo, sign-in notice, languages and security move into Admin
 
 **From** unreleased

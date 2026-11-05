@@ -1129,6 +1129,7 @@ export const PLATFORM_TOPICS: {
     readonly personDisabled: "platform.person.disabled";
     readonly personEnabled: "platform.person.enabled";
     readonly personLeft: "platform.person.left";
+    readonly personDeleted: "platform.person.deleted";
     readonly teamCreated: "platform.team.created";
     readonly teamRenamed: "platform.team.renamed";
     readonly memberAdded: "platform.team.member-added";

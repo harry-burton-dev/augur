@@ -97,6 +97,8 @@ export interface WorkspaceStore {
   setLevels(names: string[]): Promise<string[]>;
   /** Adds someone to a team or changes their role; `null` takes them off it. */
   setMember(team: string, person: string, role: MemberRole | null): Promise<void>;
+  /** A deleted person (ADR 0072): out of every team, and their own floor archived under a name that isn't theirs. */
+  forgetPerson(person: string, name: string): Promise<void>;
   /**
    * Copies teams in from `source` the first time only, as one change. Answers
    * false when that source was imported before; `load` is then not called.
@@ -391,6 +393,11 @@ export class PgWorkspaceStore implements WorkspaceStore {
     } else {
       await this.pool.query('delete from identity.workspace_members where workspace_id = $1 and person = $2', [team, person]);
     }
+  }
+
+  async forgetPerson(person: string, name: string) {
+    await this.pool.query('delete from identity.workspace_members where person = $1', [person]);
+    await this.pool.query(`update identity.workspaces set name = $2, archived_at = coalesce(archived_at, now()) where kind = 'personal' and owner = $1`, [person, name]);
   }
 
   async importOnce(source: string, load: () => Promise<ImportedTeam[]>) {

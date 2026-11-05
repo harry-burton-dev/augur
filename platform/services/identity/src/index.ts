@@ -11,6 +11,7 @@ import { organisationSettings, PgOrganisationStore } from './organisation.ts';
 import { federatedFirstSignIn, PgLifecycleStore } from './lifecycle.ts';
 import { reconcile, PgReconcileStore } from './reconcile.ts';
 import { leaveDueLeavers } from './leavers.ts';
+import { deleteDueLeavers } from './deletion.ts';
 import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
 
 const log = startupLog('identity');
@@ -120,6 +121,13 @@ const dataFrom =
     ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) }
     : undefined;
 
+// A deleted leaver's personal values leave Activity first (ADR 0072): the events service removes them.
+const redact =
+  EVENTS_URL && credentials
+    ? (person: string) =>
+        callService({ method: 'POST', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/audit/redact`, credentials, body: { person }, what: 'remove a deleted person’s details from Activity' })
+    : undefined;
+
 // Sign-ins and failed ones reach Activity (ADR 0040): copied from Keycloak each minute.
 if (keycloakEvents && audit) {
   const events = keycloakEvents;
@@ -150,10 +158,23 @@ if (directory) {
     const gone = await leaveDueLeavers({ directory: people, lifecycle, store, audit }, timeZone, new Date(), (m) => log.warn(m));
     if (gone.length) log.info(`${gone.length} leaver flow${gone.length === 1 ? '' : 's'} ran after a last day.`);
   };
-  const sweep = () => leavers().catch((err: Error) => log.error(`Leaver flows set for after a last day couldn't be checked; identity tries again in five minutes (${err.message}).`));
+  // A leaver's account is deleted once the organisation's leaver retention has passed (ADR 0072); without a
+  // way to clean Activity of their details, nobody is deleted and the log says why.
+  const deletions = async () => {
+    if (!redact) return;
+    const { security } = await organisationSettings(workspaces, organisation);
+    const gone = await deleteDueLeavers({ directory: people, lifecycle, store, workspaces, redact, audit }, security.leaverRetentionDays, new Date(), (m) => log.warn(m));
+    if (gone.length) log.info(`${gone.length} leaver account${gone.length === 1 ? '' : 's'} deleted after the retention period.`);
+  };
+  if (!redact) log.warn('Leavers’ accounts aren’t deleted after the retention period: identity has no EVENTS_URL or service credentials to clean Activity of their details first.');
+  const sweep = () =>
+    Promise.all([
+      leavers().catch((err: Error) => log.error(`Leaver flows set for after a last day couldn't be checked; identity tries again in five minutes (${err.message}).`)),
+      deletions().catch((err: Error) => log.error(`Leavers due for deletion couldn't be checked; identity tries again in five minutes (${err.message}).`)),
+    ]);
   setInterval(sweep, 5 * 60_000).unref();
   void sweep();
 }
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle, redact });
 await app.listen({ port, host: '0.0.0.0' });

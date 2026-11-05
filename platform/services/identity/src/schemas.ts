@@ -162,8 +162,17 @@ export const Person = Type.Object(
     joinedAt: Type.Optional(Type.String({ format: 'date-time', description: 'Their first sign-in that AUGUR has seen' })),
     disabledCause: Type.Optional(choice(['admin', 'idle', 'leaver', 'outside'], { description: 'Why their sign-in is off, when AUGUR knows' })),
     left: Type.Optional(
-      Type.Object({ at: Type.String({ format: 'date-time' }), by: Type.String(), handOverTo: Type.Optional(Type.String()) }, { description: 'When they left, who ran the leaver flow, and who took on their work' }),
+      Type.Object(
+        {
+          at: Type.String({ format: 'date-time' }),
+          by: Type.String(),
+          handOverTo: Type.Optional(Type.String()),
+          deleteAfter: Type.Optional(Type.String({ format: 'date-time', description: 'When their account is deleted, once the organisation’s leaver retention has passed (ADR 0072)' })),
+        },
+        { description: 'When they left, who ran the leaver flow, and who took on their work' },
+      ),
     ),
+    deleting: Type.Optional(choice(['redacted', 'tidied', 'keycloak-deleted'], { description: 'Deleting their account has started and got this far; it carries on within five minutes (ADR 0072)' })),
     source: Type.Optional(choice(['local', 'federated'], { description: 'How they sign in: a password here, or the organisation’s sign-in (Entra) since their first sign-in through it' })),
     locked: Type.Optional(Type.Boolean({ description: 'Locked out for now after repeated wrong passwords; an admin can lift it' })),
     leaving: Type.Optional(

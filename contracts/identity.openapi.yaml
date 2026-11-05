@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.29.0
+  version: 1.30.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -350,7 +350,18 @@ components:
               type: string
             handOverTo:
               type: string
+            deleteAfter:
+              type: string
+              format: date-time
+              description: When their account is deleted, once the organisation’s leaver retention has passed (ADR 0072)
           description: When they left, who ran the leaver flow, and who took on their work
+        deleting:
+          type: string
+          enum:
+            - redacted
+            - tidied
+            - keycloak-deleted
+          description: Deleting their account has started and got this far; it carries on within five minutes (ADR 0072)
         source:
           type: string
           enum:
@@ -2939,6 +2950,60 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Delete a leaver’s account now, without waiting for the retention period (deployment admins only)
+      description: "Only for someone who has left, by a deployment admin who entered their password in the last 10 minutes (401 sign_in_again otherwise). Runs the same steps as deletion after retention (ADR 0072): Activity loses their personal values, identity forgets their preferences and teams, Keycloak deletes the account, then `person.deleted` is recorded, which followers hear as `platform.person.deleted`. It can’t be undone."
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Deleted; only their id is kept, in Activity
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deleted
+                properties:
+                  deleted:
+                    type: boolean
+                    enum:
+                      - true
+                description: Deleted; only their id is kept, in Activity
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: They haven’t left
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Activity couldn’t be cleaned of their details, so nothing was deleted yet
           content:
             application/problem+json:
               schema:

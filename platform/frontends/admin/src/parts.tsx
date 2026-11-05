@@ -49,6 +49,8 @@ export const lifecycleFacts = (p: Person, nameOf: (id: string) => string): { lab
   } else if (p.idle) facts.push({ label: 'Turns off if idle', value: IDLE_EXEMPT[p.idle.exempt] });
   if (p.leaving) facts.push({ label: 'Last day', value: `${day(`${p.leaving.on}T12:00:00`)}${p.leaving.handOverTo ? `, handing over to ${nameOf(p.leaving.handOverTo)}` : ''}` });
   if (p.left) facts.push({ label: 'Left', value: `${day(p.left.at)}${p.left.handOverTo ? `, handing over to ${nameOf(p.left.handOverTo)}` : ''}` });
+  if (p.deleting) facts.push({ label: 'Account', value: 'Being deleted: it carries on within five minutes' });
+  else if (p.left?.deleteAfter) facts.push({ label: 'Account deleted', value: day(p.left.deleteAfter) });
   return facts;
 };
 
