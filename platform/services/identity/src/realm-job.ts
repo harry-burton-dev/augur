@@ -1,8 +1,10 @@
-import { loadConfigOrExit } from '@augur/service-kit';
+import { loadConfigOrExit, startupLog } from '@augur/service-kit';
 import { KeycloakAppClients, parseClientSecrets, retrying } from './clients.ts';
 import { KeycloakDirectory } from './directory.ts';
 import { applyRealm, productNameFromEnv, realmLookFromEnv, realmMailFromEnv, realmSettingsFromEnv } from './realm.ts';
 import { realmSenderFromDb } from './realm-sender.ts';
+
+const log = startupLog('keycloak-config');
 
 /**
  * The realm job (ADR 0057): brings Keycloak's realm to what this release declares (`realm.ts`), then
@@ -36,11 +38,11 @@ loadConfigOrExit('realm job', [
 ]);
 
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_PASSWORD, IDENTITY_CLIENT_SECRET, PLATFORM_ADMIN_USER } = process.env;
-const warn = (message: string) => console.warn(message);
+const warn = (message: string) => log.warn(message);
 const settings = realmSettingsFromEnv(process.env, warn);
 const look = realmLookFromEnv(process.env, warn);
 const mail = realmMailFromEnv(process.env, warn);
-if (!mail) console.info('No SMTP relay is set (SMTP_HOST): the realm keeps any relay set in Keycloak’s console, and offers verification and password resets only with one.');
+if (!mail) log.info('No SMTP relay is set (SMTP_HOST): the realm keeps any relay set in Keycloak’s console, and offers verification and password resets only with one.');
 // The organisation's sender (Admin → Organisation) replaces SMTP_FROM and the product's name, read on every run.
 const sender = mail && process.env.DATABASE_URL ? await realmSenderFromDb(process.env.DATABASE_URL, warn) : undefined;
 const kc = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, signIn: { admin: { user: KEYCLOAK_ADMIN_USER!, password: KEYCLOAK_ADMIN_PASSWORD! } } });
@@ -63,14 +65,14 @@ try {
         sender,
       }).catch((err: Error) => {
         attempt++;
-        console.warn(`Attempt ${attempt}: ${err.message} Trying again in 5 seconds.`);
+        log.warn(`Attempt ${attempt}: ${err.message} Trying again in 5 seconds.`);
         throw err;
       }),
     5000,
     120,
   );
-  console.info(changes.length ? `The ${KEYCLOAK_REALM} realm is up to date. Changed:\n- ${changes.join('\n- ')}` : `The ${KEYCLOAK_REALM} realm was already up to date.`);
+  log.info(changes.length ? `The ${KEYCLOAK_REALM} realm is up to date. Changed:\n- ${changes.join('\n- ')}` : `The ${KEYCLOAK_REALM} realm was already up to date.`);
 } catch (err) {
-  console.error(`The ${KEYCLOAK_REALM} realm couldn't be brought up to date: ${(err as Error).message}`);
+  log.error(`The ${KEYCLOAK_REALM} realm couldn't be brought up to date: ${(err as Error).message}`);
   process.exit(1);
 }

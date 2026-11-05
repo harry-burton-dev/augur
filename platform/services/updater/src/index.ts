@@ -9,7 +9,7 @@
  *                                as one JSON line and exits 1 when anything is wrong (upgrade.ts, checkOnce)
  */
 import { existsSync, readFileSync } from 'node:fs';
-import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, platformCredentialsFromEnv, serviceAuthFromEnv } from '@augur/service-kit';
+import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, platformCredentialsFromEnv, serviceAuthFromEnv, startupLog } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
@@ -44,7 +44,8 @@ const READ_KEY_FILE = '/run/secrets/augur/github-read-key';
 /** Before read keys: a pull token for a private image registry. */
 const PULL_TOKEN_FILE = '/run/secrets/augur/image-pull-token';
 
-const log = (message: string, more: Record<string, unknown> = {}) => console.log(JSON.stringify({ time: new Date().toISOString(), service: 'updater', msg: message, ...more }));
+const startup = startupLog('updater');
+const log = (message: string, more: Record<string, unknown> = {}) => startup.info(message, more);
 
 // Compose passes a setting left out of .env as empty, so an empty one means the default.
 const setting = (key: string, fallback = '') => process.env[key] || fallback;
