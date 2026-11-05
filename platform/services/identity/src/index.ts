@@ -7,6 +7,7 @@ import { KeycloakAccounts, type AccountSource } from './me.ts';
 import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
+import { MemoryOrganisationStore, PgOrganisationStore, type OrganisationStore } from './organisation.ts';
 
 // Every setting identity reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('identity', [
@@ -32,18 +33,21 @@ const orgName = process.env.ORG_NAME || 'Organisation';
 
 let store: PreferenceStore;
 let workspaces: WorkspaceStore;
+let organisation: OrganisationStore;
 if (process.env.DATABASE_URL) {
   const pool = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL }));
   const prefs = new PgPreferenceStore(pool);
   await prefs.migrate();
   store = prefs;
   workspaces = new PgWorkspaceStore(pool, { orgName });
+  organisation = new PgOrganisationStore(pool);
 } else if (production) {
   throw new Error("DATABASE_URL is not set: identity needs Postgres to keep people's preferences and teams.");
 } else {
   console.warn("DATABASE_URL is not set: keeping people's preferences and teams in memory until identity restarts.");
   store = new MemoryPreferenceStore();
   workspaces = new MemoryWorkspaceStore({ orgName });
+  organisation = new MemoryOrganisationStore();
 }
 
 // Locally this is the dev stack's Keycloak and its admin/admin console login.
@@ -104,5 +108,5 @@ const dataFrom =
     ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) }
     : undefined;
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation });
 await app.listen({ port, host: '0.0.0.0' });

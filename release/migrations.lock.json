@@ -14,7 +14,8 @@
     "001_preferences": "148165f8cbddebab",
     "002_workspaces": "54f71c8c9cc46c8c",
     "003_team_levels": "4f354b7fa3c5c9d8",
-    "004_leave_requests": "42153718f683907e"
+    "004_leave_requests": "42153718f683907e",
+    "organisation_001_settings": "4fff491ac7f81693"
   },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"
