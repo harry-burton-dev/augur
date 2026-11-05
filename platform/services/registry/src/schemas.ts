@@ -64,7 +64,7 @@ export const params = <K extends string>(...names: K[]) => Type.Object(Object.fr
 export const Scope = Type.Enum([...SCOPES], {
   $id: 'Scope',
   description:
-    "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing.",
+    "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items.",
 });
 
 export const FloorKind = Type.Enum([...FLOOR_KINDS], { $id: 'FloorKind', description: 'team means any team, at any depth' });

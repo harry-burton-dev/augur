@@ -126,6 +126,130 @@ export const DomainEvent = Type.Object(
   { $id: 'DomainEvent' },
 );
 
+// ---- the Inbox (ADR 0026) ----
+
+const SLUG = '^[a-z][a-z0-9-]{0,39}$';
+const PERSON_OR_TEAM_ID = Type.String({ minLength: 1, maxLength: 100 });
+
+export const InboxRef = Type.Object(
+  {
+    kind: Type.String({ minLength: 1, maxLength: 40, description: '"ref", or a DocumentRef, EntityRef or UnitRef kind' }),
+    app: Type.Optional(Type.String({ maxLength: 40 })),
+    id: Type.String({ minLength: 1, maxLength: 200 }),
+    label: Type.Optional(Type.String({ maxLength: 200 })),
+  },
+  { $id: 'InboxRef', additionalProperties: true, maxProperties: 12, description: "A reference back to the thing in the app (the SDK's Ref and its kin), carried as found" },
+);
+
+export const InboxOwner = Type.Object(
+  {
+    kind: Type.Enum(['person', 'team']),
+    id: PERSON_OR_TEAM_ID,
+    role: Type.Optional(Type.Enum(['lead'], { description: "For a team item: only the team's leads take it" })),
+  },
+  { $id: 'InboxOwner', additionalProperties: false, description: 'Who an item waits on' },
+);
+
+const InboxAllow = Type.Object(
+  {
+    decline: Type.Optional(Type.Boolean({ default: true })),
+    handOn: Type.Optional(Type.Boolean({ default: true })),
+    selfComplete: Type.Optional(Type.Boolean({ default: false, description: 'Whether the person may mark it done in the shell' })),
+  },
+  { additionalProperties: false },
+);
+
+const OpenIntent = Type.Object(
+  {
+    type: Type.String({ pattern: '^[a-z][a-z0-9.-]*$', maxLength: 80, description: 'An intent type some app handles' }),
+    payload: Type.Optional(Type.Unknown({ description: "The app's own; at most 1024 bytes as JSON" })),
+  },
+  { additionalProperties: false },
+);
+
+const WHEN = Type.String({ maxLength: 40, pattern: '^\\d{4}-\\d{2}-\\d{2}([T ][0-9:.]+(Z|[+-]\\d{2}:?\\d{2})?)?$', description: 'An ISO date, or date and time' });
+
+export const NewInboxItem = Type.Object(
+  {
+    kind: Type.String({ pattern: SLUG, description: "One of the kinds the app's manifest declares (inbox.kinds)" }),
+    owner: ref(InboxOwner),
+    title: Type.String({ minLength: 1, maxLength: 200 }),
+    detail: Type.Optional(Type.String({ maxLength: 1000 })),
+    subject: ref(InboxRef),
+    refs: Type.Optional(Type.Array(ref(InboxRef), { maxItems: 5 })),
+    open: Type.Optional(OpenIntent),
+    path: Type.Optional(Type.String({ pattern: '^/', maxLength: 500, description: 'Where in the app Open goes when there is no intent' })),
+    due: Type.Optional(WHEN),
+    allow: Type.Optional(InboxAllow),
+    from: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: 'The person on whose behalf the app made it' })),
+    reopen: Type.Optional(Type.Boolean({ description: 'Opens a closed item again' })),
+  },
+  { $id: 'NewInboxItem', additionalProperties: false },
+);
+
+export const InboxChange = Type.Object(
+  {
+    state: Type.Optional(Type.Enum(['done', 'withdrawn'], { description: 'Closes it: the work was done, or the app took it back' })),
+    title: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+    detail: Type.Optional(Type.String({ maxLength: 1000 })),
+    due: Type.Optional(WHEN),
+    refs: Type.Optional(Type.Array(ref(InboxRef), { maxItems: 5 })),
+    note: Type.Optional(Type.String({ maxLength: 500, description: "Why, kept in the item's history" })),
+  },
+  { $id: 'InboxChange', additionalProperties: false },
+);
+
+export const InboxItem = Type.Object(
+  {
+    id: Type.String(),
+    app: Type.String(),
+    key: Type.String(),
+    kind: Type.String(),
+    owner: ref(InboxOwner),
+    takenBy: Type.Optional(Type.String()),
+    takenAt: Type.Optional(Type.String({ format: 'date-time' })),
+    state: Type.Enum(['open', 'done', 'declined', 'handed-on', 'withdrawn'], { description: 'handed-on is never set: handing on changes the owner and keeps it open' }),
+    title: Type.Optional(Type.String({ description: 'Left out of a leads-only item shown to a member' })),
+    detail: Type.Optional(Type.String()),
+    subject: Type.Optional(ref(InboxRef)),
+    refs: Type.Optional(Type.Array(ref(InboxRef))),
+    open: Type.Optional(OpenIntent),
+    path: Type.Optional(Type.String()),
+    due: Type.Optional(Type.String({ format: 'date-time' })),
+    overdue: Type.Optional(Type.Boolean()),
+    allow: Type.Object({ decline: Type.Boolean(), handOn: Type.Boolean(), selfComplete: Type.Boolean() }),
+    from: Type.Optional(Type.String()),
+    createdAt: Type.String({ format: 'date-time' }),
+    updatedAt: Type.String({ format: 'date-time' }),
+    closedAt: Type.Optional(Type.String({ format: 'date-time' })),
+    closedBy: Type.Optional(Type.String()),
+    closeNote: Type.Optional(Type.String()),
+    workspace: Type.Optional(ref(EventFloor)),
+    redacted: Type.Optional(Type.Boolean({ description: "A leads-only item shown to a member: that it's there, not what it is" })),
+  },
+  { $id: 'InboxItem' },
+);
+
+export const InboxHistory = Type.Object(
+  {
+    at: Type.String({ format: 'date-time' }),
+    by: Type.Optional(Type.String({ description: "A person's id; none when the app did it" })),
+    action: Type.Enum(['created', 'updated', 'taken', 'released', 'declined', 'handed-on', 'done', 'withdrawn', 'reopened']),
+    from: Type.Optional(Type.String({ description: 'person:<id> or team:<id>' })),
+    to: Type.Optional(Type.String()),
+    note: Type.Optional(Type.String()),
+  },
+  { $id: 'InboxHistory' },
+);
+
+export const InboxCounts = Type.Object(
+  {
+    you: Type.Integer({ description: 'Open items on the person, or taken by them' }),
+    teams: Type.Integer({ description: "Untaken items of the person's teams they could take" }),
+    overdue: Type.Integer({ description: 'Of `you`, those past due' }),
+  },
+  { $id: 'InboxCounts' },
+);
 
 /**
  * What every refusal carries: an RFC 9457 problem (`application/problem+json`, @augur/service-kit's
@@ -156,4 +280,4 @@ export const refused = (description: string) => ({ description, content: { 'appl
 export const empty = (description: string) => Type.Null({ description });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, NewNotification, NotificationAction, Notification, NewAuditEntry, AuditEntry, EventFloor, TeamNotices, NewDomainEvent, DomainEvent];
+export const SCHEMAS = [Refusal, NewNotification, NotificationAction, Notification, NewAuditEntry, AuditEntry, EventFloor, TeamNotices, NewDomainEvent, DomainEvent, InboxRef, InboxOwner, NewInboxItem, InboxChange, InboxItem, InboxHistory, InboxCounts];

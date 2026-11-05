@@ -1721,7 +1721,7 @@ components:
           items:
             $ref: "#/components/schemas/Scope"
           uniqueItems: true
-          maxItems: 6
+          maxItems: 7
           description: What the app's service asks to do on AUGUR, such as "notifications:send". An app may always register itself.
         floors:
           type: array
@@ -1811,7 +1811,8 @@ components:
         - events:publish
         - events:subscribe
         - people:read
-      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing."
+        - inbox:write
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items."
     AppMenuCategory:
       type: object
       required:
@@ -3729,7 +3730,7 @@ paths:
                   items:
                     $ref: "#/components/schemas/Scope"
                   uniqueItems: true
-                  maxItems: 6
+                  maxItems: 7
               additionalProperties: false
       parameters:
         - schema:
