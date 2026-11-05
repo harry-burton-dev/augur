@@ -41,7 +41,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const [liveResult, setLiveResult] = useState('');
   const [liveError, setLiveError] = useState('');
   const [leaving, setLeaving] = useState<LeaveRequest[]>([]);
-  const [heir, setHeir] = useState(NO_ONE);
+  /** Who the admin chose to take on their work; until they choose, whoever was agreed when their last day was set. */
+  const [chosenHeir, setHeir] = useState<string>();
   const [leaverNote, setLeaverNote] = useState('');
   /** Their last day, when the leaver flow should wait for it; empty runs it now. */
   const [lastDay, setLastDay] = useState('');
@@ -71,12 +72,13 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
 
   const replace = (person: Person) => setPeople((all) => all.map((p) => (p.id === person.id ? person : p)));
   const person = people.find((p) => p.id === editing);
+  const heir = chosenHeir ?? person?.leaving?.handOverTo ?? NO_ONE;
 
   const open = (id?: string) => {
     setLiveResult('');
     setLiveError('');
     setChosenRoles(people.find((p) => p.id === id)?.roles ?? []);
-    setHeir(NO_ONE);
+    setHeir(undefined);
     setLeaverNote('');
     setLastDay('');
     if (id) {
@@ -249,7 +251,7 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const heirOptions = (p: Person) => [
     { value: NO_ONE, label: 'No one yet', detail: 'Apps keep what they own until someone takes it on' },
     ...people
-      .filter((x) => x.id !== p.id && x.enabled)
+      .filter((x) => x.id !== p.id && (x.enabled || x.id === p.leaving?.handOverTo))
       .map((x) => ({ value: x.id, label: fullName(x), ...(x.email ? { detail: x.email } : {}) }))
       .sort((a, b) => a.label.localeCompare(b.label)),
   ];

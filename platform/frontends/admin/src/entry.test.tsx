@@ -225,6 +225,22 @@ describe('People', () => {
     expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/They’ve left: signed out everywhere\. Apps keep what they own/);
   });
 
+  it('starts from the handover agreed with their last day, so running the flow again keeps it', async () => {
+    const samLeaving = { ...sam, enabled: true, leaving: { on: '2026-11-20', handOverTo: 'u-1' } };
+    const { sent } = gateway((method, url) => {
+      if (url === '/api/identity/v1/admin/people' && method === 'GET') return Response.json([alex, samLeaving]);
+      if (url === '/api/identity/v1/admin/people/u-2' && method === 'GET') return Response.json(samLeaving);
+      if (url === '/api/identity/v1/admin/people/u-2/leave' && method === 'POST') return Response.json({ ...sam, state: 'left', left: { at: '2026-11-05T09:00:00Z', by: 'u-1', handOverTo: 'u-1' } });
+      return undefined;
+    });
+    const el = await open('/people');
+    await openRow(el, 'Sam Okafor');
+    const live = document.querySelector('[data-live]')!;
+    await press(button('They’re leaving'));
+    await press(live.querySelector('[data-armed]'));
+    expect(sent.find((c) => c.url.endsWith('/u-2/leave'))!.body).toEqual({ handOverTo: 'u-1' });
+  });
+
   it('invites by email when email works, says until when, and sends a new invite from their details', async () => {
     const invitee = { ...sam, id: 'u-3', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', enabled: true, invited: true, state: 'invited', invite: { method: 'email', expired: false, count: 1 } };
     const { sent } = gateway((method, url) => {

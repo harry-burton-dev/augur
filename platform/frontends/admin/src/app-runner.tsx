@@ -23,6 +23,8 @@ const signInAgain = (query: string) => {
 export function useInstalls(api: AdminApi, then: () => void) {
   const [installs, setInstalls] = useState<AppInstalls>();
   const [error, setError] = useState('');
+  /** Counts failed reads, so the wait for the next one starts again after one. */
+  const [failedReads, setFailedReads] = useState(0);
   const [checking, setChecking] = useState(false);
   const [confirmInstall, setConfirmInstall] = useState<InstallAsk>();
   const [confirmRemove, setConfirmRemove] = useState<InstalledApp>();
@@ -66,6 +68,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
       if (shown) resume(shown);
     } catch (err) {
       setError((err as Error).message);
+      setFailedReads((n) => n + 1);
     }
   }, [api, resume]);
   useEffect(() => void load(), [load]);
@@ -75,7 +78,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
     if (!busy) return;
     const timer = setTimeout(() => void load().then(then), JOB_REFRESH_MS);
     return () => clearTimeout(timer);
-  }, [busy, installs, load, then]);
+  }, [busy, installs, failedReads, load, then]);
 
   const check = async () => {
     setChecking(true);
