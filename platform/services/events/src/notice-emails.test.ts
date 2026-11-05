@@ -95,7 +95,7 @@ describe.runIf(DATABASE_URL)('emailing notices', () => {
       ].map((s) => [s.person, s]),
     );
     const { mailer, sent } = fakeMailer();
-    const send = () => sendDueEmails({ outbox: db.store.emails, settings: async () => people, mailer, platformUrl: 'https://augur.example.org', now: () => new Date('2026-11-05T12:00:00Z') });
+    const send = () => sendDueEmails({ outbox: db.store.emails, settings: async () => people, mailer, platformUrl: 'https://augur.example.org', now: () => new Date(Date.now() + 60_000) });
     expect(await send()).toEqual({ sent: 2, later: 0, skipped: 6, failed: 0 });
     expect(sent.map((s) => s.to)).toEqual(expect.arrayContaining(['u-1@example.org', 'u-6@example.org']));
     expect(sent.find((s) => s.to === 'u-1@example.org')).toMatchObject({ subject: 'Review the budget paper', lang: 'fr', url: expect.stringMatching(/^https:\/\/augur\.example\.org\/\?notice=/) });
