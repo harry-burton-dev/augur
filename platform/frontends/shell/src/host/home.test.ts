@@ -72,6 +72,15 @@ describe('glance cards', () => {
     expect(cardsFor(manifest, me, ['a5', 'home', 'a2']).map((c) => c.app)).toEqual(['a5', 'a2', 'a1', 'a3', 'a4', 'a6']);
   });
 
+  it('puts apps for the work before platform apps, among those not opened lately', () => {
+    const explorer = app('auspex', { category: 'platform', surfaces: [card('personal')] });
+    const artifacts = app('folio', { category: 'pillar', surfaces: [card('personal')] });
+    const plain = app('claims', { surfaces: [card('personal')] });
+    expect(cardsFor([explorer, artifacts, plain], me, []).map((c) => c.app)).toEqual(['folio', 'claims', 'auspex']);
+    // Opened lately comes first, whatever its kind.
+    expect(cardsFor([explorer, artifacts, plain], me, ['auspex']).map((c) => c.app)).toEqual(['auspex', 'folio', 'claims']);
+  });
+
   it('keeps the card of an app it can’t open, saying why and who can change it', () => {
     const manifest = [app('claims', { surfaces: [card('personal')] }), app('old', { sdk: '^0.1.0', surfaces: [card('personal')] })];
     const [claims, old] = cardsFor(manifest, me, []);
