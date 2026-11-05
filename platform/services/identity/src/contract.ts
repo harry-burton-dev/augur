@@ -5,11 +5,12 @@
  */
 import swagger from '@fastify/swagger';
 import type { FastifyInstance } from 'fastify';
+import { ME_SCHEMAS } from './me.ts';
 import { SCHEMAS } from './schemas.ts';
 
 export const info = {
   title: 'Identity',
-  version: '1.14.0',
+  version: '1.15.0',
   description: [
     "Who people are. Reached through the gateway, which verifies the caller's",
     'sign-in token and passes the caller on in x-user-* headers.',
@@ -31,6 +32,6 @@ export const describeApi = async (app: FastifyInstance<any, any, any, any, any>,
     openapi: { openapi: '3.1.0', info, servers: [{ url: prefix }] },
     refResolver: { buildLocalReference: (json, _base, _fragment, i) => String(json.$id ?? `def-${i}`) },
   });
-  for (const schema of SCHEMAS) app.addSchema(schema);
+  for (const schema of [...SCHEMAS, ...ME_SCHEMAS]) app.addSchema(schema);
   app.setSerializerCompiler(() => (data) => JSON.stringify(data));
 };
