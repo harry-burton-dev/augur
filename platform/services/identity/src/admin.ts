@@ -3,8 +3,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
-import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson } from './directory.ts';
+import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type Person as DirectoryPerson } from './directory.ts';
 import { Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, ref, refused, Role, TeamLevels } from './schemas.ts';
+import { withLifecycle, type LifecycleStore } from './lifecycle.ts';
 import type { PreferenceStore } from './store.ts';
 import { DEFAULT_LEVELS, MAX_TEAM_DEPTH, type WorkspaceStore } from './workspaces.ts';
 
@@ -35,6 +36,8 @@ interface AdminOptions {
   audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
   /** Where requests to leave are kept: the leaver flow closes them. */
   store?: PreferenceStore;
+  /** What identity keeps about each account's life: last sign-in, why it's off, that they left. */
+  lifecycle?: LifecycleStore;
 }
 
 /** The longest note an admin can leave on a leaver, for whoever reads Activity later. */
@@ -47,7 +50,7 @@ const LEAVER_NOTE = 500;
  * can give or take away that role, or change a deployment admin's sign-in.
  */
 export const adminRoutes =
-  ({ directory, workspaces, audit, store }: AdminOptions) =>
+  ({ directory, workspaces, audit, store, lifecycle }: AdminOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     app.addHook('onRequest', async (req, reply) => {
@@ -96,6 +99,14 @@ export const adminRoutes =
       for (const id of before.filter((d) => !after.includes(d))) await record(req, 'department.member-removed', id, { person });
     };
 
+    /** People as admins see them: with their state and what is kept about their account's life. */
+    const decorate = async <P extends DirectoryPerson>(people: P[]) => {
+      const kept = lifecycle ? await lifecycle.get(people.length === 1 ? [people[0]!.id] : undefined) : new Map();
+      return people.map((p) => withLifecycle(p, kept.get(p.id)));
+    };
+    const one = async <P extends DirectoryPerson>(p: P) => (await decorate([p]))[0]!;
+    const now = () => new Date().toISOString();
+
     // What every /admin path can answer: the hooks above send these before a route runs.
     const guarded = {
       401: refused('No signed-in caller'),
@@ -106,7 +117,7 @@ export const adminRoutes =
 
     app.get('/roles', { schema: { summary: 'The roles an admin can give people', response: { 200: Type.Array(ref(Role), { description: 'Roles' }), ...guarded } } }, async () => dir().roles());
 
-    app.get('/people', { schema: { summary: 'Everyone in the directory', response: { 200: Type.Array(ref(Person), { description: 'People' }), ...guarded } } }, async () => dir().people());
+    app.get('/people', { schema: { summary: 'Everyone in the directory', response: { 200: Type.Array(ref(Person), { description: 'People' }), ...guarded } } }, async () => decorate(await dir().people()));
 
     app.get(
       '/people/:id',
@@ -117,7 +128,7 @@ export const adminRoutes =
           response: { 200: { ...ref(Person), description: 'The person' }, ...guarded, 404: refused('No such person') },
         },
       },
-      async (req) => dir().person(req.params.id),
+      async (req) => one(await dir().person(req.params.id)),
     );
 
     app.post(
@@ -153,7 +164,7 @@ export const adminRoutes =
         const created = await dir().createPerson(person, password);
         await record(req, 'person.added', created.id, { username: created.username, roles: created.roles, departments: created.departments });
         await joined(req, created.id, [], created.departments);
-        return reply.code(201).send({ person: created, temporaryPassword: password });
+        return reply.code(201).send({ person: await one(created), temporaryPassword: password });
       },
     );
 
@@ -174,7 +185,7 @@ export const adminRoutes =
             ...guarded,
             403: deploymentAdmins,
             404: refused('No such person'),
-            409: refused('The change would lock the caller out, or the email is taken'),
+            409: refused('The change would lock the caller out, the email is taken, or they have left and the change would turn their sign-in back on'),
           },
         },
       },
@@ -188,12 +199,16 @@ export const adminRoutes =
           return reply.code(409).send({ error: 'conflict', message: 'You can’t take away your own admin role. Ask another admin.' });
         }
         const before = await dir().person(req.params.id);
+        if (changes.enabled === true && !before.enabled && (await one(before)).state === 'left') {
+          return reply.code(409).send({ error: 'conflict', message: 'They’ve left, and a leaver doesn’t come back. Add them again if they return.' });
+        }
         const held = before.roles.includes(DEPLOYMENT_ADMIN);
         const touchesRole = changes.roles !== undefined && changes.roles.includes(DEPLOYMENT_ADMIN) !== held;
         const touchesSignIn = held && ((changes.enabled !== undefined && changes.enabled !== before.enabled) || (changes.email !== undefined && changes.email !== before.email));
         if ((touchesRole || touchesSignIn) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
         const after = await dir().updatePerson(req.params.id, changes);
         if (changes.enabled !== undefined && changes.enabled !== before.enabled) {
+          await (after.enabled ? lifecycle?.enabled(after.id) : lifecycle?.disabled(after.id, 'admin', now()));
           await record(req, after.enabled ? 'person.enabled' : 'person.disabled', after.id, { username: after.username });
         }
         // Turning someone off signs them out everywhere now (ADR 0040). Asking again ends them again,
@@ -206,7 +221,7 @@ export const adminRoutes =
           await record(req, 'person.updated', after.id, { username: after.username, ...Object.fromEntries(changed.map((k) => [k, { from: before[k], to: after[k] }])) });
         }
         if (changed.includes('departments')) await joined(req, after.id, before.departments, after.departments);
-        return after;
+        return one(after);
       },
     );
 
@@ -253,7 +268,7 @@ export const adminRoutes =
             ...guarded,
             403: deploymentAdmins,
             404: refused('No such person'),
-            409: refused('The caller is the leaver'),
+            409: refused('The caller is the leaver, or they have already left'),
           },
         },
       },
@@ -263,6 +278,7 @@ export const adminRoutes =
         if (id === me.id) return reply.code(409).send({ error: 'conflict', message: 'You can’t run the leaver flow on yourself. Ask another admin.' });
         const before = await dir().person(id);
         if (before.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
+        if ((await one(before)).state === 'left') return reply.code(409).send({ error: 'conflict', message: 'They’ve already left.' });
         const { handOverTo } = req.body;
         const note = req.body.note?.trim() || undefined;
         if (handOverTo !== undefined) {
@@ -277,11 +293,15 @@ export const adminRoutes =
           if (!heir.enabled) return reply.code(400).send({ error: 'bad_request', message: `${heir.firstName} ${heir.lastName}’s sign-in is off, so they can’t take this on. Pick someone who can sign in.` });
         }
         const after = before.enabled ? await dir().updatePerson(id, { enabled: false }) : before;
-        if (before.enabled) await record(req, 'person.disabled', id, { username: after.username });
+        if (before.enabled) {
+          await lifecycle?.disabled(id, 'leaver', now());
+          await record(req, 'person.disabled', id, { username: after.username });
+        }
         await dir().endSessions(id);
         const asked = store ? await store.withdrawLeave(id) : false;
+        await lifecycle?.left(id, { at: now(), by: me.id, ...(handOverTo ? { handOverTo } : {}) });
         await record(req, 'person.left', id, { username: after.username, asked, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) });
-        return after;
+        return one(after);
       },
     );
 

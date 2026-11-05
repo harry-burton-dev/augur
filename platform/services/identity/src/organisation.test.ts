@@ -1,21 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
 import { callerHeaders, type NewAuditEntry } from '@augur/service-kit';
-import { buildApp } from './app.ts';
-import { MemoryWorkspaceStore } from './workspaces.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
+
+const db = identityDb({ orgName: 'Seeded Org' });
 
 const admin = { id: 'u-admin', name: 'Ada Admin', departments: [], roles: ['admin'] };
 const person = { id: 'u-1', name: 'Alex Rivera', departments: [], roles: [] };
 
 const setup = async () => {
   const audit = vi.fn<(e: NewAuditEntry) => Promise<void>>(async () => undefined);
-  const workspaces = new MemoryWorkspaceStore({ orgName: 'Seeded Org' });
-  const app = await buildApp({ audit, workspaces });
+  const workspaces = db.workspaces;
+  const app = await db.app({ audit, workspaces });
   const read = (who = person) => app.inject({ method: 'GET', url: '/v1/organisation', headers: callerHeaders(who) });
   const change = (body: unknown, who = admin) => app.inject({ method: 'PATCH', url: '/v1/admin/organisation', headers: callerHeaders(who), payload: body as object });
   return { app, audit, workspaces, read, change };
 };
 
-describe('organisation settings', () => {
+describe.runIf(DATABASE_URL)('organisation settings', () => {
   it('starts from the seeded name, UTC, and the name as the sender', async () => {
     const { read } = await setup();
     const res = await read();

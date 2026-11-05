@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import { INBOX_CHANNEL, inboxMigration, MemoryInboxStore, PgInboxStore, type InboxStore } from './inbox.ts';
+import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
 import { PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
@@ -99,10 +99,6 @@ export const redactDetail = (detail: Record<string, unknown> | undefined): Recor
   return changed ? out : undefined;
 };
 
-/** Whether an entry is by, about or names this person. */
-const concerns = (e: AuditEntry, person: string) => e.actor.id === person || e.target === person || (e.detail as { person?: unknown } | undefined)?.person === person;
-const isSignIn = (e: AuditEntry) => (e.detail as { kind?: unknown } | undefined)?.kind === 'sign-in';
-
 export type Listener = (n: Notification) => void;
 /** Hears each domain event as it is published, on any instance: a live hint, not the record (read that with `readEvents`). */
 export type EventListener = (e: DomainEvent) => void;
@@ -187,157 +183,6 @@ export interface EventStore {
    * them, and deletes their notifications. Their id stays, now pseudonymous.
    */
   redactPerson(person: string): Promise<Redacted>;
-}
-
-const fromInput = (n: NewNotification, recipient: string, id: string, createdAt: string, floor?: EventFloor): Notification => ({
-  id,
-  recipient,
-  app: n.app,
-  level: n.level,
-  title: n.title,
-  ...(n.detail ? { detail: n.detail } : {}),
-  ...(n.link ? { link: n.link } : {}),
-  ...(n.actions?.length ? { actions: n.actions } : {}),
-  ...(n.key ? { key: n.key } : {}),
-  ...(n.kind ? { kind: n.kind } : {}),
-  ...(n.urgent ? { urgent: true } : {}),
-  createdAt,
-  ...(floor ? { workspace: floor } : {}),
-});
-
-const under = (floor: EventFloor | undefined, workspace: string) => !!floor?.path.includes(workspace);
-
-/** For tests, and for running locally without Postgres. Forgets everything on restart. */
-export class MemoryEventStore implements EventStore {
-  readonly inbox = new MemoryInboxStore();
-  private notifications: Notification[] = [];
-  private entries: AuditEntry[] = [];
-  private emitter = new EventEmitter().setMaxListeners(0);
-  private seq = 0;
-  private teams = new Set<string>();
-
-  async addNotifications(n: NewNotification, floor?: EventFloor) {
-    const now = new Date().toISOString();
-    const told = (r: string) => n.key !== undefined && this.notifications.some((x) => x.recipient === r && x.app === n.app && x.key === n.key);
-    const added = n.recipients.filter((r) => !told(r)).map((r) => fromInput(n, r, String(++this.seq), now, floor));
-    this.notifications.push(...added);
-    for (const a of added) this.emitter.emit('notification', a);
-    return added;
-  }
-
-  async unread(recipient: string, limit: number) {
-    return this.notifications
-      .filter((n) => n.recipient === recipient && !n.readAt)
-      .reverse()
-      .slice(0, limit);
-  }
-
-  async notificationsOf(recipient: string, limit: number) {
-    return this.notifications
-      .filter((n) => n.recipient === recipient)
-      .reverse()
-      .slice(0, limit);
-  }
-
-  async setRead(recipient: string, id: string, read: boolean) {
-    const n = this.notifications.find((x) => x.id === id && x.recipient === recipient);
-    if (!n) return false;
-    if (read) n.readAt ??= new Date().toISOString();
-    else delete n.readAt;
-    return true;
-  }
-
-  async appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string) {
-    const e = { ...entry, id: String(++this.seq), at: new Date().toISOString(), ...(floor ? { workspace: floor } : {}), ...(recordedBy ? { recordedBy } : {}) };
-    this.entries.push(e);
-    return e;
-  }
-
-  async audit({ app, actor, since, until, before, workspace, target, person, kind, limit }: AuditFilter) {
-    const cursor = before === undefined ? this.entries.length : this.entries.findIndex((e) => e.id === before);
-    return this.entries
-      .slice(0, cursor < 0 ? 0 : cursor)
-      .filter(
-        (e) =>
-          (!app || e.app === app) &&
-          (!actor || e.actor.id === actor) &&
-          (!since || e.at >= since) &&
-          (!until || e.at < until) &&
-          (!workspace || under(e.workspace, workspace)) &&
-          (!target || e.target === target) &&
-          (!person || concerns(e, person)) &&
-          (!kind || (kind === 'sign-in') === isSignIn(e)),
-      )
-      .reverse()
-      .slice(0, limit);
-  }
-
-  async pruneAudit(keepDays: number) {
-    const cutoff = new Date(Date.now() - keepDays * 86_400_000).toISOString();
-    const before = this.entries.length;
-    this.entries = this.entries.filter((e) => e.at >= cutoff);
-    return before - this.entries.length;
-  }
-
-  async redactPerson(person: string) {
-    let entries = 0;
-    this.entries = this.entries.map((e) => {
-      if (!concerns(e, person)) return e;
-      const detail = redactDetail(e.detail as Record<string, unknown> | undefined);
-      if (!detail) return e;
-      entries++;
-      return { ...e, detail };
-    });
-    const before = this.notifications.length;
-    this.notifications = this.notifications.filter((n) => n.recipient !== person);
-    return { entries, notifications: before - this.notifications.length };
-  }
-
-  subscribe(listener: Listener) {
-    this.emitter.on('notification', listener);
-    return () => void this.emitter.off('notification', listener);
-  }
-
-  async teamNotices(workspace: string) {
-    return this.teams.has(workspace);
-  }
-
-  async setTeamNotices(workspace: string, on: boolean) {
-    if (on) this.teams.add(workspace);
-    else this.teams.delete(workspace);
-  }
-
-  onEvent(listener: EventListener) {
-    this.emitter.on('domain-event', listener);
-    return () => void this.emitter.off('domain-event', listener);
-  }
-
-  private domainEvents: DomainEvent[] = [];
-  private eventSeq = 0;
-
-  async publish(publisher: string, events: NewDomainEvent[]) {
-    let added = 0;
-    const at = new Date().toISOString();
-    for (const e of events) {
-      if (this.domainEvents.some((d) => d.publisher === publisher && d.id === e.id)) continue;
-      const event: DomainEvent = { seq: String(++this.eventSeq), topic: e.topic, id: e.id, publisher, at, ...(e.floor ? { workspace: e.floor } : {}), payload: e.payload };
-      this.domainEvents.push(event);
-      this.emitter.emit('domain-event', event);
-      added++;
-    }
-    return { added, repeated: events.length - added };
-  }
-
-  async readEvents({ topics, after, limit }: EventsQuery) {
-    return this.domainEvents.filter((e) => Number(e.seq) > Number(after ?? 0) && topicMatches(e.topic, topics)).slice(0, limit);
-  }
-
-  async pruneEvents(keepDays: number) {
-    const cutoff = new Date(Date.now() - keepDays * 86_400_000).toISOString();
-    const before = this.domainEvents.length;
-    this.domainEvents = this.domainEvents.filter((e) => e.at >= cutoff);
-    return before - this.domainEvents.length;
-  }
 }
 
 /** Schema changes, applied in order and recorded so each runs once. The events service owns the `events` schema. */

@@ -32,7 +32,7 @@ import {
 import { describeApi } from './contract.ts';
 import { inboxRoutes, releaseLeaver, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
-import { MemoryEventStore, topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
+import { topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** Filters the audit log and its download share, beyond time and floor. */
 const AUDIT_FILTERS = {
@@ -69,7 +69,8 @@ export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
 
 export interface EventsOptions {
-  store?: EventStore;
+  /** Where notifications, Activity, domain events and the inbox are kept: Postgres. */
+  store: EventStore;
   /** Checks apps' and platform services' own sign-in tokens: only services send notifications and write the audit log. */
   verifyService?: ServiceVerifier;
   /** What an app is granted on a floor; an app's calls are checked against it. */
@@ -161,7 +162,7 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
+export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, callers }: EventsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);

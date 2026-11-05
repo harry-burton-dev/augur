@@ -1286,10 +1286,16 @@ export const registryInboxKinds: (input: GrantsOptions) => InboxKindsLookup;
 export const registryNotificationKinds: (input: GrantsOptions) => InboxKindsLookup;
 
 // @public
+export const registryRequiredRole: (input: GrantsOptions) => RequiredRoleLookup;
+
+// @public
 export const REMOVED = "[removed]";
 
 // @public
 export const REQUEST_ID_HEADER = "x-request-id";
+
+// @public
+export type RequiredRoleLookup = (app: string) => Promise<string | null | undefined>;
 
 // @public
 export const RESERVED_APP_ID_PREFIXES: Readonly<Record<string, string>>;
