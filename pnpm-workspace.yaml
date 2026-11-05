@@ -36,10 +36,11 @@ catalog:
   yaml: "^2.9.1"
 onlyBuiltDependencies:
   - esbuild
-# API Extractor pins minimatch to a release with a known vulnerability; take the patched release the rest
-# of the tree already uses. Drop this once API Extractor moves past it. fast-uri comes in through Fastify and
+# API Extractor and ESLint ask for minimatch releases with a known vulnerability; take the patched release
+# the rest of the tree already uses. Drop these once they move past it. fast-uri comes in through Fastify and
 # Ajv, whose ranges haven't reached its patched releases. Drop these once they do.
 overrides:
   "@microsoft/api-extractor>minimatch": 11.0.4
+  "minimatch@10": 11.0.4
   "fast-uri@3": 3.1.9
   "fast-uri@4": 4.2.3
