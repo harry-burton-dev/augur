@@ -45,7 +45,7 @@ Add a changeset to the pull request (`pnpm changeset`) saying what changed in `@
 
 ## 4. Servers take it
 
-Each server reads the app releases every 15 minutes. What happens next is up to that server's choice for the app, under Admin → Apps:
+Each server reads the app releases every 15 minutes. What happens next is up to that server's choice for the app, in its settings in the Upgrade Centre:
 
 - **Automatic** (the default) installs a patch or minor version straight away when it asks for nothing new: no new scopes, storage, kinds of floor or bigger uploads, an SDK range the server's AUGUR opens, and the same signer.
 - Anything else (a major version, or a version that asks for more) waits under **Needs you**, with the reason, until an admin installs it.
@@ -53,7 +53,7 @@ Each server reads the app releases every 15 minutes. What happens next is up to 
 
 An install starts the new version beside the old, checks `/healthz`, then switches over. A version that fails its checks is removed, and the old one keeps running. Every step is in Activity ([upgrade.md](upgrade.md#the-app-runner)).
 
-To go back, install an older version from Admin → Apps, or hold the shell at an earlier manifest ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).
+To go back, use **Go back** on the app's page in the Upgrade Centre, or hold the shell at an earlier manifest ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).
 
 ## An app in its own repository
 

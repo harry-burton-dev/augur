@@ -14,10 +14,10 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0006](0006-keycloak-and-identity-service.md) | Keycloak signs people in; the identity service owns people, teams and floors | Accepted | 2026-10-18 |
 | [0007](0007-floors.md) | Workspaces are floors: you, nested teams, and one organisation | Accepted | 2026-10-19 |
 | [0008](0008-per-app-identity-signed-caller.md) | Apps have their own identity, and services trust only the gateway's signed caller | Accepted | 2026-10-23 |
-| [0009](0009-object-storage-garage.md) | Files go in S3-compatible object storage, run with Garage | Accepted | 2026-10-17 |
+| [0009](0009-object-storage-garage.md) | Files go in S3-compatible object storage, run with Garage | Accepted; amendment of 5 Nov Proposed | 2026-10-17 |
 | [0010](0010-docker-compose-deployments.md) | Deployments run on Docker Compose; no Kubernetes for now | Accepted | 2026-11-01 |
 | [0011](0011-trunk-based-main-and-tags.md) | One trunk branch and release tags, instead of environment branches | Accepted | 2026-11-01 |
-| [0012](0012-apps-in-own-repositories.md) | Every app lives in its own repository, and pillar apps are default-installed apps | Accepted | 2026-11-01 |
+| [0012](0012-apps-in-own-repositories.md) | Every app lives in its own repository, and pillar apps are default-installed apps | Accepted; amendment of 5 Nov Proposed | 2026-11-01 |
 | [0013](0013-versions-and-releases.md) | One AUGUR version for deployments, and GitHub releases only for AUGUR and apps | Accepted | 2026-11-01 |
 | [0014](0014-agent-runtime.md) | Agents are apps, run by a durable runs service on DBOS | Accepted in part (jobs engine); agent runtime Proposed | 2026-11-03 |
 | [0015](0015-react-kits-tailwind.md) | Frontends are React, with a shell kit and an app kit on one common base, styled with Tailwind | Accepted | 2026-11-01 |
@@ -32,12 +32,12 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0024](0024-apps-are-trusted-code.md) | Apps in the shell are trusted code until outside apps run sandboxed | Accepted | 2026-11-01 |
 | [0025](0025-apps-own-entity-bindings.md) | Apps keep their own links to entities and publish them as events | Accepted | 2026-11-01 |
 | [0026](0026-inbox-separate-from-notifications.md) | The Inbox holds work that waits on someone, apart from notifications | Accepted | 2026-11-01 |
-| [0027](0027-runs-is-the-jobs-engine.md) | The runs service also runs ordinary background jobs | Accepted | 2026-11-01 |
+| [0027](0027-runs-is-the-jobs-engine.md) | The runs service also runs ordinary background jobs | Accepted; amendment of 5 Nov Proposed | 2026-11-01 |
 | [0028](0028-discussion-starts-in-intent.md) | Discussion starts inside Intent behind a ref-keyed API | Accepted | 2026-11-01 |
 | [0029](0029-reserve-focus-and-marking.md) | The SDK reserves a working context and a protective marking now | Accepted | 2026-11-01 |
 | [0030](0030-upgrade-centre-platform-frontend.md) | The Upgrade Centre is its own platform frontend, released with AUGUR | Accepted | 2026-11-01 |
 | [0031](0031-mirror-feeds-are-the-organisations-own.md) | A mirror's feed is the organisation's own, and carries the publisher's halt marks | Accepted | 2026-11-01 |
-| [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Accepted | 2026-11-03 |
+| [0032](0032-platform-apps-and-pillar-apps.md) | Apps that ship with AUGUR are platform apps or pillar apps | Accepted; amendment of 5 Nov Proposed | 2026-11-03 |
 | [0033](0033-renovate-for-dependency-updates.md) | Renovate proposes dependency updates, weekly and grouped, and never merges them | Accepted | 2026-11-01 |
 | [0034](0034-opentelemetry-in-the-service-kit.md) | Services send OpenTelemetry through the service kit, off until a collector is named | Accepted | 2026-11-01 |
 | [0035](0035-email-through-the-organisations-relay.md) | AUGUR sends email through the organisation's own SMTP relay | Accepted | 2026-11-01 |

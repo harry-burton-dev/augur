@@ -4,7 +4,7 @@ A card for the admin who wakes to an upgrade that went back, didn't install, or 
 
 **Don't work out why it broke.** Check four things, top to bottom: the first one that fails tells you what to do. Check all four again after anything you do. **Done when** all four hold, or you've made things safe until morning and written down what you saw and did.
 
-*Written for AUGUR 0.18. Tested 5 Nov 2026 against a scripted night: three walk-throughs, not a live tabletop (design-lab run `2026-11-05-the-quick-reference-handbook`). A pull request that changes the updater, the backups or the restore changes this card too.*
+*Written for AUGUR 0.18. Tested 5 Nov 2026 against a scripted night: three walk-throughs, not a live tabletop (Design lab run `2026-11-05-the-quick-reference-handbook`, now kept outside this repository). A pull request that changes the updater, the backups or the restore changes this card too.*
 
 > **BEFORE YOU READ ON: touch nothing.** AUGUR may already have gone back by itself. Don't restart, retry the upgrade or take a backup "to be safe": a new backup becomes the newest, and the newest is no longer the way back. Write down the backup file the notice or Upgrade Centre → History names: `platform-______________Z.sql.gz`. Its time is UTC.
 
