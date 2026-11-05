@@ -5,6 +5,7 @@ import Type from 'typebox';
 import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson } from './directory.ts';
 import { Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, ref, refused, Role, TeamLevels } from './schemas.ts';
+import type { PreferenceStore } from './store.ts';
 import { DEFAULT_LEVELS, MAX_TEAM_DEPTH, type WorkspaceStore } from './workspaces.ts';
 
 /** Easy to read out or type: no 0/O, 1/l/I. */
@@ -32,7 +33,12 @@ interface AdminOptions {
   /** Where the names of the levels of team are kept. */
   workspaces?: WorkspaceStore;
   audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
+  /** Where requests to leave are kept: the leaver flow closes them. */
+  store?: PreferenceStore;
 }
+
+/** The longest note an admin can leave on a leaver, for whoever reads Activity later. */
+const LEAVER_NOTE = 500;
 
 /**
  * People, departments and roles, for admins only. Every change is audited
@@ -41,7 +47,7 @@ interface AdminOptions {
  * can give or take away that role, or change a deployment admin's sign-in.
  */
 export const adminRoutes =
-  ({ directory, workspaces, audit }: AdminOptions) =>
+  ({ directory, workspaces, audit, store }: AdminOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     app.addHook('onRequest', async (req, reply) => {
@@ -190,6 +196,9 @@ export const adminRoutes =
         if (changes.enabled !== undefined && changes.enabled !== before.enabled) {
           await record(req, after.enabled ? 'person.enabled' : 'person.disabled', after.id, { username: after.username });
         }
+        // Turning someone off signs them out everywhere now (ADR 0040). Asking again ends them again,
+        // so an admin can retry if Keycloak couldn't be reached the first time.
+        if (changes.enabled === false) await dir().endSessions(after.id);
         const changed = (['firstName', 'lastName', 'email', 'roles', 'departments'] as const).filter(
           (k) => changes[k] !== undefined && JSON.stringify(changes[k]) !== JSON.stringify(before[k]),
         );
@@ -197,6 +206,81 @@ export const adminRoutes =
           await record(req, 'person.updated', after.id, { username: after.username, ...Object.fromEntries(changed.map((k) => [k, { from: before[k], to: after[k] }])) });
         }
         if (changed.includes('departments')) await joined(req, after.id, before.departments, after.departments);
+        return after;
+      },
+    );
+
+    app.get(
+      '/leave-requests',
+      {
+        schema: {
+          summary: 'Everyone who has asked to leave, oldest first',
+          description: 'People ask in their account (POST /me/leave); the leaver flow closes the request.',
+          response: {
+            200: Type.Array(
+              Type.Object({ person: Type.String(), requestedAt: Type.String({ format: 'date-time' }), note: Type.Optional(Type.String()) }),
+              { description: 'Open requests to leave' },
+            ),
+            ...guarded,
+          },
+        },
+      },
+      async () => (store ? store.leaveRequests() : []),
+    );
+
+    app.post(
+      '/people/:id/leave',
+      {
+        schema: {
+          summary: 'Someone leaves the organisation: the leaver flow',
+          description: [
+            'Turns off their sign-in, signs them out everywhere (sessions and offline tokens) and records',
+            '`person.left`, which followers hear as `platform.person.left` so apps hand on or archive what the',
+            'person owns, to `handOverTo` when it is given. Their teams, roles and data stay as they were until',
+            "the deployment's retention period ends. Closes their request to leave, if they made one.",
+          ].join(' '),
+          params: IdParams,
+          body: Type.Object(
+            {
+              handOverTo: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: 'Who takes on what they own: someone whose sign-in is on' })),
+              note: Type.Optional(Type.String({ maxLength: LEAVER_NOTE, description: 'Why, or what was agreed, for Activity' })),
+            },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: { ...ref(Person), description: 'The person, now turned off' },
+            400: refused('The person to hand over to is the leaver, is turned off, or isn’t in the directory'),
+            ...guarded,
+            403: deploymentAdmins,
+            404: refused('No such person'),
+            409: refused('The caller is the leaver'),
+          },
+        },
+      },
+      async (req, reply) => {
+        const me = callerFromHeaders(req.headers)!;
+        const id = req.params.id;
+        if (id === me.id) return reply.code(409).send({ error: 'conflict', message: 'You can’t run the leaver flow on yourself. Ask another admin.' });
+        const before = await dir().person(id);
+        if (before.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
+        const { handOverTo } = req.body;
+        const note = req.body.note?.trim() || undefined;
+        if (handOverTo !== undefined) {
+          if (handOverTo === id) return reply.code(400).send({ error: 'bad_request', message: 'Hand their work to someone else, not to the person leaving.' });
+          const heir = await dir()
+            .person(handOverTo)
+            .catch((err: Error) => {
+              if (err instanceof DirectoryError && err.status === 404) return undefined;
+              throw err;
+            });
+          if (!heir) return reply.code(400).send({ error: 'bad_request', message: 'The person to hand over to isn’t in the directory.' });
+          if (!heir.enabled) return reply.code(400).send({ error: 'bad_request', message: `${heir.firstName} ${heir.lastName}’s sign-in is off, so they can’t take this on. Pick someone who can sign in.` });
+        }
+        const after = before.enabled ? await dir().updatePerson(id, { enabled: false }) : before;
+        if (before.enabled) await record(req, 'person.disabled', id, { username: after.username });
+        await dir().endSessions(id);
+        const asked = store ? await store.withdrawLeave(id) : false;
+        await record(req, 'person.left', id, { username: after.username, asked, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) });
         return after;
       },
     );
