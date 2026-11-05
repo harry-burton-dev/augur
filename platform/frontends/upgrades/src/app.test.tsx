@@ -18,11 +18,14 @@ const rootFor = (el: Element) => {
   roots.push(root);
   return root;
 };
-afterEach(async () => {
+/** Unmounts every root, while its nodes are still in the page, then empties the page. */
+const clearPage = async () => {
   await act(async () => {
     for (const root of roots.splice(0)) root.unmount();
   });
-});
+  document.body.innerHTML = '';
+};
+afterEach(clearPage);
 
 const manifest = [{ id: 'upgrades', name: 'Upgrade Centre', route: '/upgrades', entry: '', version: '0.0.0', sdk: '^1.10.0', icon: 'download' }];
 /** The button with these words, and what it says when it can't be pressed. */
@@ -136,8 +139,8 @@ describe('needs you', () => {
 });
 
 describe('Upgrade Centre', () => {
-  afterEach(() => {
-    document.body.innerHTML = '';
+  afterEach(async () => {
+    await clearPage();
     window.history.replaceState(null, '', '/');
   });
 
@@ -385,8 +388,8 @@ describe('changing a unit’s settings', () => {
 });
 
 describe('upgrading from the Upgrade Centre', () => {
-  afterEach(() => {
-    document.body.innerHTML = '';
+  afterEach(async () => {
+    await clearPage();
     window.history.replaceState(null, '', '/');
   });
 
@@ -460,8 +463,8 @@ describe('upgrading from the Upgrade Centre', () => {
 });
 
 describe('installing a halted release for a test', () => {
-  afterEach(() => {
-    document.body.innerHTML = '';
+  afterEach(async () => {
+    await clearPage();
     window.history.replaceState(null, '', '/');
   });
 
@@ -559,7 +562,7 @@ describe('installing a halted release for a test', () => {
     } finally {
       Object.defineProperty(window, 'location', { configurable: true, value: real });
     }
-    document.body.innerHTML = '';
+    await clearPage();
     await open(() => undefined, current, '?halted=0.13.2');
     const again = document.querySelector('[role="dialog"]') as HTMLElement;
     expect(again.textContent).toContain('Install AUGUR 0.13.2 for a test?');
