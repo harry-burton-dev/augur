@@ -236,6 +236,47 @@
       "additionalProperties": false,
       "description": "The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)"
     },
+    "notifications": {
+      "type": "object",
+      "required": [
+        "kinds"
+      ],
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "label"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9-]{0,39}$",
+                "description": "How the app's service names it: \"comment\""
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "description": "What Account shows for it: \"Comments on your documents\""
+              },
+              "detail": {
+                "type": "string",
+                "maxLength": 120,
+                "description": "A sentence on when it is sent"
+              }
+            },
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 10
+        }
+      },
+      "additionalProperties": false,
+      "description": "The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)"
+    },
     "scopes": {
       "type": "array",
       "items": {

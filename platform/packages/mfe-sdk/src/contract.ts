@@ -114,6 +114,12 @@ export interface AppManifestEntry {
    */
   inbox?: { kinds: InboxKind[] };
   /**
+   * The kinds of notification the app sends (SDK 1.13, ADR 0036), so each person can choose
+   * in Account which kinds reach them out loud and which wait quietly. A notification the
+   * app's service sends with a kind not declared here is refused.
+   */
+  notifications?: { kinds: NotificationKind[] };
+  /**
    * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
    * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
    * apps that ship with AUGUR or come from its signed app feed can be either;
@@ -248,10 +254,22 @@ export interface Workspace extends WorkspaceRef {
   role: 'member' | 'lead';
 }
 
+/** A kind of notification an app sends, declared in its manifest's `notifications.kinds`, so the words are the app's. */
+export interface NotificationKind {
+  /** How the app names it: "comment". */
+  id: string;
+  /** What Account shows for it: "Comments on your documents". */
+  label: string;
+  /** A sentence on when it is sent. */
+  detail?: string;
+}
+
 /** What an app tells the person through the shell's stream. */
 export interface NotifyMessage {
   title: string;
   body?: string;
+  /** One of the app’s `notifications.kinds` ids (SDK 1.13): a kind the person made quiet lands without a sound and stays off Home. */
+  kind?: string;
   /** The person has to do something: it's marked, counted in the band, and shown on Home. */
   needsYou?: boolean;
   /** Up to two things to do right from the stream, such as "Approve" and "Open" (SDK 1.2). Extras are dropped. */
