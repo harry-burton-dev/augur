@@ -1,5 +1,28 @@
 # @augur/service-kit
 
+## 0.14.0
+
+### Minor Changes
+
+- 1f83a5f: Activity can be filtered by target, person and kind (sign-ins or changes), downloaded as CSV or JSON lines (admins, at most 366 days at a time), keeps entries for the organisation's retention period (365 days by default, pruned nightly), and identity can remove a deleted person's personal values from it. Service kit adds `PERSONAL_DETAIL_KEYS` and `REMOVED`.
+- 2f2b01a: The rest of PER-213:
+
+  - **Bounded caches.** The service kit's floor, people and grant lookups now remember at most 5,000 answers each (`BoundedMap`), dropping the least recently used one when full.
+  - **Paged Keycloak lists.** Identity reads Keycloak's lists of people, groups, group members and role holders 500 at a time, so a realm with more than 10,000 people no longer loses the rest without a word.
+  - **Query time limit.** `steadyPool` gives each new database connection a statement timeout: a minute by default, set with `DATABASE_STATEMENT_TIMEOUT_SECONDS`, 0 for no limit. A query stuck on a lock or a bad plan now fails its request instead of holding a connection. Migrations lift the limit for themselves.
+
+- 7886a1e: Signed-caller checks fail closed: `callerCheckFromEnv` checks callers against the gateway's key unless `AUGUR_INSECURE_DEV_CALLERS=1` is set (as `pnpm dev:app` does) or a test runner sets `NODE_ENV=test`, and always in production. Before, a service without `NODE_ENV=production` believed any `x-user-*` headers.
+- 866c076: The leaver flow and signing out everywhere (ADR 0040, part of PER-194). Turning someone's sign-in off now signs them out everywhere at once: every Keycloak session and every offline token an app holds for them. Admin → People gets "They're leaving": their sign-in goes off, they're signed out, and identity records `person.left`, which the events service publishes as `platform.person.left` `{ person, handOverTo? }` so apps hand on what the leaver owns (`PLATFORM_TOPICS.personLeft`). People marks who asked to leave in their account, and the leaver flow closes the request (`GET /admin/leave-requests`, `POST /admin/people/{id}/leave`, identity contract 1.22.0). Guide: docs/people.md.
+- 04d7ed1: Choosing notifications per kind (ADR 0036). The events service keeps a notification's `kind` and refuses one the app's manifest doesn't declare (migration 008). Identity's preferences keep `quietKinds` (`<app>:<kind>`). Account, Notifications lists each app's kinds, On Home or Quiet, and the shell lands a quiet kind in the stream without a pulse, uncounted, off Home and with no toast (Aerie 0.7.0). The service kit's `NewNotification` and `AppNotice` take `kind`.
+- 4f8d944: Apps declare the kinds of notification they send in `notifications.kinds` (id, label, detail; up to 10), and `NotifyMessage` gains `kind` (SDK 1.13). The registry names them in an app's grants, and the service kit's `registryNotificationKinds` looks them up, so the events service can check them and people can choose each kind in Account.
+- 90057d9: Every call one service makes to another now has a deadline (PER-213). `withDeadline` and `serviceTimeoutMs` in the service kit give each call 5 seconds unless `SERVICE_CALL_TIMEOUT_SECONDS` says otherwise. The kit's helpers (callService, floors, people, grants, settings, the service token, domain events) use it, as do the gateway's calls to identity and the registry, identity's calls to Keycloak (15 seconds), storage's to Garage and the updater's to the registry. A hung service now gives the caller its usual "can't be reached" error, so it answers 503 within seconds rather than waiting minutes. Calls to the model gateway get 3 minutes, and frontend uploads get 2.
+- 858fad1: `outboxBinding` and `readBinding`: an app tells others when one of its things is linked to an entity, or unlinked, in the shape Mandate and Artifacts publish (`<app>.<type>.entity-bound`, ADR 0066), and a follower reads any app's back.
+- 33b6fa3: AUGUR's own email sender (ADR 0065): `@augur/service-kit/mail` sends notice emails through the organisation's relay with Nodemailer, from React Email templates, and says why when it can't. The relay settings (`mailRelayFromEnv`) move into the service kit, shared with the realm job. The gateway's status now says whether email can be sent, and Admin → Status shows it with what to check.
+
+### Patch Changes
+
+- f902da5: Callers go unchecked under a test runner only inside Vitest (`NODE_ENV=test` and `VITEST`); `NODE_ENV=test` alone no longer turns the check off. A new script test holds every image stage, compose service and app container to `NODE_ENV=production`.
+
 ## 0.13.0
 
 ### Minor Changes
