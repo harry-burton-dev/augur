@@ -151,6 +151,8 @@ export interface EventStore {
   addNotifications(n: NewNotification, floor?: EventFloor): Promise<Notification[]>;
   /** A person's unread notifications, newest first. */
   unread(recipient: string, limit: number): Promise<Notification[]>;
+  /** One of a person's notifications, read or not; undefined when they have no such one. */
+  notification(recipient: string, id: string): Promise<Notification | undefined>;
   /** Every notification a person has, read or not, newest first: for a copy of their data. */
   notificationsOf(recipient: string, limit: number): Promise<Notification[]>;
   /** Marks a person's notification read or unread; false when they have no such notification. */
@@ -477,6 +479,13 @@ export class PgEventStore implements EventStore {
     } finally {
       client.release();
     }
+  }
+
+  async notification(recipient: string, id: string) {
+    // Ids are uuids; anything else is no notification of theirs, not an error.
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return undefined;
+    const { rows } = await this.pool.query<NotificationRow>('select * from events.notifications where id = $1 and recipient = $2', [id, recipient]);
+    return rows[0] ? fromRow(rows[0]) : undefined;
   }
 
   async unread(recipient: string, limit: number) {

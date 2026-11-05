@@ -149,7 +149,17 @@ describe.runIf(DATABASE_URL)('events', () => {
     await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...review, recipients: ['u-1'] } });
     const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: alex })).json();
     expect((await app.inject({ method: 'POST', url: `/v1/notifications/${n.id}/read`, headers: sam })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: `/v1/notifications/${n.id}`, headers: sam })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/v1/notifications' })).statusCode).toBe(401);
+  });
+
+  it('gives a person one of theirs, read or not, for a notice email’s link', async () => {
+    const app = await db.app({ verifyService });
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...review, recipients: ['u-1'] } });
+    const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: alex })).json();
+    await app.inject({ method: 'POST', url: `/v1/notifications/${n.id}/read`, headers: alex });
+    expect((await app.inject({ method: 'GET', url: `/v1/notifications/${n.id}`, headers: alex })).json()).toMatchObject({ id: n.id, title: 'Review the budget paper', link: '/doc/7' });
+    expect((await app.inject({ method: 'GET', url: '/v1/notifications/not-an-id', headers: alex })).statusCode).toBe(404);
   });
 
   it('streams each new notification to its recipient as it happens', async () => {
