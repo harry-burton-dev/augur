@@ -131,7 +131,7 @@ const once = async () => {
   const report = registry.reporter(target.id);
   if (target.state === 'running') {
     // Only this updater runs upgrades, so one already under way means it stopped partway through.
-    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `The updater restarted partway through the upgrade to ${target.version}. Check Admin → Status, and docs/upgrade.md, Going back.` });
+    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `The updater restarted partway through the upgrade to ${target.version}. Check Admin → Status, and docs/upgrade-went-back.md.` });
     return;
   }
   log('upgrading', { from: target.from, to: target.version });

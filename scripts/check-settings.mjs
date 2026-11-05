@@ -18,8 +18,8 @@ const root = new URL('..', import.meta.url).pathname;
 
 /** Ids kept on purpose so live servers keep working (AGENTS.md, Names): not a deployment's literal. */
 export const KEPT_IDS = ['ghcr.io/harry-burton-dev/im-platform'];
-/** What the operating system sets, not AUGUR. */
-const OS_KEYS = new Set(['PATH', 'HOME', 'HOSTNAME']);
+/** What the operating system or the test runner (Vitest) sets, not AUGUR. */
+const OS_KEYS = new Set(['PATH', 'HOME', 'HOSTNAME', 'VITEST']);
 
 const keyPattern = '[A-Z][A-Z0-9_]*';
 

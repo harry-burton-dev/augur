@@ -33,6 +33,7 @@ nav:
   - Shell principles: shell-principles.md
   - Ship an app: ship-an-app.md
   - Signed caller: signed-caller.md
+  - When an upgrade goes back by itself: upgrade-went-back.md
   - Upgrading AUGUR: upgrade.md
   - Versioning: versioning.md
   - Decisions:
