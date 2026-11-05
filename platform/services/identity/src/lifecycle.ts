@@ -39,8 +39,8 @@ export interface LifecycleStore {
   invited(person: string, method: InviteMethod, sent?: { at: string; expiresAt: string }): Promise<void>;
   /** They signed in at `at`: the first one also makes them joined. */
   signedIn(person: string, at: string): Promise<void>;
-  /** Their sign-in went off, and why. */
-  disabled(person: string, cause: DisabledCause, at: string): Promise<void>;
+  /** Their sign-in went off, and why (no cause: it was already off when identity started noticing). */
+  disabled(person: string, cause: DisabledCause | undefined, at: string): Promise<void>;
   /** Their sign-in came back on. */
   enabled(person: string): Promise<void>;
   /** They left. */
@@ -161,11 +161,11 @@ export class PgLifecycleStore implements LifecycleStore {
     );
   }
 
-  async disabled(person: string, cause: DisabledCause, at: string) {
+  async disabled(person: string, cause: DisabledCause | undefined, at: string) {
     await this.pool.query(
       `insert into identity.person_lifecycle (person, disabled_at, disabled_cause) values ($1, $2, $3)
        on conflict (person) do update set disabled_at = excluded.disabled_at, disabled_cause = excluded.disabled_cause, updated_at = now()`,
-      [person, at, cause],
+      [person, at, cause ?? null],
     );
   }
 
