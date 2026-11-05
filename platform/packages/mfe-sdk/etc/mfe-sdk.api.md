@@ -85,6 +85,27 @@ export const createEventBus: () => EventBus;
 export const defineMicroFrontend: (mfe: MicroFrontend) => MicroFrontend;
 
 // @public
+export const DIRECTORY_PATH = "/api/identity/v1/me/directory";
+
+// @public
+export interface DirectoryPrincipal {
+    detail?: string;
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    kind: 'person' | 'team';
+    // (undocumented)
+    name: string;
+}
+
+// @public
+export class DirectoryUnavailable extends Error {
+    constructor(message: string, status: number);
+    // (undocumented)
+    readonly status: number;
+}
+
+// @public
 export const DOCUMENT_OPEN = "document.open";
 
 // @public (undocumented)
@@ -285,6 +306,9 @@ export interface MountContext {
 }
 
 // @public
+export const namePrincipals: (ctx: Pick<MountContext, "fetch">, refs: readonly Pick<DirectoryPrincipal, "kind" | "id">[]) => Promise<DirectoryPrincipal[]>;
+
+// @public
 export interface NotificationAction {
     // (undocumented)
     intent: Intent;
@@ -319,6 +343,12 @@ export const pickDocument: (ctx: Pick<MountContext, "request">, pick?: DocumentP
 // @public
 export const pickEntities: (ctx: Pick<MountContext, "request">, pick?: EntityPick) => Promise<EntityRef[]>;
 
+// @public (undocumented)
+export interface PrincipalSearch {
+    kinds?: 'people' | 'teams' | 'both';
+    limit?: number;
+}
+
 // @public
 export interface ProposalReceipt {
     proposal: string;
@@ -350,6 +380,9 @@ export interface SearchAnswer {
     // (undocumented)
     results: SearchResult[];
 }
+
+// @public
+export const searchPrincipals: (ctx: Pick<MountContext, "fetch">, query: string, search?: PrincipalSearch) => Promise<DirectoryPrincipal[]>;
 
 // @public (undocumented)
 export interface SearchResult {

@@ -56,7 +56,17 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 ### The deployment watches itself
 
-otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72 hours and runs AUGUR's alert rules ([observability.md](observability.md#alerts)). Before upgrading, set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) and `ALERT_WEBHOOK_TOKEN` (`openssl rand -hex 32`) in `.env`, so its alerts reach deployment admins as notices. It takes up to 2 GB of memory (`OTEL_LGTM_MEM_LIMIT`); a server with its own collector sets `OTEL_EXPORTER_OTLP_ENDPOINT` to it and `OTEL_LGTM_REPLICAS=0`. The `observability` profile does nothing now and can come out of `COMPOSE_PROFILES`. The registry's report to Backstage now goes every 15 minutes.
+otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72 hours and runs AUGUR's alert rules ([observability.md](observability.md#alerts)). Its alerts reach deployment admins as notices through the registry, with `ALERT_WEBHOOK_TOKEN`: the updater makes it up when you upgrade from the Upgrade Centre; by hand, add it to `.env` (`openssl rand -hex 32`) before `pc up -d`. Set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) too, to sign in to Grafana. It takes up to 2 GB of memory (`OTEL_LGTM_MEM_LIMIT`); a server with its own collector sets `OTEL_EXPORTER_OTLP_ENDPOINT` to it and `OTEL_LGTM_REPLICAS=0`. The `observability` profile does nothing now and can come out of `COMPOSE_PROFILES`. The registry's report to Backstage now goes every 15 minutes.
+
+### Mandate ships with AUGUR
+
+Mandate, intent passed down the floors, now ships with every release like Artifacts, Explorer and Data Atlas: a new container, `mandate`, at the release `release/shipped-apps.json` pins. Admin → Apps no longer lists it as something to install, and it's upgraded with AUGUR from now on.
+
+New settings: `MANDATE_CLIENT_SECRET` and `MANDATE_DATABASE_PASSWORD` (required), and `MANDATE_BUCKET_SECRET` (optional). The updater makes them up when you upgrade from the Upgrade Centre; by hand, add them to `.env` (`openssl rand -hex 32`) before `pc up -d`.
+
+**A server whose app runner installed Mandate keeps its data.** AUGUR's container uses the same database login and schema (`app_mandate`) and the same sign-in (`app-mandate`) the runner gave it: the storage job sets the login's password, and the realm job the sign-in's secret, to the new values, and the aims and parts already there stay. Once the new updater starts, it stops the runner's own Mandate containers (`app-mandate-blue` or `-green`, Activity names them) and forgets them, so AUGUR's is the only one. Nothing to do yourself.
+
+Going back to a release before this one: Mandate's data stays in the database, and Admin → Apps lists it as installed again, at the version it had, but nothing runs it. Install that version again there and the runner starts it on the same data.
 
 ### Settings the guides named now reach their services
 
@@ -125,7 +135,7 @@ From this release a deployment can tell the company's Backstage what it runs ([A
 2. Set `DEPLOYMENT_ID` in `.env` to that name, with `PORTAL_URL` set to the Backstage address. Then `docker compose up -d registry`.
 3. Copy the deployment's public key, shown by `GET /api/registry/v1/platform/reporting` as an admin (or **Copy key** in the Upgrade Centre's Reporting section), into the annotation `augur.dev/report-key` on that entry, and let Backstage read the catalog again.
 
-The registry makes the deployment's own Ed25519 key the first time it's needed and keeps it in the database, so a restored backup reports as the same deployment. It signs a record of what the server runs and sends it two minutes after it starts (so after each AUGUR upgrade), whenever a version, an upgrade's result or something that needs you changes (it looks every 5 minutes), and at least every 15 minutes, so Backstage notices when a deployment goes quiet (ADR 0059). The record holds the deployment's name and ring, AUGUR's and each app's version, what's available, each unit's policy and pin, health, the last results, and the feed's state. It holds no names or ids of people. Backstage refuses a record from a deployment it doesn't list, or not signed with the key it lists.
+The registry makes the deployment's own Ed25519 key the first time it's needed and keeps it in the database, so a restored backup reports as the same deployment. It signs a record of what the server runs and sends it two minutes after it starts (so after each AUGUR upgrade), whenever a version, an upgrade's result or something that needs you changes (it looks every 15 minutes), and once a day. The record holds the deployment's name and ring, AUGUR's and each app's version, what's available, each unit's policy and pin, health, the last results, and the feed's state. It holds no names or ids of people. Backstage refuses a record from a deployment it doesn't list, or not signed with the key it lists.
 
 An air-gapped server sets `DEPLOYMENT_ID` and no `PORTAL_URL`: nothing is sent, and an admin exports the record (**Export the record** in the Upgrade Centre's Reporting section, or `GET /api/registry/v1/platform/reporting/export`) and carries the file to the deployment's card in Backstage. `DEPLOYMENT_REPORTING=off` turns both off.
 

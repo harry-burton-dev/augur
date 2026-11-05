@@ -76,6 +76,11 @@ x-folio-storage: &folio-storage
 x-atlas-storage: &atlas-storage
   DATABASE_URL: postgres://app_atlas:${ATLAS_DATABASE_PASSWORD:?set ATLAS_DATABASE_PASSWORD in .env}@postgres:5432/platform
 
+# Mandate's own schema, the same login and schema the app runner gave it on a server that installed it
+# before it shipped with AUGUR. The storage service makes it a bucket too, as it does every app.
+x-mandate-storage: &mandate-storage
+  DATABASE_URL: postgres://app_mandate:${MANDATE_DATABASE_PASSWORD:?set MANDATE_DATABASE_PASSWORD in .env}@postgres:5432/platform
+
 services:
   # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate. While
   # infra/deploy/public.sh has it open, Tailscale Funnel serves the same address to the internet too
@@ -231,8 +236,8 @@ services:
     environment:
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       GARAGE_ADMIN_URL: http://garage:3903
-      # Folio's and Data Atlas's, which ship with AUGUR, and any others named in .env.
-      APP_STORAGE: folio atlas ${APP_STORAGE:-}
+      # Those of the apps that ship with AUGUR and keep data (Artifacts, Data Atlas, Mandate), and any others named in .env.
+      APP_STORAGE: folio atlas mandate ${APP_STORAGE:-}
       # The platform's services that get a login owning only their own schema, each with its
       # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
       PLATFORM_DATABASE_LOGINS: identity registry events models
@@ -312,7 +317,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Each platform service's sign-in in Keycloak, made or set to these secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env},app-mandate=${MANDATE_CLIENT_SECRET:?set MANDATE_CLIENT_SECRET in .env}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
@@ -358,7 +363,7 @@ services:
       # Whether an admin may fill this deployment with synthetic sample data (pnpm seed, ADR 0056). Off unless set.
       SEED_ALLOWED: ${SEED_ALLOWED:-false}
       # Each app's service, name=url: the apps that ship with AUGUR.
-      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086
+      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086,mandate=http://mandate:8087
       # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
       CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
     volumes:
@@ -422,7 +427,7 @@ services:
       DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
       # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
-      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
       SERVER_RING: ${SERVER_RING:-}
       # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
@@ -432,7 +437,7 @@ services:
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEED_URL: ${APP_FEED_URL:-}
       # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
-      PILLAR_APPS: folio auspex atlas
+      PILLAR_APPS: folio auspex atlas mandate
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
@@ -569,6 +574,25 @@ services:
       SERVICE_CLIENT_SECRET: ${ATLAS_CLIENT_SECRET}
     depends_on: *shipped-app
 
+  # Mandate, intent passed down the floors: the fourth app every deployment ships with. Its aims and the
+  # parts passed down live in Postgres, in its own schema.
+  mandate:
+    logging: *logging
+    <<: *service
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/mandate:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      # Its own login comes first: it replaces the platform's DATABASE_URL.
+      <<: [*mandate-storage, *env]
+      PORT: 8087
+      SERVICE_CLIENT_SECRET: ${MANDATE_CLIENT_SECRET}
+    depends_on: *shipped-app
+
   # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
   # It works on the tables Folio's service makes, so it waits for the service to start.
   folio-worker:
@@ -642,7 +666,7 @@ services:
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
       # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
-      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h
     ports:
       - 127.0.0.1:3001:3000

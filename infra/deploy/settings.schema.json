@@ -27,11 +27,14 @@
     "AUSPEX_CLIENT_SECRET",
     "ATLAS_CLIENT_SECRET",
     "ATLAS_DATABASE_PASSWORD",
+    "MANDATE_CLIENT_SECRET",
+    "MANDATE_DATABASE_PASSWORD",
     "PLATFORM_ADMIN_USER",
     "PLATFORM_ADMIN_PASSWORD",
     "PLATFORM_ADMIN_EMAIL",
     "PLATFORM_ADMIN_FIRST_NAME",
-    "PLATFORM_ADMIN_LAST_NAME"
+    "PLATFORM_ADMIN_LAST_NAME",
+    "ALERT_WEBHOOK_TOKEN"
   ],
   "patternProperties": {
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
@@ -369,6 +372,35 @@
       "type": "string",
       "writeOnly": true,
       "description": "Data Atlas's bucket key (made for every app; Data Atlas keeps nothing there). Worked out from APP_SECRETS_KEY when unset.",
+      "x-services": [
+        "storage"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "MANDATE_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "Mandate's own sign-in. On a server whose app runner installed Mandate before, the updater sets it to the one the runner gave it.",
+      "x-services": [
+        "keycloak-config",
+        "mandate"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "MANDATE_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "Mandate's own database login. On a server whose app runner installed Mandate before, the updater sets it to the one the runner gave it, so its data stays.",
+      "x-services": [
+        "mandate",
+        "storage"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "MANDATE_BUCKET_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "Mandate's bucket key (made for every app; Mandate keeps nothing there). Worked out from APP_SECRETS_KEY when unset.",
       "x-services": [
         "storage"
       ],
@@ -927,7 +959,7 @@
     "ALERT_WEBHOOK_TOKEN": {
       "type": "string",
       "writeOnly": true,
-      "description": "Grafana's key to tell deployment admins of an alert through the registry; alerts reach no one in AUGUR without it.",
+      "description": "Grafana's key to tell deployment admins of an alert through the registry. The updater makes it up on upgrade.",
       "x-services": [
         "registry",
         "otel-lgtm"

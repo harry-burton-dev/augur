@@ -30,6 +30,14 @@ export {
   type EntityRef,
   type ProposalReceipt,
 } from './entities.js';
+export {
+  DIRECTORY_PATH,
+  DirectoryUnavailable,
+  namePrincipals,
+  searchPrincipals,
+  type DirectoryPrincipal,
+  type PrincipalSearch,
+} from './people.js';
 export { isMarkingOrNone, isRef, type EntityBinding, type Focus, type Marking, type Ref } from './refs.js';
 export { UNIT_LEVELS, UNIT_OPEN, isUnitRef, openUnit, type UnitLevel, type UnitRef } from './units.js';
 export { SDK_VERSION } from './version.js';
