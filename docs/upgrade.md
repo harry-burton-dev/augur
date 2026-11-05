@@ -62,6 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Where email is set up (`SMTP_*`, docs/deploy.md, Email), Admin → People → Add a person now emails an invite by default: a link that lasts 72 hours to confirm their email and choose a password. The one-time password is still there under **How they start**, and is the only choice where email isn't set up. Nothing to do, unless your relay refuses mail from Keycloak: then Admin says the invite couldn't be sent, and Admin → Status, Email says why.
 
+### Desktops without a GPU can go without blur
+
+**From** unreleased
+
+Nothing to do unless your organisation's desktops have no GPU, such as virtual desktops. There, set `FOCUS_DEPTH=scrim` in `.env` and `pc up -d web`: dialogs, menus and the palette then dim what's behind them instead of blurring it, which is slow without a GPU. Unset, nothing changes (docs/deploy.md, "Desktops without a GPU").
+
 ### Activity keeps a year
 
 **From** augur@0.20.0
