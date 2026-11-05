@@ -3,6 +3,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
+import type { LifecycleStore } from './lifecycle.ts';
 import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
@@ -48,6 +49,8 @@ export interface IdentityOptions {
   languages?: string[];
   /** The organisation's settings beside its floor's name (ADR 0042). */
   organisation: OrganisationStore;
+  /** What identity keeps about each account's life (ADR 0040). */
+  lifecycle: LifecycleStore;
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -61,7 +64,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store, workspaces, directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation }: IdentityOptions) => {
+export const buildApp = async ({ store, workspaces, directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation, lifecycle }: IdentityOptions) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -298,7 +301,7 @@ export const buildApp = async ({ store, workspaces, directory, accounts, appClie
         },
       );
 
-      await app.register(adminRoutes({ directory: teams, workspaces, audit, store }), { prefix: '/admin' });
+      await app.register(adminRoutes({ directory: teams, workspaces, audit, store, lifecycle }), { prefix: '/admin' });
       await app.register(appClientRoutes({ clients: appClients, audit }), { prefix: '/admin/apps' });
     },
     { prefix: `/${API_VERSION}` },
