@@ -1,5 +1,6 @@
 import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
+import { policyKeepDays, pruneActivity, untilNight } from './retention.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 
 // Every setting events reads, checked before it starts (in production, a missing one stops it).
@@ -64,3 +65,19 @@ const prune = () =>
   ]);
 void prune();
 setInterval(prune, 3_600_000).unref();
+
+// Activity keeps entries for the organisation's retention period (Admin, Settings), 365 days when identity can't say;
+// once a night the older ones go, and the removal is itself recorded in Activity.
+const keepActivity = policyKeepDays({ identityUrl: IDENTITY_URL, credentials });
+const pruneOld = () =>
+  pruneActivity(store, keepActivity).then(
+    ({ removed, days, defaulted }) => {
+      if (defaulted) app.log.warn({ keepDays: days, why: defaulted }, 'Activity retention: using the default');
+      if (removed) app.log.info({ removed, keepDays: days }, 'old Activity entries removed');
+    },
+    (err) => app.log.error({ err: String(err) }, 'removing old Activity entries failed'),
+  );
+setTimeout(() => {
+  void pruneOld();
+  setInterval(pruneOld, 86_400_000).unref();
+}, untilNight()).unref();

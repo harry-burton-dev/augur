@@ -14,6 +14,13 @@ export interface Person {
   createdAt?: string;
 }
 
+/** Someone who asked to leave in their account (ADR 0040), until an admin's leaver flow closes it. */
+export interface LeaveRequest {
+  person: string;
+  requestedAt: string;
+  note?: string;
+}
+
 export interface Department {
   id: string;
   name: string;
@@ -523,6 +530,9 @@ export class AdminApi {
   addPerson = (person: NewPerson) => this.call<{ person: Person; temporaryPassword: string }>('POST', '/api/identity/v1/admin/people', person);
   updatePerson = (id: string, changes: PersonChanges) => this.call<Person>('PATCH', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`, changes);
   resetPassword = (id: string) => this.call<{ temporaryPassword: string }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/password`);
+  leaveRequests = () => this.call<LeaveRequest[]>('GET', '/api/identity/v1/admin/leave-requests');
+  /** The leaver flow: their sign-in off, signed out everywhere, and apps told to hand on what they own. */
+  leave = (id: string, how: { handOverTo?: string; note?: string }) => this.call<Person>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`, how);
   roles = () => this.call<Role[]>('GET', '/api/identity/v1/admin/roles');
 
   departments = () => this.call<Department[]>('GET', '/api/identity/v1/admin/departments');

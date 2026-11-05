@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { InboxSignal } from './inbox.ts';
-import { MemoryEventStore, PgEventStore, type DomainEvent, type EventStore, type Notification } from './store.ts';
+import { MemoryEventStore, PgEventStore, type AuditFilter, type DomainEvent, type EventStore, type Notification } from './store.ts';
 
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs' as const, title: 'Review the budget paper', link: '/doc/7' };
 
@@ -90,6 +90,32 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect((await store.audit({ limit: 10 })).map((e) => e.action)).toEqual(['document.published', 'app.registered']);
     expect(await store.audit({ app: 'library', limit: 10 })).toMatchObject([{ actor: { id: 'u-2', kind: 'user' }, detail: { title: 'Budget' } }]);
     expect(await store.audit({ actor: 'library', limit: 10 })).toMatchObject([{ action: 'app.registered' }]);
+  });
+
+  it('finds entries by target, by person and by kind', async () => {
+    await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-2' });
+    await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'team.member-added', target: 't-1', detail: { person: 'u-2' } });
+    await store.appendAudit({ actor: { id: 'u-2', kind: 'user' }, app: 'identity', action: 'sign-in.succeeded', detail: { kind: 'sign-in', ip: '10.0.0.2' } });
+    await store.appendAudit({ actor: { id: 'u-3', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-1' });
+    const actions = async (f: Omit<AuditFilter, 'limit'>) => (await store.audit({ ...f, limit: 10 })).map((e) => e.action);
+    expect(await actions({ target: 't-1' })).toEqual(['team.member-added']);
+    expect(await actions({ person: 'u-2' })).toEqual(['sign-in.succeeded', 'team.member-added', 'person.disabled']);
+    expect(await actions({ kind: 'sign-in' })).toEqual(['sign-in.succeeded']);
+    expect(await actions({ kind: 'change', person: 'u-2' })).toEqual(['team.member-added', 'person.disabled']);
+  });
+
+  it('removes a deleted person’s personal values, keeping their id, and their notifications', async () => {
+    await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-2', detail: { email: { from: 'a@x.org', to: 'b@x.org' }, roles: ['editor'], nested: { name: 'Sam' } } });
+    await store.appendAudit({ actor: { id: 'u-3', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-3', detail: { email: 'kim@x.org' } });
+    await store.addNotifications({ ...review, recipients: ['u-2', 'u-3'] });
+    expect(await store.redactPerson('u-2')).toEqual({ entries: 1, notifications: 1 });
+    const [kim, sam] = await store.audit({ limit: 10 });
+    expect(sam).toMatchObject({ target: 'u-2', detail: { email: { from: '[removed]', to: '[removed]' }, roles: ['editor'], nested: { name: '[removed]' } } });
+    expect(kim!.detail).toEqual({ email: 'kim@x.org' });
+    expect(await store.unread('u-2', 10)).toEqual([]);
+    expect(await store.unread('u-3', 10)).toHaveLength(1);
+    // Again: nothing more to remove.
+    expect(await store.redactPerson('u-2')).toEqual({ entries: 0, notifications: 0 });
   });
 
   it('keeps which service wrote each audit entry', async () => {
@@ -281,6 +307,15 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
         await admin.query('truncate events.inbox_items, events.inbox_history');
       },
     ));
+
+  it('removes Activity entries older than the retention period', async () => {
+    await admin.query('truncate events.audit');
+    const old = await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.published' });
+    await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.updated' });
+    await admin.query("update events.audit set at = now() - interval '10 days' where id = $1", [old.id]);
+    expect(await store.pruneAudit(7)).toBe(1);
+    expect((await store.audit({ limit: 10 })).map((e) => e.action)).toEqual(['document.updated']);
+  });
 
   it('tells another instance of each inbox change', async () => {
     const heard: InboxSignal[] = [];
