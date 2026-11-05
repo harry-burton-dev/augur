@@ -3,10 +3,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import Fastify from 'fastify';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { appServer, auditFor, floorCaller, notifyFor, peopleFor, readManifest, standInPeople, startAppService, type AppAuditEntry, type AppNotice } from './app-service.js';
 import { callerHeaders } from './caller.js';
+import { createJobs } from './jobs.js';
 import { callerCheckFor, callerSigner, signedCallerHeaders } from './signed-caller.js';
+
+vi.mock('./jobs.js', async (actual) => {
+  const jobs = await actual<typeof import('./jobs.js')>();
+  return { ...jobs, createJobs: vi.fn(jobs.createJobs) };
+});
 
 const manifest = { id: 'notes', name: 'Team notes', version: '1.2.3' };
 const sam = { id: 'u1', name: 'Sam Okafor', departments: [], roles: [] };
@@ -102,5 +108,25 @@ describe('startAppService', () => {
     } finally {
       await app.close();
     }
+  });
+
+  it('keeps a preview’s jobs in the schema its login owns, not the app’s', async () => {
+    const start = async (env: Record<string, string>) => {
+      const teamNotes = { ...manifest, id: 'team-notes' };
+      const app = await startAppService({
+        manifest: teamNotes,
+        port: 0,
+        env: { NODE_ENV: 'test', ...env },
+        buildApp: async () => {
+          const app = Fastify({ logger: false });
+          await appServer(app, { manifest: teamNotes });
+          return app;
+        },
+      });
+      await app.close();
+      return vi.mocked(createJobs).mock.lastCall?.[0].schema;
+    };
+    expect(await start({})).toBe('team_notes_jobs');
+    expect(await start({ APP_PREVIEW: 'pr-12' })).toBe('team_notes_pr12_jobs');
   });
 });
