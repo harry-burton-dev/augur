@@ -66,7 +66,7 @@ export const afterLook = (w: AfterWatch, look: AfterLook, version: string, now: 
     serverErrors: w.serverErrors + Math.max(0, look.serverErrors),
     signInMisses: look.signInProblem ? w.signInMisses + 1 : 0,
   };
-  const stays = `AUGUR ${version} is still running: it didn’t go back by itself, because people’s work is on it now. See docs/upgrade.md, Going back.`;
+  const stays = `AUGUR ${version} is still running: it didn’t go back by itself, because people’s work is on it now. See docs/upgrade-went-back.md before you do anything.`;
   const end = (state: AfterWatch['state'], message: string): AfterWatch => ({ ...next, state, message, endedAt: at });
   if (next.signInMisses >= SIGN_IN_LOOKS) return end('failed', `Signing in stopped working after the watch: ${look.signInProblem} ${stays}`);
   if (next.calls >= MIN_CALLS) {

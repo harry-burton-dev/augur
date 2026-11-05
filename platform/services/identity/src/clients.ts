@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { appClientId, callerFromHeaders, identifyService, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
+import { appClientId, callerFromHeaders, identifyService, reservedIdProblem, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
 import { DirectoryError, type KeycloakDirectory } from './directory.ts';
 import { AppParams, refused } from './schemas.ts';
 
@@ -175,7 +175,7 @@ export const appClientRoutes =
               { clientId: Type.String({ examples: ['app-library'] }), secret: Type.String() },
               { description: "The app's client and its secret" },
             ),
-            400: refused('Not an app id'),
+            400: refused('Not an app id, or one AUGUR keeps for itself'),
             401: refused('No signed-in caller'),
             403: refused('Not an admin'),
             ...signInServiceFailed,
@@ -185,6 +185,8 @@ export const appClientRoutes =
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can issue an app’s sign-in.' });
+        const reserved = reservedIdProblem(req.params.id);
+        if (reserved) return reply.code(400).send({ error: 'invalid', message: reserved });
         if (!clients) return reply.code(503).send({ error: 'unavailable', message: 'Identity isn’t connected to the sign-in service, so apps’ sign-ins can’t be issued here yet.' });
         try {
           const issued = await clients.issue(req.params.id);
@@ -225,7 +227,7 @@ export const appRunnerRoutes =
           body: Type.Object({ secret: Type.String({ pattern: '^[0-9a-f]{64}$' }) }, { additionalProperties: false }),
           response: {
             200: Type.Object({ clientId: Type.String({ examples: ['app-notes'] }) }, { description: "The app's client" }),
-            400: refused('Not an app id, or not 64 hex characters'),
+            400: refused('Not an app id, one AUGUR keeps for itself, or not 64 hex characters'),
             403: refused('Not the app runner'),
             ...signInServiceFailed,
             503: refused("The caller's token can't be checked right now, or identity isn't connected to the sign-in service or can't reach it"),
@@ -241,6 +243,8 @@ export const appRunnerRoutes =
           return reply.code(503).send({ error: 'unavailable', message: err.message });
         }
         if (service?.kind !== 'platform' || service.name !== APP_RUNNER) return reply.code(403).send({ error: 'forbidden', message: 'Only the app runner sets an app’s sign-in this way; admins issue one.' });
+        const reserved = reservedIdProblem(req.params.id);
+        if (reserved) return reply.code(400).send({ error: 'invalid', message: reserved });
         if (!clients) return reply.code(503).send({ error: 'unavailable', message: 'Identity isn’t connected to the sign-in service, so apps’ sign-ins can’t be set here yet.' });
         try {
           const clientId = appClientId(req.params.id);

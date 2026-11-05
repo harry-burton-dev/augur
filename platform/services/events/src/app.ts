@@ -29,7 +29,7 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
-import { inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
+import { inboxRoutes, releaseLeaver, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { MemoryEventStore, topicMatches, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
@@ -591,6 +591,10 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const platformEvent = service.kind === 'platform' ? PLATFORM_EVENTS[`${req.body.app} ${req.body.action}`] : undefined;
         if (platformEvent) {
           await store.publish(req.body.app, [{ topic: platformEvent.topic, id: `audit-${entry.id}`, payload: platformEvent.payload(req.body), floor: place }]);
+          // Someone who leaves a team, or can no longer sign in, gives back the team work they'd taken.
+          const leaver = platformEvent.topic === 'platform.person.disabled' ? { person: req.body.target } : platformEvent.topic === 'platform.team.member-removed' ? { person: req.body.detail?.person, team: req.body.target } : undefined;
+          if (typeof leaver?.person === 'string' && leaver.person)
+            await releaseLeaver(store, leaver.person, typeof leaver.team === 'string' ? leaver.team : undefined).catch((err: unknown) => req.log.error({ err }, 'could not give back a leaver’s inbox items'));
         }
         return reply.code(201).send(entry);
         },

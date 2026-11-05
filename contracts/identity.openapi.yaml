@@ -1196,7 +1196,7 @@ paths:
                       - app-notes
                 description: The app's client
         "400":
-          description: Not an app id, or not 64 hex characters
+          description: Not an app id, one AUGUR keeps for itself, or not 64 hex characters
           content:
             application/problem+json:
               schema:
@@ -1248,7 +1248,7 @@ paths:
                     type: string
                 description: The app's client and its secret
         "400":
-          description: Not an app id
+          description: Not an app id, or one AUGUR keeps for itself
           content:
             application/problem+json:
               schema:
