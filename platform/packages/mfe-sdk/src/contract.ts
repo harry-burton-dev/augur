@@ -1,3 +1,4 @@
+import type { InboxKind } from './inbox.js';
 import type { Focus } from './refs.js';
 
 /**
@@ -105,6 +106,13 @@ export interface AppManifestEntry {
    * Without the flag, every move mounts the app again at the new path.
    */
   followsAddress?: boolean;
+  /**
+   * The kinds of work the app's service puts in people's inboxes (SDK 1.12,
+   * ADR 0026), with the label and icon the shell's Inbox shows for each. An
+   * item of a kind not declared here is refused. Needs `inbox:write` in
+   * `scopes`.
+   */
+  inbox?: { kinds: InboxKind[] };
   /**
    * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
    * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
