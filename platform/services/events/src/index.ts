@@ -40,7 +40,7 @@ const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verif
 await app.listen({ port, host: '0.0.0.0' });
 
 // Domain events are for followers to catch up on, not a record: they're kept DOMAIN_EVENTS_KEEP_DAYS (30) days.
-const keepDays = Number(process.env.DOMAIN_EVENTS_KEEP_DAYS ?? 30);
+const keepDays = Number(process.env.DOMAIN_EVENTS_KEEP_DAYS || 30);
 const prune = () =>
   store.pruneEvents(keepDays).then(
     (n) => n && app.log.info({ removed: n, keepDays }, 'old domain events removed'),

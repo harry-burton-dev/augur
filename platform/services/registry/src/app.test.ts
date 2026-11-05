@@ -326,9 +326,9 @@ describe('registry', () => {
     // Never the app itself, nor anyone else; never the platform's own parts.
     expect((await set('http://evil:1', service)).statusCode).toBe(403);
     expect((await set('http://evil:1', editor)).statusCode).toBe(403);
-    for (const bad of ['http://identity:8081', 'http://keycloak:8080', 'ftp://x:1', 'http://u:p@x:1', 'http://x:1/path', 'nonsense']) expect((await set(bad)).statusCode).toBe(400);
-    expect((await set('http://x:1', admin, 'home')).statusCode).toBe(409);
-    expect((await set('http://x:1', admin, 'nothing')).statusCode).toBe(404);
+    for (const bad of ['http://identity:8081', 'http://identity.:8081', 'http://platform-identity-1:8081', 'http://127.0.0.2:80', 'http://0.0.0.0:80', 'http://keycloak:8080', 'ftp://x:1', 'http://u:p@x:1', 'http://x:1/path', 'nonsense']) expect((await set(bad)).statusCode).toBe(400);
+    expect((await set('http://app-x:1', admin, 'home')).statusCode).toBe(409);
+    expect((await set('http://app-x:1', admin, 'nothing')).statusCode).toBe(404);
 
     // Registering a new version keeps it; null forgets it.
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
@@ -363,6 +363,10 @@ describe('registry', () => {
       expect(refused.json().message).toMatch(/loads from https:\/\/apps\.example\.org, which isn't a place apps are allowed/);
       expect((await register(app, { ...library, entry: '//apps.example.org/x.js' })).statusCode).toBe(400);
       expect((await register(app, { ...library, entry: 'javascript:alert(1)' })).statusCode).toBe(400);
+      // Browsers read a backslash as a slash, and drop tabs and newlines: each of these is another site.
+      for (const entry of ['/\\evil.example/x.js', '/\\/evil.example/x.js', '\\\\evil.example/x.js', '/\t/evil.example/x.js', '/\n/evil.example/x.js', 'entry.js']) {
+        expect((await register(app, { ...library, entry })).statusCode, entry).toBe(400);
+      }
     });
 
     it('takes an entry from an origin an admin allowed, and audits the choice', async () => {

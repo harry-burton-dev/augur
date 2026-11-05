@@ -45,6 +45,8 @@ A deployment runs many parts at once, so it is on one **AUGUR version**, such as
 
 The apps that ship with AUGUR (Artifacts, Explorer, Data Atlas) release in their own repositories, and AUGUR ships the release each one's pin names ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)). To ship a newer one, run `node scripts/shipped-apps.mjs pin <id> <version>` (it checks the release `app/<id>@<version>` is there and signed in that app's repository, writes its packages' versions, and adds a changeset), and open a pull request with the result. The next Version packages PR then moves AUGUR's version.
 
+`release/shipped-apps.json` is the one list of the apps that ship with AUGUR: nothing else in this repository names them. Beside each app's pin it says where its service answers in the Compose network (`port`, which `/healthz` is asked on) and which of its images are `workers` (they answer nothing: the rendition worker). The release (`infra/release-images.sh`, `scripts/augur-release.mjs`) and the updater read it; the updater's image carries it, and restarts the apps in its order after the platform's services and before the gateway, waiting for each to answer on the version its release gives it. Compose files can't read it, so `infra/deploy/compose.yml`, `infra/docker-compose.yml` and `infra/deploy/compose.build.yml` name each app as a service themselves, and `pnpm check:release` (also `node scripts/shipped-apps.mjs check`) fails when one disagrees with it: an app or worker missing, another port, the registry's `PILLAR_APPS`, the gateway's `APP_UPSTREAMS`, identity's `SERVICE_CLIENT_SECRETS`, storage's `APP_STORAGE`, or one of AUGUR's images that is neither a platform service nor a shipped app. To ship a new app with AUGUR, add its pin there with its `repo`, `port` and `workers`, run the pin command above, and add its services to the compose files until the check passes.
+
 | Field | Meaning |
 | --- | --- |
 | `version` | The AUGUR version. |
@@ -101,7 +103,17 @@ A server can always go back to the release before the one it's on, so its tables
 - **A migration that shipped in a release never changes and is never removed.** Servers have run it. Fix forward with a new migration.
 - **Within a major version, migrations only add**: new tables, new columns with a default, new indexes. A migration that drops, renames, truncates, deletes rows, changes a column's type or makes a column required needs a **major** changeset for its service. That makes the AUGUR release breaking, so nobody skips the release before it. The usual way is to expand, then contract: add the new column and use it in one release, then remove the old one in a later major.
 
-Each service's migrations are the `migrations` export of its `src/store.ts`. After adding one, run `pnpm build && pnpm sync:migrations` and commit `release/migrations.lock.json`, which records each migration's fingerprint; the released one is compared against it.
+Each service's migrations are the `migrations` export of its `src/store.ts`, applied at start by the service kit's `runMigrations(pool, { schema, migrations })`: in one transaction, under an advisory lock so several instances can start at once, making the schema if it's missing. After adding one, run `pnpm build && pnpm sync:migrations` and commit `release/migrations.lock.json`, which records each migration's fingerprint; the released one is compared against it.
+
+Every migration that hasn't shipped is linted with [Squawk](https://squawkhq.com/docs/rules) (ADR 0053), with the rules in `.squawk.toml` at the root; `pnpm install` brings it. The check also looks for three things Squawk has no rule for: `truncate` (`augur-truncate`), `delete from` (`augur-delete-rows`) and an `update` with no `where` (`augur-bulk-update`). Each problem names its rule and line. When a reviewer agrees the release before is fine with a statement, such as an `update` that fills a column added in the same migration, or a `drop index` whose replacement follows, say why on a comment line and name the rule on the line just above the statement:
+
+```sql
+-- Fills the column added above; the release before doesn't read it.
+-- squawk-ignore augur-bulk-update
+update registry.apps set granted_scopes = '{}';
+```
+
+`-- squawk-ignore a, b` names several rules; `-- squawk-ignore-file <rule>` covers the whole migration. Use them for what is safe, not to skip a major changeset.
 
 ## HTTP APIs
 

@@ -45,15 +45,28 @@ export const PublicAccess = Type.Object(
   },
 );
 
+export const OffsiteCopy = Type.Object(
+  {
+    at: Type.String({ format: 'date-time' }),
+    ok: Type.Boolean(),
+    snapshot: Type.Optional(Type.String({ description: "The database copy's restic snapshot, its first 8 characters" })),
+    keepDays: Type.Optional(Type.Integer({ description: 'How many days of copies the bucket keeps' })),
+    problem: Type.Optional(Type.String()),
+  },
+  { $id: 'OffsiteCopy', description: "The last copy of the night's backup off the server, with restic (ADR 0060)" },
+);
+
 export const BackupStatus = Type.Object(
   {
     state: Type.Enum(['ok', 'attention'], { description: '"attention" when backups cannot be relied on right now' }),
     problem: Type.Optional(Type.String({ description: 'Why, in words an admin can act on' })),
     lastBackup: Type.Optional(ref(BackupRun)),
+    offsite: Type.Optional(ref(OffsiteCopy)),
     lastRestoreTest: Type.Optional(
       Type.Intersect([
         ref(BackupRun),
         Type.Object({
+          from: Type.Optional(Type.Enum(['local', 'offsite'], { description: 'Restored from the backup on this server, or from the off-server copy' })),
           seconds: Type.Optional(Type.Integer()),
           people: Type.Optional(Type.Integer({ description: 'People in the restored sign-in realm' })),
           apps: Type.Optional(Type.Integer()),
@@ -96,6 +109,23 @@ export const Status = Type.Object(
   { description: 'Every component, the gateway first' },
 );
 
+export const BrowserTelemetry = Type.Object(
+  {
+    on: Type.Boolean({ description: 'Whether the shell should send browser errors and traces here' }),
+    why: Type.Optional(Type.String({ description: 'Why it is off, and who can change that' })),
+  },
+  { $id: 'BrowserTelemetry', description: 'Whether this deployment collects browser telemetry (ADR 0059)' },
+);
+
+/** An OTLP/HTTP JSON export request, as Faro's OTLP transport sends it. The gateway reads only the resource lists. */
+export const OtlpExport = Type.Object(
+  {
+    resourceLogs: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }))),
+    resourceSpans: Type.Optional(Type.Array(Type.Object({}, { additionalProperties: true }))),
+  },
+  { additionalProperties: true, description: 'OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces' },
+);
+
 /**
  * What every refusal carries: an RFC 9457 problem (`application/problem+json`, @augur/service-kit's
  * problemDetails), with AUGUR's `reason` and `whoCanChange`, and `error` and `message` for SDK 1.x clients.
@@ -122,4 +152,4 @@ export const Refusal = Type.Unsafe<{ error: string; message: string; [extension:
 export const refused = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Refusal) } } });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, BackupStatus, Seeding];
+export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, OffsiteCopy, BackupStatus, Seeding, BrowserTelemetry];

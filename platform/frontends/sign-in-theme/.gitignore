@@ -1,0 +1,4 @@
+dist
+dist_keycloak
+# Written by scripts/email-layout.mjs from email-layout.ftl and Common's tokens.
+src/email/html/template.ftl

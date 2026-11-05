@@ -67,14 +67,18 @@ services:
     depends_on: [postgres, garage]
 
   # Sign-in. The platform realm, its shell client and test users are imported from ./keycloak.
+  # Built as a server's is: Keycloak with AUGUR's sign-in and email theme (ADR 0041). start-dev keeps no
+  # theme cache. ORG_NAME and ORG_LOGO_URL, if set, are shown on the sign-in pages.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.8.1
+    build: { context: .., dockerfile: infra/service.Dockerfile, target: keycloak }
     command: start-dev --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       # Browsers and the gateway reach Keycloak at different addresses; tokens name this one.
       KC_HOSTNAME: http://localhost:8180
+      ORG_NAME: ${ORG_NAME:-Organisation}
+      ORG_LOGO_URL: ${ORG_LOGO_URL:-}
     ports: ["127.0.0.1:8180:8080"]
     volumes:
       - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
@@ -95,6 +99,8 @@ services:
       # The clients for the platform's services and the sample apps, with their secrets.
       SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex,app-atlas=platform-local-only-atlas
       PLATFORM_ADMIN_USER: alex
+      REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
     depends_on: [keycloak]
 
   # ---- the platform ----

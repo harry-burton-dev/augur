@@ -146,6 +146,56 @@ export const realmSettings = (s: RealmSettings, displayName?: string) => ({
 /** The realm attributes Keycloak keeps outside its representation's own fields. */
 export const realmAttributes = (s: RealmSettings) => ({ adminEventsExpiration: String(s.adminEventDays * DAY) });
 
+/** AUGUR's sign-in and email theme (ADR 0041), shipped in AUGUR's Keycloak image (platform/frontends/sign-in-theme). */
+export const SIGN_IN_THEME = 'augur';
+
+/** How the sign-in pages and emails look, and which languages they offer. */
+export interface RealmLook {
+  theme: string;
+  /** The languages people may choose at sign-in, the first being the default. */
+  languages: string[];
+}
+
+/** A deployment's look from its environment: REALM_LANGUAGES, comma separated, default `en`. */
+export const realmLookFromEnv = (env: Record<string, string | undefined>, warn: (message: string) => void = () => undefined): RealmLook => {
+  const asked = (env.REALM_LANGUAGES ?? '').split(',').map((l) => l.trim()).filter(Boolean);
+  const languages = [...new Set(asked.filter((l) => /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(l) || (warn(`REALM_LANGUAGES: ${l} isn't a language tag such as en or pt-BR, so it's left out.`), false)))];
+  return { theme: SIGN_IN_THEME, languages: languages.length ? languages : ['en'] };
+};
+
+type ServerThemes = { themes?: Record<string, { name: string; locales?: string[] }[] | undefined> };
+
+/**
+ * Puts the realm's sign-in pages and emails in AUGUR's theme, when this Keycloak has it, and offers the
+ * languages asked for that the pages have. A Keycloak without the theme (Keycloak's own image, as the
+ * local stack runs) keeps Keycloak's look, and says so.
+ */
+export const applyLook = async (kc: KeycloakDirectory, look: RealmLook, changes: Changes, warn: (message: string) => void = () => undefined) => {
+  const { themes = {} } = await kc.server<ServerThemes>('/serverinfo');
+  const login = themes.login?.find((t) => t.name === look.theme);
+  const email = themes.email?.find((t) => t.name === look.theme);
+  if (!login) warn(`This Keycloak has no ${look.theme} theme, so sign-in keeps Keycloak's own look. AUGUR's Keycloak image has it.`);
+  const known = login?.locales;
+  const languages = known ? look.languages.filter((l) => known.includes(l) || (warn(`REALM_LANGUAGES: the sign-in pages have no ${l}, so it's left out.`), false)) : look.languages;
+  const supported = languages.length ? languages : ['en'];
+  const { data: realm } = await kc.call<Record<string, unknown>>('GET', '');
+  // Without the theme, a realm left on it (a server gone back to Keycloak's own image) returns to Keycloak's.
+  const theme = (have: unknown, found: unknown) => (found ? look.theme : have === look.theme ? '' : have);
+  const want: Record<string, unknown> = {
+    internationalizationEnabled: true,
+    supportedLocales: supported,
+    defaultLocale: supported[0],
+    loginTheme: theme(realm.loginTheme, login),
+    emailTheme: theme(realm.emailTheme, email),
+  };
+  // Keycloak keeps the languages in its own order, so they are compared as a set.
+  const same = (a: unknown, b: unknown) => JSON.stringify(Array.isArray(a) ? [...a].sort() : (a ?? '')) === JSON.stringify(Array.isArray(b) ? [...b].sort() : (b ?? ''));
+  const differs = Object.entries(want).filter(([k, v]) => !same(realm[k], v)).map(([k]) => k);
+  if (!differs.length) return;
+  await kc.call('PUT', '', want);
+  changes.push(`look and languages: ${differs.join(', ')}`);
+};
+
 interface ProfileAttribute {
   name: string;
   displayName?: string;
@@ -178,10 +228,21 @@ export type Changes = string[];
 
 type Execution = { id: string; level: number; index: number; requirement: string; displayName: string; providerId?: string; authenticationFlow?: boolean; flowId?: string; authenticationConfig?: string };
 
-/** Applies `realmSettings` and `realmAttributes`, and says whether anything differed. */
-export const applyRealmSettings = async (kc: KeycloakDirectory, s: RealmSettings, changes: Changes) => {
+/** What AUGUR is called where it doesn't say otherwise; a deployment names its own product in ORG_PRODUCT_NAME. */
+export const DEFAULT_PRODUCT_NAME = 'AUGUR';
+
+/** The product's name from a deployment's environment: ORG_PRODUCT_NAME, or AUGUR when it is empty. */
+export const productNameFromEnv = (env: Record<string, string | undefined>) => env.ORG_PRODUCT_NAME?.trim() || DEFAULT_PRODUCT_NAME;
+
+/**
+ * Applies `realmSettings` and `realmAttributes`, and says whether anything differed. `productName`
+ * becomes the realm's display name, which Keycloak's emails (their subjects and AUGUR's layout), the
+ * sign-in pages and passkey prompts show; without it the realm keeps the one it has.
+ */
+export const applyRealmSettings = async (kc: KeycloakDirectory, s: RealmSettings, changes: Changes, productName?: string) => {
   const { data: realm } = await kc.call<Record<string, unknown> & { attributes?: Record<string, string>; displayName?: string }>('GET', '');
-  const want = realmSettings(s, realm.displayName);
+  const displayName = productName ?? realm.displayName;
+  const want = { ...realmSettings(s, displayName), ...(productName ? { displayName: productName } : {}) };
   const attributes = realmAttributes(s);
   const differs = Object.entries(want).filter(([k, v]) => realm[k] !== v).map(([k]) => k);
   const attributesDiffer = Object.entries(attributes).filter(([k, v]) => realm.attributes?.[k] !== v).map(([k]) => k);
@@ -331,6 +392,12 @@ export const applyServiceAccountRights = async (kc: KeycloakDirectory, clientId:
 
 export interface ApplyOptions {
   settings: RealmSettings;
+  /** The product's name (`productNameFromEnv`), set as the realm's display name. */
+  productName?: string;
+  /** The sign-in pages' theme and languages. */
+  look?: RealmLook;
+  /** Where to say what the job can't do, such as a Keycloak without AUGUR's theme. */
+  warn?: (message: string) => void;
   /** Identity's own client and secret; it is made if missing and given `IDENTITY_RIGHTS`. */
   identity?: { clientId: string; secret: string };
   /** The platform's services' sign-ins, client=secret. */
@@ -346,7 +413,8 @@ export interface ApplyOptions {
  */
 export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): Promise<Changes> => {
   const changes: Changes = [];
-  await applyRealmSettings(kc, options.settings, changes);
+  await applyRealmSettings(kc, options.settings, changes, options.productName);
+  if (options.look) await applyLook(kc, options.look, changes, options.warn);
   await applyRequiredActions(kc, changes);
   await applyRoles(kc, changes);
   await applyUserProfile(kc, changes);

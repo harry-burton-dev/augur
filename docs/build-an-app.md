@@ -129,6 +129,8 @@ app.get('/claims', async (req, reply) => {
 
 From the service kit, `notify` puts a notification on someone's stream (see [Notifications](notifications.md)) and `recordAudit` writes to the platform's audit log (each entry also keeps which service wrote it, from its signed token, so an entry that names someone as the actor still shows it came from your app); see [apps/README](../apps/README.md). A breaking API change goes under `/v2` beside `/v1`, as in [Versioning](versioning.md#http-apis).
 
+Background and scheduled work goes through the service kit's `createJobs`: durable, run once across instances, and recorded in the audit log ([Jobs](jobs.md)). Don't use `setInterval`.
+
 ### Errors
 
 Every AUGUR service answers an error as an [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) problem details body (`application/problem+json`): `type`, `title`, `status`, `detail`, and AUGUR's own `reason` and `whoCanChange`. `reason` is a stable code a client can switch on (`forbidden`, `not_found`, `conflict`, `unavailable`, `bad_request`, `internal`, …). `whoCanChange` says in plain words who can fix it, when someone can, so a screen can say why something can't be done and who to ask. `type` is `about:blank` unless a problem has its own page, so `title` is the status's phrase and the meaning is in `reason`. Each body also carries `error` (the same as `reason`) and `message` (the same as `detail`), which SDK 1.x clients read.
@@ -181,6 +183,7 @@ A frontend-only app can delete `service/`; it is then registered with `pnpm regi
 }
 ```
 
+- `id` is 2 to 40 lowercase letters, digits and dashes, and becomes the app's `/api/<id>`, `/apps/<id>/`, schema and bucket, so it can't be one a part of AUGUR answers to: a platform service's (`identity`, `registry`, `events`, `models`, `storage`, `gateway`, `updater`), a platform app's, a deployment service's (`postgres`, `keycloak`…), a path the front door serves (`api`, `sso`, `kit`…), or one starting `augur-` or `pg-`. The registry refuses such a manifest and says what has the id; the list is `RESERVED_APP_IDS` in `@augur/service-kit`.
 - `version` is copied from the frontend's `package.json` on release; don't edit it.
 - `sdk` is the range of SDK releases the app works with. The shell refuses an app outside it.
 - `icon` and menu `icon`s are the kit's icon names (see Storybook's Icons).
@@ -402,7 +405,7 @@ CI runs all of these, and fails a pull request without a changeset.
 
 ## 7. Putting it on the platform
 
-The registry lists an app once its service registers it, which it does when it starts with `REGISTRY_URL` set and a way to sign in. The gateway sends `/api/<id>/…` to the app's service: where the registry says it is (set by whatever runs the app, or an admin with `PUT /api/registry/v1/apps/<id>/upstream`), or, for the ones the server's compose file starts, where `APP_UPSTREAMS` says. `APP_UPSTREAMS` wins when both name an app. It checks the person's sign-in first and passes them on in `x-user-*` headers and in a token it signs for that service (read them with the service kit's `callerFromHeaders`, behind its `signedCallers` hook); it never passes on their own sign-in token. The names `identity`, `registry`, `events` and `gateway` belong to the platform. An app's `route` must be its own: not one another app has, and not inside or around another app's, `/admin` and `/home` included.
+The registry lists an app once its service registers it, which it does when it starts with `REGISTRY_URL` set and a way to sign in. The gateway sends `/api/<id>/…` to the app's service: where the registry says it is (set by whatever runs the app, or an admin with `PUT /api/registry/v1/apps/<id>/upstream`: on AUGUR's own network only `app-<id>` container names are taken; elsewhere give a full host name; never loopback, link-local or Docker's own 172.16.0.0/12 range), or, for the ones the server's compose file starts, where `APP_UPSTREAMS` says. `APP_UPSTREAMS` wins when both name an app. It checks the person's sign-in first and passes them on in `x-user-*` headers and in a token it signs for that service (read them with the service kit's `callerFromHeaders`, behind its `signedCallers` hook); it never passes on their own sign-in token. The names `identity`, `registry`, `events` and `gateway` belong to the platform. An app's `route` must be its own: not one another app has, and not inside or around another app's, `/admin` and `/home` included.
 
 The app's service signs in to the platform as itself. An admin issues its sign-in once, and again whenever the secret may have leaked (the old one stops working):
 
@@ -460,6 +463,6 @@ Before that, every push to a pull request that changes the app makes a preview, 
 
 ### Serving the frontend from somewhere else
 
-An `entry` that is a path (`/apps/expenses/entry.js`) is served by the platform and always allowed. An `entry` that is a full address (`https://apps.example.org/expenses/entry.js`) is only accepted when an admin has allowed that site in Admin, **Apps**, **Where apps load from**. Otherwise registering fails with a 400 that says so, and `pnpm check:manifest` doesn't catch it, because only the real registry knows which sites are allowed. The site also has to be in the server's `APP_ORIGINS` so the shell's Content Security Policy lets the browser run it, and it has to send CORS headers, since the entry is loaded as a module from another origin. See [Deploy](deploy.md#day-to-day).
+An `entry` that is a path (`/apps/expenses/entry.js`) is served by the platform and always allowed. The registry resolves the entry the way the browser will and takes it as a path only if it stays on AUGUR's own address, and it refuses backslashes and control characters, which browsers read as slashes or drop (`/\evil.example/x.js` is another site). An `entry` that is a full address (`https://apps.example.org/expenses/entry.js`) is only accepted when an admin has allowed that site in Admin, **Apps**, **Where apps load from**. Otherwise registering fails with a 400 that says so, and `pnpm check:manifest` doesn't catch it, because only the real registry knows which sites are allowed. The site also has to be in the server's `APP_ORIGINS` so the shell's Content Security Policy lets the browser run it, and it has to send CORS headers, since the entry is loaded as a module from another origin. See [Deploy](deploy.md#day-to-day).
 
 Whichever way you serve it, the shell's page doesn't allow inline scripts or `eval`. Bundle your code into files and don't build functions from strings. Inline `style` attributes are fine.

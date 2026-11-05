@@ -2,26 +2,32 @@
 # Proves the newest backup can be restored: loads it into a throwaway Postgres
 # inside this container, checks the platform's and Keycloak's tables came back,
 # then throws it away. The live database is never touched.
-# Writes the result to $BACKUP_DIR/restore-test.json, which Admin's Status reads.
+#   restore-test.sh             the newest backup on this server
+#   restore-test.sh --offsite   the newest one in the off-server copy (ADR 0060), fetched with restic
+#                               into the scratch folder first: proves the copy, not only the local file
+# Writes the result to $BACKUP_DIR/restore-test.json, which Admin's Status reads; `from` says which.
 set -eu
 set -o pipefail
 : "${BACKUP_DIR:=/backups}"
+: "${OFFSITE_HOST:=augur}"
 
 started=$(date -u +%s)
-file=$(ls -1 "$BACKUP_DIR"/platform-*.sql.gz 2>/dev/null | sort | tail -n 1 || true)
+from=local
+[ "${1:-}" = "--offsite" ] && from=offsite
+file=""
 scratch=""
 
 # result OK PROBLEM [FACTS]: writes restore-test.json beside the backups.
 result() {
   ended=$(date -u +%s)
   {
-    printf '{"at":"%s","file":"%s","ok":%s,"seconds":%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "${file:-none}")" "$1" "$((ended - started))"
+    printf '{"at":"%s","from":"%s","file":"%s","ok":%s,"seconds":%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$from" "$(basename "${file:-none}")" "$1" "$((ended - started))"
     [ -n "$2" ] && printf ',"problem":"%s"' "$2"
     [ -n "${3:-}" ] && printf ',%s' "$3"
     printf '}\n'
   } > "$BACKUP_DIR/restore-test.json.partial"
   mv "$BACKUP_DIR/restore-test.json.partial" "$BACKUP_DIR/restore-test.json"
-  if [ "$1" = true ]; then echo "restore-test: $(basename "$file") restored and checked"; else echo "restore-test: FAILED: $2" >&2; fi
+  if [ "$1" = true ]; then echo "restore-test: $(basename "$file") ($from) restored and checked"; else echo "restore-test: FAILED: $2" >&2; fi
 }
 
 cleanup() {
@@ -32,13 +38,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
+scratch=$(mktemp -d)
+chown postgres "$scratch"
+
+if [ "$from" = offsite ]; then
+  # The newest database dump in the off-server copy, as restic restores it: under its path on this server.
+  if ! restic restore latest --host "$OFFSITE_HOST" --tag augur-db --target "$scratch/offsite" >/dev/null 2>"$scratch/restic-errors"; then
+    result false "The off-server copy could not be fetched back: $(tail -n 1 "$scratch/restic-errors" | tr -d '"\\' | cut -c1-200)"
+    exit 1
+  fi
+  file=$(find "$scratch/offsite" -name 'platform-*.sql.gz' 2>/dev/null | sort | tail -n 1)
+else
+  file=$(ls -1 "$BACKUP_DIR"/platform-*.sql.gz 2>/dev/null | sort | tail -n 1 || true)
+fi
+
 if [ -z "$file" ]; then
   result false "There is no backup to restore yet."
   exit 1
 fi
-
-scratch=$(mktemp -d)
-chown postgres "$scratch"
 # Listens only on a socket in the scratch folder, so nothing else can reach it.
 if ! su postgres -c "PATH='$PATH' initdb -D $scratch/data -U postgres --auth=trust" >/dev/null 2>&1 ||
   ! printf "listen_addresses = ''\nunix_socket_directories = '%s'\n" "$scratch" >> "$scratch/data/postgresql.conf" ||

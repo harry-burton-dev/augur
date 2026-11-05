@@ -7,6 +7,7 @@ An app can keep its own data on the platform: a **database schema** in the platf
 | | What it is | The app's service reads |
 | --- | --- | --- |
 | Database | A login `app_<id>` that owns the schema `<id>` (dashes become `_`), with that schema first on its search path. Postgres has [pgvector](https://github.com/pgvector/pgvector), so the app can `create table … (embedding vector(1024))`, and [pg_trgm](https://www.postgresql.org/docs/16/pgtrgm.html), for names spelt nearly alike (`similarity(label, $1)`, and `gin (label gin_trgm_ops)` indexes). | `DATABASE_URL` |
+| Jobs | A second schema, `<id>_jobs`, owned by the same login, where the service kit keeps the app's background and scheduled jobs ([jobs.md](jobs.md)). | `DATABASE_URL` |
 | Bucket | A bucket named `<id>` on [Garage](https://garagehq.deuxfleurs.fr/), an S3-compatible store, and a key that can read and write only that bucket. | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
 
 `appStorageFromEnv()` from `@augur/service-kit` reads them, ready for `pg` and an S3 client:
@@ -56,7 +57,7 @@ With `APP_SECRETS_KEY` set in `.env` (`openssl rand -hex 32`), an app's two secr
 
 To change a secret, put the new one in `.env`, `pc up -d`, and restart the app. The database password changes in place; a new bucket secret makes a new key (its id is printed again) and removes the old one. Removing an app from `APP_STORAGE` leaves its data alone.
 
-A pull request's preview of an app gets scratch storage under its own id, such as `notes-pr12` (login `app_notes_pr12`, schema `notes_pr12`, bucket `notes-pr12`), made and taken away by the app runner ([app-previews.md](app-previews.md)). Taking it away runs the storage container with `APP_STORAGE_DROP=notes-pr12`, which drops that schema and login and empties and deletes that bucket. It only ever takes an id of that shape, so an app's own storage can't be dropped this way.
+A pull request's preview of an app gets scratch storage under its own id, such as `notes-pr12` (login `app_notes_pr12`, schema `notes_pr12`, bucket `notes-pr12`), made and taken away by the app runner ([app-previews.md](app-previews.md)). Taking it away runs the storage container with `APP_STORAGE_DROP=notes-pr12`, which drops that schema and login and empties and deletes that bucket. It only ever takes an id of that shape, so an app's own storage can't be dropped this way. No storage is made or dropped under an id a part of AUGUR answers to (`identity`, `public`, `augur-…`; `RESERVED_APP_IDS` in `@augur/service-kit`), so an app's schema never sits among the platform's own.
 
 Both stores are inside the compose network only: an app hosted elsewhere can't reach them.
 

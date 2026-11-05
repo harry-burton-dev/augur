@@ -20,6 +20,7 @@ nav:
   - Running AUGUR on your own server: deploy.md
   - Domain events: domain-events.md
   - "Artifacts: a guide for people and admins": folio.md
+  - Background and scheduled jobs: jobs.md
   - Licensing: licensing.md
   - "Mandate: intent": mandate.md
   - Mirroring AUGUR releases: mirror.md
@@ -86,8 +87,12 @@ nav:
       - 0050. Alpha is proved by a build gate and a 48-hour run on staging: decisions/0050-alpha-proving-run.md
       - 0051. A deployment admin can install a halted release on request, on dev and preview servers only: decisions/0051-install-a-halted-release-on-request.md
       - 0052. The SDK's surface is an API Extractor report, and packages are checked by publint and attw: decisions/0052-api-reports-publint-and-attw.md
+      - 0053. Squawk lints every new migration, and one runner in the service kit applies them: decisions/0053-squawk-lints-migrations.md
       - 0054. App frontends load data with TanStack Query, route with TanStack Router and call APIs with openapi-fetch, all wrapped by the app kit: decisions/0054-app-frontend-starter-libraries.md
       - "0055. Each API has one source: TypeBox schemas on its routes, with the contract generated from them": decisions/0055-schema-first-apis-with-typebox.md
       - 0056. Sample data is seeded through public APIs, only where the deployment allows it, by an admin signed in from the terminal: decisions/0056-seed-through-public-apis.md
       - 0057. The realm is kept as code and applied by identity's realm job, which alone holds Keycloak's admin: decisions/0057-realm-as-code-applied-by-identitys-realm-job.md
+      - 0058. Quill's Editor is built on Tiptap, and keeps writing the same small Markdown: decisions/0058-editor-on-tiptap.md
+      - 0059. A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence: decisions/0059-grafana-alerting-and-faro.md
+      - 0060. Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names: decisions/0060-off-server-backups-with-restic.md
       - 0063. Accessibility is checked by axe in CI, failing on serious findings: decisions/0063-accessibility-checked-by-axe.md

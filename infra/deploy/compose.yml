@@ -29,6 +29,10 @@ x-logging: &logging
 x-telemetry: &telemetry
   NODE_OPTIONS: --import @augur/service-kit/telemetry
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  # A collector's key, and which traces to keep (the SDK's defaults when empty).
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
   OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production}
 
 x-service: &service
@@ -76,7 +80,7 @@ services:
   # (tailscale/start.sh; docs/deploy.md, "Open AUGUR to the internet for a while").
   tailscale:
     logging: *logging
-    image: tailscale/tailscale:v1.76.6
+    image: tailscale/tailscale:v1.104.4
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/config/start.sh"]
     hostname: ${TS_HOSTNAME:-platform}
@@ -106,6 +110,8 @@ services:
       APP_ORIGINS: ${APP_ORIGINS:-}
       # Where the UI kit is loaded from: this server's /kit/ unless set (docs/deploy.md, "The UI kit").
       KIT_URL: ${KIT_URL:-/kit/}
+      # The product's name in the browser tab (docs/deploy.md, "First start"); AUGUR unless set.
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
       # The front door's limits (docs/deploy.md, "Limits at the front door"); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}
@@ -143,7 +149,9 @@ services:
       retries: 20
 
   # A dump of the whole database every night into infra/deploy/backups, keeping 14 days,
-  # and once a week a test restore of the newest into a throwaway database.
+  # and once a week a test restore of the newest into a throwaway database. Once OFFSITE_REPOSITORY is
+  # set, each night's dump and apps' files are also copied off the server with restic, encrypted before
+  # they leave, and the weekly restore test restores from that copy (ADR 0060; docs/deploy.md, "Backups").
   backup:
     logging: *logging
     image: postgres:16-alpine
@@ -156,14 +164,37 @@ services:
       BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-2}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       RESTORE_TEST_WEEKDAY: ${RESTORE_TEST_WEEKDAY:-0}
+      # The off-server copy: a restic repository in an S3-compatible bucket, its encryption password, and
+      # the bucket's key. Empty, nothing leaves the server.
+      RESTIC_REPOSITORY: ${OFFSITE_REPOSITORY:-}
+      RESTIC_PASSWORD: ${OFFSITE_PASSWORD:-}
+      AWS_ACCESS_KEY_ID: ${OFFSITE_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${OFFSITE_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${OFFSITE_REGION:-}
+      OFFSITE_KEEP_DAILY: ${OFFSITE_KEEP_DAILY:-30}
     volumes:
       - ./backup:/backup:ro
       - ./backups:/backups
       # Apps' files, read only: backed up beside the database.
       - garage-meta:/objects/meta:ro
       - garage-data:/objects/data:ro
+      # restic, put there by backup-tools.
+      - backup-tools:/tools:ro
     depends_on:
       postgres: { condition: service_healthy }
+      backup-tools: { condition: service_completed_successfully }
+
+  # Puts restic's binary (one static file) where the backup container runs it from, then stops. Runs on
+  # every `up`, so a new restic arrives with the image tag here.
+  backup-tools:
+    logging: *logging
+    image: restic/restic:0.19.1
+    restart: on-failure
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    entrypoint: ["/bin/sh", "-c", "cp /usr/bin/restic /tools/restic.new && mv /tools/restic.new /tools/restic"]
+    volumes:
+      - backup-tools:/tools
 
   # Apps' files: an S3-compatible object store, reached only inside the compose network.
   garage:
@@ -212,7 +243,8 @@ services:
   # first (docs/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
   keycloak:
     logging: *logging
-    image: quay.io/keycloak/keycloak:26.8.1
+    # AUGUR's Keycloak: Keycloak with AUGUR's sign-in and email theme (ADR 0041, infra/service.Dockerfile).
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/keycloak:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     restart: unless-stopped
     command: ["start", "--import-realm"]
     environment:
@@ -240,6 +272,10 @@ services:
       PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:?set PLATFORM_ADMIN_FIRST_NAME in .env}
       PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?set PLATFORM_ADMIN_LAST_NAME in .env}
       PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
+      # Shown on the sign-in pages and in emails: the organisation's name (as identity has it) and, if
+      # set, a link to its logo. The product's name is the realm's display name (keycloak-config sets it).
+      ORG_NAME: ${ORG_NAME:-Organisation}
+      ORG_LOGO_URL: ${ORG_LOGO_URL:-}
     # Its share of the server's memory: Keycloak sizes its Java heap from it.
     mem_limit: ${KEYCLOAK_MEM_LIMIT:-2g}
     # Ready once it answers on its management port (9000, inside the container only). The image has no
@@ -284,6 +320,10 @@ services:
       REALM_SESSION_MAX_HOURS: ${REALM_SESSION_MAX_HOURS:-}
       REALM_SIGN_IN_EVENT_DAYS: ${REALM_SIGN_IN_EVENT_DAYS:-}
       REALM_ADMIN_EVENT_DAYS: ${REALM_ADMIN_EVENT_DAYS:-}
+      # The languages offered at sign-in, comma separated, the first the default (default en).
+      REALM_LANGUAGES: ${REALM_LANGUAGES:-}
+      # The product's name, as the realm's display name: the sign-in pages, emails and passkeys show it.
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
     depends_on:
       keycloak: { condition: service_healthy }
 
@@ -317,6 +357,8 @@ services:
       SEED_ALLOWED: ${SEED_ALLOWED:-false}
       # Each app's service, name=url: the apps that ship with AUGUR.
       APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086
+      # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
+      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
     volumes:
       - ./backups:/backups:ro
       - ./tailscale:/run/augur/tailscale:ro
@@ -390,6 +432,8 @@ services:
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
+      # Who must sign the release feed, for AUGUR published from a fork (docs/upgrade.md, The signed feed).
+      FEED_SIGNER: ${FEED_SIGNER:-}
     volumes:
       # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/upgrade.md).
       - ./secrets:/run/secrets/augur:ro
@@ -413,6 +457,8 @@ services:
       SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}"
       # Its own login, owning only the events schema: the audit log, notifications and domain events.
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
+      DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
@@ -437,6 +483,8 @@ services:
       MODEL_API_KEY: "${MODEL_API_KEY:-}"
       MODEL_NAME: "${MODEL_NAME:-}"
       MODEL_EMBEDDING_NAME: "${MODEL_EMBEDDING_NAME:-}"
+      # How long to wait for the model, in seconds (60 when empty).
+      MODEL_TIMEOUT_SECONDS: "${MODEL_TIMEOUT_SECONDS:-}"
     depends_on: *own-login
 
   # Folio, the document libraries: the app every deployment ships with (a pillar app). It's an ordinary
@@ -554,6 +602,11 @@ services:
       GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
       # Before read keys: who the pull token in secrets/image-pull-token belongs to.
       IMAGE_PULL_USER: "${IMAGE_PULL_USER:-}"
+      # Who must sign AUGUR's images and its dev builds, for AUGUR published from a fork; the publisher's
+      # workflows when empty (docs/release-channels.md, Signatures).
+      IMAGE_SIGNER: "${IMAGE_SIGNER:-}"
+      IMAGE_SIGNER_ISSUER: "${IMAGE_SIGNER_ISSUER:-}"
+      AUGUR_DEV_SIGNER: "${AUGUR_DEV_SIGNER:-}"
     volumes:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro
@@ -599,4 +652,6 @@ volumes:
   tailscale:
   garage-meta:
   garage-data:
+  # restic, for the backup container (backup-tools fills it on every `up`).
+  backup-tools:
   otel-lgtm:

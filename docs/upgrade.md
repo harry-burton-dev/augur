@@ -54,6 +54,14 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Settings the guides named now reach their services
+
+Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([deploy.md](deploy.md#settings-and-secrets)).
+
+### AUGUR's sign-in pages and emails
+
+Keycloak now runs from AUGUR's own image (`ghcr.io/harry-burton-dev/im-platform/keycloak`, tagged and signed like the others) instead of Keycloak's, with the same Keycloak version and AUGUR's sign-in and email theme (ADR 0041). The realm job turns the theme on. Nothing to do: the pages show `ORG_NAME`, as identity does. Optional, in `.env`: `ORG_LOGO_URL` for a logo on the sign-in pages, and `REALM_LANGUAGES` (say `en,de,fr`) to offer more languages than English (docs/deploy.md, "What's in it"). Going back to a release before this one puts Keycloak's own image back: sign-in shows Keycloak's own look again, and Keycloak's log says it can't find the `augur` theme each time a page is shown, which is harmless.
+
 ### Log limits, memory limits and healthchecks
 
 Every container's log is now capped at three files of 10 MB, and Keycloak, Artifacts' rendition worker and the observability stack have memory limits (2 GB, 4 GB and 2 GB). Keycloak and Garage have healthchecks, and the containers that need them wait until they're healthy. Nothing to do on most servers: the upgrade recreates each container with its limits. Existing logs bigger than the cap go when the container is recreated. On a server with less than 8 GB of memory, set `KEYCLOAK_MEM_LIMIT` and `FOLIO_WORKER_MEM_LIMIT` lower in `.env` first (docs/deploy.md, "Logs, memory and health").
@@ -81,6 +89,12 @@ pc stop tailscale web gateway identity registry events keycloak backup
 gunzip -c infra/deploy/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
 pc up -d --remove-orphans
 ```
+
+### Artifacts, Explorer and Data Atlas come from their own repositories
+
+Since augur@0.17.0, AUGUR no longer builds Artifacts, Explorer and Data Atlas itself. Each one is released in its own repository (`augur-folio`, `augur-auspex`, `augur-atlas`), and AUGUR's release takes the release `release/shipped-apps.json` pins, checks that repository signed it, and signs it again as AUGUR's ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)). Nothing changes on the server: the images keep their names under `PLATFORM_IMAGES`, they still come with each AUGUR release, and the apps keep their tables and buckets. An app the app runner installs (Mandate) moves the same way, and the updater takes a backup before its first release from the new repository (docs/ship-an-app.md, "An app in its own repository").
+
+**Going back** to a release that built them here (0.16.x) is the usual code step in [Going back](#going-back): check out `augur@0.16.1`, set `PLATFORM_VERSION=0.16.1`, `pc up -d --remove-orphans`. No restore is needed. Neither 0.17.0 nor the apps' releases in it are breaking, so their migrations only add ([versioning.md](versioning.md#database-migrations)), and 0.17.0's deploy test went from 0.16.1 to 0.17.0 and back on the same data. Going back past 0.18.0 is the exception: Keycloak 26.8's database needs the restore in "Keycloak 26.8 and the realm job" first.
 
 ### Sample data, where you allow it
 
@@ -242,7 +256,7 @@ Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel
 
 ### The updater
 
-An optional container that runs an upgrade asked for with **Upgrade to …** in the Upgrade Centre. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the settings it needs are set, takes a backup and test-restores it, pulls, then reruns storage’s set-up and restarts identity, registry, events, models, gateway and web in turn, waiting for each to answer on its new version. If one doesn't, it puts every part back on the release you were on, and the page says why and which backup was taken. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
+An optional container that runs an upgrade asked for with **Upgrade to …** in the Upgrade Centre. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the settings it needs are set, takes a backup and test-restores it, pulls, then restarts AUGUR's Keycloak (waiting up to five minutes, as its first start on a new Keycloak minor migrates its database), reruns storage’s set-up and restarts identity, registry, events, models, the apps that ship with AUGUR (in the order `release/shipped-apps.json` lists them, which its image carries), gateway and web in turn, waiting for each to answer on its new version. A release with an image for something the server runs that this updater doesn't know is refused before anything changes, so no part is restarted without being checked; the page says which, and that release is upgraded by hand. Going back to a release from before AUGUR's own Keycloak image leaves Keycloak running; it takes Keycloak's own image the next time it's recreated. If one doesn't answer, it puts every part back on the release you were on, and the page says why and which backup was taken. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
 
 **Deploy files and new settings.** Each release's updater image carries that release's deploy files (`infra/deploy`, as `augur@<version>` has them). When the release you upgrade to changes some, the updater takes them from the new release's updater image, checks each against the release file (which the Release workflow signs with the images), writes them into `infra/deploy`, then starts anything they add and makes again anything that mounts a changed file (Keycloak's realm, say). Going back puts the old files back and takes new parts away. Two things stop it, and the page says which:
 - A file the release changes has been **edited on the server** since the release you run. The updater never overwrites your edits: put the file back as `augur@<your version>` has it (`git checkout augur@<version> -- infra/deploy/<file>`), and keep your change in `.env` or a `compose.override.yml` of your own instead.
