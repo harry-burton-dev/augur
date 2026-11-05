@@ -1,6 +1,6 @@
 import pg from 'pg';
-import type { Migration } from '@augur/service-kit';
-import { DEPLOYMENT_ADMIN_ROLE, type Person } from './directory.ts';
+import type { Migration, NewAuditEntry } from '@augur/service-kit';
+import { DEPLOYMENT_ADMIN_ROLE, type Directory, type Person } from './directory.ts';
 import { BRUTE_FORCE_POLICY } from './realm.ts';
 
 /**
@@ -35,6 +35,8 @@ export interface Lifecycle {
   lockedAt?: string;
   /** A leaver flow set for after their last day (`YYYY-MM-DD` in the organisation's time zone), not yet run. */
   leaving?: Leaving;
+  /** When they first signed in through the organisation's sign-in (Entra), which they sign in with since. */
+  federatedAt?: string;
 }
 
 /** A leaver flow an admin set for later: it runs once `on`, their last day, is over. */
@@ -68,6 +70,8 @@ export interface LifecycleStore {
   cancelLeave(person: string): Promise<boolean>;
   /** Everyone whose last day is before `today` (`YYYY-MM-DD`) and who hasn't left yet. */
   dueLeavers(today: string): Promise<(Leaving & { person: string })[]>;
+  /** They signed in through the organisation's sign-in for the first time; false if that was already known. */
+  federated(person: string, at: string): Promise<boolean>;
 }
 
 /** The organisation's idle-account days, and whether the sign-in service can warn anyone (email works). */
@@ -129,6 +133,7 @@ export const withLifecycle = <P extends Person>(p: P, l: Lifecycle = {}, now = n
   ...(stateOf(p, l) === 'active' && lockedOf(l, now) ? { locked: true } : {}),
   ...(!l.left && l.leaving ? { leaving: { on: l.leaving.on, ...(l.leaving.handOverTo ? { handOverTo: l.leaving.handOverTo } : {}) } } : {}),
   ...(policy && stateOf(p, l) === 'active' ? { idle: idleOf(p, l, policy, now) } : {}),
+  source: l.federatedAt ? ('federated' as const) : ('local' as const),
 });
 
 export const lifecycleMigrations: Migration[] = [
@@ -174,6 +179,12 @@ export const lifecycleLeavingMigrations: Migration[] = [
         add column leave_note text;
       create index person_lifecycle_leaving on identity.person_lifecycle (leave_on) where leave_on is not null and left_at is null;`,
   },
+  {
+    id: 'lifecycle_004_federated',
+    sql: `
+      -- When someone first signed in through the organisation's sign-in (Entra), which they sign in with since (PER-194).
+      alter table identity.person_lifecycle add column federated_at timestamptz;`,
+  },
 ];
 
 interface Row {
@@ -194,6 +205,7 @@ interface Row {
   leave_by: string | null;
   leave_handover_to: string | null;
   leave_note: string | null;
+  federated_at: Date | null;
 }
 
 const iso = (d: Date | null) => (d ? d.toISOString() : undefined);
@@ -228,6 +240,7 @@ export class PgLifecycleStore implements LifecycleStore {
           ...(r.left_at ? { left: { at: iso(r.left_at)!, by: r.left_by ?? '', ...(r.handover_to ? { handOverTo: r.handover_to } : {}) } } : {}),
           ...(r.locked_at ? { lockedAt: iso(r.locked_at) } : {}),
           ...(r.leave_day ? { leaving: leavingOf(r) } : {}),
+          ...(r.federated_at ? { federatedAt: iso(r.federated_at) } : {}),
         },
       ]),
     );
@@ -309,6 +322,15 @@ export class PgLifecycleStore implements LifecycleStore {
     return (rowCount ?? 0) > 0;
   }
 
+  async federated(person: string, at: string) {
+    const { rowCount } = await this.pool.query(
+      `insert into identity.person_lifecycle (person, federated_at) values ($1, $2)
+       on conflict (person) do update set federated_at = excluded.federated_at, updated_at = now() where person_lifecycle.federated_at is null`,
+      [person, at],
+    );
+    return (rowCount ?? 0) > 0;
+  }
+
   async dueLeavers(today: string) {
     const { rows } = await this.pool.query<Row>(
       `select person, ${LEAVE_ON}, leave_by, leave_handover_to, leave_note from identity.person_lifecycle
@@ -318,3 +340,24 @@ export class PgLifecycleStore implements LifecycleStore {
     return rows.map((r) => ({ person: r.person, ...leavingOf(r) }));
   }
 }
+
+/** How long after an account was made its first sign-in through Entra counts as having made it. */
+const MADE_BY_SIGN_IN_MS = 2 * 60_000;
+
+/**
+ * Someone's first sign-in through the organisation's sign-in (ADR 0040, PER-194 spec 4.8): kept, so Admin says
+ * they sign in with it, and when the sign-in made their account (nobody had their email), Activity records
+ * `person.added` with `method: 'federated'`, which followers hear as `platform.person.joined`. An account that
+ * was linked had its own `person.added` when an admin added it.
+ */
+export const federatedFirstSignIn = async (
+  { lifecycle, directory, audit }: { lifecycle: Pick<LifecycleStore, 'federated' | 'get'>; directory: Pick<Directory, 'person'>; audit?: (entry: NewAuditEntry) => Promise<unknown> },
+  person: string,
+  at: string,
+) => {
+  const before = (await lifecycle.get([person])).get(person);
+  if (!(await lifecycle.federated(person, at))) return;
+  const p = await directory.person(person);
+  const made = !before?.invite && !!p.createdAt && Math.abs(Date.parse(p.createdAt) - Date.parse(at)) <= MADE_BY_SIGN_IN_MS;
+  if (made) await audit?.({ actor: { id: 'keycloak', kind: 'service' }, app: 'identity', action: 'person.added', target: person, detail: { username: p.username, roles: p.roles, departments: p.departments, method: 'federated' } });
+};

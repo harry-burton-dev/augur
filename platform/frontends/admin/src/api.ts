@@ -22,6 +22,8 @@ export interface Person {
   disabledCause?: 'admin' | 'idle' | 'leaver' | 'outside';
   /** When they left, who ran the leaver flow, and who took on their work. */
   left?: { at: string; by: string; handOverTo?: string };
+  /** How they sign in: a password here, or the organisation's sign-in (Entra). */
+  source?: 'local' | 'federated';
   /** Locked out for now after repeated wrong passwords. */
   locked?: boolean;
   /** As the sign-in service has it now; only on one person read on their own. */

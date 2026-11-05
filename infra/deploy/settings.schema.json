@@ -625,6 +625,33 @@
       ],
       "x-docs": "docs/deploy.md#email"
     },
+    "ENTRA_TENANT_ID": {
+      "type": "string",
+      "description": "The organisation's Entra tenant id (a GUID), to sign in with the organisation's account. Set all three ENTRA_* settings, or none.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#entra"
+    },
+    "ENTRA_CLIENT_ID": {
+      "type": "string",
+      "description": "The AUGUR app registration's client id in that tenant.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#entra"
+    },
+    "ENTRA_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "That app registration's client secret.",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#entra"
+    },
     "ORG_LOGO_URL": {
       "type": "string",
       "description": "A link to the organisation's logo, shown on the sign-in pages and in emails. Empty shows none.",
