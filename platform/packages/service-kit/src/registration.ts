@@ -1,4 +1,5 @@
 import { callService, serviceHeaders, ServiceCallError, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
 
 export interface RegisterOptions {
   /** The registry's internal address, e.g. http://registry:8082. */
@@ -51,7 +52,7 @@ export interface SettingsOptions {
  */
 export async function appSettings({ registryUrl, credentials, app, fetchImpl = fetch }: SettingsOptions): Promise<Record<string, number>> {
   const what = `read ${app}'s settings from the registry`;
-  const res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/settings`, { headers: await serviceHeaders(credentials) }).catch((err: Error) => {
+  const res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/settings`, { headers: await serviceHeaders(credentials) }).catch((err: Error) => {
     throw new ServiceCallError(`Could not ${what}: ${err.message}.`);
   });
   const reply = (await res.json().catch(() => ({}))) as { settings?: { id: string; value: number }[]; message?: string };
