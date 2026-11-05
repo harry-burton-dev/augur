@@ -96,7 +96,8 @@
       "x-services": [
         "web",
         "keycloak",
-        "registry"
+        "registry",
+        "events"
       ],
       "x-via": {
         "updater": ".env"
@@ -413,6 +414,23 @@
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
+    "ATLAS_MAP_TILES": {
+      "type": "string",
+      "description": "The base map Data Atlas draws its maps on: a PMTiles file in ./maps beside the compose file, named as the container sees it (/maps/<file>.pmtiles). Without it, points go on a plain background.",
+      "pattern": "^/maps/[^/]+\\.pmtiles$",
+      "x-services": [
+        "atlas"
+      ],
+      "x-docs": "docs/atlas.md#maps"
+    },
+    "ATLAS_MAP_ATTRIBUTION": {
+      "type": "string",
+      "description": "The credit the base map's data needs, shown on the map (default: OpenStreetMap's).",
+      "x-services": [
+        "atlas"
+      ],
+      "x-docs": "docs/atlas.md#maps"
+    },
     "ATLAS_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,
@@ -504,8 +522,8 @@
     },
     "PLATFORM_ADMIN_DEPARTMENT": {
       "type": "string",
-      "description": "That person's department.",
-      "default": "Platform",
+      "description": "That person's department, made at first start. People see its name in Admin and on floors.",
+      "default": "Administration",
       "x-services": [
         "keycloak"
       ],
@@ -527,7 +545,8 @@
       "default": "AUGUR",
       "x-services": [
         "web",
-        "keycloak-config"
+        "keycloak-config",
+        "events"
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
@@ -537,7 +556,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -547,7 +567,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -557,7 +578,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -567,7 +589,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -586,7 +609,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -596,7 +620,8 @@
       "description": "That sign-in's password.",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -1011,6 +1036,16 @@
       "type": "string",
       "description": "How many days closed inbox items are kept before they go, with their history (the audit log keeps every step).",
       "default": "90",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/inbox.md#how-long-items-are-kept"
+    },
+    "INBOX_DONE_DAYS": {
+      "type": "string",
+      "description": "How many days back the Inbox's Done tab looks for closed items. Keep it at most INBOX_KEEP_DAYS, since older items are gone.",
+      "pattern": "^[1-9][0-9]*$",
+      "default": "30",
       "x-services": [
         "events"
       ],

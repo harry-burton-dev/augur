@@ -8,6 +8,7 @@ import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { mapFor } from './map.ts';
+import { noticeSettingsRoutes } from './notice-settings.ts';
 import { organisationRoutes, type OrganisationStore } from './organisation.ts';
 import { meRoutes, type AccountSource, type MeOptions } from './me.ts';
 import { DirectoryAnswer, DirectoryQuery, findInDirectory, peopleRoutes, principalsOf, signedInPeople } from './people.ts';
@@ -165,6 +166,7 @@ export const buildApp = async ({ store, workspaces, directory, accounts, appClie
       await app.register(peopleRoutes({ workspaces, teams, verifyService, grants }));
       await app.register(appRunnerRoutes({ clients: appClients, audit, verifyService }), { prefix: '/admin/apps' });
       await app.register(organisationRoutes({ workspaces, store: organisation, audit, verifyService }));
+      await app.register(noticeSettingsRoutes({ store, accounts, workspaces, organisation, verifyService, languages: languages ?? ['en'] }));
     },
     { prefix: `/${API_VERSION}` },
   );

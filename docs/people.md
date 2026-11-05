@@ -6,7 +6,8 @@ How a person's account moves through AUGUR, for admins in Admin → People and f
 
 | Step | What happens | Recorded in Activity as | Followers hear |
 | --- | --- | --- | --- |
-| Add someone | They get a one-time password to sign in with, then choose their own. Email invites come with the email work (PER-189) | `person.added` | `platform.person.joined`, and `platform.team.member-added` for each team |
+| Add someone | **How they start:** an invite email (the default when email works) with a link that lasts 72 hours to confirm their email and choose a password, or a one-time password the admin gives them. If the account is made but the email can't go, Admin says so; send it again or give a one-time password | `person.added`, with `method` (`email` or `temporary-password`) | `platform.person.joined`, and `platform.team.member-added` for each team |
+| Send a new invite | For someone still Invited: a new link for 72 hours, and the old one stops working. After 72 hours People shows **Invite expired** | `person.invite-resent` | nothing |
 | Change their details, teams or roles | Only what was changed, with before and after | `person.updated` | `platform.person.changed` (which fields, never the values) |
 | Turn their sign-in off | They can't sign in, and they're **signed out everywhere at once**: every session, and every offline token an app holds for them. Turning it off again signs them out again, so an admin can retry if Keycloak couldn't be reached | `person.disabled` | `platform.person.disabled` |
 | Turn their sign-in on | They can sign in again | `person.enabled` | `platform.person.enabled` |
@@ -23,12 +24,32 @@ People shows each person's state and their last sign-in. Identity works the stat
 
 | State | When | Shown in People |
 | --- | --- | --- |
-| `invited` | Added, and no sign-in seen yet | Invited, last sign-in "Never" |
+| `invited` | Added, and no sign-in seen yet | Invited (or Invite expired), last sign-in "Never" |
 | `active` | Their sign-in is on and they have signed in, or were here before AUGUR kept sign-ins | Active |
 | `disabled` | Their sign-in is off; `disabledCause` says why when AUGUR knows (`admin`, `leaver`; later `idle`) | Off |
 | `left` | The leaver flow ran. It is for good: their sign-in can't be turned back on (409), and the flow can't run twice. Add them again if they return | Left, with the date and who took on their work |
 
 Last sign-in starts when identity first runs with this version. Before that, People says "Not seen yet".
+
+### Idle accounts
+
+Admin → Organisation keeps when idle accounts are dealt with: a warning email after 60 days without a sign-in and the sign-in turned off at 90, unless an admin changes them or turns it off (`idle` in `/v1/organisation`). The turn-off is at least 7 days after the warning, and at most 730 days. Every sign-in starts the count again.
+
+The realm job (ADR 0057) applies them as Keycloak's idle-account Workflow, `augur-idle-accounts-{warning}-{turn-off}`, each time AUGUR starts or upgrades, so a change in Admin applies then:
+
+- Keycloak enrols a person at each sign-in (`user-authenticated`), and starts their count again at the next one. People who haven't signed in since the Workflow was made aren't counted until they do.
+- After the warning days it sends its own "Account Disable Warning" email, in the person's language and AUGUR's email theme, saying how many days are left; at the turn-off days it turns their sign-in off.
+- Deployment admins are left out, so a deployment can't lose its last admin by their being away. Service accounts never enrol.
+- New days make a new Workflow and the old one is deleted, because Keycloak won't change steps people are waiting on. Deleting cancels what was waiting, so a change only ever delays a turn-off.
+- Without email (no `SMTP_HOST` and no relay in Keycloak's console) there is no Workflow, as nobody could be warned. Idle accounts off in Admin takes it away too. A Keycloak without Workflows (before 26.6) is warned about in the realm job's log and left alone.
+
+Keycloak's Workflow ends no sessions and tells nobody, so identity notices the turn-off (below), ends their sessions and records it in Activity as "turned off after 90 days without a sign-in", with `detail.cause` `idle`.
+
+### Changes made in Keycloak itself
+
+Someone's sign-in can be turned off or on in Keycloak's admin console, and later by Keycloak's idle-account Workflow; neither ends their sessions or tells AUGUR. Every five minutes identity compares each account's sign-in with what it last knew (one identity copy at a time). For each one that changed it ends their sessions (when turned off), keeps the change, and records `person.disabled` or `person.enabled` in Activity with actor `keycloak` (a service) and `detail.outside: true`, so followers hear `platform.person.disabled` or `platform.person.enabled` as they do for an admin's change. Activity says "Sam's sign-in was turned off in the sign-in service, not in AUGUR".
+
+The first comparison only takes note: accounts already off then are kept as off with no cause, and nothing is announced. A leaver turned back on in the console is left alone; People still shows them as left.
 
 ## For apps
 
@@ -55,10 +76,14 @@ Identity copies Keycloak's sign-in events into Activity each minute, so they sha
 
 Every entry also keeps `at` (when Keycloak recorded it) and `keycloakEvent`. Copying starts when identity first runs with this version: what Keycloak held before stays only in Keycloak, for `REALM_SIGN_IN_EVENT_DAYS`. Where it got to is kept in `identity.sign_in_cursor`, so a restart never copies one twice, and with several identities only one copies at a time. If identity can't read events (its sign-in lacks `view-events`; the realm job gives it), it says so in its log each minute and Activity has no sign-ins.
 
+## Invites need email
+
+Keycloak sends the invite, through the realm's relay (`SMTP_*` in `.env`, docs/deploy.md, Email). Without one, Admin offers only the one-time password and says why, and `start: email` answers 400. The link ends in AUGUR: the shell's sign-in at the address in `OIDC_ISSUER`.
+
 ## The API
 
-Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/identity.openapi.yaml): `PATCH /admin/people/{id}` (`enabled: false` signs them out everywhere), `POST /admin/people/{id}/leave` (`handOverTo`, `note`) and `GET /admin/leave-requests`.
+Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/identity.openapi.yaml): `POST /admin/people` (`start`; answers `invite` and, for a one-time password, `temporaryPassword`), `POST /admin/people/{id}/invite`, `GET /admin/lifecycle` (`email`), `PATCH /admin/people/{id}` (`enabled: false` signs them out everywhere), `POST /admin/people/{id}/leave` (`handOverTo`, `note`) and `GET /admin/leave-requests`.
 
 ## Not built yet
 
-Email invites, idle accounts turning off on their own (60 and 90 days), deletion after retention with `platform.person.deleted`, linking an Entra first sign-in by verified email, and Locked, Idle and Leaving states on People. Each comes with PER-194.
+Idle accounts turning off on their own (60 and 90 days), deletion after retention with `platform.person.deleted`, linking an Entra first sign-in by verified email, and Locked, Idle and Leaving states on People. Each comes with PER-194.

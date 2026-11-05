@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.12.0
+  version: 1.14.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -598,6 +598,7 @@ components:
         - you
         - teams
         - overdue
+        - doneDays
       properties:
         you:
           type: integer
@@ -608,6 +609,10 @@ components:
         overdue:
           type: integer
           description: Of `you`, those past due
+        doneDays:
+          type: integer
+          minimum: 1
+          description: How many days back the done tab looks (the deployment's INBOX_DONE_DAYS)
 paths:
   /inbox/items/{app}/{key}:
     put:
@@ -777,7 +782,7 @@ paths:
   /inbox:
     get:
       summary: "The caller's inbox: one tab, newest first"
-      description: "you: open items on the caller, or team items they took. teams: untaken items of the teams they're on; a leads-only item is shown whole to a lead standing on that team (x-workspace-id) and redacted to anyone else on it. done: items closed in the last 30 days that the caller owned or acted on. To page, pass the last id shown as before."
+      description: "you: open items on the caller, or team items they took. teams: untaken items of the teams they're on; a leads-only item is shown whole to a lead standing on that team (x-workspace-id) and redacted to anyone else on it. done: items closed in the last doneDays days (/inbox/counts) that the caller owned or acted on. To page, pass the last id shown as before."
       parameters:
         - schema:
             enum:
@@ -1327,6 +1332,35 @@ paths:
                 $ref: "#/components/schemas/TeamNotices"
         "403":
           description: Not a lead standing on that team, nor an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notifications/{id}:
+    get:
+      summary: One of the caller's notifications, read or not
+      description: "What a notice email links to: the shell opens it as if it were clicked there."
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The caller has no such notification
           content:
             application/problem+json:
               schema:

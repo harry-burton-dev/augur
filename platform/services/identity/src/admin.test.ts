@@ -149,6 +149,69 @@ describe.runIf(DATABASE_URL)('admin: turning off and leavers (ADR 0040)', () => 
   });
 });
 
+describe.runIf(DATABASE_URL)('admin: invites (ADR 0040)', () => {
+  const jo = { firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org' };
+  const actions = (audit: Awaited<ReturnType<typeof setup>>['audit']) => audit.mock.calls.map(([e]) => [e.action, e.target, e.detail?.method]);
+
+  it('invites by email when email works, with a link for 72 hours and no password', async () => {
+    const { call, directory, audit } = await setup();
+    directory.emailWorks = true;
+    expect((await call('GET', '/lifecycle')).json()).toEqual({ email: true });
+    const res = await call('POST', '/people', jo);
+    expect(res.statusCode).toBe(201);
+    const { person, invite, temporaryPassword } = res.json();
+    expect(temporaryPassword).toBeUndefined();
+    expect(invite).toMatchObject({ method: 'email', sentTo: 'jo@example.org' });
+    expect(Date.parse(invite.expiresAt) - Date.now()).toBeGreaterThan(71 * 3_600_000);
+    expect(directory.invitesSent).toEqual([{ id: person.id, lifespanSeconds: 72 * 3600 }]);
+    expect(person).toMatchObject({ state: 'invited', invite: { method: 'email', count: 1, expired: false } });
+    expect(actions(audit)).toEqual([['person.added', person.id, 'email']]);
+
+    // Resend: a new link, recorded, counted.
+    const again = await call('POST', `/people/${person.id}/invite`);
+    expect(again.statusCode).toBe(200);
+    expect(directory.invitesSent).toHaveLength(2);
+    expect((await call('GET', `/people/${person.id}`)).json()).toMatchObject({ state: 'invited', invite: { method: 'email', count: 2 } });
+    expect(actions(audit).at(-1)).toEqual(['person.invite-resent', person.id, undefined]);
+  });
+
+  it('gives a one-time password when email isn’t set up, and refuses an invite it can’t send', async () => {
+    const { call, directory } = await setup();
+    expect((await call('GET', '/lifecycle')).json()).toEqual({ email: false });
+    const refused = await call('POST', '/people', { ...jo, start: 'email' });
+    expect(refused.statusCode).toBe(400);
+    expect(refused.json().message).toMatch(/Email isn’t set up/);
+    const res = (await call('POST', '/people', jo)).json();
+    expect(res).toMatchObject({ invite: { method: 'temporary-password' }, temporaryPassword: expect.any(String) });
+    expect(res.person.invite).toMatchObject({ method: 'temporary-password', count: 0 });
+    expect((await call('POST', `/people/${res.person.id}/invite`)).statusCode).toBe(503);
+    expect(directory.invitesSent).toEqual([]);
+  });
+
+  it('says so when the account is made but the email can’t go', async () => {
+    const { call, directory } = await setup();
+    directory.emailWorks = true;
+    directory.sendInvite = async () => {
+      throw new Error('The sign-in service couldn’t send the invite email.');
+    };
+    const res = await call('POST', '/people', jo);
+    expect(res.statusCode).toBe(201);
+    expect(res.json().invite).toEqual({ method: 'email', error: 'The sign-in service couldn’t send the invite email.' });
+    expect(res.json().person.invite).toMatchObject({ method: 'email', count: 0 });
+  });
+
+  it('won’t resend to someone who has set up or left', async () => {
+    const { call, directory, lifecycle } = await setup();
+    directory.emailWorks = true;
+    const { person } = (await call('POST', '/people', jo)).json();
+    await lifecycle.signedIn(person.id, new Date().toISOString());
+    expect((await call('POST', `/people/${person.id}/invite`)).json().message).toMatch(/already set up/);
+    const { person: sam } = (await call('POST', '/people', { firstName: 'Sam', lastName: 'Okafor', email: 'sam@example.org' })).json();
+    await call('POST', `/people/${sam.id}/leave`, {});
+    expect((await call('POST', `/people/${sam.id}/invite`)).statusCode).toBe(409);
+  });
+});
+
 describe.runIf(DATABASE_URL)('admin: people', () => {
   it('is for admins only', async () => {
     const { call } = await setup();

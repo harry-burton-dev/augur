@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Preferences } from '../host/preferences.js';
 import { AccountApi, sessionOf } from './api.js';
 import { AccountArea, type AccountAreaProps, type AccountSection } from './AccountArea.js';
+import { WHATS_NEW } from './whats-new.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -27,6 +28,7 @@ const answers: Record<string, unknown> = {
       { id: 'recovery-codes', action: 'CONFIGURE_RECOVERY_AUTHN_CODES', available: true },
       { id: 'email', action: 'UPDATE_EMAIL', available: true },
     ],
+    emails: { on: true, address: 'alex@example.org', verified: true },
   },
   'GET /me/sessions': {
     sessions: [
@@ -112,6 +114,7 @@ describe('the Account area', () => {
     expect(text()).toContain('This browser');
     expect(text()).toContain('From 10.0.0.9');
     expect(text()).toContain('Sign-in failed: wrong password');
+    expect(text()).toContain('AUGUR emails you at alex@example.org when your password, code app or passkeys change.');
     expect(button('Remove')?.getAttribute('aria-disabled') ?? button('Remove')?.disabled.toString()).toBeTruthy();
     await act(async () => button('Change password')!.click());
     expect(props.onAction).toHaveBeenCalledWith('UPDATE_PASSWORD', 'security');
@@ -131,6 +134,25 @@ describe('the Account area', () => {
     const toggle = document.querySelector<HTMLInputElement>('[role="switch"], input[type="checkbox"]');
     expect(toggle).toBeTruthy();
     expect(props.onPreference).not.toHaveBeenCalled();
+  });
+
+  it('says whether email reaches them, and why not', async () => {
+    const security = answers['GET /me/security'] as { emails: object };
+    const was = security.emails;
+    try {
+      expect((await open('notifications')).text()).toContain('AUGUR emails you at alex@example.org.');
+      act(() => root?.unmount());
+      security.emails = { on: false };
+      expect((await open('notifications')).text()).toContain('AUGUR can’t send email on this deployment yet.');
+      act(() => root?.unmount());
+      security.emails = { on: true, address: 'alex@example.org', verified: false };
+      const unchecked = await open('notifications');
+      expect(unchecked.text()).toContain('alex@example.org isn’t checked yet, so nothing is emailed to it.');
+      await act(async () => unchecked.button('Open Profile')!.click());
+      expect(unchecked.props.onSection).toHaveBeenCalledWith('profile');
+    } finally {
+      security.emails = was;
+    }
   });
 
   it('pins apps, clears recent ones and mounts each app’s own settings', async () => {
@@ -193,9 +215,22 @@ describe('the Account area', () => {
     expect(text()).toContain('Time zone');
   });
 
+  it('says times follow the organisation’s time zone until they choose one', async () => {
+    const { text } = await open('region', { orgTimeZone: 'America/New_York' });
+    expect(text()).toContain('Times follow your organisation’s (America/New York) until you choose one.');
+  });
+
   it('says once how the last of Keycloak’s screens went', async () => {
     const { text } = await open('security', { actionStatus: 'cancelled' });
     expect(text()).toContain('Nothing changed.');
+  });
+
+  it('says what’s new in this release, under the deployment’s own name', async () => {
+    const { text } = await open('about', { product: 'Skein' });
+    expect(text()).toContain(`What’s new in ${WHATS_NEW.name}`);
+    expect(text()).toContain(WHATS_NEW.items[0]!.title);
+    expect(text()).not.toContain('{product}');
+    expect(text()).toContain('Skein');
   });
 
   it('closes on Escape', async () => {

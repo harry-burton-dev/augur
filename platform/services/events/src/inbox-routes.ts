@@ -264,7 +264,7 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
         description: [
           'you: open items on the caller, or team items they took. teams: untaken items of the teams',
           "they're on; a leads-only item is shown whole to a lead standing on that team",
-          '(x-workspace-id) and redacted to anyone else on it. done: items closed in the last 30 days',
+          '(x-workspace-id) and redacted to anyone else on it. done: items closed in the last doneDays days (/inbox/counts)',
           'that the caller owned or acted on. To page, pass the last id shown as before.',
         ].join(' '),
         querystring: Type.Object({
@@ -304,7 +304,7 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
       if (!caller) return reply;
       const teams = await myTeams(caller, reply);
       if (!teams) return reply;
-      return inbox.counts(caller.id, teams, teams.filter((t) => leadOn(caller, t)));
+      return { ...(await inbox.counts(caller.id, teams, teams.filter((t) => leadOn(caller, t)))), doneDays: inbox.doneDays };
     },
   );
 

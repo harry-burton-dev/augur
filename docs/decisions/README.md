@@ -66,6 +66,7 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0058](0058-editor-on-tiptap.md) | Quill's Editor is built on Tiptap, and keeps writing the same small Markdown | Accepted | 2026-11-04 |
 | [0059](0059-grafana-alerting-and-faro.md) | A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence | Proposed | 2026-11-04 |
 | [0060](0060-off-server-backups-with-restic.md) | Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names | Proposed | 2026-11-04 |
+| [0061](0061-recurring-times-as-rrules.md) | Recurring times are RFC 5545 recurrence rules, read with rrule and swept by a scheduled job | Proposed | 2026-11-05 |
 | [0062](0062-ontology-checks-with-shacl.md) | Data Atlas checks what it keeps against SHACL shapes, with rdf-validate-shacl | Proposed | 2026-11-05 |
 | [0063](0063-accessibility-checked-by-axe.md) | Accessibility is checked by axe in CI, failing on serious findings | Proposed | 2026-11-04 |
 | [0064](0064-point-in-time-restore-with-postgres-wal-archiving.md) | The database can be restored to a point in time: Postgres archives its WAL, and restic copies it off the server | Proposed | 2026-11-05 |
@@ -74,5 +75,7 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0067](0067-update-control-stays-in-the-registry-behind-a-seam.md) | Update control stays in the registry for now, behind a checked seam, and leaves as its own service | Proposed | 2026-11-05 |
 | [0068](0068-a-deployment-chooses-how-depth-is-drawn.md) | A deployment chooses how depth is drawn, and scrim blurs nothing | Proposed | 2026-11-05 |
 | [0069](0069-knip-finds-dead-code-and-vitest-measures-coverage.md) | Knip finds dead code, and Vitest's v8 coverage is reported on main | Proposed | 2026-11-05 |
+| [0070](0070-military-symbols-with-milsymbol.md) | Data Atlas draws military symbols for its kinds with milsymbol | Proposed | 2026-11-05 |
+| [0071](0071-data-atlas-maps-with-maplibre-and-pmtiles.md) | Data Atlas draws maps with MapLibre GL JS from the deployment's own PMTiles file | Proposed | 2026-11-05 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

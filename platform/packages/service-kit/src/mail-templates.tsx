@@ -15,12 +15,14 @@ export interface NoticeEmailProps {
   action?: { label: string; url: string };
   /** Why this person gets it, and how to stop: shown under a rule at the end. */
   why?: string;
+  /** The language the words are in, as a language tag (default `en`). */
+  lang?: string;
 }
 
 /** A notice: a heading, a few paragraphs, maybe one link to act on it, and why it came. */
-export function NoticeEmail({ productName, heading, lines, action, why }: NoticeEmailProps) {
+export function NoticeEmail({ productName, heading, lines, action, why, lang = 'en' }: NoticeEmailProps) {
   return (
-    <html lang="en">
+    <html lang={lang}>
       <head>
         <meta httpEquiv="Content-Type" content="text/html; charset=UTF-8" />
         <title>{heading}</title>

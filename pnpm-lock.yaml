@@ -512,6 +512,9 @@ importers:
       nodemailer:
         specifier: ^10.3.1
         version: 10.3.1
+      pino:
+        specifier: ^10.4.0
+        version: 10.4.0
       react:
         specifier: 'catalog:'
         version: 19.3.1

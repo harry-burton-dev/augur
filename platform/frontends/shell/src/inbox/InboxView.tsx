@@ -1,4 +1,4 @@
-import { searchPrincipals, type AppManifestEntry, type DirectoryPrincipal, type InboxCounts, type InboxItem, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { searchPrincipals, type AppManifestEntry, type DirectoryPrincipal, type InboxItem, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import { Button, Dialog, Heading, Menu, Progress, Tab, TabList, TabPanel, Tabs, TextField } from '@augur/shell-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -14,6 +14,7 @@ import {
   type InboxClient,
   type InboxTab,
   type InboxVerb,
+  type ShellInboxCounts,
 } from '../host/index.js';
 
 export interface InboxViewProps {
@@ -23,7 +24,7 @@ export interface InboxViewProps {
   /** The floor the person stands on. */
   here: string;
   me: string;
-  counts?: InboxCounts;
+  counts?: ShellInboxCounts;
   /** Bumped whenever the stream says something changed: the open tab loads again. */
   version: number;
   /** For the hand-on picker: the directory, through the gateway. */
@@ -141,7 +142,7 @@ export function InboxView({ client, manifest, floors, here, me, counts, version,
                     ))}
                   </ul>
                 ) : (
-                  <Empty tab={t} teamCount={teamCount} onTeams={() => setTab('teams')} />
+                  <Empty tab={t} teamCount={teamCount} doneDays={counts?.doneDays} onTeams={() => setTab('teams')} />
                 )}
               </>
             )}
@@ -171,7 +172,7 @@ export function InboxView({ client, manifest, floors, here, me, counts, version,
 
 }
 
-function Empty({ tab: t, teamCount: m, onTeams }: { tab: InboxTab; teamCount: number; onTeams(): void }) {
+function Empty({ tab: t, teamCount: m, doneDays, onTeams }: { tab: InboxTab; teamCount: number; doneDays?: number; onTeams(): void }) {
   if (t === 'you')
     return (
       <div className="inbox-empty">
@@ -183,7 +184,9 @@ function Empty({ tab: t, teamCount: m, onTeams }: { tab: InboxTab; teamCount: nu
         ) : null}
       </div>
     );
-  return <p className="inbox-empty">{t === 'teams' ? 'Nothing is waiting for your teams.' : 'Nothing closed in the last 30 days.'}</p>;
+  if (t === 'teams') return <p className="inbox-empty">Nothing is waiting for your teams.</p>;
+  // The window is the deployment's (INBOX_DONE_DAYS), as the events service says; before it has said, no number.
+  return <p className="inbox-empty">{doneDays ? `Nothing closed in the last ${doneDays === 1 ? 'day' : `${doneDays} days`}.` : 'Nothing closed recently.'}</p>;
 }
 
 function InboxRow({

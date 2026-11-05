@@ -107,6 +107,14 @@ export class NotificationFeed {
     this.opts.onList((await res.json()) as ServerNotification[]);
   }
 
+  /** One of the person's notifications, read or not (what a notice email links to); undefined when they have no such one. */
+  async get(id: string): Promise<ServerNotification | undefined> {
+    const res = await this.fetchImpl(`${this.baseUrl}/notifications/${encodeURIComponent(id)}`, { headers: await this.headers() });
+    if (res.status === 404) return undefined;
+    if (!res.ok) throw new Error(`answered ${res.status}`);
+    return (await res.json()) as ServerNotification;
+  }
+
   /** Marks a notification read (or unread again after Undo). Failures are quiet: the worst case is it shows again next time. */
   async setRead(id: string, read: boolean): Promise<void> {
     await this.fetchImpl(`${this.baseUrl}/notifications/${encodeURIComponent(id)}/read`, { method: read ? 'POST' : 'DELETE', headers: await this.headers() }).catch(() => undefined);

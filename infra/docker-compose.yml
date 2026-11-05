@@ -33,7 +33,7 @@ services:
   # ---- infrastructure ----
   # Postgres with pgvector, for apps' embeddings.
   postgres:
-    image: pgvector/pgvector:0.8.0-pg17
+    image: pgvector/pgvector:0.8.7-pg17-bookworm
     environment:
       POSTGRES_USER: platform
       POSTGRES_PASSWORD: platform-local-only
@@ -177,6 +177,12 @@ services:
       PORT: 8084
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-events
+      # Notice emails land in Mailpit (http://localhost:8025), never out.
+      PLATFORM_URL: http://localhost:5173
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      SMTP_FROM: augur@localhost
       <<: *internal
     depends_on: [postgres]
 

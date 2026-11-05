@@ -398,6 +398,29 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         },
       );
 
+      app.get(
+        '/notifications/:id',
+        {
+          schema: {
+            summary: "One of the caller's notifications, read or not",
+            description: 'What a notice email links to: the shell opens it as if it were clicked there.',
+            params: Type.Object({ id: Type.String() }),
+            response: {
+              200: ref(NotificationSchema),
+              401: refused('No signed-in caller'),
+              404: refused('The caller has no such notification'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          const n = await store.notification(caller.id, req.params.id);
+          if (!n) return reply.code(404).send({ error: 'not_found', message: 'You have no such notification.' });
+          return forCaller(n);
+        },
+      );
+
       const setRead = (read: boolean) => async (req: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
         const caller = signedIn(req, reply);
         if (!caller) return reply;

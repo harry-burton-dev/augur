@@ -39,8 +39,11 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} changed ${names.person(target)}’s ${what.length ? what.join(' and ') : 'details'}`;
     }
     case 'person.enabled':
+      if (d.outside) return `${names.person(target)}’s sign-in was turned back on in the sign-in service, not in AUGUR`;
       return `${who} turned on ${names.person(target)}’s sign-in`;
     case 'person.disabled':
+      if (d.cause === 'idle') return `${names.person(target)}’s sign-in was turned off after ${String(d.days)} days without a sign-in`;
+      if (d.outside) return `${names.person(target)}’s sign-in was turned off in the sign-in service, not in AUGUR`;
       return `${who} turned off ${names.person(target)}’s sign-in`;
     case 'person.password-reset':
       return `${who} gave ${names.person(target)} a new password`;
@@ -82,7 +85,7 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} renamed ${String(d.from)} to ${String(d.to)}`;
     case 'organisation.changed': {
       const to = (d.to ?? {}) as Record<string, unknown>;
-      const what = [to.name !== undefined ? 'name' : '', to.timeZone !== undefined ? 'time zone' : '', to.sender !== undefined ? 'email sender' : ''].filter(Boolean);
+      const what = [to.name !== undefined ? 'name' : '', to.timeZone !== undefined ? 'time zone' : '', to.sender !== undefined ? 'email sender' : '', to.idle !== undefined ? 'idle-account days' : ''].filter(Boolean);
       return to.name !== undefined && what.length === 1
         ? `${who} renamed the organisation to ${String(to.name)}`
         : `${who} changed the organisation’s ${what.length ? what.join(' and ') : 'settings'}`;

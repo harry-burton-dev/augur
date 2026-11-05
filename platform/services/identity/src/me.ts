@@ -11,6 +11,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, type Caller, type NewAuditEntry, type NewNotification } from '@augur/service-kit';
 import { DirectoryError, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
+import { SECURITY_EMAIL_LISTENER } from './realm.ts';
 import { choice, empty, IdParams, Preferences, ref, refused } from './schemas.ts';
 import type { LeaveRequest, PreferenceStore, Preferences as Prefs } from './store.ts';
 
@@ -105,6 +106,8 @@ export interface AccountSource {
   /** Ends every one of their sessions but `keep`; returns how many ended. */
   endSessions(person: string, keep?: string): Promise<number>;
   signIns(person: string, max: number): Promise<SignIn[]>;
+  /** Whether Keycloak emails people when how they sign in changes: the realm has a relay and its email listener. */
+  securityEmails(): Promise<boolean>;
 }
 
 /** The Keycloak events a person's recent sign-ins are read from. */
@@ -183,6 +186,16 @@ export class KeycloakAccounts implements AccountSource {
     return data.map((f) => ({ provider: f.identityProvider, name: providers.find((p) => p.alias === f.identityProvider)?.name ?? f.identityProvider, ...(f.userName ? { username: f.userName } : {}) }));
   }
 
+  private emails?: { on: boolean; at: number };
+
+  async securityEmails() {
+    if (this.emails && Date.now() - this.emails.at < 60_000) return this.emails.on;
+    const { data } = await this.kc.call<{ smtpServer?: { host?: string }; eventsListeners?: string[] }>('GET', '');
+    const on = Boolean(data.smtpServer?.host) && (data.eventsListeners ?? []).includes(SECURITY_EMAIL_LISTENER);
+    this.emails = { on, at: Date.now() };
+    return on;
+  }
+
   async providers(): Promise<Provider[]> {
     if (this.known && Date.now() - this.known.at < 60_000) return this.known.list;
     const { data } = await this.kc.call<{ alias: string; displayName?: string; enabled: boolean; config?: { syncMode?: string } }[]>('GET', '/identity-provider/instances?briefRepresentation=false');
@@ -247,6 +260,8 @@ export class KeycloakAccounts implements AccountSource {
 export class MemoryAccounts implements AccountSource {
   readonly people = new Map<string, { profile: Profile; credentials: Credential[]; linked: LinkedAccount[]; sessions: Session[]; signIns: SignIn[] }>();
   readonly orgSignIns: Provider[] = [];
+  /** Whether this pretend realm emails security changes. */
+  emailsSecurity = false;
 
   add(person: string, profile: Partial<Profile> & { username: string }, more: Partial<{ credentials: Credential[]; linked: LinkedAccount[]; sessions: Session[]; signIns: SignIn[] }> = {}) {
     this.people.set(person, {
@@ -290,6 +305,10 @@ export class MemoryAccounts implements AccountSource {
 
   async providers() {
     return structuredClone(this.orgSignIns);
+  }
+
+  async securityEmails() {
+    return this.emailsSecurity;
   }
 
   async sessions(person: string) {
@@ -350,10 +369,19 @@ export interface Security {
   canLink: { alias: string; name: string; action: string }[];
   /** Keycloak's screens for each change, and whether this person can use it. */
   actions: { id: AccountAction; action: string; available: boolean; reason?: string }[];
+  /** Whether a change to how they sign in is emailed to them, and where. */
+  emails: { on: boolean; address?: string; verified: boolean };
 }
 
 /** The security summary for a caller, from what their account holds. */
-export const securityOf = (caller: Pick<Caller, 'roles'>, creds: Credential[], linked: LinkedAccount[], providers: Provider[], profile: Pick<Profile, 'managed' | 'managedBy'>): Security => {
+export const securityOf = (
+  caller: Pick<Caller, 'roles'>,
+  creds: Credential[],
+  linked: LinkedAccount[],
+  providers: Provider[],
+  profile: Pick<Profile, 'managed' | 'managedBy'> & Partial<Pick<Profile, 'email' | 'emailVerified'>>,
+  emails = false,
+): Security => {
   const required = caller.roles.includes(TWO_STEP_ROLE.name);
   const seconds = creds.filter((c) => SECOND_STEPS.has(c.type) && c.type !== 'recovery-authn-codes');
   const password = creds.find((c) => c.type === 'password');
@@ -378,6 +406,7 @@ export const securityOf = (caller: Pick<Caller, 'roles'>, creds: Credential[], l
       if (id === 'email' && managedEmail) return { id, action, available: false, reason: `${profile.managedBy ?? 'Your organisation’s sign-in'} sets your email address at every sign-in, so it's changed there.` };
       return { id, action, available: true };
     }),
+    emails: { on: emails, ...(profile.email ? { address: profile.email } : {}), verified: Boolean(profile.email && profile.emailVerified) },
   };
 };
 
@@ -478,6 +507,14 @@ export const AccountSecurity = Type.Object(
         available: Type.Boolean(),
         reason: opt(Type.String({ description: 'Why not, and who can change it' })),
       }),
+    ),
+    emails: Type.Object(
+      {
+        on: Type.Boolean({ description: 'This deployment emails people when their password, code app or passkeys change' }),
+        address: opt(Type.String({ description: 'Where those emails go' })),
+        verified: Type.Boolean({ description: 'They have confirmed that address' }),
+      },
+      { description: 'Emails about changes to how they sign in' },
     ),
   },
   { $id: 'AccountSecurity', description: 'How they sign in. Each change is made on Keycloak’s own screen: sign in again with kc_action set to its action, and come back.' },
@@ -649,8 +686,8 @@ export const meRoutes =
       async (req) => {
         const who = caller(req.headers);
         const a = acct();
-        const [creds, linked, providers, profile] = await Promise.all([a.credentials(who.id), a.linked(who.id), a.providers(), a.profile(who.id)]);
-        return securityOf(who, creds, linked, providers, profile);
+        const [creds, linked, providers, profile, emails] = await Promise.all([a.credentials(who.id), a.linked(who.id), a.providers(), a.profile(who.id), a.securityEmails().catch(() => false)]);
+        return securityOf(who, creds, linked, providers, profile, emails);
       },
     );
 
