@@ -1,0 +1,9 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/contracts/*.openapi.yaml"] },
+    "typecheck": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/contracts/*.openapi.yaml"] },
+    "test": { "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/contracts/*.openapi.yaml"] }
+  }
+}
