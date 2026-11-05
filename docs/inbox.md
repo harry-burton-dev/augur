@@ -36,7 +36,7 @@ Ask for `inbox:write` in the manifest's `scopes` (Admin shows it as "Put work in
 }
 ```
 
-Each kind has an `id` (lowercase, as your service names it), a `label` of up to 40 characters and an optional kit icon; up to 10. The events service refuses an item of a kind your manifest doesn't declare. `InboxItem`, `InboxKind` and `INBOX_TOPICS` are in `@augur/mfe-sdk` (1.12) for frontends that show items.
+Each kind has an `id` (lowercase, as your service names it), a `label` of up to 40 characters and an optional kit icon; up to 10. Admin lists the labels under the app's "Inbox work", and says so when the app declares kinds but isn't allowed `inbox:write` yet. The events service refuses an item of a kind your manifest doesn't declare. `InboxItem`, `InboxKind` and `INBOX_TOPICS` are in `@augur/mfe-sdk` (1.12) for frontends that show items.
 
 Then, from the service kit:
 
