@@ -115,11 +115,11 @@ const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name,
 /**
  * Agents aren't built yet: they are still being designed and have nothing
  * behind them. Rather than hiding them (Nothing is obtuse, docs/shell-principles.md),
- * the Shell keeps them in its functions under an id it doesn't open itself, and
- * pressing them says why. Once Aerie's functions take `unavailable` as its navs
- * do, this becomes that.
+ * the Shell keeps them in its functions as unavailable, so they look it and say
+ * why on hover and focus, and pressing them does nothing.
  */
-export const AGENTS_UNAVAILABLE = 'agents-unavailable';
+export const AGENTS_WHY =
+  'Not here yet: they’re still being designed and arrive with a later release of AUGUR, so nobody can turn them on.';
 /**
  * Account opens the shell's Account area (ADR 0036), which the host draws, and Settings has moved into it
  * (Appearance), so the Shell's own small Account and Settings views aren't offered.
@@ -130,7 +130,7 @@ export const ACCOUNT_PARAM = 'account';
 /** What the Shell offers; floors replace Switch workspace. */
 export const alphaFunctions = defaultFunctions
   .filter((f) => f.id !== 'settings')
-  .map((f) => (f.id === 'agents' ? { ...f, id: AGENTS_UNAVAILABLE } : f.id === 'account' ? { ...f, id: ACCOUNT_AREA } : f));
+  .map((f) => (f.id === 'agents' ? { ...f, unavailable: AGENTS_WHY } : f.id === 'account' ? { ...f, id: ACCOUNT_AREA } : f));
 /** For an app's developers: its pull requests' previews, to switch to for themselves. */
 /** Pinned apps first, in their order, then the few opened most recently. */
 const keptClose = (pinned: string[] = [], recent: string[] = []) => [...new Set([...pinned, ...recent.slice(0, 6)])];
@@ -189,7 +189,6 @@ export function Host({
   /** Apps' feature previews, and whether each is on for this person (SDK 1.7). */
   const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
-  const [agentsWhy, setAgentsWhy] = useState(false);
   /** The Account area's open section, from `?account=`; null when it's closed. */
   const [accountSection, setAccountSection] = useState<AccountSection | null>(() => {
     const s = new URLSearchParams(window.location.search).get(ACCOUNT_PARAM);
@@ -948,7 +947,6 @@ export function Host({
       if (id === 'sign-out') void session.signOut();
       else if (id === 'previews') setPreviewsOpen(true);
       else if (id === 'inbox') setInboxOpen(true);
-      else if (id === AGENTS_UNAVAILABLE) setAgentsWhy(true);
       else if (id === ACCOUNT_AREA) {
         shell.close();
         showAccount('profile');
@@ -1143,14 +1141,6 @@ export function Host({
           />
         ) : null}
       </Dialog>
-      <Dialog
-        open={agentsWhy}
-        onClose={() => setAgentsWhy(false)}
-        size="glance"
-        heading="Agents aren’t here yet"
-        summary="They’re still being designed, so nothing is behind them yet. They arrive with a later release of AUGUR: until then nobody can turn them on, here or in Settings."
-        cancelLabel="Close"
-      />
       <Dialog
         open={previewsOpen}
         onClose={() => setPreviewsOpen(false)}
