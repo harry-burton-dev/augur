@@ -36,6 +36,23 @@ export interface Department {
   members: string[];
 }
 
+/** The organisation's settings (ADR 0042): its name, time zone and who AUGUR's email says it is from. */
+export interface Organisation {
+  name: string;
+  /** An IANA time zone, e.g. Europe/London. */
+  timeZone: string;
+  sender: { name: string; address?: string };
+  updatedAt?: string;
+  updatedBy?: string;
+}
+
+/** Only what changes; a sender address of `null` takes it away. */
+export interface OrganisationChanges {
+  name?: string;
+  timeZone?: string;
+  sender?: { name: string; address: string | null };
+}
+
 export interface Role {
   name: string;
   description?: string;
@@ -560,6 +577,11 @@ export class AdminApi {
     this.call<void>('PUT', `/api/identity/v1/admin/departments/${encodeURIComponent(department)}/members/${encodeURIComponent(person)}`);
   removeMember = (department: string, person: string) =>
     this.call<void>('DELETE', `/api/identity/v1/admin/departments/${encodeURIComponent(department)}/members/${encodeURIComponent(person)}`);
+
+  organisation = () => this.call<Organisation>('GET', '/api/identity/v1/organisation');
+  setOrganisation = (changes: OrganisationChanges) => this.call<Organisation>('PATCH', '/api/identity/v1/admin/organisation', changes);
+  /** The time zones an admin can choose, UTC first. */
+  timeZones = () => this.call<string[]>('GET', '/api/identity/v1/admin/organisation/time-zones');
 
   apps = () => this.call<CatalogueApp[]>('GET', '/api/registry/v1/apps');
   setAppEnabled = (id: string, enabled: boolean) => this.call<CatalogueApp>('PATCH', `/api/registry/v1/apps/${encodeURIComponent(id)}`, { enabled });
