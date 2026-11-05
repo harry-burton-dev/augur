@@ -138,7 +138,10 @@ components:
           description: The relay as host:port, never its sign-in
         from:
           type: string
-          description: The address mail comes from
+          description: "The address mail comes from: the organisation's sender address (Admin, Organisation), or SMTP_FROM"
+        fromName:
+          type: string
+          description: "The name mail comes from: the organisation's sender name, or the product's name"
         checkedAt:
           type: string
           format: date-time

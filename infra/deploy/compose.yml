@@ -361,8 +361,11 @@ services:
       SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # Identity's database, read for the organisation's email sender (Admin → Organisation), which replaces SMTP_FROM.
+      DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
     depends_on:
       keycloak: { condition: service_healthy }
+      postgres: { condition: service_healthy }
 
   gateway:
     logging: *logging

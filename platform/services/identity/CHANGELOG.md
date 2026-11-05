@@ -1,5 +1,18 @@
 # @augur/identity
 
+## 1.4.0
+
+### Minor Changes
+
+- c0de29b: Email comes from the organisation's sender (Admin → Organisation) instead of SMTP_FROM and the product's name. The service kit's `Mailer` takes a `sender` lookup (`organisationSender` reads identity's `GET /v1/organisation`), Admin → Status shows the name and address mail comes from, and the realm job gives Keycloak the same sender on every run.
+
+### Patch Changes
+
+- Updated dependencies [c0de29b]
+- Updated dependencies [8eba62b]
+- Updated dependencies [ab9f61f]
+  - @augur/service-kit@0.16.0
+
 ## 1.3.0
 
 ### Minor Changes
