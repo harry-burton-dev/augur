@@ -1,6 +1,6 @@
 {
   "name": "@augur/shell",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -22,20 +22,20 @@
     "@grafana/faro-web-sdk": "^2.13.0",
     "@grafana/faro-web-tracing": "^2.13.0",
     "oidc-client-ts": "^3.5.0",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "semver": "^7.8.5"
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "semver": "catalog:"
   },
   "devDependencies": {
     "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.5.6",
-    "@types/node": "^22.0.0",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@types/semver": "^7.8.0",
-    "@vitejs/plugin-react": "^5.2.0",
-    "happy-dom": "^20.0.0",
-    "typescript": "^5.6.0",
-    "vite": "^7.3.7",
-    "vitest": "^3.2.0"
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/semver": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "happy-dom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
   }
 }

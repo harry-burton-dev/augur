@@ -1,5 +1,16 @@
 # @augur/service-kit
 
+## 0.16.0
+
+### Minor Changes
+
+- c0de29b: Email comes from the organisation's sender (Admin → Organisation) instead of SMTP_FROM and the product's name. The service kit's `Mailer` takes a `sender` lookup (`organisationSender` reads identity's `GET /v1/organisation`), Admin → Status shows the name and address mail comes from, and the realm job gives Keycloak the same sender on every run.
+- 8eba62b: Apps say they bind their things to entities with `links: { entities: true }` and name the types they bind in `bindings` (lowercase, up to 10, never `entity` or `role`; SDK 2.1, ADR 0066). The registry lists those apps and types for any service at `GET /v1/entity-links`, and the service kit's `registryBindingApps` reads it, cached, so a follower such as Data Atlas subscribes to exactly `<app>.<type>.entity-bound` and `-unbound`.
+
+### Patch Changes
+
+- ab9f61f: Say AUGUR, not "the platform", where people read it: why an app id starting `augur-` is refused, two settings' descriptions and a dashboard's.
+
 ## 0.15.0
 
 ### Minor Changes

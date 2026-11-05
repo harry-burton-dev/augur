@@ -97,13 +97,15 @@ export function settingsOf(app: AppManifestEntry, floor: Pick<Workspace, 'kind' 
 }
 
 /**
- * The cards for Home on this floor: apps the person opened most recently first, then the catalogue's order, at most six.
+ * The cards for Home on this floor: apps the person opened most recently first; then, of the rest, apps for the work
+ * (pillar apps and every other app) before platform apps, each in the catalogue's order; at most six (ADR 0032).
  * An app this shell can't open keeps its card, which says why and who can change it (Nothing is obtuse).
  */
 export function cardsFor(manifest: AppManifestEntry[], floor: Pick<Workspace, 'kind' | 'role'>, recent: string[]): HomeCard[] {
   const order = (a: AppManifestEntry) => {
     const at = recent.indexOf(a.id);
-    return at < 0 ? recent.length + manifest.indexOf(a) : at;
+    if (at >= 0) return at;
+    return recent.length + (a.category === 'platform' ? manifest.length : 0) + manifest.indexOf(a);
   };
   return manifest
     .filter((a) => cardOf(a, floor))

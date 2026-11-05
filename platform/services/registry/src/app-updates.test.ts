@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { appFeed, AppUpdateChecker, newestOn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
-import { MemoryAppStore, type AppRelease } from './store.ts';
+import { PgAppStore, type AppRelease } from './store.ts';
 import { UpdateChecker } from './updates.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const release = (version: string, more: Partial<AppRelease['manifest']> = {}, channel = 'stable'): AppRelease => ({
@@ -88,20 +90,20 @@ describe('what an update needs', () => {
   });
 });
 
-describe('installs and updates in Admin → Apps', () => {
+describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
   const fresh = () => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date().toISOString() });
   const verifyService = async (headers: Record<string, string | string[] | undefined>) =>
     headers.authorization === 'Bearer platform-updater' ? { kind: 'platform' as const, name: 'updater' } : undefined;
   const runner = { authorization: 'Bearer platform-updater' };
 
-  const setup = async (releases: AppFeedRelease[], ring?: 'preview' | 'production', more: { store?: MemoryAppStore; pillars?: string[] } = {}) => {
+  const setup = async (releases: AppFeedRelease[], ring?: 'preview' | 'production', more: { store?: PgAppStore; pillars?: string[] } = {}) => {
     let feed = releases;
     // Each check a minute after the last, so none is answered from the one before.
     let minutes = 0;
     const checker = new AppUpdateChecker(async () => feed, () => new Date(Date.UTC(2026, 9, 27, 12, minutes++)));
     const entries: { action: string; detail?: Record<string, unknown> }[] = [];
     const updates = new UpdateChecker({ running: { version: '0.9.0', channel: 'beta' }, ring });
-    const server = await buildApp({ verifyService, appUpdates: checker, updates, allowPrPreviews: ring !== 'production', audit: async (e) => void entries.push(e), ...more });
+    const server = await db.app({ verifyService, appUpdates: checker, updates, allowPrPreviews: ring !== 'production', audit: async (e) => void entries.push(e), ...more });
     await checker.check();
     /** Plays the runner: takes the next job and says it went as `outcome`. */
     const runNext = async (outcome: 'done' | 'failed' = 'done') => {
@@ -133,7 +135,7 @@ describe('installs and updates in Admin → Apps', () => {
   });
 
   it('stops listing an app the runner installed once it ships with AUGUR', async () => {
-    const store = new MemoryAppStore();
+    const store = db.store;
     const before = await setup(feedOf(release('1.0.0')), undefined, { store });
     await before.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
     await before.runNext();

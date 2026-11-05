@@ -1,0 +1,80 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignoreWorkspaces": [
+    "apps/*/*"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": [
+    "cosign",
+    "oras",
+    "tailscale",
+    "diff"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.mjs",
+        "infra/*.mjs"
+      ],
+      "project": [
+        "scripts/**/*.mjs",
+        "infra/**/*.mjs"
+      ],
+      "ignoreDependencies": [
+        "@arethetypeswrong/cli",
+        "@microsoft/api-extractor",
+        "publint",
+        "squawk-cli",
+        "playwright"
+      ]
+    },
+    "platform/services/*": {
+      "entry": [
+        "src/index.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ]
+    },
+    "platform/packages/*": {
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ]
+    },
+    "platform/frontends/*": {
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss"
+      ]
+    },
+    "platform/contract": {
+      "project": [
+        "**/*.{ts,mjs}"
+      ]
+    },
+    "platform/frontends/shell": {
+      "entry": [
+        "src/dev-app.tsx"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss"
+      ]
+    },
+    "platform/frontends/sign-in-theme": {
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ],
+      "ignore": [
+        "src/kc.gen.tsx"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss"
+      ]
+    }
+  }
+}
