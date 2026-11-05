@@ -56,15 +56,21 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Activity keeps a year
+
+**From** augur@0.20.0
+
+Activity (Admin's record of who did what) now keeps entries for 365 days. Each night at 03:00 UTC the events service removes older ones, and Activity records how many it removed. On the first night after the upgrade, anything older than a year goes. To keep it, download it first, signed in as an admin: open `/api/events/v1/audit/export?since=2025-01-01T00:00:00Z&until=2026-01-01T00:00:00Z` on your AUGUR's address (CSV, at most 366 days per download; Admin's own download button comes with a later release). When the organisation's policy sets a different period (Admin, Settings), the events service uses that instead.
+
 ### Grafana's password is required
 
-**From** unreleased
+**From** augur@0.20.0
 
 `GRAFANA_ADMIN_PASSWORD` is now required, because Grafana with none signs in as admin/admin. An upgrade from the Upgrade Centre makes one up and writes it to `.env`, where you read it to sign in. By hand, set it before `pc up -d` (`openssl rand -hex 16`), even with `OTEL_LGTM_REPLICAS=0`. Settings you enter for an upgrade are still never stored: if the registry restarts before the updater takes them, the upgrade ends at once, failed, nothing changed, and says to ask again. The registry also turns down a signed feed issued before the newest one it has taken since it started, so an older feed still in date can't be replayed to hide a newer release or a halt; the Upgrade Centre says so.
 
 ### Time limits between services and on database queries
 
-**From** unreleased
+**From** augur@0.20.0
 
 One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`), and Postgres cancels any one query from a service after a minute (`DATABASE_STATEMENT_TIMEOUT_SECONDS`, 0 for no limit; migrations are never limited). Nothing to do. On a slow server, if `pc logs` shows a working service giving up ("could not be reached", or "canceling statement due to statement timeout"), raise the value in `.env` and run `pc up -d` ([deploy.md](deploy.md#logs-memory-and-health)).
 
@@ -76,13 +82,13 @@ One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT
 
 ### Restoring the database to a point in time
 
-**From** unreleased
+**From** augur@0.20.0
 
 From this release Postgres archives its changes as it makes them, and the backup container takes a base backup each night beside the dump, so the database can go back to any moment in the last 7 days (ADR 0064; [deploy.md](deploy.md#restore-to-a-point-in-time)). The Upgrade Centre doesn't restart Postgres or the backup container: after upgrading, run `pc up -d postgres backup` once. Postgres restarts with archiving on (a few seconds without the database), then the backup container takes the first base backup and tests a replay. Until then Admin → Status says "Backups need a look" and why. It needs disk for 7 base backups, each about the size of the database, beside the dumps.
 
 ### SDK 2: the shell stops serving Lit
 
-**From** unreleased
+**From** augur@0.20.0
 
 From the release on SDK 2.0 the shell no longer serves `lit` or `@augur/ui-kit`. Nothing to do for the apps that ship with AUGUR: Home, Admin, the Upgrade Centre, Explorer, Artifacts, Mandate and Data Atlas never used them, and their manifests accept SDK 2. An app of your own that imports Lit stops loading: move it to React and Quill first (docs/build-an-app.md). An app of your own that doesn't import Lit keeps working once its manifest's `sdk` range also accepts 2, say `^1.4.0 || ^2.0.0`; until then the shell shows it as made for an older version.
 
@@ -100,7 +106,7 @@ AUGUR can now send email through the organisation's SMTP relay: password resets 
 
 ### Organisation settings move to Admin
 
-**From** unreleased
+**From** augur@0.20.0
 
 Admin → Organisation now holds the organisation's name, time zone and email sender (ADR 0042). Nothing to do: the name your server already shows, which came from `ORG_NAME` at first start, stays as it is, and the time zone starts as UTC. From this release identity ignores a changed `ORG_NAME`: change the name in Admin instead. The sign-in pages still show `ORG_NAME` for now, so keep the two the same.
 

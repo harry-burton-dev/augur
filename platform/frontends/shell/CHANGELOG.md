@@ -1,5 +1,27 @@
 # @augur/shell
 
+## 0.17.0
+
+### Minor Changes
+
+- 8d5b585: Account's Home and apps section: the floor AUGUR opens on, pinned apps first on Home and in the list of apps, clearing recent apps, and each app's own `settings` surface. Identity's preferences keep `pinned` and `startFloor`.
+- 54b0d26: Account, Language and region: choose your language from the ones the deployment offers (`REALM_LANGUAGES`, which identity now reads too; kept as the profile's `locale`, so sign-in pages and emails follow it), how dates and times are written (`dateFormat` and `clock` preferences), with examples. The shell writes its dates and times their way, in their time zone. Part of PER-193.
+- eac9902: Account gets Privacy and data: download a copy of what AUGUR keeps about you (identity `GET /me/data`, with events' notifications, inbox and Activity from `GET /v1/people/{id}/data`), see who sees what about you, and ask to leave or take it back (`/me/leave`; admins are told once). Part of PER-193.
+- f12bbaf: Apps get the person's date formats (PER-323): `ctx.formats` (SDK 2.0) carries their `language`, the `locale` to write dates in, their `timeZone` and `hourCycle`, read live from Account's Language and region. Additive: an older shell leaves it out.
+- cbd1abc: SDK 2 drops Lit and the Lit kit (`@augur/ui-kit`, PER-264). The shell no longer builds or serves them: its import map holds React, Common and Quill from the kit bundle, and in production the shell's own stand-in for `react/jsx-dev-runtime` at `/shared/`. The shell's build stops if the pinned kit doesn't serve every module the SDK promises apps. An app that still imports `lit` or `@augur/ui-kit` doesn't load. The typefaces (Jost and Nunito) now come with the kit's styles (kit 0.5.0). `pnpm dev:app` drops its `--kit` switch, and the registry takes a `.tsx` entry for Live on the workbench. `pnpm check:boundaries` fails on any import of Lit or the Lit kit under `platform/`.
+- 04d7ed1: Choosing notifications per kind (ADR 0036). The events service keeps a notification's `kind` and refuses one the app's manifest doesn't declare (migration 008). Identity's preferences keep `quietKinds` (`<app>:<kind>`). Account, Notifications lists each app's kinds, On Home or Quiet, and the shell lands a quiet kind in the stream without a pulse, uncounted, off Home and with no toast (Aerie 0.7.0). The service kit's `NewNotification` and `AppNotice` take `kind`.
+
+### Patch Changes
+
+- 1f3bcfd: Agents, not built yet, now look unavailable on the Shell's arc and say why on hover and focus, instead of opening a dialog when pressed.
+- fe3d68a: `pnpm dev:app` keeps a stand-in inbox, filled from the browser console, and the contract tests check the Inbox through it: an item shows in the app's words, Open raises its intent, Home lists it, and what the app doesn’t allow stays in the menu saying why. Each Inbox row’s More now opens its menu from a button.
+- 21ee89a: Serve Quill 0.8.0 (kit bundle 0.5.3): its dates follow each person's `ctx.formats` (PER-323), and `AppError` reads a service's problem as AUGUR sends it.
+- 9d8c0ed: `pnpm dev:app`'s stand-in Home, and the shell's and registry's test apps, accept SDK 2 as well as 1, so they still open once the SDK is 2.0.0.
+- Updated dependencies [f12bbaf]
+- Updated dependencies [4f8d944]
+- Updated dependencies [cbd1abc]
+  - @augur/mfe-sdk@2.0.0
+
 ## 0.16.0
 
 ### Minor Changes

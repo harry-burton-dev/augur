@@ -195,9 +195,15 @@ The rest lives in GitHub's settings, which a cloud session can't change. The own
   the updater and the registry trust signatures from any `release/<unit>-<x>.<y>` branch;
 - `APP_RELEASES_TOKEN` as a fine-grained token with only what it is used for: Contents read on the app
   repositories (their releases and source) and Actions write on this one (an app's release starts the
-  Release feed), set in this repository and each app repository, expiring after 90 days.
+  Release feed), set in this repository and each app repository, expiring after 90 days;
 - `APP_PROMOTE_TOKEN`, only in this repository: Contents read and write on the app repositories, for
-  Promote to stable to mark an app's own release stable (docs/release-channels.md), expiring after 90 days.
+  Promote to stable to mark an app's own release stable (docs/release-channels.md), expiring after 90 days;
+- in this repository, augur-kit, each app repository and the app template (so each new app repository
+  made from it): Settings → Actions → General → Workflow permissions on **Read and write**, with
+  **Allow GitHub Actions to create and approve pull requests** ticked. Without it the first Release run
+  fails when it opens the Version packages pull request;
+- `RELEASE_TOKEN` in each repository that releases ([versioning.md](versioning.md)), so the Version
+  packages pull request's CI starts by itself instead of waiting as `action_required` or not at all.
 
 Each release image carries a signed SBOM and SLSA provenance
 ([release-channels.md](release-channels.md#signatures)), and the deploy test runs Trivy over every image a

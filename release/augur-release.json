@@ -1,15 +1,14 @@
 {
-  "version": "0.19.0",
-  "name": "Falcon",
+  "version": "0.20.0",
+  "name": "Goshawk",
   "channel": "beta",
   "released": "2026-11-05",
-  "upgradeFrom": ">=0.17.0",
+  "upgradeFrom": ">=0.19.0",
   "changed": [
     "@augur/app-kit",
     "@augur/shell-kit",
     "@augur/kit-bundle",
     "@augur/app-tools",
-    "@augur/clients",
     "@augur/mfe-sdk",
     "@augur/service-kit",
     "@augur/events",
@@ -22,16 +21,18 @@
     "@augur/admin",
     "@augur/home",
     "@augur/shell",
-    "@augur/sign-in-theme",
     "@augur/upgrades",
-    "@apps/folio-frontend",
-    "@apps/folio",
+    "@apps/auspex-frontend",
+    "@apps/auspex",
     "@apps/atlas-frontend",
     "@apps/atlas",
     "@apps/mandate-frontend",
     "@apps/mandate"
   ],
-  "breaking": [],
+  "breaking": [
+    "@augur/mfe-sdk 1.12.0 → 2.0.0",
+    "@augur/ui-kit removed"
+  ],
   "settings": {
     "all": [
       "PLATFORM_VERSION",
@@ -99,6 +100,8 @@
       "OFFSITE_SECRET_ACCESS_KEY",
       "OFFSITE_REGION",
       "OFFSITE_KEEP_DAILY",
+      "PITR_KEEP_DAYS",
+      "PITR_ARCHIVE_SECONDS",
       "MODEL_API_URL",
       "MODEL_API_KEY",
       "MODEL_NAME",
@@ -149,6 +152,8 @@
       "OTEL_EXPORTER_OTLP_HEADERS",
       "OTEL_TRACES_SAMPLER",
       "OTEL_TRACES_SAMPLER_ARG",
+      "SERVICE_CALL_TIMEOUT_SECONDS",
+      "DATABASE_STATEMENT_TIMEOUT_SECONDS",
       "GRAFANA_ADMIN_PASSWORD",
       "ALERT_WEBHOOK_TOKEN"
     ],
@@ -192,109 +197,76 @@
       "ALERT_WEBHOOK_TOKEN"
     ],
     "added": [
-      "APPS_NETWORK",
-      "MANDATE_CLIENT_SECRET",
-      "MANDATE_DATABASE_PASSWORD",
-      "MANDATE_BUCKET_SECRET",
-      "REALM_LANGUAGES",
-      "ORG_LOGO_URL",
-      "ORG_PRODUCT_NAME",
-      "SMTP_HOST",
-      "SMTP_PORT",
-      "SMTP_SECURITY",
-      "SMTP_FROM",
-      "SMTP_REPLY_TO",
-      "SMTP_USER",
-      "SMTP_PASSWORD",
-      "OFFSITE_REPOSITORY",
-      "OFFSITE_PASSWORD",
-      "OFFSITE_ACCESS_KEY_ID",
-      "OFFSITE_SECRET_ACCESS_KEY",
-      "OFFSITE_REGION",
-      "OFFSITE_KEEP_DAILY",
-      "MODEL_TIMEOUT_SECONDS",
-      "FEED_SIGNER",
-      "IMAGE_SIGNER",
-      "IMAGE_SIGNER_ISSUER",
-      "AUGUR_DEV_SIGNER",
-      "DOMAIN_EVENTS_KEEP_DAYS",
-      "INBOX_KEEP_DAYS",
-      "CALLER_SIGNING_KEY",
-      "OTEL_LGTM_REPLICAS",
-      "OTEL_SDK_DISABLED",
-      "OTEL_EXPORTER_OTLP_HEADERS",
-      "OTEL_TRACES_SAMPLER",
-      "OTEL_TRACES_SAMPLER_ARG",
-      "ALERT_WEBHOOK_TOKEN"
+      "PITR_KEEP_DAYS",
+      "PITR_ARCHIVE_SECONDS",
+      "SERVICE_CALL_TIMEOUT_SECONDS",
+      "DATABASE_STATEMENT_TIMEOUT_SECONDS"
     ],
     "removed": []
   },
   "parts": {
+    "@augur/app-kit": {
+      "version": "0.8.0"
+    },
     "@augur/kit-common": {
       "version": "0.7.0"
     },
-    "@augur/app-kit": {
+    "@augur/shell-kit": {
       "version": "0.7.0"
     },
-    "@augur/shell-kit": {
-      "version": "0.6.0"
-    },
     "@augur/kit-bundle": {
-      "version": "0.5.1"
+      "version": "0.5.3"
     },
     "@augur/app-tools": {
-      "version": "0.3.0"
+      "version": "0.3.1"
     },
     "@augur/clients": {
       "version": "0.1.0"
     },
     "@augur/mfe-sdk": {
-      "version": "1.12.0"
+      "version": "2.0.0"
     },
     "@augur/records": {
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.13.0"
-    },
-    "@augur/ui-kit": {
-      "version": "1.9.2"
-    },
-    "@augur/events": {
-      "version": "0.8.0"
-    },
-    "@augur/gateway": {
-      "version": "0.10.0"
-    },
-    "@augur/identity": {
-      "version": "1.1.0"
-    },
-    "@augur/models": {
-      "version": "0.3.4"
-    },
-    "@augur/registry": {
-      "version": "0.16.0"
-    },
-    "@augur/storage": {
-      "version": "0.4.2"
-    },
-    "@augur/updater": {
-      "version": "0.9.0"
-    },
-    "@augur/admin": {
       "version": "0.14.0"
     },
+    "@augur/events": {
+      "version": "0.9.0"
+    },
+    "@augur/gateway": {
+      "version": "0.11.0"
+    },
+    "@augur/identity": {
+      "version": "1.2.0"
+    },
+    "@augur/models": {
+      "version": "0.3.5"
+    },
+    "@augur/registry": {
+      "version": "0.17.0"
+    },
+    "@augur/storage": {
+      "version": "0.4.3"
+    },
+    "@augur/updater": {
+      "version": "0.9.1"
+    },
+    "@augur/admin": {
+      "version": "0.15.0"
+    },
     "@augur/home": {
-      "version": "0.3.4"
+      "version": "0.3.5"
     },
     "@augur/shell": {
-      "version": "0.16.0"
+      "version": "0.17.0"
     },
     "@augur/sign-in-theme": {
       "version": "0.1.0"
     },
     "@augur/upgrades": {
-      "version": "0.1.4"
+      "version": "0.1.5"
     },
     "@apps/folio-frontend": {
       "version": "0.8.0"
@@ -303,22 +275,22 @@
       "version": "0.8.0"
     },
     "@apps/auspex-frontend": {
-      "version": "0.3.2"
+      "version": "0.3.3"
     },
     "@apps/auspex": {
-      "version": "0.3.2"
+      "version": "0.3.3"
     },
     "@apps/atlas-frontend": {
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     "@apps/atlas": {
-      "version": "0.3.0"
+      "version": "0.4.0"
     },
     "@apps/mandate-frontend": {
-      "version": "0.2.2"
+      "version": "0.2.3"
     },
     "@apps/mandate": {
-      "version": "0.2.2"
+      "version": "0.2.3"
     }
   }
 }
