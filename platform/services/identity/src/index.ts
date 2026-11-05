@@ -3,6 +3,7 @@ import { auditTo, buildApp } from './app.ts';
 import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, steadyPool } from '@augur/service-kit';
 import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
+import { KeycloakAccounts, type AccountSource } from './me.ts';
 import { IDENTITY_RIGHTS } from './realm.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
@@ -58,12 +59,14 @@ if (ownSecret && production && process.env.KEYCLOAK_ADMIN_PASSWORD) {
 }
 let directory: Directory | undefined;
 let appClients: AppClients | undefined;
+let accounts: AccountSource | undefined;
 if (ownSecret || keycloakAdmin) {
   // Identity manages people as its own client, whose rights stop at people, departments and apps'
   // sign-ins in this realm (IDENTITY_RIGHTS): it can't change how anyone signs in.
   const keycloak = new KeycloakDirectory({ url: KEYCLOAK_URL, realm: KEYCLOAK_REALM, signIn: ownSecret ? { client: { id: IDENTITY_CLIENT, secret: ownSecret } } : { admin: keycloakAdmin! } });
   directory = keycloak;
   appClients = new KeycloakAppClients(keycloak);
+  accounts = new KeycloakAccounts(keycloak);
   if (ownSecret) {
     // Keycloak may still be starting: keep trying, then say plainly if identity's own sign-in can't do its job.
     retrying(() => keycloak.hasRights(IDENTITY_RIGHTS))
@@ -94,5 +97,5 @@ const { REGISTRY_URL } = process.env;
 const grants = REGISTRY_URL && credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 if (!grants) console.warn('REGISTRY_URL or SERVICE_CLIENT_SECRET is not set: apps can’t look people up.');
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, appClients, audit, verifyService: serviceVerifierFromEnv(), grants });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants });
 await app.listen({ port, host: '0.0.0.0' });

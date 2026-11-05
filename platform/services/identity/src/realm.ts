@@ -15,11 +15,12 @@ import type { AppClients } from './clients.ts';
 
 /**
  * What identity's own client (`platform-identity`) may do in the realm at run time: read the realm's
- * roles, manage people and departments, and issue apps' sign-ins from Admin. Realm settings, sign-in
+ * roles, manage people and departments, issue apps' sign-ins from Admin, and show each person their own
+ * sign-ins and the organisation's sign-ins in their Account (`view-events`, `view-identity-providers`). Realm settings, sign-in
  * flows and policies (`manage-realm`) are the realm job's, so a flaw in identity can't rewrite how
  * people sign in. Nothing in any other realm, Keycloak's master realm included.
  */
-export const IDENTITY_RIGHTS = ['view-realm', 'view-users', 'query-users', 'manage-users', 'query-groups', 'view-clients', 'query-clients', 'manage-clients'] as const;
+export const IDENTITY_RIGHTS = ['view-realm', 'view-users', 'query-users', 'manage-users', 'query-groups', 'view-clients', 'query-clients', 'manage-clients', 'view-events', 'view-identity-providers'] as const;
 
 export { TWO_STEP_ROLE };
 
@@ -49,9 +50,11 @@ export const REQUIRED_ACTIONS = [
   'webauthn-register',
   'webauthn-register-passwordless',
   'UPDATE_PROFILE',
+  'UPDATE_EMAIL',
   'VERIFY_PROFILE',
   'delete_credential',
   'update_user_locale',
+  'idp_link',
 ] as const;
 
 const HOUR = 3600;

@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 
@@ -32,6 +32,8 @@ const { REGISTRY_URL = 'http://localhost:8082', IDENTITY_URL = 'http://localhost
 const credentials = platformCredentialsFromEnv('events');
 if (!credentials) console.warn('SERVICE_CLIENT_SECRET is not set: apps’ grants can’t be checked, so only platform services can notify or write the audit log.');
 const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
+// The inbox kinds each app's manifest declares; an item of another kind is refused.
+const inboxKinds = credentials ? registryInboxKinds({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 // Where floors sit, and who is on a team, come from identity, asked as events.
 const floors = credentials ? floorPlaces({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 const members = credentials ? floorMembers({ identityUrl: IDENTITY_URL, credentials }) : undefined;
@@ -40,7 +42,7 @@ const audience = credentials ? identityAudience({ identityUrl: IDENTITY_URL, cre
 // An inbox item's owner must be someone who can sign in (the directory lists only them), and a person's teams decide which team items they see.
 const directory = credentials ? identityDirectory({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 const principals = credentials ? identityPrincipals({ identityUrl: IDENTITY_URL, credentials }) : undefined;
-const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals });
+const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds });
 await app.listen({ port, host: '0.0.0.0' });
 
 // Domain events are for followers to catch up on, not a record: they're kept DOMAIN_EVENTS_KEEP_DAYS (30) days.
