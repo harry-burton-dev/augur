@@ -1,7 +1,7 @@
 import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { policyKeepDays, pruneActivity, untilNight } from './retention.ts';
-import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
+import { PgEventStore, type EventStore } from './store.ts';
 
 // Every setting events reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('events', [
@@ -18,15 +18,12 @@ loadConfigOrExit('events', [
 
 const port = Number(process.env.PORT ?? 8084);
 
-let store: EventStore;
-if (process.env.DATABASE_URL) {
-  store = await PgEventStore.connect(process.env.DATABASE_URL);
-} else if (process.env.NODE_ENV === 'production') {
-  throw new Error('DATABASE_URL is not set: the events service needs Postgres for notifications and the audit log.');
-} else {
-  console.warn('DATABASE_URL is not set: keeping notifications and the audit log in memory until the service restarts.');
-  store = new MemoryEventStore();
+// Notifications, Activity and the inbox live in Postgres, locally too: the dev stack's
+// (`docker compose -f infra/docker-compose.yml up -d postgres`). There is no in-memory copy.
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is not set: the events service keeps notifications and the audit log in Postgres. Locally, start the dev stack’s (docker compose -f infra/docker-compose.yml up -d postgres).');
 }
+const store: EventStore = await PgEventStore.connect(process.env.DATABASE_URL);
 
 // Apps sign in as themselves and are held to what the registry grants them; events asks the registry as itself (platform-events).
 const { REGISTRY_URL = 'http://localhost:8082', IDENTITY_URL = 'http://localhost:8081' } = process.env;

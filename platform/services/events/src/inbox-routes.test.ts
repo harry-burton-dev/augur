@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { callerHeaders, serviceHeaders, type FloorPlace, type Scope } from '@augur/service-kit';
-import { buildApp } from './app.ts';
-import { MemoryEventStore } from './store.ts';
+import type { buildApp } from './app.ts';
+import { DATABASE_URL, eventsDb } from './db.testing.ts';
+
+const db = eventsDb();
 
 // Stands in for Keycloak: "Bearer app-<id>" is that app's token.
 const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
@@ -33,8 +35,8 @@ afterEach(async () => {
 });
 
 const setUp = async (granted: Scope[] = ['inbox:write'], heartbeatMs?: number) => {
-  const store = new MemoryEventStore();
-  const app = await buildApp({
+  const store = db.store;
+  const app = await db.app({
     store,
     verifyService,
     grants: async () => granted,
@@ -51,7 +53,7 @@ const setUp = async (granted: Scope[] = ['inbox:write'], heartbeatMs?: number) =
   return { app, store, put, act, list };
 };
 
-describe('the inbox', () => {
+describe.runIf(DATABASE_URL)('the inbox', () => {
   it('lets an app put an item in a person’s inbox, once per key, and change it in place', async () => {
     const { put, list, store } = await setUp();
     const first = await put('intent/1', assignment);

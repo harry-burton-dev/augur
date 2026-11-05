@@ -1,6 +1,8 @@
 import pg from 'pg';
 import { runMigrations, type Migration } from '@augur/service-kit';
 import { organisationMigrations } from './organisation.ts';
+import { signInMigrations } from './sign-ins.ts';
+import { lifecycleMigrations } from './lifecycle.ts';
 import { workspaceMigrations } from './workspaces.ts';
 
 /** What someone has chosen for the shell. Every field is optional: what's missing takes the shell's default. */
@@ -68,40 +70,6 @@ export interface PreferenceStore {
   leaveRequests(): Promise<(LeaveRequest & { person: string })[]>;
 }
 
-/** For tests, and for running identity locally without Postgres. Forgets everything on restart. */
-export class MemoryPreferenceStore implements PreferenceStore {
-  private prefs = new Map<string, Preferences>();
-
-  async get(person: string) {
-    return structuredClone(this.prefs.get(person) ?? {});
-  }
-
-  async put(person: string, prefs: Preferences) {
-    this.prefs.set(person, structuredClone(prefs));
-  }
-
-  private leaving = new Map<string, LeaveRequest>();
-
-  async leaveRequest(person: string) {
-    const r = this.leaving.get(person);
-    return r ? { ...r } : undefined;
-  }
-
-  async requestLeave(person: string, note?: string) {
-    const r = { requestedAt: this.leaving.get(person)?.requestedAt ?? new Date().toISOString(), ...(note ? { note } : {}) };
-    this.leaving.set(person, r);
-    return { ...r };
-  }
-
-  async withdrawLeave(person: string) {
-    return this.leaving.delete(person);
-  }
-
-  async leaveRequests() {
-    return [...this.leaving].map(([person, r]) => ({ person, ...r })).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
-  }
-}
-
 /**
  * Schema changes, applied in order and recorded so each runs once. Identity
  * owns the `identity` schema; no other service reads or writes it.
@@ -128,6 +96,8 @@ export const migrations: Migration[] = [
       );`,
   },
   ...organisationMigrations,
+  ...signInMigrations,
+  ...lifecycleMigrations,
 ];
 
 export class PgPreferenceStore implements PreferenceStore {

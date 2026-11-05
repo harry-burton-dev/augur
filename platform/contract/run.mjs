@@ -27,8 +27,8 @@ if (!folio) {
   }
   console.log(`Folio isn't laid out in ${folioDir}, so every run has it off. To run with it: infra/shipped-app.sh folio`);
 }
-// Today's build runs every spec, with its feature preview `turned-on` on for the stand-in person
-// (SDK 1.7). Folio's own checks (tests/pillar.spec.ts) test the shell and Folio, not the app, so the
+// Every build runs with the feature preview `turned-on` on for the stand-in person (SDK 1.7), since
+// a frozen build from 1.7 on checks it too. Today's build runs every spec. Folio's own checks (tests/pillar.spec.ts) test the shell and Folio, not the app, so the
 // frozen builds run only the mount context's (tests/contract.spec.ts): Folio is still beside them.
 const source = { DEV_PREVIEWS: 'turned-on' };
 const targets = [
@@ -37,7 +37,7 @@ const targets = [
   ...chosen.map((release) => ({
     name: release,
     folio,
-    env: { DEV_APP_ENTRY: '/apps/reference/entry.js', APP_DIST: `reference=${join(frozen, release)}` },
+    env: { ...source, DEV_APP_ENTRY: '/apps/reference/entry.js', APP_DIST: `reference=${join(frozen, release)}` },
     specs: ['tests/contract.spec.ts'],
   })),
 ];

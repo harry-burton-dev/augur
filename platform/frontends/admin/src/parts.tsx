@@ -11,8 +11,17 @@ export const Page = ({ heading, summary, actions, onAction, children }: { headin
 );
 
 /** Where someone's sign-in stands, as a status mark and its word. */
-export const statusOf = (p: Pick<Person, 'enabled' | 'invited'>): { status: StatusName; label: string } =>
-  !p.enabled ? { status: 'paused', label: 'Off' } : p.invited ? { status: 'queued', label: 'Invited' } : { status: 'done', label: 'Active' };
+export const statusOf = (p: Pick<Person, 'enabled' | 'invited' | 'state'>): { status: StatusName; label: string } =>
+  p.state === 'left'
+    ? { status: 'paused', label: 'Left' }
+    : !p.enabled
+      ? { status: 'paused', label: 'Off' }
+      : (p.state ?? (p.invited ? 'invited' : 'active')) === 'invited'
+        ? { status: 'queued', label: 'Invited' }
+        : { status: 'done', label: 'Active' };
+
+/** When someone last signed in, as a date, or why there's none. */
+export const lastSignIn = (p: Pick<Person, 'lastSignInAt' | 'state'>) => (p.lastSignInAt ? new Date(p.lastSignInAt).toLocaleDateString() : p.state === 'invited' ? 'Never' : 'Not seen yet');
 
 /** A secret shown once, large, to copy. */
 export const Secret = ({ value, kind }: { value: string; kind: 'password' | 'secret' }) => (

@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
-import type { FeaturePreview } from './manifest.ts';
+import { platformApps, type AppEntry, type FeaturePreview } from './manifest.ts';
 import { empty, FeaturePreview as FeaturePreviewSchema, FeaturePreviewMode as FeaturePreviewModeSchema, FeaturePreviewsAdmin, params, ref, refused } from './schemas.ts';
 import type { Ring } from './ring.ts';
 import type { AppRecord, AppStore, FeatureOptIn, FeaturePreviewMode } from './store.ts';
@@ -46,6 +46,16 @@ export const previewsOnFor = (record: AppRecord, optIns: FeatureOptIn[], ring: R
     })
     .map((p) => p.id);
 
+/**
+ * AUGUR's own apps (Home, Admin, …) as records, so their feature previews work as any app's do. They aren't in
+ * the catalogue table, so an admin can't choose who gets them yet: each stays at the server's default (opt-in on
+ * a preview server, off on a production one), and people turn them on for themselves in Previews.
+ */
+export const platformRecord = (entry: AppEntry): AppRecord => ({ entry, enabled: true, registeredBy: 'augur', registeredAt: '', updatedAt: '', grantedScopes: [] });
+
+/** Whether an app is one of AUGUR's own, whose previews stay at the server's default. */
+export const isPlatformApp = (id: string) => platformApps.some((a) => a.id === id);
+
 export const MODE_WORDS: Record<FeaturePreviewMode, string> = { off: 'off', 'opt-in': 'for those who turn it on', everyone: 'on for everyone', floors: 'on for chosen floors' };
 
 /** The most floors one preview can be targeted at. */
@@ -74,7 +84,9 @@ export const featurePreviewRoutes =
   ({ store, ring, now = () => new Date(), serviceOf, record, chainOf }: FeaturePreviewRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
-    const findApp = async (id: string) => (await store.records()).find((r) => r.entry.id === id);
+    /** Every app's record, AUGUR's own with previews first. */
+    const allRecords = async () => [...platformApps.filter((a) => a.previews?.length).map(platformRecord), ...(await store.records())];
+    const findApp = async (id: string) => (await allRecords()).find((r) => r.entry.id === id);
     /** Where someone stands, as a rule chain; empty when they stand nowhere or it can't be told, so floor previews stay off. */
     const chainAt = async (workspace: string | undefined) => (workspace && chainOf ? ((await chainOf(workspace)) ?? []) : []);
 
@@ -116,7 +128,7 @@ export const featurePreviewRoutes =
       async (req, reply) => {
       const caller = callerFromHeaders(req.headers);
       if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to see previews.' });
-      const [records, optIns, chain] = await Promise.all([store.records(), store.featureOptIns({ person: caller.id }), chainAt(caller.workspace?.id)]);
+      const [records, optIns, chain] = await Promise.all([allRecords(), store.featureOptIns({ person: caller.id }), chainAt(caller.workspace?.id)]);
       const at = now();
       return {
         apps: records
@@ -238,6 +250,7 @@ export const featurePreviewRoutes =
             400: refused('Mode `floors` without floors, floors with another mode, or a floor that does not exist (error bad_floors)'),
             403: refused('Not an admin'),
             404: refused('No such app, or it offers no such preview'),
+            409: refused("One of AUGUR's own apps, whose previews stay at the server's default (error platform_app)"),
             503: refused("Floors can't be looked up right now, so they can't be checked"),
           },
         },
@@ -248,6 +261,12 @@ export const featurePreviewRoutes =
         const found = await findApp(req.params.id);
         const preview = found?.entry.previews?.find((p) => p.id === req.params.preview);
         if (!found || !preview) return reply.code(404).send({ error: 'not_found', message: `${found ? found.entry.name : req.params.id} has no preview "${req.params.preview}".` });
+        if (isPlatformApp(found.entry.id)) {
+          return reply.code(409).send({
+            error: 'platform_app',
+            message: `${found.entry.name} is one of AUGUR's own apps: its previews stay ${MODE_WORDS[defaultMode(ring)]} on this server, and each person chooses for themselves in Previews.`,
+          });
+        }
         const { mode, floors } = req.body;
         if (mode === 'floors' && !floors) return reply.code(400).send({ error: 'bad_floors', message: `Choose at least one floor to turn ${preview.name} on for.` });
         if (mode !== 'floors' && floors) return reply.code(400).send({ error: 'bad_floors', message: 'Floors go only with the mode floors.' });

@@ -5,9 +5,11 @@ import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { KeycloakAccounts, type AccountSource } from './me.ts';
 import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
-import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
-import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
-import { MemoryOrganisationStore, PgOrganisationStore, type OrganisationStore } from './organisation.ts';
+import { PgPreferenceStore } from './store.ts';
+import { PgWorkspaceStore } from './workspaces.ts';
+import { PgOrganisationStore } from './organisation.ts';
+import { PgLifecycleStore } from './lifecycle.ts';
+import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
 
 // Every setting identity reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('identity', [
@@ -31,24 +33,18 @@ const production = process.env.NODE_ENV === 'production';
 // What the org's own floor is called; people see it as the top floor.
 const orgName = process.env.ORG_NAME || 'Organisation';
 
-let store: PreferenceStore;
-let workspaces: WorkspaceStore;
-let organisation: OrganisationStore;
-if (process.env.DATABASE_URL) {
-  const pool = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL }));
-  const prefs = new PgPreferenceStore(pool);
-  await prefs.migrate();
-  store = prefs;
-  workspaces = new PgWorkspaceStore(pool, { orgName });
-  organisation = new PgOrganisationStore(pool);
-} else if (production) {
-  throw new Error("DATABASE_URL is not set: identity needs Postgres to keep people's preferences and teams.");
-} else {
-  console.warn("DATABASE_URL is not set: keeping people's preferences and teams in memory until identity restarts.");
-  store = new MemoryPreferenceStore();
-  workspaces = new MemoryWorkspaceStore({ orgName });
-  organisation = new MemoryOrganisationStore();
+// Identity keeps people's preferences, teams and the organisation's settings in Postgres, locally too: the
+// dev stack's (`docker compose -f infra/docker-compose.yml up -d postgres`). There is no in-memory copy.
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is not set: identity keeps people's preferences and teams in Postgres. Locally, start the dev stack's (docker compose -f infra/docker-compose.yml up -d postgres).");
 }
+const pool = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL }));
+const store = new PgPreferenceStore(pool);
+await store.migrate();
+const workspaces = new PgWorkspaceStore(pool, { orgName });
+const organisation = new PgOrganisationStore(pool);
+const signInCursor = new PgSignInCursorStore(pool);
+const lifecycle = new PgLifecycleStore(pool);
 
 // Locally this is the dev stack's Keycloak and its admin/admin console login.
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER = production ? undefined : 'admin' } = process.env;
@@ -62,6 +58,7 @@ if (ownSecret && production && process.env.KEYCLOAK_ADMIN_PASSWORD) {
   console.warn("Keycloak's admin password is in identity's settings but identity never uses it: take KEYCLOAK_ADMIN_PASSWORD out of identity's environment. The realm job is the only part that needs it.");
 }
 let directory: Directory | undefined;
+let keycloakEvents: ((path: string) => Promise<KcEvent[]>) | undefined;
 let appClients: AppClients | undefined;
 let accounts: AccountSource | undefined;
 if (ownSecret || keycloakAdmin) {
@@ -71,6 +68,7 @@ if (ownSecret || keycloakAdmin) {
   directory = keycloak;
   appClients = new KeycloakAppClients(keycloak);
   accounts = new KeycloakAccounts(keycloak);
+  keycloakEvents = async (path) => (await keycloak.call<KcEvent[]>('GET', path)).data;
   if (ownSecret) {
     // Keycloak may still be starting: keep trying, then say plainly if identity's own sign-in can't do its job.
     retrying(() => keycloak.hasRights(IDENTITY_RIGHTS))
@@ -108,5 +106,16 @@ const dataFrom =
     ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) }
     : undefined;
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation });
+// Sign-ins and failed ones reach Activity (ADR 0040): copied from Keycloak each minute.
+if (keycloakEvents && audit) {
+  const events = keycloakEvents;
+  const copy = () =>
+    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at) }).catch((err: Error) =>
+      console.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
+    );
+  setInterval(copy, 60_000).unref();
+  void copy();
+}
+
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation, lifecycle });
 await app.listen({ port, host: '0.0.0.0' });
