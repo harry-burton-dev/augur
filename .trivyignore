@@ -1,2 +1,13 @@
 # Trivy's exceptions (ADR 0043): one vulnerability id per line, with a comment saying why it's
 # accepted and when to look again.
+
+# gosu's Go standard library (crypto/tls certificate checks). Every current postgres and pgvector image ships
+# gosu 1.19, built with Go 1.24.6; gosu only drops to the postgres user as the container starts and never
+# makes a TLS connection, so the flaw can't be reached. Look again when the postgres images move past
+# gosu 1.19 (checked 2026-11-05: postgres:16-alpine, postgres:16-bookworm, pgvector 0.8.7-pg16-bookworm).
+CVE-2025-68121
+
+# openssh-client in restic/restic:0.19.1, the newest restic image. backup-tools only copies the restic
+# binary out of that image and stops; ssh never runs, and the backup container doesn't have it. Look again
+# when restic publishes a newer image (checked 2026-11-05).
+CVE-2026-60002
