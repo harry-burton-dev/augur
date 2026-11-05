@@ -1,5 +1,22 @@
 # @augur/admin
 
+## 0.14.0
+
+### Minor Changes
+
+- 2c9e0a0: An app's details in Admin list the kinds of work it puts in people's inboxes, and say when it isn't allowed to yet.
+- b4cad59: Feature previews can be turned on for chosen floors: Admin → Apps picks the floors, the preview is on there and on the floors beneath them, and off everywhere else, without a release (ADR 0021, amended). `ctx.previewOn` is unchanged; an app's service passes `?workspace=` when it asks the registry for a person.
+- 0ec750c: The Inbox's items (ADR 0026, PER-146): apps' services put work that waits on a person or a team in their inbox with the new `inbox:write` scope (`inboxItem`, `updateInboxItem`, `getInboxItem` in the service kit), keyed by the app's own id, and close it when it's done or withdraw it. People list theirs (`/v1/inbox`, `/v1/inbox/counts`) and take, release, decline, hand on or mark done; each step is in the item's history and the audit log, and published as `platform.inbox.*`. The notification stream also carries `inbox` events, so the shell's count stays live. Closed items are kept `INBOX_KEEP_DAYS` (90) days. Admin names the scope "Put work in people's inboxes". Events API 1.9.0.
+- 0b8018d: With the kit's accessibility pass (kit 0.4.0 and later), the shell's stage is the page's one `main` landmark, named for the open app; a new thing that needs you is said once by a polite live region; every icon-only control in the band shows its name on hover and focus; Reduce motion stops every loop; and floors move with Alt+Page Up and Alt+Page Down, leaving Page Up and Page Down to the app. In Admin, turning off someone's sign-in, giving them a new one-time password, turning an app off and removing a site apps load from each ask twice in place (`AskTwice`) instead of opening a confirmation. The contract job runs axe on the shell and fails on any serious finding (ADR 0063).
+- 896efde: Backups can be copied off the server (ADR 0060). Once `OFFSITE_REPOSITORY`, `OFFSITE_PASSWORD` and the bucket's key are set in `.env`, the backup container copies each night's dump and apps' files with restic to that S3-compatible bucket, encrypted on the server first, and keeps 30 days (`OFFSITE_KEEP_DAILY`). The weekly restore test then restores from the bucket. Admin → Status shows the copy and where the last restore came from, and needs a look while backups stay on the server only (gateway contract 1.7.0: `backups.offsite`, `lastRestoreTest.from`). A new one-shot `backup-tools` container hands restic to the backup container: after upgrading, run `pc up -d backup` once. See docs/deploy.md, "Off-server copy".
+
+### Patch Changes
+
+- eb6aed9: AUGUR serves kit 0.5.1 (Quill 0.7.0, Aerie 0.6.0): apps get the Tiptap editor with mentions as chips (ADR 0058), a date field with a real calendar, and the people picker that SDK 1.12's `searchPrincipals` answers. In Admin, the activity filters' dates open that calendar.
+- Updated dependencies [7518ce8]
+- Updated dependencies [cceb953]
+  - @augur/mfe-sdk@1.12.0
+
 ## 0.13.0
 
 ### Minor Changes

@@ -1,5 +1,27 @@
 # @augur/events
 
+## 0.8.0
+
+### Minor Changes
+
+- 2dbdc22: Apps hear more of what changes about people (PER-148). `platform.person.joined` when an admin adds someone, and `platform.person.changed` (`{ person, changed }`, naming which of `name`, `email`, `roles` and `teams` changed, never the values) when an admin changes their details. Every team someone joins or leaves is now `platform.team.member-added` or `-removed` on that team's floor, also when it happened by adding the person or changing their list of teams, which before sent nothing; each is in that floor's Activity too. `PLATFORM_TOPICS` names the two new topics. See docs/domain-events.md.
+- 0ec750c: The Inbox's items (ADR 0026, PER-146): apps' services put work that waits on a person or a team in their inbox with the new `inbox:write` scope (`inboxItem`, `updateInboxItem`, `getInboxItem` in the service kit), keyed by the app's own id, and close it when it's done or withdraw it. People list theirs (`/v1/inbox`, `/v1/inbox/counts`) and take, release, decline, hand on or mark done; each step is in the item's history and the audit log, and published as `platform.inbox.*`. The notification stream also carries `inbox` events, so the shell's count stays live. Closed items are kept `INBOX_KEEP_DAYS` (90) days. Admin names the scope "Put work in people's inboxes". Events API 1.9.0.
+- 7518ce8: Apps declare the kinds of work they put in people's inboxes in their manifest's `inbox.kinds` (SDK 1.12: `id`, `label`, `icon`, up to 10), and the events service refuses an item of a kind the app doesn't declare. The registry names them in an app's grants (`inboxKinds`), read with `registryInboxKinds` from the service kit. The SDK gains the Inbox's types (`InboxItem`, `InboxKind`, `InboxCounts`, `InboxChange`) and `INBOX_TOPICS`.
+
+### Patch Changes
+
+- 46619f9: The events API's schemas are TypeBox, and contracts/events.openapi.yaml is generated from them (ADR 0055). The contract now names the refusals the routes already sent.
+- 03e7d87: Every deployment setting is described once, in infra/deploy/settings.schema.json, and CI checks compose.yml, .env.example, the guides and the services' code against it (`pnpm check:settings`). Settings the guides named but compose never passed now reach their services: FEED_SIGNER (registry), IMAGE_SIGNER, IMAGE_SIGNER_ISSUER and AUGUR_DEV_SIGNER (updater), DOMAIN_EVENTS_KEEP_DAYS (events), MODEL_TIMEOUT_SECONDS (models), CALLER_SIGNING_KEY (gateway), and OTEL_EXPORTER_OTLP_HEADERS, OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG (every service). An empty DOMAIN_EVENTS_KEEP_DAYS or MODEL_TIMEOUT_SECONDS keeps its default, and AUGUR_DEV_SIGNER follows the repository a fork's IMAGE_SIGNER names.
+- 566f261: The service kit has one migration runner, `runMigrations(pool, { schema, migrations })`, and the events, identity, models and registry services use it in place of their own copies; what they do at start is unchanged. New migrations are linted with Squawk (ADR 0053), which catches drops, renames and type changes the old check missed.
+- Updated dependencies [7dbdf7b]
+- Updated dependencies [2dbdc22]
+- Updated dependencies [0ec750c]
+- Updated dependencies [7518ce8]
+- Updated dependencies [dec1a40]
+- Updated dependencies [566f261]
+- Updated dependencies [7517bd7]
+  - @augur/service-kit@0.13.0
+
 ## 0.7.0
 
 ### Minor Changes
