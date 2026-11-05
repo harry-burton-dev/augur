@@ -74,6 +74,6 @@ The events service publishes these as identity and the registry record the chang
 | `platform.inbox.taken`, `.released`, `.declined`, `.done` | `{ item, app, key, by }` | Someone takes a team's inbox item, gives it back, declines it or marks it done ([The Inbox](inbox.md)) |
 | `platform.inbox.handed-on` | `{ item, app, key, by, to }` | Someone hands an item on; `to` is `person:<id>` or `team:<id>` |
 
-Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own name or email in their account (in Keycloak, ADR 0039) and the lifecycle events of ADR 0040 (`left`, `deleted`) aren't sent yet.
+Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own profile in their account (`PATCH /v1/me/profile`, docs/account.md) and the lifecycle events of ADR 0040 (`left`, `deleted`) aren't sent yet.
 
 `PLATFORM_TOPICS` in the service kit names them. The API is in [contracts/events.openapi.yaml](../contracts/events.openapi.yaml).
