@@ -28,6 +28,7 @@ export const devSession = (user: User): Session => ({
   floors: devFloors,
   getToken: async () => 'dev-token',
   signOut: async () => window.location.assign('/'),
+  startAction: async () => undefined,
 });
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
