@@ -140,3 +140,42 @@ describe('home', () => {
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({ needsYou: true }));
   });
 });
+
+describe('home, design direction previews (PER-283)', () => {
+  const withPreviews = (on: string[], bus: EventBus) => ({ ...ctx(bus), previewOn: (id: string) => on.includes(id) });
+
+  it('stays as it was with every preview off', async () => {
+    const el = document.body.appendChild(document.createElement('div'));
+    mount(el, ctx(shell(state).bus));
+    expect(el.querySelector('.quill-field')!.hasAttribute('data-pulling')).toBe(false);
+    expect(el.querySelector('.augur-signal')).toBeNull();
+    expect(el.querySelector('.quill-ring-more')).toBeNull();
+    unmount(el);
+  });
+
+  it('focal planes: what needs you pulls focus, with its count in light and words, and the cards go quiet', async () => {
+    const el = document.body.appendChild(document.createElement('div'));
+    mount(el, withPreviews(['focal-planes'], shell(state).bus));
+    expect(el.querySelector('.quill-field')!.hasAttribute('data-pulling')).toBe(true);
+    expect(el.querySelector('.augur-signal')!.textContent).toContain('need you');
+    const items = [...el.querySelectorAll('.quill-focus-item')].map((i) => i.getAttribute('data-focus'));
+    expect(items).toEqual(['pulled', 'ambient']);
+    unmount(el);
+  });
+
+  it('radial menu: each need opens its actions in a ring, Open first, and choosing one is passed on', async () => {
+    const el = document.body.appendChild(document.createElement('div'));
+    const { bus, asked } = shell(state);
+    mount(el, withPreviews(['radial-menu'], bus));
+    const more = el.querySelector<HTMLButtonElement>('.quill-ring-more')!;
+    expect(more.getAttribute('aria-label')).toBe('More actions for Approve Alex’s claim');
+    press(more);
+    const names = [...document.querySelectorAll('.quill-ring-items .quill-ring-label')].map((n) => n.textContent);
+    expect(names).toEqual(['Open', 'Approve', 'Open']);
+    vi.useFakeTimers();
+    press([...document.querySelectorAll<HTMLElement>('.quill-ring-items [role="menuitem"]')][1]);
+    act(() => void vi.runAllTimers());
+    expect(asked).toContain('act n1 0');
+    unmount(el);
+  });
+});
