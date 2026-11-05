@@ -5,8 +5,8 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.21.0
-  description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
+  version: 1.22.0
+  description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
     Refusal:
@@ -1273,6 +1273,196 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service, or can't reach it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /organisation:
+    get:
+      summary: The organisation's name, time zone and email sender
+      description: For anyone signed in, and any service signed in as itself, so every part of AUGUR shows the same name and times (ADR 0042).
+      responses:
+        "200":
+          description: The organisation's settings (ADR 0042)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - name
+                  - timeZone
+                  - sender
+                properties:
+                  name:
+                    type: string
+                    description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"
+                  timeZone:
+                    type: string
+                    description: An IANA time zone, e.g. Europe/London. UTC until an admin chooses one
+                  sender:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 100
+                        pattern: ^[^\r\n]*$
+                        description: Who email says it is from, e.g. the organisation's name
+                      address:
+                        type: string
+                        format: email
+                        maxLength: 254
+                        description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
+                    additionalProperties: false
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: When an admin last changed them
+                  updatedBy:
+                    type: string
+                    description: Who last changed them
+                description: The organisation's settings (ADR 0042)
+        "401":
+          description: Not signed in, and not a service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Services' sign-ins can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation/time-zones:
+    get:
+      summary: The time zones an admin can choose (admins only)
+      responses:
+        "200":
+          description: IANA names, UTC first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: IANA names, UTC first
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation:
+    patch:
+      summary: Change the organisation's settings, audited as organisation.changed (admins only)
+      description: Only the fields sent change. The name renames the organisation’s floor, which everyone sees.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  pattern: ^[^\r\n/]*[^\s/][^\r\n/]*$
+                  description: No slash and not only spaces
+                timeZone:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  description: An IANA time zone; GET /admin/organisation/time-zones lists them
+                sender:
+                  type: object
+                  required:
+                    - name
+                    - address
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                      maxLength: 100
+                      pattern: ^[^\r\n]*\S[^\r\n]*$
+                    address:
+                      anyOf:
+                        - type: string
+                          format: email
+                          maxLength: 254
+                        - type: "null"
+                      description: null takes the address away
+                  additionalProperties: false
+              additionalProperties: false
+              minProperties: 1
+              description: Only what changes
+        description: Only what changes
+      responses:
+        "200":
+          description: The settings now
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - name
+                  - timeZone
+                  - sender
+                properties:
+                  name:
+                    type: string
+                    description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"
+                  timeZone:
+                    type: string
+                    description: An IANA time zone, e.g. Europe/London. UTC until an admin chooses one
+                  sender:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 100
+                        pattern: ^[^\r\n]*$
+                        description: Who email says it is from, e.g. the organisation's name
+                      address:
+                        type: string
+                        format: email
+                        maxLength: 254
+                        description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
+                    additionalProperties: false
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: When an admin last changed them
+                  updatedBy:
+                    type: string
+                    description: Who last changed them
+                description: The settings now
+        "400":
+          description: A name with a slash or only spaces, an unknown time zone, or a sender that is not one line or not an email address
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
           content:
             application/problem+json:
               schema:

@@ -10,7 +10,7 @@ import { SCHEMAS } from './schemas.ts';
 
 export const info = {
   title: 'Identity',
-  version: '1.21.0',
+  version: '1.22.0',
   description: [
     "Who people are. Reached through the gateway, which verifies the caller's",
     'sign-in token and passes the caller on in x-user-* headers.',
@@ -18,7 +18,9 @@ export const info = {
     "(Keycloak), and departments, which are identity's own teams (copied in once",
     "from the provider's groups). Every /admin path answers 403 to a caller",
     "without the admin role, and 503 when identity isn't connected to the",
-    'provider. Changes are audited, never a password.',
+    'provider. Changes are audited, never a password. /organisation is the',
+    "organisation's name, time zone and email sender (ADR 0042), for anyone",
+    'signed in and any service; only an admin changes them.',
   ].join(' '),
 };
 

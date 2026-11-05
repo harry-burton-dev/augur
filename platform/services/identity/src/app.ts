@@ -7,6 +7,7 @@ import { describeApi } from './contract.ts';
 import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts';
 import type { Directory } from './directory.ts';
 import { mapFor } from './map.ts';
+import { MemoryOrganisationStore, organisationRoutes, type OrganisationStore } from './organisation.ts';
 import { meRoutes, type AccountSource, type MeOptions } from './me.ts';
 import { DirectoryAnswer, DirectoryQuery, findInDirectory, peopleRoutes, principalsOf, signedInPeople } from './people.ts';
 import { Caller, choice, Floor, IdParams, PersonMap, ref, refused } from './schemas.ts';
@@ -45,6 +46,8 @@ export interface IdentityOptions {
   dataFrom?: MeOptions['dataFrom'];
   /** The languages the deployment offers people (REALM_LANGUAGES). */
   languages?: string[];
+  /** The organisation's settings beside its floor's name (ADR 0042). */
+  organisation?: OrganisationStore;
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -58,7 +61,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation = new MemoryOrganisationStore() }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -158,6 +161,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
 
       await app.register(peopleRoutes({ workspaces, teams, verifyService, grants }));
       await app.register(appRunnerRoutes({ clients: appClients, audit, verifyService }), { prefix: '/admin/apps' });
+      await app.register(organisationRoutes({ workspaces, store: organisation, audit, verifyService }));
     },
     { prefix: `/${API_VERSION}` },
   );
