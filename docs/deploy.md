@@ -10,44 +10,153 @@ your laptop ──tailnet──▶ tailscale ──▶ web (nginx) ─┬─ /  
 
 The setup is in `infra/deploy/`. The server runs images CI built and signed for an AUGUR release, pulled from GitHub's container registry (`ghcr.io/harry-burton-dev/im-platform/<part>:<version>`); nothing is built on the server. They run as unprivileged users.
 
+This guide is one procedure. On an empty server, follow **Before you start** and **First start** from top to bottom, and AUGUR is running, private to your tailnet, backed up and reporting to Backstage, with no step outside them. A staging server, wiping and refreshing one, and taking one out of service follow. The rest is reference, and the [glossary](#glossary) at the end explains the words.
+
 ## Before you start
 
-- On the server: Docker with the Compose plugin (`docker compose version` should work), and git access to this repo for the deploy files.
-- While the repository is private, its images and its releases are too: the deployment needs its own **read key**, one GitHub token with only **read:packages**, saved as `infra/deploy/secrets/github-read-key` (owned by user 1000) with `GITHUB_READ_USER` in `.env`, and Docker signed in with it once (`docker login ghcr.io`). [upgrade.md](upgrade.md#the-read-key) has the steps, including the read-only GitHub account to make it from. With it, the Upgrade Centre and Admin → Apps see new releases, and the updater applies them for you if you turn it on ([upgrade.md](upgrade.md#the-updater)). A server that can't reach GitHub runs releases from your own registry instead ([mirror.md](mirror.md)).
-- In the [Tailscale admin console](https://login.tailscale.com/admin):
-  - **DNS**: turn on MagicDNS and **HTTPS Certificates**. Note your tailnet name, for example `tail1234.ts.net`.
-  - **Settings → Keys**: generate an auth key. A reusable key is easiest. Tag it if you use ACL tags.
+Have these ready. The preflight (step 3) checks what it can of them before anything starts.
 
-The server doesn't need Tailscale installed itself. The `tailscale` container joins your tailnet as its own machine, named after `TS_HOSTNAME`.
+1. **A server**: Linux, with 4 CPUs, 16 GB of memory and 200 GB of disk for a staging or small production server (AUGUR's memory limits are sized for 16 GB). It needs Docker with the Compose plugin (`docker compose version` prints a version) and git, and nothing else: no Node, no Tailscale.
+2. **Your tailnet.** In the [Tailscale admin console](https://login.tailscale.com/admin):
+   - **DNS**: turn on MagicDNS and **HTTPS Certificates**. Note your tailnet name, for example `tail1234.ts.net`.
+   - **Settings → Keys**: generate an auth key. A reusable key is easiest. If your policy uses tags, tag it (say `tag:augur`): a tagged machine's key never expires.
+   - **A name for the machine**: `TS_HOSTNAME` in `.env`, `platform` unless you set it, and not already used on the tailnet. Give each server its own, such as `augur-staging`. AUGUR's address is then `https://<TS_HOSTNAME>.<tailnet name>`.
+
+   The server doesn't need Tailscale installed itself. The `tailscale` container joins your tailnet as its own machine, named after `TS_HOSTNAME`.
+3. **Its entry in Backstage**, if it reports there (a staging server must): the deployment's name in Backstage's `org/deployments.yaml`, and Backstage's address on the tailnet. Step 6 joins them up.
+4. **A read key**, only if AUGUR's packages aren't public to you: one GitHub token with only **read:packages**. After step 1, save it as `infra/deploy/secrets/github-read-key` (owned by user 1000), set `GITHUB_READ_USER` in `.env`, and sign Docker in with it once (`docker login ghcr.io`). [upgrade.md](upgrade.md#the-read-key) has the steps, including the read-only GitHub account to make it from. A server that can't reach GitHub runs releases from your own registry instead ([mirror.md](mirror.md)).
+5. **For later, but before anyone real works on it**: the organisation's email relay ([Email](#email)) and a bucket off the server for backups ([Off-server copy](#off-server-copy)).
 
 ## First start
 
+### 1. Get the release
+
 ```sh
-git clone https://github.com/harry-burton-dev/augur.git platform && cd platform
-git checkout augur@0.1.1        # the release you'll run: the newest augur@ under Releases
-cp infra/deploy/.env.example infra/deploy/.env
+git clone https://github.com/harry-burton-dev/augur.git augur && cd augur
+git checkout augur@<version>     # the release you'll run: the newest augur@ under Releases
+cp infra/deploy/.env.example infra/deploy/.env && chmod 600 infra/deploy/.env
+alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
 ```
 
-Fill in `infra/deploy/.env`:
+Every command after this runs from the checkout and uses `pc`; put the alias in your shell's profile. The folder's name doesn't matter: the Compose project is always called `platform`.
 
-- `PLATFORM_VERSION`: the same release, without `augur@`, for example `0.1.1`.
-- `PLATFORM_URL`: `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`.
-- `TS_AUTHKEY`: the key from the admin console.
-- `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `FOLIO_CLIENT_SECRET`, `FOLIO_DATABASE_PASSWORD`, `FOLIO_BUCKET_SECRET`, `AUSPEX_CLIENT_SECRET`, `ATLAS_CLIENT_SECRET`, `ATLAS_DATABASE_PASSWORD`, `MANDATE_CLIENT_SECRET`, `MANDATE_DATABASE_PASSWORD`: long random strings, each different. Compose refuses to start without them. `openssl rand -hex 32` makes one. The `FOLIO_` ones are for Artifacts (Folio in code), the document libraries every deployment ships with; `AUSPEX_` is Explorer's, `ATLAS_` Data Atlas's and `MANDATE_` Mandate's. `ATLAS_BUCKET_SECRET` and `MANDATE_BUCKET_SECRET` are two more, though optional: without it the storage job works it out from `APP_SECRETS_KEY`.
-- **Database logins**: `POSTGRES_PASSWORD` is Postgres's admin login, used only by the storage job and backups. Each platform service (identity, registry, events, models) and Keycloak connects with its own login, which owns only its own schema (Keycloak: its own database) and can't read anyone else's. The storage job makes them from the `*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins, so changing one in `.env` and running `pc up -d` changes it.
-- `PLATFORM_ADMIN_USER`, `PLATFORM_ADMIN_PASSWORD`, `PLATFORM_ADMIN_EMAIL`, `PLATFORM_ADMIN_FIRST_NAME`, `PLATFORM_ADMIN_LAST_NAME` and `PLATFORM_ADMIN_DEPARTMENT` (`Platform` unless you change it): you. This is the first person who can sign in, as an admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one.
+### 2. Fill in the settings
+
+Open `infra/deploy/.env` and fill in these, which only you know:
+
+<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->
+| Setting | What to put |
+| --- | --- |
+| `PLATFORM_VERSION` | The AUGUR release this server runs, such as 0.1.1. |
+| `PLATFORM_URL` | AUGUR's address: https://&lt;TS_HOSTNAME>.&lt;your tailnet>.ts.net. |
+| `TS_AUTHKEY` | A Tailscale auth key. A secret. |
+| `PLATFORM_ADMIN_USER` | The first person who can sign in; identity gives them the deployment-admin role when nobody has it. |
+| `PLATFORM_ADMIN_PASSWORD` | That person's password, for the first sign-in only. A secret. |
+| `PLATFORM_ADMIN_EMAIL` | That person's email address. |
+| `PLATFORM_ADMIN_FIRST_NAME` | That person's first name. |
+| `PLATFORM_ADMIN_LAST_NAME` | That person's last name. |
+
+The preflight (step 3) fills in these 26 secrets, each with 64 random hex characters: `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `FRONTENDS_BUCKET_SECRET`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `MODELS_CLIENT_SECRET`, `FOLIO_CLIENT_SECRET`, `FOLIO_DATABASE_PASSWORD`, `FOLIO_BUCKET_SECRET`, `AUSPEX_CLIENT_SECRET`, `ATLAS_CLIENT_SECRET`, `ATLAS_DATABASE_PASSWORD`, `ATLAS_BUCKET_SECRET`, `MANDATE_CLIENT_SECRET`, `MANDATE_DATABASE_PASSWORD`, `MANDATE_BUCKET_SECRET`, `GRAFANA_ADMIN_PASSWORD`, `ALERT_WEBHOOK_TOKEN`.
+<!-- /settings -->
+
+- `PLATFORM_VERSION` is the release you checked out, without `augur@`, for example `0.19.0`.
+- `PLATFORM_URL` is `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`, with no trailing slash.
+- `PLATFORM_ADMIN_*` is you: the first person who can sign in, as an admin and deployment admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one. `PLATFORM_ADMIN_DEPARTMENT` is your department (`Platform` unless you change it).
+- `SERVER_RING` says what kind of server this is: `production` (the default), `preview` for a staging server, or `dev` for the workbench you build on ([release-channels.md](release-channels.md#server-rings)).
 - `ORG_NAME`, optional: what the organisation's own floor is called (`Organisation` unless you set it).
 - `ORG_PRODUCT_NAME`, optional: what people see the product called, in the browser tab, on the sign-in pages and in emails (`AUGUR` unless you set it, for example `Example, built on AUGUR`). The realm job makes it the realm's display name, and the web container writes it into the shell's page, so a change takes effect at the next `pc up -d`.
 
-Then:
+The secrets are made for you in step 3. Each is a long random string, different from every other, and Compose refuses to start without the required ones. The `FOLIO_` ones are for Artifacts (Folio in code), the document libraries every deployment ships with; `AUSPEX_` is Explorer's, `ATLAS_` Data Atlas's and `MANDATE_` Mandate's. To set one yourself instead, `openssl rand -hex 32` makes one.
+
+**Database logins**: `POSTGRES_PASSWORD` is Postgres's admin login, used only by the storage job and backups. Each platform service (identity, registry, events, models) and Keycloak connects with its own login, which owns only its own schema (Keycloak: its own database) and can't read anyone else's. The storage job makes them from the `*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins, so changing one in `.env` and running `pc up -d` changes it.
+
+### 3. Run the preflight
+
+The preflight fills in the secrets and checks the server can take AUGUR, before anything starts. It needs nothing but Docker:
 
 ```sh
-docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur" -w /augur node:22-alpine node scripts/preflight.mjs --install --fill-secrets
 ```
 
-The first pull takes a minute or two. Keycloak needs about a minute to start, and Tailscale fetches its certificate on the first request, so the first page can be slow. Open `PLATFORM_URL` from any device on your tailnet and sign in.
+`--fill-secrets` writes a random value into each blank secret in `.env` and never changes one that's set. Then it checks, one line each:
 
-Check on it with `docker compose -f infra/deploy/compose.yml ps` and `... logs -f <service>`.
+- **Release**: the checkout is the release `PLATFORM_VERSION` names.
+- **Settings**: every required setting is set, and each value set fits what it must be: `PLATFORM_URL` an https address with no path, `TS_AUTHKEY` a Tailscale key, `PLATFORM_ADMIN_EMAIL` an email address, bucket keys 64 hex characters, passwords at least 16 characters, `SERVER_RING` one of its three. A name in `.env` that no setting has is pointed out, in case it's a typo.
+- **Secrets**: no two are the same.
+- **Address**: `PLATFORM_URL` names the machine `TS_HOSTNAME` makes.
+- **Ring**: what kind of server this is, and whether sample data is allowed (`SEED_ALLOWED`).
+- **Read key**: `GITHUB_READ_USER` and `infra/deploy/secrets/github-read-key` are both there, or neither.
+- **`.env`** can't be read by other users on the server.
+- **Memory and disk**, against the size above.
+- And, for reading, what isn't set up yet: reporting to Backstage, the off-server copy, email.
+
+A line starting `✗` stops the install: fix it and run the command again (without `--fill-secrets` it changes nothing). Lines starting `-` are for reading. When it ends `✓ Ready`, go on.
+
+`KEYCLOAK_ADMIN_PASSWORD`, which it made, is Keycloak's own admin: the way back in if every deployment admin loses their sign-in code (below). Copy it from `.env` into your password manager now.
+
+### 4. Start AUGUR
+
+```sh
+pc up -d
+```
+
+The first pull takes a minute or two. Keycloak needs about a minute to start, and Tailscale fetches its certificate on the first request, so the first page can be slow. `pc ps` shows each container `healthy` when it's ready, and the jobs that run once (`storage`, `keycloak-config`, `backup-tools`) as exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
+
+### 5. Sign in and check it
+
+1. From any device on your tailnet, open `PLATFORM_URL` and sign in as `PLATFORM_ADMIN_USER` with `PLATFORM_ADMIN_PASSWORD`. Choose your own password, then set up a code app or a passkey: deployment admins always sign in with one.
+2. Open **Admin → Status**. Every part should say it's working. Under **Backups**, the first backup, the first restore test and the first point-in-time test are run when the backup container starts, so give it a few minutes; a part that isn't working says why.
+3. In the Tailscale admin console's **Machines**, the machine named after `TS_HOSTNAME` is there. If its key wasn't tagged, open its menu and choose **Disable key expiry**, or it leaves your tailnet when the key expires (180 days by default).
+
+### 6. Finish setting up
+
+1. **Report to Backstage** ([upgrade.md](upgrade.md#reporting-to-backstage)): set `DEPLOYMENT_ID` to the deployment's name in `org/deployments.yaml` and `PORTAL_URL` to Backstage's address, then `pc up -d registry`. Copy the deployment's key (**Copy key** in the Upgrade Centre's Reporting section) into the entry's `augur.dev/report-key` annotation. Within 15 minutes Backstage shows the deployment, and from then it raises the alarm when a report is more than 30 minutes late, so it notices when the whole server is down.
+2. **Prove the alert path** ([observability.md](observability.md#alerts)): open Grafana through `ssh -L 3001:127.0.0.1:3001 <server>` at `http://localhost:3001`, sign in as `admin` with `GRAFANA_ADMIN_PASSWORD` from `.env`, and under **Alerting → Contact points**, open **AUGUR notices** and press **Test**. A notice reaches you, and every deployment admin, in AUGUR within a minute. (observability.md has a way to do it from the command line too.)
+3. **Email** ([Email](#email)), so people can reset a forgotten password.
+4. **The off-server copy** ([Off-server copy](#off-server-copy)), so a lost server doesn't lose its backups. Until then, Admin → Status says backups are kept on this server only.
+5. **Turn on the updater**, if this server should upgrade itself ([upgrade.md](upgrade.md#the-updater)).
+
+Run the preflight once more (without `--fill-secrets`): what's left under `-` is what you chose not to set up. Write down where this deployment's bucket is, its Backstage name and its ring with its other records.
+
+## A staging server
+
+A staging server runs preview releases before they reach production, with sample people and no real ones, so a release can bake there ([ADR 0045](decisions/0045-promote-asks-portal-over-tailscale.md)). Install it with the procedure above, with these differences:
+
+- **`SERVER_RING=preview`** in step 2. It takes preview (beta) releases by default ([release-channels.md](release-channels.md#server-rings)).
+- **It joins the tailnet and reports to Backstage** (step 6, item 1), so its bake hours and its heartbeat reach Backstage with no override or hand export. Give it its own `TS_HOSTNAME` and its own entry in `org/deployments.yaml`.
+- **Sample data**: set `SEED_ALLOWED=true`, then fill it with the seed's cast ([seed.md](seed.md)). The run suite (`augur-run`) runs only where that's allowed.
+- **Everything else is its own**: its own read key, its own bucket (or its own path in one), its own auth key if they aren't reusable. Nothing is shared with production, so a mistake on staging stays there.
+- **The same size as production**, so what it shows about memory and speed holds there.
+
+## Wipe and refresh
+
+To take a dev or staging server back to empty, on the same release or a newer one, and keep its settings and its machine on the tailnet:
+
+```sh
+pc down
+docker volume rm platform_pgdata platform_wal-archive platform_garage-meta platform_garage-data platform_otel-lgtm
+sudo rm -rf infra/deploy/backups/*                 # this server's own backups, now of nothing
+# For a newer release: git fetch --tags && git checkout augur@<version>, and set PLATFORM_VERSION to it.
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur:ro" -w /augur node:22-alpine node scripts/preflight.mjs --install
+pc up -d
+```
+
+Then sign in again as in step 5: Keycloak starts from its realm file, with you as the only person, and every app's data is gone. The `tailscale` volume stays, so the machine and its address stay too (`pc down -v` would remove it as well, and it would join again with `TS_AUTHKEY`, which a one-off key can't). Afterwards:
+
+- **The deployment's reporting key is new**, because it lived in the database: copy it into Backstage again (step 6, item 1), or Backstage refuses its reports.
+- **The off-server copy keeps the copies from before**, until `OFFSITE_KEEP_DAILY` days pass. To start that clean too, point `OFFSITE_REPOSITORY` at a new path.
+- **On staging, seed it again** ([seed.md](seed.md)).
+
+## Take a server out of service
+
+When a deployment is no longer needed, end it so nothing is left behind that can sign in, alarm or cost money:
+
+1. **Tell its people**, and let them take out anything they want to keep.
+2. **Take a last backup off the server**: `pc exec backup /bin/sh /backup/backup.sh --offsite`. Decide how long to keep the bucket, and note it.
+3. **Take it out of Backstage**: remove its entry from `org/deployments.yaml`, so Backstage doesn't raise the alarm when its reports stop.
+4. **Stop it and remove its data**: `pc down -v`, then delete the checkout with `infra/deploy/.env`, `infra/deploy/secrets/` and `infra/deploy/backups/` (`sudo rm -rf`, since containers own some of it).
+5. **Take it off the tailnet**: in the Tailscale admin console, remove the machine, and revoke its auth key if it was made for this server.
+6. **Revoke what it held**: its read key in GitHub, its sign-in at the email relay, and its bucket key. When the bucket's time is up, delete the bucket, and only then the encryption password (`OFFSITE_PASSWORD`) and `KEYCLOAK_ADMIN_PASSWORD` from your password manager.
 
 ## Settings and secrets
 
@@ -66,7 +175,7 @@ Any secret (a password, a client secret, a bucket key, `DATABASE_URL`) can be gi
 
 ## Day to day
 
-To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'`.
+`pc` is the alias from step 1: `alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'`.
 
 - **Update** to a new release: see [upgrade.md](upgrade.md). In short, check out its `augur@<version>` tag, set `PLATFORM_VERSION` to it, then `pc pull && pc up -d --remove-orphans`. Services migrate their own database schemas on start.
 - **Try a change before it's released**: build the images from your checkout with `pc -f infra/deploy/compose.build.yml up -d --build`, with `PLATFORM_VERSION=local` so a later pull doesn't mistake them for a release, and `NODE_AUTH_TOKEN` set in your shell to a GitHub token with `read:packages` (the builds install the UI kit from GitHub Packages). The Upgrade Centre then shows AUGUR as built from source, based on the last release in the checkout, and offers newer releases against that. To go back to released images without editing `.env`, upgrade from the Upgrade Centre: the workbench (`SERVER_RING=dev`) is offered the newest dev build.
@@ -81,7 +190,7 @@ To shorten the commands: `alias pc='docker compose -f infra/deploy/compose.yml -
   ```
   `204` means it's gone. Removing it is recorded in the audit log.
 - **An app whose code lives on another site** (its manifest's `entry` is a full address such as `https://apps.example.org/maps/entry.js`, not a path like `/apps/maps/entry.js`) needs that site allowed in two places. In Admin, **Apps**, **Where apps load from**, add `https://apps.example.org`: until then the registry refuses to register the app. And add it to `APP_ORIGINS` in `.env` (space separated), then `pc up -d web`, so the browser will run its code. The site must serve the entry with a CORS header such as `Access-Control-Allow-Origin: PLATFORM_URL`. Removing a site in Admin stops offering its apps straight away; they show as **Blocked** in Apps until it's allowed again.
-- **Stop**: `pc down`. Data stays in the `pgdata`, `garage-meta` and `garage-data` volumes; `pc down -v` deletes them.
+- **Stop**: `pc down`. Data stays in the Compose project's volumes (`pgdata`, `wal-archive`, `garage-meta`, `garage-data`, and the others in `compose.yml`); `pc down -v` deletes them all. [Wipe and refresh](#wipe-and-refresh) empties a server and keeps its machine on the tailnet.
 
 ## Email
 
@@ -283,3 +392,24 @@ See [upgrade.md](upgrade.md) for moving from one release to the next.
 - **The page says AUGUR could not load its UI kit**: the browser couldn't fetch the kit from `KIT_URL`, or what it got didn't match the release's hashes. Open `KIT_URL` followed by the version and `kit.json` in a browser; if it doesn't load or differs from `PLATFORM_URL/kit/<version>/kit.json`, fix the CDN or remove `KIT_URL` from `.env` and `pc up -d web`.
 - **An app is listed but won't open, and the browser console says "Refused to load the script… Content Security Policy"**: its site is allowed in Admin but not in `APP_ORIGINS` (see Day to day).
 - **Apps are unavailable**: run `pc logs gateway registry`. If the gateway says the token issuer doesn't match, `PLATFORM_URL` changed after Keycloak first started (see above).
+
+## Glossary
+
+- **AUGUR**: the product, and one install of it, a **deployment**: one server running this guide's containers.
+- **Release**: one version of AUGUR as a whole, tagged `augur@<version>`, with signed images. `PLATFORM_VERSION` says which one a server runs.
+- **Ring**: what kind of server this is (`SERVER_RING`): `dev`, the **workbench** AUGUR is built on; `preview`, a **staging** server that takes releases before production; `production`, every other.
+- **Channel**: which releases a server is offered: stable, beta (preview) or dev. A ring has a default channel.
+- **Bake**: the hours a release runs on a preview server before it can be made stable. Backstage counts them from the server's reports.
+- **Tailnet**: your private Tailscale network. AUGUR is reachable only from devices on it, unless you [open it for a while](#open-augur-to-the-internet-for-a-while). **MagicDNS** gives each machine a name, and **HTTPS Certificates** give it a certificate. An **auth key** lets a machine join.
+- **The front door**: the `web` container, the only one reachable. It serves the shell and the apps, and passes `/api` to the gateway and `/sso` to Keycloak.
+- **Keycloak**: the sign-in service. Its **realm** `platform` holds the people and the rules for signing in. The **realm job** (`keycloak-config`) sets those rules on every `up`.
+- **Admin** and **deployment admin**: an admin manages people, departments and apps in Admin. A deployment admin also runs the deployment itself: its settings, upgrades and backups.
+- **Floor**: a level of the organisation (the organisation, a department, a team). Apps show people what their floor allows.
+- **Platform apps** and **pillar apps**: the apps that ship with AUGUR. Platform apps are for using and managing it (Home, Admin, Upgrade Centre, Explorer). Pillar apps are the foundation of its output (Artifacts, Mandate, Data Atlas).
+- **Preflight**: `scripts/preflight.mjs`, the check before an install (`--install`) or an upgrade.
+- **Read key**: the GitHub token a deployment uses to see and pull private releases.
+- **Backup**: the nightly dump of the whole database, with apps' files. The **restore test** loads it into a throwaway database each week. The **off-server copy** puts both in a bucket elsewhere, with restic.
+- **WAL** and **base backup**: Postgres's record of every change, archived as it goes, and a nightly copy of the database files. Together they allow a **point-in-time restore** to any moment in the last 7 days.
+- **Backstage**: the company's portal above every deployment. Each deployment sends it a signed **report** of what it runs every 15 minutes, and Backstage raises the alarm when one is late.
+- **Updater**: the optional container that applies upgrades for you, and runs the **app runner**, which installs and updates apps from their own releases.
+- **`pc`**: the alias for `docker compose` with this deployment's files (First start, step 1).

@@ -4,8 +4,6 @@
 //   pnpm dev:app ../augur-<id>             an app in its own repository, made from augur-app-template
 //   DEV_ROLES=admin pnpm dev:app <id>      the stand-in person also has these roles
 //   APP_SERVICE_PORT=8091 pnpm dev:app <id>
-//   pnpm dev:app <id> --kit                also rebuilds the Lit kit as you change it, and reloads the page. The React kits
-//                                          (Common, Quill, Aerie) are in the augur-kit repository: work on them in its Storybook
 //   DEV_PREVIEWS=all pnpm dev:app <id>     turns the app's feature previews on (or name them, comma separated)
 //   DEV_HOST=0.0.0.0 pnpm dev:app <id>     open to other machines on the tailnet (*.ts.net), such as your phone
 //   pnpm dev:app <id> --live               Live on the workbench: the workbench's shell loads the app's frontend from
@@ -17,7 +15,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const arg = process.argv[2];
-const kit = process.argv.includes('--kit');
 const live = process.argv.includes('--live');
 // pnpm is a .cmd shim on Windows, which only runs through a shell.
 const windows = process.platform === 'win32';
@@ -27,6 +24,11 @@ const dir = arg && (isAbsolute(arg) || /[\\/]|^\./.test(arg) ? resolve(process.e
 const entry = dir && ['frontend/src/entry.tsx', 'frontend/src/entry.ts'].map((e) => join(dir, e)).find((e) => existsSync(e));
 if (!dir || !existsSync(join(dir, 'manifest.json')) || !entry) {
   console.error(`✗ Usage: pnpm dev:app <id or path>: apps/<id>, or an app's own repository, with a manifest.json and frontend/src/entry.tsx (or entry.ts).`);
+  process.exit(1);
+}
+if (process.argv.includes('--kit')) {
+  // The Lit kit it rebuilt went with SDK 2. The kits (Common, Quill, Aerie) are in the augur-kit repository.
+  console.error('✗ --kit is gone: the kits are in the augur-kit repository. Work on them in its Storybook, then bump the kit here.');
   process.exit(1);
 }
 const { id } = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'));
@@ -50,11 +52,6 @@ if (existsSync(join(dir, 'service/package.json'))) {
   // No REGISTRY_URL or sign-in: the stand-in shell lists the app itself, and sends its stand-in person as plain
   // x-user-* headers, which the service believes only because it is told to here.
   run(['dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '', AUGUR_INSECURE_DEV_CALLERS: '1' }, join(dir, 'service'));
-}
-if (kit) {
-  // The Lit kit's TypeScript, then the shared modules the shell serves: each rebuilds when the one before changes.
-  run(['--filter', '@augur/ui-kit', 'exec', 'tsc', '-p', 'tsconfig.json', '--watch', '--preserveWatchOutput']);
-  run(['--filter', '@augur/shell', 'exec', 'vite', 'build', '-c', 'vite.shared.config.ts', '--mode', 'development', '--watch']);
 }
 // Live on the workbench: this machine's name on the tailnet, which `tailscale serve` answers on with https.
 let liveEnv = {};
@@ -84,5 +81,5 @@ if (live) {
     ].join('\n'),
   );
 }
-run(['--filter', '@augur/shell', 'dev'], { DEV_APP: dir, APP_SERVICE_URL: `http://localhost:${port}`, ...(kit ? { DEV_KIT: 'watch' } : {}), ...liveEnv });
+run(['--filter', '@augur/shell', 'dev'], { DEV_APP: dir, APP_SERVICE_URL: `http://localhost:${port}`, ...liveEnv });
 process.on('SIGINT', () => children.forEach((c) => c.kill('SIGINT')));
