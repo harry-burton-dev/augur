@@ -4,34 +4,42 @@ This takes you from nothing to an app running in AUGUR's shell. An app is three 
 
 ## 1. Start it
 
+Every app starts from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), in a repository of its own ([ADR 0012](decisions/0012-apps-in-own-repositories.md)). On GitHub, **Use this template** to make `augur-expenses`, clone it next to your AUGUR checkout, and name it:
+
 ```sh
-pnpm install
-pnpm create-app expenses --name "Expenses"
+export NODE_AUTH_TOKEN=<a token with read:packages>   # AUGUR's packages come from GitHub Packages
+pnpm make-app expenses --name "Expenses"
+pnpm install && pnpm test
 ```
 
-The id is the app's folder, its route (`/expenses`) and its prefix behind the gateway (`/api/expenses`): 2 to 40 lowercase letters, digits and dashes. `create-app` writes:
+The id is the app's route (`/expenses`) and its prefix behind the gateway (`/api/expenses`): 2 to 40 lowercase letters, digits and dashes. The template's README is the whole path, from here to its first release, in 15 minutes. What it gives you:
 
 | Path | What it is |
 | --- | --- |
-| `apps/expenses/manifest.json` | How the registry lists the app |
-| `apps/expenses/frontend/` | `@apps/expenses-frontend`: `src/entry.ts` and its test |
-| `apps/expenses/service/` | `@apps/expenses`: a Fastify service with `/healthz` and `GET /v1/greeting`, and their tests |
-| `.changeset/new-app-expenses.md` | The app's first release, 0.1.0 |
+| `manifest.json` | How the registry lists the app, with `$schema` pointing at AUGUR's published schema |
+| `frontend/` | `@apps/expenses-frontend`: a React app on the app kit's starter, `src/entry.tsx` and its test |
+| `service/` | `@apps/expenses`: a Fastify service on the service kit's starter, with `/healthz` and `GET /v1/greeting`, and their tests |
+| `service/src/api-types.ts` | The wire types, written once, which the service answers with and the frontend reads |
+| `run/index.ts` | A stub of its scenarios for the run suite (augur-run, [ADR 0050](decisions/0050-alpha-proving-run.md)) |
+| `.github/workflows/` | CI on every pull request; previews, dev builds and releases ([Ship an app](ship-an-app.md)) |
+| `.changeset/first-release.md` | The app's first release, 0.1.0 |
 
 The new app already works: the frontend asks its service who you are and shows the answer, and has a button that sends you a notification.
 
 ## 2. Run it
 
+From your AUGUR checkout (after its own `pnpm install`):
+
 ```sh
-pnpm dev:app expenses
+pnpm dev:app ../augur-expenses
 ```
 
-Open http://localhost:5173/expenses. This is the real shell and the real UI kit, with your frontend loaded from source and your service running beside it on port 8090 (`APP_SERVICE_PORT` changes it). Edit either and it reloads.
+Open http://localhost:5173/expenses. This is the real shell and the real UI kit, with your frontend loaded from source and your service running beside it on port 8090 (`APP_SERVICE_PORT` changes it). Edit either and it reloads. An app still in this repository's `apps/` runs by its id instead: `pnpm dev:app <id>`.
 
 Nothing else of the platform runs, so the shell stands in for it:
 
-- You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app expenses` adds roles.
-- `pnpm dev:app expenses --kit` also rebuilds the UI kit and its tokens as you change them and reloads the page; `DEV_PREVIEWS=all` turns your feature previews on; `DEV_HOST=0.0.0.0` opens it to your other machines on the tailnet ([release-channels.md](release-channels.md#the-live-dev-loop)).
+- You are signed in as **Dev Person**, in the Development department, with the role your manifest's `requiredRole` asks for. `DEV_ROLES=admin pnpm dev:app ../augur-expenses` adds roles.
+- `DEV_PREVIEWS=all` turns your feature previews on; `DEV_HOST=0.0.0.0` opens it to your other machines on the tailnet ([release-channels.md](release-channels.md#the-live-dev-loop)). The React kits are in the augur-kit repository: work on them in its Storybook.
 - Your inbox items show in the stand-in shell's Inbox: put one in from the browser console ([inbox.md](inbox.md#trying-it-with-pnpm-devapp)).
 - You're on your own floor (`/@me/expenses`); `/@org/expenses` puts your app on the org's.
 - Calls to `/api/expenses/…` go to your service with Dev Person attached, exactly as the gateway sends them, so `callerFromHeaders` works.
@@ -43,22 +51,18 @@ To try your app with the rest of the platform, use the full local stack (see the
 
 ## 3. The frontend
 
-`src/entry.ts` default-exports a micro frontend. The shell calls `mount(el, ctx)` when someone opens your app, and `unmount(el)` before the next one opens. Render into `el` and nowhere else.
+`src/entry.tsx` default-exports what the shell mounts. `defineReactApp` from the app kit makes it: the shell calls `mount(el, ctx)` when someone opens your app and `unmount(el)` before the next one opens, and each part of your app reads `ctx` with `useAppContext()`. React and the kits are served by the shell to every app, so they stay out of your bundle (`isSharedModule` in `vite.config.ts`).
 
-```ts
-import { defineMicroFrontend, type MountContext } from '@augur/mfe-sdk';
-import { html, render } from 'lit';
-import '@augur/ui-kit';
+```tsx
+import { defineReactApp } from '@augur/app-kit';
+import type { MountContext } from '@augur/mfe-sdk';
+import manifest from '../../manifest.json';
+import { App, places } from './app.js';
 
-export default defineMicroFrontend({
-  mount(el: HTMLElement, ctx: MountContext) {
-    render(html`<ui-heading heading="Expenses"></ui-heading>`, el);
-  },
-  unmount(el: HTMLElement) {
-    render(html``, el);
-  },
-});
+export default defineReactApp<MountContext>({ name: manifest.name, App, routes: places });
 ```
+
+`places` are the app's places on the address bar (`placeRoutes`, `place('/claims/:claim', Claim)`), and `useData` loads what each shows, kept per floor and refreshed by `refreshOn`. Add a `Glance` for a card on Home, a `Picker` to answer requests, and `intents` to open at a place. Apps written before the React kits mount Lit with `defineMicroFrontend` from the SDK, and the parts below have the same names there (`ui-page-head` for `PageHead`).
 
 Everything you need from outside your app comes through `ctx`:
 
@@ -488,7 +492,7 @@ Each build of a version's frontend is kept in a folder of its own, `/apps/expens
 
 [Ship an app](ship-an-app.md) walks the whole loop, from a pull request's preview to servers taking the release by themselves.
 
-You don't release an app by hand. Merging the Version packages PR that moves its version releases it on its own: a signed service image, a signed frontend and the GitHub release `app/<id>@<version>` ([Versioning](versioning.md#app-releases)). A deployment's app runner can install and update it from there, with no new AUGUR release. The app made by `pnpm create-app` already copies its manifest into its build and gives the registry its frontend when it starts, as the release needs.
+You don't release an app by hand. Merging the Version packages PR that moves its version releases it on its own: a signed service image, a signed frontend and the GitHub release `app/<id>@<version>` ([Versioning](versioning.md#app-releases)). A deployment's app runner can install and update it from there, with no new AUGUR release. The app made from augur-app-template already copies its manifest into its build and gives the registry its frontend when it starts, as the release needs.
 
 Before that, every push to a pull request that changes the app makes a preview, which a server with the app installed runs beside it for the app's developers to switch to ([app-previews.md](app-previews.md)). A preview signs in as the app but keeps its data apart, and sees `APP_PREVIEW=pr-<number>` in its settings; the service kit marks its notifications ("Preview #12: …") and audit entries (`preview: 12`) with it.
 
