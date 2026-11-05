@@ -14,6 +14,9 @@ export const MAX_SETTINGS = 10;
 /** How many feature previews one app may offer at once. */
 export const MAX_FEATURE_PREVIEWS = 8;
 
+/** How many types of thing one app may bind to entities and say so in events (ADR 0066). */
+export const MAX_BINDING_TYPES = 10;
+
 /** How many kinds of inbox item one app may declare. */
 export const MAX_INBOX_KINDS = 10;
 
@@ -222,6 +225,24 @@ export const appEntrySchema = Type.Object(
         { additionalProperties: false, description: 'The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)' },
       ),
     ),
+    links: Type.Optional(
+      Type.Object(
+        {
+          entities: Type.Optional(
+            Type.Boolean({ description: 'The app binds its things to entities and publishes the binding events (ADR 0066), so the entity catalogue follows them' }),
+          ),
+        },
+        { additionalProperties: false, description: 'What the app links its things to elsewhere in AUGUR (SDK 2.1)' },
+      ),
+    ),
+    bindings: Type.Optional(
+      Type.Array(Type.String({ pattern: '^[a-z][a-z0-9-]{0,39}$', description: 'A type of thing the app binds, as it names it in its topics: "intent"' }), {
+        minItems: 1,
+        maxItems: MAX_BINDING_TYPES,
+        uniqueItems: true,
+        description: 'With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound (SDK 2.1)',
+      }),
+    ),
     scopes: Type.Optional(
       Type.Array(Type.Enum([...SCOPES]), {
         uniqueItems: true,
@@ -346,7 +367,7 @@ export const platformApps: AppEntry[] = [
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
     areas: [
-      { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People and departments' },
+      { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People, departments and its settings' },
       { id: 'system', label: 'System', icon: 'server', detail: 'Apps, status, updates and activity' },
     ],
     menu: [
@@ -367,6 +388,12 @@ export const platformApps: AppEntry[] = [
           { label: 'All departments', icon: 'list', path: '/departments', detail: 'Names and members', keywords: 'groups teams' },
           { label: 'New department', icon: 'plus', path: '/departments/new', keywords: 'create group team' },
         ],
+      },
+      {
+        label: 'Settings',
+        icon: 'settings',
+        area: 'organisation',
+        items: [{ label: 'Name, time zone and email', icon: 'org', path: '/organisation', detail: 'The organisation’s own settings', keywords: 'organisation organization name timezone time zone sender email from' }],
       },
       {
         label: 'Apps',
@@ -448,7 +475,10 @@ export const surfaceProblem = (entry: AppEntry): string | undefined => {
   return stray ? `${entry.name} has a ${stray.slot} for the ${stray.floor} floor, but its floors don't include ${stray.floor}.` : undefined;
 };
 
-/** What's wrong with the settings, feature previews, inbox kinds and notification kinds an app offers, or undefined when nothing is. */
+/** Type names the binding events' payload keeps for itself (the service kit's bindingEvent refuses them too). */
+const RESERVED_BINDING_TYPES = new Set(['entity', 'role']);
+
+/** What's wrong with the settings, feature previews, inbox kinds, notification kinds and binding types an app offers, or undefined when nothing is. */
 export const settingsProblem = (entry: AppEntry): string | undefined => {
   const previews = new Set<string>();
   for (const preview of entry.previews ?? []) {
@@ -466,6 +496,9 @@ export const settingsProblem = (entry: AppEntry): string | undefined => {
     if (told.has(kind.id)) return `${entry.name} declares the notification kind "${kind.id}" twice.`;
     told.add(kind.id);
   }
+  if (entry.bindings && !entry.links?.entities) return `${entry.name} names the things it binds, but doesn't say it links them to entities (links.entities).`;
+  const reserved = entry.bindings?.find((type) => RESERVED_BINDING_TYPES.has(type));
+  if (reserved) return `${entry.name} can't bind a type named "${reserved}": the binding events' payload uses that key.`;
   const seen = new Set<string>();
   for (const setting of entry.settings ?? []) {
     if (seen.has(setting.id)) return `${entry.name} offers the setting "${setting.id}" twice.`;

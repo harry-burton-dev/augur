@@ -50,7 +50,7 @@ describe('registry', () => {
     const app = await buildApp();
     const forAdmin = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
     expect(ids(forAdmin)).toContain('admin');
-    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Apps', 'AUGUR']);
+    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Settings', 'Apps', 'AUGUR']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).not.toContain('admin');
   });
 
@@ -434,6 +434,22 @@ describe('registry', () => {
       expect((await put({ kinds: [{ id: 'comment', label: 'Comments on your documents', detail: 'When someone comments on one you own' }] })).statusCode).toBe(201);
       const grants = await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers: as('platform-events') });
       expect(grants.json().notificationKinds).toEqual(['comment']);
+    });
+
+    it('takes the types an app binds to entities, refuses reserved or stray ones, and lists them for services', async () => {
+      const app = await buildApp({ verifyService });
+      const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, ...extra } });
+      expect((await put({ links: { entities: true }, bindings: ['Record'] })).statusCode).toBe(400);
+      expect((await put({ links: { entities: true }, bindings: ['record', 'record'] })).statusCode).toBe(400);
+      expect((await put({ links: { entities: true }, bindings: ['entity'] })).json().message).toContain('"entity"');
+      expect((await put({ bindings: ['record'] })).json().message).toContain('links.entities');
+      expect((await put({ links: { entities: true }, bindings: ['record', 'library'] })).statusCode).toBe(201);
+      const listed = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/entity-links', headers });
+      expect((await listed(as('app-atlas'))).json()).toEqual([{ app: 'library', types: ['record', 'library'] }]);
+      expect((await listed(as('platform-events'))).statusCode).toBe(200);
+      expect((await listed(admin)).statusCode).toBe(403);
+      await put({});
+      expect((await listed(as('app-atlas'))).json()).toEqual([]);
     });
 
     it('tells platform services what an app is granted, and nothing once it is off', async () => {

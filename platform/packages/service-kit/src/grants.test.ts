@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GrantsUnavailable, registryGrants, registryInboxKinds, registryNotificationKinds, registryRequiredRole } from './grants.js';
+import { GrantsUnavailable, registryBindingApps, registryGrants, registryInboxKinds, registryNotificationKinds, registryRequiredRole } from './grants.js';
 
 describe('registry grants', () => {
   it('asks once per app and floor while the answer is fresh, as a platform service', async () => {
@@ -46,5 +46,27 @@ describe('registry grants', () => {
     expect(await role(answer(null, 404))).toBeNull();
     expect(await role(answer({ scopes: [], inboxKinds: [] }))).toBeUndefined();
     await expect(role(answer(null, 502))).rejects.toBeInstanceOf(GrantsUnavailable);
+  });
+
+  it('lists the apps that bind to entities, asks again only when stale, and keeps the last answer when the registry is down', async () => {
+    const credentials = { name: 'atlas', getToken: async () => 'atlas-token' };
+    let t = 0;
+    let status = 200;
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      expect(String(url)).toBe('http://registry/v1/entity-links');
+      return status === 200 ? Response.json([{ app: 'mandate', types: ['intent'] }]) : new Response(null, { status });
+    });
+    const apps = registryBindingApps({ registryUrl: 'http://registry/', credentials, fetchImpl: fetchImpl as typeof fetch, now: () => t });
+    expect(await apps()).toEqual([{ app: 'mandate', types: ['intent'] }]);
+    await apps();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    t = 300_001;
+    status = 502;
+    expect(await apps()).toEqual([{ app: 'mandate', types: ['intent'] }]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const old = registryBindingApps({ registryUrl: 'http://registry', credentials, fetchImpl: (async () => new Response(null, { status: 404 })) as typeof fetch });
+    expect(await old()).toEqual([]);
+    const down = registryBindingApps({ registryUrl: 'http://registry', credentials, fetchImpl: (async () => new Response(null, { status: 503 })) as typeof fetch });
+    await expect(down()).rejects.toBeInstanceOf(GrantsUnavailable);
   });
 });
