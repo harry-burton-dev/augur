@@ -1,7 +1,7 @@
 import { AskTwice, Button, Checkbox, CheckboxGroup, Dialog, Select, Status, Table, TextField, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import { departmentPath, fullName, type AdminApi, type Department, type LeaveRequest, type Person, type Role } from './api.js';
-import { Page, PasswordNote, Problem, statusOf } from './parts.js';
+import { lastSignIn, Page, PasswordNote, Problem, statusOf } from './parts.js';
 
 const NO_DEPARTMENT = '';
 /** The leaver flow's choice when nobody takes on their work: apps keep it until someone does. */
@@ -15,6 +15,7 @@ const columns: TableColumn[] = [
   { key: 'department', label: 'Department', sortable: true },
   { key: 'roles', label: 'Roles' },
   { key: 'signIn', label: 'Sign-in', sortable: true, format: (v, row) => <Status status={row.signInStatus as ReturnType<typeof statusOf>['status']} label={String(v)} />, text: (v) => String(v) },
+  { key: 'lastSignIn', label: 'Last sign-in', sortable: true, format: (_v, row) => String(row.lastSignInText) },
 ];
 
 /**
@@ -179,6 +180,9 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
       roles: p.roles.join(', '),
       signIn: p.enabled && askedToLeave(p.id) ? 'Asked to leave' : statusOf(p).label,
       signInStatus: p.enabled && askedToLeave(p.id) ? 'needs' : statusOf(p).status,
+      // Sorted by the time itself; shown as a date, or why there's none.
+      lastSignIn: p.lastSignInAt ?? '',
+      lastSignInText: lastSignIn(p),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const unready = loading || Boolean(error);
@@ -221,7 +225,15 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
           size="glance"
           eyebrow={person.username}
           heading={fullName(person)}
-          summary={person.invited ? 'Hasn’t chosen their own password yet.' : ''}
+          summary={
+            person.state === 'left'
+              ? `Left on ${new Date(person.left!.at).toLocaleDateString()}.`
+              : person.invited && !person.lastSignInAt
+                ? 'Hasn’t chosen their own password yet.'
+                : person.lastSignInAt
+                  ? `Last signed in on ${new Date(person.lastSignInAt).toLocaleDateString()}.`
+                  : ''
+          }
           actionLabel="Save"
           busyLabel="Saving…"
           onSubmit={saveEdit}
@@ -251,7 +263,14 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
                   Turn off their sign-in
                 </AskTwice>
               ) : (
-                <Button kind="secondary" size="sm" busyLabel="Turning on…" onPress={() => setSignIn(person, true).catch((err: Error) => setLiveError(err.message))}>
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  busyLabel="Turning on…"
+                  disabled={person.state === 'left'}
+                  reason="They’ve left, and a leaver doesn’t come back. Add them again if they return."
+                  onPress={() => setSignIn(person, true).catch((err: Error) => setLiveError(err.message))}
+                >
                   Turn their sign-in on
                 </Button>
               )}
@@ -262,7 +281,9 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
             <div className="admin-part-head" data-leaver>
               <h3 className="admin-part-label">Leaving</h3>
               <p className="admin-muted">
-                {askedToLeave(person.id)
+                {person.state === 'left'
+                  ? `They left on ${new Date(person.left!.at).toLocaleDateString()}${person.left!.handOverTo ? `, handing their work to ${fullName(people.find((x) => x.id === person.left!.handOverTo) ?? { firstName: 'someone', lastName: 'else', username: '' })}` : ''}.`
+                  : askedToLeave(person.id)
                   ? `They asked to leave on ${new Date(askedToLeave(person.id)!.requestedAt).toLocaleDateString()}${askedToLeave(person.id)!.note ? `: “${askedToLeave(person.id)!.note}”` : '.'}`
                   : 'For someone leaving the organisation. Their sign-in goes off, they’re signed out everywhere, and apps hand on what they own. Their teams and history stay.'}
               </p>
@@ -274,8 +295,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
                 size="sm"
                 confirm="Press again: they leave now"
                 busyLabel="Leaving…"
-                disabled={person.id === me}
-                reason="You can’t run the leaver flow on yourself. Ask another admin."
+                disabled={person.id === me || person.state === 'left'}
+                reason={person.state === 'left' ? 'They’ve already left.' : 'You can’t run the leaver flow on yourself. Ask another admin.'}
                 onPress={() => runLeaver(person).catch((err: Error) => setLiveError(err.message))}
               >
                 They’re leaving

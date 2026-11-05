@@ -116,12 +116,14 @@ export interface SignInCopier {
   store: SignInCursorStore;
   audit: (entry: NewAuditEntry) => Promise<void>;
   now?: () => number;
+  /** Told each time someone signs in, with when, so their last sign-in is kept. */
+  signedIn?: (person: string, at: string) => Promise<void>;
   /** Told when more events arrived since the last run than one run reads, so the oldest of them were not copied. */
   warn?: (message: string) => void;
 }
 
 /** Copies the sign-ins since the last run into the audit log, oldest first; returns how many. */
-export const copySignIns = async ({ events, store, audit, now = Date.now, warn = console.warn }: SignInCopier): Promise<number> => {
+export const copySignIns = async ({ events, store, audit, now = Date.now, warn = console.warn, signedIn }: SignInCopier): Promise<number> => {
   let copied = 0;
   await store.alone(async () => {
     const cursor = await store.load();
@@ -179,6 +181,7 @@ export const copySignIns = async ({ events, store, audit, now = Date.now, warn =
       // A known event after a waiting hour: that hour is written first, so the cursor never skips it.
       await flushHour();
       await audit(signInEntry(e));
+      if (e.userId && (e.type === 'LOGIN' || e.type === 'IDENTITY_PROVIDER_FIRST_LOGIN')) await signedIn?.(e.userId, new Date(e.time).toISOString());
       advance(e);
       // Kept after each one, so a failure part way never copies one twice.
       await store.save(at);
