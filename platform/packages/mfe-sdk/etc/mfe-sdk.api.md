@@ -206,6 +206,14 @@ export interface Focus {
 }
 
 // @public
+export interface Formats {
+    hourCycle?: 'h12' | 'h23';
+    language?: string;
+    locale?: string;
+    timeZone?: string;
+}
+
+// @public
 export const INBOX_TOPICS: {
     readonly taken: "platform.inbox.taken";
     readonly released: "platform.inbox.released";
@@ -402,6 +410,7 @@ export interface MountContext {
     bus: EventBus;
     fetch(path: string, init?: RequestInit): Promise<Response>;
     focus?: Focus;
+    formats?: Formats;
     getToken(): Promise<string>;
     getWorkspace(): Workspace;
     intent?: Intent;

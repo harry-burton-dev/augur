@@ -1,3 +1,4 @@
+import type { Formats } from '@augur/mfe-sdk';
 import type { Preferences } from './preferences.js';
 
 /**
@@ -5,16 +6,11 @@ import type { Preferences } from './preferences.js';
  * deployment, then the browser). The words stay English; only the way of writing dates, times and
  * numbers follows their choice.
  */
-export interface Formats {
-  /** A language tag, such as en-GB; the browser's without it. */
-  locale?: string;
-  /** IANA; the browser's without it. */
-  timeZone?: string;
-  hourCycle?: 'h12' | 'h23';
-}
+export type { Formats };
 
 /** Their date format, else their language, else the browser's; their time zone; their clock. */
 export const formatsFrom = (prefs: Pick<Preferences, 'dateFormat' | 'timeZone' | 'clock'>, language?: string): Formats => ({
+  ...(language ? { language } : {}),
   ...(prefs.dateFormat || language ? { locale: prefs.dateFormat || language } : {}),
   ...(prefs.timeZone ? { timeZone: prefs.timeZone } : {}),
   ...(prefs.clock ? { hourCycle: prefs.clock === '12' ? 'h12' : 'h23' } : {}),
@@ -26,7 +22,8 @@ let current: Formats = {};
 export const setFormats = (formats: Formats) => {
   current = formats;
 };
-export const currentFormats = () => current;
+/** A copy, so an app holding it can't change the shell's. */
+export const currentFormats = (): Formats => ({ ...current });
 
 /** A formatter for `options`, written their way. A tag the browser can't use falls back to the browser's own. */
 export const dateTimeFormat = (options: Intl.DateTimeFormatOptions, formats: Formats = current) => {
