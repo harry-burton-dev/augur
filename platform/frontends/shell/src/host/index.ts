@@ -26,3 +26,24 @@ export {
 } from './previews.js';
 export { AppSearch, readAnswer, SEARCH_BUDGET_MS, RESULTS_PER_APP, MIN_QUERY, type FoundIn, type FindUpdate } from './find.js';
 export { toastFor, withToast, MAX_TOASTS, type ShellToast } from './toasts.js';
+export {
+  InboxClient,
+  InboxError,
+  INBOX_FUNCTION,
+  INBOX_MORE,
+  UNREACHABLE as INBOX_UNREACHABLE,
+  appNameOf,
+  dueLine,
+  inboxLabel,
+  inboxNeeds,
+  itemOfNeed,
+  kindOf,
+  menuFor,
+  openProblem,
+  ordered,
+  subjectLabel,
+  withInbox,
+  type InboxMenuEntry,
+  type InboxTab,
+  type InboxVerb,
+} from './inbox.js';
