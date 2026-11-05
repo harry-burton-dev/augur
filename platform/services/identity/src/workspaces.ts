@@ -89,6 +89,8 @@ export interface WorkspaceStore {
   createTeam(name: string, parentId?: string): Promise<Workspace>;
   /** Renames a team. Its slug stays, so links to it keep working. */
   renameTeam(id: string, name: string): Promise<Workspace>;
+  /** Renames the organisation's own floor, which is the organisation's name (ADR 0042). */
+  renameOrg(name: string): Promise<Workspace>;
   /** What each level of team is called, from the top (see DEFAULT_LEVELS). */
   levels(): Promise<string[]>;
   /** Renames the levels; the names are checked with checkLevels. */
@@ -234,6 +236,12 @@ export class MemoryWorkspaceStore implements WorkspaceStore {
     placeTeam(await this.org(), await this.teams(), name, team.parentId, id);
     team.name = name;
     return structuredClone(team);
+  }
+
+  async renameOrg(name: string) {
+    const org = this.all.get((await this.org()).id)!;
+    org.name = name;
+    return structuredClone(org);
   }
 
   async setMember(team: string, person: string, role: MemberRole | null) {
@@ -467,6 +475,14 @@ export class PgWorkspaceStore implements WorkspaceStore {
       placeTeam(await this.orgIn(q), teams, name, team.parentId, id);
       await q.query('update identity.workspaces set name = $2 where id = $1', [id, name]);
       return { ...team, name };
+    });
+  }
+
+  renameOrg(name: string) {
+    return this.locked(async (q) => {
+      const org = await this.orgIn(q);
+      await q.query('update identity.workspaces set name = $2 where id = $1', [org.id, name]);
+      return { ...org, name };
     });
   }
 
