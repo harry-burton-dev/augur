@@ -8,6 +8,7 @@ plugins:
 nav:
   - Your account: account.md
   - Agents and models: agents.md
+  - For alpha testers: alpha-testers.md
   - API contracts: api-contracts.md
   - App patterns: app-patterns.md
   - Previews of pull requests: app-previews.md

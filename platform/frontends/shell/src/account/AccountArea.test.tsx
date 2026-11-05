@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Preferences } from '../host/preferences.js';
 import { AccountApi, sessionOf } from './api.js';
 import { AccountArea, type AccountAreaProps, type AccountSection } from './AccountArea.js';
+import { WHATS_NEW } from './whats-new.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -203,6 +204,14 @@ describe('the Account area', () => {
   it('says once how the last of Keycloak’s screens went', async () => {
     const { text } = await open('security', { actionStatus: 'cancelled' });
     expect(text()).toContain('Nothing changed.');
+  });
+
+  it('says what’s new in this release, under the deployment’s own name', async () => {
+    const { text } = await open('about', { product: 'Skein' });
+    expect(text()).toContain(`What’s new in ${WHATS_NEW.name}`);
+    expect(text()).toContain(WHATS_NEW.items[0]!.title);
+    expect(text()).not.toContain('{product}');
+    expect(text()).toContain('Skein');
   });
 
   it('closes on Escape', async () => {
