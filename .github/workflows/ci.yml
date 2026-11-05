@@ -128,10 +128,17 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `tasks=${n}\ntests=${Math.min(n, 2)}\n`);
           '
       - run: pnpm build --concurrency=${{ steps.fit.outputs.tasks }}
-      # The SDK's public surface against its committed report, and the changeset its change needs (ADR 0052).
-      - run: pnpm check:api
+      # Each library's public surface (the SDK, records, the service kit) against its committed report, and the
+      # changeset its change needs (ADR 0052). On a pull request, only when the libraries or the check changed.
+      - name: Do the libraries' API reports match?
         env:
           BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ] && git diff --quiet "origin/$BASE_REF...HEAD" -- platform/packages scripts/check-api.mjs package.json pnpm-lock.yaml; then
+            echo "No library changed: nothing to check."
+          else
+            pnpm check:api
+          fi
       # Each library as it would be published, checked by publint and Are the Types Wrong (ADR 0052),
       # on pull requests that touch the libraries; the Release workflow checks them again before publishing.
       - name: Are the packages ready to publish?

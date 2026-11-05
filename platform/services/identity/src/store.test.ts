@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PgOrganisationStore } from './organisation.ts';
+import { PgSignInCursorStore } from './sign-ins.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 
 /** The same behaviour from every store. */
@@ -45,7 +46,7 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from identity.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings']);
+    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor']);
   });
 
   it('keeps the organisation settings in one row', async () => {
@@ -55,5 +56,20 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
     await org.put({ timeZone: 'Europe/Paris', senderName: 'Acme', senderAddress: 'no-reply@acme.example', updatedAt: '2026-11-05T02:00:00.000Z', updatedBy: 'u-2' });
     expect(await org.get()).toEqual({ timeZone: 'Europe/Paris', senderName: 'Acme', senderAddress: 'no-reply@acme.example', updatedAt: '2026-11-05T02:00:00.000Z', updatedBy: 'u-2' });
     expect((await admin.query('select count(*)::int as n from identity.organisation')).rows[0].n).toBe(1);
+  });
+
+  it('keeps where sign-in copying has got to, and lets one identity copy at a time', async () => {
+    const cursor = new PgSignInCursorStore(admin);
+    expect(await cursor.load()).toBeUndefined();
+    await cursor.save({ time: 1_700_000_000_000, seen: ['a'] });
+    await cursor.save({ time: 1_700_000_000_500, seen: ['b', 'c'] });
+    expect(await cursor.load()).toEqual({ time: 1_700_000_000_500, seen: ['b', 'c'] });
+    let inner: boolean | undefined;
+    const outer = await cursor.alone(async () => {
+      inner = await cursor.alone(async () => {});
+    });
+    expect(outer).toBe(true);
+    expect(inner).toBe(false);
+    expect(await cursor.alone(async () => {})).toBe(true);
   });
 });
