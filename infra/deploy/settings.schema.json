@@ -815,6 +815,15 @@
       ],
       "x-docs": "docs/domain-events.md#following"
     },
+    "INBOX_KEEP_DAYS": {
+      "type": "string",
+      "description": "How many days closed inbox items are kept before they go, with their history (the audit log keeps every step).",
+      "default": "90",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/inbox.md#how-long-items-are-kept"
+    },
     "CALLER_SIGNING_KEY": {
       "type": "string",
       "writeOnly": true,

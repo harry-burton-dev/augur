@@ -459,6 +459,7 @@ services:
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
+      INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
