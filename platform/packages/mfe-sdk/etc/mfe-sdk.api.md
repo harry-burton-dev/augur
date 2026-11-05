@@ -23,6 +23,7 @@ export type AppCategory = (typeof APP_CATEGORIES)[number];
 export interface AppManifestEntry {
     ai?: boolean;
     areas?: AppArea[];
+    bindings?: string[];
     category?: AppCategory;
     description?: string;
     entry: string;
@@ -35,6 +36,9 @@ export interface AppManifestEntry {
     id: string;
     inbox?: {
         kinds: InboxKind[];
+    };
+    links?: {
+        entities?: boolean;
     };
     maxUpload?: number;
     menu?: AppMenuCategory[];

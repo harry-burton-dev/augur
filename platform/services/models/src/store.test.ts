@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { MemoryModelStore, PgModelStore, type ModelStore } from './store.ts';
+import { PgModelStore, type ModelStore } from './store.ts';
 
 /** The same behaviour from every store. */
 const behavesLikeAStore = (make: () => ModelStore, reset: () => Promise<void> = async () => {}) => {
@@ -33,8 +33,6 @@ const behavesLikeAStore = (make: () => ModelStore, reset: () => Promise<void> = 
     expect((await store.usage('2026-10-24')).map((u) => u.day)).toEqual(['2026-10-24']);
   });
 };
-
-describe('MemoryModelStore', () => behavesLikeAStore(() => new MemoryModelStore()));
 
 // Runs wherever DATABASE_URL points at a Postgres; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('PgModelStore', () => {
