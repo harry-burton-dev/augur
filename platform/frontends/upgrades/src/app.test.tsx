@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { createRoot } from 'react-dom/client';
+import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App, routeFor } from './app.js';
 import { needsYou } from './model/needs-you.js';
@@ -7,6 +7,22 @@ import type { AppInstalls, Overview, OverviewUnit, PlatformUpdates } from './mod
 import { stateOf } from './units.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/**
+ * Every root a test mounts, unmounted after it. A dialog left open (react-aria's useDialog) has a timer
+ * that would otherwise fire after the test environment is torn down and fail the run.
+ */
+const roots: Root[] = [];
+const rootFor = (el: Element) => {
+  const root = createRoot(el);
+  roots.push(root);
+  return root;
+};
+afterEach(async () => {
+  await act(async () => {
+    for (const root of roots.splice(0)) root.unmount();
+  });
+});
 
 const manifest = [{ id: 'upgrades', name: 'Upgrade Centre', route: '/upgrades', entry: '', version: '0.0.0', sdk: '^1.10.0', icon: 'download' }];
 /** The button with these words, and what it says when it can't be pressed. */
@@ -133,7 +149,7 @@ describe('Upgrade Centre', () => {
       const [status, body] = respond(path, init);
       return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
     });
-    const root = createRoot(el);
+    const root = rootFor(el);
     await act(async () => {
       root.render(<App ctx={{ fetch, path: '', user: { id: 'p1', name: 'Alex', departments: [], roles } }} />);
     });
@@ -264,7 +280,7 @@ describe('marking a result looked at', () => {
       return new Response(JSON.stringify(body), { status: 200 });
     });
     await act(async () => {
-      createRoot(el).render(<App ctx={{ fetch, path: '', user: { id: 'p1', name: 'Alex', departments: [], roles: ['deployment-admin'] } }} />);
+      rootFor(el).render(<App ctx={{ fetch, path: '', user: { id: 'p1', name: 'Alex', departments: [], roles: ['deployment-admin'] } }} />);
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -297,7 +313,7 @@ describe('changing a unit’s settings', () => {
       return new Response(JSON.stringify(body), { status: 200 });
     });
     await act(async () => {
-      createRoot(el).render(<App ctx={{ fetch, path, user: { id: 'p1', name: 'Alex', departments: [], roles } }} />);
+      rootFor(el).render(<App ctx={{ fetch, path, user: { id: 'p1', name: 'Alex', departments: [], roles } }} />);
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -384,7 +400,7 @@ describe('upgrading from the Upgrade Centre', () => {
       return new Response(JSON.stringify(body), { status });
     });
     await act(async () => {
-      createRoot(el).render(<App ctx={{ fetch, path: '/augur', user: { id: 'p1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'] } }} />);
+      rootFor(el).render(<App ctx={{ fetch, path: '/augur', user: { id: 'p1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'] } }} />);
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
@@ -462,7 +478,7 @@ describe('installing a halted release for a test', () => {
       return new Response(JSON.stringify(body), { status });
     });
     await act(async () => {
-      createRoot(el).render(<App ctx={{ fetch, path: '/augur', user: { id: 'p1', name: 'Alex', departments: [], roles: ['deployment-admin'] } }} />);
+      rootFor(el).render(<App ctx={{ fetch, path: '/augur', user: { id: 'p1', name: 'Alex', departments: [], roles: ['deployment-admin'] } }} />);
     });
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0));
