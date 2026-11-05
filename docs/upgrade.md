@@ -62,6 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Once email is set up (`SMTP_*`), Keycloak emails each person when their password, code app or passkeys change. The realm job turns this on at `pc up -d`, and people see it in Account → Sign-in and security. Failed sign-ins aren't emailed. Nothing to do.
 
+### Adding someone sends an invite email
+
+**From** unreleased
+
+Where email is set up (`SMTP_*`, docs/deploy.md, Email), Admin → People → Add a person now emails an invite by default: a link that lasts 72 hours to confirm their email and choose a password. The one-time password is still there under **How they start**, and is the only choice where email isn't set up. Nothing to do, unless your relay refuses mail from Keycloak: then Admin says the invite couldn't be sent, and Admin → Status, Email says why.
+
 ### Email comes from the organisation's sender
 
 **From** augur@0.22.0

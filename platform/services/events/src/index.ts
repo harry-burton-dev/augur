@@ -14,6 +14,7 @@ loadConfigOrExit('events', [
   commonSettings.gateway,
   { name: 'DOMAIN_EVENTS_KEEP_DAYS', about: 'how many days apps’ domain events are kept (default 30).' },
   { name: 'INBOX_KEEP_DAYS', about: 'how many days closed inbox items are kept (default 90).' },
+  { name: 'INBOX_DONE_DAYS', about: 'how many days back the Inbox’s Done tab looks (default 30).' },
 ]);
 
 const port = Number(process.env.PORT ?? 8084);
@@ -23,7 +24,9 @@ const port = Number(process.env.PORT ?? 8084);
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is not set: the events service keeps notifications and the audit log in Postgres. Locally, start the dev stack’s (docker compose -f infra/docker-compose.yml up -d postgres).');
 }
-const store: EventStore = await PgEventStore.connect(process.env.DATABASE_URL);
+// The Inbox's Done tab shows items closed in the last INBOX_DONE_DAYS (30) days; the shell reads the number from /inbox/counts.
+const inboxDoneDays = Number(process.env.INBOX_DONE_DAYS || 30);
+const store: EventStore = await PgEventStore.connect(process.env.DATABASE_URL, { inboxDoneDays });
 
 // Apps sign in as themselves and are held to what the registry grants them; events asks the registry as itself (platform-events).
 const { REGISTRY_URL = 'http://localhost:8082', IDENTITY_URL = 'http://localhost:8081' } = process.env;

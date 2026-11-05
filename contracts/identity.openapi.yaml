@@ -295,6 +295,32 @@ components:
             - disabled
             - left
           description: "Where their account is in its life (ADR 0040): invited until their first sign-in, then active; disabled while their sign-in is off; left for good"
+        invite:
+          type: object
+          required:
+            - method
+            - expired
+            - count
+          properties:
+            method:
+              type: string
+              enum:
+                - email
+                - temporary-password
+            sentAt:
+              type: string
+              format: date-time
+            expiresAt:
+              type: string
+              format: date-time
+            expired:
+              type: boolean
+              description: Still invited, and the link has run out
+            count:
+              type: integer
+              minimum: 0
+              description: Invite emails sent
+          description: How they were asked to start, when AUGUR made the account
         lastSignInAt:
           type: string
           format: date-time
@@ -367,6 +393,12 @@ components:
             maxLength: 100
           maxItems: 50
           uniqueItems: true
+        start:
+          type: string
+          enum:
+            - email
+            - temporary-password
+          description: "How they start: an invite email with a link to choose a password (the default when email works), or a one-time password an admin gives them"
       additionalProperties: false
     PersonChanges:
       type: object
@@ -2128,7 +2160,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
-      summary: Add someone, with a one-time password they replace at first sign-in
+      summary: "Add someone: an invite email, or a one-time password they replace at first sign-in"
+      description: "`start` is `email` by default when the sign-in service can send email, else `temporary-password`. An invite emails a link that works for 72 hours to confirm their email and choose a password. If the account is made but the email can’t be sent, the answer is still 201, with `invite.error`."
       requestBody:
         required: true
         content:
@@ -2137,22 +2170,41 @@ paths:
               $ref: "#/components/schemas/NewPerson"
       responses:
         "201":
-          description: Added. The password is returned once and kept nowhere it can be read again.
+          description: Added. A one-time password is returned once and kept nowhere it can be read again.
           content:
             application/json:
               schema:
                 type: object
                 required:
                   - person
-                  - temporaryPassword
+                  - invite
                 properties:
                   person:
                     $ref: "#/components/schemas/Person"
+                  invite:
+                    type: object
+                    required:
+                      - method
+                    properties:
+                      method:
+                        type: string
+                        enum:
+                          - email
+                          - temporary-password
+                      sentTo:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
+                        description: "The account was made but the email couldn’t be sent: resend it, or give a one-time password"
+                    description: How they start
                   temporaryPassword:
                     type: string
-                description: Added. The password is returned once and kept nowhere it can be read again.
+                description: Added. A one-time password is returned once and kept nowhere it can be read again.
         "400":
-          description: A field is missing or wrong, or a role or department doesn't exist
+          description: A field is missing or wrong, a role or department doesn't exist, or an invite was asked for and email isn't set up
           content:
             application/problem+json:
               schema:
@@ -2275,6 +2327,111 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/lifecycle:
+    get:
+      summary: What the account lifecycle can do on this deployment
+      description: "For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites."
+      responses:
+        "200":
+          description: What works
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - email
+                properties:
+                  email:
+                    type: boolean
+                description: What works
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/invite:
+    post:
+      summary: Send someone a new invite email
+      description: A new link that works for 72 hours; the old one stops working. Recorded as `person.invite-resent`.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - invite
+                properties:
+                  invite:
+                    type: object
+                    required:
+                      - method
+                    properties:
+                      method:
+                        type: string
+                        enum:
+                          - email
+                          - temporary-password
+                      sentTo:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
+                        description: "The account was made but the email couldn’t be sent: resend it, or give a one-time password"
+                    description: How they start
+                description: Sent
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: They have already set up, or they have left
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Email isn't set up, or the sign-in service couldn't send it
           content:
             application/problem+json:
               schema:

@@ -146,6 +146,18 @@ export const Person = Type.Object(
     state: Type.Optional(
       choice(['invited', 'active', 'disabled', 'left'], { description: 'Where their account is in its life (ADR 0040): invited until their first sign-in, then active; disabled while their sign-in is off; left for good' }),
     ),
+    invite: Type.Optional(
+      Type.Object(
+        {
+          method: choice(['email', 'temporary-password']),
+          sentAt: Type.Optional(Type.String({ format: 'date-time' })),
+          expiresAt: Type.Optional(Type.String({ format: 'date-time' })),
+          expired: Type.Boolean({ description: 'Still invited, and the link has run out' }),
+          count: Type.Integer({ minimum: 0, description: 'Invite emails sent' }),
+        },
+        { description: 'How they were asked to start, when AUGUR made the account' },
+      ),
+    ),
     lastSignInAt: Type.Optional(Type.String({ format: 'date-time', description: 'Their last sign-in that AUGUR has seen' })),
     joinedAt: Type.Optional(Type.String({ format: 'date-time', description: 'Their first sign-in that AUGUR has seen' })),
     disabledCause: Type.Optional(choice(['admin', 'idle', 'leaver', 'outside'], { description: 'Why their sign-in is off, when AUGUR knows' })),
@@ -168,6 +180,11 @@ export const NewPerson = Type.Object(
     email: email(),
     roles: Type.Optional(ids()),
     departments: Type.Optional(ids()),
+    start: Type.Optional(
+      choice(['email', 'temporary-password'], {
+        description: 'How they start: an invite email with a link to choose a password (the default when email works), or a one-time password an admin gives them',
+      }),
+    ),
   },
   { $id: 'NewPerson', additionalProperties: false },
 );

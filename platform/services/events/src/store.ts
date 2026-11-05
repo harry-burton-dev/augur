@@ -373,12 +373,15 @@ export class PgEventStore implements EventStore {
   private closed = false;
   readonly inbox: PgInboxStore;
 
-  constructor(private readonly pool: pg.Pool) {
-    this.inbox = new PgInboxStore(pool);
+  constructor(
+    private readonly pool: pg.Pool,
+    options: { inboxDoneDays?: number } = {},
+  ) {
+    this.inbox = new PgInboxStore(pool, options.inboxDoneDays);
   }
 
-  static async connect(connectionString: string) {
-    const store = new PgEventStore(steadyPool(new pg.Pool({ connectionString })));
+  static async connect(connectionString: string, options: { inboxDoneDays?: number } = {}) {
+    const store = new PgEventStore(steadyPool(new pg.Pool({ connectionString })), options);
     await store.migrate();
     await store.listen();
     return store;
