@@ -47,8 +47,9 @@ const run = (args, env, cwd = root) => {
 
 // The service's own dev script, in its own folder: in this workspace or in the app's own repository.
 if (existsSync(join(dir, 'service/package.json'))) {
-  // No REGISTRY_URL or sign-in: the stand-in shell lists the app itself.
-  run(['dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '' }, join(dir, 'service'));
+  // No REGISTRY_URL or sign-in: the stand-in shell lists the app itself, and sends its stand-in person as plain
+  // x-user-* headers, which the service believes only because it is told to here.
+  run(['dev'], { PORT: port, REGISTRY_URL: '', SERVICE_CLIENT_SECRET: '', AUGUR_INSECURE_DEV_CALLERS: '1' }, join(dir, 'service'));
 }
 if (kit) {
   // The Lit kit's TypeScript, then the shared modules the shell serves: each rebuilds when the one before changes.
