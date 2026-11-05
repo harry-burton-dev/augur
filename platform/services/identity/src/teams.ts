@@ -91,6 +91,10 @@ export class TeamDirectory implements Directory {
     return this.signIn.resetPassword(id, temporaryPassword);
   }
 
+  endSessions(id: string) {
+    return this.signIn.endSessions(id);
+  }
+
   roles() {
     return this.signIn.roles();
   }
