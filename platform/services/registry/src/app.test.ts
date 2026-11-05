@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders, GATEWAY_CALLER, packFrontend, type FloorPlace } from '@augur/service-kit';
 import { MemoryFrontendFiles, servedEntry } from './frontends.ts';
-import { buildApp } from './app.ts';
 import type { AppEntry } from './manifest.ts';
-import { MemoryAppStore } from './store.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0 || ^2.0.0', handles: ['document.open'] };
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
@@ -32,22 +33,22 @@ const floors = async (id: string) => (id === 'org' ? places.o : places[id]);
 /** Someone standing on a floor, as the gateway passes it on. */
 const on = (id: string) => callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id, kind: places[id].kind, role: 'member' } });
 
-describe('registry', () => {
+describe.runIf(DATABASE_URL)('registry', () => {
   it('reports healthy', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const res = await app.inject({ method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
   });
 
   it('hides apps that need a role the caller lacks', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, requiredRole: 'admin' } });
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toEqual(['home']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin', 'upgrades', 'library']);
   });
 
   it('offers Admin, with its menu, to admins only', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const forAdmin = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
     expect(ids(forAdmin)).toContain('admin');
     expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Settings', 'Apps', 'AUGUR']);
@@ -56,7 +57,7 @@ describe('registry', () => {
 
   it('shows admins the whole catalogue, and lets them turn an app off and on', async () => {
     const entries: { action: string }[] = [];
-    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const patch = (enabled: boolean, headers = admin, id = 'library') => app.inject({ method: 'PATCH', url: `/v1/apps/${id}`, headers, payload: { enabled } });
     expect((await patch(false, editor)).statusCode).toBe(403);
@@ -77,7 +78,7 @@ describe('registry', () => {
 
   it('tells the gateway how much an app may be sent, which only an admin can lower', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
-    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
     const served = async () => (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library');
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect((await served()).maxUpload).toBe(10);
@@ -98,7 +99,7 @@ describe('registry', () => {
   });
 
   it('lets an app’s service register it, signed in as itself', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const first = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const again = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
     expect([first.statusCode, again.statusCode]).toEqual([201, 200]);
@@ -107,7 +108,7 @@ describe('registry', () => {
   });
 
   it('lets an admin register an app, but no one else', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const byAdmin = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: admin, payload: library });
     const byEditor = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: editor, payload: library });
     const notAToken = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: { authorization: 'Bearer guess' }, payload: library });
@@ -115,13 +116,13 @@ describe('registry', () => {
   });
 
   it('trusts no service token when it has no way to check one', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect(res.statusCode).toBe(403);
   });
 
   it('turns away manifests it cannot use', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const put = (url: string, payload: object) => app.inject({ method: 'PUT', url, headers: service, payload });
     expect((await put('/v1/apps/library', { ...library, route: 'library' })).statusCode).toBe(400);
     expect((await put('/v1/apps/library', { ...library, extra: true })).statusCode).toBe(400);
@@ -130,7 +131,7 @@ describe('registry', () => {
   });
 
   it('needs a semver version and the SDK range the app works with', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
     const { sdk: _, ...noSdk } = library;
     expect((await put(noSdk)).statusCode).toBe(400);
@@ -140,13 +141,13 @@ describe('registry', () => {
   });
 
   it('serves its API under /v1 only', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     expect((await app.inject({ method: 'GET', url: '/v1/manifest' })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/manifest' })).statusCode).toBe(404);
   });
 
   it('keeps an app’s menu, and turns away items that would open its root', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const menu = [{ label: 'Documents', icon: 'folder', items: [{ label: 'Reports', path: '/reports', detail: 'Updated today' }] }];
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
     expect((await put({ ...library, ai: false, menu, orbit: false })).statusCode).toBe(201);
@@ -167,7 +168,7 @@ describe('registry', () => {
   });
 
   it('keeps platform apps and taken routes for their owners', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: as(`app-${(payload as { id: string }).id}`), payload });
     const home = await put({ ...library, id: 'home', route: '/home' });
     const slash = await put({ ...library, route: '/admin' });
@@ -178,7 +179,7 @@ describe('registry', () => {
   });
 
   it('keeps an app out of another app’s pages, the platform’s included', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: as(`app-${(payload as { id: string }).id}`), payload });
     await put(library);
     const underAdmin = await put({ ...library, id: 'people', route: '/admin/people' });
@@ -193,7 +194,7 @@ describe('registry', () => {
 
   it('records who changed the catalogue in the audit log', async () => {
     const entries: unknown[] = [];
-    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
     expect(entries).toEqual([
@@ -204,7 +205,7 @@ describe('registry', () => {
 
   it('lets admins see an app’s versions, roll it back and hold it there, then let it go', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
-    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
     const register = (version: string) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version } });
     await register('0.1.0');
     await register('0.2.0');
@@ -230,7 +231,7 @@ describe('registry', () => {
   });
 
   it('keeps versions to admins, and platform apps out of it', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect((await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: editor })).statusCode).toBe(403);
     expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: editor, payload: { version: '0.1.0' } })).statusCode).toBe(403);
@@ -240,7 +241,7 @@ describe('registry', () => {
   });
 
   it('still registers the app when the audit log cannot be reached', async () => {
-    const app = await buildApp({ verifyService, audit: async () => Promise.reject(new Error('events is down')) });
+    const app = await db.app({ verifyService, audit: async () => Promise.reject(new Error('events is down')) });
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect(res.statusCode).toBe(201);
   });
@@ -248,7 +249,7 @@ describe('registry', () => {
   it('keeps each version’s frontend and points the shell at that version’s own copy', async () => {
     const entries: { action: string }[] = [];
     const frontendFiles = new MemoryFrontendFiles();
-    const app = await buildApp({ verifyService, frontendFiles, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ verifyService, frontendFiles, audit: async (e) => void entries.push(e) });
     const tarball = (text: string) => packFrontend([{ path: 'entry.js', data: Buffer.from(text) }, { path: 'assets/a.js', data: Buffer.from('export {};') }]);
     const give = (version: string, body: Buffer, headers: Record<string, string> = service, id = 'library') =>
       app.inject({ method: 'PUT', url: `/v1/apps/${id}/versions/${version}/frontend`, headers: { ...headers, 'content-type': 'application/gzip' }, payload: body });
@@ -304,14 +305,14 @@ describe('registry', () => {
   });
 
   it('says so when the deployment doesn’t keep frontends', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.1.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]) });
     expect(res.statusCode).toBe(501);
   });
 
   it('tells the gateway where each app’s service is, as set by what runs it or an admin', async () => {
     const entries: { action: string; actor: { id: string } }[] = [];
-    const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const set = (url: string | null, headers: Record<string, string> = as('platform-updater'), id = 'library') =>
       app.inject({ method: 'PUT', url: `/v1/apps/${id}/upstream`, headers, payload: { url } });
@@ -342,7 +343,7 @@ describe('registry', () => {
   });
 
   it('lets an admin remove an app', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const byService = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: service });
     const byAdmin = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
@@ -356,7 +357,7 @@ describe('registry', () => {
     const allow = (app: Awaited<ReturnType<typeof buildApp>>, origin: string, headers = admin) => app.inject({ method: 'POST', url: '/v1/origins', headers, payload: { origin } });
 
     it('takes an entry on the platform itself, and refuses one from an origin nobody allowed', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       expect((await register(app, library)).statusCode).toBe(201);
       const refused = await register(app, elsewhere);
       expect(refused.statusCode).toBe(400);
@@ -371,7 +372,7 @@ describe('registry', () => {
 
     it('takes an entry from an origin an admin allowed, and audits the choice', async () => {
       const entries: { action: string; target?: string }[] = [];
-      const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+      const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
       expect((await allow(app, 'https://apps.example.org', editor)).statusCode).toBe(403);
       expect((await allow(app, 'http://apps.example.org')).json().message).toMatch(/HTTPS/);
       expect((await allow(app, 'https://apps.example.org/library')).json().message).toMatch(/without a path/);
@@ -384,7 +385,7 @@ describe('registry', () => {
     });
 
     it('stops offering apps from an origin that is no longer allowed', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       await allow(app, 'https://apps.example.org');
       await register(app, elsewhere);
       const removed = await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: admin });
@@ -399,7 +400,7 @@ describe('registry', () => {
   describe('apps signed in as themselves', () => {
     it('lets an app register itself, recorded as itself, and nothing else', async () => {
       const entries: { actor: { id: string } }[] = [];
-      const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+      const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
       expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: library })).statusCode).toBe(201);
       expect(entries.at(-1)?.actor).toEqual({ id: 'library', kind: 'service' });
       const other = await app.inject({ method: 'PUT', url: '/v1/apps/board', headers: as('app-library'), payload: { ...library, id: 'board', route: '/board' } });
@@ -408,7 +409,7 @@ describe('registry', () => {
     });
 
     it('takes the scopes an app asks for, and refuses ones that don’t exist', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       const bad = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['people:delete'] } });
       expect(bad.statusCode).toBe(400);
       const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
@@ -416,7 +417,7 @@ describe('registry', () => {
     });
 
     it('takes the inbox kinds an app declares, refuses a kind twice, and tells platform services which', async () => {
-      const app = await buildApp({ verifyService, floors });
+      const app = await db.app({ verifyService, floors });
       const put = (inbox: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['inbox:write'], inbox } });
       expect((await put({ kinds: [] })).statusCode).toBe(400);
       expect((await put({ kinds: [{ id: 'Review', label: 'To review' }] })).statusCode).toBe(400);
@@ -427,7 +428,7 @@ describe('registry', () => {
     });
 
     it('takes the notification kinds an app declares, refuses a kind twice, and tells platform services which', async () => {
-      const app = await buildApp({ verifyService, floors });
+      const app = await db.app({ verifyService, floors });
       const put = (notifications: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'], notifications } });
       expect((await put({ kinds: [] })).statusCode).toBe(400);
       expect((await put({ kinds: [{ id: 'comment', label: 'Comments' }, { id: 'comment', label: 'Again' }] })).json().message).toContain('"comment" twice');
@@ -437,7 +438,7 @@ describe('registry', () => {
     });
 
     it('takes the types an app binds to entities, refuses reserved or stray ones, and lists them for services', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, ...extra } });
       expect((await put({ links: { entities: true }, bindings: ['Record'] })).statusCode).toBe(400);
       expect((await put({ links: { entities: true }, bindings: ['record', 'record'] })).statusCode).toBe(400);
@@ -453,7 +454,7 @@ describe('registry', () => {
     });
 
     it('tells platform services what an app is granted, and nothing once it is off', async () => {
-      const app = await buildApp({ verifyService, floors });
+      const app = await db.app({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
       const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers });
       expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w1', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
@@ -465,7 +466,7 @@ describe('registry', () => {
     });
 
     it('tells platform services the role an app needs, for the services a person reaches it through', async () => {
-      const app = await buildApp({ verifyService, floors });
+      const app = await db.app({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, requiredRole: 'analyst' } });
       expect((await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers: as('platform-models') })).json().requiredRole).toBe('analyst');
     });
@@ -476,7 +477,7 @@ describe('registry', () => {
     const withSettings = { ...library, settings: [retention] };
 
     it('turns away settings that can’t work', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       const put = (settings: object[]) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, settings } });
       expect((await put([{ ...retention, default: 400 }])).json().message).toMatch(/defaults to 400, outside 1 to 365/);
       expect((await put([retention, retention])).json().message).toMatch(/twice/);
@@ -486,7 +487,7 @@ describe('registry', () => {
 
     it('lets admins set them and the app read them, with defaults until then, all on the record', async () => {
       const entries: { action: string; detail?: unknown }[] = [];
-      const app = await buildApp({ verifyService, audit: async (e) => void entries.push(e) });
+      const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: withSettings });
       const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/settings', headers });
       const set = (value: number | null, headers = admin, setting = 'retentionDays') => app.inject({ method: 'PUT', url: `/v1/apps/library/settings/${setting}`, headers, payload: { value } });
@@ -517,7 +518,7 @@ describe('registry', () => {
 
     it('register themselves with what their release asks, with no admin step', async () => {
       const entries: { action: string; detail?: unknown }[] = [];
-      const app = await buildApp({ verifyService, pillars: ['library'], audit: async (e) => void entries.push(e) });
+      const app = await db.app({ verifyService, pillars: ['library'], audit: async (e) => void entries.push(e) });
       expect((await put(app, shipped)).statusCode).toBe(201);
       // The next release asks for more: an ordinary app waits for an admin, one that ships with AUGUR doesn't.
       await put(app, { ...shipped, version: '0.2.0', scopes: ['notifications:send', 'people:read'] });
@@ -526,7 +527,8 @@ describe('registry', () => {
       expect(entry.awaitingScopes).toBeUndefined();
       expect(entries.find((e) => e.action === 'app.scopes-granted')?.detail).toEqual({ scopes: ['notifications:send', 'people:read'], shipsWithAugur: true });
 
-      const ordinary = await buildApp({ verifyService });
+      await db.reset();
+      const ordinary = await db.app({ verifyService });
       await put(ordinary, shipped);
       await put(ordinary, { ...shipped, version: '0.2.0', scopes: ['notifications:send', 'people:read'] });
       const waiting = (await ordinary.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json().find((a: { id: string }) => a.id === 'library');
@@ -535,7 +537,7 @@ describe('registry', () => {
     });
 
     it('can be turned off, org-wide or on a floor, but never removed or held at a version', async () => {
-      const app = await buildApp({ verifyService, floors, pillars: ['library'] });
+      const app = await db.app({ verifyService, floors, pillars: ['library'] });
       await put(app, shipped);
       expect((await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } })).json().enabled).toBe(false);
       expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/floors/f', headers: admin, payload: { state: 'off' } })).statusCode).toBe(200);
@@ -551,12 +553,12 @@ describe('registry', () => {
     const manifestFor = (id: string, name: string, category?: string) => ({ ...library, id, name, route: `/${id}`, entry: `/apps/${id}/entry.js`, handles: [], ...(category ? { category } : {}) });
 
     it('reports the kind in force: its own apps, shipped and feed apps’ claims, and no one else’s', async () => {
-      const store = new MemoryAppStore();
+      const store = db.store;
       // Mandate came from the signed app feed, through the app runner.
       const release = { schema: 'augur.app-release/v1' as const, id: 'mandate', version: '0.1.0', channel: 'stable', manifest: manifestFor('mandate', 'Mandate', 'pillar') as AppEntry, service: null, frontend: null, signer: { repository: 'r', workflow: 'w' } };
       await store.requestAppJob({ id: 'j1', app: 'mandate', action: 'install', release, requestedBy: 'u-1' });
       await store.progressAppJob('j1', { step: 'switch', state: 'done' }, { state: 'done' });
-      const app = await buildApp({ verifyService, floors, store, pillars: ['auspex', 'folio'] });
+      const app = await db.app({ verifyService, floors, store, pillars: ['auspex', 'folio'] });
       const reg = (id: string, name: string, category?: string) => app.inject({ method: 'PUT', url: `/v1/apps/${id}`, headers: as(`app-${id}`), payload: manifestFor(id, name, category) });
       expect((await reg('auspex', 'Explorer', 'platform')).statusCode).toBe(201);
       expect((await reg('folio', 'Artifacts', 'pillar')).statusCode).toBe(201);
@@ -585,7 +587,7 @@ describe('registry', () => {
   describe('floor by floor', () => {
     const setup = async (payload: object = library) => {
       const entries: { action: string; detail?: unknown }[] = [];
-      const app = await buildApp({ verifyService, floors, audit: async (e) => void entries.push(e) });
+      const app = await db.app({ verifyService, floors, audit: async (e) => void entries.push(e) });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
       const set = (workspace: string, state: string, headers = admin, carriesOn?: boolean) =>
         app.inject({ method: 'PUT', url: `/v1/apps/library/floors/${workspace}`, headers, payload: { state, ...(carriesOn === undefined ? {} : { carriesOn }) } });
@@ -663,7 +665,7 @@ describe('registry', () => {
     });
 
     it('can’t answer for a floor without identity', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       expect((await app.inject({ method: 'GET', url: '/v1/manifest?workspace=f', headers: on('f') })).statusCode).toBe(503);
     });
 
@@ -702,7 +704,7 @@ describe('registry', () => {
     });
 
     it('checks that each surface is for a floor the app works on', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, ...payload } });
       expect((await put({ floors: ['team'], surfaces: [{ floor: 'org', slot: 'card', module: './Card' }] })).statusCode).toBe(400);
       expect((await put({ surfaces: [{ floor: 'team', slot: 'shelf', module: './Card' }] })).statusCode).toBe(400);
@@ -711,7 +713,7 @@ describe('registry', () => {
     });
 
     it('takes the storage an app keeps, and nothing else under it', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, ...payload } });
       expect((await put({ storage: { database: true, bucket: true } })).statusCode).toBe(201);
       expect((await put({ storage: { disk: true } })).statusCode).toBe(400);
