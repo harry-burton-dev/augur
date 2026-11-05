@@ -402,7 +402,7 @@ jobs:
           zcat /tmp/backups/platform-*.sql.gz | grep -q "PostgreSQL database cluster dump complete"
           grep -q '"ok":true' /tmp/backups/last-backup.json
           cat /tmp/backups/pitr.json
-          grep -q '"ok":true,"bases":1,"earliest"' /tmp/backups/pitr.json && sudo test -s /tmp/backups/base-*/base.tar.gz
+          grep -q '"ok":true,"bases":1,"earliest"' /tmp/backups/pitr.json && sudo sh -c 'test -s /tmp/backups/base-*/base.tar.gz'
           tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
           grep -q '^data/00/block$' /tmp/objects.txt && grep -q '^meta/snapshots/s1$' /tmp/objects.txt && ! grep -q 'db.sqlite' /tmp/objects.txt
       - name: The updater's backup is a fresh one, and the newest
