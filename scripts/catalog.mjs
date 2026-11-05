@@ -30,8 +30,6 @@ const lifecycle = (version) => (version && !version.startsWith('0.') ? 'producti
 // The deploy stack: which parts ship in AUGUR's own release, what each one calls, and what it stands on.
 const compose = parse(read('infra/deploy/compose.yml'), { merge: true, maxAliasCount: -1 });
 const stack = compose.services ?? {};
-const ownImage = (svc) => String(svc.image ?? '').includes('/im-platform}/') || String(svc.image ?? '').includes('PLATFORM_IMAGES');
-const shipsWithAugur = new Set(Object.entries(stack).filter(([, s]) => ownImage(s)).map(([name]) => name));
 
 /** The platform APIs a service calls, from the URLs in its environment. */
 const API_BY_ENV = { IDENTITY_URL: 'identity-api', REGISTRY_URL: 'registry-api', EVENTS_URL: 'events-api', MODELS_URL: 'models-api', GATEWAY_URL: 'gateway-api' };
@@ -57,9 +55,6 @@ const resourceDeps = (name) => {
   return list.filter((d) => RESOURCES[d]).map((d) => `resource:default/${d}`).sort();
 };
 
-/** An app the runner installs has no entry in compose.yml: it registers itself, and calls events for what its scopes allow. */
-const EVENTS_SCOPES = ['audit:write', 'notifications:send', 'events:publish', 'events:subscribe'];
-const appRunnerApis = (m) => ['api:default/registry-api', ...((m.scopes ?? []).some((s) => EVENTS_SCOPES.includes(s)) ? ['api:default/events-api'] : []), ...((m.scopes ?? []).includes('models:use') ? ['api:default/models-api'] : [])].sort();
 
 const sourceOf = (dir) => ({ 'backstage.io/source-location': `url:${SOURCE}/${dir}/` });
 const github = { 'github.com/project-slug': REPO };
@@ -158,84 +153,24 @@ for (const [name, r] of Object.entries(RESOURCES)) {
   });
 }
 
-// ---- Each app: its own system, with its frontend, its service, the intents it handles and what it keeps.
-const appFiles = {};
-for (const id of dirs('apps')) {
-  if (!existsSync(join(root, `apps/${id}/manifest.json`))) continue;
-  const m = json(`apps/${id}/manifest.json`);
-  const unit = shipsWithAugur.has(id) ? 'augur' : `app/${id}`;
-  const facts = {
-    'augur.dev/app-id': m.id,
-    'augur.dev/route': m.route,
-    'augur.dev/sdk-range': m.sdk,
-    'augur.dev/floors': (m.floors ?? []).join(','),
-    'augur.dev/scopes': (m.scopes ?? []).join(','),
-  };
-  const entities = [
-    {
-      apiVersion: 'backstage.io/v1alpha1',
-      kind: 'System',
-      metadata: {
-        name: id,
-        title: m.name,
-        description: m.description,
-        annotations: { ...github, ...sourceOf(`apps/${id}`), 'augur.dev/release-unit': unit, 'augur.dev/version': m.version, ...facts },
-        ...(existsSync(join(root, `docs/${id}.md`)) ? { links: [{ url: `${SOURCE}/docs/${id}.md`, title: `${m.name} guide` }] } : {}),
-      },
-      spec: { owner: OWNER, domain: 'augur' },
-    },
-  ];
-  const resources = [];
-  if (m.storage?.database) resources.push({ name: `${id}-db`, type: 'database', description: `${m.name}'s schema in Postgres` });
-  if (m.storage?.bucket) resources.push({ name: `${id}-bucket`, type: 's3-bucket', description: `${m.name}'s bucket in Garage` });
-  const intents = m.handles?.length ? `${id}-intents` : null;
-  for (const part of dirs(`apps/${id}`)) {
-    if (!existsSync(join(root, `apps/${id}/${part}/package.json`))) continue;
-    const isService = part === 'service';
-    entities.push(
-      component({
-        dir: `apps/${id}/${part}`,
-        type: isService ? 'service' : FRONTEND_TYPE,
-        system: id,
-        unit,
-        extra: { 'augur.dev/app-id': id },
-        spec: isService
-          ? {
-              consumesApis: shipsWithAugur.has(id) ? consumedApis(id) : appRunnerApis(m),
-              dependsOn: [...resources.map((r) => `resource:default/${r.name}`), ...(shipsWithAugur.has(id) ? resourceDeps(id) : [])].sort(),
-            }
-          : intents
-            ? { providesApis: [`api:default/${intents}`] }
-            : {},
-      }),
-    );
-  }
-  if (intents) {
-    entities.push({
-      apiVersion: 'backstage.io/v1alpha1',
-      kind: 'API',
-      metadata: { name: intents, title: `${m.name} intents`, description: `What other apps can ask ${m.name} for, through ctx.raise or ctx.request` },
-      spec: { type: 'augur-intent', lifecycle: lifecycle(m.version), owner: OWNER, system: id, definition: stringify({ intents: m.handles }) },
-    });
-  }
-  for (const r of resources) {
-    entities.push({ apiVersion: 'backstage.io/v1alpha1', kind: 'Resource', metadata: { name: r.name, description: r.description }, spec: { type: r.type, owner: OWNER, system: id, dependsOn: [`resource:default/${r.type === 'database' ? 'postgres' : 'garage'}`] } });
-  }
-  appFiles[`catalog/apps/${id}.yaml`] = entities;
-}
+// ---- Each app lives in its own repository (ADR 0047) and keeps its own entry there, catalog-info.yaml, which
+// `augur-app catalog` writes from its manifest. The Location below points Backstage at each shipped app's.
+const shippedApps = json('release/shipped-apps.json').apps;
+const appEntries = Object.keys(shippedApps)
+  .sort()
+  .map((id) => `https://github.com/${shippedApps[id].repo}/blob/main/catalog-info.yaml`);
 
 // ---- The files.
 const doc = (entities) => HEADER + entities.map((e) => stringify(e, { lineWidth: 0 })).join('---\n');
 const files = {
   'catalog/augur.yaml': doc(platform),
-  ...Object.fromEntries(Object.entries(appFiles).map(([path, entities]) => [path, doc(entities)])),
 };
 files['catalog/all.yaml'] = doc([
   {
     apiVersion: 'backstage.io/v1alpha1',
     kind: 'Location',
-    metadata: { name: 'augur', description: 'Everything in the augur repository: register this one file in Backstage' },
-    spec: { targets: Object.keys(files).map((p) => `./${relative('catalog', p)}`) },
+    metadata: { name: 'augur', description: 'AUGUR and the apps that ship with it, each from its own repository: register this one file in Backstage' },
+    spec: { targets: [...Object.keys(files).map((p) => `./${relative('catalog', p)}`), ...appEntries] },
   },
 ]);
 
@@ -266,11 +201,10 @@ files['mkdocs.yml'] =
 const mode = process.argv[2] ?? 'write';
 if (mode === 'check') {
   const stale = Object.entries(files).filter(([path, text]) => !existsSync(join(root, path)) || read(path) !== text).map(([path]) => path);
-  const known = new Set(Object.keys(files));
-  const extra = existsSync(join(root, 'catalog/apps')) ? readdirSync(join(root, 'catalog/apps')).map((f) => `catalog/apps/${f}`).filter((p) => !known.has(p)) : [];
+  const extra = existsSync(join(root, 'catalog/apps')) ? ['catalog/apps/'] : [];
   if (stale.length || extra.length) {
     for (const p of stale) console.error(`✗ ${p} is out of date.`);
-    for (const p of extra) console.error(`✗ ${p} is for an app that no longer exists.`);
+    for (const p of extra) console.error(`✗ ${p} is left from before apps moved out: each app's entry is in its own repository.`);
     console.error('Run: pnpm catalog, and commit what it writes.');
     process.exit(1);
   }

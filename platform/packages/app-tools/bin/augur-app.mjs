@@ -14,11 +14,14 @@
 //   augur-app clean-devs [<tag>...]    deletes all but the newest few dev builds, and those named
 //   augur-app clean-previews <pr> [<tag>...]
 //                                      deletes a pull request's previews, but those named
+//   augur-app catalog [--check]        writes catalog-info.yaml, the app's Backstage catalog entry, from manifest.json
+//                                      and the parts' package.json files; --check fails when it's out of date
 // Images go to ghcr.io/<owner>/<repo>/<id> and <id>-frontend (IMAGE_REPO overrides ghcr.io/<owner>/<repo>).
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { appCatalog, CATALOG_FILE, catalogText, repoSlug } from '../src/catalog.mjs';
 import { appRelease, appTag, changelogSection, channelOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion, releaseNotes, signerOf } from '../src/release.mjs';
 
 const root = process.cwd();
@@ -140,8 +143,26 @@ const main = async ([mode, ...args]) => {
   } else if (mode === 'clean-previews') {
     const pr = Number(args[0]);
     for (const tag of releaseTags().filter((t) => previewPrOf(t) === pr && !args.slice(1).includes(t))) deleteRelease(tag);
+  } else if (mode === 'catalog') {
+    let remote = '';
+    try {
+      remote = run('git', ['remote', 'get-url', 'origin'], { stdio: ['ignore', 'pipe', 'ignore'] });
+    } catch {
+      // No remote: GITHUB_REPOSITORY has to say.
+    }
+    const text = catalogText(appCatalog({ manifest: manifest(), parts: Object.fromEntries(parts.map((p) => [p, readJson(`${p}/package.json`)])), repo: repoSlug({ remote }) }));
+    const file = join(root, CATALOG_FILE);
+    const current = existsSync(file) ? readFileSync(file, 'utf8') : '';
+    if (args[0] === '--check') {
+      if (current !== text) throw new Error(`${CATALOG_FILE} is out of date. Run: augur-app catalog, and commit what it writes.`);
+      console.log(`${CATALOG_FILE} is up to date.`);
+    } else if (current === text) console.log(`${CATALOG_FILE} is up to date.`);
+    else {
+      writeFileSync(file, text);
+      console.log(`Wrote ${CATALOG_FILE}`);
+    }
   } else {
-    console.error('Usage: augur-app pending | dev <run> | preview <pr> <run> | bundle <channel> | describe [bundle.json] | publish <bundle.json> | clean-devs [<tag>...] | clean-previews <pr> [<tag>...]');
+    console.error('Usage: augur-app pending | dev <run> | preview <pr> <run> | bundle <channel> | describe [bundle.json] | publish <bundle.json> | clean-devs [<tag>...] | clean-previews <pr> [<tag>...] | catalog [--check]');
     process.exit(2);
   }
 };
