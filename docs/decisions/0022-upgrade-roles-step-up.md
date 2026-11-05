@@ -24,6 +24,10 @@ Option 1. Roles are Keycloak realm roles, with the app admin scoped per app. Cha
 - Identity creates the roles and the step-up flow in the `platform` realm on start. Existing admins become deployment admins in an upgrade note in docs/upgrade.md.
 - Every greyed-out control names the role it needs and who holds it.
 
+## Built so far
+
+Built: the `deployment-admin` realm role, which alone upgrades AUGUR, goes back, takes back a waiting upgrade or changes how updates are taken (registry `roles.ts`), and a refusal that names it. Not built yet: the per-app admin and the viewer roles, and the OIDC step-up (`acr_values`, `max_age`). Until it lands, a change needs the password entered in the last 10 minutes (`CHANGE_SIGN_IN_MS`), not 5.
+
 ## Links
 
 - Linear PER-177

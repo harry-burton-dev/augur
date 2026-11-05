@@ -1,9 +1,11 @@
 import { AskTwice, Button, Checkbox, CheckboxGroup, Dialog, Select, Status, Table, TextField, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
-import { departmentPath, fullName, type AdminApi, type Department, type Person, type Role } from './api.js';
+import { departmentPath, fullName, type AdminApi, type Department, type LeaveRequest, type Person, type Role } from './api.js';
 import { Page, PasswordNote, Problem, statusOf } from './parts.js';
 
 const NO_DEPARTMENT = '';
+/** The leaver flow's choice when nobody takes on their work: apps keep it until someone does. */
+const NO_ONE = '';
 
 const emailCheck = (v: string) => (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) ? null : { state: 'error' as const, message: 'That email is missing something, like @example.org' });
 
@@ -17,7 +19,8 @@ const columns: TableColumn[] = [
 
 /**
  * Everyone who can sign in: add someone, change their name, department and
- * roles, turn their sign-in off or on, and give them a new one-time password.
+ * roles, turn their sign-in off or on, give them a new one-time password, and
+ * run the leaver flow (ADR 0040) for someone who is leaving.
  *
  * A person's dialog keeps two kinds of control apart. Their details (name,
  * email, department, roles) are a form that changes nothing until Save.
@@ -36,6 +39,9 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const [chosenRoles, setChosenRoles] = useState<string[]>([]);
   const [liveResult, setLiveResult] = useState('');
   const [liveError, setLiveError] = useState('');
+  const [leaving, setLeaving] = useState<LeaveRequest[]>([]);
+  const [heir, setHeir] = useState(NO_ONE);
+  const [leaverNote, setLeaverNote] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -45,6 +51,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
       setPeople(p);
       setDepartments(d);
       setRoles(r);
+      // Who asked to leave is a hint for the leaver flow: People still works if it can't be read.
+      setLeaving(await api.leaveRequests().catch(() => []));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -60,6 +68,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     setLiveResult('');
     setLiveError('');
     setChosenRoles(people.find((p) => p.id === id)?.roles ?? []);
+    setHeir(NO_ONE);
+    setLeaverNote('');
     if (id) setEditing(id);
     else setAdding(true);
   };
@@ -124,7 +134,7 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     setLiveResult('');
     setLiveError('');
     replace(await api.updatePerson(p.id, { enabled }));
-    setLiveResult(enabled ? 'Sign-in turned on: they can sign in again.' : 'Sign-in turned off: they can’t sign in until it’s turned on again.');
+    setLiveResult(enabled ? 'Sign-in turned on: they can sign in again.' : 'Sign-in turned off: they’re signed out everywhere and can’t sign in until it’s turned on again.');
   };
 
   /** Gives someone a new one-time password straight away, and shows it once. */
@@ -137,6 +147,29 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     setLiveResult('New one-time password given: their old password no longer works.');
   };
 
+  /** The leaver flow, at once: off, signed out everywhere, and apps told who takes on what they own. */
+  const runLeaver = async (p: Person) => {
+    setLiveResult('');
+    setLiveError('');
+    const to = people.find((x) => x.id === heir);
+    replace(await api.leave(p.id, { ...(to ? { handOverTo: to.id } : {}), ...(leaverNote.trim() ? { note: leaverNote.trim() } : {}) }));
+    setLeaving((all) => all.filter((r) => r.person !== p.id));
+    setLiveResult(
+      to
+        ? `They’ve left: signed out everywhere, and apps are handing what they own to ${fullName(to)}.`
+        : 'They’ve left: signed out everywhere. Apps keep what they own until someone takes it on.',
+    );
+  };
+
+  const askedToLeave = (id: string) => leaving.find((r) => r.person === id);
+  const heirOptions = (p: Person) => [
+    { value: NO_ONE, label: 'No one yet', detail: 'Apps keep what they own until someone takes it on' },
+    ...people
+      .filter((x) => x.id !== p.id && x.enabled)
+      .map((x) => ({ value: x.id, label: fullName(x), ...(x.email ? { detail: x.email } : {}) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+  ];
+
   const rows: TableRow[] = people
     .map((p) => ({
       id: p.id,
@@ -144,8 +177,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
       email: p.email ?? '',
       department: p.departments.map((d) => departmentPath(d, departments)).join(', '),
       roles: p.roles.join(', '),
-      signIn: statusOf(p).label,
-      signInStatus: statusOf(p).status,
+      signIn: p.enabled && askedToLeave(p.id) ? 'Asked to leave' : statusOf(p).label,
+      signInStatus: p.enabled && askedToLeave(p.id) ? 'needs' : statusOf(p).status,
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const unready = loading || Boolean(error);
@@ -224,6 +257,28 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
               )}
               <AskTwice size="sm" confirm="Press again: their current password stops working" busyLabel="Making one…" onPress={() => resetPassword(person).catch((err: Error) => setLiveError(err.message))}>
                 Give them a new one-time password
+              </AskTwice>
+            </div>
+            <div className="admin-part-head" data-leaver>
+              <h3 className="admin-part-label">Leaving</h3>
+              <p className="admin-muted">
+                {askedToLeave(person.id)
+                  ? `They asked to leave on ${new Date(askedToLeave(person.id)!.requestedAt).toLocaleDateString()}${askedToLeave(person.id)!.note ? `: “${askedToLeave(person.id)!.note}”` : '.'}`
+                  : 'For someone leaving the organisation. Their sign-in goes off, they’re signed out everywhere, and apps hand on what they own. Their teams and history stay.'}
+              </p>
+            </div>
+            <Select label="Hand their work to" optional options={heirOptions(person)} value={heir} onChange={setHeir} />
+            <TextField label="Note for Activity" optional multiline rows={2} maxLength={500} value={leaverNote} onChange={setLeaverNote} hint="Why, or what was agreed. Shown in Activity." />
+            <div className="admin-live-actions">
+              <AskTwice
+                size="sm"
+                confirm="Press again: they leave now"
+                busyLabel="Leaving…"
+                disabled={person.id === me}
+                reason="You can’t run the leaver flow on yourself. Ask another admin."
+                onPress={() => runLeaver(person).catch((err: Error) => setLiveError(err.message))}
+              >
+                They’re leaving
               </AskTwice>
             </div>
             {liveResult ? (

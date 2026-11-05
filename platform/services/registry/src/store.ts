@@ -152,6 +152,8 @@ export interface Upgrade {
   seenAt?: string;
   /** The light watch after a quiet 10-minute watch (after-watch.ts). */
   afterWatch?: AfterWatch;
+  /** The names of the settings an admin entered for it. Their values are kept in memory only, never stored. */
+  settingNames?: string[];
 }
 
 export type UpgradeOutcome = 'done' | 'rolled-back' | 'failed';
@@ -318,7 +320,7 @@ export interface AppStore {
   /** Every upgrade asked for, newest first, at most `limit`: the Updates page's history. */
   upgrades(limit?: number): Promise<Upgrade[]>;
   /** Records an upgrade to run; false when one is already waiting or under way. */
-  requestUpgrade(upgrade: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName'>): Promise<boolean>;
+  requestUpgrade(upgrade: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName' | 'settingNames'>): Promise<boolean>;
   /**
    * Records a step of the open upgrade `id`, which starts it, and with `outcome` ends it.
    * Undefined when `id` isn't the open upgrade.
@@ -568,9 +570,9 @@ export class MemoryAppStore implements AppStore {
     return structuredClone(this.upgradeList.slice(-limit).reverse());
   }
 
-  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName'>) {
+  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName' | 'settingNames'>) {
     if (isOpen(this.upgradeList.at(-1))) return false;
-    this.upgradeList.push({ ...u, requestedAt: new Date().toISOString(), state: 'requested', steps: [] });
+    this.upgradeList.push({ ...withoutEmptyNames(u), requestedAt: new Date().toISOString(), state: 'requested', steps: [] });
     return true;
   }
 
@@ -990,6 +992,13 @@ export const migrations: Migration[] = [
       -- same version replaces the old one without a browser running what it kept. Null: the version's own folder.
       alter table registry.app_frontends add column folder text;`,
   },
+  {
+    id: '020_upgrade_setting_names',
+    sql: `
+      -- The names of the settings an admin entered for an upgrade, so a registry that restarted before the updater
+      -- took them knows they were lost. Their values stay in memory only.
+      alter table registry.upgrades add column setting_names text[];`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -1251,10 +1260,10 @@ export class PgAppStore implements AppStore {
     return rows.map(fromUpgradeRow);
   }
 
-  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName'>) {
+  async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName' | 'settingNames'>) {
     const { rowCount } = await this.pool.query(
-      'insert into registry.upgrades (id, from_version, version, images, requested_by, requested_by_name) values ($1, $2, $3, $4, $5, $6) on conflict do nothing',
-      [u.id, u.from, u.version, JSON.stringify(u.images), u.requestedBy, u.requestedByName ?? null],
+      'insert into registry.upgrades (id, from_version, version, images, requested_by, requested_by_name, setting_names) values ($1, $2, $3, $4, $5, $6, $7) on conflict do nothing',
+      [u.id, u.from, u.version, JSON.stringify(u.images), u.requestedBy, u.requestedByName ?? null, u.settingNames?.length ? u.settingNames : null],
     );
     return rowCount === 1;
   }
@@ -1471,6 +1480,7 @@ type UpgradeRow = {
   seen_by?: string | null;
   seen_at?: Date | null;
   after_watch?: AfterWatch | null;
+  setting_names?: string[] | null;
 };
 
 const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
@@ -1487,7 +1497,14 @@ const fromUpgradeRow = (r: UpgradeRow): Upgrade => ({
   ...(r.finished_at ? { finishedAt: r.finished_at.toISOString() } : {}),
   ...(r.seen_by ? { seenBy: r.seen_by, ...(r.seen_at ? { seenAt: r.seen_at.toISOString() } : {}) } : {}),
   ...(r.after_watch ? { afterWatch: r.after_watch } : {}),
+  ...(r.setting_names?.length ? { settingNames: r.setting_names } : {}),
 });
+
+/** An upgrade as asked for, without an empty list of setting names. */
+const withoutEmptyNames = <T extends { settingNames?: string[] }>(u: T): T => {
+  const { settingNames, ...rest } = u;
+  return (settingNames?.length ? { ...rest, settingNames: [...settingNames] } : rest) as T;
+};
 
 type AppJobRow = {
   id: string;

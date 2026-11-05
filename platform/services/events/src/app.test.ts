@@ -389,6 +389,9 @@ describe('events', () => {
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'department.member-added', target: 'w-legal', detail: { person: 'u-2' } }, 'w-legal');
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-9', detail: { username: 'jo', firstName: { from: 'Jo', to: 'Joanne' }, lastName: { from: 'S', to: 'T' }, departments: { from: [], to: ['w-legal'] } } });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.password-reset', target: 'u-9' });
+      // A leaver, handed over and not: who takes on their things, never the admin's note.
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-9', detail: { username: 'jo', asked: true, handOverTo: 'u-2', note: 'Agreed' } });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-8', detail: { username: 'al', asked: false } });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.blocked', target: 'notes' }, 'w-legal');
       const { events } = (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=platform.*', headers: as('notes') })).json();
@@ -397,6 +400,8 @@ describe('events', () => {
         { topic: 'platform.team.member-added', payload: { team: 'w-legal', person: 'u-2' }, workspace: { id: 'w-legal' } },
         // What changed, never the values: a follower asks identity for those.
         { topic: 'platform.person.changed', publisher: 'identity', payload: { person: 'u-9', changed: ['name', 'teams'] } },
+        { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-9', handOverTo: 'u-2' } },
+        { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-8' } },
         { topic: 'platform.app.turned-off', publisher: 'registry', payload: { app: 'notes' } },
         { topic: 'platform.app.blocked', payload: { app: 'notes' }, workspace: { id: 'w-legal' } },
       ]);

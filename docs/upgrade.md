@@ -62,6 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Activity (Admin's record of who did what) now keeps entries for 365 days. Each night at 03:00 UTC the events service removes older ones, and Activity records how many it removed. On the first night after the upgrade, anything older than a year goes. To keep it, download it first, signed in as an admin: open `/api/events/v1/audit/export?since=2025-01-01T00:00:00Z&until=2026-01-01T00:00:00Z` on your AUGUR's address (CSV, at most 366 days per download; Admin's own download button comes with a later release). When the organisation's policy sets a different period (Admin, Settings), the events service uses that instead.
 
+### Grafana's password is required
+
+**From** unreleased
+
+`GRAFANA_ADMIN_PASSWORD` is now required, because Grafana with none signs in as admin/admin. An upgrade from the Upgrade Centre makes one up and writes it to `.env`, where you read it to sign in. By hand, set it before `pc up -d` (`openssl rand -hex 16`), even with `OTEL_LGTM_REPLICAS=0`. Settings you enter for an upgrade are still never stored: if the registry restarts before the updater takes them, the upgrade ends at once, failed, nothing changed, and says to ask again. The registry also turns down a signed feed issued before the newest one it has taken since it started, so an older feed still in date can't be replayed to hide a newer release or a halt; the Upgrade Centre says so.
+
 ### Time limits between services and on database queries
 
 **From** unreleased

@@ -39,6 +39,7 @@
     "016_desired_state": "e980edefce9d09fb",
     "017_deployment_key": "e6e0addb0f5d02e1",
     "018_after_watch": "a3ded298146207db",
-    "019_frontend_folders": "ea9a435440fa75fd"
+    "019_frontend_folders": "ea9a435440fa75fd",
+    "020_upgrade_setting_names": "6f195be93ba70025"
   }
 }

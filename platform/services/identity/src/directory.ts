@@ -96,6 +96,11 @@ export interface Directory {
   updatePerson(id: string, changes: PersonChanges): Promise<Person>;
   /** Gives someone a new one-time password; they choose their own at next sign-in. */
   resetPassword(id: string, temporaryPassword: string): Promise<void>;
+  /**
+   * Signs someone out everywhere at once (ADR 0040): every session, and every offline token an app
+   * holds for them, so turning them off takes effect now rather than when a token runs out.
+   */
+  endSessions(id: string): Promise<void>;
   departments(): Promise<Department[]>;
   createDepartment(name: string, parentId?: string): Promise<Department>;
   renameDepartment(id: string, name: string): Promise<Department>;
@@ -169,6 +174,14 @@ export class MemoryDirectory implements Directory {
     if (changes.departments) this.checkDepartments(changes.departments);
     Object.assign(p, structuredClone(changes));
     return structuredClone(p);
+  }
+
+  /** Who has been signed out everywhere, in order, for tests. */
+  readonly signedOut: string[] = [];
+
+  async endSessions(id: string) {
+    this.known(id);
+    this.signedOut.push(id);
   }
 
   async resetPassword(id: string) {
@@ -530,6 +543,15 @@ export class KeycloakDirectory implements Directory {
     if (changes.roles) await this.setRoles(id, changes.roles, current.roles);
     if (changes.departments) await this.setDepartments(id, changes.departments, current.departments);
     return this.person(id);
+  }
+
+  async endSessions(id: string) {
+    const user = `/users/${encodeURIComponent(id)}`;
+    // Every browser session, and with it the refresh tokens they hold.
+    await this.call('POST', `${user}/logout`, undefined, 'That person isn’t in the directory.');
+    // Offline tokens outlive sessions: revoking each app's consent ends them too.
+    const { data: consents } = await this.call<{ clientId: string }[]>('GET', `${user}/consents`);
+    for (const { clientId } of consents ?? []) await this.call('DELETE', `${user}/consents/${encodeURIComponent(clientId)}`);
   }
 
   async resetPassword(id: string, temporaryPassword: string) {

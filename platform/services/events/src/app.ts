@@ -113,6 +113,11 @@ const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntr
   'identity person.updated': { topic: 'platform.person.changed', payload: (e) => ({ person: e.target, changed: changedOf(e.detail) }) },
   'identity person.disabled': { topic: 'platform.person.disabled', payload: (e) => ({ person: e.target }) },
   'identity person.enabled': { topic: 'platform.person.enabled', payload: (e) => ({ person: e.target }) },
+  // A leaver (ADR 0040): apps hand on or archive what they own, to handOverTo when an admin named someone.
+  'identity person.left': {
+    topic: 'platform.person.left',
+    payload: (e) => ({ person: e.target, ...(typeof e.detail?.handOverTo === 'string' ? { handOverTo: e.detail.handOverTo } : {}) }),
+  },
   'identity department.created': { topic: 'platform.team.created', payload: (e) => ({ team: e.target, name: e.detail?.name }) },
   'identity department.renamed': { topic: 'platform.team.renamed', payload: (e) => ({ team: e.target, name: e.detail?.to }) },
   'identity department.member-added': { topic: 'platform.team.member-added', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
