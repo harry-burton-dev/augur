@@ -1,5 +1,21 @@
 # @augur/admin
 
+## 0.15.0
+
+### Minor Changes
+
+- 866c076: The leaver flow and signing out everywhere (ADR 0040, part of PER-194). Turning someone's sign-in off now signs them out everywhere at once: every Keycloak session and every offline token an app holds for them. Admin → People gets "They're leaving": their sign-in goes off, they're signed out, and identity records `person.left`, which the events service publishes as `platform.person.left` `{ person, handOverTo? }` so apps hand on what the leaver owns (`PLATFORM_TOPICS.personLeft`). People marks who asked to leave in their account, and the leaver flow closes the request (`GET /admin/leave-requests`, `POST /admin/people/{id}/leave`, identity contract 1.22.0). Guide: docs/people.md.
+- 88f3b55: The database can be restored to any moment in the last 7 days (ADR 0064). Postgres archives its changes (WAL) as it makes them, the backup container takes a base backup each night, copies both off the server every hour once the off-server copy is set up, and replays them in the weekly restore test; `backup/restore-to-time.sh` goes back to a moment. Admin → Status shows how far back the database can go and the last replay test, and says why when it can't be relied on (`backups.pointInTime`, gateway contract 1.8.0).
+- 33b6fa3: AUGUR's own email sender (ADR 0065): `@augur/service-kit/mail` sends notice emails through the organisation's relay with Nodemailer, from React Email templates, and says why when it can't. The relay settings (`mailRelayFromEnv`) move into the service kit, shared with the realm job. The gateway's status now says whether email can be sent, and Admin → Status shows it with what to check.
+
+### Patch Changes
+
+- 21ee89a: Serve Quill 0.8.0 (kit bundle 0.5.3): its dates follow each person's `ctx.formats` (PER-323), and `AppError` reads a service's problem as AUGUR sends it.
+- Updated dependencies [f12bbaf]
+- Updated dependencies [4f8d944]
+- Updated dependencies [cbd1abc]
+  - @augur/mfe-sdk@2.0.0
+
 ## 0.14.0
 
 ### Minor Changes

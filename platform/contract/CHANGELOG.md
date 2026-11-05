@@ -1,5 +1,17 @@
 # @augur/contract-tests
 
+## 0.2.1
+
+### Patch Changes
+
+- 4ac7cf2: The contract tests wait for states, not clocks (PER-322): the dev server is warmed before the first test, checks on CI wait up to 10 seconds, and Find's budget test no longer races a 4-second stand-in answer.
+- fe3d68a: `pnpm dev:app` keeps a stand-in inbox, filled from the browser console, and the contract tests check the Inbox through it: an item shows in the app's words, Open raises its intent, Home lists it, and what the app doesn’t allow stays in the menu saying why. Each Inbox row’s More now opens its menu from a button.
+- 21ee89a: Serve Quill 0.8.0 (kit bundle 0.5.3): its dates follow each person's `ctx.formats` (PER-323), and `AppError` reads a service's problem as AUGUR sends it.
+- Updated dependencies [f12bbaf]
+- Updated dependencies [4f8d944]
+- Updated dependencies [cbd1abc]
+  - @augur/mfe-sdk@2.0.0
+
 ## 0.2.0
 
 ### Minor Changes
