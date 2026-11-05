@@ -1,5 +1,13 @@
 # @augur/gateway
 
+## 0.11.1
+
+### Patch Changes
+
+- Updated dependencies [833b4ed]
+- Updated dependencies [431db38]
+  - @augur/service-kit@0.15.0
+
 ## 0.11.0
 
 ### Minor Changes

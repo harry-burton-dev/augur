@@ -1,5 +1,18 @@
 # @augur/app-tools
 
+## 0.4.0
+
+### Minor Changes
+
+- bb4377b: `augur-app catalog` writes an app's Backstage catalog entry, `catalog-info.yaml`, from its manifest and parts, with its kind (`augur.dev/category`); `--check` fails when it's out of date. AUGUR's `catalog/all.yaml` now points Backstage at each shipped app's entry, so apps are back in the catalog since they moved to their own repositories.
+- e6c1a39: The app manifest's JSON Schema ships inside the package, as `@augur/app-tools/manifest.schema.json`. An app's manifest can point `"$schema"` at `./node_modules/@augur/app-tools/manifest.schema.json` and its editor completes and checks the fields, with the schema of the tools it releases with.
+
+### Patch Changes
+
+- Updated dependencies [833b4ed]
+- Updated dependencies [431db38]
+  - @augur/service-kit@0.15.0
+
 ## 0.3.1
 
 ### Patch Changes
