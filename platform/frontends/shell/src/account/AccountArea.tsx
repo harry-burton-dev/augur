@@ -468,7 +468,37 @@ function RecentSignIns({ api, shellClient, product }: Pick<AccountAreaProps, 'ap
 // ---------------------------------------------------------------------------------------------------
 // Notifications
 
-function NotificationsSection({ prefs, onPreference, apps }: AccountAreaProps) {
+/**
+ * Whether email reaches this person, and if not, why and who can change it. Email works when the deployment has a mail
+ * relay (the realm's, the one security emails use) and their address is checked.
+ */
+function EmailReach({ api, product, onSection }: Pick<AccountAreaProps, 'api' | 'product' | 'onSection'>) {
+  const security = useLoad(() => api.security());
+  if (security.loading && !security.value) return null;
+  const emails = security.value?.emails;
+  if (!emails) return <Note>Whether {product} can email you couldn’t be checked{security.error ? ` (${security.error})` : ''}. Your choices are kept either way.</Note>;
+  if (!emails.on)
+    return (
+      <Notice tone="info" heading={`${product} can’t send email on this deployment yet.`}>
+        No mail relay is set up. Your choices are kept, and apply as soon as a deployment admin connects the organisation’s mail.
+      </Notice>
+    );
+  if (!emails.address)
+    return (
+      <Notice tone="info" heading="Add an email address to get email." action="Open Profile" onAction={() => onSection('profile')}>
+        {product} emails you here once you add one in Profile.
+      </Notice>
+    );
+  if (!emails.verified)
+    return (
+      <Notice tone="info" heading={`${emails.address} isn’t checked yet, so nothing is emailed to it.`} action="Open Profile" onAction={() => onSection('profile')}>
+        In Profile, Change email sends the address a link to check.
+      </Notice>
+    );
+  return <Note>{product} emails you at {emails.address}.</Note>;
+}
+
+function NotificationsSection({ prefs, onPreference, apps, api, product, onSection }: AccountAreaProps) {
   const n = prefs.notifications ?? {};
   const set = (next: NonNullable<Preferences['notifications']>) => onPreference('notifications', { ...n, ...next });
   const muted = new Set(prefs.muted ?? []);
@@ -477,7 +507,7 @@ function NotificationsSection({ prefs, onPreference, apps }: AccountAreaProps) {
   return (
     <>
       <PageHead eyebrow="Account" heading="Notifications" summary="How AUGUR tells you about things" />
-      <Notice tone="info" heading="AUGUR doesn’t send email yet.">Your choices are kept, and apply as soon as a deployment admin connects the organisation’s mail.</Notice>
+      <EmailReach api={api} product={product} onSection={onSection} />
       <Section label="Email" count={-1}>
         <Toggle label="Email me about things that need me" hint="One email for each notification that asks something of you." checked={n.email !== false} onChange={(on) => set({ email: on })} />
         <Choice
