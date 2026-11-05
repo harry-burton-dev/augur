@@ -95,11 +95,24 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} renamed ${String(d.from)} to ${String(d.to)}`;
     case 'organisation.changed': {
       const to = (d.to ?? {}) as Record<string, unknown>;
-      const what = [to.name !== undefined ? 'name' : '', to.timeZone !== undefined ? 'time zone' : '', to.sender !== undefined ? 'email sender' : '', to.idle !== undefined ? 'idle-account days' : ''].filter(Boolean);
+      const words: [string, string][] = [
+        ['name', 'name'],
+        ['timeZone', 'time zone'],
+        ['sender', 'email sender'],
+        ['idle', 'idle-account days'],
+        ['logo', 'logo'],
+        ['notice', 'sign-in notice'],
+        ['languages', 'languages'],
+        ['defaultLanguage', 'default language'],
+        ['security', 'security and retention'],
+      ];
+      const what = words.filter(([k]) => to[k] !== undefined).map(([, w]) => w);
       return to.name !== undefined && what.length === 1
         ? `${who} renamed the organisation to ${String(to.name)}`
         : `${who} changed the organisation’s ${what.length ? what.join(' and ') : 'settings'}`;
     }
+    case 'organisation.notice-asked':
+      return `${who} asked everyone to accept the sign-in notice again (${String(d.people ?? 0)} people)`;
     case 'department.member-added':
       return `${who} added ${names.person(String(d.person))} to ${names.department(target)}`;
     case 'department.member-removed':

@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.29.0
+  version: 1.30.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -1485,7 +1485,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /organisation:
     get:
-      summary: The organisation's name, time zone, email sender and idle-account days
+      summary: "The organisation's settings: name, time zone, email sender, idle-account days, logo, sign-in notice, languages, security and retention"
       description: For anyone signed in, and any service signed in as itself, so every part of AUGUR shows the same name and times (ADR 0042).
       responses:
         "200":
@@ -1499,6 +1499,10 @@ paths:
                   - timeZone
                   - sender
                   - idle
+                  - notice
+                  - languages
+                  - defaultLanguage
+                  - security
                 properties:
                   name:
                     type: string
@@ -1545,6 +1549,81 @@ paths:
                         description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
                     additionalProperties: false
                     description: Idle accounts. 60 and 90 days, on, until an admin changes them
+                  logo:
+                    type: object
+                    required:
+                      - url
+                      - sha256
+                      - width
+                      - height
+                    properties:
+                      url:
+                        type: string
+                        description: "Where anyone, signed in or not, fetches it: changes when the logo does"
+                      sha256:
+                        type: string
+                      width:
+                        type: integer
+                      height:
+                        type: integer
+                    additionalProperties: false
+                    description: The organisation’s logo, a PNG
+                  notice:
+                    type: object
+                    required:
+                      - on
+                      - version
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether people read and accept it before they use AUGUR
+                      title:
+                        type: string
+                        maxLength: 80
+                      text:
+                        type: string
+                        maxLength: 5000
+                        description: Plain text; a blank line between paragraphs
+                      version:
+                        type: integer
+                        description: Goes up each time everyone is asked to accept it again
+                      changedAt:
+                        type: string
+                        format: date-time
+                      changedBy:
+                        type: string
+                    additionalProperties: false
+                    description: The sign-in notice, shown as Keycloak’s Terms and Conditions step. Off until an admin turns it on
+                  languages:
+                    type: array
+                    items:
+                      type: string
+                    description: "The languages offered at sign-in and in Account: REALM_LANGUAGES until an admin chooses"
+                  defaultLanguage:
+                    type: string
+                    description: One of `languages`, for anyone who hasn’t chosen
+                  security:
+                    type: object
+                    required:
+                      - twoStepForAll
+                      - leaverRetentionDays
+                      - activityRetentionDays
+                    properties:
+                      twoStepForAll:
+                        type: boolean
+                        description: Everyone, not only the admin roles, signs in with a code app or a passkey
+                      leaverRetentionDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 3650
+                        description: Days a leaver’s account is kept after they leave
+                      activityRetentionDays:
+                        type: integer
+                        minimum: 90
+                        maximum: 3650
+                        description: Days Activity keeps its entries
+                    additionalProperties: false
+                    description: Changed only by a deployment admin who just entered their password. Two steps for admins only, 90 and 365 days, until one changes them
                   updatedAt:
                     type: string
                     format: date-time
@@ -1555,6 +1634,60 @@ paths:
                 description: The organisation's settings (ADR 0042)
         "401":
           description: Not signed in, and not a service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Services' sign-ins can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /organisation/policy:
+    get:
+      summary: How long things are kept, for AUGUR’s own services
+      description: Activity’s retention for the events service, and the leaver and idle-account rules for whatever applies them.
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - activityRetentionDays
+                  - leaverRetentionDays
+                  - idle
+                properties:
+                  activityRetentionDays:
+                    type: integer
+                  leaverRetentionDays:
+                    type: integer
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
+        "403":
+          description: Not one of AUGUR’s own services
           content:
             application/problem+json:
               schema:
@@ -1590,10 +1723,36 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /admin/organisation/languages:
+    get:
+      summary: The languages an admin can offer (admins only)
+      description: The languages the sign-in service has words in. The realm job leaves out any the running one lacks.
+      responses:
+        "200":
+          description: Language tags, such as en or pt-BR
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: Language tags, such as en or pt-BR
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/organisation:
     patch:
-      summary: Change the organisation's settings, audited as organisation.changed (admins only)
-      description: Only the fields sent change. The name renames the organisation’s floor, which everyone sees.
+      summary: Change the organisation's settings, audited as organisation.changed (admins only; security and retention need a deployment admin)
+      description: Only the fields sent change. The name renames the organisation’s floor, which everyone sees. `security` needs the deployment-admin role and a password entered in the last 10 minutes, or it answers 401 sign_in_again. `notice.askAgain` asks everyone to accept the notice at their next sign-in, audited as organisation.notice-asked. The notice, languages and two steps for everyone reach the sign-in service when AUGUR next starts or upgrades.
       requestBody:
         required: true
         content:
@@ -1650,6 +1809,54 @@ paths:
                   additionalProperties: false
                   minProperties: 1
                   description: Only what changes; the warning stays at least a week before the turn-off
+                notice:
+                  type: object
+                  properties:
+                    on:
+                      type: boolean
+                    title:
+                      type: string
+                      maxLength: 80
+                      pattern: ^[^\r\n]*$
+                    text:
+                      type: string
+                      maxLength: 5000
+                    askAgain:
+                      type: boolean
+                      description: Ask everyone to accept it again at their next sign-in
+                  additionalProperties: false
+                  minProperties: 1
+                languages:
+                  type: array
+                  items:
+                    type: string
+                    maxLength: 35
+                  minItems: 1
+                  maxItems: 40
+                  uniqueItems: true
+                  description: GET /admin/organisation/languages lists the ones there are
+                defaultLanguage:
+                  type: string
+                  maxLength: 35
+                security:
+                  type: object
+                  properties:
+                    twoStepForAll:
+                      type: boolean
+                      description: Everyone, not only the admin roles, signs in with a code app or a passkey
+                    leaverRetentionDays:
+                      type: integer
+                      minimum: 7
+                      maximum: 3650
+                      description: Days a leaver’s account is kept after they leave
+                    activityRetentionDays:
+                      type: integer
+                      minimum: 90
+                      maximum: 3650
+                      description: Days Activity keeps its entries
+                  additionalProperties: false
+                  minProperties: 1
+                  description: Only a deployment admin who just entered their password
               additionalProperties: false
               minProperties: 1
               description: Only what changes
@@ -1666,6 +1873,10 @@ paths:
                   - timeZone
                   - sender
                   - idle
+                  - notice
+                  - languages
+                  - defaultLanguage
+                  - security
                 properties:
                   name:
                     type: string
@@ -1712,6 +1923,81 @@ paths:
                         description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
                     additionalProperties: false
                     description: Idle accounts. 60 and 90 days, on, until an admin changes them
+                  logo:
+                    type: object
+                    required:
+                      - url
+                      - sha256
+                      - width
+                      - height
+                    properties:
+                      url:
+                        type: string
+                        description: "Where anyone, signed in or not, fetches it: changes when the logo does"
+                      sha256:
+                        type: string
+                      width:
+                        type: integer
+                      height:
+                        type: integer
+                    additionalProperties: false
+                    description: The organisation’s logo, a PNG
+                  notice:
+                    type: object
+                    required:
+                      - on
+                      - version
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether people read and accept it before they use AUGUR
+                      title:
+                        type: string
+                        maxLength: 80
+                      text:
+                        type: string
+                        maxLength: 5000
+                        description: Plain text; a blank line between paragraphs
+                      version:
+                        type: integer
+                        description: Goes up each time everyone is asked to accept it again
+                      changedAt:
+                        type: string
+                        format: date-time
+                      changedBy:
+                        type: string
+                    additionalProperties: false
+                    description: The sign-in notice, shown as Keycloak’s Terms and Conditions step. Off until an admin turns it on
+                  languages:
+                    type: array
+                    items:
+                      type: string
+                    description: "The languages offered at sign-in and in Account: REALM_LANGUAGES until an admin chooses"
+                  defaultLanguage:
+                    type: string
+                    description: One of `languages`, for anyone who hasn’t chosen
+                  security:
+                    type: object
+                    required:
+                      - twoStepForAll
+                      - leaverRetentionDays
+                      - activityRetentionDays
+                    properties:
+                      twoStepForAll:
+                        type: boolean
+                        description: Everyone, not only the admin roles, signs in with a code app or a passkey
+                      leaverRetentionDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 3650
+                        description: Days a leaver’s account is kept after they leave
+                      activityRetentionDays:
+                        type: integer
+                        minimum: 90
+                        maximum: 3650
+                        description: Days Activity keeps its entries
+                    additionalProperties: false
+                    description: Changed only by a deployment admin who just entered their password. Two steps for admins only, 90 and 365 days, until one changes them
                   updatedAt:
                     type: string
                     format: date-time
@@ -1721,11 +2007,92 @@ paths:
                     description: Who last changed them
                 description: The settings now
         "400":
-          description: A name with a slash or only spaces, an unknown time zone, a sender that is not one line or not an email address, or idle days out of bounds or with less than a week between warning and turn-off
+          description: A name with a slash or only spaces, an unknown time zone or language, a sender that is not one line or not an email address, idle or retention days out of bounds, or a notice turned on without a title and text
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller, or sign_in_again for security
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or security from someone who isn’t a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Asked everyone again, but the sign-in service can’t be reached
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation/logo:
+    put:
+      summary: Set the organisation's logo, a PNG (admins only), audited as organisation.changed
+      description: A PNG of at most 256 KB and 1024 px on each side, at least 32 px tall. Sent as image/png.
+      responses:
+        "200":
+          description: The organisation’s logo, a PNG
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - url
+                  - sha256
+                  - width
+                  - height
+                properties:
+                  url:
+                    type: string
+                    description: "Where anyone, signed in or not, fetches it: changes when the logo does"
+                  sha256:
+                    type: string
+                  width:
+                    type: integer
+                  height:
+                    type: integer
+                additionalProperties: false
+                description: The organisation’s logo, a PNG
+        "400":
+          description: Not a PNG, or the wrong size
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "413":
+          description: Larger than the limit
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "415":
+          description: Not sent as image/png
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take the organisation's logo away (admins only)
+      responses:
+        "204":
+          description: Default Response
         "401":
           description: No signed-in caller
           content:

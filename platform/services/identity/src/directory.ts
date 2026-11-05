@@ -70,6 +70,9 @@ export const PUBLISHER_ROLE: Role = { name: 'publisher', description: 'Publishes
  * someone who holds it may give it or take it away, or change a holder's sign-in, and a holder signs
  * in with a one-time code as well as a password.
  */
+/** Keycloak's Terms and Conditions step, which shows the organisation's sign-in notice (ADR 0042). */
+export const TERMS_ACTION = 'TERMS_AND_CONDITIONS';
+
 export const DEPLOYMENT_ADMIN_ROLE: Role = { name: 'deployment-admin', description: 'Runs the deployment: settings, secrets, updates and backups' };
 
 /** The roles the platform itself relies on, made by the realm job when they're missing (Keycloak reads its realm file only when it first starts). */
@@ -121,6 +124,8 @@ export interface Directory {
   removeMember(department: string, person: string): Promise<void>;
   /** The roles an admin can give people. */
   roles(): Promise<Role[]>;
+  /** Asks everyone whose sign-in is on to take a Keycloak required action at their next sign-in; says how many. */
+  askEveryone?(action: string): Promise<number>;
 }
 
 export interface Lockout {
@@ -135,6 +140,15 @@ export class MemoryDirectory implements Directory {
   private readonly folks = new Map<string, Person>();
   private readonly depts = new Map<string, { id: string; name: string; parentId?: string }>();
   private readonly roleList: Role[];
+
+  /** Who was asked to take each required action, for tests. */
+  readonly asked = new Map<string, Set<string>>();
+
+  async askEveryone(action: string) {
+    const on = [...this.folks.values()].filter((p) => p.enabled);
+    for (const p of on) this.asked.set(p.id, new Set([...(this.asked.get(p.id) ?? []), action]));
+    return on.length;
+  }
 
   constructor(
     roles: Role[] = [
@@ -622,6 +636,22 @@ export class KeycloakDirectory implements Directory {
     // Offline tokens outlive sessions: revoking each app's consent ends them too.
     const { data: consents } = await this.call<{ clientId: string }[]>('GET', `${user}/consents`);
     for (const { clientId } of consents ?? []) await this.call('DELETE', `${user}/consents/${encodeURIComponent(clientId)}`);
+  }
+
+  /**
+   * Asks everyone whose sign-in is on to take `action` at their next sign-in, such as accepting the sign-in
+   * notice again. Service accounts never sign in, so they're left out. Says how many were asked.
+   */
+  async askEveryone(action: string) {
+    const users = await this.all<KcUser & { serviceAccountClientId?: string }>('/users?briefRepresentation=false');
+    let asked = 0;
+    for (const user of users) {
+      if (!user.enabled || user.serviceAccountClientId || user.username?.startsWith('service-account-')) continue;
+      asked++;
+      if (user.requiredActions?.includes(action)) continue;
+      await this.call('PUT', `/users/${encodeURIComponent(user.id)}`, { ...user, requiredActions: [...(user.requiredActions ?? []), action] });
+    }
+    return asked;
   }
 
   async lockout(id: string): Promise<Lockout> {

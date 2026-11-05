@@ -60,7 +60,7 @@ export interface Department {
   members: string[];
 }
 
-/** The organisation's settings (ADR 0042): its name, time zone and who AUGUR's email says it is from. */
+/** The organisation's settings (ADR 0042). */
 export interface Organisation {
   name: string;
   /** An IANA time zone, e.g. Europe/London. */
@@ -68,8 +68,33 @@ export interface Organisation {
   sender: { name: string; address?: string };
   /** Idle accounts: warned after `warningDays` without a sign-in, turned off at `turnOffDays`. */
   idle: Idle;
+  /** A PNG, at `url` for anyone, signed in or not. */
+  logo?: { url: string; sha256: string; width: number; height: number };
+  /** The sign-in notice, shown as Keycloak's Terms and Conditions step. */
+  notice: SignInNotice;
+  /** The languages offered at sign-in and in Account. */
+  languages: string[];
+  defaultLanguage: string;
+  /** Changed only by a deployment admin who just entered their password. */
+  security: Security;
   updatedAt?: string;
   updatedBy?: string;
+}
+
+export interface SignInNotice {
+  on: boolean;
+  title?: string;
+  text?: string;
+  /** Goes up each time everyone is asked to accept it again. */
+  version: number;
+  changedAt?: string;
+  changedBy?: string;
+}
+
+export interface Security {
+  twoStepForAll: boolean;
+  leaverRetentionDays: number;
+  activityRetentionDays: number;
 }
 
 export interface Idle {
@@ -84,6 +109,10 @@ export interface OrganisationChanges {
   timeZone?: string;
   sender?: { name: string; address: string | null };
   idle?: Partial<Idle>;
+  notice?: { on?: boolean; title?: string; text?: string; askAgain?: boolean };
+  languages?: string[];
+  defaultLanguage?: string;
+  security?: Partial<Security>;
 }
 
 export interface Role {
@@ -638,6 +667,22 @@ export class AdminApi {
   setOrganisation = (changes: OrganisationChanges) => this.call<Organisation>('PATCH', '/api/identity/v1/admin/organisation', changes);
   /** The time zones an admin can choose, UTC first. */
   timeZones = () => this.call<string[]>('GET', '/api/identity/v1/admin/organisation/time-zones');
+  /** The languages the sign-in pages have words in, which an admin can offer. */
+  signInLanguages = () => this.call<string[]>('GET', '/api/identity/v1/admin/organisation/languages');
+  /** Keeps a PNG as the organisation's logo; identity says why when it can't be one. */
+  setLogo = async (png: Blob) => {
+    let res: Response;
+    try {
+      res = await this.fetchImpl('/api/identity/v1/admin/organisation/logo', { method: 'PUT', headers: { authorization: `Bearer ${await this.getToken()}`, 'content-type': 'image/png' }, body: png });
+    } catch {
+      throw new Error('AUGUR can’t be reached. Check your connection; nothing was changed.');
+    }
+    const data = (await res.json().catch(() => ({}))) as NonNullable<Organisation['logo']> & { message?: string; error?: string };
+    if (res.status === 413) throw new ApiError('The logo is too large. Save it smaller and try again.', 413, data.error);
+    if (!res.ok) throw new ApiError(data.message ?? `That didn’t work (${res.status}). Nothing was changed.`, res.status, data.error);
+    return data;
+  };
+  removeLogo = () => this.call<void>('DELETE', '/api/identity/v1/admin/organisation/logo');
 
   apps = () => this.call<CatalogueApp[]>('GET', '/api/registry/v1/apps');
   setAppEnabled = (id: string, enabled: boolean) => this.call<CatalogueApp>('PATCH', `/api/registry/v1/apps/${encodeURIComponent(id)}`, { enabled });

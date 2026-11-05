@@ -49,7 +49,7 @@ const shellTo = (href: string) => {
  * caller is an admin and record it in the audit log. Moving between its
  * sections moves the address without the shell mounting it again.
  */
-export function AdminApp({ api, me, path: start }: { api: AdminApi; me: string; path: string }) {
+export function AdminApp({ api, me, roles = [], path: start }: { api: AdminApi; me: string; roles?: string[]; path: string }) {
   const [path, setPath] = useState(start || '/');
   const [catalogue, setCatalogue] = useState<CatalogueApp[]>([]);
   useEffect(() => {
@@ -103,7 +103,7 @@ export function AdminApp({ api, me, path: start }: { api: AdminApi; me: string; 
         ) : screen === 'apps' ? (
           <Apps api={api} openUpgrades={openUpgrades} upgradesName={upgrades?.name ?? 'Upgrade Centre'} />
         ) : screen === 'organisation' ? (
-          <Organisation api={api} />
+          <Organisation api={api} roles={roles} />
         ) : screen === 'status' ? (
           <Status api={api} openUpgrades={openUpgrades} />
         ) : screen === 'updates' ? (

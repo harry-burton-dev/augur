@@ -23,7 +23,7 @@ export default defineMicroFrontend({
     }
     const root = createRoot(el);
     roots.set(el, root);
-    root.render(<AdminApp api={new AdminApi(() => ctx.getToken())} me={ctx.user.id} path={ctx.path} />);
+    root.render(<AdminApp api={new AdminApi(() => ctx.getToken())} me={ctx.user.id} roles={ctx.user.roles} path={ctx.path} />);
   },
   unmount(el: HTMLElement) {
     roots.get(el)?.unmount();

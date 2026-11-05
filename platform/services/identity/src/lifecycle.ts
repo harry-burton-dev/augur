@@ -202,6 +202,10 @@ export const lifecycleLeavingMigrations: Migration[] = [
       -- When someone first signed in through the organisation's sign-in (Entra), which they sign in with since (PER-194).
       alter table identity.person_lifecycle add column federated_at timestamptz;`,
   },
+];
+
+/** Added after the organisation's logo, notice, languages and security settings, so it runs after them. */
+export const lifecycleDeletionMigrations: Migration[] = [
   {
     id: 'lifecycle_005_deletion',
     sql: `

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DirectoryError, KeycloakDirectory } from './directory.ts';
-import { applyEntra, ENTRA_FIRST_SIGN_IN, realmEntraFromEnv, applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { applyEntra, ENTRA_FIRST_SIGN_IN, realmEntraFromEnv, applyOrganisation, applyTwoStepForAll, NOTICE_KEYS, applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -343,6 +343,67 @@ describe('idle accounts through Keycloak’s Workflow (PER-194)', () => {
     const t = workflowsAt([{ id: 'old', name: `${IDLE_WORKFLOW}-60-90` }]);
     await applyIdleWorkflow(t.kc, undefined, true, []);
     expect(t.calls).toEqual([]);
+  });
+});
+
+describe('Admin → Organisation in the realm (PER-196)', () => {
+  const terms = { alias: 'TERMS_AND_CONDITIONS', name: 'Terms and Conditions', enabled: false, defaultAction: false };
+
+  it('shows the organisation’s name and turns the notice on with its words in every language offered', async () => {
+    const { kc, calls } = keycloak((method, path) => {
+      if (method !== 'GET') return undefined;
+      if (path === '') return { displayNameHtml: 'Old' };
+      if (path === '/authentication/required-actions') return [terms];
+      if (path.startsWith('/localization/')) return {};
+      return undefined;
+    });
+    const changes: string[] = [];
+    await applyOrganisation(kc, { name: 'Acme & Co', notice: { on: true, title: 'Before you start', text: 'Be <kind>.' }, twoStepForAll: false }, ['en', 'fr'], changes);
+    expect(calls).toContainEqual({ method: 'PUT', path: '', body: { displayNameHtml: 'Acme &amp; Co' } });
+    expect(calls).toContainEqual({ method: 'PUT', path: '/authentication/required-actions/TERMS_AND_CONDITIONS', body: { ...terms, enabled: true, defaultAction: true } });
+    const words = { [NOTICE_KEYS.title]: 'Before you start', [NOTICE_KEYS.text]: '<p>Be &lt;kind&gt;.</p>' };
+    expect(calls).toContainEqual({ method: 'POST', path: '/localization/en', body: words });
+    expect(calls).toContainEqual({ method: 'POST', path: '/localization/fr', body: words });
+    expect(changes).toEqual(['organisation’s name on sign-in pages', 'sign-in notice on', 'sign-in notice words: en, fr']);
+  });
+
+  it('changes nothing when the realm already matches, and gives Keycloak its words back when the notice goes off', async () => {
+    const on = { ...terms, enabled: true, defaultAction: true };
+    const { kc, calls } = keycloak((method, path) => {
+      if (method !== 'GET') return undefined;
+      if (path === '') return { displayNameHtml: 'Acme' };
+      if (path === '/authentication/required-actions') return [on];
+      if (path === '/localization/en') return { [NOTICE_KEYS.title]: 'T', [NOTICE_KEYS.text]: '<p>X</p>', other: 'kept' };
+      return undefined;
+    });
+    const same: string[] = [];
+    await applyOrganisation(kc, { name: 'Acme', notice: { on: true, title: 'T', text: 'X' }, twoStepForAll: false }, ['en'], same);
+    expect(same).toEqual([]);
+    const off: string[] = [];
+    await applyOrganisation(kc, { name: 'Acme', notice: { on: false }, twoStepForAll: false }, ['en'], off);
+    expect(calls.filter((c) => c.method === 'DELETE').map((c) => c.path)).toEqual([`/localization/en/${NOTICE_KEYS.title}`, `/localization/en/${NOTICE_KEYS.text}`]);
+    expect(off).toEqual(['sign-in notice off', 'sign-in notice words: en']);
+  });
+
+  it('asks everyone for two steps by putting the two-step role in the default roles, and takes it out again', async () => {
+    let inside: { name: string }[] = [];
+    const { kc, calls } = keycloak((method, path, body) => {
+      if (path === '' && method === 'GET') return { defaultRole: { name: 'default-roles-platform' } };
+      if (path === '/roles/default-roles-platform/composites') {
+        if (method === 'GET') return inside;
+        inside = method === 'POST' ? (body as { name: string }[]) : [];
+        return undefined;
+      }
+      if (path.startsWith('/roles/')) return { id: 'r2', name: 'two-step-sign-in' };
+      return undefined;
+    });
+    const changes: string[] = [];
+    await applyTwoStepForAll(kc, true, changes);
+    await applyTwoStepForAll(kc, true, changes);
+    await applyTwoStepForAll(kc, false, changes);
+    await applyTwoStepForAll(kc, undefined, changes);
+    expect(calls.filter((c) => c.method !== 'GET').map((c) => c.method)).toEqual(['POST', 'DELETE']);
+    expect(changes).toEqual(['everyone now signs in with two steps', 'two steps for the admin roles only']);
   });
 });
 

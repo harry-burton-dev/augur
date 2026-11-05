@@ -33,12 +33,19 @@ const render = async (kcContext: Parameters<typeof KcPage>[0]['kcContext']) => {
 
 describe('the sign-in page', () => {
   it('names the organisation and the product from state, and posts to Keycloak', async () => {
-    const el = await render(getKcContextMock({ pageId: 'login.ftl', overrides: { realm: { displayName: 'Product' }, url: { loginAction: '/sign-in-here' } } }));
+    const el = await render(getKcContextMock({ pageId: 'login.ftl', overrides: { realm: { displayName: 'Product', displayNameHtml: '' }, url: { loginAction: '/sign-in-here' } } }));
     expect(el.querySelector('.augur-eyebrow')?.textContent).toBe('Northwind');
+    expect(el.querySelector('.augur-signin-logo')?.getAttribute('src')).toBe('/api/identity/v1/public/organisation/logo');
     expect(el.querySelector('.augur-signin-product')?.textContent).toBe('Product');
     expect(el.querySelector('#kc-page-title')?.textContent).toBe('Sign in to your account');
     expect(el.querySelector('form#kc-form-login')?.getAttribute('action')).toBe('/sign-in-here');
     expect(el.querySelector('#kc-login')?.className).toContain('augur-signin-primary');
+  });
+
+  it('names the organisation as Admin → Organisation has it, as text', async () => {
+    const el = await render(getKcContextMock({ pageId: 'login.ftl', overrides: { realm: { displayNameHtml: 'Acme &amp; <b>Co</b>' } } }));
+    expect(el.querySelector('.augur-eyebrow')?.textContent).toBe('Acme & Co');
+    expect(el.querySelector('.augur-eyebrow b')).toBeNull();
   });
 
   it('shows Keycloak’s message with a shape for its kind, and offers the realm’s languages', async () => {

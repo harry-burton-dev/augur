@@ -117,7 +117,7 @@ export const adminRoutes =
     /** Whether, and when, idle sign-ins turn off here; unknown (and not shown) when it can't be read. */
     const idlePolicy = async (): Promise<IdlePolicy | undefined> => {
       const [settings, canEmail] = await Promise.all([org().catch(() => undefined), dir().canEmail().catch(() => undefined)]);
-      return settings && canEmail !== undefined ? { ...settings.idle, canEmail } : undefined;
+      return settings && canEmail !== undefined ? { ...settings.idle, canEmail, ...(redact ? { leaverDeleteAfterDays: settings.security.leaverRetentionDays } : {}) } : undefined;
     };
     /** People as admins see them: with their state and what is kept about their account's life. */
     const decorate = async <P extends DirectoryPerson>(people: P[]) => {
