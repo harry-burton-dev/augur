@@ -8,6 +8,7 @@ import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kind
 import { headline, stateOf } from './status.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { placeOf, portalLink } from './line.js';
+import { changesFrom, orgNameCheck, zoneLabel } from './organisation.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -110,6 +111,7 @@ describe('admin', () => {
     expect(screenFor('/people/new')).toEqual({ screen: 'people', adding: true });
     expect(screenFor('/departments/new')).toEqual({ screen: 'departments', adding: true });
     expect(screenFor('/updates')).toEqual({ screen: 'updates', adding: false });
+    expect(screenFor('/organisation')).toEqual({ screen: 'organisation', adding: false });
     expect(screenFor('/')).toEqual({ screen: 'people', adding: false });
   });
 
@@ -228,6 +230,50 @@ describe('Departments', () => {
   });
 });
 
+describe('Organisation', () => {
+  const org = { name: 'Northwind', timeZone: 'UTC', sender: { name: 'Northwind' } };
+
+  it('sends only what changed, and takes a sender address away when it’s emptied', () => {
+    expect(changesFrom(org, { name: ' Northwind ', timeZone: 'UTC', senderName: 'Northwind', senderAddress: '' })).toEqual({});
+    expect(changesFrom(org, { name: 'Northwind Trading', timeZone: 'Europe/London', senderName: 'Northwind', senderAddress: '' })).toEqual({ name: 'Northwind Trading', timeZone: 'Europe/London' });
+    expect(changesFrom(org, { senderAddress: 'augur@northwind.example' })).toEqual({ sender: { name: 'Northwind', address: 'augur@northwind.example' } });
+    expect(changesFrom({ ...org, sender: { name: 'Northwind', address: 'a@b.example' } }, { senderAddress: '' })).toEqual({ sender: { name: 'Northwind', address: null } });
+    expect(orgNameCheck('North/wind')?.state).toBe('error');
+    expect(orgNameCheck('Northwind')).toBeNull();
+  });
+
+  it('names a time zone with its offset now', () => {
+    expect(zoneLabel('America/New_York', new Date('2026-01-15T12:00:00Z'))).toBe('America/New York, UTC-5');
+    expect(zoneLabel('UTC')).toBe('UTC');
+    expect(zoneLabel('Not/AZone')).toBe('Not/AZone');
+  });
+
+  it('shows the settings, says the sender isn’t used for email yet, and saves a new name', async () => {
+    const { sent } = gateway((method, url, body) => {
+      if (url === '/api/identity/v1/organisation') return Response.json(org);
+      if (url === '/api/identity/v1/admin/organisation/time-zones') return Response.json(['UTC', 'Europe/London']);
+      if (url === '/api/identity/v1/admin/organisation' && method === 'PATCH') return Response.json({ ...org, ...(body as object), updatedAt: '2026-11-05T04:00:00.000Z', updatedBy: 'u-1' });
+      return undefined;
+    });
+    const el = await open('/organisation');
+    expect(title(el)).toBe('Organisation');
+    expect(el.textContent).toContain('Northwind');
+    expect(el.textContent).toContain('Not used for email yet.');
+    await press(button('Change', el));
+    await type(fieldNamed('Name'), 'Northwind Trading');
+    await press(button('Save'));
+    expect(sent.find((c) => c.method === 'PATCH')).toEqual({ method: 'PATCH', url: '/api/identity/v1/admin/organisation', body: { name: 'Northwind Trading' } });
+    expect(el.textContent).toContain('Northwind Trading');
+  });
+
+  it('says why when the settings can’t be loaded, and offers to try again', async () => {
+    gateway((_m, url) => (url === '/api/identity/v1/organisation' ? Response.json({ message: 'Identity isn’t answering.' }, { status: 503 }) : undefined));
+    const el = await open('/organisation');
+    expect(el.querySelector('[role="alert"]')?.textContent).toBe('Identity isn’t answering.');
+    expect(button('Try again', el)).toBeTruthy();
+  });
+});
+
 describe('Status', () => {
   const part = (name: string, state: ComponentStatus['state'], extra: Partial<ComponentStatus> = {}): ComponentStatus => ({ name, kind: 'service', state, ...extra });
 
@@ -283,6 +329,8 @@ describe('Activity', () => {
     expect(sentence(entry('person.updated', { target: 'u-2', detail: { roles: { from: [], to: ['admin'] }, firstName: {}, lastName: {} } }), names)).toBe('Alex Rivera changed Sam Okafor’s roles and name');
     expect(sentence(entry('app.updated', { app: 'registry', target: 'library', detail: { version: '0.3.0', heldAt: '0.1.0' } }), names)).toBe('Library registered version 0.3.0, kept but not used while it’s held at 0.1.0');
     expect(sentence(entry('app.blocked', { app: 'registry', target: 'library', detail: { workspace: 'd-1' } }), names)).toBe('Alex Rivera blocked Library for Finance and every team below it');
+    expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: { name: 'Old' }, to: { name: 'Northwind' } } }), names)).toBe('Alex Rivera renamed the organisation to Northwind');
+    expect(sentence(entry('organisation.changed', { target: 'organisation', detail: { from: {}, to: { timeZone: 'Europe/London', sender: { name: 'N' } } } }), names)).toBe('Alex Rivera changed the organisation’s time zone and email sender');
     expect(sentence(entry('document.published', { app: 'library', target: 'doc-7' }), names)).toBe('Alex Rivera: document.published (doc-7)');
   });
 
