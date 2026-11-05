@@ -128,6 +128,8 @@ A staging server runs preview releases before they reach production, with sample
 - **Everything else is its own**: its own read key, its own bucket (or its own path in one), its own auth key if they aren't reusable. Nothing is shared with production, so a mistake on staging stays there.
 - **The same size as production**, so what it shows about memory and speed holds there.
 
+To stand one up and prove a release on it, from the first command to Promote to stable, follow [staging-runbook.md](staging-runbook.md): each step with the output that shows it worked.
+
 ## Wipe and refresh
 
 To take a dev or staging server back to empty, on the same release or a newer one, and keep its settings and its machine on the tailnet:

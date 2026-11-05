@@ -34,6 +34,7 @@ nav:
   - Shell principles: shell-principles.md
   - Ship an app: ship-an-app.md
   - Signed caller: signed-caller.md
+  - The staging runbook: staging-runbook.md
   - When an upgrade goes back by itself: upgrade-went-back.md
   - Upgrading AUGUR: upgrade.md
   - Versioning: versioning.md
