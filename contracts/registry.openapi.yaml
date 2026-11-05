@@ -1582,6 +1582,8 @@ components:
         - off
         - opt-in
         - everyone
+        - floors
+      description: "Who gets a feature preview: nobody, those who turn it on, everyone, or chosen floors and the floors beneath them"
     FeaturePreviewsAdmin:
       type: object
       required:
@@ -1609,6 +1611,11 @@ components:
                     $ref: "#/components/schemas/FeaturePreviewMode"
                   ended:
                     type: boolean
+                  floors:
+                    type: array
+                    items:
+                      type: string
+                    description: "With mode floors: the floors it is on for"
                   chosen:
                     type: boolean
                     description: An admin chose its mode; false means the server's default
@@ -2269,7 +2276,7 @@ paths:
   /feature-previews:
     get:
       summary: Apps' feature previews, and whether each is on for the caller (SDK 1.7)
-      description: Every app the caller can open that lists `previews` in its manifest. A preview is on for everyone, for those who turned it on (opt-in), or off; one past its `until` day is ended and off. On a preview server one nobody chose for is opt-in, on a production server off.
+      description: Every app the caller can open that lists `previews` in its manifest. A preview is on for everyone, for chosen floors and the floors beneath them, for those who turned it on (opt-in), or off; one past its `until` day is ended and off. On a preview server one nobody chose for is opt-in, on a production server off. Floor-targeted ones are on when the caller's floor (X-Workspace-Id, checked by the gateway) is one of them or beneath one.
       responses:
         "200":
           description: The apps with feature previews
@@ -2394,7 +2401,7 @@ paths:
   /apps/{id}/feature-previews/{preview}:
     put:
       summary: Set who gets one of an app's feature previews (admins)
-      description: "`null` goes back to the server's default. Kept when the app registers new versions. Audited as app.preview-set."
+      description: "`null` goes back to the server's default. `floors` turns it on for the floors listed in `floors` and the floors beneath them, and for nobody else. Kept when the app registers new versions. Audited as app.preview-set."
       requestBody:
         required: true
         content:
@@ -2408,6 +2415,16 @@ paths:
                   anyOf:
                     - $ref: "#/components/schemas/FeaturePreviewMode"
                     - type: "null"
+                floors:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  description: The floors it is on for, with mode `floors` (and only then)
               additionalProperties: false
       parameters:
         - schema:
@@ -2427,6 +2444,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/FeaturePreviewsAdmin"
+        "400":
+          description: Mode `floors` without floors, floors with another mode, or a floor that does not exist (error bad_floors)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
         "403":
           description: Not an admin
           content:
@@ -2439,10 +2462,24 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors can't be looked up right now, so they can't be checked
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /apps/{id}/feature-previews/people/{person}:
     get:
       summary: Which of an app's feature previews are on for one person (the app's own service, or admins)
+      description: With `workspace`, the floor they stand on, so previews targeted at floors count too; without it those are off.
       parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: The floor they stand on
         - schema:
             type: string
           in: path
