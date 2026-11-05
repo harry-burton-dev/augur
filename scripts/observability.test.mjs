@@ -1,4 +1,4 @@
-// The alert rules and dashboard provisioned into the observability profile's Grafana (ADR 0059) stay
+// The alert rules and dashboard provisioned into the deployment's Grafana (ADR 0059) stay
 // readable and point only at what exists: the stack's own data sources, and the metrics the gateway
 // records. Grafana itself isn't run in CI; this is the check that holds the files.
 import { test } from 'node:test';
@@ -46,4 +46,14 @@ test('the dashboard reads only what exists', () => {
       for (const m of metricsIn(t.expr)) assert.ok(METRICS.includes(m), `panel ${panel.id} reads ${m}, which the gateway records`);
     }
   }
+});
+
+test('alerts go to the registry’s webhook, with its token, and are told again only daily', () => {
+  const { contactPoints, policies } = parse(readFileSync(new URL('alerting/contact-points.yaml', dir), 'utf8'));
+  const names = new Set(contactPoints.map((c) => c.name));
+  const hook = contactPoints.flatMap((c) => c.receivers).find((r) => r.type === 'webhook');
+  assert.match(hook.settings.url, /^http:\/\/registry:\d+\/v1\/platform\/alerts$/);
+  assert.equal(hook.settings.authorization_credentials, '$ALERT_WEBHOOK_TOKEN', 'the token comes from compose, never the file');
+  assert.equal(hook.disableResolveMessage, false, 'a cleared alert is told too');
+  for (const p of policies) assert.ok(names.has(p.receiver), `the policy sends to ${p.receiver}, which is defined`);
 });

@@ -23,17 +23,19 @@ x-logging: &logging
     max-size: ${LOG_MAX_SIZE:-10m}
     max-file: "${LOG_MAX_FILES:-3}"
 
-# OpenTelemetry (ADR 0034, docs/observability.md): every Node service loads the service kit's telemetry
-# first. It does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT names a collector, such as the
-# `observability` profile's at http://otel-lgtm:4318.
+# OpenTelemetry (ADR 0034, 0059, docs/observability.md): every Node service loads the service kit's
+# telemetry first and sends to the deployment's own otel-lgtm, or to the collector OTEL_EXPORTER_OTLP_ENDPOINT
+# names. OTEL_SDK_DISABLED=true turns it off (and OTEL_LGTM_REPLICAS=0 stops otel-lgtm).
 x-telemetry: &telemetry
   NODE_OPTIONS: --import @augur/service-kit/telemetry
-  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-lgtm:4318}
+  OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-}
   # A collector's key, and which traces to keep (the SDK's defaults when empty).
   OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
   OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
   OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
-  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production}
+  # Which deployment it came from: its ring, and the name it reports to Backstage under.
+  OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production},deployment.name=${DEPLOYMENT_ID:-${SERVER_RING:-production}}
 
 x-service: &service
   <<: *hardened
@@ -419,6 +421,8 @@ services:
       # What this server runs, signed and reported to that Backstage under this name (ADR 0019).
       DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
+      # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
       SERVER_RING: ${SERVER_RING:-}
       # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
@@ -624,22 +628,31 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker]
 
-  # Optional: somewhere to look at the services' traces, metrics and logs (ADR 0034,
-  # docs/observability.md). Grafana's all-in-one OpenTelemetry stack, for one server: add observability to
-  # COMPOSE_PROFILES and set OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-lgtm:4318 in .env.
-  # Grafana answers on the server itself only, at http://127.0.0.1:3001.
+  # Where the deployment watches itself (ADR 0034, 0059, docs/observability.md): Grafana's all-in-one
+  # OpenTelemetry stack, for one server, keeping 72 hours. It runs AUGUR's alert rules and dashboard
+  # (observability/) and tells deployment admins through the registry. Grafana answers on the server
+  # itself only, at http://127.0.0.1:3001. A deployment with its own collector sets OTEL_LGTM_REPLICAS=0.
   otel-lgtm:
     logging: *logging
     image: grafana/otel-lgtm:0.37.0
-    profiles: [observability]
     restart: unless-stopped
+    deploy:
+      replicas: ${OTEL_LGTM_REPLICAS:-1}
     mem_limit: ${OTEL_LGTM_MEM_LIMIT:-2g}
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
+      PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h
     ports:
       - 127.0.0.1:3001:3000
     volumes:
       - otel-lgtm:/data
+      - ./observability/lgtm/loki.yaml:/otel-lgtm/loki-config.yaml:ro
+      - ./observability/lgtm/tempo.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./observability/grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
+      - ./observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/augur.yaml:ro
+      - ./observability/grafana/dashboards:/otel-lgtm/augur-dashboards:ro
 
 networks:
   default:

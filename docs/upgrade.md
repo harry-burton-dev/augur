@@ -54,6 +54,10 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### The deployment watches itself
+
+otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72 hours and runs AUGUR's alert rules ([observability.md](observability.md#alerts)). Before upgrading, set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) and `ALERT_WEBHOOK_TOKEN` (`openssl rand -hex 32`) in `.env`, so its alerts reach deployment admins as notices. It takes up to 2 GB of memory (`OTEL_LGTM_MEM_LIMIT`); a server with its own collector sets `OTEL_EXPORTER_OTLP_ENDPOINT` to it and `OTEL_LGTM_REPLICAS=0`. The `observability` profile does nothing now and can come out of `COMPOSE_PROFILES`. The registry's report to Backstage now goes every 15 minutes.
+
 ### Settings the guides named now reach their services
 
 Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([deploy.md](deploy.md#settings-and-secrets)).

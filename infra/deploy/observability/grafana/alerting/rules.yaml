@@ -1,4 +1,4 @@
-# AUGUR's alert rules (ADR 0059, alpha goal 23), provisioned into the observability profile's Grafana
+# AUGUR's alert rules (ADR 0059, alpha goal 23), provisioned into the deployment's Grafana
 # (otel-lgtm). They read what the gateway records (docs/observability.md, "What the alert rules read")
 # and the shell's browser errors. Grafana evaluates them every 30 seconds, outside the gateway, the
 # notices and the mail path, so it still reports when those are down. Where they go: contact-points.yaml.
