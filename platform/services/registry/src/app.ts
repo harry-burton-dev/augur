@@ -597,7 +597,8 @@ export const buildApp = async ({
               "/manifest); nothing where it is off, on a floor that doesn't exist, or",
               "anywhere while it is turned off. Without a workspace, on the organisation's",
               'floor, as the gateway checks a call that names none (ADR 0007). With them, the',
-              'inbox and notification kinds its manifest declares, which the events service checks against.',
+              'inbox and notification kinds its manifest declares, which the events service checks against, and the',
+              'role its manifest says a person needs, which models checks for an AI app.',
             ].join(' '),
             params: params('id'),
             querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor the call is for' })) }),
@@ -609,6 +610,9 @@ export const buildApp = async ({
                   scopes: Type.Array(ref(ScopeSchema)),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
                   notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
+                  requiredRole: Type.Union([Type.String(), Type.Null()], {
+                    description: "The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.",
+                  }),
                 },
                 { description: "The app's grants" },
               ),
@@ -640,6 +644,7 @@ export const buildApp = async ({
             scopes: on ? usableScopes(found) : [],
             inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
+            requiredRole: found.entry.requiredRole ?? null,
           };
         },
       );
