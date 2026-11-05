@@ -6,9 +6,10 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { stringify } from 'yaml';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 // Spectral runs through pnpm dlx at a pinned version: it lints, it never ships, and its own dependencies
 // stay out of pnpm-lock.yaml and the dependency scan (ADR 0055). Renovate doesn't move it: bump it here.
 const SPECTRAL = '@stoplight/spectral-cli@6.17.0';

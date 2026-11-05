@@ -32,6 +32,7 @@
     "seed": "node scripts/seed.mjs",
     "check:licences": "node scripts/licences.mjs check",
     "check:repo-security": "node scripts/check-repo-security.mjs",
+    "check:attribution": "node scripts/check-attribution.mjs",
     "notices": "node scripts/licences.mjs notices",
     "lint": "eslint .",
     "check:kit": "node scripts/kit.mjs check",

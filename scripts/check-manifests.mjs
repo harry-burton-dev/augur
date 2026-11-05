@@ -6,12 +6,12 @@
 // Run it after pnpm build: it uses the registry's build.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import Ajv2020Module from 'ajv/dist/2020.js';
 import { manifestSchemaText, SCHEMA_FILES } from './manifest.schema.mjs';
 
 const Ajv2020 = Ajv2020Module.default ?? Ajv2020Module;
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 process.env.NODE_ENV = 'test';
 const built = join(root, 'platform/services/registry/dist/manifest.js');
 if (!existsSync(built)) {

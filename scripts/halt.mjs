@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { REPO } from './repo.mjs';
 
@@ -54,7 +55,7 @@ const main = () => {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `changed=${tag}\n`);
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   try {
     main();
   } catch (err) {

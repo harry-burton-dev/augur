@@ -30,11 +30,12 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { layoutProblems, readShipped, shippedParts, SHIPPED_FILE } from './shipped-apps.mjs';
 import { NOTES_FILE, stamp } from './upgrade-notes.mjs';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const RELEASE_FILE = 'release/augur-release.json';
 const DEPLOY_DIR = 'infra/deploy';
 const ENV_EXAMPLE = `${DEPLOY_DIR}/.env.example`;
@@ -386,4 +387,4 @@ const main = () => {
   }
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();

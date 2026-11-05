@@ -11,11 +11,12 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { readApps } from './app-release.mjs';
 import { REPO } from './repo.mjs';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 export const AUGUR = 'augur';
 /** The branch work merges into. */
 export const TRUNK = 'main';
@@ -221,7 +222,7 @@ const main = async () => {
   }
 };
 
-if (import.meta.url === `file://${process.argv[1]}`)
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href)
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);

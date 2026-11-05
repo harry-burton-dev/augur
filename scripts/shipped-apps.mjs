@@ -17,10 +17,11 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { parse as parseYaml } from 'yaml';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 export const SHIPPED_FILE = 'release/shipped-apps.json';
 /** The app-release.json schema these pins understand (@augur/app-tools). */
 const APP_RELEASE_SCHEMA = 'augur.app-release/v1';
@@ -256,7 +257,7 @@ const main = async () => {
   process.exit(2);
 };
 
-if (process.argv[1] === new URL(import.meta.url).pathname) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main().catch((err) => {
     console.error(err.message);
     process.exit(1);

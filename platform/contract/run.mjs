@@ -6,8 +6,9 @@ import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { availableParallelism, totalmem } from 'node:os';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const here = new URL('.', import.meta.url).pathname;
+const here = fileURLToPath(new URL('.', import.meta.url));
 const frozen = join(here, 'frozen');
 // Every frozen build, or with CONTRACT_FROZEN=edges only the oldest and the newest: CI's choice on an
 // ordinary pull request, to keep its minutes down, while the Version packages pull request runs them

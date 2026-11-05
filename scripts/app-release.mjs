@@ -29,12 +29,13 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { changelogFor, PILLAR_APPS } from './augur-release.mjs';
 import { appRelease, appTag, channelOf, devVersion, oldDevBuilds, previewPrOf, previewVersion, releaseNotes, signerOf } from '../platform/packages/app-tools/src/release.mjs';
 // The shared release steps live in @augur/app-tools, so an app in its own repository releases the same way.
 export * from '../platform/packages/app-tools/src/release.mjs';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 
 /** Which apps a pull request changes, from the paths it touches. */
@@ -149,4 +150,4 @@ const main = async () => {
   }
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) await main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) await main();

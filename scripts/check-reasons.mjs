@@ -8,8 +8,9 @@
 // says so with `check-reasons: code-only` in a comment on it or the line above.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const skip = new Set(['node_modules', 'dist', 'storybook-static', '.turbo', 'coverage', 'stories']);
 
 /** The disabled kit controls in one source file that don't carry a reason, as `line: tag`. */
@@ -85,7 +86,7 @@ const walk = (dir, visit) => {
   }
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const problems = [];
   for (const top of [join(root, 'apps'), join(root, 'platform', 'frontends')]) {
     walk(top, (path) => {

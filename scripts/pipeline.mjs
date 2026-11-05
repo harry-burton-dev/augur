@@ -12,13 +12,14 @@
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { readApps } from './app-release.mjs';
 import { parseChangeset, readParts } from './augur-release.mjs';
 import { AUGUR, tagOf, versionsFrom } from './promote.mjs';
 import { REPO } from './repo.mjs';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 /** Where the images, and so the feed, are: IMAGE_REPO, or the repository's own path. */
 const IMAGES = (process.env.IMAGE_REPO || `ghcr.io/${REPO}`).toLowerCase();
 /** The pipeline's media type in the registry. */
@@ -195,4 +196,4 @@ const main = (args) => {
   }
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) main(process.argv.slice(2));
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main(process.argv.slice(2));

@@ -118,7 +118,8 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   server as a short numbered list.
 - Nothing in the repository names the tool that wrote it: no
   `Co-Authored-By` or session trailers on commits, no assistant attribution in
-  pull requests, and no links to private chats or artifacts in files.
+  pull requests, and no links to private chats or artifacts in files. The
+  Attribution workflow checks each pull request's commits and description.
 - One PR at a time per thread, small enough to review in one sitting. Say
   "Part of PER-x" in the body when an issue spans several PRs, because Linear
   closes an issue when any linked PR merges.

@@ -12,9 +12,10 @@
 // node scripts/check-repo-security.mjs
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const WORKFLOWS = '.github/workflows';
 
 /** `uses:` lines that name a remote action or reusable workflow not pinned to a 40-character SHA, as `line: text`. */
@@ -78,7 +79,7 @@ export const check = () => {
   return problems;
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const problems = check();
   for (const p of problems) console.error(`✗ ${p}`);
   if (problems.length) process.exit(1);

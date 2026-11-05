@@ -12,6 +12,7 @@
 //   - a dependency two or more of AUGUR's packages name comes from the catalog in pnpm-workspace.yaml
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import semver from 'semver';
 import { parse as parseYaml } from 'yaml';
 import { catalogProblems } from './shared-versions.mjs';
@@ -22,7 +23,7 @@ if (mode !== 'sync' && mode !== 'check') {
   process.exit(2);
 }
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
 const problems = [];
 const changed = [];
