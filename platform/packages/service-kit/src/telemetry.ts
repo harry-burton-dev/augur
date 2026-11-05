@@ -12,15 +12,18 @@ import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import { join } from 'node:path';
 
+/** The settings telemetry reads: process.env, or a test's own. */
+export type TelemetryEnv = Record<string, string | undefined>;
+
 /** True when the settings name a collector and don't turn the SDK off. */
-export const telemetryOn = (env: NodeJS.ProcessEnv = process.env): boolean =>
+export const telemetryOn = (env: TelemetryEnv = process.env): boolean =>
   Boolean(env.OTEL_EXPORTER_OTLP_ENDPOINT || env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT) && env.OTEL_SDK_DISABLED !== 'true';
 
 /**
- * Names the service after its own package unless OTEL_SERVICE_NAME does ("@augur/registry" is
- * "registry"), and adds its version, so a deployment's compose file needn't name each one.
+ * Names the service after its own package unless OTEL_SERVICE_NAME does (`@augur/registry` is
+ * `registry`), and adds its version, so a deployment's compose file needn't name each one.
  */
-export const nameService = (env: NodeJS.ProcessEnv = process.env, dir = process.cwd()): void => {
+export const nameService = (env: TelemetryEnv = process.env, dir = process.cwd()): void => {
   let pkg: { name?: string; version?: string };
   try {
     pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'));

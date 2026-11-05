@@ -193,7 +193,7 @@ export interface StartAppServiceOptions {
  * registry its frontend and put it in the catalogue, and on SIGTERM stop taking requests, let jobs
  * reach a step and close. Returns the running app.
  */
-export async function startAppService({ manifest, buildApp, jobs: defineJobs, port, env = process.env }: StartAppServiceOptions) {
+export async function startAppService({ manifest, buildApp, jobs: defineJobs, port, env = process.env }: StartAppServiceOptions): Promise<FastifyInstance> {
   // Until the app's own logger exists, the starter's lines go to the console as JSON.
   let log: JobLogger = { info: (o, m) => console.log(JSON.stringify({ level: 'info', ...(o as object), msg: m })), warn: (o, m) => console.warn(JSON.stringify({ level: 'warn', ...(o as object), msg: m })), error: (o, m) => console.error(JSON.stringify({ level: 'error', ...(o as object), msg: m })) };
   const lazy: JobLogger = { info: (o, m) => log.info(o, m), warn: (o, m) => log.warn(o, m), error: (o, m) => log.error(o, m), debug: (o, m) => log.debug?.(o, m) };

@@ -2545,6 +2545,12 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of AUGUR's own apps, whose previews stay at the server's default (error platform_app)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors can't be looked up right now, so they can't be checked
           content:
