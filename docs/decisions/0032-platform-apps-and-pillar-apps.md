@@ -1,6 +1,6 @@
 # 0032. Apps that ship with AUGUR are platform apps or pillar apps
 
-- **Status:** Accepted
+- **Status:** Accepted; the amendment of 2026-11-05 is Proposed
 - **Date:** 2026-11-01 (proposed), 2026-11-03 (accepted)
 - **Decided by:** Harry
 - **Replaces:** none (amends the pillar list in [0012](0012-apps-in-own-repositories.md), and narrows "platform apps" in the handbook's PDR-008)
@@ -33,6 +33,10 @@ Auspex is shown to people as **Explorer**. Like Folio shown as Artifacts, its co
 - PDR-008's "platform apps" now means this narrower set; Data Atlas is a pillar app.
 - A new shipped app has to say which kind it is, in its ADR or plan.
 - Renaming the persisted `auspex` ids, or `PILLAR_APPS`, would need an alias and an upgrade note in docs/upgrade.md; this record chooses not to.
+
+## Amended 2026-11-05 (Proposed)
+
+The follow-up named above is built: the manifest's optional `category` (`platform` or `pillar`) is in the SDK (`APP_CATEGORIES`, `@augur/mfe-sdk`), and the registry counts its own platform apps as `platform` whatever an app's manifest says. The category is data now, not only docs. All four shipped apps, Explorer and the three pillar apps, are in `release/shipped-apps.json` (Mandate since PER-275), so `PILLAR_APPS` lists all of them.
 
 ## Links
 
