@@ -202,7 +202,7 @@ describe('email through the organisation’s relay (ADR 0035)', () => {
     return { ...k, realm: () => realm };
   };
 
-  it('points the realm at the relay with the product as the sender, turns on verification and resets, and writes again only when something changed', async () => {
+  it('points the realm at the relay with the product as the sender, turns on verification, resets and security-change emails, and writes again only when something changed', async () => {
     const t = realmAt({ attributes: { other: 'kept' }, verifyEmail: false, resetPasswordAllowed: false });
     const mail = realmMailFromEnv({ SMTP_HOST: 'relay.example', SMTP_FROM: 'augur@example.org', SMTP_USER: 'u', SMTP_PASSWORD: 'secret' })!;
     const changes: string[] = [];
@@ -212,9 +212,10 @@ describe('email through the organisation’s relay (ADR 0035)', () => {
       resetPasswordAllowed: true,
       smtpServer: { host: 'relay.example', port: '587', from: 'augur@example.org', fromDisplayName: 'Skein', starttls: 'true', ssl: 'false', auth: 'true', user: 'u' },
       attributes: { other: 'kept', [MAIL_FINGERPRINT]: expect.any(String) },
+      eventsListeners: ['jboss-logging', 'email'],
     });
     expect(JSON.stringify(t.realm().attributes)).not.toContain('secret');
-    expect(changes).toEqual(['email: relay relay.example:587, verifyEmail on, resetPasswordAllowed on']);
+    expect(changes).toEqual(['email: relay relay.example:587, verifyEmail on, resetPasswordAllowed on, security-change emails on']);
     const puts = () => t.calls.filter((c) => c.method === 'PUT').length;
     await applyMail(t.kc, mail, changes, 'Skein');
     expect(puts()).toBe(1);
@@ -245,11 +246,13 @@ describe('email through the organisation’s relay (ADR 0035)', () => {
     const kept = realmAt({ smtpServer: { host: 'console.example' }, verifyEmail: false, resetPasswordAllowed: false });
     await applyMail(kept.kc, undefined, []);
     expect(kept.realm()).toMatchObject({ smtpServer: { host: 'console.example' }, verifyEmail: true, resetPasswordAllowed: true });
-    const none = realmAt({ verifyEmail: true, resetPasswordAllowed: true });
+    expect(kept.realm().eventsListeners).toEqual(['jboss-logging', 'email']);
+    // Gone back to no relay: security-change emails stop, and a listener an admin added stays.
+    const none = realmAt({ verifyEmail: true, resetPasswordAllowed: true, eventsListeners: ['jboss-logging', 'email', 'metrics'] });
     const changes: string[] = [];
     await applyMail(none.kc, undefined, changes);
-    expect(none.realm()).toMatchObject({ verifyEmail: false, resetPasswordAllowed: false });
+    expect(none.realm()).toMatchObject({ verifyEmail: false, resetPasswordAllowed: false, eventsListeners: ['jboss-logging', 'metrics'] });
     expect(none.realm().smtpServer).toBeUndefined();
-    expect(changes).toEqual(['email: verifyEmail off, resetPasswordAllowed off']);
+    expect(changes).toEqual(['email: verifyEmail off, resetPasswordAllowed off, security-change emails off']);
   });
 });

@@ -85,7 +85,7 @@ import {
 } from './host/index.js';
 import { AccountApi } from './account/api.js';
 import type { Preferences } from './host/preferences.js';
-import { currentFormats, formatsFrom, languageOf, setFormats } from './host/formats.js';
+import { currentFormats, formatsFrom, languageOf, loadOrgTimeZone, setFormats } from './host/formats.js';
 import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { ACTION_STATUS } from './host/session.js';
@@ -104,6 +104,8 @@ export interface HostProps {
   preferencesUrl?: string;
   /** Where the registry lists the pull requests' previews a developer may try, through the gateway. */
   previewsUrl?: string;
+  /** Identity's organisation settings, for the time zone people follow until they choose their own. */
+  organisationUrl?: string;
   /** Where the registry lists apps' feature previews and takes a person's choice of them (SDK 1.7). */
   featurePreviewsUrl?: string;
   fetchImpl?: typeof fetch;
@@ -168,6 +170,7 @@ export function Host({
   manifestUrl = '/api/registry/v1/manifest',
   eventsUrl = '/api/events/v1',
   preferencesUrl = '/api/identity/v1/me/preferences',
+  organisationUrl = '/api/identity/v1/organisation',
   previewsUrl = '/api/registry/v1/previews',
   featurePreviewsUrl = '/api/registry/v1/feature-previews',
   fetchImpl = fetch,
@@ -263,20 +266,26 @@ export function Host({
   );
   /** Their language, from their sign-in (Keycloak's locale) until they choose another in Account. */
   const language = useRef<string | undefined>(undefined);
+  /** The organisation's time zone, which times follow until someone chooses their own (ADR 0039, 0042). */
+  const orgZone = useRef<string | undefined>(undefined);
+  const [orgTimeZone, setOrgTimeZone] = useState<string | undefined>(undefined);
   useEffect(() => {
     void session.getToken().then(
-      (token) => {
+      async (token) => {
         language.current ??= languageOf(token);
-        setFormats(formatsFrom(prefs.current, language.current));
+        setFormats(formatsFrom(prefs.current, language.current, orgZone.current));
+        orgZone.current = await loadOrgTimeZone(fetchImpl, organisationUrl, token);
+        setOrgTimeZone(orgZone.current);
+        setFormats(formatsFrom(prefs.current, language.current, orgZone.current));
       },
       () => undefined,
     );
-  }, [session, prefs]);
+  }, [session, prefs, fetchImpl, organisationUrl]);
   /** A language chosen in Account: dates follow it at once, unless they chose a date format of their own. */
   const chooseLanguage = useCallback(
     (locale: string | undefined) => {
       language.current = locale;
-      setFormats(formatsFrom(prefs.current, locale));
+      setFormats(formatsFrom(prefs.current, locale, orgZone.current));
     },
     [prefs],
   );
@@ -287,7 +296,7 @@ export function Host({
       const now = prefs.current;
       setChosen(now);
       applyPreferences(now);
-      setFormats(formatsFrom(now, language.current));
+      setFormats(formatsFrom(now, language.current, orgZone.current));
       const shell = shellRef.current;
       if (!shell) return;
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
@@ -900,7 +909,7 @@ export function Host({
       }
       const now = prefs.current;
       applyPreferences(now);
-      setFormats(formatsFrom(now, language.current));
+      setFormats(formatsFrom(now, language.current, orgZone.current));
       setChosen(now);
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
       shell.away = !!now.away;
@@ -1118,6 +1127,7 @@ export function Host({
           prefs={chosen}
           onPreference={choose}
           onLanguage={chooseLanguage}
+          orgTimeZone={orgTimeZone}
           onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
           onSignOut={() => void session.signOut()}
           apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}

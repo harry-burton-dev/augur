@@ -31,17 +31,17 @@ Account on the shell's arc opens the Account area (`platform/frontends/shell/src
 | Section | What's in it |
 | --- | --- |
 | Profile | Name, job title, phone and pronouns, saved as each field is left; the email address, changed on Keycloak's screen; away, with what it says and when it ends; sign out. |
-| Sign-in and security | Password, code apps, passkeys and recovery codes, each changed on Keycloak's screen; the organisation sign-ins to link; where you're signed in, with sign out there or everywhere else (the shell knows its own session by the `sid` claim in its token); recent sign-ins. |
+| Sign-in and security | Password, code apps, passkeys and recovery codes, each changed on Keycloak's screen; the organisation sign-ins to link; where you're signed in, with sign out there or everywhere else (the shell knows its own session by the `sid` claim in its token); recent sign-ins; and whether changes to how they sign in are emailed, and where (Keycloak's email listener, on whenever the deployment has a relay). |
 | Notifications | Email for things that need you, a digest, quiet hours, and On Home or Quiet for each app and each kind of notification it names. AUGUR doesn't send email yet, and the section says so. |
 | Appearance | Reduce motion, area titles, toasts and density. |
-| Language and region | Their language, from the ones the deployment offers (`REALM_LANGUAGES`, the same as sign-in; kept as their `locale`, so sign-in pages and emails use it; with one language offered it says so and who can offer more); how dates and times are written (`dateFormat`, a region such as en-GB, and `clock`, 12- or 24-hour, each with an example); and the time zone (the browser's unless chosen). AUGUR's own words are in English for now, and it says so. |
+| Language and region | Their language, from the ones the deployment offers (`REALM_LANGUAGES`, the same as sign-in; kept as their `locale`, so sign-in pages and emails use it; with one language offered it says so and who can offer more); how dates and times are written (`dateFormat`, a region such as en-GB, and `clock`, 12- or 24-hour, each with an example); and the time zone (unless they choose one, the organisation's from Admin → Organisation, else the browser's; the section says which they follow). AUGUR's own words are in English for now, and it says so. |
 | Home and apps | The floor AUGUR opens on at its front door (`startFloor`; their own unless chosen, and a floor that is no longer theirs says so); pinned apps, first on Home and in the list of apps (`pinned`); recent apps, with a way to clear them; and each app's own settings. |
 | Privacy and data | Download my data; what others see about you (name and email to everyone signed in, through the people picker; away to everyone, beside your name; the rest to you and administrators); and asking to leave, pressed twice, with a way to take it back. |
 | About and help | What's running, and the keys. |
 
 An app that names its kinds of notification in its manifest (`notifications.kinds`) lists them under it, each On Home or Quiet (`quietKinds`, as `<app>:<kind>`); a quiet kind lands in the stream without a pulse, uncounted, and never on Home or as a toast.
 
-The shell writes every date and time it shows through `host/formats.ts`: the person's `dateFormat`, else their language (their choice here, else the `locale` their sign-in carries), else the browser's; in their time zone; with their clock. Apps don't get these yet.
+The shell writes every date and time it shows through `host/formats.ts`: the person's `dateFormat`, else their language (their choice here, else the `locale` their sign-in carries), else the browser's; in their time zone, else the organisation's (`GET /v1/organisation`, ADR 0042), else the browser's; with their clock. Apps don't get these yet.
 
 Coming back from Keycloak's screen, the shell's sign-in callback adds `kc_action_status` to the address it returns to, and the section says once whether the change was made.
 
