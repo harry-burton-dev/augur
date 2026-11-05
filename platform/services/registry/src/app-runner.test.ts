@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const manifest = { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', version: '1.2.0', sdk: '^1.3.0', storage: { database: true } };
@@ -24,12 +26,12 @@ const runner = { authorization: 'Bearer platform-updater' };
 
 const setup = async () => {
   const entries: { action: string; target?: string }[] = [];
-  const server = await buildApp({ verifyService, pillars: ['folio'], audit: async (e) => void entries.push(e) });
+  const server = await db.app({ verifyService, pillars: ['folio'], audit: async (e) => void entries.push(e) });
   const ask = (payload: unknown, headers = fresh()) => server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers, payload: payload as object });
   return { server, entries, ask };
 };
 
-describe('the app runner', () => {
+describe.runIf(DATABASE_URL)('the app runner', () => {
   it('installs only for a deployment admin who has just entered their password', async () => {
     const { ask } = await setup();
     expect((await ask({ action: 'install', release }, editor)).statusCode).toBe(403);

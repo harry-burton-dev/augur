@@ -1037,7 +1037,8 @@
         "folio",
         "auspex",
         "atlas",
-        "updater"
+        "updater",
+        "folio-worker"
       ],
       "x-docs": "docs/observability.md#turn-it-on",
       "default": "http://otel-lgtm:4318"
@@ -1055,7 +1056,8 @@
         "folio",
         "auspex",
         "atlas",
-        "updater"
+        "updater",
+        "folio-worker"
       ],
       "x-docs": "docs/observability.md#turn-it-on"
     },
@@ -1071,7 +1073,8 @@
         "folio",
         "auspex",
         "atlas",
-        "updater"
+        "updater",
+        "folio-worker"
       ],
       "x-docs": "docs/observability.md#for-a-service"
     },
@@ -1087,7 +1090,8 @@
         "folio",
         "auspex",
         "atlas",
-        "updater"
+        "updater",
+        "folio-worker"
       ],
       "x-docs": "docs/observability.md#turn-it-off"
     },
@@ -1103,7 +1107,8 @@
         "folio",
         "auspex",
         "atlas",
-        "updater"
+        "updater",
+        "folio-worker"
       ],
       "x-docs": "docs/observability.md#for-a-service"
     },
@@ -1593,7 +1598,8 @@
         "folio",
         "auspex",
         "atlas",
-        "updater"
+        "updater",
+        "folio-worker"
       ]
     },
     "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": {

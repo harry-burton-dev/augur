@@ -4,10 +4,12 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
-import { MemoryAppStore, type AppRecord } from './store.ts';
+import { type AppRecord } from './store.ts';
 import { feedSigner, repoOfFeed, sameRepository } from './feed-trust.ts';
 import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const listOf = (read: FeedRelease[] | FeedRead) => (Array.isArray(read) ? read : read.releases);
 const trustOf = (read: FeedRelease[] | FeedRead) => (Array.isArray(read) ? undefined : read.trust);
@@ -218,7 +220,7 @@ describe('the release feed', () => {
   });
 });
 
-describe('the Updates page', () => {
+describe.runIf(DATABASE_URL)('the Updates page', () => {
   it('says the deployment is up to date when nothing newer is out', async () => {
     const view = updatesView({ checker: await checked([release('0.2.0'), release('0.1.0')]), apps: [] });
     expect(view).toMatchObject({ running: { version: '0.2.0' }, feed: 'on', newer: [], needsYou: [] });
@@ -261,7 +263,7 @@ describe('the Updates page', () => {
 
   it('is for admins, and a check now is audited', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
-    const server = await buildApp({ updates: await checked([release('0.3.0'), release('0.2.0')]), audit: async (e) => void entries.push(e) });
+    const server = await db.app({ updates: await checked([release('0.3.0'), release('0.2.0')]), audit: async (e) => void entries.push(e) });
     expect((await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: editor })).statusCode).toBe(403);
     expect((await server.inject({ method: 'POST', url: '/v1/platform/updates/check', headers: editor })).statusCode).toBe(403);
     expect((await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json()).toMatchObject({ available: { version: '0.3.0' } });
@@ -270,12 +272,12 @@ describe('the Updates page', () => {
   });
 
   it('says the feed is off when the deployment turned it off', async () => {
-    const server = await buildApp();
+    const server = await db.app();
     expect((await server.inject({ method: 'GET', url: '/v1/platform/updates', headers: admin })).json()).toMatchObject({ feed: 'off', newer: [] });
   });
 });
 
-describe('upgrading', () => {
+describe.runIf(DATABASE_URL)('upgrading', () => {
   const images = { registry: 'ghcr.io/o/r/registry@sha256:aa', web: 'ghcr.io/o/r/web@sha256:bb' };
   const fresh = (at = new Date()) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: at.toISOString() });
   // An admin who runs the organisation but not the server (ADR 0022).
@@ -288,13 +290,13 @@ describe('upgrading', () => {
   const updater = { authorization: 'Bearer platform-updater' };
   const setup = async () => {
     const entries: { action: string; target?: string; actor: { id: string } }[] = [];
-    const server = await buildApp({ verifyService, updates: await checked([release('0.3.0', 'beta', { images, deploy: { 'compose.yml': 'cc' } }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
+    const server = await db.app({ verifyService, updates: await checked([release('0.3.0', 'beta', { images, deploy: { 'compose.yml': 'cc' } }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
     return { server, entries };
   };
 
   it('goes back to an earlier release the same way, for an admin who has just entered their password', async () => {
     const entries: { action: string; target?: string; actor: { id: string } }[] = [];
-    const server = await buildApp({
+    const server = await db.app({
       verifyService,
       updates: await checked([release('0.4.0', 'beta', { images }), release('0.3.0', 'beta', { images }), release('0.2.0', 'beta', { images, breaking: ['x'] }), release('0.1.0', 'beta', { images })], 'beta', '0.4.0'),
       audit: async (e) => void entries.push(e),
@@ -327,7 +329,7 @@ describe('upgrading', () => {
       const entries: { action: string; target?: string; detail?: Record<string, unknown> }[] = [];
       const checker = new UpdateChecker({ feed: async () => feed, running: { version: '0.2.0', channel: 'beta' }, channel: 'beta', ring });
       await checker.check();
-      return { server: await buildApp({ verifyService, updates: checker, audit: async (e) => void entries.push(e) }), entries };
+      return { server: await db.app({ verifyService, updates: checker, audit: async (e) => void entries.push(e) }), entries };
     };
     const reason = 'Proving the watch goes back on staging.';
     const ask = (server: Awaited<ReturnType<typeof buildApp>>, headers: Record<string, string>, version: string, why = reason) =>
@@ -409,7 +411,7 @@ describe('upgrading', () => {
 
   it('passes settings entered with the ask to the updater alone, until the upgrade ends', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
-    const server = await buildApp({ verifyService, updates: await checked([release('0.3.0', 'beta', { images, settings: settings(['OBJECT_STORE_URL'], ['OBJECT_STORE_URL']) }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
+    const server = await db.app({ verifyService, updates: await checked([release('0.3.0', 'beta', { images, settings: settings(['OBJECT_STORE_URL'], ['OBJECT_STORE_URL']) }), release('0.2.0')]), audit: async (e) => void entries.push(e) });
     const ask = (s: Record<string, string>) => server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0', settings: s } });
     expect((await ask({ NOT_A_SETTING: 'x' })).json().message).toBe('AUGUR 0.3.0 has no setting NOT_A_SETTING.');
     expect((await ask({ OBJECT_STORE_URL: 'a\nB=c' })).statusCode).toBe(400);
@@ -426,14 +428,14 @@ describe('upgrading', () => {
 
   it('ends an upgrade whose settings were lost in a restart, saying so, before the updater starts it', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
-    const store = new MemoryAppStore();
+    const store = db.store;
     const feed = () => checked([release('0.3.0', 'beta', { images, settings: settings(['OBJECT_STORE_URL'], ['OBJECT_STORE_URL']) }), release('0.2.0')]);
-    const before = await buildApp({ verifyService, store, updates: await feed(), audit: async (e) => void entries.push(e) });
+    const before = await db.app({ verifyService, store, updates: await feed(), audit: async (e) => void entries.push(e) });
     const asked = await before.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0', settings: { OBJECT_STORE_URL: 'https://s3.example.org' } } });
     expect(asked.statusCode).toBe(202);
     expect(asked.json().upgrade.settingNames).toEqual(['OBJECT_STORE_URL']);
     // The registry restarts: same store, a new process with nothing in memory.
-    const after = await buildApp({ verifyService, store, updates: await feed(), audit: async (e) => void entries.push(e) });
+    const after = await db.app({ verifyService, store, updates: await feed(), audit: async (e) => void entries.push(e) });
     expect((await after.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
     const upgrade = await store.upgrade();
     expect(upgrade).toMatchObject({ state: 'failed', message: expect.stringContaining('OBJECT_STORE_URL') });
@@ -447,10 +449,10 @@ describe('upgrading', () => {
     const updates = new UpdateChecker({ feed: async () => [release('0.2.1-dev.48', 'dev', { images }), release('0.2.0')], running: { version: '0.2.0', channel: 'beta' }, ring: 'dev' });
     await updates.check();
     // An admin upgraded this server once and it finished, so Automatic may start (ADR 0020, amended 2 Nov).
-    const store = new MemoryAppStore();
+    const store = db.store;
     await store.requestUpgrade({ id: 'up-0', from: '0.1.0', version: '0.2.0', images, requestedBy: 'u-1' });
     await store.progressUpgrade('up-0', { step: 'watch', state: 'done' }, { state: 'done' });
-    const server = await buildApp({ verifyService, store, updates, audit: async (e) => void entries.push(e) });
+    const server = await db.app({ verifyService, store, updates, audit: async (e) => void entries.push(e) });
     const target = (await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
     expect(target).toMatchObject({ version: '0.2.1-dev.48', from: '0.2.0', images, state: 'requested' });
     expect(entries.map((e) => `${e.action} ${e.target} by ${e.actor.id}`)).toEqual(['platform.upgrade-requested 0.2.1-dev.48 by registry']);
@@ -471,7 +473,7 @@ describe('upgrading', () => {
   });
 
   it('won’t upgrade to a release whose file names no images', async () => {
-    const server = await buildApp({ updates: await checked([release('0.3.0'), release('0.2.0')]) });
+    const server = await db.app({ updates: await checked([release('0.3.0'), release('0.2.0')]) });
     const res = await server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0' } });
     expect(res.json().message).toBe('AUGUR 0.3.0’s release file names no images, so it can’t be applied.');
   });
