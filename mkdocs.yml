@@ -28,6 +28,7 @@ nav:
   - Mirroring AUGUR releases: mirror.md
   - Notifications: notifications.md
   - Observability: observability.md
+  - "People: joining, changing and leaving": people.md
   - "Release channels: one branch, three rings": release-channels.md
   - Sample data (`pnpm seed`): seed.md
   - Shell principles: shell-principles.md

@@ -201,6 +201,33 @@ describe('People', () => {
     await press(button('Done'));
     expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/New one-time password given/);
   });
+
+  it('shows who asked to leave, and runs the leaver flow after asking twice', async () => {
+    const samOn = { ...sam, enabled: true };
+    const { sent } = gateway((method, url) => {
+      if (url === '/api/identity/v1/admin/people' && method === 'GET') return Response.json([alex, samOn]);
+      if (url === '/api/identity/v1/admin/leave-requests') return Response.json([{ person: 'u-2', requestedAt: '2026-11-01T09:00:00Z', note: 'Moving on' }]);
+      if (url === '/api/identity/v1/admin/people/u-2/leave' && method === 'POST') return Response.json({ ...samOn, enabled: false });
+      return undefined;
+    });
+    const el = await open('/people');
+    expect(rowsOf(el).find((r) => r[0] === 'Sam Okafor')!.join(' ')).toContain('Asked to leave');
+    await openRow(el, 'Sam Okafor');
+    const live = document.querySelector('[data-live]')!;
+    expect(live.querySelector('[data-leaver]')!.textContent).toContain('“Moving on”');
+    await press(button('They’re leaving'));
+    expect(sent.some((c) => c.url.endsWith('/u-2/leave'))).toBe(false);
+    await press(live.querySelector('[data-armed]'));
+    expect(sent.find((c) => c.url.endsWith('/u-2/leave'))!.body).toEqual({});
+    expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/They’ve left: signed out everywhere\. Apps keep what they own/);
+  });
+
+  it('won’t let an admin run the leaver flow on themselves', async () => {
+    gateway();
+    const el = await open('/people');
+    await openRow(el, 'Alex Rivera');
+    expect(shut(button('They’re leaving'))).toBe(true);
+  });
 });
 
 describe('Departments', () => {
