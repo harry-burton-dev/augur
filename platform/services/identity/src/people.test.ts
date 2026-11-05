@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders, GrantsUnavailable } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { MemoryDirectory } from './directory.ts';
 import { principalsOf } from './people.ts';
-import { MemoryWorkspaceStore } from './workspaces.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
+
+const db = identityDb();
 
 const verifyService = async (headers: Record<string, string | string[] | undefined>) =>
   ({ 'Bearer registry': { kind: 'platform', name: 'registry' } as const, 'Bearer folio': { kind: 'app', app: 'folio' } as const, 'Bearer other': { kind: 'app', app: 'other' } as const })[
@@ -12,7 +13,7 @@ const verifyService = async (headers: Record<string, string | string[] | undefin
 
 const setUp = async (grants = async (app: string) => (app === 'folio' ? (['people:read'] as const) : ([] as const))) => {
   const directory = new MemoryDirectory();
-  const workspaces = new MemoryWorkspaceStore();
+  const workspaces = db.workspaces;
   const org = await workspaces.org();
   const finance = await workspaces.createTeam('Finance');
   const payroll = await workspaces.createTeam('Payroll', finance.id);
@@ -21,13 +22,13 @@ const setUp = async (grants = async (app: string) => (app === 'folio' ? (['peopl
   const sam = await directory.createPerson({ username: 'sam', firstName: 'Sam', lastName: 'Okafor', email: 'sam@example.org', roles: ['deployment-admin'], departments: [] });
   const gone = await directory.createPerson({ username: 'gone', firstName: 'Ola', lastName: 'Gone', email: 'ola@example.org', roles: [], departments: [] });
   await directory.updatePerson(gone.id, { enabled: false });
-  const app = await buildApp({ workspaces, directory, verifyService, grants });
+  const app = await db.app({ workspaces, directory, verifyService, grants });
   await workspaces.setMember(payroll.id, alex.id, 'member');
   await workspaces.setMember(legal.id, alex.id, 'lead');
   return { app, org, finance, payroll, legal, alex, sam };
 };
 
-describe('people for apps', () => {
+describe.runIf(DATABASE_URL)('people for apps', () => {
   it('works out who someone stands for', () => {
     const teams = [
       { id: 'f', kind: 'team', name: 'Finance', slug: 'finance', path: ['o', 'f'] },

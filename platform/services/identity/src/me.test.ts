@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { DirectoryError, TWO_STEP_ROLE } from './directory.ts';
 import { KeycloakAccounts, MemoryAccounts, securityOf } from './me.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
+
+const db = identityDb();
 
 const alex = { id: 'u-1', name: 'Alex Rivera', departments: [], roles: [] };
 const admin = { ...alex, roles: ['admin', TWO_STEP_ROLE.name] };
@@ -24,10 +26,10 @@ const accountsWithAlex = () => {
   return accounts;
 };
 
-describe('the caller’s account', () => {
+describe.runIf(DATABASE_URL)('the caller’s account', () => {
   it('shows and changes their own profile, never someone else’s', async () => {
     const accounts = accountsWithAlex();
-    const app = await buildApp({ accounts });
+    const app = await db.app({ accounts });
     const me = callerHeaders(alex);
     expect((await app.inject({ method: 'GET', url: '/v1/me/profile', headers: me })).json()).toMatchObject({ username: 'alex', email: 'alex@example.org', managed: [] });
     const changed = await app.inject({ method: 'PATCH', url: '/v1/me/profile', headers: me, payload: { jobTitle: 'Analyst', pronouns: 'they/them' } });
@@ -43,7 +45,7 @@ describe('the caller’s account', () => {
   });
 
   it('offers the deployment’s languages and keeps theirs, refusing one it doesn’t offer', async () => {
-    const app = await buildApp({ accounts: accountsWithAlex(), languages: ['en', 'de'] });
+    const app = await db.app({ accounts: accountsWithAlex(), languages: ['en', 'de'] });
     const me = callerHeaders(alex);
     expect((await app.inject({ method: 'GET', url: '/v1/me/profile', headers: me })).json().languages).toEqual(['en', 'de']);
     const chosen = await app.inject({ method: 'PATCH', url: '/v1/me/profile', headers: me, payload: { locale: 'de' } });
@@ -56,7 +58,7 @@ describe('the caller’s account', () => {
   it('refuses a change to what the organisation’s sign-in sets, and says where to change it', async () => {
     const accounts = new MemoryAccounts();
     accounts.add('u-1', { username: 'alex', firstName: 'Alex', managed: ['firstName', 'lastName', 'email'], managedBy: 'Contoso' });
-    const app = await buildApp({ accounts });
+    const app = await db.app({ accounts });
     const res = await app.inject({ method: 'PATCH', url: '/v1/me/profile', headers: callerHeaders(alex), payload: { firstName: 'Al' } });
     expect(res.statusCode).toBe(409);
     expect(res.json().message).toContain('Contoso sets your first name');
@@ -66,7 +68,7 @@ describe('the caller’s account', () => {
 
   it('lists where they’re signed in, and ends only their own sessions', async () => {
     const accounts = accountsWithAlex();
-    const app = await buildApp({ accounts });
+    const app = await db.app({ accounts });
     const me = callerHeaders(alex);
     expect((await app.inject({ method: 'GET', url: '/v1/me/sessions', headers: me })).json().sessions.map((s: { id: string }) => s.id)).toEqual(['s-here', 's-laptop']);
     expect((await app.inject({ method: 'DELETE', url: '/v1/me/sessions/s-sam', headers: me })).statusCode).toBe(404);
@@ -80,14 +82,14 @@ describe('the caller’s account', () => {
   });
 
   it('lists recent sign-ins, failed ones too', async () => {
-    const app = await buildApp({ accounts: accountsWithAlex() });
+    const app = await db.app({ accounts: accountsWithAlex() });
     const res = await app.inject({ method: 'GET', url: '/v1/me/sign-ins?max=1', headers: callerHeaders(alex) });
     expect(res.json()).toEqual({ signIns: [{ time: '2026-11-05T08:00:00.000Z', kind: 'signed-in', event: 'LOGIN' }] });
     expect((await app.inject({ method: 'GET', url: '/v1/me/sign-ins?max=500', headers: callerHeaders(alex) })).statusCode).toBe(400);
   });
 
   it('says how they sign in and which of Keycloak’s screens changes each', async () => {
-    const app = await buildApp({ accounts: accountsWithAlex() });
+    const app = await db.app({ accounts: accountsWithAlex() });
     const security = (await app.inject({ method: 'GET', url: '/v1/me/security', headers: callerHeaders(admin) })).json();
     expect(security.password).toEqual({ set: true });
     expect(security.twoStep).toMatchObject({ required: true, set: true });
@@ -112,7 +114,7 @@ describe('the caller’s account', () => {
   });
 
   it('answers 503, saying why, without the sign-in service; preferences still work', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const res = await app.inject({ method: 'GET', url: '/v1/me/profile', headers: callerHeaders(alex) });
     expect(res.statusCode).toBe(503);
     expect(res.json().message).toContain('deployment admin can connect it');
@@ -121,7 +123,7 @@ describe('the caller’s account', () => {
   });
 
   it('keeps a time zone, away message and notification choices, refusing ones that make no sense', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const me = callerHeaders(alex);
     const prefs = { quietKinds: ['folio:comment'], pinned: ['folio', 'atlas'], startFloor: 'ws-finance', timeZone: 'Europe/London', dateFormat: 'en-US', clock: '24', awayMessage: 'Back Monday', awayUntil: '2026-11-09T09:00:00.000Z', notifications: { email: false, digest: 'weekly', quietHours: { from: '22:00', to: '07:00' } } };
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: me, payload: prefs })).statusCode).toBe(200);
@@ -132,11 +134,11 @@ describe('the caller’s account', () => {
   });
 });
 
-describe('privacy and data', () => {
+describe.runIf(DATABASE_URL)('privacy and data', () => {
   it('records a request to leave, tells admins once, and lets them take it back', async () => {
     const audited: { action: string }[] = [];
     const told: { title: string; audience?: string[] }[] = [];
-    const app = await buildApp({ accounts: accountsWithAlex(), audit: async (e) => void audited.push(e), tell: async (n) => void told.push(n) });
+    const app = await db.app({ accounts: accountsWithAlex(), audit: async (e) => void audited.push(e), tell: async (n) => void told.push(n) });
     const me = callerHeaders(alex);
     expect((await app.inject({ method: 'GET', url: '/v1/me/leave', headers: me })).json()).toEqual({});
     const asked = await app.inject({ method: 'POST', url: '/v1/me/leave', headers: me, payload: { note: 'Moving on in December' } });
@@ -153,7 +155,7 @@ describe('privacy and data', () => {
   it('gives a copy of their data, saying which parts it couldn’t read, and records it', async () => {
     const audited: { action: string }[] = [];
     const dataFrom = { events: async () => ({ notifications: [{ title: 'Hello' }] }), storage: async () => Promise.reject(new Error('it answered 503')) };
-    const app = await buildApp({ accounts: accountsWithAlex(), audit: async (e) => void audited.push(e), dataFrom });
+    const app = await db.app({ accounts: accountsWithAlex(), audit: async (e) => void audited.push(e), dataFrom });
     const res = await app.inject({ method: 'GET', url: '/v1/me/data', headers: callerHeaders(alex) });
     expect(res.statusCode).toBe(200);
     expect(res.headers['content-disposition']).toMatch(/^attachment; filename="my-data-\d{4}-\d{2}-\d{2}\.json"$/);
@@ -166,7 +168,7 @@ describe('privacy and data', () => {
     expect(JSON.stringify(data)).not.toMatch(/secretData|credentialData|hashedPassword/i);
     expect(audited.map((e) => e.action)).toEqual(['account.data-downloaded']);
     // Without the sign-in service, the account's parts are named as missing, and the rest still comes.
-    const bare = await (await buildApp({})).inject({ method: 'GET', url: '/v1/me/data', headers: callerHeaders(alex) });
+    const bare = await (await db.app({})).inject({ method: 'GET', url: '/v1/me/data', headers: callerHeaders(alex) });
     expect(bare.json().missing).toHaveLength(5);
   });
 });

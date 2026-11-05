@@ -38,7 +38,8 @@ for (const service of services) {
     continue;
   }
   const { buildApp } = await import(built);
-  const app = await buildApp();
+  // Only the routes are read: a service that needs its stores to answer gets none here.
+  const app = await buildApp({});
   await app.ready();
   const text = header(service) + stringify(app.swagger(), { lineWidth: 0, aliasDuplicateObjects: false });
   await app.close();

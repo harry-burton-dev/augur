@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
-import { MemoryWorkspaceStore } from './workspaces.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
+
+const db = identityDb({ orgName: 'Acme' });
 
 /** Acme: Finance (Payroll, Treasury) and Legal. Alex is on Payroll, Sam leads Payroll, Priya leads Finance, Lee is on Legal. */
 const acme = async () => {
-  const workspaces = new MemoryWorkspaceStore({ orgName: 'Acme' });
+  const workspaces = db.workspaces;
   const finance = await workspaces.createTeam('Finance');
   const payroll = await workspaces.createTeam('Payroll', finance.id);
   const treasury = await workspaces.createTeam('Treasury', finance.id);
@@ -15,12 +16,12 @@ const acme = async () => {
   await workspaces.setMember(finance.id, 'priya', 'lead');
   await workspaces.setMember(treasury.id, 'tom', 'member');
   await workspaces.setMember(legal.id, 'lee', 'lead');
-  const app = await buildApp({ workspaces });
+  const app = await db.app({ workspaces });
   return { app, finance, payroll, treasury, legal };
 };
 const as = (id: string, roles: string[] = []) => callerHeaders({ id, name: id, departments: [], roles });
 
-describe('your map', () => {
+describe.runIf(DATABASE_URL)('your map', () => {
   it('opens the floors you stand on, saying why, and shows every other team as a closed door', async () => {
     const { app, finance, payroll, treasury, legal } = await acme();
     const map = (await app.inject({ method: 'GET', url: '/v1/me/map', headers: as('alex') })).json();
