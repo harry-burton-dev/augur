@@ -361,6 +361,10 @@ services:
       SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      # The organisation's Entra, to sign in with the organisation's account (docs/deploy.md, Entra). All three or none.
+      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
+      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
+      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
       # Identity's database, read for the organisation's email sender (Admin → Organisation), which replaces SMTP_FROM.
       DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
     depends_on:

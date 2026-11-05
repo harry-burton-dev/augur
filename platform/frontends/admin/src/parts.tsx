@@ -39,6 +39,7 @@ const IDLE_EXEMPT: Record<'off' | 'no-email' | 'deployment-admin' | 'not-tracked
 /** What is known about someone's account, as label and value, for their dialog. */
 export const lifecycleFacts = (p: Person, nameOf: (id: string) => string): { label: string; value: string }[] => {
   const facts: { label: string; value: string }[] = [{ label: 'State', value: statusOf(p).label }, { label: 'Last sign-in', value: lastSignIn(p) }];
+  if (p.source) facts.push({ label: 'Signs in with', value: p.source === 'federated' ? 'The organisation’s sign-in' : 'A password here' });
   if (p.createdAt) facts.push({ label: 'Added', value: day(p.createdAt) });
   if (p.state === 'invited' && p.invite?.expiresAt) facts.push({ label: p.invite.expired ? 'Invite ran out' : 'Invite works until', value: day(p.invite.expiresAt) });
   if (p.lockout?.locked || p.locked) facts.push({ label: 'Locked out', value: p.lockout ? `After ${p.lockout.failures} wrong passwords in a row` : 'After repeated wrong passwords' });

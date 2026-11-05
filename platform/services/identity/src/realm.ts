@@ -553,6 +553,154 @@ export const applyIdleWorkflow = async (
   }
 };
 
+/**
+ * Entra as the organisation's sign-in (ADR 0040, PER-194 spec 4.8). With the three ENTRA_* settings the realm
+ * gets one OpenID Connect identity provider, `entra`, for the organisation's own tenant, and the sign-in pages
+ * offer it beside the password. The first time someone signs in through it, Keycloak links them to the account
+ * with the same email, or makes one if nobody has it (`ENTRA_FIRST_SIGN_IN`), with no Keycloak password asked
+ * for. That is safe because the app registration is single-tenant: only the organisation's people can sign in,
+ * and their emails are the organisation's (`trustEmail`). Names and email follow Entra at every sign-in.
+ * Their second step is Entra's own, under the organisation's Conditional Access.
+ *
+ * Without the settings an `entra` provider that is there is turned off, never deleted, so the links survive a
+ * mistake in `.env`.
+ */
+export const ENTRA_ALIAS = 'entra';
+export const ENTRA_FIRST_SIGN_IN = 'augur first sign-in';
+/** Where the provider keeps a fingerprint of what it was set to, the secret included, so a new secret is noticed without reading it back. */
+export const ENTRA_FINGERPRINT = 'augurFingerprint';
+
+export interface RealmEntra {
+  tenantId: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+/** The organisation's Entra from ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET: all three or none. */
+export const realmEntraFromEnv = (env: Record<string, string | undefined>, warn: (message: string) => void = () => undefined): RealmEntra | undefined => {
+  const tenantId = env.ENTRA_TENANT_ID?.trim();
+  const clientId = env.ENTRA_CLIENT_ID?.trim();
+  const clientSecret = env.ENTRA_CLIENT_SECRET?.trim();
+  if (!tenantId && !clientId && !clientSecret) return undefined;
+  if (!tenantId || !clientId || !clientSecret) {
+    warn('Entra needs all of ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET; one is missing, so people sign in with a password only (docs/deploy.md, Entra).');
+    return undefined;
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(tenantId)) {
+    warn('ENTRA_TENANT_ID should be the tenant’s id (a GUID, from Entra’s Overview), not its domain, so the sign-in is for that tenant alone. Entra is not set up.');
+    return undefined;
+  }
+  return { tenantId, clientId, clientSecret };
+};
+
+/** Keycloak's representation of the `entra` provider, named for the organisation. */
+export const entraProvider = (entra: RealmEntra, orgName: string) => {
+  const base = `https://login.microsoftonline.com/${encodeURIComponent(entra.tenantId)}`;
+  const config: Record<string, string> = {
+    issuer: `${base}/v2.0`,
+    authorizationUrl: `${base}/oauth2/v2.0/authorize`,
+    tokenUrl: `${base}/oauth2/v2.0/token`,
+    logoutUrl: `${base}/oauth2/v2.0/logout`,
+    jwksUrl: `${base}/discovery/v2.0/keys`,
+    useJwksUrl: 'true',
+    validateSignature: 'true',
+    clientId: entra.clientId,
+    clientSecret: entra.clientSecret,
+    clientAuthMethod: 'client_secret_post',
+    defaultScope: 'openid profile email',
+    syncMode: 'FORCE',
+    prompt: 'select_account',
+    pkceEnabled: 'true',
+    pkceMethod: 'S256',
+  };
+  return {
+    alias: ENTRA_ALIAS,
+    providerId: 'oidc',
+    displayName: `${orgName} account`,
+    enabled: true,
+    trustEmail: true,
+    storeToken: false,
+    linkOnly: false,
+    firstBrokerLoginFlowAlias: ENTRA_FIRST_SIGN_IN,
+    config: { ...config, [ENTRA_FINGERPRINT]: mailFingerprint({ ...config, displayName: orgName }) },
+  };
+};
+
+/** What Entra's claims fill in on the account, at every sign-in. */
+export const ENTRA_MAPPERS = [
+  { name: 'first name', claim: 'given_name', attribute: 'firstName' },
+  { name: 'last name', claim: 'family_name', attribute: 'lastName' },
+  { name: 'email', claim: 'email', attribute: 'email' },
+] as const;
+
+interface KcProvider {
+  alias: string;
+  enabled?: boolean;
+  config?: Record<string, string>;
+}
+
+/**
+ * The first sign-in through Entra: link to the account with the same email, else make one. Two alternatives,
+ * as Keycloak's guide to linking automatically has it, in place of its default that asks for the old password.
+ */
+const applyFirstSignInFlow = async (kc: KeycloakDirectory, changes: Changes) => {
+  const flows = (await kc.call<{ alias: string }[]>('GET', '/authentication/flows')).data;
+  if (flows.some((f) => f.alias === ENTRA_FIRST_SIGN_IN)) return;
+  await kc.call('POST', '/authentication/flows', {
+    alias: ENTRA_FIRST_SIGN_IN,
+    description: "The first sign-in through the organisation's Entra: linked to the account with the same email, or a new one.",
+    providerId: 'basic-flow',
+    topLevel: true,
+    builtIn: false,
+  });
+  const path = `/authentication/flows/${encodeURIComponent(ENTRA_FIRST_SIGN_IN)}/executions`;
+  for (const provider of ['idp-create-user-if-unique', 'idp-auto-link']) {
+    const { location } = await kc.call('POST', `${path}/execution`, { provider });
+    const exec = (await kc.call<Execution[]>('GET', path)).data.find((e) => e.id === location?.split('/').pop());
+    if (!exec) throw new DirectoryError(`The sign-in service didn't add ${provider} to the first sign-in through Entra.`, 503);
+    await kc.call('PUT', path, { ...exec, requirement: 'ALTERNATIVE' });
+  }
+  changes.push(`entra: first sign-in links by email (${ENTRA_FIRST_SIGN_IN})`);
+};
+
+/** Keeps the `entra` provider, its first sign-in and its mappers as the settings say, or turns it off without them. */
+export const applyEntra = async (kc: KeycloakDirectory, entra: RealmEntra | undefined, orgName: string, changes: Changes) => {
+  const at = `/identity-provider/instances/${ENTRA_ALIAS}`;
+  const existing = await kc
+    .call<KcProvider>('GET', at)
+    .then((r) => r.data)
+    .catch((err: unknown) => {
+      if (err instanceof DirectoryError && err.status === 404) return undefined;
+      throw err;
+    });
+  if (!entra) {
+    if (existing?.enabled) {
+      await kc.call('PUT', at, { ...existing, enabled: false });
+      changes.push('entra: turned off (no ENTRA_* settings); accounts stay linked');
+    }
+    return;
+  }
+  await applyFirstSignInFlow(kc, changes);
+  const want = entraProvider(entra, orgName);
+  if (!existing) {
+    await kc.call('POST', '/identity-provider/instances', want);
+    changes.push(`entra: the organisation's sign-in for tenant ${entra.tenantId}`);
+  } else if (!existing.enabled || existing.config?.[ENTRA_FINGERPRINT] !== want.config[ENTRA_FINGERPRINT]) {
+    await kc.call('PUT', at, want);
+    changes.push(`entra: brought up to date for tenant ${entra.tenantId}`);
+  }
+  const mappers = (await kc.call<{ name: string }[]>('GET', `${at}/mappers`)).data;
+  for (const m of ENTRA_MAPPERS.filter((x) => !mappers.some((have) => have.name === x.name))) {
+    await kc.call('POST', `${at}/mappers`, {
+      name: m.name,
+      identityProviderAlias: ENTRA_ALIAS,
+      identityProviderMapper: 'oidc-user-attribute-idp-mapper',
+      config: { syncMode: 'FORCE', claim: m.claim, 'user.attribute': m.attribute },
+    });
+    changes.push(`entra: ${m.name} comes from Entra`);
+  }
+};
+
 /** Whether Keycloak can send email: the organisation's relay, or one set in Keycloak's console. */
 const canEmail = async (kc: KeycloakDirectory, mail: RealmMail | undefined) =>
   Boolean(mail) || Boolean((await kc.call<{ smtpServer?: { host?: string } }>('GET', '')).data.smtpServer?.host);
@@ -578,6 +726,10 @@ export interface ApplyOptions {
   sender?: { name: string; address?: string };
   /** The organisation's idle-account days (`realmIdleFromDb`); without them the idle Workflow is left as it is. */
   idle?: IdleDays;
+  /** The organisation's Entra (`realmEntraFromEnv`); without it an `entra` provider is turned off. */
+  entra?: RealmEntra;
+  /** What the organisation is called, for the Entra button: "{name} account". */
+  orgName?: string;
 }
 
 /**
@@ -595,6 +747,7 @@ export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): 
   await applyRoles(kc, changes);
   await applyUserProfile(kc, changes);
   await applySignInFlow(kc, changes);
+  await applyEntra(kc, options.entra, options.orgName ?? options.sender?.name ?? options.productName ?? DEFAULT_PRODUCT_NAME, changes);
   const secrets = options.identity ? [[options.identity.clientId, options.identity.secret] as [string, string], ...options.serviceSecrets.filter(([id]) => id !== options.identity!.clientId)] : options.serviceSecrets;
   for (const [clientId, secret] of secrets) await options.clients.ensure(clientId, secret);
   if (options.identity) await applyServiceAccountRights(kc, options.identity.clientId, IDENTITY_RIGHTS, changes);

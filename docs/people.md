@@ -63,6 +63,10 @@ Someone's sign-in can be turned off or on in Keycloak's admin console, and later
 
 The first comparison only takes note: accounts already off then are kept as off with no cause, and nothing is announced. A leaver turned back on in the console is left alone; People still shows them as left.
 
+## Signing in with the organisation's Entra
+
+Where a deployment has set up Entra (docs/deploy.md, Entra), someone's first sign-in through it links them to the account with the same email, or makes one when nobody has it, with no AUGUR password asked for. From then on `source` is `federated` and their dialog says they sign in with the organisation's sign-in; their name and email follow Entra. An account made this way is recorded as `person.added` with `method: 'federated'` by Keycloak (Activity: "Sam joined through the organisation's sign-in"), so followers hear `platform.person.joined` as for anyone an admin adds; it starts with no roles or teams.
+
 ## For apps
 
 Follow `platform.person.left` (`PLATFORM_TOPICS.personLeft` in the service kit). When `handOverTo` is there, move what the leaver owns to that person, or offer it to them. When it isn't, keep it and show it as the leaver's until an admin or a team lead hands it on. Team inbox items a person had taken go back to their team when their sign-in goes off (docs/inbox.md).
@@ -98,4 +102,4 @@ Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/
 
 ## Not built yet
 
-Deletion after retention with `platform.person.deleted`, and linking an Entra first sign-in by verified email. Each comes with PER-194.
+Deletion after retention with `platform.person.deleted` comes with PER-194.

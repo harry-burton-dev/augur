@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { KeycloakDirectory } from './directory.ts';
-import { applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { DirectoryError, KeycloakDirectory } from './directory.ts';
+import { applyEntra, ENTRA_FIRST_SIGN_IN, realmEntraFromEnv, applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -343,5 +343,86 @@ describe('idle accounts through Keycloak’s Workflow (PER-194)', () => {
     const t = workflowsAt([{ id: 'old', name: `${IDLE_WORKFLOW}-60-90` }]);
     await applyIdleWorkflow(t.kc, undefined, true, []);
     expect(t.calls).toEqual([]);
+  });
+});
+
+describe('Entra as the organisation’s sign-in', () => {
+  const entra = { tenantId: '11111111-2222-3333-4444-555555555555', clientId: 'augur-app', clientSecret: 's3cret' };
+
+  it('needs all three settings and a tenant id, not a domain', () => {
+    const warnings: string[] = [];
+    expect(realmEntraFromEnv({})).toBeUndefined();
+    expect(realmEntraFromEnv({ ENTRA_TENANT_ID: entra.tenantId }, (m) => warnings.push(m))).toBeUndefined();
+    expect(realmEntraFromEnv({ ENTRA_TENANT_ID: 'example.org', ENTRA_CLIENT_ID: 'a', ENTRA_CLIENT_SECRET: 'b' }, (m) => warnings.push(m))).toBeUndefined();
+    expect(warnings).toHaveLength(2);
+    expect(realmEntraFromEnv({ ENTRA_TENANT_ID: entra.tenantId, ENTRA_CLIENT_ID: 'augur-app', ENTRA_CLIENT_SECRET: 's3cret' })).toEqual(entra);
+  });
+
+  it('adds the provider for the tenant, its first sign-in that links by email, and its mappers; then changes nothing', async () => {
+    let provider: Record<string, unknown> | undefined;
+    const flows: { alias: string }[] = [];
+    const executions: { id: string; requirement: string; providerId: string }[] = [];
+    let mappers: { name: string }[] = [];
+    const { calls, kc } = keycloak((method, path, body) => {
+      if (path === '/identity-provider/instances/entra' && method === 'GET') return provider ?? { __status: 404 };
+      if (path === '/identity-provider/instances' && method === 'POST') provider = body as Record<string, unknown>;
+      if (path === '/identity-provider/instances/entra' && method === 'PUT') provider = body as Record<string, unknown>;
+      if (path === '/authentication/flows' && method === 'GET') return flows;
+      if (path === '/authentication/flows' && method === 'POST') flows.push(body as { alias: string });
+      if (path.endsWith('/executions') && method === 'GET') return executions;
+      if (path.endsWith('/mappers') && method === 'GET') return mappers;
+      if (path.endsWith('/mappers') && method === 'POST') mappers = [...mappers, body as { name: string }];
+      return undefined;
+    });
+    // The fake answers 404 for a missing provider through the directory's own error.
+    const call = kc.call.bind(kc);
+    let n = 0;
+    kc.call = (async (method: string, path: string, body?: unknown) => {
+      if (path === '/authentication/flows/augur%20first%20sign-in/executions/execution') {
+        const id = `e${++n}`;
+        executions.push({ id, requirement: 'DISABLED', providerId: (body as { provider: string }).provider });
+        calls.push({ method, path, body });
+        return { data: undefined, location: `http://kc/x/${id}` };
+      }
+      const r = await call(method, path, body);
+      if ((r.data as { __status?: number } | undefined)?.__status === 404) throw new DirectoryError('missing', 404);
+      return r;
+    }) as typeof kc.call;
+    const changes: string[] = [];
+    await applyEntra(kc, entra, 'Example Org', changes);
+    expect(flows).toEqual([expect.objectContaining({ alias: ENTRA_FIRST_SIGN_IN, providerId: 'basic-flow' })]);
+    expect(calls.filter((c) => c.method === 'PUT' && c.path.endsWith('/executions')).map((c) => (c.body as { requirement: string }).requirement)).toEqual(['ALTERNATIVE', 'ALTERNATIVE']);
+    expect(provider).toMatchObject({
+      alias: 'entra',
+      providerId: 'oidc',
+      displayName: 'Example Org account',
+      trustEmail: true,
+      firstBrokerLoginFlowAlias: ENTRA_FIRST_SIGN_IN,
+      config: { issuer: `https://login.microsoftonline.com/${entra.tenantId}/v2.0`, clientId: 'augur-app', syncMode: 'FORCE', defaultScope: 'openid profile email' },
+    });
+    expect(mappers.map((m) => m.name)).toEqual(['first name', 'last name', 'email']);
+    expect(changes.length).toBeGreaterThan(0);
+
+    const again: string[] = [];
+    await applyEntra(kc, entra, 'Example Org', again);
+    expect(again).toEqual([]);
+    // A new secret is noticed from the fingerprint, without reading the secret back.
+    await applyEntra(kc, { ...entra, clientSecret: 'new' }, 'Example Org', again);
+    expect(again).toEqual([`entra: brought up to date for tenant ${entra.tenantId}`]);
+  });
+
+  it('turns the provider off without the settings, keeping it and its links', async () => {
+    let provider: Record<string, unknown> = { alias: 'entra', enabled: true, config: {} };
+    const { kc } = keycloak((method, path, body) => {
+      if (path !== '/identity-provider/instances/entra') return undefined;
+      if (method === 'PUT') provider = body as Record<string, unknown>;
+      return method === 'GET' ? provider : undefined;
+    });
+    const changes: string[] = [];
+    await applyEntra(kc, undefined, 'Example Org', changes);
+    expect(provider.enabled).toBe(false);
+    expect(changes).toEqual(['entra: turned off (no ENTRA_* settings); accounts stay linked']);
+    await applyEntra(kc, undefined, 'Example Org', changes);
+    expect(changes).toHaveLength(1);
   });
 });

@@ -164,6 +164,7 @@ export const Person = Type.Object(
     left: Type.Optional(
       Type.Object({ at: Type.String({ format: 'date-time' }), by: Type.String(), handOverTo: Type.Optional(Type.String()) }, { description: 'When they left, who ran the leaver flow, and who took on their work' }),
     ),
+    source: Type.Optional(choice(['local', 'federated'], { description: 'How they sign in: a password here, or the organisation’s sign-in (Entra) since their first sign-in through it' })),
     locked: Type.Optional(Type.Boolean({ description: 'Locked out for now after repeated wrong passwords; an admin can lift it' })),
     leaving: Type.Optional(
       Type.Object(

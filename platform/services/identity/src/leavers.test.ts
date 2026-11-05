@@ -3,7 +3,7 @@ import type { NewAuditEntry } from '@augur/service-kit';
 import { MemoryDirectory } from './directory.ts';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
 import { addDays, leaveDueLeavers, todayIn } from './leavers.ts';
-import { idleOf, lockedOf } from './lifecycle.ts';
+import { federatedFirstSignIn, idleOf, lockedOf, withLifecycle } from './lifecycle.ts';
 
 describe('dates for a last day', () => {
   it('reads today where the organisation is, and counts days on', () => {
@@ -58,5 +58,26 @@ describe.runIf(DATABASE_URL)('leaver flows set for after a last day', () => {
     expect(kept.left).toMatchObject({ by: 'admin-1', handOverTo: sam.id });
     expect(kept.leaving).toBeUndefined();
     expect((await db.lifecycle.get([sam.id])).get(sam.id)!.leaving).toEqual({ on: '2026-11-06', by: 'admin-1' });
+  });
+});
+
+describe.runIf(DATABASE_URL)('a first sign-in through the organisation’s sign-in', () => {
+  const db = identityDb();
+
+  it('marks them as signing in with it, and records an account it made as added, once', async () => {
+    const directory = new MemoryDirectory();
+    const made = await directory.createPerson({ username: 'new', firstName: 'New', lastName: 'Person', email: 'new@example.org', roles: [], departments: [] });
+    const linked = await directory.createPerson({ username: 'old', firstName: 'Old', lastName: 'Hand', email: 'old@example.org', roles: [], departments: [] });
+    await db.lifecycle.invited(linked.id, 'temporary-password');
+    const entries: NewAuditEntry[] = [];
+    const deps = { lifecycle: db.lifecycle, directory, audit: async (e: NewAuditEntry) => void entries.push(e) };
+    const now = new Date().toISOString();
+    await federatedFirstSignIn(deps, made.id, now);
+    await federatedFirstSignIn(deps, made.id, now);
+    await federatedFirstSignIn(deps, linked.id, now);
+    expect(entries.map((e) => [e.action, e.target, e.detail?.method])).toEqual([['person.added', made.id, 'federated']]);
+    const kept = await db.lifecycle.get([made.id, linked.id]);
+    expect(withLifecycle(made, kept.get(made.id)).source).toBe('federated');
+    expect(withLifecycle(linked, kept.get(linked.id)).source).toBe('federated');
   });
 });

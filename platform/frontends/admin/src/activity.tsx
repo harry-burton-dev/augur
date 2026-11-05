@@ -33,6 +33,7 @@ export const describe = (e: AuditEntry, names: Names): string => {
   const d = e.detail ?? {};
   switch (e.action) {
     case 'person.added':
+      if (d.method === 'federated') return `${names.person(target)} joined through the organisation’s sign-in`;
       return `${who} added ${names.person(target)}`;
     case 'person.updated': {
       const what = [...new Set(Object.keys(d).map((k) => changedWords[k]).filter(Boolean))];

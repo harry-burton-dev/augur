@@ -8,7 +8,7 @@ import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
 import { PgPreferenceStore } from './store.ts';
 import { PgWorkspaceStore } from './workspaces.ts';
 import { organisationSettings, PgOrganisationStore } from './organisation.ts';
-import { PgLifecycleStore } from './lifecycle.ts';
+import { federatedFirstSignIn, PgLifecycleStore } from './lifecycle.ts';
 import { reconcile, PgReconcileStore } from './reconcile.ts';
 import { leaveDueLeavers } from './leavers.ts';
 import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
@@ -124,7 +124,9 @@ const dataFrom =
 if (keycloakEvents && audit) {
   const events = keycloakEvents;
   const copy = () =>
-    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at), locked: (person, at) => lifecycle.locked(person, at) }).catch((err: Error) =>
+    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at), locked: (person, at) => lifecycle.locked(person, at),
+      ...(directory ? { federated: (person: string, at: string) => federatedFirstSignIn({ lifecycle, directory: directory!, audit }, person, at) } : {}),
+    }).catch((err: Error) =>
       log.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
     );
   setInterval(copy, 60_000).unref();
