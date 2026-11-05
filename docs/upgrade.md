@@ -58,30 +58,30 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### Data Atlas can draw a base map from a file you keep
 
-**From** unreleased
+**From** augur@0.23.0
 
 Nothing to do: Data Atlas's maps work without one, drawing points on a plain background and saying why. To add a base map, put a vector PMTiles file in `maps/` beside your compose file and set `ATLAS_MAP_TILES=/maps/<file>.pmtiles` in `.env`, then `pc up -d atlas`. docs/atlas.md, Maps, says how to cut one for your region. No map request leaves the server.
 
 ### The first admin's department is called Administration on new servers
 
-**From** unreleased
+**From** augur@0.23.0
 
 Nothing to do on a server that's already running: its departments keep their names, because the realm reads `PLATFORM_ADMIN_DEPARTMENT` only at first start. On a new server, the first admin's department is now called `Administration` instead of `Platform` unless `PLATFORM_ADMIN_DEPARTMENT` names another. To rename an existing one, use Admin → Departments.
 ### Idle accounts are warned, then turned off
 
-**From** unreleased
+**From** augur@0.23.0
 
 Where email is set up, Keycloak now emails someone who hasn't signed in for 60 days and turns their sign-in off at 90 (Admin → Organisation, Idle accounts, to change the days or turn it off). The count starts at each person's next sign-in after this upgrade, so nobody is turned off sooner than 90 days from now. Deployment admins are never turned off. If you'd rather not, turn idle accounts off in Admin → Organisation, then run `pc up -d keycloak-config` so it applies straight away (docs/people.md, Idle accounts).
 
 ### People are emailed when how they sign in changes
 
-**From** unreleased
+**From** augur@0.23.0
 
 Once email is set up (`SMTP_*`), Keycloak emails each person when their password, code app or passkeys change. The realm job turns this on at `pc up -d`, and people see it in Account → Sign-in and security. Failed sign-ins aren't emailed. Nothing to do.
 
 ### Adding someone sends an invite email
 
-**From** unreleased
+**From** augur@0.23.0
 
 Where email is set up (`SMTP_*`, docs/deploy.md, Email), Admin → People → Add a person now emails an invite by default: a link that lasts 72 hours to confirm their email and choose a password. The one-time password is still there under **How they start**, and is the only choice where email isn't set up. Nothing to do, unless your relay refuses mail from Keycloak: then Admin says the invite couldn't be sent, and Admin → Status, Email says why.
 

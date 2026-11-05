@@ -1,5 +1,20 @@
 # @augur/storage
 
+## 0.5.0
+
+### Minor Changes
+
+- 8b22fe4: Identity answers `GET /v1/notice-settings` for the events service: each person's confirmed address,
+  language, time zone (theirs, else the organisation's) and choices in Account → Notifications, so
+  notices can be emailed. Storage gives each platform service a jobs schema of its own.
+
+### Patch Changes
+
+- 6ec3e70: What these services say as they start, and the storage and realm jobs as they run, goes through the service kit's `startupLog` instead of `console`: the same JSON lines as the rest of their logs, sent to the deployment's telemetry stack with them.
+- Updated dependencies [1a8561d]
+- Updated dependencies [c678672]
+  - @augur/service-kit@0.17.0
+
 ## 0.4.5
 
 ### Patch Changes

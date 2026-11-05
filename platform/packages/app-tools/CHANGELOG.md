@@ -1,5 +1,13 @@
 # @augur/app-tools
 
+## 0.4.2
+
+### Patch Changes
+
+- Updated dependencies [1a8561d]
+- Updated dependencies [c678672]
+  - @augur/service-kit@0.17.0
+
 ## 0.4.1
 
 ### Patch Changes
