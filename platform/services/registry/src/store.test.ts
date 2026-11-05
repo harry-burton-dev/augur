@@ -57,6 +57,10 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     // The history keeps every one, newest first, with who asked.
     expect((await store.upgrades()).map((u) => `${u.id} ${u.state} ${u.requestedByName}`)).toEqual(['up-3 cancelled Alex', 'up-1 done Alex']);
     expect((await store.upgrades(1)).map((u) => u.id)).toEqual(['up-3']);
+    // Only the names of settings entered for an upgrade are kept, never their values.
+    expect(await store.requestUpgrade({ id: 'up-4', from: '0.3.0', version: '0.4.0', images: {}, requestedBy: 'u-1', settingNames: ['OBJECT_STORE_URL'] })).toBe(true);
+    expect((await store.upgrade())?.settingNames).toEqual(['OBJECT_STORE_URL']);
+    expect(await store.cancelUpgrade('up-4')).toBe(true);
   });
 
   it('keeps one job open per app for the app runner, oldest first', async () => {
@@ -308,7 +312,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch', '019_frontend_folders']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch', '019_frontend_folders', '020_upgrade_setting_names']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

@@ -424,6 +424,24 @@ describe('upgrading', () => {
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json().settings).toBeUndefined();
   });
 
+  it('ends an upgrade whose settings were lost in a restart, saying so, before the updater starts it', async () => {
+    const entries: { action: string; detail?: unknown }[] = [];
+    const store = new MemoryAppStore();
+    const feed = () => checked([release('0.3.0', 'beta', { images, settings: settings(['OBJECT_STORE_URL'], ['OBJECT_STORE_URL']) }), release('0.2.0')]);
+    const before = await buildApp({ verifyService, store, updates: await feed(), audit: async (e) => void entries.push(e) });
+    const asked = await before.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0', settings: { OBJECT_STORE_URL: 'https://s3.example.org' } } });
+    expect(asked.statusCode).toBe(202);
+    expect(asked.json().upgrade.settingNames).toEqual(['OBJECT_STORE_URL']);
+    // The registry restarts: same store, a new process with nothing in memory.
+    const after = await buildApp({ verifyService, store, updates: await feed(), audit: async (e) => void entries.push(e) });
+    expect((await after.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
+    const upgrade = await store.upgrade();
+    expect(upgrade).toMatchObject({ state: 'failed', message: expect.stringContaining('OBJECT_STORE_URL') });
+    expect(upgrade?.message).toContain('ask for the upgrade again');
+    expect(entries.at(-1)).toMatchObject({ action: 'platform.upgrade-failed', detail: { reason: 'settings-lost', settings: ['OBJECT_STORE_URL'] } });
+    expect(JSON.stringify(await store.upgrades())).not.toContain('s3.example.org');
+  });
+
   it('on the workbench, asks the updater for a new dev build by itself, and audits it', async () => {
     const entries: { action: string; target?: string; actor: { id: string } }[] = [];
     const updates = new UpdateChecker({ feed: async () => [release('0.2.1-dev.48', 'dev', { images }), release('0.2.0')], running: { version: '0.2.0', channel: 'beta' }, ring: 'dev' });
@@ -484,7 +502,7 @@ describe('the signed feed (ADR 0017)', () => {
 
   it('takes a signed feed in date, and lists a halted release as halted', async () => {
     const read = await releaseFeed({ url, fetchImpl: registry(feedText(), 'the-bundle'), check: signedBy(true), signer: 'feed.yml', now: () => NOW })('0.2.0');
-    expect(trustOf(read)).toEqual({ state: 'verified', expires: '2026-11-15T00:00:00Z', signer: 'feed.yml' });
+    expect(trustOf(read)).toEqual({ state: 'verified', expires: '2026-11-15T00:00:00Z', issued: '2026-11-01T00:00:00Z', signer: 'feed.yml' });
     expect(listOf(read).find((r) => r.version === '0.2.5')?.halted).toEqual({ reason: 'Sign-in fails after it', at: '2026-11-01T10:00:00Z' });
   });
 
@@ -494,6 +512,19 @@ describe('the signed feed (ADR 0017)', () => {
     await expect(read(feedText(), 'the-bundle', false)).rejects.toThrow(/signature didn’t check out, so nothing new is offered: none of the expected identities/);
     await expect(read(feedText('2026-10-31T00:00:00Z'), 'the-bundle')).rejects.toThrow(/expired on 2026-10-31/);
     await expect(read(feedText('soon'), 'the-bundle')).rejects.toThrow(/doesn’t say when it expires/);
+  });
+
+  it('refuses an older feed, still in date, once it has taken a newer one', async () => {
+    let text = feedText('2026-11-15T00:00:00Z', { issued: '2026-11-01T06:00:00Z' });
+    const read = releaseFeed({ url, fetchImpl: (async (input: RequestInfo | URL) => registry(text, 'the-bundle')(input)) as typeof fetch, check: signedBy(true), now: () => NOW });
+    expect(trustOf(await read('0.2.0'))).toMatchObject({ state: 'verified', issued: '2026-11-01T06:00:00Z' });
+    text = feedText('2026-11-15T00:00:00Z', { issued: '2026-10-30T00:00:00Z' });
+    await expect(read('0.2.0')).rejects.toThrow(/issued on 2026-10-30 00:00, before the one this server already accepted \(2026-11-01 06:00\), so it could be hiding a newer release or a halt/);
+    text = feedText('2026-11-15T00:00:00Z', { issued: undefined });
+    await expect(read('0.2.0')).rejects.toThrow(/issued at an unknown time/);
+    // The same feed again, or a newer one, is taken.
+    text = feedText('2026-11-15T00:00:00Z', { issued: '2026-11-01T06:00:00Z' });
+    expect(trustOf(await read('0.2.0')).issued).toBe('2026-11-01T06:00:00Z');
   });
 
   it('expects the Release feed workflow of the feed’s own repository', () => {

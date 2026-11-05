@@ -674,6 +674,11 @@ components:
               type: string
               format: date-time
           description: The light watch after a watch too quiet to judge errors by (ADR 0020, amended)
+        settingNames:
+          type: array
+          items:
+            type: string
+          description: The names of the settings entered for it; their values are never stored
     UpgradeStep:
       enum:
         - preflight
@@ -1374,6 +1379,10 @@ components:
           type: string
           format: date-time
           description: When a verified feed stops being good unless it is issued again
+        issued:
+          type: string
+          format: date-time
+          description: When the publisher issued a verified feed; an older one is refused after it
         signer:
           type: string
           description: The workflow that signed it, as cosign checked it
@@ -4128,7 +4137,7 @@ paths:
   /platform/upgrade:
     put:
       summary: Ask the deployment's updater to upgrade AUGUR (deployment admins only)
-      description: "`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again. Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as platform.upgrade-requested. `settings` are new settings for `.env`, each one the release has: they're kept in memory for the updater until the upgrade ends, never stored, and only their names are audited. An empty value is left out."
+      description: "`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again. Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as platform.upgrade-requested. `settings` are new settings for `.env`, each one the release has: they're kept in memory for the updater until the upgrade ends, never stored, and only their names are stored and audited. If the registry restarts before the updater takes them, the upgrade ends failed and says to ask again. An empty value is left out."
       requestBody:
         required: true
         content:
