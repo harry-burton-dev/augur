@@ -1,5 +1,27 @@
 # @augur/gateway
 
+## 0.11.0
+
+### Minor Changes
+
+- 88f3b55: The database can be restored to any moment in the last 7 days (ADR 0064). Postgres archives its changes (WAL) as it makes them, the backup container takes a base backup each night, copies both off the server every hour once the off-server copy is set up, and replays them in the weekly restore test; `backup/restore-to-time.sh` goes back to a moment. Admin → Status shows how far back the database can go and the last replay test, and says why when it can't be relied on (`backups.pointInTime`, gateway contract 1.8.0).
+- 33b6fa3: AUGUR's own email sender (ADR 0065): `@augur/service-kit/mail` sends notice emails through the organisation's relay with Nodemailer, from React Email templates, and says why when it can't. The relay settings (`mailRelayFromEnv`) move into the service kit, shared with the realm job. The gateway's status now says whether email can be sent, and Admin → Status shows it with what to check.
+
+### Patch Changes
+
+- 90057d9: Every call one service makes to another now has a deadline (PER-213). `withDeadline` and `serviceTimeoutMs` in the service kit give each call 5 seconds unless `SERVICE_CALL_TIMEOUT_SECONDS` says otherwise. The kit's helpers (callService, floors, people, grants, settings, the service token, domain events) use it, as do the gateway's calls to identity and the registry, identity's calls to Keycloak (15 seconds), storage's to Garage and the updater's to the registry. A hung service now gives the caller its usual "can't be reached" error, so it answers 503 within seconds rather than waiting minutes. Calls to the model gateway get 3 minutes, and frontend uploads get 2.
+- Updated dependencies [1f83a5f]
+- Updated dependencies [2f2b01a]
+- Updated dependencies [7886a1e]
+- Updated dependencies [f902da5]
+- Updated dependencies [866c076]
+- Updated dependencies [04d7ed1]
+- Updated dependencies [4f8d944]
+- Updated dependencies [90057d9]
+- Updated dependencies [858fad1]
+- Updated dependencies [33b6fa3]
+  - @augur/service-kit@0.14.0
+
 ## 0.10.0
 
 ### Minor Changes

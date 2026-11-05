@@ -250,15 +250,14 @@ test('Find asks the app’s service, on the floor, and opens a result where it s
 });
 
 test('Find doesn’t wait for a slow app: it says so, and lets go after the budget', async ({ page }) => {
-  await page.route('**/api/reference/v1/search?*', async (route) => {
-    await new Promise((r) => setTimeout(r, 4000));
-    await route.fulfill({ json: { results: [] } }).catch(() => undefined);
-  });
+  // The app never answers while the test runs, so the only way the note can change is the shell's own
+  // budget running out, however slow the runner (PER-322).
+  await page.route('**/api/reference/v1/search?*', () => new Promise<void>(() => undefined));
   await page.goto('/reference');
   await find(page, 'reference');
   await expect(page.locator('.aerie-shell .aerie-view .aerie-row', { hasText: 'Reference' }).first()).toBeVisible();
   // The reference app's own note: other apps in the catalogue (Folio, when it's on) have theirs.
   const note = page.locator('.aerie-shell .aerie-view .aerie-group.aerie-label:has-text("Reference") + p.aerie-note.aerie-small');
   await expect(note).toHaveText('Still looking…');
-  await expect(note).toHaveText('Didn’t answer in time.', { timeout: 3000 });
+  await expect(note).toHaveText('Didn’t answer in time.');
 });

@@ -1,5 +1,22 @@
 # @augur/storage
 
+## 0.4.3
+
+### Patch Changes
+
+- 90057d9: Every call one service makes to another now has a deadline (PER-213). `withDeadline` and `serviceTimeoutMs` in the service kit give each call 5 seconds unless `SERVICE_CALL_TIMEOUT_SECONDS` says otherwise. The kit's helpers (callService, floors, people, grants, settings, the service token, domain events) use it, as do the gateway's calls to identity and the registry, identity's calls to Keycloak (15 seconds), storage's to Garage and the updater's to the registry. A hung service now gives the caller its usual "can't be reached" error, so it answers 503 within seconds rather than waiting minutes. Calls to the model gateway get 3 minutes, and frontend uploads get 2.
+- Updated dependencies [1f83a5f]
+- Updated dependencies [2f2b01a]
+- Updated dependencies [7886a1e]
+- Updated dependencies [f902da5]
+- Updated dependencies [866c076]
+- Updated dependencies [04d7ed1]
+- Updated dependencies [4f8d944]
+- Updated dependencies [90057d9]
+- Updated dependencies [858fad1]
+- Updated dependencies [33b6fa3]
+  - @augur/service-kit@0.14.0
+
 ## 0.4.2
 
 ### Patch Changes

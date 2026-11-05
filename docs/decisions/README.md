@@ -26,8 +26,8 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0018](0018-rollout-gates.md) | Releases reach production through rings, a bake time and a halt switch | Accepted | 2026-11-01 |
 | [0019](0019-deployment-reporting.md) | Deployments report what they run, as a signed heartbeat or an exported file | Accepted | 2026-11-01 |
 | [0020](0020-upgrade-policy-windows-watch.md) | AUGUR upgrades follow a policy, a maintenance window, a semver pin and a post-upgrade watch | Accepted | 2026-11-01 |
-| [0021](0021-feature-flags-openfeature-flagd.md) | Feature flags use OpenFeature with flagd | Accepted | 2026-11-01 |
-| [0022](0022-upgrade-roles-step-up.md) | Upgrades need a deployment or app admin role and a step-up sign-in | Accepted | 2026-11-01 |
+| [0021](0021-feature-flags-openfeature-flagd.md) | Feature flags use OpenFeature with flagd | Accepted, deferred to beta (amended 3 Nov) | 2026-11-01 |
+| [0022](0022-upgrade-roles-step-up.md) | Upgrades need a deployment or app admin role and a step-up sign-in | Accepted, partly built | 2026-11-01 |
 | [0023](0023-air-gap-bundle-oci-layout.md) | The air-gap bundle is a standard OCI image layout | Accepted | 2026-11-01 |
 | [0024](0024-apps-are-trusted-code.md) | Apps in the shell are trusted code until outside apps run sandboxed | Accepted | 2026-11-01 |
 | [0025](0025-apps-own-entity-bindings.md) | Apps keep their own links to entities and publish them as events | Accepted | 2026-11-01 |
@@ -70,5 +70,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0064](0064-point-in-time-restore-with-postgres-wal-archiving.md) | The database can be restored to a point in time: Postgres archives its WAL, and restic copies it off the server | Proposed | 2026-11-05 |
 | [0065](0065-mail-through-nodemailer-react-email-and-mailpit.md) | AUGUR's own email is sent by Nodemailer from React Email templates, and Mailpit catches it in dev | Accepted | 2026-11-05 |
 | [0066](0066-binding-events-name-the-thing.md) | Binding events name the thing: `<app>.<type>.entity-bound` | Proposed | 2026-11-05 |
+| [0067](0067-update-control-stays-in-the-registry-behind-a-seam.md) | Update control stays in the registry for now, behind a checked seam, and leaves as its own service | Proposed | 2026-11-05 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

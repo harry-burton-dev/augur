@@ -1,6 +1,6 @@
 {
   "name": "@augur/home",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.7.0",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.8.0",
     "@augur/mfe-sdk": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

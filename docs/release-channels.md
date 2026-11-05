@@ -22,7 +22,7 @@ The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A producti
 
 ## Promote to stable
 
-In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or the id of an app released from this repository) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it: anyone else's run fails before it changes anything.
+In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or the id of an app released from this repository or from its own, below) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it: anyone else's run fails before it changes anything.
 
 ### Bake time
 
@@ -37,6 +37,12 @@ The portal is only on the tailnet, so the workflow joins it to ask ([ADR 0045](d
 Until then, a promotion goes ahead, and both the run and `promotion.json` say that bake time wasn't checked.
 
 Units move independently: Mandate can become stable while AUGUR stays where it is, and the other way round.
+
+### An app in its own repository
+
+An app listed in `release/app-repos.json` ([ADR 0047](decisions/0047-app-repositories-in-augurs-feed.md)) is promoted from here too: give its id as the unit. The workflow marks its release stable in the app's own repository, with `promotion.json`, and the feed that follows lists it as stable. It does this with the `APP_PROMOTE_TOKEN` secret, which only this workflow reads: a fine-grained token with Contents read and write on the app repositories, nothing else, expiring after 90 days. Without it, promoting such an app fails and says so. The feed's `APP_RELEASES_TOKEN` stays read-only.
+
+A pillar app (`release/shipped-apps.json`) isn't promoted on its own: it ships inside AUGUR's release ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)), so it becomes stable when that AUGUR release does. Asking for one says so.
 
 ## Halting a release
 

@@ -5,7 +5,7 @@ import { buildApp } from './app.ts';
 import type { AppEntry } from './manifest.ts';
 import { MemoryAppStore } from './store.ts';
 
-const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0', handles: ['document.open'] };
+const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0 || ^2.0.0', handles: ['document.open'] };
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
 // Stands in for Keycloak: "Bearer app-<id>" is that app's token, "Bearer platform-<name>" a platform service's.

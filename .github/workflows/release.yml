@@ -38,6 +38,10 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # An empty changeset bumps nothing, so when only empty ones wait they mustn't hold back the
+      # release below (PER-277): they're set aside for this run, and the next Version packages PR consumes them.
+      - name: Set empty changesets aside
+        run: node scripts/empty-changesets.mjs
       # While changesets are waiting, keeps one "Version packages" PR open that bumps versions and
       # writes changelogs. No publish step: packages aren't tagged or released one by one. The only
       # GitHub releases are the units a deployment installs, augur@<version> and app/<id>@<version>, made below.
