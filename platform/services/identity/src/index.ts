@@ -120,6 +120,13 @@ const dataFrom =
     ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) }
     : undefined;
 
+// A deleted leaver's personal values leave Activity first (ADR 0072): the events service removes them.
+const redact =
+  EVENTS_URL && credentials
+    ? (person: string) =>
+        callService({ method: 'POST', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/audit/redact`, credentials, body: { person }, what: 'remove a deleted person’s details from Activity' })
+    : undefined;
+
 // Sign-ins and failed ones reach Activity (ADR 0040): copied from Keycloak each minute.
 if (keycloakEvents && audit) {
   const events = keycloakEvents;
@@ -155,5 +162,5 @@ if (directory) {
   void sweep();
 }
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle, redact });
 await app.listen({ port, host: '0.0.0.0' });

@@ -71,6 +71,8 @@ export interface PreferenceStore {
   withdrawLeave(person: string): Promise<boolean>;
   /** Every open request to leave, oldest first, for the admins who act on them. */
   leaveRequests(): Promise<(LeaveRequest & { person: string })[]>;
+  /** A deleted person (ADR 0072): their preferences and any request to leave, gone. */
+  forget(person: string): Promise<void>;
 }
 
 /**
@@ -163,6 +165,11 @@ export class PgPreferenceStore implements PreferenceStore {
   async leaveRequests() {
     const { rows } = await this.pool.query<{ person: string; note: string | null; requested_at: Date }>('select person, note, requested_at from identity.leave_requests order by requested_at');
     return rows.map((r) => ({ person: r.person, requestedAt: r.requested_at.toISOString(), ...(r.note ? { note: r.note } : {}) }));
+  }
+
+  async forget(person: string) {
+    await this.pool.query('delete from identity.preferences where person = $1', [person]);
+    await this.pool.query('delete from identity.leave_requests where person = $1', [person]);
   }
 
   close() {

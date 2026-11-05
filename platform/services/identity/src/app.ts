@@ -46,6 +46,8 @@ export interface IdentityOptions {
   tell?: MeOptions['tell'];
   /** What other services keep about a person, for the copy of their data they download. */
   dataFrom?: MeOptions['dataFrom'];
+  /** Removes a deleted person's personal values from Activity (the events service), for deleting leavers (ADR 0072). */
+  redact?: (person: string) => Promise<unknown>;
   /** The languages the deployment offers people (REALM_LANGUAGES). */
   languages?: string[];
   /** The organisation's settings beside its floor's name (ADR 0042). */
@@ -65,7 +67,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store, workspaces, directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation, lifecycle }: IdentityOptions) => {
+export const buildApp = async ({ store, workspaces, directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation, lifecycle, redact }: IdentityOptions) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -303,7 +305,7 @@ export const buildApp = async ({ store, workspaces, directory, accounts, appClie
         },
       );
 
-      await app.register(adminRoutes({ directory: teams, workspaces, audit, store, lifecycle, organisation }), { prefix: '/admin' });
+      await app.register(adminRoutes({ directory: teams, workspaces, audit, store, lifecycle, organisation, redact }), { prefix: '/admin' });
       await app.register(appClientRoutes({ clients: appClients, audit }), { prefix: '/admin/apps' });
     },
     { prefix: `/${API_VERSION}` },

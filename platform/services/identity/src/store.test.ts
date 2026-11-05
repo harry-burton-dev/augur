@@ -45,7 +45,7 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from identity.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor', 'lifecycle_001_people', 'lifecycle_002_invites', 'reconcile_001_since', 'organisation_002_idle', 'lifecycle_003_locked_leaving', 'lifecycle_004_federated']);
+    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor', 'lifecycle_001_people', 'lifecycle_002_invites', 'reconcile_001_since', 'organisation_002_idle', 'lifecycle_003_locked_leaving', 'lifecycle_004_federated', 'lifecycle_005_deletion']);
   });
 
   it('keeps the organisation settings in one row', async () => {

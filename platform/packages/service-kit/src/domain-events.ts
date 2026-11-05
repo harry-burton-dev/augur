@@ -196,7 +196,8 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
  * The platform's own topics, which any follower may read. The events service publishes
  * them as identity and the registry record the change, with the audit entry's floor.
  * Payloads: `{ person }`, `{ person, changed }` (some of `name`, `email`, `roles`, `teams`), `{ person, handOverTo? }`
- * (a leaver, and who takes on what they own), `{ team, name? }`,
+ * (a leaver, and who takes on what they own), `{ person }` for a deleted account (forget what you keep about
+ * them; their id may stay, as it does in Activity), `{ team, name? }`,
  * `{ team, person }`, `{ app }`.
  */
 export const PLATFORM_TOPICS = {
@@ -205,6 +206,7 @@ export const PLATFORM_TOPICS = {
   personDisabled: 'platform.person.disabled',
   personEnabled: 'platform.person.enabled',
   personLeft: 'platform.person.left',
+  personDeleted: 'platform.person.deleted',
   teamCreated: 'platform.team.created',
   teamRenamed: 'platform.team.renamed',
   memberAdded: 'platform.team.member-added',
