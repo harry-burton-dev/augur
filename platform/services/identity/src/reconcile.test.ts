@@ -2,10 +2,68 @@ import { describe, expect, it } from 'vitest';
 import type { NewAuditEntry } from '@augur/service-kit';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
 import { MemoryDirectory } from './directory.ts';
+import type { Lifecycle } from './lifecycle.ts';
 import { causeOf, PgReconcileStore, reconcile } from './reconcile.ts';
 
 const person = (dir: MemoryDirectory, username: string) =>
   dir.createPerson({ username, email: `${username}@example.org`, firstName: username, lastName: 'Test', roles: [], departments: [] });
+
+describe('a change that couldn’t be finished', () => {
+  const setUp = async () => {
+    const directory = new MemoryDirectory();
+    const p = await person(directory, 'turned-off');
+    const kept = new Map<string, Lifecycle>();
+    const lifecycle = {
+      get: async () => kept,
+      disabled: async (id: string, _cause: unknown, at: string) => void kept.set(id, { disabledAt: at }),
+      enabled: async (id: string) => void kept.delete(id),
+    };
+    let since: string | undefined;
+    const store = { since: async () => since, started: async (at: string) => void (since = at), alone: async (fn: () => Promise<void>) => (await fn(), true) };
+    const entries: NewAuditEntry[] = [];
+    const fail = { sessions: false, audit: false };
+    const endSessions = directory.endSessions.bind(directory);
+    directory.endSessions = async (id) => {
+      if (fail.sessions) throw new Error('keycloak unreachable');
+      await endSessions(id);
+    };
+    const audit = async (e: NewAuditEntry) => {
+      if (fail.audit) throw new Error('events unreachable');
+      entries.push(e);
+    };
+    const run = () => reconcile({ directory, lifecycle, store, audit, now: () => '2026-11-05T06:00:00.000Z' });
+    await run();
+    return { directory, p, kept, entries, fail, run };
+  };
+
+  it.each(['sessions', 'audit'] as const)('is tried again on the next run when %s failed', async (failed) => {
+    const { directory, p, kept, entries, fail, run } = await setUp();
+    await directory.updatePerson(p.id, { enabled: false });
+    fail[failed] = true;
+    await expect(run()).rejects.toThrow('unreachable');
+    expect(kept.has(p.id)).toBe(false);
+
+    fail[failed] = false;
+    expect(await run()).toEqual({ disabled: [p.id], enabled: [], noted: [] });
+    expect(directory.signedOut.at(-1)).toBe(p.id);
+    expect(entries.map((e) => e.action)).toEqual(['person.disabled']);
+    expect(kept.get(p.id)?.disabledAt).toBeDefined();
+    expect(await run()).toEqual({ disabled: [], enabled: [], noted: [] });
+  });
+
+  it('tries a turn-on again too', async () => {
+    const { directory, p, kept, entries, fail, run } = await setUp();
+    await directory.updatePerson(p.id, { enabled: false });
+    await run();
+    await directory.updatePerson(p.id, { enabled: true });
+    fail.audit = true;
+    await expect(run()).rejects.toThrow('unreachable');
+    expect(kept.has(p.id)).toBe(true);
+    fail.audit = false;
+    expect(await run()).toEqual({ disabled: [], enabled: [p.id], noted: [] });
+    expect(entries.map((e) => e.action)).toEqual(['person.disabled', 'person.enabled']);
+  });
+});
 
 describe.runIf(DATABASE_URL)('noticing sign-ins turned off or on in Keycloak', () => {
   const db = identityDb();

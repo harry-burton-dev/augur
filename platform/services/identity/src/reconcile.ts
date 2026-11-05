@@ -7,8 +7,8 @@ import type { LifecycleStore } from './lifecycle.ts';
  * Noticing what changed in Keycloak without AUGUR (PER-194 spec 4.7): someone's sign-in turned off or back on
  * in Keycloak's console, or later by Keycloak's own idle Workflow, which ends no sessions and tells nobody.
  * Every few minutes identity compares each account's sign-in with what it last knew, and for each change ends
- * their sessions (when turned off), keeps the change, and records it in Activity as Keycloak's doing, so
- * followers hear platform.person.disabled or platform.person.enabled as they do for an admin's change.
+ * their sessions (when turned off), records it in Activity as Keycloak's doing, so followers hear
+ * platform.person.disabled or platform.person.enabled as they do for an admin's change, and keeps the change.
  *
  * A turn-off is put down to being idle when the person's last sign-in is as old as the organisation's turn-off
  * days, which is when Keycloak's idle-account Workflow turns them off.
@@ -76,19 +76,18 @@ export async function reconcile({
       if (again?.left || person.enabled !== !!again?.disabledAt) continue;
       const at = now();
       const cause = first ? undefined : causeOf(again?.lastSignInAt, at, days);
-      if (!person.enabled) {
-        await lifecycle.disabled(person.id, cause, at);
-        if (first) {
+      if (first) {
+        if (person.enabled) {
+          await lifecycle.enabled(person.id);
+        } else {
+          await lifecycle.disabled(person.id, cause, at);
           result.noted.push(person.id);
-          continue;
         }
-        await directory.endSessions(person.id);
-        result.disabled.push(person.id);
-      } else {
-        await lifecycle.enabled(person.id);
-        if (first) continue;
-        result.enabled.push(person.id);
+        continue;
       }
+      // What's kept is what stops them being picked up again, so it's saved last: if ending their sessions or
+      // the audit entry fails, the next run sees the same change and tries again.
+      if (!person.enabled) await directory.endSessions(person.id);
       await audit?.({
         actor: { ...KEYCLOAK_ACTOR },
         app: 'identity',
@@ -96,6 +95,13 @@ export async function reconcile({
         target: person.id,
         detail: { username: person.username, outside: true, ...(!person.enabled && cause ? { cause, days: days!.turnOffDays } : {}) },
       });
+      if (person.enabled) {
+        await lifecycle.enabled(person.id);
+        result.enabled.push(person.id);
+      } else {
+        await lifecycle.disabled(person.id, cause, at);
+        result.disabled.push(person.id);
+      }
     }
     if (first) await store.started(now());
   });

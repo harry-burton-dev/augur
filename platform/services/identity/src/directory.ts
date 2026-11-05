@@ -560,10 +560,15 @@ export class KeycloakDirectory implements Directory {
     );
   }
 
-  private async setRoles(id: string, want: string[], have: string[]) {
+  /** The realm's roles, once `want` are all among them. Called before anything is written, so a refusal changes nothing. */
+  private async checkRoles(want: string[]) {
     const all = await this.realmRoles();
     const unknown = want.find((r) => !all.some((x) => x.name === r));
     if (unknown) throw new DirectoryError(`There is no role called “${unknown}”.`, 400);
+    return all;
+  }
+
+  private async setRoles(id: string, all: KcRole[], want: string[], have: string[]) {
     const add = all.filter((r) => want.includes(r.name) && !have.includes(r.name));
     const remove = all.filter((r) => have.includes(r.name) && !want.includes(r.name));
     const reps = (rs: KcRole[]) => rs.map(({ id, name }) => ({ id, name }));
@@ -571,14 +576,20 @@ export class KeycloakDirectory implements Directory {
     if (remove.length) await this.call('DELETE', `/users/${id}/role-mappings/realm`, reps(remove));
   }
 
-  private async setDepartments(id: string, want: string[], have: string[]) {
+  /** Like `checkRoles`, for departments. */
+  private async checkDepartments(want: string[]) {
     const known = new Set((await this.groups()).map((g) => g.id));
     if (want.some((d) => !known.has(d))) throw new DirectoryError('One of those departments no longer exists.', 400);
+  }
+
+  private async setDepartments(id: string, want: string[], have: string[]) {
     for (const d of want.filter((d) => !have.includes(d))) await this.addMember(d, id);
     for (const d of have.filter((d) => !want.includes(d))) await this.removeMember(d, id);
   }
 
   async createPerson(person: NewPerson, temporaryPassword?: string): Promise<Person> {
+    const roles = await this.checkRoles(person.roles);
+    await this.checkDepartments(person.departments);
     const { location } = await this.call('POST', '/users', {
       username: person.username,
       firstName: person.firstName,
@@ -598,19 +609,21 @@ export class KeycloakDirectory implements Directory {
     });
     const id = location?.split('/').pop();
     if (!id) throw new DirectoryError('The sign-in service added them but didn’t say who they are. Refresh to see them.', 503);
-    await this.setRoles(id, person.roles, []);
+    await this.setRoles(id, roles, person.roles, []);
     await this.setDepartments(id, person.departments, []);
     return this.person(id);
   }
 
   async updatePerson(id: string, changes: PersonChanges): Promise<Person> {
     const current = await this.person(id);
+    const roles = changes.roles && (await this.checkRoles(changes.roles));
+    if (changes.departments) await this.checkDepartments(changes.departments);
     const fields = (['firstName', 'lastName', 'email', 'enabled'] as const).filter((k) => changes[k] !== undefined);
     if (fields.length) {
       const { data: user } = await this.call<KcUser>('GET', `/users/${id}`);
       await this.call('PUT', `/users/${id}`, { ...user, ...Object.fromEntries(fields.map((k) => [k, changes[k]])) });
     }
-    if (changes.roles) await this.setRoles(id, changes.roles, current.roles);
+    if (changes.roles && roles) await this.setRoles(id, roles, changes.roles, current.roles);
     if (changes.departments) await this.setDepartments(id, changes.departments, current.departments);
     return this.person(id);
   }
@@ -647,9 +660,16 @@ export class KeycloakDirectory implements Directory {
     let asked = 0;
     for (const user of users) {
       if (!user.enabled || user.serviceAccountClientId || user.username?.startsWith('service-account-')) continue;
+      if (!user.requiredActions?.includes(action)) {
+        // The list is old by now. Each is read again, and `enabled` is left out, which Keycloak then keeps as it
+        // is, so this can never turn back on someone an admin turned off meanwhile.
+        const { data: fresh } = await this.call<KcUser>('GET', `/users/${encodeURIComponent(user.id)}`);
+        if (!fresh.enabled) continue;
+        if (!fresh.requiredActions?.includes(action)) {
+          await this.call('PUT', `/users/${encodeURIComponent(user.id)}`, { ...fresh, enabled: undefined, requiredActions: [...(fresh.requiredActions ?? []), action] });
+        }
+      }
       asked++;
-      if (user.requiredActions?.includes(action)) continue;
-      await this.call('PUT', `/users/${encodeURIComponent(user.id)}`, { ...user, requiredActions: [...(user.requiredActions ?? []), action] });
     }
     return asked;
   }

@@ -15,6 +15,7 @@ const keycloak = (answer: (method: string, path: string, body?: unknown) => unkn
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ method, path, body });
     const data = answer(method, path, body);
+    if (data instanceof Response) return data;
     return data === undefined ? new Response(null, { status: 204 }) : Response.json(data);
   }) as typeof fetch;
   return { calls, kc: new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn: { admin: { user: 'a', password: 'p' } }, fetchImpl }) };
@@ -106,10 +107,14 @@ describe('identity’s rights', () => {
 });
 
 describe('the sign-in flow', () => {
+  const step = { id: 'e-1', level: 1, index: 2, requirement: 'CONDITIONAL', displayName: TWO_STEP_STEP, authenticationFlow: true };
+  const condition = { id: 'e-2', level: 2, index: 0, requirement: 'REQUIRED', displayName: 'Condition - user role', providerId: 'conditional-user-role', authenticationConfig: 'c-1' };
+  const form = { id: 'e-3', level: 2, index: 1, requirement: 'REQUIRED', displayName: 'OTP Form', providerId: 'auth-otp-form' };
+
   it('is left alone when it already has the admin roles’ step and is in use', async () => {
     const { calls, kc } = keycloak((method, path) => {
       if (path === '/authentication/flows') return [{ id: 'f-1', alias: 'augur browser' }];
-      if (path === '/authentication/flows/augur%20browser/executions') return [{ id: 'e-1', level: 1, index: 2, requirement: 'CONDITIONAL', displayName: TWO_STEP_STEP, authenticationFlow: true }];
+      if (path === '/authentication/flows/augur%20browser/executions') return [step, condition, form];
       if (path === '' && method === 'GET') return { browserFlow: 'augur browser' };
       return undefined;
     });
@@ -130,6 +135,93 @@ describe('the sign-in flow', () => {
     const writes = calls.filter((c) => c.method !== 'GET').map((c) => `${c.method} ${c.path}`);
     expect(writes.slice(0, 3)).toEqual(['PUT ', 'DELETE /authentication/flows/f-old', 'POST /authentication/flows/browser/copy']);
     expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ browserFlow: 'browser' });
+  });
+
+  it.each([
+    ['has nothing inside it', [step]],
+    ['has no code form', [step, condition]],
+    ['has no role condition', [step, form]],
+    ['has a role condition with no role set', [step, { ...condition, authenticationConfig: undefined }, form]],
+    ['has a code form that isn’t required', [step, condition, { ...form, requirement: 'DISABLED' }]],
+    ['isn’t conditional', [{ ...step, requirement: 'DISABLED' }, condition, form]],
+    ['has its code form in the next step along', [step, condition, { ...step, id: 'e-4', displayName: 'next' }, { ...form, level: 2 }]],
+  ])('is rebuilt, never put in use, when the step %s', async (_name, executions) => {
+    const { calls, kc } = keycloak((_method, path) => {
+      if (path === '/authentication/flows') return [{ id: 'f-1', alias: 'augur browser' }];
+      if (path === '/authentication/flows/augur%20browser/executions') return executions;
+      return undefined;
+    });
+    await expect(applySignInFlow(kc, [])).rejects.toThrow('shaped as expected');
+    expect(calls.filter((c) => c.method !== 'GET').slice(0, 3).map((c) => `${c.method} ${c.path}`)).toEqual(['PUT ', 'DELETE /authentication/flows/f-1', 'POST /authentication/flows/browser/copy']);
+    expect(calls.filter((c) => c.method === 'PUT' && c.path === '').map((c) => c.body)).toEqual([{ browserFlow: 'browser' }]);
+  });
+
+  it('finishes after a run that failed half-way, with each condition added once', async () => {
+    type Exec = { id: string; level: number; index: number; requirement: string; displayName: string; providerId?: string; authenticationFlow?: boolean; flowId?: string; authenticationConfig?: string };
+    const realm = { browserFlow: 'browser' };
+    let flow: Exec[] | undefined;
+    let nextId = 0;
+    let failOn: string | undefined = 'auth-otp-form';
+    const add = (parent: string, exec: Omit<Exec, 'id' | 'level' | 'index' | 'requirement'>) => {
+      const at = flow!.findIndex((e) => e.displayName === parent);
+      const level = flow![at]!.level + 1;
+      const end = flow!.findIndex((e, i) => i > at && e.level < level);
+      const made = { id: `e-${++nextId}`, level, index: 0, requirement: 'DISABLED', ...exec };
+      flow!.splice(end === -1 ? flow!.length : end, 0, made);
+      return made;
+    };
+    const { calls, kc } = keycloak((method, path, body) => {
+      const b = body as Record<string, string>;
+      if (path === '' && method === 'GET') return realm;
+      if (path === '' && method === 'PUT') return void Object.assign(realm, body);
+      if (path === '/authentication/flows') return flow ? [{ id: 'f-1', alias: 'augur browser' }] : [];
+      if (path === '/authentication/flows/f-1' && method === 'DELETE') return void (flow = undefined);
+      if (path === '/authentication/flows/browser/copy') {
+        flow = [
+          { id: 'forms', level: 0, index: 0, requirement: 'ALTERNATIVE', displayName: 'forms', authenticationFlow: true, flowId: 'forms' },
+          { id: 'usual', level: 1, index: 0, requirement: 'CONDITIONAL', displayName: 'usual', authenticationFlow: true, flowId: 'usual' },
+          { id: 'configured', level: 2, index: 0, requirement: 'REQUIRED', displayName: 'Condition - user configured', providerId: 'conditional-user-configured' },
+          { id: 'otp', level: 2, index: 1, requirement: 'ALTERNATIVE', displayName: 'OTP Form', providerId: 'auth-otp-form' },
+        ];
+        return undefined;
+      }
+      if (path === '/authentication/flows/forms') return { alias: 'forms' };
+      if (path === '/authentication/flows/usual') return { alias: 'usual' };
+      if (path === '/authentication/flows/augur%20browser/executions' && method === 'GET') return flow;
+      if (path === '/authentication/flows/augur%20browser/executions' && method === 'PUT') return void (flow!.find((e) => e.id === b.id)!.requirement = b.requirement!);
+      const within = /^\/authentication\/flows\/(.+)\/executions\/(execution|flow)$/.exec(path);
+      if (within?.[2] === 'flow') return void add(decodeURIComponent(within[1]!), { displayName: b.alias!, authenticationFlow: true });
+      if (within) {
+        if (b.provider === failOn) {
+          failOn = undefined;
+          return new Response(null, { status: 500 });
+        }
+        const made = add(decodeURIComponent(within[1]!), { displayName: b.provider!, providerId: b.provider });
+        return new Response(null, { status: 201, headers: { location: `http://kc/x/${made.id}` } });
+      }
+      const config = /^\/authentication\/executions\/(.+)\/config$/.exec(path);
+      if (config) return void (flow!.find((e) => e.id === config[1])!.authenticationConfig = 'c');
+      return undefined;
+    });
+
+    await expect(applySignInFlow(kc, [])).rejects.toThrow('answered 500');
+    expect(realm.browserFlow).toBe('browser');
+
+    await applySignInFlow(kc, []);
+    expect(realm.browserFlow).toBe('augur browser');
+    expect(flow!.filter((e) => e.providerId === 'conditional-user-role')).toHaveLength(2);
+    expect(flow!.map((e) => [e.level, e.displayName, e.requirement]).slice(4)).toEqual([
+      [2, 'conditional-user-role', 'REQUIRED'],
+      [1, TWO_STEP_STEP, 'CONDITIONAL'],
+      [2, 'conditional-user-role', 'REQUIRED'],
+      [2, 'auth-otp-form', 'REQUIRED'],
+    ]);
+
+    const writes = calls.filter((c) => c.method !== 'GET').length;
+    const changes: string[] = [];
+    await applySignInFlow(kc, changes);
+    expect(calls.filter((c) => c.method !== 'GET')).toHaveLength(writes);
+    expect(changes).toEqual([]);
   });
 });
 

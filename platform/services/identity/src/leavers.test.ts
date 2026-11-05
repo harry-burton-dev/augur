@@ -3,7 +3,7 @@ import type { NewAuditEntry } from '@augur/service-kit';
 import { MemoryDirectory } from './directory.ts';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
 import { addDays, leaveDueLeavers, todayIn } from './leavers.ts';
-import { federatedFirstSignIn, idleOf, lockedOf, withLifecycle } from './lifecycle.ts';
+import { federatedFirstSignIn, idleOf, lockedOf, withLifecycle, type DisabledCause, type Leaving, type Lifecycle } from './lifecycle.ts';
 
 describe('dates for a last day', () => {
   it('reads today where the organisation is, and counts days on', () => {
@@ -28,6 +28,100 @@ describe('idle and locked', () => {
     expect(lockedOf({ lockedAt: '2026-11-05T11:55:00Z' }, now)).toBe(true);
     expect(lockedOf({ lockedAt: '2026-11-05T11:55:00Z', lastSignInAt: '2026-11-05T11:58:00Z' }, now)).toBe(false);
     expect(lockedOf({ lockedAt: '2026-11-05T11:00:00Z' }, now)).toBe(false);
+  });
+});
+
+describe('a leaver flow whose audit entry fails', () => {
+  const setUp = async () => {
+    const directory = new MemoryDirectory();
+    const kim = await directory.createPerson({ username: 'kim', firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org', roles: [], departments: [] });
+    const kept = new Map<string, Lifecycle>();
+    const leaving: Leaving = { on: '2026-11-05', by: 'admin-1', handOverTo: 'sam' };
+    const lifecycle = {
+      get: async () => kept,
+      disabled: async (person: string, cause: DisabledCause | undefined, at: string) => void kept.set(person, { ...kept.get(person), disabledAt: at, disabledCause: cause }),
+      left: async (person: string, left: NonNullable<Lifecycle['left']>) => void kept.set(person, { ...kept.get(person), left }),
+      dueLeavers: async () => (kept.get(kim.id)?.left ? [] : [{ person: kim.id, ...leaving }]),
+    };
+    const entries: NewAuditEntry[] = [];
+    let failing: string | undefined;
+    const audit = async (e: NewAuditEntry) => {
+      if (e.action === failing) throw new Error('events unreachable');
+      entries.push(e);
+    };
+    const run = (warn?: (m: string) => void) => leaveDueLeavers({ directory, lifecycle, audit }, 'UTC', new Date('2026-11-06T00:10:00Z'), warn);
+    return { kim, kept, entries, run, directory, failOn: (action?: string) => (failing = action) };
+  };
+
+  it('tries `person.left` again, keeping who the work goes to', async () => {
+    const { kim, kept, entries, run, failOn } = await setUp();
+    failOn('person.left');
+    const warnings: string[] = [];
+    expect(await run((m) => warnings.push(m))).toEqual([]);
+    expect(warnings[0]).toContain('events unreachable');
+    expect(kept.get(kim.id)?.left).toBeUndefined();
+
+    failOn(undefined);
+    expect(await run()).toEqual([kim.id]);
+    expect(entries.map((e) => e.action)).toEqual(['person.disabled', 'person.left']);
+    expect(entries[1]!.detail).toMatchObject({ handOverTo: 'sam', lastDay: '2026-11-05' });
+    expect(await run()).toEqual([]);
+  });
+
+  it('still says `person.disabled` on the next try, though their sign-in is already off', async () => {
+    const { kim, kept, entries, run, directory, failOn } = await setUp();
+    failOn('person.disabled');
+    expect(await run()).toEqual([]);
+    expect((await directory.person(kim.id)).enabled).toBe(false);
+
+    failOn(undefined);
+    expect(await run()).toEqual([kim.id]);
+    expect(entries.map((e) => e.action)).toEqual(['person.disabled', 'person.left']);
+    expect(kept.get(kim.id)?.disabledCause).toBe('leaver');
+  });
+
+  it('doesn’t say `person.disabled` for someone already kept as off', async () => {
+    const { kim, kept, entries, run, directory } = await setUp();
+    await directory.updatePerson(kim.id, { enabled: false });
+    kept.set(kim.id, { disabledAt: '2026-11-01T00:00:00.000Z', disabledCause: 'admin' });
+    expect(await run()).toEqual([kim.id]);
+    expect(entries.map((e) => e.action)).toEqual(['person.left']);
+  });
+});
+
+describe('a first sign-in whose entry can’t be made yet', () => {
+  const setUp = async () => {
+    const directory = new MemoryDirectory();
+    const made = await directory.createPerson({ username: 'new', firstName: 'New', lastName: 'Person', email: 'new@example.org', roles: [], departments: [] });
+    const kept = new Map<string, Lifecycle>();
+    const lifecycle = {
+      get: async () => kept,
+      federated: async (person: string, at: string) => (kept.set(person, { federatedAt: at }), true),
+    };
+    return { directory, made, kept, lifecycle };
+  };
+
+  it('records the account as added when the sign-in is tried again', async () => {
+    const { directory, made, kept, lifecycle } = await setUp();
+    const entries: NewAuditEntry[] = [];
+    let works = false;
+    const deps = { lifecycle, directory, audit: async (e: NewAuditEntry) => {
+      if (!works) throw new Error('events unreachable');
+      entries.push(e);
+    } };
+    const now = new Date().toISOString();
+    await expect(federatedFirstSignIn(deps, made.id, now)).rejects.toThrow('events unreachable');
+    expect(kept.has(made.id)).toBe(false);
+    works = true;
+    await federatedFirstSignIn(deps, made.id, now);
+    await federatedFirstSignIn(deps, made.id, now);
+    expect(entries.map((e) => e.action)).toEqual(['person.added']);
+  });
+
+  it('gets past an account deleted since, so the sign-ins after it are still copied', async () => {
+    const { directory, kept, lifecycle } = await setUp();
+    await federatedFirstSignIn({ lifecycle, directory }, 'gone', new Date().toISOString());
+    expect(kept.has('gone')).toBe(true);
   });
 });
 

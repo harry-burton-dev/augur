@@ -112,3 +112,57 @@ describe('invites through Keycloak', () => {
     expect(await new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl }).canEmail()).toBe(false);
   });
 });
+
+describe('refusing a bad role or department', () => {
+  const signIn = { client: { id: 'platform-identity', secret: 's' } };
+  const person = { username: 'jo', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: [] as string[], departments: [] as string[] };
+  const directory = () => {
+    const { calls, fetchImpl } = keycloak((method, path) => {
+      if (method !== 'GET') return undefined;
+      if (path.startsWith('/roles')) return [{ id: 'r-1', name: 'editor' }];
+      if (path === '/users/u-1') return { id: 'u-1', username: 'jo', enabled: true };
+      return [];
+    });
+    return { calls, kc: new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl }) };
+  };
+  const writes = (calls: Call[]) => calls.filter((c) => c.method !== 'GET' && !c.url.endsWith('/token'));
+
+  it('adds nobody, so asking again with the right role isn’t refused as a clash', async () => {
+    const { calls, kc } = directory();
+    await expect(kc.createPerson({ ...person, roles: ['nope'] })).rejects.toMatchObject({ status: 400, message: 'There is no role called “nope”.' });
+    await expect(kc.createPerson({ ...person, departments: ['gone'] })).rejects.toMatchObject({ status: 400 });
+    expect(writes(calls)).toEqual([]);
+  });
+
+  it('changes nothing about someone when one of the changes is refused', async () => {
+    const { calls, kc } = directory();
+    await expect(kc.updatePerson('u-1', { enabled: false, roles: ['nope'] })).rejects.toMatchObject({ status: 400 });
+    await expect(kc.updatePerson('u-1', { enabled: false, departments: ['gone'] })).rejects.toMatchObject({ status: 400 });
+    expect(writes(calls)).toEqual([]);
+  });
+});
+
+describe('asking everyone to take an action', () => {
+  const signIn = { client: { id: 'platform-identity', secret: 's' } };
+  const listed = [
+    { id: 'u-1', username: 'turned-off-meanwhile', enabled: true },
+    { id: 'u-2', username: 'still-on', enabled: true, requiredActions: [] },
+    { id: 'u-3', username: 'already-asked', enabled: true, requiredActions: ['TERMS_AND_CONDITIONS'] },
+    { id: 'u-4', username: 'off', enabled: false },
+  ];
+
+  it('reads each person again, leaves out whether they’re on, and skips anyone turned off since the list', async () => {
+    const { calls, fetchImpl } = keycloak((method, path) => {
+      if (method !== 'GET') return undefined;
+      if (path.startsWith('/users?')) return listed;
+      if (path === '/users/u-1') return { ...listed[0], enabled: false };
+      if (path === '/users/u-2') return { ...listed[1], requiredActions: ['UPDATE_PASSWORD'] };
+      return undefined;
+    });
+    const asked = await new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl }).askEveryone('TERMS_AND_CONDITIONS');
+    expect(asked).toBe(2);
+    const puts = calls.filter((c) => c.method === 'PUT');
+    expect(puts.map((c) => c.url)).toEqual(['http://kc/admin/realms/platform/users/u-2']);
+    expect(JSON.parse(puts[0]!.body!)).toEqual({ id: 'u-2', username: 'still-on', requiredActions: ['UPDATE_PASSWORD', 'TERMS_AND_CONDITIONS'] });
+  });
+});
