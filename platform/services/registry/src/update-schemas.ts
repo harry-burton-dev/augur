@@ -57,6 +57,7 @@ export const Upgrade = Type.Object(
     seenBy: Type.Optional(Type.String({ description: 'Who marked it looked at, once it finished' })),
     seenAt: Type.Optional(dateTime()),
     afterWatch: Type.Optional(AfterWatch),
+    settingNames: Type.Optional(Type.Array(Type.String(), { description: 'The names of the settings entered for it; their values are never stored' })),
   },
   { $id: 'Upgrade' },
 );
@@ -138,6 +139,7 @@ export const FeedTrust = Type.Object(
       description: "verified: signed by the publisher and in date; mirror: the organisation's own mirror feed; unchecked: GitHub's releases read directly",
     }),
     expires: Type.Optional(dateTime('When a verified feed stops being good unless it is issued again')),
+    issued: Type.Optional(dateTime('When the publisher issued a verified feed; an older one is refused after it')),
     signer: Type.Optional(Type.String({ description: 'The workflow that signed it, as cosign checked it' })),
     note: Type.Optional(Type.String({ description: "What to know when it isn't verified" })),
   },

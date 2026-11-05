@@ -19,6 +19,8 @@ export interface FeedTrust {
   state: 'verified' | 'mirror' | 'unchecked';
   /** When a verified feed stops being good, unless it is issued again. */
   expires?: string;
+  /** When the publisher issued a verified feed: a later read refuses an older one. */
+  issued?: string;
   /** Who signed it: the workflow, as cosign checked it. */
   signer?: string;
   /** What to know, when it isn't verified. */
@@ -98,10 +100,26 @@ export const cosignFeedCheck =
   };
 
 /**
- * Checks the publisher's feed: signed by its workflow, and in date. Gives back what the Upgrade Centre
- * says about it. `bundle` is undefined when the feed came with no signature.
+ * Checks the publisher's feed: signed by its workflow, in date, and no older than `newest`, the
+ * `issued` of the newest feed this registry accepted, so a still-valid older feed can't be replayed
+ * to hide a newer release or a halt. Gives back what the Upgrade Centre says about it. `bundle` is
+ * undefined when the feed came with no signature.
  */
-export const checkPublisherFeed = async ({ text, bundle, check, signer, now }: { text: string; bundle?: string; check?: FeedSignatureCheck; signer?: string; now: Date }): Promise<FeedTrust> => {
+export const checkPublisherFeed = async ({
+  text,
+  bundle,
+  check,
+  signer,
+  now,
+  newest,
+}: {
+  text: string;
+  bundle?: string;
+  check?: FeedSignatureCheck;
+  signer?: string;
+  now: Date;
+  newest?: string;
+}): Promise<FeedTrust> => {
   if (!check) return { state: 'unchecked', note: 'This registry was started without a way to check the feed’s signature.' };
   if (!bundle) throw new FeedTrustProblem('The release feed isn’t signed, so nothing new is offered. If it persists, the publisher’s Release feed workflow needs to run again (docs/upgrade.md, The signed feed).');
   try {
@@ -110,14 +128,21 @@ export const checkPublisherFeed = async ({ text, bundle, check, signer, now }: {
     throw new FeedTrustProblem(`The release feed’s signature didn’t check out, so nothing new is offered: ${(err as Error).message} Everything running carries on (docs/upgrade.md, The signed feed).`);
   }
   let expires: unknown;
+  let issued: unknown;
   try {
-    expires = (JSON.parse(text) as { expires?: unknown }).expires;
+    ({ expires, issued } = JSON.parse(text) as { expires?: unknown; issued?: unknown });
   } catch {
     throw new FeedTrustProblem('The release feed isn’t JSON. Check RELEASE_FEED_URL.');
   }
   if (typeof expires !== 'string' || Number.isNaN(Date.parse(expires))) throw new FeedTrustProblem('The release feed doesn’t say when it expires, so it can’t be trusted to be current. Nothing new is offered.');
   if (Date.parse(expires) <= now.getTime()) throw new FeedTrustProblem(`The release feed expired on ${expires.slice(0, 10)}, so nothing newer than it can be trusted. The publisher issues it weekly; if a newer one doesn’t arrive, check this server can reach the feed (docs/upgrade.md, The signed feed).`);
-  return { state: 'verified', expires, ...(signer ? { signer } : {}) };
+  const when = typeof issued === 'string' && !Number.isNaN(Date.parse(issued)) ? issued : undefined;
+  if (newest && (!when || Date.parse(when) < Date.parse(newest))) {
+    throw new FeedTrustProblem(
+      `The release feed read was issued ${when ? `on ${when.slice(0, 16).replace('T', ' ')}` : 'at an unknown time'}, before the one this server already accepted (${newest.slice(0, 16).replace('T', ' ')}), so it could be hiding a newer release or a halt. Nothing new is offered from it. If it persists, check what sits between this server and the feed (docs/upgrade.md, The signed feed).`,
+    );
+  }
+  return { state: 'verified', expires, ...(when ? { issued: when } : {}), ...(signer ? { signer } : {}) };
 };
 
 /** The trust root the mirror script writes beside a mirror's feed, as the registry sees it. */
