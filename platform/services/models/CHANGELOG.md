@@ -1,5 +1,21 @@
 # @augur/models
 
+## 0.3.4
+
+### Patch Changes
+
+- 0c4ab5e: The model gateway's schemas are TypeBox, and contracts/models.openapi.yaml is generated from them (ADR 0055). The contract now names the refusals the routes already sent.
+- 03e7d87: Every deployment setting is described once, in infra/deploy/settings.schema.json, and CI checks compose.yml, .env.example, the guides and the services' code against it (`pnpm check:settings`). Settings the guides named but compose never passed now reach their services: FEED_SIGNER (registry), IMAGE_SIGNER, IMAGE_SIGNER_ISSUER and AUGUR_DEV_SIGNER (updater), DOMAIN_EVENTS_KEEP_DAYS (events), MODEL_TIMEOUT_SECONDS (models), CALLER_SIGNING_KEY (gateway), and OTEL_EXPORTER_OTLP_HEADERS, OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG (every service). An empty DOMAIN_EVENTS_KEEP_DAYS or MODEL_TIMEOUT_SECONDS keeps its default, and AUGUR_DEV_SIGNER follows the repository a fork's IMAGE_SIGNER names.
+- 566f261: The service kit has one migration runner, `runMigrations(pool, { schema, migrations })`, and the events, identity, models and registry services use it in place of their own copies; what they do at start is unchanged. New migrations are linted with Squawk (ADR 0053), which catches drops, renames and type changes the old check missed.
+- Updated dependencies [7dbdf7b]
+- Updated dependencies [2dbdc22]
+- Updated dependencies [0ec750c]
+- Updated dependencies [7518ce8]
+- Updated dependencies [dec1a40]
+- Updated dependencies [566f261]
+- Updated dependencies [7517bd7]
+  - @augur/service-kit@0.13.0
+
 ## 0.3.3
 
 ### Patch Changes

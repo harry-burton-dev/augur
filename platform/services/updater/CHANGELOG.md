@@ -1,5 +1,28 @@
 # @augur/updater
 
+## 0.9.0
+
+### Minor Changes
+
+- 9ad4399: Mandate ships with AUGUR, like Artifacts, Explorer and Data Atlas: a `mandate` container with its own sign-in, login and schema (`MANDATE_*` in `.env`). On a server whose app runner installed it, AUGUR's container takes over the same schema, the updater stops the runner's copy, and Admin → Apps stops listing it as an installed app.
+
+### Patch Changes
+
+- 03e7d87: Every deployment setting is described once, in infra/deploy/settings.schema.json, and CI checks compose.yml, .env.example, the guides and the services' code against it (`pnpm check:settings`). Settings the guides named but compose never passed now reach their services: FEED_SIGNER (registry), IMAGE_SIGNER, IMAGE_SIGNER_ISSUER and AUGUR_DEV_SIGNER (updater), DOMAIN_EVENTS_KEEP_DAYS (events), MODEL_TIMEOUT_SECONDS (models), CALLER_SIGNING_KEY (gateway), and OTEL_EXPORTER_OTLP_HEADERS, OTEL_TRACES_SAMPLER and OTEL_TRACES_SAMPLER_ARG (every service). An empty DOMAIN_EVENTS_KEEP_DAYS or MODEL_TIMEOUT_SECONDS keeps its default, and AUGUR_DEV_SIGNER follows the repository a fork's IMAGE_SIGNER names.
+- 7517bd7: `release/shipped-apps.json` is now the one list of the apps that ship with AUGUR. The updater reads it from its image to restart them in order and check each comes back, and refuses an upgrade with an image for a part the server runs that it doesn't know, instead of restarting it unchecked. `pnpm check:release` fails when a compose file disagrees with it. The registry refuses an app whose id a part of AUGUR answers to (a platform service, a platform app, a deployment service or a path the front door serves), saying which, and storage makes no schema under such an id (`RESERVED_APP_IDS` in the service kit).
+
+  The updater restarts AUGUR's own Keycloak image first, giving it up to five minutes to be ready, and keeps it running when going back to a release from before that image.
+
+- b7f0f21: The app runner takes a backup before an app's first release from another repository, such as an app moving into its own (ADR 0047). That release takes over the data the old one left. The install's first step names the backup file. Later releases from that repository install as before.
+- Updated dependencies [7dbdf7b]
+- Updated dependencies [2dbdc22]
+- Updated dependencies [0ec750c]
+- Updated dependencies [7518ce8]
+- Updated dependencies [dec1a40]
+- Updated dependencies [566f261]
+- Updated dependencies [7517bd7]
+  - @augur/service-kit@0.13.0
+
 ## 0.8.1
 
 ### Patch Changes
