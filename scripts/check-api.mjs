@@ -92,6 +92,18 @@ export function reports(base = root) {
     });
 }
 
+/** How the built types differ from the committed report: API Extractor leaves what it found in dist/api/. */
+function reportDiff(report, pkgDir) {
+  const found = join(pkgDir, 'dist', 'api', report.split('/').pop());
+  if (!existsSync(found)) return '';
+  try {
+    execFileSync('diff', ['-u', join(root, report), found], { stdio: 'pipe', encoding: 'utf8' });
+    return '';
+  } catch (err) {
+    return String(err.stdout ?? '').split('\n').slice(0, 60).join('\n');
+  }
+}
+
 function main() {
   const update = process.argv[2] === 'update';
   const problems = [];
@@ -103,7 +115,7 @@ function main() {
     try {
       execFileSync(bin, ['run', '--config', config, ...(update ? ['--local'] : [])], { cwd: pkgDir, stdio: 'pipe', encoding: 'utf8' });
     } catch (err) {
-      problems.push(`${report}: doesn't match the built types. Run pnpm build && pnpm api:update, and commit it.\n${err.stdout ?? ''}`.trim());
+      problems.push(`${report}: doesn't match the built types. Run pnpm build && pnpm api:update, and commit it.\n${err.stdout ?? ''}\n${reportDiff(report, pkgDir)}`.trim());
       continue;
     }
     const foreign = foreignImports(readFileSync(join(root, report), 'utf8'), name);
