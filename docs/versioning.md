@@ -68,6 +68,8 @@ Two GitHub settings the workflow needs: Settings → Actions → General → Wor
 
 When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)). A build byte-for-byte the newest kept one isn't kept: `freeze` says so, and that folder stands for both minors. At SDK 2.0, a major that 1.x apps don't run on, the 1.x builds retire from the contract tests, and each 2.x minor is frozen from then on.
 
+An empty changeset (`pnpm changeset --empty`) bumps nothing, so it never holds back a release. When only empty changesets wait on the branch, as when a tooling PR merges right after the Version packages PR, the Release workflow sets them aside for that run (`scripts/empty-changesets.mjs`) and releases anyway; the next Version packages PR consumes them.
+
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then let the Release workflow make the AUGUR and app releases.
 
 ### App releases
