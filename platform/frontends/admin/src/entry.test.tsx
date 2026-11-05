@@ -334,6 +334,32 @@ describe('Activity', () => {
     expect(rowsOf(el)).toHaveLength(53);
     expect(button('Show older', el)).toBeUndefined();
   });
+
+  it('downloads everything the filters show as a CSV file, and says why when it can’t', async () => {
+    const made = vi.fn((_: Blob) => 'blob:activity');
+    Object.assign(URL, { createObjectURL: made, revokeObjectURL: vi.fn() });
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    let fail = false;
+    const { sent } = gateway((_m, url) => {
+      if (url.startsWith('/api/events/v1/audit/export'))
+        return fail
+          ? Response.json({ error: 'forbidden', message: 'Only an admin can export the whole audit log; a lead can export their own floor’s.' }, { status: 403 })
+          : new Response('id,at\r\n1,2026-10-22\r\n', { headers: { 'content-type': 'text/csv', 'content-disposition': 'attachment; filename="activity-2026-10-22.csv"' } });
+      return url.startsWith('/api/events/v1/audit') ? Response.json([entry('person.password-reset', { target: 'u-2' })]) : undefined;
+    });
+    const el = await open('/activity');
+    await press(button('Download CSV', el));
+    const asked = new URL(sent.find((c) => c.url.includes('/audit/export'))!.url, 'http://x');
+    // The same filters as the list, without its paging.
+    expect(asked.searchParams.get('since')).toBeTruthy();
+    expect(asked.searchParams.has('limit')).toBe(false);
+    expect(made).toHaveBeenCalledOnce();
+    expect(click).toHaveBeenCalledOnce();
+    fail = true;
+    await press(button('Download CSV', el));
+    expect(el.textContent).toContain('Only an admin can export the whole audit log');
+    click.mockRestore();
+  });
 });
 
 describe('Apps', () => {

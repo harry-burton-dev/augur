@@ -21,10 +21,16 @@ Rules that hold for every step: an admin can't turn off their own sign-in, take 
 
 Follow `platform.person.left` (`PLATFORM_TOPICS.personLeft` in the service kit). When `handOverTo` is there, move what the leaver owns to that person, or offer it to them. When it isn't, keep it and show it as the leaver's until an admin or a team lead hands it on. Team inbox items a person had taken go back to their team when their sign-in goes off (docs/inbox.md).
 
+## Activity
+
+Admin → Activity shows every entry in the audit log, filtered by who, where, floor and when. **Download CSV** gives the entries the filters show, newest first, up to 50,000 at a time (narrow the dates for more), from the events service's `GET /v1/audit/export`. A lead can export their own floor's. The columns are id, at, actor, actor kind, recorded by, app, action, target, floor and detail (as JSON), and a cell a spreadsheet would read as a formula starts with an apostrophe. Each export is recorded too, as `audit.exported`.
+
+Activity is kept for good unless the deployment sets `AUDIT_KEEP_DAYS` in `.env`. Then the events service removes older entries once a day.
+
 ## The API
 
 Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/identity.openapi.yaml): `PATCH /admin/people/{id}` (`enabled: false` signs them out everywhere), `POST /admin/people/{id}/leave` (`handOverTo`, `note`) and `GET /admin/leave-requests`.
 
 ## Not built yet
 
-Email invites, idle accounts turning off on their own (60 and 90 days), deletion after retention with `platform.person.deleted`, linking an Entra first sign-in by verified email, and sign-in events, an export and a retention setting in Activity. Each comes with PER-194.
+Email invites, idle accounts turning off on their own (60 and 90 days), deletion after retention with `platform.person.deleted`, linking an Entra first sign-in by verified email, and sign-in events in Activity. Each comes with PER-194.

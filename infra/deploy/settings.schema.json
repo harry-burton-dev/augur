@@ -1002,6 +1002,14 @@
       ],
       "x-docs": "docs/inbox.md#how-long-items-are-kept"
     },
+    "AUDIT_KEEP_DAYS": {
+      "type": "string",
+      "description": "How many days Activity (the audit log) is kept. Unset or 0 keeps it all; entries older than this are removed each day.",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/people.md#activity"
+    },
     "CALLER_SIGNING_KEY": {
       "type": "string",
       "writeOnly": true,

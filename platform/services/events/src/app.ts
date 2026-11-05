@@ -31,7 +31,7 @@ import {
 import { describeApi } from './contract.ts';
 import { inboxRoutes, releaseLeaver, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
-import { MemoryEventStore, topicMatches, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
+import { MemoryEventStore, topicMatches, type AuditEntry as AuditEntryType, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
@@ -68,6 +68,28 @@ const ACTION_PAYLOAD_BYTES = 1024;
 
 /** Each event carries ids and a little context; anything bigger is fetched from the publisher's API. */
 const EVENT_PAYLOAD_BYTES = 16 * 1024;
+
+/** The most entries one Activity export holds: a year of a busy deployment. Narrow the dates for more. */
+export const AUDIT_EXPORT_MAX = 50_000;
+
+/**
+ * One CSV cell (RFC 4180): quoted when it holds a comma, quote or line break. A cell a spreadsheet
+ * would run as a formula (starting =, +, -, @, tab or return) starts with an apostrophe (OWASP CSV injection).
+ */
+const csvCell = (value: unknown) => {
+  let text = value === undefined || value === null ? '' : typeof value === 'string' ? value : JSON.stringify(value);
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+/** Activity as CSV, a header row then one row per entry, in the order given. */
+export const auditCsv = (entries: AuditEntryType[]) =>
+  [
+    ['id', 'at', 'actor', 'actor kind', 'recorded by', 'app', 'action', 'target', 'floor', 'detail'],
+    ...entries.map((e) => [e.id, e.at, e.actor.id, e.actor.kind, e.recordedBy, e.app, e.action, e.target, e.workspace?.id, e.detail && Object.keys(e.detail).length ? e.detail : undefined]),
+  ]
+    .map((row) => row.map(csvCell).join(','))
+    .join('\r\n') + '\r\n';
 
 /** What a person.updated entry says changed, in the words followers use: never the values, which a follower fetches. */
 const PERSON_FIELDS: Record<string, string> = { firstName: 'name', lastName: 'name', email: 'email', roles: 'roles', departments: 'teams' };
@@ -642,6 +664,57 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
             return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the whole audit log; a lead can read their own floor’s.' });
           }
           return store.audit({ app: forApp, actor, since, until, before, workspace, limit });
+        },
+      );
+
+      // Activity as a spreadsheet (ADR 0040): the same entries, filters and rights as GET /audit, as CSV.
+      app.get(
+        '/audit/export',
+        {
+          schema: {
+            summary: 'The audit log as CSV, newest first (admins; leads for their own floor)',
+            description: [
+              'The same filters and rights as GET /audit, every matching entry up to',
+              `${AUDIT_EXPORT_MAX.toLocaleString('en')} (newest first; narrow the dates for more). Columns: id, at, actor,`,
+              'actor kind, recorded by, app, action, target, floor, detail (JSON). A cell that a spreadsheet would',
+              'read as a formula starts with an apostrophe. Each export is itself recorded, as audit.exported.',
+            ].join(' '),
+            querystring: Type.Object({
+              app: Type.Optional(Type.String()),
+              actor: Type.Optional(Type.String()),
+              since: Type.Optional(Type.String({ format: 'date-time', description: 'Only entries at or after this time' })),
+              until: Type.Optional(Type.String({ format: 'date-time', description: 'Only entries before this time' })),
+              workspace: Type.Optional(Type.String({ maxLength: 100, description: 'Only entries on this floor or below it' })),
+            }),
+            response: {
+              200: { description: 'The entries, as text/csv', content: { 'text/csv': { schema: Type.String() } } },
+              403: refused('Not an admin, nor a lead asking for their own floor'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          const { app: forApp, actor, since, until, workspace } = req.query;
+          if (!caller.roles.includes('admin') && !(workspace && leadsOrAdmin(caller, workspace))) {
+            return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can export the whole audit log; a lead can export their own floor’s.' });
+          }
+          const rows: AuditEntryType[] = [];
+          for (let before: string | undefined; rows.length < AUDIT_EXPORT_MAX; ) {
+            const page = await store.audit({ app: forApp, actor, since, until, before, workspace, limit: Math.min(500, AUDIT_EXPORT_MAX - rows.length) });
+            rows.push(...page);
+            if (page.length < 500) break;
+            before = page[page.length - 1]!.id;
+          }
+          await store.appendAudit(
+            { actor: { id: caller.id, kind: 'user' }, app: 'events', action: 'audit.exported', detail: { rows: rows.length, ...Object.fromEntries(Object.entries(req.query).filter(([, v]) => v !== undefined)) } },
+            undefined,
+          );
+          const stamp = new Date().toISOString().slice(0, 10);
+          return reply
+            .type('text/csv; charset=utf-8')
+            .header('content-disposition', `attachment; filename="activity-${stamp}.csv"`)
+            .send(auditCsv(rows));
         },
       );
 

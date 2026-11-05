@@ -43,6 +43,10 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect((await store.audit({ workspace: 'f', limit: 10 })).map((e) => e.action)).toEqual(['a.payroll']);
     expect((await store.audit({ workspace: 'o', limit: 10 })).map((e) => e.action)).toEqual(['a.legal', 'a.payroll']);
     expect((await store.audit({ limit: 10 })).map((e) => e.action)).toEqual(['a.nowhere', 'a.legal', 'a.payroll']);
+    // AUDIT_KEEP_DAYS: nothing is a day old yet; with a cutoff in the future, all of it goes.
+    expect(await store.pruneAudit(1)).toBe(0);
+    expect(await store.pruneAudit(-1)).toBeGreaterThanOrEqual(3);
+    expect(await store.audit({ limit: 10 })).toEqual([]);
   });
 
   it('keeps which teams turned team notices on', async () => {

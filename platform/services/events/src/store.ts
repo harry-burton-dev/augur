@@ -128,6 +128,8 @@ export interface EventStore {
   readEvents(query: EventsQuery): Promise<DomainEvent[]>;
   /** Forgets events older than this many days; returns how many went. */
   pruneEvents(keepDays: number): Promise<number>;
+  /** Forgets audit entries older than this many days (the deployment's AUDIT_KEEP_DAYS); returns how many went. */
+  pruneAudit(keepDays: number): Promise<number>;
 }
 
 const fromInput = (n: NewNotification, recipient: string, id: string, createdAt: string, floor?: EventFloor): Notification => ({
@@ -246,6 +248,13 @@ export class MemoryEventStore implements EventStore {
     const before = this.domainEvents.length;
     this.domainEvents = this.domainEvents.filter((e) => e.at >= cutoff);
     return before - this.domainEvents.length;
+  }
+
+  async pruneAudit(keepDays: number) {
+    const cutoff = new Date(Date.now() - keepDays * 86_400_000).toISOString();
+    const before = this.entries.length;
+    this.entries = this.entries.filter((e) => e.at >= cutoff);
+    return before - this.entries.length;
   }
 }
 
@@ -628,6 +637,11 @@ export class PgEventStore implements EventStore {
 
   async pruneEvents(keepDays: number) {
     const { rowCount } = await this.pool.query(`delete from events.domain_events where at < now() - make_interval(days => $1)`, [keepDays]);
+    return rowCount ?? 0;
+  }
+
+  async pruneAudit(keepDays: number) {
+    const { rowCount } = await this.pool.query(`delete from events.audit where at < now() - make_interval(days => $1)`, [keepDays]);
     return rowCount ?? 0;
   }
 

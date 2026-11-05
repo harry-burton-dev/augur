@@ -181,6 +181,36 @@ describe('events', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/audit?since=yesterday', headers: alex })).statusCode).toBe(400);
   });
 
+  it('exports Activity as CSV for admins, with the same filters, safe for spreadsheets, and records the export', async () => {
+    const app = await buildApp({ verifyService });
+    const write = (entry: object) => app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: entry });
+    await write({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' });
+    await write({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.renamed', target: 'doc-7', detail: { from: '=SUM(A1)', to: 'Budget, final' } });
+    await write({ actor: { id: 'u-3', kind: 'user' }, app: 'identity', action: 'person.added', target: '+44 20' });
+    expect((await app.inject({ method: 'GET', url: '/v1/audit/export', headers: sam })).statusCode).toBe(403);
+
+    const res = await app.inject({ method: 'GET', url: '/v1/audit/export?app=library', headers: alex });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/csv/);
+    expect(res.headers['content-disposition']).toMatch(/^attachment; filename="activity-\d{4}-\d{2}-\d{2}\.csv"$/);
+    const lines = res.body.trimEnd().split('\r\n');
+    expect(lines[0]).toBe('id,at,actor,actor kind,recorded by,app,action,target,floor,detail');
+    // Newest first, and only the library's.
+    expect(lines.slice(1).map((l) => l.split(',')[6])).toEqual(['document.renamed', 'document.published']);
+    // Detail as JSON in one quoted cell, its quotes doubled.
+    expect(lines[1]!.endsWith(',"{""from"":""=SUM(A1)"",""to"":""Budget, final""}"')).toBe(true);
+
+    // A cell a spreadsheet would run as a formula starts with an apostrophe.
+    const everyone = (await app.inject({ method: 'GET', url: '/v1/audit/export', headers: alex })).body;
+    expect(everyone).toContain(",person.added,'+44 20,");
+
+    // Each export is itself in Activity, with what was asked for.
+    const [last] = (await app.inject({ method: 'GET', url: '/v1/audit?app=events', headers: alex })).json();
+    expect(last).toMatchObject({ actor: { id: 'u-1' }, action: 'audit.exported', detail: { rows: 4 } });
+    const [, first] = (await app.inject({ method: 'GET', url: '/v1/audit?app=events', headers: alex })).json();
+    expect(first).toMatchObject({ action: 'audit.exported', detail: { rows: 2, app: 'library' } });
+  });
+
   describe('apps signed in as themselves', () => {
     const as = (app: string, workspace?: string) => ({ authorization: `Bearer app-${app}`, ...(workspace ? { 'x-workspace-id': workspace } : {}) });
     const asked: [string, string | undefined][] = [];

@@ -13,6 +13,7 @@ loadConfigOrExit('events', [
   commonSettings.gateway,
   { name: 'DOMAIN_EVENTS_KEEP_DAYS', about: 'how many days apps’ domain events are kept (default 30).' },
   { name: 'INBOX_KEEP_DAYS', about: 'how many days closed inbox items are kept (default 90).' },
+  { name: 'AUDIT_KEEP_DAYS', about: 'how many days Activity (the audit log) is kept; unset or 0 keeps it all.' },
 ]);
 
 const port = Number(process.env.PORT ?? 8084);
@@ -51,6 +52,8 @@ await app.listen({ port, host: '0.0.0.0' });
 const keepDays = Number(process.env.DOMAIN_EVENTS_KEEP_DAYS || 30);
 // Closed inbox items are kept INBOX_KEEP_DAYS (90) days, then go with their history; the audit log keeps every step.
 const inboxDays = Number(process.env.INBOX_KEEP_DAYS || 90);
+// Activity is the record (ADR 0040): kept for good unless the deployment sets a retention period.
+const auditDays = Number(process.env.AUDIT_KEEP_DAYS || 0);
 const prune = () =>
   Promise.all([
     store.pruneEvents(keepDays).then(
@@ -61,6 +64,12 @@ const prune = () =>
       (n) => n && app.log.info({ removed: n, keepDays: inboxDays }, 'old closed inbox items removed'),
       (err) => app.log.error({ err: String(err) }, 'removing old inbox items failed'),
     ),
+    auditDays > 0
+      ? store.pruneAudit(auditDays).then(
+          (n) => n && app.log.info({ removed: n, keepDays: auditDays }, 'Activity older than AUDIT_KEEP_DAYS removed'),
+          (err) => app.log.error({ err: String(err) }, 'removing old Activity failed'),
+        )
+      : undefined,
   ]);
 void prune();
 setInterval(prune, 3_600_000).unref();

@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.11.0
+  version: 1.12.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -1613,6 +1613,55 @@ paths:
                 items:
                   $ref: "#/components/schemas/AuditEntry"
                 description: Audit entries
+        "403":
+          description: Not an admin, nor a lead asking for their own floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /audit/export:
+    get:
+      summary: The audit log as CSV, newest first (admins; leads for their own floor)
+      description: "The same filters and rights as GET /audit, every matching entry up to 50,000 (newest first; narrow the dates for more). Columns: id, at, actor, actor kind, recorded by, app, action, target, floor, detail (JSON). A cell that a spreadsheet would read as a formula starts with an apostrophe. Each export is itself recorded, as audit.exported."
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: app
+          required: false
+        - schema:
+            type: string
+          in: query
+          name: actor
+          required: false
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: since
+          required: false
+          description: Only entries at or after this time
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: until
+          required: false
+          description: Only entries before this time
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: Only entries on this floor or below it
+      responses:
+        "200":
+          description: The entries, as text/csv
+          content:
+            text/csv:
+              schema:
+                type: string
         "403":
           description: Not an admin, nor a lead asking for their own floor
           content:

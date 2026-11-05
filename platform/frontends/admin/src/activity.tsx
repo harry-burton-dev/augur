@@ -2,7 +2,7 @@ import { Button, DateField, Details, Dialog, Select, Table, type SelectOption, t
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fullName, type AdminApi, type AuditEntry, type AuditQuery, type CatalogueApp, type Department, type Person } from './api.js';
 import { floorTree } from './apps-model.js';
-import { Page } from './parts.js';
+import { Page, Problem } from './parts.js';
 
 const PAGE = 50;
 const ANYONE = '*';
@@ -164,6 +164,8 @@ export function Activity({ api }: { api: AdminApi }) {
   const [names, setNames] = useState<Names>(() => namesFrom([], [], []));
   const [options, setOptions] = useState<{ people: SelectOption[]; areas: SelectOption[]; floors: SelectOption[] }>({ people: [], areas: [], floors: [] });
   const [filters, setFilters] = useState<Filters>({ who: ANYONE, area: ANYONE, floor: ANYONE, period: 'week', from: '', to: '' });
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -244,11 +246,30 @@ export function Activity({ api }: { api: AdminApi }) {
   };
 
   const set = (k: keyof Filters) => (value: string) => setFilters((f) => ({ ...f, [k]: value }));
+
+  /** Everything the filters show, not only the pages loaded, as a spreadsheet file. */
+  const download = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const query = Object.fromEntries(Object.entries(queryFor(filters)).filter(([k]) => k !== 'before' && k !== 'limit')) as Omit<AuditQuery, 'before' | 'limit'>;
+      const { blob, filename } = await api.exportAudit(query);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (err) {
+      setExportError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
   const rows: TableRow[] = entries.map((e) => ({ id: e.id, at: e.at, what: describe(e, names), area: areaName(e.app, names) }));
   const e = entries.find((x) => x.id === open);
 
   return (
-    <Page heading="Activity" summary="Every change made through AUGUR: who, what, where and when. Nothing here can be edited or removed.">
+    <Page heading="Activity" summary="Every change made through AUGUR: who, what, where and when. Nothing here can be edited or removed by hand.">
       <div className="admin-filters" data-filters>
         <Select label="Who" options={options.people} value={filters.who} onChange={set('who')} />
         <Select label="Where" options={options.areas} value={filters.area} onChange={set('area')} />
@@ -261,7 +282,22 @@ export function Activity({ api }: { api: AdminApi }) {
           </>
         ) : null}
       </div>
-      <Table noun="changes" columns={columns} rows={rows} loading={loading} error={error} empty="Nothing was changed in this time." onOpen={(row) => setOpen(row.id)} onRetry={() => void load()} />
+      <Table
+        noun="changes"
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        error={error}
+        empty="Nothing was changed in this time."
+        onOpen={(row) => setOpen(row.id)}
+        onRetry={() => void load()}
+        actions={
+          <Button kind="secondary" size="sm" busy={exporting} busyLabel="Making the file…" disabled={loading || Boolean(error)} reason={error ? 'Activity couldn’t be loaded. Try again first.' : 'Wait for Activity to load.'} onPress={() => void download()}>
+            Download CSV
+          </Button>
+        }
+      />
+      <Problem>{exportError}</Problem>
       {more && !loading ? (
         <div className="admin-more">
           <Button kind="secondary" size="sm" busy={loadingMore} onPress={() => void loadOlder()}>
