@@ -1,6 +1,6 @@
 {
-  "version": "0.21.0",
-  "name": "Heron",
+  "version": "0.22.0",
+  "name": "Ibis",
   "channel": "beta",
   "released": "2026-11-05",
   "upgradeFrom": ">=0.19.0",
@@ -9,6 +9,7 @@
     "@augur/kit-common",
     "@augur/kit-bundle",
     "@augur/app-tools",
+    "@augur/mfe-sdk",
     "@augur/service-kit",
     "@augur/events",
     "@augur/gateway",
@@ -19,7 +20,8 @@
     "@augur/updater",
     "@augur/admin",
     "@augur/home",
-    "@augur/shell"
+    "@augur/shell",
+    "@augur/upgrades"
   ],
   "breaking": [],
   "settings": {
@@ -112,6 +114,7 @@
       "OTEL_LGTM_MEM_LIMIT",
       "APP_ORIGINS",
       "KIT_URL",
+      "FOCUS_DEPTH",
       "SEED_ALLOWED",
       "GITHUB_READ_USER",
       "RELEASE_FEED_URL",
@@ -185,72 +188,74 @@
       "GRAFANA_ADMIN_PASSWORD",
       "ALERT_WEBHOOK_TOKEN"
     ],
-    "added": [],
+    "added": [
+      "FOCUS_DEPTH"
+    ],
     "removed": []
   },
   "parts": {
     "@augur/app-kit": {
-      "version": "0.9.0"
+      "version": "0.11.0"
     },
     "@augur/kit-common": {
-      "version": "0.8.0"
+      "version": "0.9.0"
     },
     "@augur/shell-kit": {
       "version": "0.7.0"
     },
     "@augur/kit-bundle": {
-      "version": "0.5.4"
+      "version": "0.5.6"
     },
     "@augur/app-tools": {
-      "version": "0.4.0"
+      "version": "0.4.1"
     },
     "@augur/clients": {
       "version": "0.1.0"
     },
     "@augur/mfe-sdk": {
-      "version": "2.0.0"
+      "version": "2.1.0"
     },
     "@augur/records": {
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.15.0"
-    },
-    "@augur/events": {
-      "version": "0.9.1"
-    },
-    "@augur/gateway": {
-      "version": "0.11.1"
-    },
-    "@augur/identity": {
-      "version": "1.3.0"
-    },
-    "@augur/models": {
-      "version": "0.3.6"
-    },
-    "@augur/registry": {
-      "version": "0.18.0"
-    },
-    "@augur/storage": {
-      "version": "0.4.4"
-    },
-    "@augur/updater": {
-      "version": "0.9.2"
-    },
-    "@augur/admin": {
       "version": "0.16.0"
     },
+    "@augur/events": {
+      "version": "0.9.2"
+    },
+    "@augur/gateway": {
+      "version": "0.12.0"
+    },
+    "@augur/identity": {
+      "version": "1.4.0"
+    },
+    "@augur/models": {
+      "version": "0.3.7"
+    },
+    "@augur/registry": {
+      "version": "0.19.0"
+    },
+    "@augur/storage": {
+      "version": "0.4.5"
+    },
+    "@augur/updater": {
+      "version": "0.9.3"
+    },
+    "@augur/admin": {
+      "version": "0.17.0"
+    },
     "@augur/home": {
-      "version": "0.4.0"
+      "version": "0.4.1"
     },
     "@augur/shell": {
-      "version": "0.17.1"
+      "version": "0.18.0"
     },
     "@augur/sign-in-theme": {
       "version": "0.1.0"
     },
     "@augur/upgrades": {
-      "version": "0.1.5"
+      "version": "0.1.6"
     },
     "@apps/folio-frontend": {
       "version": "0.8.0"

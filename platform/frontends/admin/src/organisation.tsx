@@ -96,8 +96,8 @@ export function Organisation({ api }: { api: AdminApi }) {
                 { label: 'Address', value: settings.sender.address },
               ]}
             />
-            <Notice tone="info" heading="Not used for email yet.">
-              AUGUR’s email still goes from the mail relay’s own address, under the product’s name, both set in the server’s settings. These are kept for when it uses the organisation’s own sender. Admin → Status says whether email can be sent.
+            <Notice tone="info" heading="Email from AUGUR uses these.">
+              Without an address, email goes from the mail relay’s own. AUGUR’s email picks up a change within a minute; sign-in emails pick it up when the server next restarts its services. Admin → Status says whether email can be sent.
             </Notice>
           </Section>
           <p className="admin-quiet">{changed(settings)}</p>
@@ -121,7 +121,7 @@ export function Organisation({ api }: { api: AdminApi }) {
               <TextField name="name" label="Name" required maxLength={100} defaultValue={settings.name} validate={orgNameCheck} />
               <Select name="timeZone" label="Time zone" required options={zoneOptions} defaultValue={settings.timeZone} empty="The list of time zones couldn’t be loaded." />
               <TextField name="senderName" label="Email from" required maxLength={100} defaultValue={settings.sender.name} hint="The name people see on email from AUGUR" />
-              <TextField name="senderAddress" label="Sender address" optional type="email" maxLength={254} defaultValue={settings.sender.address ?? ''} hint="Optional. Kept for when AUGUR’s email uses it" />
+              <TextField name="senderAddress" label="Sender address" optional type="email" maxLength={254} defaultValue={settings.sender.address ?? ''} hint="Optional. Without one, email goes from the mail relay’s own address" />
             </>
           }
         />
