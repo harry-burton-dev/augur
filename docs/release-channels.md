@@ -18,7 +18,7 @@ CI holds these rules on every pull request (`node scripts/promote.mjs check-pr`)
 
 Open pull requests against `main`, with a changeset ([versioning.md](versioning.md#making-a-change)). Merging releases nothing on its own: the Release workflow keeps the **Version packages** pull request open while changesets wait. Merging that bumps each changed package, writes the changelogs and `release/augur-release.json`, and then, in the same run, builds, pushes and signs each unit whose version has no release yet, and makes its GitHub pre-release with its release file. The feed is published once at the end. Servers following beta (the preview ring) see it at their next check; production servers, which follow stable, don't.
 
-The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: Preview releases too** on the installed app in Admin → Apps, so its betas install there.
+The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, open it in the Upgrade Centre and set **Releases from** to Preview in its settings, so its betas install there.
 
 ## Promote to stable
 
@@ -78,7 +78,7 @@ Each server says what kind it is with `SERVER_RING` in `.env`. It is set there a
 | | `dev` (the workbench) | `preview` (a staging server) | `production` (every other deployment, and the default) |
 | --- | --- | --- | --- |
 | AUGUR follows | AUGUR's own dev builds, taken by itself, and every release (`RELEASE_CHANNEL=dev`, the default; see [AUGUR dev builds](#augur-dev-builds)) | preview releases (beta) by default; `RELEASE_CHANNEL=stable` for production ones only | production releases (stable) only; `RELEASE_CHANNEL=beta` is ignored, and Updates says so |
-| An app follows | production releases, preview releases too, or dev builds too (Admin → Apps, **New releases**) | the same | production releases only; **Preview releases too** and **Dev builds too** stay in the list, greyed, saying why |
+| An app follows | production releases, preview releases too, or dev builds too (Upgrade Centre, the app's **Releases from**) | the same | production releases only; Preview and Dev builds stay in the list, greyed, saying why |
 | Pull requests' builds | run for an app's developers | the same | don't run, unless `ALLOW_PR_PREVIEWS=on` |
 | Feature previews nobody chose for | opt-in | opt-in | off |
 
@@ -88,19 +88,19 @@ It is a required setting from the release that brings it: **Upgrade to …** ask
 
 The **Upgrade Centre** (`/upgrades`) lists every upgrade asked for, newest first: from and to, who asked, how it ended (done, went back by itself, stopped partway), how long it took and the backup it took first. Above it, **What's new since** your version gathers every change between yours and the newest release, once each however many parts it moved, breaking changes first. Each release carries its changed parts' changelogs (`changelogs` in `augur-release.json`) for this; releases made before that link to their notes on GitHub instead.
 
-**Admin → Apps**, on an installed app, shows what's new in the version waiting and the app's history: each install, update and removal, by whom or by itself.
+The same history covers apps: each install, update and removal, by whom or by itself, with what's new in the version waiting on the app's page.
 
 ## Going back
 
 **Upgrade Centre → Go back** lists the five releases before yours on your channel. **Go back** runs the same steps as an upgrade, a backup first, then every part on the older release; parts the older release doesn't have are stopped. It's offered straight away only while no release between is breaking: within that, migrations only add, so the older release works on the tables the newer one left, and the data stays as it is. Across a breaking release, the list says which one and why, and going back is by hand, restoring the backup taken before upgrading to it ([upgrade.md](upgrade.md#going-back)). History records each going back, and Activity has `platform.go-back-requested` and `platform.went-back`.
 
-For an app, **Admin → Apps → Go back** installs one of its three versions before (blue/green, as any install) and sets it to **Hold**, so Automatic doesn't take it straight up again.
+For an app, **Go back** on its page in the Upgrade Centre installs one of its three versions before (blue/green, as any install) and sets it to **Hold**, so Automatic doesn't take it straight up again.
 
 ## Dev builds
 
 Every merge into `main` that changes a runner app (Mandate today) builds it at once, with no Version packages: **App dev builds** (`.github/workflows/app-dev.yml`) makes `app/<id>@<next patch>-dev.<run>` (such as `0.1.3-dev.212` after `0.1.2`), signed by that workflow on `refs/heads/main`, and keeps each app's three newest. A dev build sorts above the release it follows and below the next one.
 
-Only a dev or preview server takes them. On the installed app in Admin → Apps, choose **New releases: Dev builds too**; with **Automatic**, each dev build installs at the server's next check (blue/green, as any install). Before each one, the updater takes a backup of the database, since a dev build runs on the server's real data; the install's first step names the file. On a production server the choice stays in the list, greyed, saying why; the registry refuses one, and the updater refuses to install a dev build unless `.env` says `SERVER_RING=dev` or `preview`.
+Only a dev or preview server takes them. In the Upgrade Centre, set the installed app's **Releases from** to Dev builds; with **Automatic**, each dev build installs at the server's next check (blue/green, as any install). Before each one, the updater takes a backup of the database, since a dev build runs on the server's real data; the install's first step names the file. On a production server the choice stays in the list, greyed, saying why; the registry refuses one, and the updater refuses to install a dev build unless `.env` says `SERVER_RING=dev` or `preview`.
 
 Because a dev build has run its migrations on a real server, a migration is frozen once it's on `main`, not only once it's released: CI on a pull request into `main` fails if it changes or removes one that's already there (`MIGRATIONS_FROZEN_AT=origin/main pnpm check:migrations`). Add a new migration instead.
 

@@ -687,7 +687,6 @@ export class AdminApi {
   installApp = (app: string, version: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', app, version });
   /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
   uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
-  followApp = (app: string, channel: AppChannel, policy: AppPolicy) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/follow`, { channel, policy });
   setDevelopers = (app: string, people: string[]) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/developers`, { people });
   /** Takes back an upgrade the updater hasn't started. */
   cancelUpgrade = () => this.call<PlatformUpdates>('DELETE', '/api/registry/v1/platform/upgrade');

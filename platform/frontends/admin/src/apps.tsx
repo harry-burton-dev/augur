@@ -16,7 +16,7 @@ const columns: TableColumn[] = [
 ];
 
 /** Every app in the catalogue with its version, a switch to stop offering one, and its kept versions to go back to. */
-export function Apps({ api }: { api: AdminApi }) {
+export function Apps({ api, openUpgrades, upgradesName }: { api: AdminApi; openUpgrades: () => void; upgradesName: string }) {
   const [apps, setApps] = useState<CatalogueApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -59,7 +59,7 @@ export function Apps({ api }: { api: AdminApi }) {
     >
       <Table noun="apps" columns={columns} rows={rows} loading={loading} error={error} empty="No apps are registered." onOpen={(row) => setOpen(row.id)} onRetry={() => void load()} />
       <InstallsSection ins={ins} />
-      {app ? <AppDetails key={app.id} api={api} app={app} ins={ins} took={took} onIssue={() => setIssuing(app)} onClose={() => setOpen(undefined)} /> : null}
+      {app ? <AppDetails key={app.id} api={api} app={app} ins={ins} openUpgrades={openUpgrades} upgradesName={upgradesName} took={took} onIssue={() => setIssuing(app)} onClose={() => setOpen(undefined)} /> : null}
       {originsOpen ? <Origins api={api} reload={() => load()} onClose={() => setOriginsOpen(false)} /> : null}
       {issuing ? (
         <Dialog
@@ -96,7 +96,7 @@ export function Apps({ api }: { api: AdminApi }) {
 }
 
 /** One app opened: what it is, whether it's offered, its limits, settings and previews, where it's on, its versions and its runner. */
-function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; app: CatalogueApp; ins: Installs; took: (a: CatalogueApp) => void; onIssue: () => void; onClose: () => void }) {
+function AppDetails({ api, app, ins, openUpgrades, upgradesName, took, onIssue, onClose }: { api: AdminApi; app: CatalogueApp; ins: Installs; openUpgrades: () => void; upgradesName: string; took: (a: CatalogueApp) => void; onIssue: () => void; onClose: () => void }) {
   const [problem, setProblem] = useState('');
   const ships = shipsWithAugur(app);
   const shipped = app.platform || ships;
@@ -188,7 +188,7 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
           </Button>
         </div>
       )}
-      {!shipped && installed ? <RunnerControls installed={installed} ins={ins} /> : null}
+      {!shipped && installed ? <RunnerControls installed={installed} ins={ins} openUpgrades={openUpgrades} upgradesName={upgradesName} /> : null}
       {app.updatedAt ? (
         <p>
           Registered {day(app.registeredAt)}, last updated {day(app.updatedAt)}.
