@@ -54,6 +54,10 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 - **Each service signs in as itself** (the release that removes the shared token): `SERVICE_TOKEN` is gone. Before upgrading, add `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET` and `EVENTS_CLIENT_SECRET` to `.env` (`openssl rand -hex 32` for each), and remove `SERVICE_TOKEN`. Identity makes the matching Keycloak clients when it starts. An app with its own service needs a sign-in from Admin, Apps (**Issue a new sign-in**) as its `SERVICE_CLIENT_SECRET`.
 
+### Organisation settings move to Admin
+
+Admin → Organisation now holds the organisation's name, time zone and email sender (ADR 0042). Nothing to do: the name your server already shows, which came from `ORG_NAME` at first start, stays as it is, and the time zone starts as UTC. From this release identity ignores a changed `ORG_NAME`: change the name in Admin instead. The sign-in pages still show `ORG_NAME` for now, so keep the two the same.
+
 ### Settings the guides named now reach their services
 
 Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([deploy.md](deploy.md#settings-and-secrets)).

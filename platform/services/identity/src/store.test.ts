@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { PgOrganisationStore } from './organisation.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 
 /** The same behaviour from every store. */
@@ -44,6 +45,15 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from identity.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels']);
+    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', 'organisation_001_settings']);
+  });
+
+  it('keeps the organisation settings in one row', async () => {
+    const org = new PgOrganisationStore(admin);
+    expect(await org.get()).toEqual({});
+    await org.put({ timeZone: 'Europe/London', senderName: 'Acme', updatedAt: '2026-11-05T01:00:00.000Z', updatedBy: 'u-1' });
+    await org.put({ timeZone: 'Europe/Paris', senderName: 'Acme', senderAddress: 'no-reply@acme.example', updatedAt: '2026-11-05T02:00:00.000Z', updatedBy: 'u-2' });
+    expect(await org.get()).toEqual({ timeZone: 'Europe/Paris', senderName: 'Acme', senderAddress: 'no-reply@acme.example', updatedAt: '2026-11-05T02:00:00.000Z', updatedBy: 'u-2' });
+    expect((await admin.query('select count(*)::int as n from identity.organisation')).rows[0].n).toBe(1);
   });
 });

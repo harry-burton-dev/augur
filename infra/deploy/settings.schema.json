@@ -427,7 +427,7 @@
     },
     "ORG_NAME": {
       "type": "string",
-      "description": "What the top floor, the whole organisation, is called.",
+      "description": "What the organisation is called at first start. After that an admin changes it in Admin, Organisation (ADR 0042); the sign-in pages still read it.",
       "default": "Organisation",
       "x-services": [
         "identity",
