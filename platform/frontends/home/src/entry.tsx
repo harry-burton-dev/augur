@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { Home } from './home.js';
 import styles from './styles.css?inline';
 
-export { HOME_CHANNEL, needsWords, ago, type HomeCard, type HomeNeed, type HomeState } from './home.js';
+export { HOME_CHANNEL, needsWords, type HomeState } from './home.js';
 
 const roots = new WeakMap<HTMLElement, Root>();
 const STYLE_ID = 'augur-home-styles';

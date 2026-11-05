@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
-import { MemoryAppStore } from './store.ts';
 import { UpdateChecker, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -26,25 +27,26 @@ const manifest = (version: string): ReleaseManifest => ({
 const release = (version: string): FeedRelease => ({ version, channel: 'stable', manifest: manifest(version) });
 
 /** A store holding one upgrade an admin ran that finished, so Automatic may start (ADR 0020, amended 2 Nov). */
-const upgradedByHand = async (store = new MemoryAppStore()) => {
+const upgradedByHand = async (store = db.store) => {
   await store.requestUpgrade({ id: 'up-0', from: '0.12.0', version: '0.13.0', images, requestedBy: 'u-1' });
   await store.progressUpgrade('up-0', { step: 'watch', state: 'done' }, { state: 'done' });
   return store;
 };
 
-/** A production server on 0.13.0, with `releases` out, at `at`, already upgraded once by hand unless given a store. */
-const server = async (releases: FeedRelease[], at: string, store?: MemoryAppStore) => {
-  store ??= await upgradedByHand();
+/** A production server on 0.13.0, on an empty store, with `releases` out, at `at`, already upgraded once by hand unless `byHand` is false. */
+const server = async (releases: FeedRelease[], at: string, byHand = true) => {
+  await db.reset();
+  const store = byHand ? await upgradedByHand() : db.store;
   const updates = new UpdateChecker({ feed: async () => releases, running: { version: '0.13.0', channel: 'stable' }, channel: 'stable', ring: 'production' });
   await updates.check();
   const entries: { action: string; target?: string; detail?: Record<string, unknown> }[] = [];
-  const app = await buildApp({ verifyService, store, updates, timeZone: 'Europe/London', now: () => new Date(at), audit: async (e) => void entries.push(e) });
+  const app = await db.app({ verifyService, store, updates, timeZone: 'Europe/London', now: () => new Date(at), audit: async (e) => void entries.push(e) });
   return { app, store, entries };
 };
 const SUNDAY_2AM = '2026-11-01T02:30:00Z';
 const MONDAY = '2026-11-02T12:00:00Z';
 
-describe('the Upgrade Centre overview (ADR 0020)', () => {
+describe.runIf(DATABASE_URL)('the Upgrade Centre overview (ADR 0020)', () => {
   it('shows AUGUR with its default record, in a sentence, and what Automatic does with the next release', async () => {
     const { app } = await server([release('0.13.1'), release('0.13.0')], MONDAY);
     expect((await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: editor })).statusCode).toBe(403);
@@ -102,7 +104,7 @@ describe('the Upgrade Centre overview (ADR 0020)', () => {
   });
 
   it('leaves AUGUR’s first upgrade on a server to an admin, and says so in Needs you', async () => {
-    const { app } = await server([release('0.13.1'), release('0.13.0')], SUNDAY_2AM, new MemoryAppStore());
+    const { app } = await server([release('0.13.1'), release('0.13.0')], SUNDAY_2AM, false);
     expect((await app.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).statusCode).toBe(204);
     const view = (await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json();
     const why = 'Automatic starts after an admin has upgraded AUGUR on this server once and it finished. Upgrade once from here and watch it.';
@@ -118,7 +120,7 @@ describe('the Upgrade Centre overview (ADR 0020)', () => {
     const store = await upgradedByHand();
     const updates = new UpdateChecker({ feed: async () => [release('0.13.1'), release('0.13.0')], running: { version: '0.13.0', channel: 'stable' }, channel: 'stable', ring: 'production' });
     await updates.check();
-    const app = await buildApp({ verifyService, store, updates, timeZone: 'Europe/London', now: () => new Date(at), audit: async () => undefined });
+    const app = await db.app({ verifyService, store, updates, timeZone: 'Europe/London', now: () => new Date(at), audit: async () => undefined });
     const target = (await app.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json();
     const progress = (payload: Record<string, unknown>) => app.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, ...payload } });
     await progress({ step: 'watch', state: 'running' });
