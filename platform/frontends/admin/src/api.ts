@@ -44,8 +44,16 @@ export interface Organisation {
   /** An IANA time zone, e.g. Europe/London. */
   timeZone: string;
   sender: { name: string; address?: string };
+  /** Idle accounts: warned after `warningDays` without a sign-in, turned off at `turnOffDays`. */
+  idle: Idle;
   updatedAt?: string;
   updatedBy?: string;
+}
+
+export interface Idle {
+  on: boolean;
+  warningDays: number;
+  turnOffDays: number;
 }
 
 /** Only what changes; a sender address of `null` takes it away. */
@@ -53,6 +61,7 @@ export interface OrganisationChanges {
   name?: string;
   timeZone?: string;
   sender?: { name: string; address: string | null };
+  idle?: Partial<Idle>;
 }
 
 export interface Role {

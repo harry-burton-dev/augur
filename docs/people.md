@@ -31,6 +31,10 @@ People shows each person's state and their last sign-in. Identity works the stat
 
 Last sign-in starts when identity first runs with this version. Before that, People says "Not seen yet".
 
+### Idle accounts
+
+Admin → Organisation keeps when idle accounts are dealt with: a warning email after 60 days without a sign-in and the sign-in turned off at 90, unless an admin changes them or turns it off (`idle` in `/v1/organisation`). The turn-off is at least 7 days after the warning, and at most 730 days. Every sign-in starts the count again. The days are kept now; the sign-in service's idle-account Workflow that applies them comes in a later release, and Admin says so.
+
 ### Changes made in Keycloak itself
 
 Someone's sign-in can be turned off or on in Keycloak's admin console, and later by Keycloak's idle-account Workflow; neither ends their sessions or tells AUGUR. Every five minutes identity compares each account's sign-in with what it last knew (one identity copy at a time). For each one that changed it ends their sessions (when turned off), keeps the change, and records `person.disabled` or `person.enabled` in Activity with actor `keycloak` (a service) and `detail.outside: true`, so followers hear `platform.person.disabled` or `platform.person.enabled` as they do for an admin's change. Activity says "Sam's sign-in was turned off in the sign-in service, not in AUGUR".

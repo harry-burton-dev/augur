@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.24.0
+  version: 1.25.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -1349,7 +1349,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /organisation:
     get:
-      summary: The organisation's name, time zone and email sender
+      summary: The organisation's name, time zone, email sender and idle-account days
       description: For anyone signed in, and any service signed in as itself, so every part of AUGUR shows the same name and times (ADR 0042).
       responses:
         "200":
@@ -1362,6 +1362,7 @@ paths:
                   - name
                   - timeZone
                   - sender
+                  - idle
                 properties:
                   name:
                     type: string
@@ -1386,6 +1387,28 @@ paths:
                         maxLength: 254
                         description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
                     additionalProperties: false
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
                   updatedAt:
                     type: string
                     format: date-time
@@ -1472,6 +1495,25 @@ paths:
                         - type: "null"
                       description: null takes the address away
                   additionalProperties: false
+                idle:
+                  type: object
+                  properties:
+                    on:
+                      type: boolean
+                      description: Whether accounts nobody signs in to are warned and then turned off
+                    warningDays:
+                      type: integer
+                      minimum: 7
+                      maximum: 723
+                      description: Days without a sign-in before the warning email
+                    turnOffDays:
+                      type: integer
+                      minimum: 14
+                      maximum: 730
+                      description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                  additionalProperties: false
+                  minProperties: 1
+                  description: Only what changes; the warning stays at least a week before the turn-off
               additionalProperties: false
               minProperties: 1
               description: Only what changes
@@ -1487,6 +1529,7 @@ paths:
                   - name
                   - timeZone
                   - sender
+                  - idle
                 properties:
                   name:
                     type: string
@@ -1511,6 +1554,28 @@ paths:
                         maxLength: 254
                         description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
                     additionalProperties: false
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
                   updatedAt:
                     type: string
                     format: date-time
@@ -1520,7 +1585,7 @@ paths:
                     description: Who last changed them
                 description: The settings now
         "400":
-          description: A name with a slash or only spaces, an unknown time zone, or a sender that is not one line or not an email address
+          description: A name with a slash or only spaces, an unknown time zone, a sender that is not one line or not an email address, or idle days out of bounds or with less than a week between warning and turn-off
           content:
             application/problem+json:
               schema:
