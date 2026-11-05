@@ -67,5 +67,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0059](0059-grafana-alerting-and-faro.md) | A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence | Proposed | 2026-11-04 |
 | [0060](0060-off-server-backups-with-restic.md) | Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names | Proposed | 2026-11-04 |
 | [0063](0063-accessibility-checked-by-axe.md) | Accessibility is checked by axe in CI, failing on serious findings | Proposed | 2026-11-04 |
+| [0065](0065-mail-through-nodemailer-react-email-and-mailpit.md) | AUGUR's own email is sent by Nodemailer from React Email templates, and Mailpit catches it in dev | Accepted | 2026-11-05 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
