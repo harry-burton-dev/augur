@@ -1,5 +1,21 @@
 # @augur/registry
 
+## 0.19.0
+
+### Minor Changes
+
+- 8eba62b: Apps say they bind their things to entities with `links: { entities: true }` and name the types they bind in `bindings` (lowercase, up to 10, never `entity` or `role`; SDK 2.1, ADR 0066). The registry lists those apps and types for any service at `GET /v1/entity-links`, and the service kit's `registryBindingApps` reads it, cached, so a follower such as Data Atlas subscribes to exactly `<app>.<type>.entity-bound` and `-unbound`.
+
+### Patch Changes
+
+- 325b583: Admin → Organisation shows the organisation's name, time zone and email sender, and lets an admin change them in one form that sends only what changed (ADR 0042). It says plainly that AUGUR's email doesn't use the organisation's sender yet: mail still goes from the relay's address (`SMTP_FROM`) under the product's name. Activity writes `organisation.changed` as a sentence, and Admin's menu gains a Settings group in the Organisation area.
+- f3c0ffd: The registry keeps its catalogue only in Postgres: its in-memory store is gone, and its tests run on real Postgres. Run locally, it needs `DATABASE_URL`.
+- Updated dependencies [c0de29b]
+- Updated dependencies [8eba62b]
+- Updated dependencies [ab9f61f]
+  - @augur/service-kit@0.16.0
+  - @augur/mfe-sdk@2.1.0
+
 ## 0.18.0
 
 ### Minor Changes
