@@ -231,6 +231,14 @@ export const Preferences = Type.Object(
         description: 'App ids whose notifications land in the stream silently and never on Home',
       }),
     ),
+    pinned: Type.Optional(
+      Type.Array(Type.String({ minLength: 1, maxLength: 64 }), {
+        maxItems: 12,
+        uniqueItems: true,
+        description: 'App ids they keep first on Home and in the list of apps, in their order',
+      }),
+    ),
+    startFloor: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: 'The floor id AUGUR opens on when an address names none; their own floor without it' })),
     awayMessage: Type.Optional(Type.String({ maxLength: 140, description: 'What their away status says' })),
     awayUntil: Type.Optional(Type.String({ format: 'date-time', description: 'When being away ends by itself' })),
     timeZone: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: "IANA, such as Europe/London; without it the organisation's, then the browser's" })),

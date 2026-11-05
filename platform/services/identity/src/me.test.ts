@@ -112,10 +112,10 @@ describe('the caller’s account', () => {
   it('keeps a time zone, away message and notification choices, refusing ones that make no sense', async () => {
     const app = await buildApp();
     const me = callerHeaders(alex);
-    const prefs = { timeZone: 'Europe/London', awayMessage: 'Back Monday', awayUntil: '2026-11-09T09:00:00.000Z', notifications: { email: false, digest: 'weekly', quietHours: { from: '22:00', to: '07:00' } } };
+    const prefs = { pinned: ['folio', 'atlas'], startFloor: 'ws-finance', timeZone: 'Europe/London', awayMessage: 'Back Monday', awayUntil: '2026-11-09T09:00:00.000Z', notifications: { email: false, digest: 'weekly', quietHours: { from: '22:00', to: '07:00' } } };
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: me, payload: prefs })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences', headers: me })).json()).toEqual(prefs);
-    for (const bad of [{ timeZone: 'Mars/Olympus' }, { notifications: { quietHours: { from: '22:00', to: '22:00' } } }, { notifications: { quietHours: { from: '25:00', to: '07:00' } } }, { notifications: { digest: 'hourly' } }]) {
+    for (const bad of [{ timeZone: 'Mars/Olympus' }, { notifications: { quietHours: { from: '22:00', to: '22:00' } } }, { notifications: { quietHours: { from: '25:00', to: '07:00' } } }, { notifications: { digest: 'hourly' } }, { pinned: ['folio', 'folio'] }]) {
       expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: me, payload: bad })).statusCode).toBe(400);
     }
   });

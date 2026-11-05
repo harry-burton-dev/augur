@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.7.0
+  version: 1.8.0
   description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz and /caller-keys needs a signed-in caller, however it is spelt. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
 components:
   schemas:
@@ -139,6 +139,61 @@ components:
         problem:
           type: string
       description: The last copy of the night's backup off the server, with restic (ADR 0060)
+    PointInTime:
+      type: object
+      required:
+        - at
+        - ok
+      properties:
+        at:
+          type: string
+          format: date-time
+          description: When the backup container last looked (hourly)
+        ok:
+          type: boolean
+        bases:
+          type: integer
+          description: Base backups kept, one a night
+        earliest:
+          type: string
+          format: date-time
+          description: "The earliest moment the database can be restored to: when the oldest base backup was taken"
+        archivedAt:
+          type: string
+          format: date-time
+          description: When Postgres last archived a WAL file
+        copiedAt:
+          type: string
+          format: date-time
+          description: When the WAL archive was last copied off the server
+        problem:
+          type: string
+        lastTest:
+          type: object
+          required:
+            - at
+            - ok
+          properties:
+            at:
+              type: string
+              format: date-time
+            ok:
+              type: boolean
+            base:
+              type: string
+              description: The base backup the changes were replayed onto
+            seconds:
+              type: integer
+            mark:
+              type: string
+              description: The moment marked on the live database before the test
+            reached:
+              type: string
+              description: The last change the replay reached
+            problem:
+              type: string
+          description: "The weekly test: the newest base backup restored and every archived change since replayed onto it"
+      description: "Restoring the database to a point in time: archived WAL replayed onto a nightly base backup (ADR 0064)"
     BackupStatus:
       type: object
       required:
@@ -156,6 +211,8 @@ components:
           $ref: "#/components/schemas/BackupRun"
         offsite:
           $ref: "#/components/schemas/OffsiteCopy"
+        pointInTime:
+          $ref: "#/components/schemas/PointInTime"
         lastRestoreTest:
           allOf:
             - $ref: "#/components/schemas/BackupRun"

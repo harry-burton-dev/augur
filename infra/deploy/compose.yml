@@ -138,25 +138,34 @@ services:
       keycloak: { condition: service_healthy }
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.
+  # Archives every change (its WAL) into wal-archive as it goes, so the database can be put back as it was
+  # at any moment since the oldest base backup (ADR 0064; postgres/start.sh; docs/deploy.md, "Restore to a
+  # point in time").
   postgres:
     logging: *logging
     image: pgvector/pgvector:0.8.0-pg16
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "/etc/augur/start.sh"]
     environment:
       POSTGRES_USER: platform
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: platform
+      # At most this many seconds of changes wait before they're archived (when there are any).
+      PITR_ARCHIVE_SECONDS: ${PITR_ARCHIVE_SECONDS:-900}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./postgres:/etc/augur:ro
+      - wal-archive:/wal-archive
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform"]
       interval: 5s
       timeout: 5s
       retries: 20
 
-  # A dump of the whole database every night into infra/deploy/backups, keeping 14 days,
-  # and once a week a test restore of the newest into a throwaway database. Once OFFSITE_REPOSITORY is
+  # A dump of the whole database every night into infra/deploy/backups, keeping 14 days, with a base backup
+  # for the archived WAL to be replayed onto (the newest PITR_KEEP_DAYS kept; ADR 0064), and once a week a
+  # test restore of the newest of each into a throwaway database. Once OFFSITE_REPOSITORY is
   # set, each night's dump and apps' files are also copied off the server with restic, encrypted before
   # they leave, and the weekly restore test restores from that copy (ADR 0060; docs/deploy.md, "Backups").
   backup:
@@ -179,6 +188,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${OFFSITE_SECRET_ACCESS_KEY:-}
       AWS_DEFAULT_REGION: ${OFFSITE_REGION:-}
       OFFSITE_KEEP_DAILY: ${OFFSITE_KEEP_DAILY:-30}
+      PITR_KEEP_DAYS: ${PITR_KEEP_DAYS:-7}
     volumes:
       - ./backup:/backup:ro
       - ./backups:/backups
@@ -187,6 +197,8 @@ services:
       - garage-data:/objects/data:ro
       # restic, put there by backup-tools.
       - backup-tools:/tools:ro
+      # Postgres's archived WAL: pruned to the oldest base backup, copied off the server, replayed in tests.
+      - wal-archive:/wal-archive
     depends_on:
       postgres: { condition: service_healthy }
       backup-tools: { condition: service_completed_successfully }
@@ -700,4 +712,6 @@ volumes:
   garage-data:
   # restic, for the backup container (backup-tools fills it on every `up`).
   backup-tools:
+  # Postgres's archived changes (WAL), gzipped: postgres writes them, the backup container prunes and copies them.
+  wal-archive:
   otel-lgtm:
