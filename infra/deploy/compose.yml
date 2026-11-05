@@ -687,7 +687,8 @@ services:
       replicas: ${OTEL_LGTM_REPLICAS:-1}
     mem_limit: ${OTEL_LGTM_MEM_LIMIT:-2g}
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      # Required: with none, Grafana would take admin/admin. An upgrade from the Upgrade Centre makes it up.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
       # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h

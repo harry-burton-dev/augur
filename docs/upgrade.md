@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Grafana's password is required
+
+**From** unreleased
+
+`GRAFANA_ADMIN_PASSWORD` is now required, because Grafana with none signs in as admin/admin. An upgrade from the Upgrade Centre makes one up and writes it to `.env`, where you read it to sign in. By hand, set it before `pc up -d` (`openssl rand -hex 16`), even with `OTEL_LGTM_REPLICAS=0`. Settings you enter for an upgrade are still never stored: if the registry restarts before the updater takes them, the upgrade ends at once, failed, nothing changed, and says to ask again. The registry also turns down a signed feed issued before the newest one it has taken since it started, so an older feed still in date can't be replayed to hide a newer release or a halt; the Upgrade Centre says so.
+
 ### Each service signs in as itself
 
 **From** augur@0.2.0
