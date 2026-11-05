@@ -62,7 +62,8 @@ const notesFor = (version) =>
  */
 const attest = (ref, out) => {
   for (const [kind, field, type] of [['sbom', '.SBOM.SPDX', 'spdxjson'], ['provenance', '.Provenance.SLSA', 'slsaprovenance']]) {
-    const value = run('docker', ['buildx', 'imagetools', 'inspect', ref, '--format', `{{ json ${field} }}`]).trim();
+    // An SBOM lists every package in the image: a service's runs to megabytes, past execFileSync's 1 MB default.
+    const value = run('docker', ['buildx', 'imagetools', 'inspect', ref, '--format', `{{ json ${field} }}`], { maxBuffer: 256 * 1024 * 1024 }).trim();
     if (!value || value === 'null') throw new Error(`${ref} has no ${kind}: build it with --sbom=true --provenance=true.`);
     const file = join(out, `${kind}.json`);
     writeFileSync(file, value);
