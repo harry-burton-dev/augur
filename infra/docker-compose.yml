@@ -58,12 +58,14 @@ services:
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       GARAGE_ADMIN_URL: http://garage:3903
       GARAGE_ADMIN_TOKEN: platform-local-only
-      # Folio's and Data Atlas's own schemas and buckets. Local only.
-      APP_STORAGE: folio atlas
+      # Folio's, Data Atlas's and Mandate's own schemas and buckets. Local only.
+      APP_STORAGE: folio atlas mandate
       FOLIO_DATABASE_PASSWORD: platform-local-only-folio
       FOLIO_BUCKET_SECRET: 6c6f63616c2d6f6e6c792d666f6c696f2d6275636b65742d7365637265742d30
       ATLAS_DATABASE_PASSWORD: platform-local-only-atlas
       ATLAS_BUCKET_SECRET: 6c6f63616c2d6f6e6c792d61746c61732d6275636b65742d7365637265742d30
+      MANDATE_DATABASE_PASSWORD: platform-local-only-mandate
+      MANDATE_BUCKET_SECRET: 6c6f63616c2d6f6e6c792d6d616e646174652d6275636b65742d736563726574
     depends_on: [postgres, garage]
 
   # Sign-in. The platform realm, its shell client and test users are imported from ./keycloak.
@@ -97,7 +99,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       IDENTITY_CLIENT_SECRET: platform-local-only-identity
       # The clients for the platform's services and the sample apps, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex,app-atlas=platform-local-only-atlas
+      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex,app-atlas=platform-local-only-atlas,app-mandate=platform-local-only-mandate
       PLATFORM_ADMIN_USER: alex
       REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
@@ -120,7 +122,7 @@ services:
       # Your own machine may be filled with sample data (pnpm seed, docs/seed.md).
       SEED_ALLOWED: "true"
       # Each app's service, name=url. The platform knows no app by name.
-      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086
+      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086,mandate=http://mandate:8087
     ports: ["8080:8080"]
 
   identity:
@@ -146,7 +148,7 @@ services:
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-registry
       # The apps that ship with AUGUR: turned off rather than removed.
-      PILLAR_APPS: folio auspex atlas
+      PILLAR_APPS: folio auspex atlas mandate
       <<: *internal
     depends_on: [postgres]
 
@@ -207,6 +209,18 @@ services:
       PORT: 8086
       DATABASE_URL: postgres://app_atlas:platform-local-only-atlas@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-atlas
+    depends_on:
+      storage: { condition: service_completed_successfully }
+
+  # Mandate, intent passed down the floors.
+  mandate:
+    <<: *service
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/mandate:${SHIPPED_APPS_VERSION:-beta}
+    environment:
+      <<: *internal
+      PORT: 8087
+      DATABASE_URL: postgres://app_mandate:platform-local-only-mandate@postgres:5432/platform
+      SERVICE_CLIENT_SECRET: platform-local-only-mandate
     depends_on:
       storage: { condition: service_completed_successfully }
 
