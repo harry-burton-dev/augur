@@ -4,7 +4,7 @@ From a new app to running on your servers, with no manual update at any step. Ea
 
 | Step | Where it runs | What you do |
 | --- | --- | --- |
-| [Build and test](#1-build-and-test-it) | Your machine | `pnpm create-app`, `pnpm dev:app` |
+| [Build and test](#1-build-and-test-it) | Your machine | A repository from augur-app-template, `pnpm dev:app` |
 | [Try it on a server](#2-try-it-on-a-real-server) | CI and your server | Open a pull request, switch to its preview |
 | [Release it](#3-release-it) | CI | Merge, then merge Version packages |
 | [Servers take it](#4-servers-take-it) | Each server | Nothing, unless it asks for something new |
@@ -21,10 +21,10 @@ A server that can't reach GitHub reads apps from a mirror instead ([mirror.md](m
 
 ## 1. Build and test it
 
+Make the app's repository from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template) and follow its README, then, from an AUGUR checkout beside it:
+
 ```sh
-pnpm create-app expenses --name "Expenses"
-pnpm dev:app expenses        # the real shell and kit, your frontend and service from source
-pnpm --filter "@apps/expenses*" test
+pnpm dev:app ../augur-expenses   # the real shell and kit, your frontend and service from source
 ```
 
 The shell stands in for the rest of the platform: sign-in, floors and Home. See [build-an-app.md](build-an-app.md) for the frontend, service and manifest, and for the checks to run before a pull request.
