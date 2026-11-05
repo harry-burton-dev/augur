@@ -248,6 +248,7 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
 - `maxUpload` is the largest request, in MB (1 to 2048), the gateway lets through to your service; 10 without it. Bodies stream through the gateway and are never held there, and one past the limit gets 413 before your service sees it. An admin can lower it in Admin, Apps. The manifest the shell gives your frontend has the limit in force, so check a file against it before sending. SDK 1.4.
 - `inbox` (SDK 1.12) declares the kinds of work your service puts in people's inboxes: `{ "kinds": [{ "id": "assignment", "label": "Assigned to you", "icon": "compass" }] }`, up to 10, each id once. The Inbox shows the label and icon on each item, and an item of a kind you didn't declare is refused. It goes with `inbox:write` ([The Inbox](inbox.md)).
 - `notifications` (SDK 2.0) declares the kinds of notification your service sends: `{ "kinds": [{ "id": "comment", "label": "Comments on your documents", "detail": "When someone comments on one you own" }] }`, up to 10, each id once. Send each notification with its `kind`. Account, Notifications lists them under your app, and each person chooses which kinds reach them out loud and which wait quietly ([Your account](account.md)). A notification of a kind you didn't declare is refused. It goes with `notifications:send`.
+- `links` and `bindings` (SDK 2.1) say your app binds its things to entities: `"links": { "entities": true }, "bindings": ["claim"]`. Each type in `bindings` (lowercase, up to 10, never `entity` or `role`) is published on `<app id>.<type>.entity-bound` and `-unbound` ([Binding your things to entities](#binding-your-things-to-entities) below). The registry lists these apps and types for services at `GET /v1/entity-links`, which the service kit's `registryBindingApps` reads, so the entity catalogue follows exactly your binding topics and shows what uses each entity.
 - `settings` are what admins can change about your app, in Admin, Apps: up to 10, each a whole number with an `id`, a `label`, an optional `detail` and `unit`, and its `min`, `max` and `default`. Your service reads them as itself with `appSettings({ registryUrl, credentials, app })` from the service kit, which gives each id's value: an admin's, or the default. Ask again each time you use one, since an admin can change it at any time; changes are in the activity log. If a newer version narrows a range past an admin's value, the default is used until an admin sets it again.
 
   ```json
@@ -255,7 +256,7 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
   ```
 - `storage` says the app keeps its own database schema (`"database": true`) or files (`"bucket": true`) on the platform; an admin gives it them, and its service reads them with `appStorageFromEnv()`. See [App storage](app-storage.md).
 
-`pnpm check:manifest` puts every app's manifest to a registry running in memory, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
+`pnpm check:manifest` checks every app's manifest with the registry's own schema and rules, so it fails on exactly what the real registry would refuse: an unknown or misspelt field, a bad version or range, a route another app has.
 
 ### Checking a manifest
 
@@ -265,7 +266,13 @@ The manifest has a published JSON Schema, `contracts/manifest.schema.json`. It i
 { "$schema": "../../contracts/manifest.schema.json", "id": "expenses", … }
 ```
 
-The path is relative to the manifest; in an app's own repository, point it at the file in an AUGUR checkout or a copy of it. The registry accepts `$schema` and doesn't use it. A registry from before the schema was published refuses it as an unknown field, so leave it out of an app that may register with a deployment that hasn't upgraded.
+The path is relative to the manifest. In an app's own repository, point it at the copy inside `@augur/app-tools`, which every app already builds with, so the schema matches the tools it releases with and needs no checkout of AUGUR:
+
+```json
+{ "$schema": "./node_modules/@augur/app-tools/manifest.schema.json", "id": "expenses", … }
+```
+
+The registry accepts `$schema` and doesn't use it. A registry from before the schema was published refuses it as an unknown field, so leave it out of an app that may register with a deployment that hasn't upgraded.
 
 To check manifests, build AUGUR, then name them, or name none to check every `apps/<id>/manifest.json`:
 
@@ -274,7 +281,7 @@ pnpm build
 node scripts/check-manifests.mjs path/to/manifest.json
 ```
 
-Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes is then put to the registry in memory, for the rules a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json` is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
+Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes then meets the registry's own rules, the ones its `PUT /apps/:id` applies, for what a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json`, or its copy in `@augur/app-tools`, is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
 
 ### Find
 
@@ -369,7 +376,7 @@ await outboxBinding(tx, { app: 'expenses', type: 'claim', id: claim.id, entity: 
 
 Ask for `events:publish`; `bindingTopics('expenses', 'claim')` names the two topics. Send ids only: a thing another app needs more ids to open can carry them in `more` (Artifacts sends `library` and `level`), never titles. A follower reads any app's binding events with `readBinding(event)`. In the browser, `EntityBinding` (a `Ref` and an `EntityRef`) is how a frontend passes the same link around.
 
-A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`. Data Atlas follows the events to answer "what points at this entity", so binding still works while Atlas is off.
+A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`. Data Atlas follows the events to answer "what points at this entity", so binding still works while Atlas is off. Declare `"links": { "entities": true }` and your types in `bindings` (SDK 2.1) so it subscribes to just those topics; a follower asks the registry which apps bind what with the service kit's `registryBindingApps({ registryUrl, credentials })`.
 
 ### Dates and times, the person's way
 

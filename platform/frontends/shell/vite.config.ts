@@ -79,6 +79,11 @@ export const KIT_URL_PLACEHOLDER = '@KIT_URL@';
  */
 export const PRODUCT_NAME_PLACEHOLDER = '@PRODUCT_NAME@';
 const DEFAULT_PRODUCT_NAME = 'AUGUR';
+/**
+ * How focus is drawn, in the page's `augur-depth` meta, which Quill reads (ADR 0068): the web container
+ * fills it in from FOCUS_DEPTH. index.html and dev leave it empty, so each app chooses.
+ */
+export const FOCUS_DEPTH_PLACEHOLDER = '@FOCUS_DEPTH@';
 const kit = readKit();
 /** Every module the SDK promises apps must come from the kit: since SDK 2 nothing else serves one. */
 const notInKit = sharedModules.filter((s) => !(s in kit.imports));
@@ -160,7 +165,7 @@ const sharedModulesMap = (): Plugin => {
         })),
         { tag: 'script', children: KIT_FAILED, injectTo: 'head-prepend' },
       ];
-      return { html: dev ? html.replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME) : html, tags };
+      return { html: dev ? html.replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME).replaceAll(FOCUS_DEPTH_PLACEHOLDER, '') : html, tags };
     },
     // index.template.html keeps the placeholders for the web container; index.html has the defaults.
     writeBundle() {
@@ -168,7 +173,7 @@ const sharedModulesMap = (): Plugin => {
       if (dev || !existsSync(page)) return;
       const html = readFileSync(page, 'utf8');
       writeFileSync(join(outDir, 'index.template.html'), html);
-      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/').replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME));
+      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/').replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME).replaceAll(FOCUS_DEPTH_PLACEHOLDER, ''));
     },
   };
 };

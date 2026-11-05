@@ -21,7 +21,7 @@ Keycloak runs in the stack and only signs people in (OIDC). It brokers the organ
 ## Consequences
 
 - Keycloak's realm and client ids keep the old `platform` names on purpose, because renaming them would sign everyone out.
-- The Keycloak master admin and `/sso/admin` exposure are open security items.
+- The Keycloak master admin and `/sso/admin` exposure are open security items. *Update 2026-11-05: done. The front door never serves `/sso/admin` or the master realm to the network unless `KEYCLOAK_CONSOLE=open`, and never through Tailscale Funnel (`infra/deploy/nginx.conf`).*
 
 ## Links
 

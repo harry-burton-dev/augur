@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Desktops without a GPU can go without blur
+
+**From** unreleased
+
+Nothing to do unless your organisation's desktops have no GPU, such as virtual desktops. There, set `FOCUS_DEPTH=scrim` in `.env` and `pc up -d web`: dialogs, menus and the palette then dim what's behind them instead of blurring it, which is slow without a GPU. Unset, nothing changes (docs/deploy.md, "Desktops without a GPU").
+
 ### Activity keeps a year
 
 **From** augur@0.20.0
@@ -435,7 +441,7 @@ Admin → Apps lists, under the catalogue, the apps this repository has released
 
 Open an installed app to choose how it takes new releases:
 
-- **New releases**: stable only, or betas too.
+- **New releases**: **Production releases**, **Preview releases too**, or **Dev builds too** (every merge into `main`; not on a production server).
 - **When one is out**: **Automatic** (the default) installs a newer version by itself when it's a fix or a feature that asks for nothing new: no major version or 0.x minor, no new scopes, storage, kinds of floor or bigger uploads, an SDK range this AUGUR opens, and the same signer. Anything else waits under **Needs you** with why. **Ask first** makes every version wait for you, and **Hold** offers none. A version that failed to install isn't tried again by itself.
 
 The same page follows each job step by step, and **Remove from the server** stops an app's containers; its data stays, and removing it from the catalogue too stops it being listed. Every install, update, removal and choice is in Activity.

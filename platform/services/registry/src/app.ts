@@ -604,7 +604,8 @@ export const buildApp = async ({
               "/manifest); nothing where it is off, on a floor that doesn't exist, or",
               "anywhere while it is turned off. Without a workspace, on the organisation's",
               'floor, as the gateway checks a call that names none (ADR 0007). With them, the',
-              'inbox and notification kinds its manifest declares, which the events service checks against.',
+              'inbox and notification kinds its manifest declares, which the events service checks against, and the',
+              'role its manifest says a person needs, which models checks for an AI app.',
             ].join(' '),
             params: params('id'),
             querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor the call is for' })) }),
@@ -616,6 +617,9 @@ export const buildApp = async ({
                   scopes: Type.Array(ref(ScopeSchema)),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
                   notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
+                  requiredRole: Type.Union([Type.String(), Type.Null()], {
+                    description: "The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.",
+                  }),
                 },
                 { description: "The app's grants" },
               ),
@@ -647,7 +651,48 @@ export const buildApp = async ({
             scopes: on ? usableScopes(found) : [],
             inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
+            requiredRole: found.entry.requiredRole ?? null,
           };
+        },
+      );
+
+      /**
+       * The apps that link their things to entities (manifest links.entities, SDK 2.1) and the types
+       * they bind, so a follower such as the entity catalogue subscribes to exactly those topics
+       * (`<app>.<type>.entity-bound` and `-unbound`, ADR 0066) rather than every event each app sends.
+       */
+      app.get(
+        '/entity-links',
+        {
+          schema: {
+            summary: 'The apps that bind their things to entities, and the types they bind (services only)',
+            description: [
+              'Every registered app whose manifest sets links.entities, with the types of thing it names in',
+              'bindings, each published on <app>.<type>.entity-bound and <app>.<type>.entity-unbound (ADR 0066).',
+              'An app that sets links.entities without bindings has no types listed: follow its <app>.* topics',
+              "and read each event with the service kit's readBinding. For any service, AUGUR's own or an app's.",
+            ].join(' '),
+            response: {
+              200: Type.Array(
+                Type.Object({
+                  app: Type.String({ description: "The app's id" }),
+                  types: Type.Array(Type.String(), { description: 'The types of thing it binds (its manifest\'s bindings)' }),
+                }),
+                { description: 'The apps that link to entities, by id' },
+              ),
+              403: refused('Not a service'),
+              503: refused("The sign-in service that checks the caller's token can't be reached right now"),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          if (!service) return reply.code(403).send({ error: 'forbidden', message: 'Only a service can ask which apps link to entities.' });
+          return (await store.records())
+            .filter((r) => r.entry.links?.entities)
+            .map((r) => ({ app: r.entry.id, types: r.entry.bindings ?? [] }))
+            .sort((a, b) => a.app.localeCompare(b.app));
         },
       );
 

@@ -143,6 +143,15 @@ export const Person = Type.Object(
     roles: strings(),
     departments: strings('Department ids'),
     createdAt: Type.Optional(Type.String({ format: 'date-time' })),
+    state: Type.Optional(
+      choice(['invited', 'active', 'disabled', 'left'], { description: 'Where their account is in its life (ADR 0040): invited until their first sign-in, then active; disabled while their sign-in is off; left for good' }),
+    ),
+    lastSignInAt: Type.Optional(Type.String({ format: 'date-time', description: 'Their last sign-in that AUGUR has seen' })),
+    joinedAt: Type.Optional(Type.String({ format: 'date-time', description: 'Their first sign-in that AUGUR has seen' })),
+    disabledCause: Type.Optional(choice(['admin', 'idle', 'leaver', 'outside'], { description: 'Why their sign-in is off, when AUGUR knows' })),
+    left: Type.Optional(
+      Type.Object({ at: Type.String({ format: 'date-time' }), by: Type.String(), handOverTo: Type.Optional(Type.String()) }, { description: 'When they left, who ran the leaver flow, and who took on their work' }),
+    ),
   },
   { $id: 'Person' },
 );

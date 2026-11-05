@@ -1,5 +1,6 @@
 # grafana/otel-lgtm 0.37.0's own Tempo settings, kept for 72 hours (ADR 0059). When Renovate moves the image,
-# compare with the image's /otel-lgtm/tempo-config.yaml and carry its changes over.
+# compare with the image's /otel-lgtm/tempo-config.yaml and carry its changes over, and check the keys
+# below still exist in its Tempo (an unknown key stops Tempo, and with it otel-lgtm).
 server:
   http_listen_port: 3200
   grpc_listen_port: 9096
@@ -47,6 +48,7 @@ overrides:
     metrics_generator:
       processors: [service-graphs, span-metrics]
 
-compactor:
+# Tempo 3 has no compactor: its backend worker compacts and deletes blocks past their retention.
+backend_worker:
   compaction:
     block_retention: 72h
