@@ -59,7 +59,7 @@ describe('reporting what this deployment runs (ADR 0019)', () => {
     expect(verify(null, Buffer.from(signed.payload), pub, Buffer.from(signed.signature, 'base64'))).toBe(true);
   });
 
-  it('sends when it starts and when something changes, else once a day, and keeps what went wrong', async () => {
+  it('sends when it starts and when something changes, else every 15 minutes, and keeps what went wrong', async () => {
     const sent: { reason: string }[] = [];
     let now = at;
     let answer = 202;
@@ -79,12 +79,14 @@ describe('reporting what this deployment runs (ADR 0019)', () => {
     expect(await sender.maybeSend('changed')).toBeUndefined();
     current = overview({ units: [{ ...overview().units[0], running: '0.14.0' }] });
     expect(await sender.maybeSend('changed')).toMatchObject({ ok: true });
-    now = new Date(at.getTime() + 25 * 3600_000);
-    expect(await sender.maybeSend('changed')).toMatchObject({ ok: true, reason: 'daily' });
+    now = new Date(at.getTime() + 10 * 60_000);
+    expect(await sender.maybeSend('changed')).toBeUndefined();
+    now = new Date(at.getTime() + 16 * 60_000);
+    expect(await sender.maybeSend('changed')).toMatchObject({ ok: true, reason: 'heartbeat' });
     answer = 403;
     current = overview({ needsYou: [{ kind: 'failed', unit: 'augur', message: 'AUGUR didn’t finish.' }] });
     expect(await sender.maybeSend('changed')).toMatchObject({ ok: false, problem: 'No key for augur-workbench.' });
-    expect(sent.map((r) => r.reason)).toEqual(['started', 'changed', 'daily', 'changed']);
+    expect(sent.map((r) => r.reason)).toEqual(['started', 'changed', 'heartbeat', 'changed']);
   });
 
   it('shows admins the mode and public key, and exports the signed record as a file', async () => {

@@ -33,7 +33,8 @@
     "PLATFORM_ADMIN_PASSWORD",
     "PLATFORM_ADMIN_EMAIL",
     "PLATFORM_ADMIN_FIRST_NAME",
-    "PLATFORM_ADMIN_LAST_NAME"
+    "PLATFORM_ADMIN_LAST_NAME",
+    "ALERT_WEBHOOK_TOKEN"
   ],
   "patternProperties": {
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
@@ -857,7 +858,7 @@
     },
     "OTEL_EXPORTER_OTLP_ENDPOINT": {
       "type": "string",
-      "description": "The OpenTelemetry collector every service sends to; without it they send nothing.",
+      "description": "The OpenTelemetry collector every service sends to: the deployment's own otel-lgtm unless another is named.",
       "x-services": [
         "gateway",
         "identity",
@@ -869,7 +870,8 @@
         "atlas",
         "updater"
       ],
-      "x-docs": "docs/observability.md#turn-it-on"
+      "x-docs": "docs/observability.md#turn-it-on",
+      "default": "http://otel-lgtm:4318"
     },
     "OTEL_EXPORTER_OTLP_HEADERS": {
       "type": "string",
@@ -904,6 +906,22 @@
       ],
       "x-docs": "docs/observability.md#for-a-service"
     },
+    "OTEL_SDK_DISABLED": {
+      "type": "string",
+      "description": "true turns OpenTelemetry off in every service and the shell's browser errors, whatever else is set.",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ],
+      "x-docs": "docs/observability.md#turn-it-off"
+    },
     "OTEL_TRACES_SAMPLER_ARG": {
       "type": "string",
       "description": "The sampler's argument, such as 0.1 to keep one trace in ten.",
@@ -932,11 +950,21 @@
     "GRAFANA_ADMIN_PASSWORD": {
       "type": "string",
       "writeOnly": true,
-      "description": "Grafana's admin password, with the observability profile.",
+      "description": "Grafana's admin password (otel-lgtm), at least 16 characters.",
       "x-services": [
         "otel-lgtm"
       ],
       "x-docs": "docs/observability.md#turn-it-on"
+    },
+    "ALERT_WEBHOOK_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "Grafana's key to tell deployment admins of an alert through the registry. The updater makes it up on upgrade.",
+      "x-services": [
+        "registry",
+        "otel-lgtm"
+      ],
+      "x-docs": "docs/observability.md#alerts"
     },
     "NODE_ENV": {
       "type": "string",
@@ -1362,11 +1390,6 @@
       "description": "A collector for traces only (default: OTEL_EXPORTER_OTLP_ENDPOINT's).",
       "x-internal": "default"
     },
-    "OTEL_SDK_DISABLED": {
-      "type": "string",
-      "description": "true turns OpenTelemetry off whatever else is set.",
-      "x-internal": "default"
-    },
     "OTEL_SERVICE_NAME": {
       "type": "string",
       "description": "A service's name in traces (default: its package's).",
@@ -1479,6 +1502,19 @@
         "compose"
       ],
       "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "OTEL_LGTM_REPLICAS": {
+      "type": "string",
+      "enum": [
+        "0",
+        "1"
+      ],
+      "description": "0 stops the deployment's own otel-lgtm, when an organisation's collector takes its place.",
+      "default": "1",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/observability.md#turn-it-off"
     }
   }
 }
