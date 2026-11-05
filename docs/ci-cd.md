@@ -196,6 +196,8 @@ The rest lives in GitHub's settings, which a cloud session can't change. The own
 - `APP_RELEASES_TOKEN` as a fine-grained token with only what it is used for: Contents read on the app
   repositories (their releases and source) and Actions write on this one (an app's release starts the
   Release feed), set in this repository and each app repository, expiring after 90 days.
+- `APP_PROMOTE_TOKEN`, only in this repository: Contents read and write on the app repositories, for
+  Promote to stable to mark an app's own release stable (docs/release-channels.md), expiring after 90 days.
 
 Each release image carries a signed SBOM and SLSA provenance
 ([release-channels.md](release-channels.md#signatures)), and the deploy test runs Trivy over every image a

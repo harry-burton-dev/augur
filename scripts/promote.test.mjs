@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { AUGUR, bakeVerdict, prProblems, promotionRecord, promotionTarget, releaseLineOf, tagOf, unitOf, versionsFrom } from './promote.mjs';
+import { AUGUR, bakeVerdict, prProblems, promotionRecord, promotionSource, promotionTarget, releaseLineOf, tagOf, unitOf, versionsFrom } from './promote.mjs';
 
 const apps = ['mandate'];
 
@@ -86,5 +86,26 @@ describe('bake time (ADR 0018)', () => {
   it('records an override, and says so when the portal wasn’t asked rather than passing quietly', () => {
     assert.deepEqual(bakeVerdict({ evidence: { deployments: [] }, skip: true }).record, { checked: true, needs: 72, overridden: true, problem: 'No preview deployment has reported running it.' });
     assert.deepEqual(bakeVerdict({ notAsked: 'PORTAL_URL isn’t set.' }), { record: { checked: false, why: 'PORTAL_URL isn’t set.' } });
+  });
+});
+
+describe('where a promotion happens', () => {
+  const units = { repo: 'harry-burton-dev/augur', here: ['mandate'], own: { notes: 'someone/augur-notes' }, shipped: ['folio'] };
+
+  it('AUGUR and the apps released here are promoted here', () => {
+    assert.deepEqual(promotionSource(AUGUR, units), { repo: 'harry-burton-dev/augur', own: false });
+    assert.deepEqual(promotionSource('mandate', units), { repo: 'harry-burton-dev/augur', own: false });
+  });
+
+  it('an app in its own repository is promoted there', () => {
+    assert.deepEqual(promotionSource('notes', units), { repo: 'someone/augur-notes', own: true });
+  });
+
+  it('a pillar app is refused, and told to promote AUGUR', () => {
+    assert.match(promotionSource('folio', units).problem, /ships with AUGUR.*Promote augur/);
+  });
+
+  it('anything else names the units there are', () => {
+    assert.equal(promotionSource('nope', units).problem, '"nope" is not a unit: augur, mandate, notes.');
   });
 });
