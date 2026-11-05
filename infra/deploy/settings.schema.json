@@ -1046,6 +1046,23 @@
       ],
       "x-docs": "docs/deploy.md#logs-memory-and-health"
     },
+    "DATABASE_STATEMENT_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long one database query may run before Postgres cancels it (0 for no limit; migrations are never limited).",
+      "default": "60",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "folio",
+        "auspex",
+        "atlas",
+        "updater"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
     "SEED_ALLOWED": {
       "type": "string",
       "description": "true lets a deployment admin fill this deployment with synthetic sample data (pnpm seed). Never where real people work.",

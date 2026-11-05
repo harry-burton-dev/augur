@@ -62,6 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 `GRAFANA_ADMIN_PASSWORD` is now required, because Grafana with none signs in as admin/admin. An upgrade from the Upgrade Centre makes one up and writes it to `.env`, where you read it to sign in. By hand, set it before `pc up -d` (`openssl rand -hex 16`), even with `OTEL_LGTM_REPLICAS=0`. Settings you enter for an upgrade are still never stored: if the registry restarts before the updater takes them, the upgrade ends at once, failed, nothing changed, and says to ask again. The registry also turns down a signed feed issued before the newest one it has taken since it started, so an older feed still in date can't be replayed to hide a newer release or a halt; the Upgrade Centre says so.
 
+### Time limits between services and on database queries
+
+**From** unreleased
+
+One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`), and Postgres cancels any one query from a service after a minute (`DATABASE_STATEMENT_TIMEOUT_SECONDS`, 0 for no limit; migrations are never limited). Nothing to do. On a slow server, if `pc logs` shows a working service giving up ("could not be reached", or "canceling statement due to statement timeout"), raise the value in `.env` and run `pc up -d` ([deploy.md](deploy.md#logs-memory-and-health)).
+
 ### Each service signs in as itself
 
 **From** augur@0.2.0

@@ -60,7 +60,7 @@ const toTime = (t: ShellNotification['time']) => (t instanceof Date ? t.getTime(
 /** Everything unread that needs you, newest first, leaving out what the person muted. */
 export function needsFor(notifications: ShellNotification[], { muted, apps, floors, here }: { muted: string[]; apps: AppManifestEntry[]; floors: Workspace[]; here: string }): HomeNeed[] {
   return notifications
-    .filter((n) => n.level === 'needs' && !muted.includes(n.app))
+    .filter((n) => n.level === 'needs' && !n.quiet && !muted.includes(n.app))
     .sort((a, b) => toTime(b.time) - toTime(a.time))
     .map((n) => {
       const floor = n.floor && n.floor !== here ? floors.find((f) => f.id === n.floor) : undefined;

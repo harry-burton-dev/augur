@@ -86,6 +86,21 @@ describe('events', () => {
     expect((await send({ ...available, key: 'available:augur:0.15.1' })).json()).toEqual({ sent: 2 });
   });
 
+  it('keeps the kind of a notification, refusing one the app doesn’t declare', async () => {
+    const declared: Record<string, string[] | undefined> = { library: ['comment'] };
+    const app = await buildApp({ verifyService, notificationKinds: async (id) => declared[id] });
+    const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
+    expect((await post({ ...review, kind: 'comment' })).statusCode).toBe(202);
+    const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
+    expect(n.kind).toBe('comment');
+    const refused = await post({ ...review, kind: 'gossip' });
+    expect([refused.statusCode, refused.json().message]).toEqual([400, expect.stringContaining('notifications.kinds')]);
+    expect((await post({ ...review, kind: 'Not A Kind' })).statusCode).toBe(400);
+    // A registry too old to say lets any kind through.
+    declared.library = undefined;
+    expect((await post({ ...review, kind: 'gossip' })).statusCode).toBe(202);
+  });
+
   it('carries up to two actions, each an intent with a small payload', async () => {
     const app = await buildApp({ verifyService });
     const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
