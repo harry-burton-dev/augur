@@ -9,9 +9,12 @@
 //   - the platform's own apps' versions in the registry (Home and Admin), from their frontend packages
 //   - each app's manifest `sdk` range, which must be valid and include the current SDK
 //   - each OpenAPI contract: its info.version major is its server path (/v1) and the service's API_VERSION
+//   - a dependency two or more of AUGUR's packages name comes from the catalog in pnpm-workspace.yaml
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import semver from 'semver';
+import { parse as parseYaml } from 'yaml';
+import { catalogProblems } from './shared-versions.mjs';
 
 const mode = process.argv[2];
 if (mode !== 'sync' && mode !== 'check') {
@@ -97,6 +100,22 @@ for (const file of readdirSync(join(root, 'contracts')).filter((f) => f.endsWith
     if (`/${api}` !== prefix) problems.push(`${appTs}: API_VERSION is ${api}, but contracts/${file} is ${version} (${prefix})`);
   }
 }
+
+// ---- shared dependency versions (pnpm catalogs) ----
+// A dependency that two or more of AUGUR's packages name takes its range from the catalog in
+// pnpm-workspace.yaml (`"name": "catalog:"`), so one line moves them all. The kit's `npm:` aliases,
+// `workspace:` packages and peer ranges stay where they are.
+
+const workspace = parseYaml(readFileSync(join(root, 'pnpm-workspace.yaml'), 'utf8'));
+const catalog = workspace.catalog ?? {};
+const ownPackages = ['package.json'];
+for (const pattern of workspace.packages) {
+  if (pattern.startsWith('apps/')) continue;
+  const parent = pattern.replace(/\/\*$/, '');
+  const dirs = pattern.endsWith('/*') ? (existsSync(join(root, parent)) ? readdirSync(join(root, parent)).map((d) => `${parent}/${d}`) : []) : [parent];
+  for (const dir of dirs) if (existsSync(join(root, dir, 'package.json'))) ownPackages.push(`${dir}/package.json`);
+}
+for (const problem of catalogProblems(Object.fromEntries(ownPackages.map((path) => [path, readJson(path)])), catalog)) problems.push(problem);
 
 if (changed.length) console.log(`Updated: ${changed.join(', ')}`);
 if (problems.length) {

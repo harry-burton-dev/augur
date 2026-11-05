@@ -4,6 +4,81 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@aws-sdk/client-s3':
+      specifier: ^3.1156.0
+      version: 3.1156.0
+    '@fastify/swagger':
+      specifier: ^9.9.0
+      version: 9.9.3
+    '@fastify/type-provider-typebox':
+      specifier: ^6.3.0
+      version: 6.3.0
+    '@opentelemetry/api':
+      specifier: ^1.10.0
+      version: 1.10.0
+    '@tailwindcss/vite':
+      specifier: 4.3.3
+      version: 4.3.3
+    '@types/node':
+      specifier: ^22.0.0
+      version: 22.20.5
+    '@types/pg':
+      specifier: ^8.23.1
+      version: 8.23.1
+    '@types/react':
+      specifier: ^19.3.0
+      version: 19.3.0
+    '@types/react-dom':
+      specifier: ^19.3.0
+      version: 19.3.0
+    '@types/semver':
+      specifier: ^7.8.0
+      version: 7.8.0
+    '@vitejs/plugin-react':
+      specifier: ^5.2.0
+      version: 5.2.0
+    fastify:
+      specifier: ^5.12.7
+      version: 5.12.7
+    happy-dom:
+      specifier: ^20.0.0
+      version: 20.14.6
+    jose:
+      specifier: ^6.2.12
+      version: 6.2.12
+    pg:
+      specifier: ^8.23.1
+      version: 8.23.1
+    react:
+      specifier: ^19.3.1
+      version: 19.3.1
+    react-dom:
+      specifier: ^19.3.1
+      version: 19.3.1
+    semver:
+      specifier: ^7.8.5
+      version: 7.8.5
+    tailwindcss:
+      specifier: 4.3.3
+      version: 4.3.3
+    typebox:
+      specifier: ^1.4.0
+      version: 1.4.3
+    typescript:
+      specifier: ^5.6.0
+      version: 5.9.3
+    vite:
+      specifier: ^7.3.7
+      version: 7.3.7
+    vitest:
+      specifier: ^3.2.0
+      version: 3.2.7
+    yaml:
+      specifier: ^2.9.1
+      version: 2.9.1
+
 overrides:
   '@microsoft/api-extractor>minimatch': 10.2.6
   '@vitest/coverage-v8>test-exclude': 8.0.0
@@ -47,7 +122,7 @@ importers:
         specifier: ^0.3.25
         version: 0.3.25
       semver:
-        specifier: ^7.8.5
+        specifier: 'catalog:'
         version: 7.8.5
       squawk-cli:
         specifier: 2.70.0
@@ -56,13 +131,13 @@ importers:
         specifier: ^2.5.0
         version: 2.11.9
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       typescript-eslint:
         specifier: ^8.72.1
         version: 8.72.1(eslint@10.14.0(jiti@2.7.0))(typescript@5.9.3)
       yaml:
-        specifier: ^2.9.1
+        specifier: 'catalog:'
         version: 2.9.1
 
   platform/contract:
@@ -74,10 +149,10 @@ importers:
         specifier: workspace:*
         version: link:../packages/mfe-sdk
       react:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1
       react-dom:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@axe-core/playwright':
@@ -87,19 +162,19 @@ importers:
         specifier: 1.56.1
         version: 1.56.1
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/react':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0(@types/react@19.3.0)
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.7
+        specifier: 'catalog:'
         version: 7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
 
   platform/frontends/admin:
@@ -111,44 +186,44 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
       react:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1
       react-dom:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
       semver:
-        specifier: ^7.8.5
+        specifier: 'catalog:'
         version: 7.8.5
     devDependencies:
       '@tailwindcss/vite':
-        specifier: 4.3.3
+        specifier: 'catalog:'
         version: 4.3.3(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       '@types/react':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0(@types/react@19.3.0)
       '@types/semver':
-        specifier: ^7.8.0
+        specifier: 'catalog:'
         version: 7.8.0
       '@vitejs/plugin-react':
-        specifier: ^5.2.0
+        specifier: 'catalog:'
         version: 5.2.0(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       happy-dom:
-        specifier: ^20.0.0
+        specifier: 'catalog:'
         version: 20.14.6
       tailwindcss:
-        specifier: 4.3.3
+        specifier: 'catalog:'
         version: 4.3.3
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.7
+        specifier: 'catalog:'
         version: 7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/frontends/home:
@@ -160,38 +235,38 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
       react:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1
       react-dom:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@tailwindcss/vite':
-        specifier: 4.3.3
+        specifier: 'catalog:'
         version: 4.3.3(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       '@types/react':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
-        specifier: ^5.2.0
+        specifier: 'catalog:'
         version: 5.2.0(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       happy-dom:
-        specifier: ^20.0.0
+        specifier: 'catalog:'
         version: 20.14.6
       tailwindcss:
-        specifier: 4.3.3
+        specifier: 'catalog:'
         version: 4.3.3
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.7
+        specifier: 'catalog:'
         version: 7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/frontends/shell:
@@ -221,44 +296,44 @@ importers:
         specifier: ^3.5.0
         version: 3.5.0
       react:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1
       react-dom:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
       semver:
-        specifier: ^7.8.5
+        specifier: 'catalog:'
         version: 7.8.5
     devDependencies:
       '@augur/kit-bundle':
         specifier: npm:@harry-burton-dev/augur-kit-bundle@0.5.6
         version: '@harry-burton-dev/augur-kit-bundle@0.5.6(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/react':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0(@types/react@19.3.0)
       '@types/semver':
-        specifier: ^7.8.0
+        specifier: 'catalog:'
         version: 7.8.0
       '@vitejs/plugin-react':
-        specifier: ^5.2.0
+        specifier: 'catalog:'
         version: 5.2.0(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       happy-dom:
-        specifier: ^20.0.0
+        specifier: 'catalog:'
         version: 20.14.6
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.7
+        specifier: 'catalog:'
         version: 7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/frontends/sign-in-theme:
@@ -273,32 +348,32 @@ importers:
         specifier: 11.16.4
         version: 11.16.4
       react:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1
       react-dom:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@types/react':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0(@types/react@19.3.0)
       '@vitejs/plugin-react':
-        specifier: ^5.2.0
+        specifier: 'catalog:'
         version: 5.2.0(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       happy-dom:
-        specifier: ^20.0.0
+        specifier: 'catalog:'
         version: 20.14.6
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.7
+        specifier: 'catalog:'
         version: 7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/frontends/upgrades:
@@ -310,44 +385,44 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
       react:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1
       react-dom:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
       semver:
-        specifier: ^7.8.5
+        specifier: 'catalog:'
         version: 7.8.5
     devDependencies:
       '@tailwindcss/vite':
-        specifier: 4.3.3
+        specifier: 'catalog:'
         version: 4.3.3(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       '@types/react':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0
       '@types/react-dom':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0(@types/react@19.3.0)
       '@types/semver':
-        specifier: ^7.8.0
+        specifier: 'catalog:'
         version: 7.8.0
       '@vitejs/plugin-react':
-        specifier: ^5.2.0
+        specifier: 'catalog:'
         version: 5.2.0(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
       happy-dom:
-        specifier: ^20.0.0
+        specifier: 'catalog:'
         version: 20.14.6
       tailwindcss:
-        specifier: 4.3.3
+        specifier: 'catalog:'
         version: 4.3.3
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^7.3.7
+        specifier: 'catalog:'
         version: 7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1)
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/packages/app-tools:
@@ -356,7 +431,7 @@ importers:
         specifier: workspace:*
         version: link:../service-kit
       semver:
-        specifier: ^7.8.5
+        specifier: 'catalog:'
         version: 7.8.5
 
   platform/packages/clients:
@@ -369,13 +444,13 @@ importers:
         specifier: ^7.13.0
         version: 7.13.0(typescript@5.9.3)
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
       yaml:
-        specifier: ^2.9.1
+        specifier: 'catalog:'
         version: 2.9.1
 
   platform/packages/mfe-sdk:
@@ -384,22 +459,22 @@ importers:
         specifier: 2.15.0
         version: 2.15.0(@types/node@22.20.5)(typescript@5.9.3)
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
       yaml:
-        specifier: ^2.9.1
+        specifier: 'catalog:'
         version: 2.9.1
 
   platform/packages/records:
     devDependencies:
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/packages/service-kit:
@@ -408,7 +483,7 @@ importers:
         specifier: ^5.4.0
         version: 5.4.0
       '@opentelemetry/api':
-        specifier: ^1.10.0
+        specifier: 'catalog:'
         version: 1.10.0
       '@opentelemetry/instrumentation':
         specifier: ^0.300.0
@@ -432,38 +507,38 @@ importers:
         specifier: ^2.2.0
         version: 2.2.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       jose:
-        specifier: ^6.2.12
+        specifier: 'catalog:'
         version: 6.2.12
       nodemailer:
         specifier: ^10.3.1
         version: 10.3.1
       react:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1
       react-dom:
-        specifier: ^19.3.1
+        specifier: 'catalog:'
         version: 19.3.1(react@19.3.1)
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       '@types/react':
-        specifier: ^19.3.0
+        specifier: 'catalog:'
         version: 19.3.0
       fastify:
-        specifier: ^5.12.7
+        specifier: 'catalog:'
         version: 5.12.7
       pg:
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/services/events:
@@ -472,32 +547,32 @@ importers:
         specifier: workspace:*
         version: link:../../packages/service-kit
       '@fastify/swagger':
-        specifier: ^9.9.0
+        specifier: 'catalog:'
         version: 9.9.3
       '@fastify/type-provider-typebox':
-        specifier: ^6.3.0
+        specifier: 'catalog:'
         version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.12.7
       pg:
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typebox:
-        specifier: ^1.4.0
+        specifier: 'catalog:'
         version: 1.4.3
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/services/gateway:
@@ -512,32 +587,32 @@ importers:
         specifier: ^12.7.1
         version: 12.7.1
       '@fastify/swagger':
-        specifier: ^9.9.0
+        specifier: 'catalog:'
         version: 9.9.3
       '@fastify/type-provider-typebox':
-        specifier: ^6.3.0
+        specifier: 'catalog:'
         version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       '@opentelemetry/api':
-        specifier: ^1.10.0
+        specifier: 'catalog:'
         version: 1.10.0
       fastify:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.12.7
       jose:
-        specifier: ^6.2.12
+        specifier: 'catalog:'
         version: 6.2.12
       typebox:
-        specifier: ^1.4.0
+        specifier: 'catalog:'
         version: 1.4.3
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/services/identity:
@@ -546,32 +621,32 @@ importers:
         specifier: workspace:*
         version: link:../../packages/service-kit
       '@fastify/swagger':
-        specifier: ^9.9.0
+        specifier: 'catalog:'
         version: 9.9.3
       '@fastify/type-provider-typebox':
-        specifier: ^6.3.0
+        specifier: 'catalog:'
         version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.12.7
       pg:
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typebox:
-        specifier: ^1.4.0
+        specifier: 'catalog:'
         version: 1.4.3
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/services/models:
@@ -580,32 +655,32 @@ importers:
         specifier: workspace:*
         version: link:../../packages/service-kit
       '@fastify/swagger':
-        specifier: ^9.9.0
+        specifier: 'catalog:'
         version: 9.9.3
       '@fastify/type-provider-typebox':
-        specifier: ^6.3.0
+        specifier: 'catalog:'
         version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.12.7
       pg:
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typebox:
-        specifier: ^1.4.0
+        specifier: 'catalog:'
         version: 1.4.3
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/services/registry:
@@ -617,41 +692,41 @@ importers:
         specifier: workspace:*
         version: link:../../packages/service-kit
       '@aws-sdk/client-s3':
-        specifier: ^3.1156.0
+        specifier: 'catalog:'
         version: 3.1156.0
       '@fastify/swagger':
-        specifier: ^9.9.0
+        specifier: 'catalog:'
         version: 9.9.3
       '@fastify/type-provider-typebox':
-        specifier: ^6.3.0
+        specifier: 'catalog:'
         version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
       fastify:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.12.7
       pg:
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       semver:
-        specifier: ^7.8.5
+        specifier: 'catalog:'
         version: 7.8.5
       typebox:
-        specifier: ^1.4.0
+        specifier: 'catalog:'
         version: 1.4.3
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       '@types/semver':
-        specifier: ^7.8.0
+        specifier: 'catalog:'
         version: 7.8.0
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/services/storage:
@@ -660,23 +735,23 @@ importers:
         specifier: workspace:*
         version: link:../../packages/service-kit
       '@aws-sdk/client-s3':
-        specifier: ^3.1156.0
+        specifier: 'catalog:'
         version: 3.1156.0
       pg:
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       '@types/pg':
-        specifier: ^8.23.1
+        specifier: 'catalog:'
         version: 8.23.1
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
   platform/services/updater:
@@ -686,13 +761,13 @@ importers:
         version: link:../../packages/service-kit
     devDependencies:
       '@types/node':
-        specifier: ^22.0.0
+        specifier: 'catalog:'
         version: 22.20.5
       typescript:
-        specifier: ^5.6.0
+        specifier: 'catalog:'
         version: 5.9.3
       vitest:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.7(@types/node@22.20.5)(happy-dom@20.14.6)(jiti@2.7.0)(lightningcss@1.32.0)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(yaml@2.9.1)
 
 packages:
@@ -2161,6 +2236,7 @@ packages:
   '@smithy/core@3.36.2':
     resolution: {integrity: sha512-oRw0rB9QSUiCZfEs23G5F4Af+b2rQt1lItIICWu5IejFNd+uPM8SWqiKLMpQ6bX1Q7slsLbjuoE2niErFtkVPQ==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
