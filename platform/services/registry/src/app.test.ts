@@ -438,7 +438,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     });
 
     it('takes the types an app binds to entities, refuses reserved or stray ones, and lists them for services', async () => {
-      const app = await buildApp({ verifyService });
+      const app = await db.app({ verifyService });
       const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, ...extra } });
       expect((await put({ links: { entities: true }, bindings: ['Record'] })).statusCode).toBe(400);
       expect((await put({ links: { entities: true }, bindings: ['record', 'record'] })).statusCode).toBe(400);
