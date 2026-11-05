@@ -12,6 +12,7 @@ export const ACCOUNT_SECTIONS = [
   { id: 'appearance', label: 'Appearance', icon: 'palette' },
   { id: 'region', label: 'Language and region', icon: 'clock' },
   { id: 'apps', label: 'Home and apps', icon: 'home' },
+  { id: 'privacy', label: 'Privacy and data', icon: 'download' },
   { id: 'about', label: 'About and help', icon: 'info' },
 ] as const satisfies readonly { id: string; label: string; icon: IconName }[];
 export type AccountSection = (typeof ACCOUNT_SECTIONS)[number]['id'];
@@ -83,6 +84,7 @@ export function AccountArea(props: AccountAreaProps) {
         {section === 'appearance' ? <AppearanceSection {...props} /> : null}
         {section === 'region' ? <RegionSection {...props} /> : null}
         {section === 'apps' ? <AppsSection {...props} /> : null}
+        {section === 'privacy' ? <PrivacySection {...props} /> : null}
         {section === 'about' ? <AboutSection {...props} /> : null}
       </AppFrame>
     </div>
@@ -661,6 +663,109 @@ function RegionSection({ prefs, onPreference }: AccountAreaProps) {
         <Note>AUGUR is in English only for now, so there’s nothing to choose yet.</Note>
       </Section>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Privacy and data
+
+/** Who sees what about them: the people picker shows name and email; the rest follows the profile's permissions. */
+const SEEN_BY: { what: string; who: string }[] = [
+  { what: 'Your name and email', who: 'Everyone signed in, when they pick people to share with or tell' },
+  { what: 'Your job title, phone, pronouns and picture', who: 'You and administrators' },
+  { what: 'Your sign-ins, sessions and whole profile', who: 'You, and administrators looking after accounts' },
+  { what: 'Whether you’re away, and what it says', who: 'Everyone signed in, beside your name' },
+  { what: 'Your other choices, such as quiet hours and pinned apps', who: 'Only you' },
+];
+
+function PrivacySection({ api, product }: AccountAreaProps) {
+  const [saving, setSaving] = useState(false);
+  const [said, setSaid] = useState<{ tone: 'done' | 'error'; text: string } | null>(null);
+  const download = async () => {
+    setSaving(true);
+    setSaid(null);
+    try {
+      const { blob, name } = await api.myData();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      setSaid({ tone: 'done', text: `Saved ${name}.` });
+    } catch (err) {
+      setSaid({ tone: 'error', text: (err as Error).message });
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="Privacy and data" summary={`What ${product} keeps about you, who sees it, and leaving`} />
+      <Section label="Your data" count={-1} why="One file with your profile, how you sign in, your sessions and sign-ins, your choices, your notifications, your inbox and what you’ve done. Apps keep their own content, such as documents, and this copy doesn’t include it yet.">
+        <div className="account-line">
+          {said ? <Note live>{said.text}</Note> : <span />}
+          <Button kind="secondary" size="sm" busy={saving} onPress={() => void download()}>
+            Download my data
+          </Button>
+        </div>
+      </Section>
+      <Section label="What others see about you" count={-1}>
+        <Rows items={SEEN_BY.map((r) => ({ label: r.what, value: r.who }))} />
+      </Section>
+      <Leave api={api} />
+    </>
+  );
+}
+
+/** Asking to leave: an administrator closes the account, so nobody deletes their own by mistake (ADR 0040). */
+function Leave({ api }: Pick<AccountAreaProps, 'api'>) {
+  const req = useLoad(() => api.leaveRequest());
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const act = async (go: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await go();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const asked = req.value;
+  return (
+    <Section label="Leaving" count={-1} why="You can’t close your own account. Ask here and an administrator turns it off, ends your sessions and hands on what you own. You can take it back until they do.">
+      {req.value === undefined ? (
+        <Loading what="request to leave" error={req.error} onRetry={req.again} />
+      ) : asked ? (
+        <>
+          <Notice tone="info" heading={`You asked to leave ${dayAndTime(asked.requestedAt)}.`}>
+            {asked.note ? `You said: “${asked.note}”` : 'Administrators have been told.'}
+          </Notice>
+          <div className="account-line">
+            {error ? <Note live>{error}</Note> : <span />}
+            <Button kind="tertiary" size="sm" busy={busy} onPress={() => void act(async () => { await api.withdrawLeave(); req.set(null); })}>
+              Take it back
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="account-fields">
+            <TextField label="Anything they should know" optional maxLength={500} placeholder="My last day is Friday" defaultValue={note} onCommit={(v) => setNote(v)} />
+          </div>
+          <div className="account-line">
+            {error ? <Note live>{error}</Note> : <span />}
+            <AskTwice size="sm" confirm="Press again to ask to leave" busy={busy} onPress={() => void act(async () => req.set(await api.requestLeave(note.trim() || undefined)))}>
+              Ask to leave
+            </AskTwice>
+          </div>
+        </>
+      )}
+    </Section>
   );
 }
 

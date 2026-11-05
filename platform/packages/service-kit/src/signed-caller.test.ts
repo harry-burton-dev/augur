@@ -104,16 +104,20 @@ describe('callerCheckFromEnv', () => {
     expect(callerCheckFromEnv('identity', { NODE_ENV: 'production' })).toBeDefined();
     expect(callerCheckFromEnv('identity', { NODE_ENV: 'development' })).toBeDefined();
     expect(callerCheckFromEnv('identity', { AUGUR_INSECURE_DEV_CALLERS: 'true' })).toBeDefined();
+    // A container that somehow got NODE_ENV=test is still not a test runner.
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test' })).toBeDefined();
   });
 
-  it('believes x-user-* headers only under pnpm dev:app or a test runner', () => {
+  it('believes x-user-* headers only under pnpm dev:app or Vitest', () => {
     expect(callerCheckFromEnv('identity', { AUGUR_INSECURE_DEV_CALLERS: '1' })).toBeUndefined();
-    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test' })).toBeUndefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test', VITEST: 'true' })).toBeUndefined();
+    expect(callerCheckFromEnv('identity')).toBeUndefined();
   });
 
   it('always checks in production, and wherever CALLER_KEYS_URL is set', () => {
     expect(callerCheckFromEnv('identity', { NODE_ENV: 'production', AUGUR_INSECURE_DEV_CALLERS: '1' })).toBeDefined();
-    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test', CALLER_KEYS_URL: 'http://gateway:8080/keys' })).toBeDefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'production', VITEST: 'true' })).toBeDefined();
+    expect(callerCheckFromEnv('identity', { NODE_ENV: 'test', VITEST: 'true', CALLER_KEYS_URL: 'http://gateway:8080/keys' })).toBeDefined();
   });
 
   it('checks against the key the gateway at GATEWAY_URL publishes', async () => {

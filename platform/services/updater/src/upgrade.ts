@@ -468,7 +468,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       await report({
         step,
         state: 'failed',
-        message: `${why} AUGUR ${target.version} is still running: it didn’t go back by itself, because ${target.watch.breakingSince} between is breaking. See docs/upgrade.md, Going back.`,
+        message: `${why} AUGUR ${target.version} is still running: it didn’t go back by itself, because ${target.watch.breakingSince} between is breaking. See docs/upgrade-went-back.md before you do anything.`,
         outcome: 'failed',
       }).catch(() => undefined);
       return 'failed';
@@ -503,7 +503,9 @@ const rollBack = async (
   backup?: string,
   { oldFiles = {}, fresh = [], others = [], left = [] }: { oldFiles?: Record<string, Buffer | undefined>; fresh?: string[]; others?: string[]; left?: string[] } = {},
 ): Promise<Outcome> => {
-  const kept = backup ? ` If ${target.from} has trouble with data ${target.version} changed, restore ${backup} (docs/upgrade.md, Going back).` : '';
+  const kept = backup
+    ? ` If ${target.from} has trouble with data ${target.version} changed, restore ${backup}: docs/upgrade-went-back.md says how, and what to check first.`
+    : ' docs/upgrade-went-back.md says what to check.';
   try {
     await report({ step: 'roll-back', state: 'running' }).catch(() => undefined);
     // Parts the release added go first, while its compose.yml still names them.

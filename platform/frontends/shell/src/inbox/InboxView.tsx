@@ -242,7 +242,9 @@ function InboxRow({
           </Button>
           {entries.length ? (
             <Menu label={`More for ${item.title ?? 'this item'}`} items={entries.map((e) => ({ id: e.id, label: e.label, ...(e.disabled ? { disabled: true, reason: e.reason } : {}) }))} onAction={(id) => onAction(id as InboxVerb)}>
-              More
+              <Button kind="tertiary" size="sm">
+                More
+              </Button>
             </Menu>
           ) : null}
         </span>

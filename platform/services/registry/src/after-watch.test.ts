@@ -26,7 +26,7 @@ describe('the light watch after a quiet watch (ADR 0020, amended 2 Nov)', () => 
     const errors = afterLook(startAfterWatch(T0), { calls: 20, serverErrors: 4 }, '0.13.1', at(5));
     expect(errors.state).toBe('failed');
     expect(errors.message).toBe(
-      '4 of the first 20 calls to AUGUR’s services after the watch failed, more than 5%. AUGUR 0.13.1 is still running: it didn’t go back by itself, because people’s work is on it now. See docs/upgrade.md, Going back.',
+      '4 of the first 20 calls to AUGUR’s services after the watch failed, more than 5%. AUGUR 0.13.1 is still running: it didn’t go back by itself, because people’s work is on it now. See docs/upgrade-went-back.md before you do anything.',
     );
     const once = afterLook(startAfterWatch(T0), { calls: 0, serverErrors: 0, signInProblem: 'Keycloak answered 503.' }, '0.13.1', at(5));
     expect(once.state).toBe('watching');

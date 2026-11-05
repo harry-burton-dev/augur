@@ -29,7 +29,7 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
-import { inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
+import { inboxRoutes, releaseLeaver, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { MemoryEventStore, topicMatches, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
@@ -591,6 +591,10 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const platformEvent = service.kind === 'platform' ? PLATFORM_EVENTS[`${req.body.app} ${req.body.action}`] : undefined;
         if (platformEvent) {
           await store.publish(req.body.app, [{ topic: platformEvent.topic, id: `audit-${entry.id}`, payload: platformEvent.payload(req.body), floor: place }]);
+          // Someone who leaves a team, or can no longer sign in, gives back the team work they'd taken.
+          const leaver = platformEvent.topic === 'platform.person.disabled' ? { person: req.body.target } : platformEvent.topic === 'platform.team.member-removed' ? { person: req.body.detail?.person, team: req.body.target } : undefined;
+          if (typeof leaver?.person === 'string' && leaver.person)
+            await releaseLeaver(store, leaver.person, typeof leaver.team === 'string' ? leaver.team : undefined).catch((err: unknown) => req.log.error({ err }, 'could not give back a leaver’s inbox items'));
         }
         return reply.code(201).send(entry);
         },
@@ -633,6 +637,49 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
             return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the whole audit log; a lead can read their own floor’s.' });
           }
           return store.audit({ app: forApp, actor, since, until, before, workspace, limit });
+        },
+      );
+
+      // A copy of what the events service keeps about one person (ADR 0040), for identity to put in their download.
+      app.get(
+        '/people/:id/data',
+        {
+          schema: {
+            summary: 'What the events service keeps about one person (identity only)',
+            description: [
+              'Their notifications, read or not; the inbox items waiting on them and those',
+              'they finished; and the audit entries naming them as the actor: at most',
+              '`limit` of each, newest first. Only identity asks, to build the copy of',
+              "someone's data they download from Account (ADR 0040).",
+            ].join(' '),
+            params: Type.Object({ id: Type.String({ minLength: 1, maxLength: 100 }) }),
+            querystring: Type.Object({ limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 1000, default: 1000 })) }),
+            response: {
+              200: Type.Object(
+                {
+                  notifications: Type.Array(ref(NotificationSchema)),
+                  inbox: Type.Array(Type.Unknown(), { description: 'InboxItem, as the Inbox gives it to them' }),
+                  audit: Type.Array(ref(AuditEntry)),
+                },
+                { description: 'Their data here' },
+              ),
+              403: refused('Not identity'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await fromService(req, reply, undefined, 'audit:write');
+          if (!service) return reply;
+          if (service.kind !== 'platform' || service.name !== 'identity') return reply.code(403).send({ error: 'forbidden', message: 'Only identity reads a person’s data, for their own download.' });
+          const { id } = req.params;
+          const limit = req.query.limit ?? 1000;
+          const [notifications, open, done, audit] = await Promise.all([
+            store.notificationsOf(id, limit),
+            store.inbox.list({ person: id, teams: [], tab: 'you', limit }),
+            store.inbox.list({ person: id, teams: [], tab: 'done', limit }),
+            store.audit({ actor: id, limit }),
+          ]);
+          return { notifications: notifications.map(forCaller), inbox: [...open, ...done].slice(0, limit), audit };
         },
       );
     },
