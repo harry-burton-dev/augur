@@ -45,7 +45,6 @@
     "@opentelemetry/instrumentation-pino": "^0.70.0",
     "@opentelemetry/instrumentation-undici": "^0.34.0",
     "@opentelemetry/sdk-node": "^0.300.0",
-    "@react-email/components": "^1.0.12",
     "@react-email/render": "^2.2.0",
     "jose": "^6.2.12",
     "nodemailer": "^10.3.1",
