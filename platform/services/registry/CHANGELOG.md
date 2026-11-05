@@ -1,5 +1,21 @@
 # @augur/registry
 
+## 0.18.0
+
+### Minor Changes
+
+- 5be0fd6: The design direction behind feature previews (PER-283). AUGUR's own apps can offer feature previews: they stay at the server's default (opt-in on a dev or preview server, off on a production one), people turn them on in Previews, and Admin says why it can't change them. Home offers two, both off until someone turns them on: `focal-planes` (what needs you comes forward, with its count in light and words, and the glance cards go quiet) and `radial-menu` (each thing that needs you opens its actions in a ring: right-click, a long press, or its "more" mark).
+
+  The shell serves kit 0.5.4 (Common 0.8.0, Quill 0.9.0), which brings the design picks' parts, each off until an app turns it on.
+
+### Patch Changes
+
+- 833b4ed: The registry tells AUGUR's services the role an app's manifest says a person needs (`requiredRole` in an app's grants), and the service kit reads it (`registryRequiredRole`), so models can check it for an AI app as the gateway does for the app's own API.
+- cfc0c69: After SDK 2.0's release, Home, Admin and the Upgrade Centre ask for `^2.0.0`, and the contract tests keep the reference app built against 2.0 (`frozen/sdk-2.0`). The Lockfile workflow can keep a frozen build where no package token can make one (**freeze**).
+- Updated dependencies [833b4ed]
+- Updated dependencies [431db38]
+  - @augur/service-kit@0.15.0
+
 ## 0.17.0
 
 ### Minor Changes
