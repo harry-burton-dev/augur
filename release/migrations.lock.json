@@ -8,7 +8,8 @@
     "006_notification_keys": "5be3ec9616ff89c3",
     "007_inbox": "40aac179ecbfe3a7",
     "008_notification_kinds": "6eea4513b4123b12",
-    "009_audit_by_person": "7d6352a8630b9708"
+    "009_audit_by_person": "7d6352a8630b9708",
+    "010_notice_emails": "56f06c7c00f0d2c8"
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",
