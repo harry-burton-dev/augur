@@ -23,7 +23,7 @@ const target = (more: Partial<Target> = {}): Target => ({
 });
 
 /** A server that does what it's told, and remembers it; `breaks` makes one thing go wrong. */
-type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile' | 'errors' | 'signIn' | 'blip' | 'quiet' | 'fallsOver';
+type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile' | 'errors' | 'signIn' | 'blip' | 'quiet' | 'fallsOver' | 'ownKeycloak';
 const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
   const did: string[] = [];
   // The deploy folder, as the running release (0.2.0) left it, unless it's been edited; and the next release's.
@@ -73,6 +73,11 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
       did.push('restore-test');
     },
     pull: async (services, version) => void did.push(`pull ${services.join(' ')} ${version}`),
+    // `ownKeycloak`: the running compose.yml (c0) names Keycloak's own image; the next one (c1), AUGUR's.
+    images: async (version) => {
+      const names = ['postgres', 'keycloak', 'storage', 'identity', 'registry', 'web', 'updater', 'search'];
+      return Object.fromEntries(names.map((s) => [s, s === 'keycloak' && breaks.ownKeycloak && disk['compose.yml'] !== 'c1' ? 'quay.io/keycloak/keycloak:26.8.1' : `ghcr.io/o/r/${s}:${version}`]));
+    },
     digests: async (service) => [breaks.digest && service === 'registry' ? image(service, 'other') : `ghcr.io/o/r/${service}@sha256:${service[0]}3`],
     up: async (services) => {
       const onNew = env.includes('PLATFORM_VERSION=0.3.0');
@@ -270,6 +275,19 @@ describe('an upgrade', () => {
     expect(reports.find((r) => r.step === 'roll-forward' && r.state === 'done')?.message).toBe(
       'wrote compose.yml, keycloak/realm.json, search.yml; set SEARCH_URL, ORG_NAME as entered; made up SEARCH_CLIENT_SECRET in .env; started search.',
     );
+  });
+
+  it('pulls a part moving onto AUGUR’s image once the new compose.yml names it, and puts it back on the old one when it goes back', async () => {
+    const t = target({ images: { ...target().images, keycloak: image('keycloak', 'k3') }, deploy: { 'compose.yml': hash('c1') } });
+    const fake = fakeServer({ ownKeycloak: true });
+    expect((await run(t, fake.server)).outcome).toBe('done');
+    expect(fake.did.filter((d) => d.startsWith('pull') || d.startsWith('write'))).toEqual(['pull storage identity registry web updater 0.3.0', 'write compose.yml', 'pull keycloak 0.3.0']);
+
+    const failing = fakeServer({ ownKeycloak: true, registry: true });
+    expect((await run(t, failing.server)).outcome).toBe('rolled-back');
+    expect(failing.disk['compose.yml']).toBe('c0');
+    expect(failing.did).not.toContain('remove keycloak');
+    expect(failing.did.at(-1)).toBe('up keycloak storage identity registry web');
   });
 
   it('puts the deploy files back, and takes new parts away, when it goes back', async () => {

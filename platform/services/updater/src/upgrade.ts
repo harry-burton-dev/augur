@@ -93,6 +93,8 @@ export interface Server {
   pull(services: string[], version: string): Promise<void>;
   /** The digests a service's image for `version` is known by, once pulled. */
   digests(service: string, version: string): Promise<string[]>;
+  /** The image each service names for `version`, as the compose.yml on the server has it now. */
+  images(version: string): Promise<Record<string, string>>;
   /** Recreates these services on the version the settings file names, leaving the others alone. */
   up(services: string[]): Promise<void>;
   /** What a service's /healthz says, or undefined while it doesn't answer. */
@@ -307,6 +309,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
   const madeKeys: string[] = [];
   const enteredKeys: string[] = [];
   let pulledFirst: string[] = [];
+  let switched: string[] = [];
 
   const run = async (name: Step, work: () => Promise<string | void>) => {
     step = name;
@@ -390,8 +393,13 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
 
     await run('pull', async () => {
       // A part new in this release is pulled once its compose.yml is in place (roll-forward).
+      // So is a part whose image the server's compose.yml names as someone else's (Keycloak's own, say,
+      // before the release brings AUGUR's): pulled now, it would fetch that image and fail the digest check.
       const running = new Set(await server.services());
-      pulledFirst = Object.keys(target.images).filter((service) => running.has(service));
+      const named = await server.images(target.version);
+      const ours = (service: string) => named[service]?.startsWith(`${imageRepo(before, target.images[service]!)}/${service}:`) ?? false;
+      pulledFirst = Object.keys(target.images).filter((service) => running.has(service) && ours(service));
+      switched = Object.keys(target.images).filter((service) => running.has(service) && !ours(service));
       await pullAndCheck(server, target, pulledFirst);
       const paths = Object.keys(changedFiles);
       if (!paths.length) return;
@@ -429,8 +437,10 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       const now = await server.services();
       const rolled = new Set<string>([...services, UPDATER, DOCKER_PROXY]);
       // Parts new in this release: pulled now that the new compose.yml names them.
-      fresh = Object.keys(target.images).filter((service) => !pulledFirst.includes(service) && now.includes(service));
-      if (fresh.length) await pullAndCheck(server, target, fresh);
+      fresh = Object.keys(target.images).filter((service) => !pulledFirst.includes(service) && !switched.includes(service) && now.includes(service));
+      // And parts that move onto AUGUR's image, now that the new compose.yml names it. Going back puts them on the old one again.
+      const late = [...switched.filter((service) => now.includes(service)), ...fresh];
+      if (late.length) await pullAndCheck(server, target, late);
       const added = fresh.filter((service) => !rolled.has(service));
       // First what the parts stand on: Compose recreates only those whose settings or image changed,
       // and those that mount a file just written are made again so they read it.
