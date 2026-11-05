@@ -22,6 +22,8 @@ export interface Notification {
   actions?: NotificationAction[];
   /** The sender's name for this news: a person has at most one per app and key. */
   key?: string;
+  /** One of the app's `notifications.kinds`. */
+  kind?: string;
   createdAt: string;
   readAt?: string;
   /** The floor it's from; none for one about the platform as a whole. */
@@ -136,6 +138,7 @@ const fromInput = (n: NewNotification, recipient: string, id: string, createdAt:
   ...(n.link ? { link: n.link } : {}),
   ...(n.actions?.length ? { actions: n.actions } : {}),
   ...(n.key ? { key: n.key } : {}),
+  ...(n.kind ? { kind: n.kind } : {}),
   createdAt,
   ...(floor ? { workspace: floor } : {}),
 });
@@ -323,6 +326,12 @@ export const migrations: Migration[] = [
       create unique index notifications_once on events.notifications (recipient, app, key) where key is not null;`,
   },
   inboxMigration,
+  {
+    id: '008_notification_kinds',
+    sql: `
+      -- Which of the app's declared kinds a notification is (ADR 0036): people choose how each kind reaches them.
+      alter table events.notifications add column kind text;`,
+  },
 ];
 
 const CHANNEL = 'events_notification';
@@ -340,6 +349,7 @@ type NotificationRow = {
   link: string | null;
   actions: NotificationAction[] | null;
   key: string | null;
+  kind: string | null;
   created_at: Date;
   read_at: Date | null;
   workspace_id: string | null;
@@ -371,6 +381,7 @@ const fromRow = (r: NotificationRow): Notification => ({
   ...(r.link ? { link: r.link } : {}),
   ...(r.actions?.length ? { actions: r.actions } : {}),
   ...(r.key ? { key: r.key } : {}),
+  ...(r.kind ? { kind: r.kind } : {}),
   createdAt: r.created_at.toISOString(),
   ...(r.read_at ? { readAt: r.read_at.toISOString() } : {}),
   ...floorFrom(r.workspace_id, r.workspace_path),
@@ -486,11 +497,11 @@ export class PgEventStore implements EventStore {
     try {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
-        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key)
-         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10 from unnest($1::text[]) as r
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind)
+         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11 from unnest($1::text[]) as r
          on conflict (recipient, app, key) where key is not null do nothing
          returning *`,
-        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null],
+        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null, n.kind ?? null],
       );
       const added = rows.map(fromRow);
       // Delivered when the transaction commits. Postgres caps a payload at 8000 bytes; a bigger one goes by id.

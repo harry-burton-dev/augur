@@ -3,6 +3,9 @@ import { withDeadline } from '@augur/service-kit';
 /** Keycloak's admin calls get longer than a service call's few seconds: some write or list a lot. */
 const KEYCLOAK_TIMEOUT_MS = 15_000;
 
+/** How many items each page of a Keycloak list asks for. */
+const PAGE_SIZE = 500;
+
 /**
  * The directory of people and departments. Keycloak holds them (departments
  * are its groups, roles its realm roles); admins change them through identity,
@@ -371,6 +374,19 @@ export class KeycloakDirectory implements Directory {
     throw new DirectoryError(`The sign-in service answered ${res.status}. Nothing was changed.`, 503);
   }
 
+  /**
+   * Every item of one of Keycloak's lists, a page at a time: its lists stop at `max`, so a realm with more
+   * people, groups or holders than one page used to lose the rest without a word (PER-213).
+   */
+  async all<T>(path: string, size = PAGE_SIZE): Promise<T[]> {
+    const items: T[] = [];
+    for (let first = 0; ; first += size) {
+      const { data } = await this.call<T[]>('GET', `${path}${path.includes('?') ? '&' : '?'}first=${first}&max=${size}`);
+      items.push(...(data ?? []));
+      if (!data || data.length < size) return items;
+    }
+  }
+
   private async realmRoles(): Promise<KcRole[]> {
     const { data } = await this.call<KcRole[]>('GET', '/roles?briefRepresentation=false');
     return data.filter((r) => !builtInRole(r.name, this.config.realm));
@@ -378,12 +394,12 @@ export class KeycloakDirectory implements Directory {
 
   /** Every group, top-level and nested, each with the id of the group it sits in. */
   private async groups(): Promise<KcGroup[]> {
-    const { data: top } = await this.call<KcGroup[]>('GET', '/groups?max=1000&briefRepresentation=true');
+    const top = await this.all<KcGroup>('/groups?briefRepresentation=true');
     const all: KcGroup[] = [];
     const walk = async (groups: KcGroup[], parentId?: string) => {
       for (const g of groups) {
         all.push({ id: g.id, name: g.name, ...(parentId ? { parentId } : {}) });
-        if (g.subGroupCount) await walk((await this.call<KcGroup[]>('GET', `/groups/${g.id}/children?max=1000&briefRepresentation=true`)).data, g.id);
+        if (g.subGroupCount) await walk(await this.all<KcGroup>(`/groups/${g.id}/children?briefRepresentation=true`), g.id);
       }
     };
     await walk(top);
@@ -391,8 +407,7 @@ export class KeycloakDirectory implements Directory {
   }
 
   private async memberIds(group: string): Promise<string[]> {
-    const { data } = await this.call<KcUser[]>('GET', `/groups/${group}/members?briefRepresentation=true&max=10000`);
-    return data.map((u) => u.id);
+    return (await this.all<KcUser>(`/groups/${group}/members?briefRepresentation=true`)).map((u) => u.id);
   }
 
   /** Makes any of these realm roles that don't exist yet; returns the ones it made. */
@@ -432,13 +447,13 @@ export class KeycloakDirectory implements Directory {
 
   /** Everyone, with roles and departments read per role and per department rather than per person. */
   async people(): Promise<Person[]> {
-    const [{ data: users }, roles, departments] = await Promise.all([
-      this.call<KcUser[]>('GET', '/users?briefRepresentation=false&max=10000'),
+    const [users, roles, departments] = await Promise.all([
+      this.all<KcUser>('/users?briefRepresentation=false'),
       this.realmRoles(),
       this.departments(),
     ]);
     const holders = await Promise.all(
-      roles.map(async (r) => ({ role: r.name, ids: new Set((await this.call<KcUser[]>('GET', `/roles/${encodeURIComponent(r.name)}/users?max=10000`)).data.map((u) => u.id)) })),
+      roles.map(async (r) => ({ role: r.name, ids: new Set((await this.all<KcUser>(`/roles/${encodeURIComponent(r.name)}/users`)).map((u) => u.id)) })),
     );
     return users.map((u) =>
       this.toPerson(
