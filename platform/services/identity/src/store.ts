@@ -2,6 +2,7 @@ import pg from 'pg';
 import { runMigrations, type Migration } from '@augur/service-kit';
 import { organisationMigrations } from './organisation.ts';
 import { signInMigrations } from './sign-ins.ts';
+import { lifecycleMigrations } from './lifecycle.ts';
 import { workspaceMigrations } from './workspaces.ts';
 
 /** What someone has chosen for the shell. Every field is optional: what's missing takes the shell's default. */
@@ -96,6 +97,7 @@ export const migrations: Migration[] = [
   },
   ...organisationMigrations,
   ...signInMigrations,
+  ...lifecycleMigrations,
 ];
 
 export class PgPreferenceStore implements PreferenceStore {

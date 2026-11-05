@@ -4,6 +4,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp, type IdentityOptions } from './app.ts';
+import { PgLifecycleStore } from './lifecycle.ts';
 import { PgOrganisationStore, type OrganisationStore } from './organisation.ts';
 import { PgPreferenceStore } from './store.ts';
 import { PgWorkspaceStore, type OrgSettings } from './workspaces.ts';
@@ -22,6 +23,7 @@ export const identityDb = (settings: OrgSettings = {}) => {
     store: PgPreferenceStore;
     workspaces: PgWorkspaceStore;
     organisation: OrganisationStore;
+    lifecycle: PgLifecycleStore;
     reset: () => Promise<void>;
     /** Identity's app on these stores; `opts` adds to them or replaces one. */
     app: (opts?: Partial<IdentityOptions>) => ReturnType<typeof buildApp>;
@@ -38,7 +40,7 @@ export const identityDb = (settings: OrgSettings = {}) => {
     await pool.query('drop schema if exists identity cascade');
     const store = new PgPreferenceStore(pool);
     await store.migrate();
-    const stores = { store, workspaces: new PgWorkspaceStore(pool, settings), organisation: new PgOrganisationStore(pool) };
+    const stores = { store, workspaces: new PgWorkspaceStore(pool, settings), organisation: new PgOrganisationStore(pool), lifecycle: new PgLifecycleStore(pool) };
     Object.assign(db, { pool, ...stores, reset, app: (opts: Partial<IdentityOptions> = {}) => buildApp({ ...stores, ...opts }) });
   });
   beforeEach(reset);

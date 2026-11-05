@@ -8,6 +8,7 @@ import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
 import { PgPreferenceStore } from './store.ts';
 import { PgWorkspaceStore } from './workspaces.ts';
 import { PgOrganisationStore } from './organisation.ts';
+import { PgLifecycleStore } from './lifecycle.ts';
 import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
 
 // Every setting identity reads, checked before it starts (in production, a missing one stops it).
@@ -43,6 +44,7 @@ await store.migrate();
 const workspaces = new PgWorkspaceStore(pool, { orgName });
 const organisation = new PgOrganisationStore(pool);
 const signInCursor = new PgSignInCursorStore(pool);
+const lifecycle = new PgLifecycleStore(pool);
 
 // Locally this is the dev stack's Keycloak and its admin/admin console login.
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER = production ? undefined : 'admin' } = process.env;
@@ -108,12 +110,12 @@ const dataFrom =
 if (keycloakEvents && audit) {
   const events = keycloakEvents;
   const copy = () =>
-    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry) }).catch((err: Error) =>
+    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at) }).catch((err: Error) =>
       console.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
     );
   setInterval(copy, 60_000).unref();
   void copy();
 }
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation, lifecycle });
 await app.listen({ port, host: '0.0.0.0' });

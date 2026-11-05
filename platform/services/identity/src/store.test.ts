@@ -2,6 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PgOrganisationStore } from './organisation.ts';
 import { PgSignInCursorStore } from './sign-ins.ts';
+import { PgLifecycleStore } from './lifecycle.ts';
 import { PgPreferenceStore, type PreferenceStore } from './store.ts';
 
 /** The same behaviour from every store. */
@@ -44,7 +45,7 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from identity.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor']);
+    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor', 'lifecycle_001_people']);
   });
 
   it('keeps the organisation settings in one row', async () => {
@@ -69,5 +70,18 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
     expect(outer).toBe(true);
     expect(inner).toBe(false);
     expect(await cursor.alone(async () => {})).toBe(true);
+  });
+
+  it('keeps each account’s life: first and last sign-in, why it went off, that they left', async () => {
+    const lc = new PgLifecycleStore(admin);
+    await lc.signedIn('p-1', '2026-11-05T09:00:00.000Z');
+    await lc.signedIn('p-1', '2026-11-04T09:00:00.000Z');
+    await lc.signedIn('p-1', '2026-11-06T09:00:00.000Z');
+    await lc.disabled('p-1', 'admin', '2026-11-06T10:00:00.000Z');
+    await lc.enabled('p-1');
+    await lc.disabled('p-2', 'leaver', '2026-11-06T10:00:00.000Z');
+    await lc.left('p-2', { at: '2026-11-06T10:00:01.000Z', by: 'a-1', handOverTo: 'p-1' });
+    expect(await lc.get(['p-1'])).toEqual(new Map([['p-1', { joinedAt: '2026-11-05T09:00:00.000Z', lastSignInAt: '2026-11-06T09:00:00.000Z' }]]));
+    expect((await lc.get()).get('p-2')).toEqual({ disabledAt: '2026-11-06T10:00:00.000Z', disabledCause: 'leaver', left: { at: '2026-11-06T10:00:01.000Z', by: 'a-1', handOverTo: 'p-1' } });
   });
 });
