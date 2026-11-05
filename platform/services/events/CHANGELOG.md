@@ -1,5 +1,14 @@
 # @augur/events
 
+## 0.9.1
+
+### Patch Changes
+
+- d88842e: The events service keeps everything in Postgres, locally too: the in-memory copies of its event and inbox stores are gone, and it won't start without `DATABASE_URL`. Its tests run on real Postgres (PER-271).
+- Updated dependencies [833b4ed]
+- Updated dependencies [431db38]
+  - @augur/service-kit@0.15.0
+
 ## 0.9.0
 
 ### Minor Changes

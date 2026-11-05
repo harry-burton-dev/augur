@@ -1,6 +1,7 @@
 name: Lockfile
 # Brings pnpm-lock.yaml up to date on a pull request's branch, and release/kit.json with it once the kit
-# bundle is pinned there (scripts/kit.mjs), and THIRD_PARTY_NOTICES.md (scripts/licences.mjs), and pushes them. For a change that adds or bumps a package from
+# bundle is pinned there (scripts/kit.mjs), and THIRD_PARTY_NOTICES.md (scripts/licences.mjs), and pushes them.
+# With freeze, it also keeps the contract reference app built against the current SDK minor. For a change that adds or bumps a package from
 # GitHub Packages (the kit, ADR 0046) made where no read token is set, such as a cloud session:
 # Actions → Lockfile → Run workflow, with the branch. It pushes with RELEASE_TOKEN, so CI runs on the new
 # commit. Never on main.
@@ -10,6 +11,10 @@ on:
       branch:
         description: The pull request's branch
         required: true
+      freeze:
+        description: Also keep the contract reference app built against this SDK minor (platform/contract/freeze.mjs)
+        type: boolean
+        default: false
 permissions:
   contents: read
   packages: read
@@ -34,10 +39,16 @@ jobs:
         run: if [ -f scripts/kit.mjs ]; then node scripts/kit.mjs pin; fi
       - name: Write the open-source notices from what is installed
         run: if [ -f scripts/licences.mjs ]; then node scripts/licences.mjs notices; fi
+      # After a release that moves the SDK's minor, where no package token can build it (a cloud session).
+      - name: Keep the frozen contract build
+        if: inputs.freeze
+        run: |
+          pnpm turbo run build --filter=@augur/contract-tests^...
+          pnpm --filter @augur/contract-tests freeze
       - name: Push them, if they changed
         run: |
-          if [ -z "$(git status --porcelain pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md)" ]; then
-            echo "pnpm-lock.yaml, release/kit.json and THIRD_PARTY_NOTICES.md are already up to date" >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "$(git status --porcelain pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md platform/contract/frozen)" ]; then
+            echo "pnpm-lock.yaml, release/kit.json, THIRD_PARTY_NOTICES.md and the frozen builds are already up to date" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -45,7 +56,8 @@ jobs:
           git add pnpm-lock.yaml
           [ -f release/kit.json ] && git add release/kit.json
           [ -f THIRD_PARTY_NOTICES.md ] && git add THIRD_PARTY_NOTICES.md
-          git commit -m "Update pnpm-lock.yaml, the kit pin and the open-source notices"
+          [ -d platform/contract/frozen ] && git add platform/contract/frozen
+          git commit -m "Update pnpm-lock.yaml, the kit pin, the open-source notices and the frozen builds"
           git push origin "HEAD:$BRANCH"
         env:
           BRANCH: ${{ inputs.branch }}

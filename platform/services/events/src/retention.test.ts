@@ -1,14 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { ACTIVITY_KEEP_DAYS, policyKeepDays, pruneActivity, untilNight } from './retention.ts';
-import { MemoryEventStore } from './store.ts';
+import { DATABASE_URL, eventsDb } from './db.testing.ts';
+
+const db = eventsDb();
 
 const credentials = { name: 'events', getToken: async () => 't' };
 
-describe('Activity retention', () => {
+describe.runIf(DATABASE_URL)('Activity retention', () => {
   it('removes entries older than the period, and records that it did', async () => {
-    const store = new MemoryEventStore();
+    const store = db.store;
     const old = await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.published' });
-    old.at = new Date(Date.now() - 10 * 86_400_000).toISOString();
+    await db.pool.query(`update events.audit set at = now() - interval '10 days' where id = $1`, [old.id]);
     await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.updated' });
     expect(await pruneActivity(store, async () => ({ days: 7 }))).toMatchObject({ removed: 1, days: 7 });
     const left = await store.audit({ limit: 10 });

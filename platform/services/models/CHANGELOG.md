@@ -1,5 +1,14 @@
 # @augur/models
 
+## 0.3.6
+
+### Patch Changes
+
+- 3199b56: Someone talking to an AI app's agent now needs the role that app's manifest asks for, the same rule the gateway applies to the app's own API. Without it, models refuses the call and says which role is needed.
+- Updated dependencies [833b4ed]
+- Updated dependencies [431db38]
+  - @augur/service-kit@0.15.0
+
 ## 0.3.5
 
 ### Patch Changes
