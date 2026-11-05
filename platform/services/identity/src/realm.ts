@@ -432,13 +432,20 @@ export const mailFingerprint = (server: Record<string, string>) =>
   createHash('sha256').update(JSON.stringify(Object.entries(server).sort(([a], [b]) => a.localeCompare(b)))).digest('hex').slice(0, 32);
 
 /**
+ * Keycloak's built-in listener that emails a person when their password, code app or passkeys change
+ * (ADR 0036). AUGUR's Keycloak image sets KC_SPI_EVENTS_LISTENER__EMAIL__EXCLUDE_EVENTS, which
+ * leaves failed sign-ins out, so only security changes are emailed.
+ */
+export const SECURITY_EMAIL_LISTENER = 'email';
+
+/**
  * Points the realm at the organisation's relay and, with one, turns on what needs email: verifying an
- * address and resetting a forgotten password. Without `mail` the relay set in Keycloak's console (if any)
- * is left as it is, and those two follow whether the realm has one, so a deployment never offers a reset
- * link it can't send.
+ * address, resetting a forgotten password and emailing people about changes to how they sign in. Without
+ * `mail` the relay set in Keycloak's console (if any) is left as it is, and those follow whether the realm
+ * has one, so a deployment never offers a reset link it can't send.
  */
 export const applyMail = async (kc: KeycloakDirectory, mail: RealmMail | undefined, changes: Changes, productName?: string) => {
-  const { data: realm } = await kc.call<Record<string, unknown> & { smtpServer?: Record<string, string>; attributes?: Record<string, string> }>('GET', '');
+  const { data: realm } = await kc.call<Record<string, unknown> & { smtpServer?: Record<string, string>; attributes?: Record<string, string>; eventsListeners?: string[] }>('GET', '');
   const want: Record<string, unknown> = {};
   let attributes: Record<string, string> | undefined;
   if (mail) {
@@ -452,10 +459,16 @@ export const applyMail = async (kc: KeycloakDirectory, mail: RealmMail | undefin
   const canSend = Boolean(mail ?? realm.smtpServer?.host);
   if (realm.verifyEmail !== canSend) want.verifyEmail = canSend;
   if (realm.resetPasswordAllowed !== canSend) want.resetPasswordAllowed = canSend;
+  // Other listeners an admin added stay; Keycloak's default is jboss-logging alone.
+  const listeners = realm.eventsListeners ?? ['jboss-logging'];
+  if (listeners.includes(SECURITY_EMAIL_LISTENER) !== canSend) {
+    want.eventsListeners = canSend ? [...listeners, SECURITY_EMAIL_LISTENER] : listeners.filter((l) => l !== SECURITY_EMAIL_LISTENER);
+  }
   const differs = Object.keys(want);
   if (!differs.length) return;
   await kc.call('PUT', '', { ...want, ...(attributes ? { attributes } : {}) });
-  changes.push(`email: ${differs.map((k) => (k === 'smtpServer' ? `relay ${mail!.host}:${mail!.port}` : `${k} ${want[k] ? 'on' : 'off'}`)).join(', ')}`);
+  const said = (k: string) => (k === 'smtpServer' ? `relay ${mail!.host}:${mail!.port}` : k === 'eventsListeners' ? `security-change emails ${canSend ? 'on' : 'off'}` : `${k} ${want[k] ? 'on' : 'off'}`);
+  changes.push(`email: ${differs.map(said).join(', ')}`);
 };
 
 export interface ApplyOptions {

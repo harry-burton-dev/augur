@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### People are emailed when how they sign in changes
+
+**From** unreleased
+
+Once email is set up (`SMTP_*`), Keycloak emails each person when their password, code app or passkeys change. The realm job turns this on at `pc up -d`, and people see it in Account → Sign-in and security. Failed sign-ins aren't emailed. Nothing to do.
+
 ### Adding someone sends an invite email
 
 **From** unreleased
