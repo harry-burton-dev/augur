@@ -56,8 +56,8 @@ export const endingOf = (up: Upgrade, running: string): Ending | undefined => {
         kind: 'failed',
         words:
           running === up.version
-            ? `${up.version} is running but didn’t pass its checks${up.message ? `: ${up.message}` : '.'} It didn’t go back by itself because a breaking release is in between. See “Going back” in docs/upgrade.md.`
-            : `It stopped partway${up.message ? `: ${up.message}` : '.'} It couldn’t go back by itself. Follow “Going back” in docs/upgrade.md, with the backup it took first.`,
+            ? `${up.version} is running but didn’t pass its checks${up.message ? `: ${up.message}` : '.'} It didn’t go back by itself because a breaking release is in between. See docs/upgrade-went-back.md before you do anything.`
+            : `It stopped partway${up.message ? `: ${up.message}` : '.'} It couldn’t go back by itself. Follow docs/upgrade-went-back.md, with the backup it took first.`,
       };
     case 'cancelled':
       return { kind: 'cancelled', words: `The upgrade to ${up.version} was cancelled before it started. Nothing changed.` };
