@@ -28,6 +28,15 @@ const header = (service) =>
     '',
   ].join('\n');
 
+/** Stands in for a store while a service's routes are read: any part of it can be reached, none can be called. */
+const unused = (name) =>
+  new Proxy(() => {}, {
+    get: (_, key) => (key === 'then' ? undefined : unused(`${name}.${String(key)}`)),
+    apply: () => {
+      throw new Error(`pnpm contracts only reads routes, but building the app called ${name}.`);
+    },
+  });
+
 const problems = [];
 const generated = [];
 const services = readdirSync(join(root, 'platform/services')).filter((s) => existsSync(join(root, 'platform/services', s, 'src/contract.ts')));
@@ -38,8 +47,8 @@ for (const service of services) {
     continue;
   }
   const { buildApp } = await import(built);
-  // Only the routes are read: a service that needs its stores to answer gets none here.
-  const app = await buildApp({});
+  // Only the routes are read, so a service's stores are stand-ins that refuse to be used.
+  const app = await buildApp({ store: unused('store'), workspaces: unused('workspaces'), organisation: unused('organisation') });
   await app.ready();
   const text = header(service) + stringify(app.swagger(), { lineWidth: 0, aliasDuplicateObjects: false });
   await app.close();
