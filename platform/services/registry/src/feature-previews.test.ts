@@ -20,7 +20,7 @@ const setup = async (ring: 'preview' | 'production') => {
   const entries: { action: string; detail?: Record<string, unknown> }[] = [];
   const app = await buildApp({ verifyService, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring }), audit: async (e) => void entries.push(e) });
   expect((await app.inject({ method: 'PUT', url: '/v1/apps/notes', headers: service, payload: notes })).statusCode).toBeLessThan(300);
-  const mine = async (headers = sam) => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers })).json().apps;
+  const mine = async (headers = sam) => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers })).json().apps.filter((a: { app: string }) => a.app === 'notes');
   const choose = (on: boolean, preview = 'board', headers = sam) => app.inject({ method: 'PUT', url: `/v1/feature-previews/notes/${preview}`, headers, payload: { on } });
   const set = (mode: string | null, preview = 'board', headers = admin) => app.inject({ method: 'PUT', url: `/v1/apps/notes/feature-previews/${preview}`, headers, payload: { mode } });
   const catalogue = async (headers = sam) => (await app.inject({ method: 'GET', url: '/v1/manifest', headers })).json().find((a: { id: string }) => a.id === 'notes');
@@ -120,7 +120,7 @@ describe('feature previews', () => {
     expect((await catalogue('m')).previewsOn).toBeUndefined();
     // Nobody turns it on for themselves, and the Previews list says whether it's on where they stand.
     expect((await app.inject({ method: 'PUT', url: '/v1/feature-previews/notes/board', headers: on('l'), payload: { on: true } })).json()).toMatchObject({ error: 'not_opt_in', message: expect.stringContaining('chosen floors') });
-    const listed = async (id: string) => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers: on(id) })).json().apps[0].previews[0];
+    const listed = async (id: string) => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers: on(id) })).json().apps.find((a: { app: string }) => a.app === 'notes').previews[0];
     expect(await listed('p')).toMatchObject({ mode: 'floors', on: true });
     expect(await listed('l')).toMatchObject({ mode: 'floors', on: false });
     expect((await listed('p')).floors).toBeUndefined();
@@ -140,5 +140,23 @@ describe('feature previews', () => {
     expect(ended({ until: '2026-10-29' }, new Date('2026-10-30T09:00:00Z'))).toBe(true);
     expect(ended({ until: '2026-10-30' }, new Date('2026-10-30T23:00:00Z'))).toBe(false);
     expect(ended({}, new Date())).toBe(false);
+  });
+});
+
+describe("AUGUR's own apps' feature previews", () => {
+  it('are at the server default, opt-in on a preview server: a person turns one on and the catalogue says so; Admin cannot change them', async () => {
+    const app = await buildApp({ verifyService, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring: 'preview' }) });
+    const homeOf = async () => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers: sam })).json().apps.find((a: { app: string }) => a.app === 'home');
+    const home = await homeOf();
+    expect(home.previews.map((p: { id: string; mode: string; on: boolean }) => [p.id, p.mode, p.on])).toEqual([
+      ['focal-planes', 'opt-in', false],
+      ['radial-menu', 'opt-in', false],
+    ]);
+    expect((await app.inject({ method: 'PUT', url: '/v1/feature-previews/home/focal-planes', headers: sam, payload: { on: true } })).statusCode).toBe(204);
+    const listed = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: sam })).json().find((a: { id: string }) => a.id === 'home');
+    expect(listed.previewsOn).toEqual(['focal-planes']);
+    const set = await app.inject({ method: 'PUT', url: '/v1/apps/home/feature-previews/focal-planes', headers: admin, payload: { mode: 'everyone' } });
+    expect(set.statusCode).toBe(409);
+    expect(set.json()).toMatchObject({ error: 'platform_app', message: expect.stringContaining('chooses for themselves') });
   });
 });
