@@ -1,5 +1,29 @@
 # @augur/identity
 
+## 1.1.0
+
+### Minor Changes
+
+- c55f1f3: Identity serves each person's own account under `/v1/me/*` for the shell's Account area (ADR 0036, PER-190): their profile from Keycloak's user profile, how they sign in and the `kc_action` that changes each credential, where they're signed in (sign out of one, everywhere else or everywhere), and their recent sign-ins. Preferences gain a time zone, an away message with an end, and notification choices. The realm job turns on Keycloak's update-email action and gives identity's client `view-events` and `view-identity-providers`, which only read.
+- 2dbdc22: Apps hear more of what changes about people (PER-148). `platform.person.joined` when an admin adds someone, and `platform.person.changed` (`{ person, changed }`, naming which of `name`, `email`, `roles` and `teams` changed, never the values) when an admin changes their details. Every team someone joins or leaves is now `platform.team.member-added` or `-removed` on that team's floor, also when it happened by adding the person or changing their list of teams, which before sent nothing; each is in that floor's Activity too. `PLATFORM_TOPICS` names the two new topics. See docs/domain-events.md.
+- dcae52f: The product's name is a deployment setting, `ORG_PRODUCT_NAME` (default AUGUR). The web container writes it into the shell's page, so the browser tab says it, and the realm job makes it the realm's display name, so the sign-in pages, Keycloak's emails (their subjects and AUGUR's layout) and passkey prompts show it.
+- c2fe051: The realm job points Keycloak at the organisation's SMTP relay (`SMTP_*` in `.env`, ADR 0035) and, with one, turns on Forgot password and address checks; without one it leaves a relay set in the console and offers those only if there is one. The local stack catches all mail in Mailpit (ADR 0065).
+- cceb953: People and teams for the people picker. Identity answers a signed-in person at `GET /v1/me/directory` (API 1.15): people by name or email and teams by name, or named by id. The SDK's new `searchPrincipals` and `namePrincipals` ask it through `ctx.fetch` and answer in the shape Quill's `PeoplePicker` takes, so an app hands one straight to the other. They reject with `DirectoryUnavailable`, whose message can be shown as it is.
+- 16cd6fa: Sign-in pages and emails in AUGUR's look (ADR 0041). Keycloak now runs from AUGUR's own image, which carries a Keycloakify theme built from Common's tokens and parts: every Keycloak sign-in page and email, showing the organisation's name (`ORG_NAME`) and, if set, its logo (`ORG_LOGO_URL`), with the product's name from the realm. The realm job turns the theme on when Keycloak has it and offers the languages in `REALM_LANGUAGES` (default `en`).
+
+### Patch Changes
+
+- 3a7455e: The identity API's schemas are TypeBox, and contracts/identity.openapi.yaml is generated from them (ADR 0055). The contract now names the refusals the routes already sent.
+- 566f261: The service kit has one migration runner, `runMigrations(pool, { schema, migrations })`, and the events, identity, models and registry services use it in place of their own copies; what they do at start is unchanged. New migrations are linted with Squawk (ADR 0053), which catches drops, renames and type changes the old check missed.
+- Updated dependencies [7dbdf7b]
+- Updated dependencies [2dbdc22]
+- Updated dependencies [0ec750c]
+- Updated dependencies [7518ce8]
+- Updated dependencies [dec1a40]
+- Updated dependencies [566f261]
+- Updated dependencies [7517bd7]
+  - @augur/service-kit@0.13.0
+
 ## 1.0.0
 
 ### Major Changes
