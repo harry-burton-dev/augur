@@ -1,5 +1,26 @@
 # @augur/gateway
 
+## 0.10.0
+
+### Minor Changes
+
+- 8736ebd: The gateway takes browser errors and traces from the shell and passes them on to the deployment's collector, stamped as `augur-browser` and with anything personal taken out (ADR 0059, contract 1.6.0). It also records what the alert rules read: each part's health, calls by part and status class, and whether backups can be relied on.
+- 896efde: Backups can be copied off the server (ADR 0060). Once `OFFSITE_REPOSITORY`, `OFFSITE_PASSWORD` and the bucket's key are set in `.env`, the backup container copies each night's dump and apps' files with restic to that S3-compatible bucket, encrypted on the server first, and keeps 30 days (`OFFSITE_KEEP_DAILY`). The weekly restore test then restores from the bucket. Admin → Status shows the copy and where the last restore came from, and needs a look while backups stay on the server only (gateway contract 1.7.0: `backups.offsite`, `lastRestoreTest.from`). A new one-shot `backup-tools` container hands restic to the backup container: after upgrading, run `pc up -d backup` once. See docs/deploy.md, "Off-server copy".
+
+### Patch Changes
+
+- c4b539c: The gateway's own routes carry TypeBox schemas, and contracts/gateway.openapi.yaml is generated from them (ADR 0055); what it forwards stays out of it.
+  Its contract now also lists Status's `seeding` (contract 1.5.0).
+- 8606741: The deployment watches itself (ADR 0059). otel-lgtm now runs in every deployment, keeps 72 hours, and its Grafana loads AUGUR's alert rules (a part down, server errors, browser errors, backups) and dashboard from `infra/deploy/observability/`. Each alert, and its all-clear, reaches deployment admins as a notice through the registry's new webhook (`POST /v1/platform/alerts`, contract 1.32.0, with `ALERT_WEBHOOK_TOKEN`). Before upgrading, set `GRAFANA_ADMIN_PASSWORD` and `ALERT_WEBHOOK_TOKEN` in `.env`; a server with its own collector sets `OTEL_LGTM_REPLICAS=0`. `OTEL_SDK_DISABLED=true` now also stops the shell sending browser errors. See docs/upgrade.md, "The deployment watches itself".
+- Updated dependencies [7dbdf7b]
+- Updated dependencies [2dbdc22]
+- Updated dependencies [0ec750c]
+- Updated dependencies [7518ce8]
+- Updated dependencies [dec1a40]
+- Updated dependencies [566f261]
+- Updated dependencies [7517bd7]
+  - @augur/service-kit@0.13.0
+
 ## 0.9.0
 
 ### Minor Changes
