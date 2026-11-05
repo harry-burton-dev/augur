@@ -107,7 +107,7 @@ describe('NotificationFeed', () => {
     let lists = 0;
     let closed = 0;
     const states: { loading: boolean; error: string }[] = [];
-    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+    const fetchImpl = vi.fn(async (url: string, _init?: RequestInit) => {
       if (url.endsWith('/stream')) {
         return new Response(new ReadableStream<Uint8Array>({ cancel: () => void closed++ }), { headers: { 'content-type': 'text/event-stream' } });
       }
