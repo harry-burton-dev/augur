@@ -57,15 +57,15 @@ To go back, use **Go back** on the app's page in the Upgrade Centre, or hold the
 
 ## An app in its own repository
 
-Apps are moving out of this repository into their own ([ADR 0012](decisions/0012-apps-in-own-repositories.md)). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
+Apps are moving out of this repository into their own (ADR 0012). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
 
 The release steps come from `@augur/app-tools`, published beside the SDK. Its `augur-app` command runs in the app repository's root (`manifest.json`, `frontend/`, `service/` and a `Dockerfile` for the service) and does what `scripts/app-release.mjs` and `infra/release-app.sh` do here: `augur-app pending`, `dev <run>`, `preview <pr> <run>`, `bundle <channel>` (build, push and sign), `publish <bundle.json>`, `clean-devs` and `clean-previews <pr>`. The app template's workflows call it.
 
-Servers still read one feed, AUGUR's ([ADR 0047](decisions/0047-app-repositories-in-augurs-feed.md)):
+Servers still read one feed, AUGUR's (ADR 0047):
 
 - `release/app-repos.json` names the repository each moved app is published from. The pull request that moves an app out adds its line.
 - The Release feed workflow lists that repository's releases of that app, and only those signed there, beside AUGUR's own. It reads them with the `APP_RELEASES_TOKEN` secret, a fine-grained token that can read the app repositories' contents. The app's release workflow starts the Release feed workflow when it has released, with the same token, which can also run Actions in this repository.
 - The updater trusts that repository to sign that app, and only that app, so a server needs no `APP_PUBLISHERS` line for it. Releases of the app signed anywhere else, this repository included, are refused from then on.
 - The first release a server installs from the new repository takes over the data the old one left, so the updater takes a backup of the database first, and the install's first step names the file. Later releases from that repository install as usual. A version installed before this rule (its record names no repository) gets the same backup at its next update.
 
-An app that ships with AUGUR (a platform or pillar app, [ADR 0032](decisions/0032-platform-apps-and-pillar-apps.md)) goes in `release/shipped-apps.json` instead, never in both: AUGUR's own release carries it, at the release its pin names, so the feed doesn't offer it apart from AUGUR ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md), and [Versioning](versioning.md#the-augur-release) for moving a pin). Reading its images takes one more secret in this repository, `PACKAGES_READ_TOKEN`: the same classic token with `read:packages` the app repositories have, because a fine-grained token can't read packages.
+An app that ships with AUGUR (a platform or pillar app, ADR 0032) goes in `release/shipped-apps.json` instead, never in both: AUGUR's own release carries it, at the release its pin names, so the feed doesn't offer it apart from AUGUR (ADR 0049, and [Versioning](versioning.md#the-augur-release) for moving a pin). Reading its images takes one more secret in this repository, `PACKAGES_READ_TOKEN`: the same classic token with `read:packages` the app repositories have, because a fine-grained token can't read packages.

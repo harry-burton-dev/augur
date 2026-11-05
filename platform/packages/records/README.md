@@ -2,7 +2,7 @@
 
 The shapes every app's records share, so the next app keeps its things the way Artifacts does and people meet the same rules everywhere. It's plain TypeScript with no dependencies, so an app's service and its frontend both use it: the service to enforce the rules, the frontend to offer only what will work.
 
-[App patterns](../../../docs/app-patterns.md) is the guide: what each piece is for, the tables an app keeps for it, and Artifacts as the worked example.
+[App patterns](https://drive.google.com/drive/folders/1L14-L3PNjl5OVlztzZCu3TjD2D5QLs24) is the guide: what each piece is for, the tables an app keeps for it, and Artifacts as the worked example.
 
 | Module | What it gives |
 | --- | --- |

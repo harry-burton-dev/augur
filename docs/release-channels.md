@@ -2,7 +2,7 @@
 
 Work merges into `main`, the only long-lived branch. Each release is built and signed **once**, as a GitHub pre-release on the **beta** channel. Making it **stable** changes only its label: production servers then take that same release, so they run exactly what the preview server ran. There are no `preview` or `production` branches, and no promotion pull requests.
 
-Which workflow does each step, when it runs and what it costs in CI minutes: [ci-cd.md](ci-cd.md).
+Which workflow does each step, when it runs and what it costs in CI minutes: [CI/CD](https://drive.google.com/drive/folders/1m2NCsXrXQxhsbnDfIqgezh8nmKY6XBa2).
 
 A **unit** is what moves on its own: **AUGUR** (the platform, its services and the pillar apps, as one `augur@x.y.z` release) or one **app** the app runner installs (`app/<id>@x.y.z`, Mandate today).
 
@@ -26,9 +26,9 @@ In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`a
 
 ### Bake time
 
-A release goes stable only once it has run on a preview deployment (`SERVER_RING=preview`) for 72 hours, with no deployment going back from it ([ADR 0018](decisions/0018-rollout-gates.md)). The workflow asks the portal, which works it out from the records deployments send ([ADR 0019](decisions/0019-deployment-reporting.md)). If it hasn't baked, the run fails and says how long it ran and where. Tick **Skip the bake time** to make it stable anyway: `promotion.json` records the override and why it was needed.
+A release goes stable only once it has run on a preview deployment (`SERVER_RING=preview`) for 72 hours, with no deployment going back from it (ADR 0018). The workflow asks the portal, which works it out from the records deployments send (ADR 0019). If it hasn't baked, the run fails and says how long it ran and where. Tick **Skip the bake time** to make it stable anyway: `promotion.json` records the override and why it was needed.
 
-The portal is only on the tailnet, so the workflow joins it to ask ([ADR 0045](decisions/0045-promote-asks-portal-over-tailscale.md)). To set that up, once:
+The portal is only on the tailnet, so the workflow joins it to ask (ADR 0045). To set that up, once:
 
 1. In Tailscale, add the tag `tag:ci` to the ACL's `tagOwners`, and let `tag:ci` reach the portal on port 443.
 2. Make an OAuth client (Settings → OAuth clients) with the `auth_keys` write scope and the tag `tag:ci`.
@@ -40,13 +40,13 @@ Units move independently: Mandate can become stable while AUGUR stays where it i
 
 ### An app in its own repository
 
-An app listed in `release/app-repos.json` ([ADR 0047](decisions/0047-app-repositories-in-augurs-feed.md)) is promoted from here too: give its id as the unit. The workflow marks its release stable in the app's own repository, with `promotion.json`, and the feed that follows lists it as stable. It does this with the `APP_PROMOTE_TOKEN` secret, which only this workflow reads: a fine-grained token with Contents read and write on the app repositories, nothing else, expiring after 90 days. Without it, promoting such an app fails and says so. The feed's `APP_RELEASES_TOKEN` stays read-only.
+An app listed in `release/app-repos.json` (ADR 0047) is promoted from here too: give its id as the unit. The workflow marks its release stable in the app's own repository, with `promotion.json`, and the feed that follows lists it as stable. It does this with the `APP_PROMOTE_TOKEN` secret, which only this workflow reads: a fine-grained token with Contents read and write on the app repositories, nothing else, expiring after 90 days. Without it, promoting such an app fails and says so. The feed's `APP_RELEASES_TOKEN` stays read-only.
 
-A pillar app (`release/shipped-apps.json`) isn't promoted on its own: it ships inside AUGUR's release ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)), so it becomes stable when that AUGUR release does. Asking for one says so.
+A pillar app (`release/shipped-apps.json`) isn't promoted on its own: it ships inside AUGUR's release (ADR 0049), so it becomes stable when that AUGUR release does. Asking for one says so.
 
 ## Halting a release
 
-When a release turns out to be bad after it's out, stop it reaching more servers: in GitHub, **Actions → Halt rollout → Run workflow**, with `halt`, the unit (`augur` or an app's id), the version and a reason people will read. It attaches `halted.json` (the reason, when, who) to the release and publishes the feed again at once ([ADR 0018](decisions/0018-rollout-gates.md)). Every server sees the mark at its next check: the release stays listed, marked halted with the reason, and is never offered, chosen as the next upgrade or installed. A server running it is told to move on, or to go back. Only the repository's owner may run it.
+When a release turns out to be bad after it's out, stop it reaching more servers: in GitHub, **Actions → Halt rollout → Run workflow**, with `halt`, the unit (`augur` or an app's id), the version and a reason people will read. It attaches `halted.json` (the reason, when, who) to the release and publishes the feed again at once (ADR 0018). Every server sees the mark at its next check: the release stays listed, marked halted with the reason, and is never offered, chosen as the next upgrade or installed. A server running it is told to move on, or to go back. Only the repository's owner may run it.
 
 Run it again with `resume` to take the mark off once the release turns out fine. A fix is normally a new patch release instead, which servers move to as usual. Mirrors pass a halt on when the release is mirrored again ([mirror.md](mirror.md#halted-releases)).
 

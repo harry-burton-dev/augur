@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Gathers the coverage each package's tests wrote (Vitest's v8 coverage, json-summary reporter, ADR 0069)
 // into one Markdown table: one row per package, lines, statements, functions and branches covered.
-// CI writes it to the run's summary on a push to main; nothing fails on a number (docs/ci-cd.md).
+// CI writes it to the run's summary on a push to main; nothing fails on a number (CI/CD in the AUGUR handbook, 03 Architecture/Engineering).
 //
 //   node scripts/coverage-summary.mjs            print the table
 //   node scripts/coverage-summary.mjs >> "$GITHUB_STEP_SUMMARY"

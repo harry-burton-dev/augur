@@ -19,7 +19,7 @@ Today's build runs with the manifest's feature preview `turned-on` on for the st
 
 It runs every build side by side, each against its own copy of the shell on its own port (5180, 5181…), and prints each build's results once that build is done. Failures for a build are kept in `test-results/<build>/`.
 
-On an ordinary pull request CI runs today's build and only the oldest and newest frozen builds (`CONTRACT_FROZEN=edges`); the Version packages pull request runs every one ([docs/ci-cd.md](../../docs/ci-cd.md)).
+On an ordinary pull request CI runs today's build and only the oldest and newest frozen builds (`CONTRACT_FROZEN=edges`); the Version packages pull request runs every one ([CI/CD in the AUGUR handbook, 03 Architecture/Engineering](https://drive.google.com/drive/folders/1m2NCsXrXQxhsbnDfIqgezh8nmKY6XBa2)).
 
 When a release bumps the SDK's minor, keep that release's build: `pnpm build && pnpm --filter @augur/contract-tests freeze`, and commit the new `frozen/` folder. When the build is byte-for-byte the newest kept one, `freeze` says so and keeps nothing: that folder already stands for it. A new part of the mount context gets a check in the reference app and the spec in the same pull request that adds it, with `since('<minor>')` so builds from before it skip it; the frozen builds don't use it, which is the point.
 

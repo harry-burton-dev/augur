@@ -1,7 +1,7 @@
 # AUGUR's sign-in and email theme
 
 The pages Keycloak shows at sign-in (sign in, set up a code app or passkey, change a password, choose
-another way in) and the emails it sends, in AUGUR's look ([ADR 0041](../../../docs/decisions/0041-keycloakify-sign-in-theme.md)).
+another way in) and the emails it sends, in AUGUR's look (ADR 0041).
 Built with [Keycloakify](https://www.keycloakify.dev) from Common's tokens and parts (`@augur/kit-common`),
 and shipped as a jar in AUGUR's Keycloak image (`infra/service.Dockerfile`, target `keycloak`).
 

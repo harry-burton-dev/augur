@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Dependency updates for AUGUR: weekly, grouped, never merged by Renovate. See docs/decisions/0033-renovate-for-dependency-updates.md.",
+  "description": "Dependency updates for AUGUR: weekly, grouped, never merged by Renovate. See ADR 0033 in the AUGUR handbook's Decision register.",
   "extends": [
     "config:recommended",
     "helpers:pinGitHubActionDigests",

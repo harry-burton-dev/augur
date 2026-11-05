@@ -120,7 +120,7 @@ Run the preflight once more (without `--fill-secrets`): what's left under `-` is
 
 ## A staging server
 
-A staging server runs preview releases before they reach production, with sample people and no real ones, so a release can bake there ([ADR 0045](decisions/0045-promote-asks-portal-over-tailscale.md)). Install it with the procedure above, with these differences:
+A staging server runs preview releases before they reach production, with sample people and no real ones, so a release can bake there (ADR 0045). Install it with the procedure above, with these differences:
 
 - **`SERVER_RING=preview`** in step 2. It takes preview (beta) releases by default ([release-channels.md](release-channels.md#server-rings)).
 - **It joins the tailnet and reports to Backstage** (step 6, item 1), so its bake hours and its heartbeat reach Backstage with no override or hand export. Give it its own `TS_HOSTNAME` and its own entry in `org/deployments.yaml`.
@@ -128,7 +128,7 @@ A staging server runs preview releases before they reach production, with sample
 - **Everything else is its own**: its own read key, its own bucket (or its own path in one), its own auth key if they aren't reusable. Nothing is shared with production, so a mistake on staging stays there.
 - **The same size as production**, so what it shows about memory and speed holds there.
 
-To stand one up and prove a release on it, from the first command to Promote to stable, follow [staging-runbook.md](staging-runbook.md): each step with the output that shows it worked.
+To stand one up and prove a release on it, from the first command to Promote to stable, follow [The staging runbook](https://drive.google.com/drive/folders/1EzJSsBNEF3zgYAaldmUKLLWWCXMn-kgi): each step with the output that shows it worked.
 
 ## Wipe and refresh
 
@@ -211,7 +211,7 @@ The realm job applies what Keycloak shows when it runs, on every `pc up -d` and 
 
 ## Email
 
-AUGUR sends email through the organisation's own SMTP relay ([ADR 0035](decisions/0035-email-through-the-organisations-relay.md)). Without one, AUGUR still works: nobody can reset a forgotten password or have their address checked, so an admin passes on one-time passwords by hand, as before.
+AUGUR sends email through the organisation's own SMTP relay (ADR 0035). Without one, AUGUR still works: nobody can reset a forgotten password or have their address checked, so an admin passes on one-time passwords by hand, as before.
 
 Set it in `.env`, then `pc up -d`:
 
@@ -225,7 +225,7 @@ The realm job (below) points Keycloak at the relay on every `up`, and with a rel
 
 Admin → Status has an **Email** section: whether email can be sent, the relay and the address mail comes from, and when the relay was last checked (at most every 5 minutes). When the relay is set but doesn't answer, it says what to check: the sign-in, the host and port, or the security setting. The gateway reads the same `SMTP_*` settings for this check and sends nothing.
 
-AUGUR's own services send email through one sender in the service kit (`@augur/service-kit/mail`, [ADR 0065](decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md)): Nodemailer to the relay, from React Email templates. Without a relay it says why instead of failing.
+AUGUR's own services send email through one sender in the service kit (`@augur/service-kit/mail`, ADR 0065): Nodemailer to the relay, from React Email templates. Without a relay it says why instead of failing.
 
 **Who email is from.** Admin → Organisation sets the sender: a name (the organisation's name until changed) and, optionally, an address. AUGUR's own email uses them within a minute. Keycloak's emails (password resets, address checks) use them from the next run of the realm job, which reads them from identity's database: run `pc up -d` after changing them. Without an address, email comes from `SMTP_FROM`. If the relay refuses the new address, Admin → Status says so.
 
@@ -235,7 +235,7 @@ On the local stack (`infra/docker-compose.yml`) every email goes to Mailpit inst
 
 ## Entra
 
-People can sign in with the organisation's Microsoft Entra account instead of a password here ([ADR 0040](decisions/0040-account-lifecycle-and-personal-data.md)). The sign-in page then offers "{organisation} account" beside the password.
+People can sign in with the organisation's Microsoft Entra account instead of a password here (ADR 0040). The sign-in page then offers "{organisation} account" beside the password.
 
 1. In Entra (Microsoft Entra admin centre → App registrations → New registration), register AUGUR: **Accounts in this organizational directory only** (single tenant), and the web redirect URI `PLATFORM_URL/sso/realms/platform/broker/entra/endpoint`, for example `https://augur.example.org/sso/realms/platform/broker/entra/endpoint`.
 2. Under **Certificates & secrets**, make a client secret. Under **Token configuration**, add the optional claims `email`, `given_name` and `family_name` to the ID token.
@@ -349,7 +349,7 @@ The first start after this arrived restarts Postgres with archiving on (`pc up -
 - **The front door** (`web`): nginx serving the shell and the apps' frontends, with `/api` and `/sso` behind it. Each build of an app's frontend is kept in Garage's `augur-frontends` bucket and served from a folder of its own, `/apps/<id>/<version>_<digest>/`, so it never changes under someone using it, and a new build of the same version (on the workbench, say) reaches browsers straight away. The shell's page has a Content Security Policy: the browser runs only scripts from the platform's own address, the shell's own inline scripts (its import map and the note shown if the kit can't be loaded), the kit's site when `KIT_URL` names another, and the sites in `APP_ORIGINS`, and the page talks only to the platform (plus those sites). Fonts come from Google Fonts.
 - **Storage**: Postgres (with pgvector) holds every service's and app's schema. Garage holds apps' files, reachable only inside the compose network; the `storage` container gives each app in `APP_STORAGE` its own login, schema and bucket ([App storage](app-storage.md)).
 - **Sign-in**: Keycloak, imported on first start from `infra/deploy/keycloak/platform-realm.json`, with no test users, then kept up to date by the realm job (above). Keycloak reads that file only once. If you change `PLATFORM_URL` later, update the **shell** client's redirect URIs and web origins in the admin console.
-- **Sign-in pages and emails**: AUGUR's own Keycloak image (`keycloak`, built and signed with each release) carries AUGUR's sign-in and email theme ([ADR 0041](decisions/0041-keycloakify-sign-in-theme.md)), and the realm job turns it on. The pages show the organisation's name and logo as Admin → Organisation keeps them (`ORG_NAME` until the realm job first runs; `ORG_LOGO_URL`, if set, replaces the logo); the product's name is the realm's display name, which the realm job sets from `ORG_PRODUCT_NAME` (default `AUGUR`), so emails' subjects and passkey prompts show it too. They are offered in the languages an admin chooses in Admin → Organisation, else those in `REALM_LANGUAGES` (default `en`; any language Keycloak has, the first being the default), with a language menu when there is more than one, and each person's choice is kept as their `locale`. People choose from the same languages in Account. Every word on them is Keycloak's own, so each language is complete. On a Keycloak without the theme, such as Keycloak's own image, the realm job leaves Keycloak's look and says so in `pc logs keycloak-config`.
+- **Sign-in pages and emails**: AUGUR's own Keycloak image (`keycloak`, built and signed with each release) carries AUGUR's sign-in and email theme (ADR 0041), and the realm job turns it on. The pages show the organisation's name and logo as Admin → Organisation keeps them (`ORG_NAME` until the realm job first runs; `ORG_LOGO_URL`, if set, replaces the logo); the product's name is the realm's display name, which the realm job sets from `ORG_PRODUCT_NAME` (default `AUGUR`), so emails' subjects and passkey prompts show it too. They are offered in the languages an admin chooses in Admin → Organisation, else those in `REALM_LANGUAGES` (default `en`; any language Keycloak has, the first being the default), with a language menu when there is more than one, and each person's choice is kept as their `locale`. People choose from the same languages in Account. Every word on them is Keycloak's own, so each language is complete. On a Keycloak without the theme, such as Keycloak's own image, the realm job leaves Keycloak's look and says so in `pc logs keycloak-config`.
 
 ### Limits at the front door
 
@@ -369,7 +369,7 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 
 ### The UI kit
 
-The shell and every app share one copy of the UI kit (React, Common and Quill), the version this AUGUR release pinned in `release/kit.json` ([ADR 0048](decisions/0048-kit-served-from-a-kit-url.md)). The front door serves it at `PLATFORM_URL/kit/<version>/`, and `KIT_URL` in `.env` says where browsers load it from:
+The shell and every app share one copy of the UI kit (React, Common and Quill), the version this AUGUR release pinned in `release/kit.json` (ADR 0048). The front door serves it at `PLATFORM_URL/kit/<version>/`, and `KIT_URL` in `.env` says where browsers load it from:
 
 - **Unset, or `/kit/`** (the default): from this server. Nothing else to do.
 - **A CDN in front**: set `KIT_URL` to an https address, ending in `/`, that serves the same files at the same paths, for example a CDN that mirrors `PLATFORM_URL/kit/`. It must send `Access-Control-Allow-Origin` for `PLATFORM_URL`, because the browser loads the kit as modules. Then `pc up -d web`. The page names the full version, so the CDN can keep each file forever.
@@ -378,7 +378,7 @@ The page holds every kit file to the hash in the release, so a CDN that serves a
 
 ### Desktops without a GPU
 
-Behind a dialog, the palette or the radial menu, the shell and every app go out of focus instead of going dark (PDR-010). Blurring the page is quick on a desktop with a GPU and slow on one without, such as most virtual desktops. `FOCUS_DEPTH` in `.env` says how the whole deployment draws it ([ADR 0068](decisions/0068-a-deployment-chooses-how-depth-is-drawn.md)):
+Behind a dialog, the palette or the radial menu, the shell and every app go out of focus instead of going dark (PDR-010). Blurring the page is quick on a desktop with a GPU and slow on one without, such as most virtual desktops. `FOCUS_DEPTH` in `.env` says how the whole deployment draws it (ADR 0068):
 
 - **Unset** (the default): each app chooses, which is `veil` unless it says otherwise.
 - **`veil`** or **`lens`**: blur what's behind, through a layer over it or by blurring the page itself.

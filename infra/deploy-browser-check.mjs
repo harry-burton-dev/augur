@@ -1,7 +1,7 @@
 // Opens a running AUGUR in a real browser, as its first admin would, and checks what unit and
 // contract tests can't see on a release's own images: sign-in works, the shell and the apps that
 // ship with it render, and the UI kit comes from KIT_URL, held to its hashes (ADR 0048).
-// infra/deploy-test.sh runs it in Playwright's container after a fresh install. See docs/deploy-test.md.
+// infra/deploy-test.sh runs it in Playwright's container after a fresh install. See The deploy test in the AUGUR handbook, 03 Architecture/Engineering.
 //
 //   node deploy-browser-check.mjs <front door> <admin user> <admin password> <app id>...
 //

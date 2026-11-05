@@ -1855,7 +1855,7 @@ components:
           items:
             $ref: "#/components/schemas/AppArea"
           maxItems: 6
-          description: The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See docs/shell-principles.md
+          description: The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See Shell principles in the AUGUR handbook, 02 Principles
         menu:
           type: array
           items:

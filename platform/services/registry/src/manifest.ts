@@ -272,7 +272,7 @@ export const appEntrySchema = Type.Object(
     areas: Type.Optional(
       Type.Array(appAreaSchema, {
         maxItems: 6,
-        description: 'The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See docs/shell-principles.md',
+        description: 'The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See Shell principles in the AUGUR handbook, 02 Principles',
       }),
     ),
     menu: Type.Optional(
@@ -289,7 +289,7 @@ export type AppEntry = Static<typeof appEntrySchema>;
 export const floorKindsOf = (entry: Pick<AppEntry, 'floors'>): readonly FloorKind[] => entry.floors ?? FLOOR_KINDS;
 
 /**
- * Where an app's menu breaks the shell principles (docs/shell-principles.md):
+ * Where an app's menu breaks the shell principles (Shell principles in the AUGUR handbook, 02 Principles):
  * something repeating the label or icon of what it sits under, a group naming
  * an area the app doesn't have, an area with no groups. These are warnings:
  * the manifest is still accepted, so released apps keep working, but the

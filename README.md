@@ -52,7 +52,7 @@ infra/
 scripts/                  repo tooling: dev-app, register-app, boundary/manifest/version checks
 docs/                     how-to guides (below)
 .changeset/               pending release notes; one per PR
-.github/workflows/        CI, releases, dev builds, previews and feeds (docs/ci-cd.md)
+.github/workflows/        CI, releases, dev builds, previews and feeds (CI/CD in the AUGUR handbook, 03 Architecture/Engineering)
 ```
 
 ## What each part is for
@@ -74,7 +74,7 @@ Home and Admin are built like any app: one ES module the shell imports.
 | `@augur/kit-common`, `@augur/app-kit`, `@augur/shell-kit` | Common (with the tokens), Quill (the React kit apps build with) and Aerie (the shell's own; only the shell may import it), ADR 0015. They live in the [augur-kit](https://github.com/harry-burton-dev/augur-kit) repository with their Storybook (ADR 0046), and come here as packages from GitHub Packages: set `NODE_AUTH_TOKEN` to a token with `read:packages` before `pnpm install`. |
 | `@augur/mfe-sdk` | What an app gets from the shell: `defineMicroFrontend`, the mount context (`ctx.person`, `ctx.workspace`, `ctx.fetch`, `notify`, `raise`/`request` intents, event bus), and the manifest types. Breaking it breaks apps, so it is versioned carefully. |
 | `@augur/service-kit` | For backend services: read the caller the gateway verified, sign in as the service itself, register an app, send notifications and audit entries, check floors and grants, logging. |
-| `@augur/records` | The rules every app's records share, for services and frontends alike: levels a tree is built from, lifecycles, read/edit/manage down a tree, tags, relationships, and publishing up the floors with one owner. See [App patterns](docs/app-patterns.md). |
+| `@augur/records` | The rules every app's records share, for services and frontends alike: levels a tree is built from, lifecycles, read/edit/manage down a tree, tags, relationships, and publishing up the floors with one owner. See [App patterns](https://drive.google.com/drive/folders/1L14-L3PNjl5OVlztzZCu3TjD2D5QLs24). |
 | `@augur/clients` | Typed clients for each platform API, generated from `contracts/*.openapi.yaml`: one factory per service, called through the gateway. |
 | `@augur/app-tools` | The `augur-app` command an app's own repository builds and releases with: dev builds, previews, signed bundles and the `app-release.json` a deployment installs. |
 
@@ -136,6 +136,6 @@ pnpm check:boundaries
 | [Mirror](docs/mirror.md) | Releases and apps for servers that can't reach GitHub |
 | [Agents and models](docs/agents.md) | Setting up the model behind Agents, and an app's service asking it |
 | [Versioning](docs/versioning.md) | Changesets, releases, API and SDK versions |
-| [CI/CD](docs/ci-cd.md) | Every workflow: what runs when, what it costs in minutes, and how to keep it cheap |
+| [AUGUR handbook](https://drive.google.com/drive/folders/1CDGBoi620UrDG3DY2biDXIHrpA8dICDh) | Outside this repository, on Google Drive: the decisions (ADRs and PDRs, listed in the Decision register), principles, app patterns, architecture and CI/CD |
 | [apps/](apps/README.md) | How apps register and ask each other for things |
 | [platform/contract](platform/contract/README.md) | The shell's promise to apps and the frozen SDK builds |

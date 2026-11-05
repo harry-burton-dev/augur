@@ -28,6 +28,7 @@
     "check:reasons": "node scripts/check-reasons.mjs",
     "catalog": "node scripts/catalog.mjs",
     "check:catalog": "node scripts/catalog.mjs check",
+    "check:docs": "node scripts/check-docs.mjs",
     "seed": "node scripts/seed.mjs",
     "check:licences": "node scripts/licences.mjs check",
     "check:repo-security": "node scripts/check-repo-security.mjs",

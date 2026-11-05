@@ -29,6 +29,10 @@ metadata:
     backstage.io/techdocs-ref: dir:..
     augur.dev/release-unit: augur
     augur.dev/version: 0.23.1
+  links:
+    - url: https://drive.google.com/drive/folders/16wXmUMRNP2_vXAlf4kBMF9hCDNUXg7yO
+      title: Decision register (AUGUR handbook, 04 Decisions)
+      icon: docs
 spec:
   owner: group:default/augur-core
   domain: augur

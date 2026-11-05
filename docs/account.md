@@ -1,6 +1,6 @@
 # Your account
 
-Each person manages themselves in the shell's Account area ([ADR 0036](decisions/0036-account-area-in-the-shell.md)). Who they are lives in Keycloak's user profile; how AUGUR behaves for them lives in identity's preferences ([ADR 0039](decisions/0039-profile-in-keycloak-preferences-in-identity.md)).
+Each person manages themselves in the shell's Account area (ADR 0036). Who they are lives in Keycloak's user profile; how AUGUR behaves for them lives in identity's preferences (ADR 0039).
 
 ## The API
 

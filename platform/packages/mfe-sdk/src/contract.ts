@@ -47,7 +47,7 @@ export interface AppManifestEntry {
    * System (SDK 1.5): what Title lists under the app. Each menu group names
    * its `area`. With fewer than two, Title shows the app alone, never a
    * doubled item. Nothing repeats its parent: an area's label and icon differ
-   * from the app's. See docs/shell-principles.md.
+   * from the app's. See Shell principles in the AUGUR handbook, 02 Principles.
    */
   areas?: AppArea[];
   /**

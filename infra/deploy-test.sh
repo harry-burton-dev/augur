@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Puts AUGUR through what a server does, with the real compose file and images, so a release that
-# won't start, won't upgrade or can't go back is caught before anyone installs it. See docs/deploy-test.md.
+# won't start, won't upgrade or can't go back is caught before anyone installs it. See The deploy test in the AUGUR handbook, 03 Architecture/Engineering.
 #
 #   infra/deploy-test.sh fresh                    # a new server on the images built from this checkout
 #   infra/deploy-test.sh upgrade <from-version>   # that release first, with data, then this checkout, then back

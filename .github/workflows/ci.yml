@@ -10,7 +10,7 @@ on:
 # RELEASE_RUNNER, if set, names the x86-64 runner the image-building jobs use.
 
 # A new push to a pull request stops its last run.
-# What each run does, and what it costs, is in docs/ci-cd.md. In short: a pull request runs only the
+# What each run does, and what it costs, is in CI/CD in the AUGUR handbook, 03 Architecture/Engineering. In short: a pull request runs only the
 # jobs its change needs (scripts/ci-changes.sh); the push that merges it runs only build-test, because
 # the pull request already ran the rest on the same code. The kit's Storybook is published from augur-kit.
 permissions:
@@ -92,6 +92,8 @@ jobs:
       - run: pnpm check:settings
       - run: pnpm check:upgrade-notes
       - run: pnpm check:catalog
+      # Only shipped guides and code's own Markdown; documents live in the AUGUR handbook.
+      - run: pnpm check:docs
       - run: pnpm check:licences
       # Workflows pinned and scoped, no untrusted text in scripts, CI on servers' Postgres major.
       - run: pnpm check:repo-security

@@ -11,7 +11,7 @@ const here = new URL('.', import.meta.url).pathname;
 const frozen = join(here, 'frozen');
 // Every frozen build, or with CONTRACT_FROZEN=edges only the oldest and the newest: CI's choice on an
 // ordinary pull request, to keep its minutes down, while the Version packages pull request runs them
-// all before anything is released (docs/ci-cd.md).
+// all before anything is released (CI/CD in the AUGUR handbook, 03 Architecture/Engineering).
 const releases = (existsSync(frozen) ? readdirSync(frozen) : []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 const chosen = process.env.CONTRACT_FROZEN === 'edges' && releases.length > 2 ? [releases[0], releases.at(-1)] : releases;
 // Folio ships with AUGUR but can be turned off, so today's build runs with it and without it,

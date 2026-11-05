@@ -1,5 +1,5 @@
 #!/bin/bash
-# Gets a cloud coding session ready to work on AUGUR (ADR 0001, AGENTS.md):
+# Gets a cloud coding session ready to work on AUGUR (AGENTS.md):
 # installs dependencies when they changed, then points the session at the decisions.
 set -euo pipefail
 
@@ -17,8 +17,5 @@ if [ "${CLAUDE_CODE_REMOTE:-}" = "true" ]; then
   fi
 fi
 
-# Every session: show which decisions are on record, so work is checked against them.
-if [ -f docs/decisions/README.md ]; then
-  echo "AUGUR decisions on record (docs/decisions/). Check the ones your work touches; going against an Accepted one needs a new Proposed record (ADR 0001):"
-  grep -E '^\| \[[0-9]{4}\]' docs/decisions/README.md | sed -E 's/^\| \[([0-9]{4})\]\([^)]*\) \| ([^|]+)\| ([^|]+)\|.*/  \1 \3: \2/' | sed -E 's/ +:/:/; s/ +$//'
-fi
+# Every session: point at the decisions on record, so work is checked against them.
+echo "AUGUR's decisions (ADRs and PDRs) are listed in the Decision register, in the AUGUR handbook on Google Drive (04 Decisions): https://drive.google.com/drive/folders/16wXmUMRNP2_vXAlf4kBMF9hCDNUXg7yO. Check the ones your work touches; going against an Accepted one needs a new Proposed record first."
