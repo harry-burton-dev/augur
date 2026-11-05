@@ -87,6 +87,16 @@ export function cardOf(app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'r
 }
 
 /**
+ * An app's own settings for the person (ADR 0036), shown as a section of Account's Home and apps:
+ * the `settings` surface for this kind of floor, or else its personal one, since what a person
+ * chooses for themselves follows them.
+ */
+export function settingsOf(app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'role'>): ManifestSurface | undefined {
+  const all = (app.surfaces ?? []).filter((s) => s.slot === 'settings' && (!s.role || s.role === floor.role));
+  return all.find((s) => s.floor === floor.kind) ?? all.find((s) => s.floor === 'personal');
+}
+
+/**
  * The cards for Home on this floor: apps the person opened most recently first, then the catalogue's order, at most six.
  * An app this shell can't open keeps its card, which says why and who can change it (Nothing is obtuse).
  */
@@ -132,10 +142,14 @@ export class SurfaceMounter {
   }
 
   /** Mounts `app`'s card for the floor into `el`. False when there is none, or it failed; Home then says so in the tile. */
-  async mount(el: HTMLElement, app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'role'>, ctx: MountContext): Promise<boolean> {
-    const card = cardOf(app, floor);
-    if (!card || incompatibility(app)) return false;
-    const surface = (await this.entryOf(app))?.surfaces?.[card.module];
+  mount(el: HTMLElement, app: AppManifestEntry, floor: Pick<Workspace, 'kind' | 'role'>, ctx: MountContext): Promise<boolean> {
+    return this.mountSurface(el, app, cardOf(app, floor), ctx);
+  }
+
+  /** Mounts one of `app`'s surfaces (a card, its settings) into `el`. False when there is none, or it failed. */
+  async mountSurface(el: HTMLElement, app: AppManifestEntry, which: ManifestSurface | undefined, ctx: MountContext): Promise<boolean> {
+    if (!which || incompatibility(app)) return false;
+    const surface = (await this.entryOf(app))?.surfaces?.[which.module];
     if (!isSurface(surface) || !el.isConnected) return false;
     await this.unmount(el);
     this.mounted.set(el, surface);
