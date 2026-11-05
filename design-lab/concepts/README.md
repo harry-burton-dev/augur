@@ -124,3 +124,19 @@ app pattern took it), **dropped** (say why in the file).
 | [The opening book](the-opening-book.md) | explored | 2026-11-03-the-annotated-game |
 | [Play it first](play-it-first.md) | explored | 2026-11-03-the-annotated-game |
 | [The warrant shows](the-warrant-shows.md) | to explore | batch 6 research |
+| [Verdict first](verdict-first.md) | explored | 2026-11-05-the-safety-card (writing) |
+| [Every note knows its release](the-note-knows-its-release.md) | explored | 2026-11-05-the-safety-card (writing) |
+| [One sheet for the jump](one-sheet-for-the-jump.md) | explored | 2026-11-05-the-safety-card (writing) |
+| [Every if has a then](every-if-has-a-then.md) | explored | 2026-11-05-the-safety-card (writing) |
+| [A contradiction is open](a-contradiction-is-open.md) | explored | 2026-11-05-the-safety-card (writing) |
+| [Memory items are do-nots](memory-items-are-do-nots.md) | explored | 2026-11-05-the-quick-reference-handbook (ops) |
+| [The way back has a name](the-way-back-has-a-name.md) | explored | 2026-11-05-the-quick-reference-handbook (ops) |
+| [The record survives the restore](the-record-survives-the-restore.md) | explored | 2026-11-05-the-quick-reference-handbook (ops) |
+| [Four things must hold](four-things-must-hold.md) | explored | 2026-11-05-the-quick-reference-handbook (ops) |
+| [Upgrade while someone is awake](upgrade-while-awake.md) | explored | 2026-11-05-the-quick-reference-handbook (ops) |
+| [The type fixes which, not what](the-type-fixes-which.md) | explored | 2026-11-05-the-type-specimen (data) |
+| [Found the same, or became one](found-the-same-or-became-one.md) | explored | 2026-11-05-the-type-specimen (data) |
+| [A rerun has three numbers, not two](three-numbers-not-two.md) | explored | 2026-11-05-the-type-specimen (data) |
+| [Sort what was said while merged](sort-what-was-said-while-merged.md) | explored | 2026-11-05-the-type-specimen (data) |
+| [A shared key is a question](a-shared-key-is-a-question.md) | explored | 2026-11-05-the-type-specimen (data) |
+| [Name the wrong record](name-the-wrong-record.md) | explored | 2026-11-05-the-type-specimen (data) |

@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-annotated-game`](../runs/2026-11-03-the-annotat
 Could steer: Upgrade Centre (an upgrade's way back), Admin changes, consequence preview, the wake.
 
 Related: [consequence preview](consequence-preview.md), [the wake](the-wake.md), [decided versus said](decided-versus-said.md).
+
+Used in [`2026-11-05-the-quick-reference-handbook`](../runs/2026-11-05-the-quick-reference-handbook/) (ops track): the way-back register before each upgrade window and the way-back ledger after it, each step with its undo, cost and what it depended on (daylight V2, hand-off V3). Split off: [the way back has a name](the-way-back-has-a-name.md), [the record survives the restore](the-record-survives-the-restore.md).

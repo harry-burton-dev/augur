@@ -12,3 +12,5 @@ First found in: [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-referen
 Could steer: Notifications (O), watch for change in the briefing (M), Upgrade Centre release notes.
 
 In [`2026-11-03-the-situation`](../runs/2026-11-03-the-situation/): every stale change names one; "who can answer changed" covers a claim whose only source moved post (stale V1).
+
+In [`2026-11-05-the-type-specimen`](../runs/2026-11-05-the-type-specimen/) (data track): the reasons are worked out by which clock moved, across four frames; a split is "we learned about the past", with a link to its cause. "A guess was settled" and "a word changed meaning" still need cause links.
