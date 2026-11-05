@@ -10,7 +10,7 @@ import { cosignFeedCheck, feedSigner, repoOfFeed, TRUSTED_ROOT_IN_REGISTRY } fro
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { reportingFrom } from './report.ts';
 import { ringFrom, takesPreview } from './ring.ts';
-import { MemoryAppStore, PgAppStore, type AppStore } from './store.ts';
+import { PgAppStore, type AppStore } from './store.ts';
 import { updateNotices } from './notices.ts';
 
 // Every setting the registry reads, checked before it starts (in production, a missing one stops it).
@@ -44,15 +44,11 @@ loadConfigOrExit('registry', [
 
 const port = Number(process.env.PORT ?? 8082);
 
-let store: AppStore;
-if (process.env.DATABASE_URL) {
-  store = await PgAppStore.connect(process.env.DATABASE_URL);
-} else if (process.env.NODE_ENV === 'production') {
-  throw new Error('DATABASE_URL is not set: the registry needs Postgres to keep the catalogue.');
-} else {
-  console.warn('DATABASE_URL is not set: keeping registered apps in memory until the registry restarts.');
-  store = new MemoryAppStore();
+// The catalogue lives in Postgres, locally too: the dev stack's (docker compose -f infra/docker-compose.yml up -d postgres).
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL is not set: the registry keeps the catalogue in Postgres. Locally, start the dev stack’s (docker compose -f infra/docker-compose.yml up -d postgres).');
 }
+const store: AppStore = await PgAppStore.connect(process.env.DATABASE_URL);
 
 // The registry signs in as itself (Keycloak client platform-registry) to write the audit log.
 const { EVENTS_URL } = process.env;

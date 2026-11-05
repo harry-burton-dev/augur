@@ -5,6 +5,10 @@ node_modules
 .git
 .env
 **/.env
+# A deployment's or a developer's other env files (.env.local, .env.production): secrets, never in an image.
+.env.*
+**/.env.*
+!**/.env.example
 **/__pycache__
 **/*.egg-info
 **/.pytest_cache

@@ -38,23 +38,27 @@
     "contracts": "node scripts/check-contracts.mjs write",
     "check:contracts": "node scripts/check-contracts.mjs check",
     "check:api": "node scripts/check-api.mjs",
-    "api:update": "node scripts/check-api.mjs update"
+    "api:update": "node scripts/check-api.mjs update",
+    "knip": "knip",
+    "coverage:summary": "node scripts/coverage-summary.mjs"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@changesets/cli": "^2.31.1",
     "@eslint/js": "^10.0.1",
     "@microsoft/api-extractor": "^7.60.1",
+    "@vitest/coverage-v8": "3.2.7",
     "ajv": "^8.20.0",
     "eslint": "^10.14.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.14.0",
+    "knip": "^6.44.1",
     "publint": "^0.3.25",
-    "semver": "^7.8.5",
+    "semver": "catalog:",
     "squawk-cli": "2.70.0",
     "turbo": "^2.5.0",
-    "typescript": "^5.6.0",
+    "typescript": "catalog:",
     "typescript-eslint": "^8.72.1",
-    "yaml": "^2.9.1"
+    "yaml": "catalog:"
   }
 }

@@ -19,8 +19,8 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import semver from 'semver';
 import { HALTED_ASSET, haltedOf } from './publish-feed.mjs';
+import { REPO } from './repo.mjs';
 
-const REPO = process.env.AUGUR_REPO ?? 'harry-burton-dev/augur';
 /** Who signs AUGUR's images: this repository's Release workflow (infra/release-images.sh). */
 /** The branches releases are made from (docs/release-channels.md): main, a hotfix's release/<unit>-<major.minor>, and (up to 0.13.0) preview and production. */
 export const RELEASE_BRANCHES = ['main', 'preview', 'production', 'release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+'];
