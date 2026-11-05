@@ -44,11 +44,12 @@ describe.runIf(DATABASE_URL)('sending digests', () => {
     };
     return { m, sent };
   };
-  /** Notifications for a person, made an hour before Monday morning. */
+  /** Notifications for a person, made an hour before Monday morning, a second apart in the order given. */
   const add = async (person: string, titles: string[]) => {
     const made = [];
     for (const title of titles) made.push(...(await db.store.addNotifications({ app: 'folio', recipients: [person], level: 'info', title })));
-    await db.pool.query('update events.notifications set created_at = $1 where recipient = $2', [new Date(monday.getTime() - 3_600_000), person]);
+    // Distinct times, so newest first is one order (the same time left it to the ids, which are random).
+    for (const [i, n] of made.entries()) await db.pool.query('update events.notifications set created_at = $1 where id = $2', [new Date(monday.getTime() - 3_600_000 + i * 1000), n.id]);
     return made;
   };
   const run = (kind: DigestKind, people: NoticeSettings[], m: NoticeMailer, at = monday) =>
