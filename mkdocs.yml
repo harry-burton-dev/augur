@@ -105,3 +105,4 @@ nav:
       - 0065. AUGUR's own email is sent by Nodemailer from React Email templates, and Mailpit catches it in dev: decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md
       - "0066. Binding events name the thing: `<app>.<type>.entity-bound`": decisions/0066-binding-events-name-the-thing.md
       - 0067. Update control stays in the registry for now, behind a checked seam, and leaves as its own service: decisions/0067-update-control-stays-in-the-registry-behind-a-seam.md
+      - 0068. Knip finds dead code, and Vitest's v8 coverage is reported on main: decisions/0068-knip-finds-dead-code-and-vitest-measures-coverage.md
