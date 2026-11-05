@@ -76,5 +76,6 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0068](0068-a-deployment-chooses-how-depth-is-drawn.md) | A deployment chooses how depth is drawn, and scrim blurs nothing | Proposed | 2026-11-05 |
 | [0069](0069-knip-finds-dead-code-and-vitest-measures-coverage.md) | Knip finds dead code, and Vitest's v8 coverage is reported on main | Proposed | 2026-11-05 |
 | [0070](0070-military-symbols-with-milsymbol.md) | Data Atlas draws military symbols for its kinds with milsymbol | Proposed | 2026-11-05 |
+| [0071](0071-data-atlas-maps-with-maplibre-and-pmtiles.md) | Data Atlas draws maps with MapLibre GL JS from the deployment's own PMTiles file | Proposed | 2026-11-05 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.

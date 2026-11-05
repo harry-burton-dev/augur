@@ -626,6 +626,11 @@ services:
       <<: [*atlas-storage, *env]
       PORT: 8086
       SERVICE_CLIENT_SECRET: ${ATLAS_CLIENT_SECRET}
+      # The map's base map: a PMTiles file in ./maps, as the container sees it (docs/atlas.md, "Maps").
+      ATLAS_MAP_TILES: ${ATLAS_MAP_TILES:-}
+      ATLAS_MAP_ATTRIBUTION: ${ATLAS_MAP_ATTRIBUTION:-}
+    volumes:
+      - ./maps:/maps:ro
     depends_on: *shipped-app
 
   # Mandate, intent passed down the floors: the fourth app every deployment ships with. Its aims and the
