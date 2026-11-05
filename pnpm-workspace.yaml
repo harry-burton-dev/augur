@@ -10,6 +10,7 @@ onlyBuiltDependencies:
 # patched release the rest of the tree already uses. Drop this once API Extractor moves past it.
 overrides:
   "@microsoft/api-extractor>minimatch": 10.2.6
-  # Vitest 3's coverage takes test-exclude 7, which pins glob 10, a release with a known vulnerability
-  # (GHSA-3g3m-2fjr-6pw4); test-exclude 8 takes the patched glob. Drop this once Vitest's coverage moves past it.
+  # Vitest 3's coverage takes test-exclude 7 and glob 10, and glob before 14.0.2 has a known vulnerability
+  # (GHSA-3g3m-2fjr-6pw4). Take test-exclude 8 with the patched glob. Drop these once Vitest's coverage moves past it.
   "@vitest/coverage-v8>test-exclude": 8.0.0
+  "test-exclude>glob": 14.0.3
