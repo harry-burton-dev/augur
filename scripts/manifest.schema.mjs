@@ -2,14 +2,19 @@
 // registry's own appEntrySchema (TypeBox, platform/services/registry/src/manifest.ts), so a manifest
 // that passes it has the fields and limits the registry accepts. The registry's other rules (a semver
 // version, a free route, surfaces on the app's floors) are checked by pnpm check:manifest.
-//   pnpm manifest-schema     write contracts/manifest.schema.json (after pnpm build: it uses the registry's build)
-// scripts/check-manifests.mjs fails when the file is out of step.
+//   pnpm manifest-schema     write contracts/manifest.schema.json and its copy in @augur/app-tools (after pnpm build:
+//                            it uses the registry's build)
+// scripts/check-manifests.mjs fails when either file is out of step.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = new URL('..', import.meta.url).pathname;
 export const SCHEMA_FILE = 'contracts/manifest.schema.json';
+/** The copy published inside @augur/app-tools, so an app repository's manifest points into node_modules at the
+ * schema of the tools it builds with: "$schema": "./node_modules/@augur/app-tools/manifest.schema.json". */
+export const PACKAGE_SCHEMA_FILE = 'platform/packages/app-tools/manifest.schema.json';
+export const SCHEMA_FILES = [SCHEMA_FILE, PACKAGE_SCHEMA_FILE];
 /** Not an address: the repository is private, so a manifest points at a copy by path (docs/build-an-app.md). */
 export const SCHEMA_ID = 'urn:augur:app-manifest';
 
@@ -32,7 +37,6 @@ export const manifestSchemaText = async () => {
 };
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const file = join(root, SCHEMA_FILE);
   let text;
   try {
     text = await manifestSchemaText();
@@ -40,9 +44,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.error(`✗ ${err.message}`);
     process.exit(1);
   }
-  if (existsSync(file) && readFileSync(file, 'utf8') === text) console.log(`${SCHEMA_FILE} is up to date.`);
-  else {
-    writeFileSync(file, text);
-    console.log(`Wrote ${SCHEMA_FILE}`);
+  for (const name of SCHEMA_FILES) {
+    const file = join(root, name);
+    if (existsSync(file) && readFileSync(file, 'utf8') === text) console.log(`${name} is up to date.`);
+    else {
+      writeFileSync(file, text);
+      console.log(`Wrote ${name}`);
+    }
   }
 }
