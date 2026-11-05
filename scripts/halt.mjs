@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import semver from 'semver';
 
-const REPO = process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/im-platform';
+const REPO = process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/augur';
 const UNIT = /^(augur|[a-z][a-z0-9-]{1,39})$/;
 
 /** The release's tag: augur@<version>, or app/<id>@<version>. */

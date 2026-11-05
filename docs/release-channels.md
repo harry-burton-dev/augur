@@ -55,7 +55,7 @@ Releases are signed by the Release workflow on the branch it ran on. The updater
 Each image also carries two attestations, signed by the same workflow: an SBOM of what is inside it (SPDX, from Syft through BuildKit's `--sbom`) and SLSA build provenance (BuildKit's `--provenance`). An organisation's security review checks them with the image's own identity:
 
 ```sh
-cosign verify-attestation --type spdxjson --certificate-identity-regexp '^https://github.com/harry-burton-dev/im-platform/.github/workflows/' \
+cosign verify-attestation --type spdxjson --certificate-identity-regexp '^https://github.com/harry-burton-dev/(augur|im-platform)/.github/workflows/' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com <image>@<digest> | jq -r .payload | base64 -d | jq .predicate
 ```
 
