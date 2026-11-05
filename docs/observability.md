@@ -31,6 +31,12 @@ Grafana evaluates AUGUR's rules every 30 seconds (`infra/deploy/observability/gr
 
 Each alert, and its all-clear, reaches deployment admins as a notice through the registry (`POST /v1/platform/alerts`, with `ALERT_WEBHOOK_TOKEN`). Grafana sends one notice per incident and repeats a firing one only daily. Email through the deployment's relay joins this once AUGUR has SMTP settings. Grafana sits outside the gateway and the notices, so it still sees them fail; the registry is the one part it needs to tell anyone.
 
+**Prove it works** once on a new server (docs/deploy.md, First start, step 6): in Grafana, under **Alerting → Contact points**, open **AUGUR notices** and press **Test**. Within a minute every deployment admin has a notice in AUGUR. That proves Grafana reaches the registry with the right token and the registry reaches people. From the command line, this sends the registry the same kind of alert Grafana would and prints `202` when it took it:
+
+```sh
+pc exec registry node -e "fetch('http://localhost:8082/v1/platform/alerts', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.ALERT_WEBHOOK_TOKEN, 'content-type': 'application/json' }, body: JSON.stringify({ alerts: [{ status: 'firing', labels: { alertname: 'Install test' }, annotations: { summary: 'A test alert: the alert path works' }, startsAt: new Date().toISOString() }] }) }).then((r) => console.log(r.status))"
+```
+
 To change a threshold, edit your copy of `rules.yaml` and run `pc restart otel-lgtm`. An upgrade replaces the file, so note what you changed.
 
 **When the whole server is down,** nothing on it can say so. The registry sends its signed report to Backstage every 15 minutes (docs/upgrade.md, Reporting to Backstage), and Backstage raises the alarm when one is more than 30 minutes late.
