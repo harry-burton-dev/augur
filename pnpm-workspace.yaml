@@ -22,7 +22,7 @@ catalog:
   "@types/semver": "^7.8.0"
   "@vitejs/plugin-react": "^5.2.0"
   fastify: "^5.12.7"
-  happy-dom: "^20.0.0"
+  happy-dom: "^21.0.4"
   jose: "^6.2.12"
   pg: "^8.23.1"
   react: "^19.3.1"
@@ -32,15 +32,15 @@ catalog:
   typebox: "^1.4.0"
   typescript: "^5.6.0"
   vite: "^7.3.7"
-  vitest: "^3.2.0"
+  vitest: "^4.1.12"
   yaml: "^2.9.1"
 onlyBuiltDependencies:
   - esbuild
-# API Extractor pins minimatch to a release with a known vulnerability (GHSA-g3hv-75wg-m249); take the
-# patched release the rest of the tree already uses. Drop this once API Extractor moves past it.
+# API Extractor and ESLint ask for minimatch releases with a known vulnerability; take the patched release
+# the rest of the tree already uses. Drop these once they move past it. fast-uri comes in through Fastify and
+# Ajv, whose ranges haven't reached its patched releases. Drop these once they do.
 overrides:
-  "@microsoft/api-extractor>minimatch": 10.2.6
-  # Vitest 3's coverage takes test-exclude 7 and glob 10, and glob before 14.0.2 has a known vulnerability
-  # (GHSA-3g3m-2fjr-6pw4). Take test-exclude 8 with the patched glob. Drop these once Vitest's coverage moves past it.
-  "@vitest/coverage-v8>test-exclude": 8.0.0
-  "test-exclude>glob": 14.0.3
+  "@microsoft/api-extractor>minimatch": 11.0.4
+  "minimatch@10": 11.0.4
+  "fast-uri@3": 3.1.9
+  "fast-uri@4": 4.2.3
