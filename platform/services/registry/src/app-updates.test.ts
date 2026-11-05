@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { appFeed, AppUpdateChecker, newestOn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
+import { appFeed, AppUpdateChecker, newestOn, updateNeeds, type AppFeedRead, type AppFeedRelease } from './app-updates.ts';
 import { PgAppStore, type AppRelease } from './store.ts';
-import { UpdateChecker } from './updates.ts';
+import { FeedProblem, UpdateChecker } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 
 const db = registryDb();
@@ -20,6 +20,7 @@ const release = (version: string, more: Partial<AppRelease['manifest']> = {}, ch
 });
 const feedOf = (...releases: AppRelease[]): AppFeedRelease[] =>
   releases.map((r) => ({ app: r.id, version: r.version, channel: r.channel === 'stable' ? 'stable' : r.channel === 'dev' ? 'dev' : 'beta', release: r }));
+const listOf = (read: AppFeedRelease[] | AppFeedRead) => (Array.isArray(read) ? read : read.releases);
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('the app feed', () => {
@@ -31,7 +32,7 @@ describe('the app feed', () => {
       if (url === 'https://api/assets/app/notes@1.1.0-beta.1') return json(release('1.0.0'));
       return json({}, 404);
     }) as typeof fetch;
-    const found = await appFeed({ url: 'https://api/releases', fetchImpl })();
+    const found = listOf(await appFeed({ url: 'https://api/releases', fetchImpl })());
     expect(found.map((r) => `${r.app} ${r.version} ${r.channel} ${r.release ? 'file' : 'no file'}`)).toEqual([
       'notes 1.1.0-beta.1 beta no file', // its file names another version
       'notes 1.0.0 stable file',
@@ -40,12 +41,12 @@ describe('the app feed', () => {
 
   it('reads a mirror’s list of release files', async () => {
     const fetchImpl = (async () => json({ apps: [release('1.0.0'), { nonsense: true }] })) as unknown as typeof fetch;
-    expect((await appFeed({ url: 'https://mirror/apps.json', fetchImpl })()).map((r) => r.version)).toEqual(['1.0.0']);
+    expect(listOf(await appFeed({ url: 'https://mirror/apps.json', fetchImpl })()).map((r) => r.version)).toEqual(['1.0.0']);
   });
 
   it('lists a halted release as halted, and never takes it', async () => {
     const fetchImpl = (async () => json({ apps: [release('1.0.0'), { ...release('1.1.0'), halted: { reason: 'Loses notes on save' } }] })) as unknown as typeof fetch;
-    const releases = await appFeed({ url: 'https://mirror/apps.json', fetchImpl })();
+    const releases = listOf(await appFeed({ url: 'https://mirror/apps.json', fetchImpl })());
     expect(releases.find((r) => r.version === '1.1.0')?.halted).toEqual({ reason: 'Loses notes on save' });
     expect(newestOn(releases, 'notes', 'stable')?.version).toBe('1.0.0');
   });
@@ -65,7 +66,25 @@ describe('the app feed', () => {
       url === 'https://api/releases'
         ? json([{ tag_name: 'app/notes@1.0.1-dev.40', prerelease: true, draft: false, assets: [{ name: 'app-release.json', url: 'https://api/assets/dev' }] }])
         : json(release('1.0.1-dev.40', {}, 'dev'))) as typeof fetch;
-    expect((await appFeed({ url: 'https://api/releases', fetchImpl })()).map((r) => `${r.version} ${r.channel} ${r.release ? 'file' : 'no file'}`)).toEqual(['1.0.1-dev.40 dev file']);
+    expect(listOf(await appFeed({ url: 'https://api/releases', fetchImpl })()).map((r) => `${r.version} ${r.channel} ${r.release ? 'file' : 'no file'}`)).toEqual(['1.0.1-dev.40 dev file']);
+  });
+
+  it('refuses an older signed feed, still in date, once it has taken a newer one, and keeps whether it can be trusted', async () => {
+    let issued = '2026-11-01T06:00:00Z';
+    const fetchImpl = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/token?')) return json({ token: 'pull' });
+      if (url.includes('/manifests/')) return json({ layers: [{ digest: 'sha256:feed', mediaType: 'application/vnd.augur.feed.v1+json' }, { digest: 'sha256:sig', mediaType: 'application/vnd.dev.sigstore.bundle.v0.3+json' }] });
+      return new Response(url.endsWith('/blobs/sha256:sig') ? 'the-bundle' : JSON.stringify({ issued, expires: '2026-11-15T00:00:00Z', apps: [release('1.0.0')] }));
+    }) as typeof fetch;
+    const feed = appFeed({ url: 'oci://ghcr.io/o/r/feed:latest', fetchImpl, check: async () => undefined, now: () => new Date('2026-11-02T00:00:00Z') });
+    let at = Date.UTC(2026, 10, 2);
+    const checker = new AppUpdateChecker(feed, () => new Date((at += 60_000)));
+    expect((await checker.check()).trust).toMatchObject({ state: 'verified', expires: '2026-11-15T00:00:00Z' });
+    issued = '2026-10-30T00:00:00Z';
+    await expect(feed()).rejects.toThrow(/before the one this server already accepted/);
+    expect((await checker.check()).problem).toMatch(/before the one this server already accepted/);
+    expect(checker.result.releases.map((r) => r.version)).toEqual(['1.0.0']);
   });
 });
 
@@ -98,9 +117,16 @@ describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
 
   const setup = async (releases: AppFeedRelease[], ring?: 'preview' | 'production', more: { store?: PgAppStore; pillars?: string[] } = {}) => {
     let feed = releases;
+    let refused = false;
     // Each check a minute after the last, so none is answered from the one before.
     let minutes = 0;
-    const checker = new AppUpdateChecker(async () => feed, () => new Date(Date.UTC(2026, 9, 27, 12, minutes++)));
+    const checker = new AppUpdateChecker(
+      async () => {
+        if (refused) throw new FeedProblem('The release feed isn’t signed.');
+        return feed;
+      },
+      () => new Date(Date.UTC(2026, 9, 27, 12, minutes++)),
+    );
     const entries: { action: string; detail?: Record<string, unknown> }[] = [];
     const updates = new UpdateChecker({ running: { version: '0.9.0', channel: 'beta' }, ring });
     const server = await db.app({ verifyService, appUpdates: checker, updates, allowPrPreviews: ring !== 'production', audit: async (e) => void entries.push(e), ...more });
@@ -116,7 +142,7 @@ describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
       feed = next;
       return (await server.inject({ method: 'POST', url: '/v1/app-runner/check', headers: fresh() })).json();
     };
-    return { server, entries, runNext, view, check, checker };
+    return { server, entries, runNext, view, check, checker, refuse: () => void (refused = true) };
   };
 
   it('offers what the feed has, and installs it by version', async () => {
@@ -224,6 +250,29 @@ describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
     await t.check(feedOf(release('1.0.0'), release('1.1.0-beta.1', {}, 'beta')));
     expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
     expect((await t.view()).installed[0]).toMatchObject({ channel: 'stable' });
+  });
+
+  it('on a production server, refuses a beta however it is asked for', async () => {
+    const t = await setup(feedOf(release('1.0.0'), release('1.1.0-beta.1', {}, 'beta')), 'production');
+    const ask = (payload: object) => t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload });
+    const byVersion = await ask({ action: 'install', app: 'notes', version: '1.1.0-beta.1' });
+    expect(byVersion.statusCode).toBe(400);
+    expect(byVersion.json().message).toMatch(/only releases promoted to production/);
+    expect((await ask({ action: 'install', release: { ...release('1.1.0-beta.1'), channel: 'stable' } })).statusCode).toBe(400);
+  });
+
+  it('installs nothing by itself from a refused feed, though an admin still can', async () => {
+    const t = await setup(feedOf(release('1.0.0')));
+    const follow = (policy: string) => t.server.inject({ method: 'PUT', url: '/v1/app-runner/apps/notes/follow', headers: fresh(), payload: { channel: 'stable', policy } });
+    await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await t.runNext();
+    await follow('ask');
+    await t.check(feedOf(release('1.0.0'), release('1.1.0')));
+    t.refuse();
+    expect((await t.check(feedOf(release('1.0.0'), release('1.1.0')))).problem).toBe('The release feed isn’t signed.');
+    await follow('automatic');
+    expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
+    expect((await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.1.0' } })).statusCode).toBe(202);
   });
 
   it('takes dev builds only on a preview server whose admin chose them', async () => {
