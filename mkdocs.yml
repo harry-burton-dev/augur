@@ -101,3 +101,4 @@ nav:
       - 0063. Accessibility is checked by axe in CI, failing on serious findings: decisions/0063-accessibility-checked-by-axe.md
       - "0064. The database can be restored to a point in time: Postgres archives its WAL, and restic copies it off the server": decisions/0064-point-in-time-restore-with-postgres-wal-archiving.md
       - 0065. AUGUR's own email is sent by Nodemailer from React Email templates, and Mailpit catches it in dev: decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md
+      - "0066. Binding events name the thing: `<app>.<type>.entity-bound`": decisions/0066-binding-events-name-the-thing.md
