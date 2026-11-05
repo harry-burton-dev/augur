@@ -55,6 +55,8 @@ export interface EventsOptions {
   principals?: PrincipalLookup;
   /** The inbox kinds each app's manifest declares, from the registry; without it kinds aren't checked. */
   inboxKinds?: InboxKindLookup;
+  /** The notification kinds each app's manifest declares, from the registry; without it kinds aren't checked. */
+  notificationKinds?: InboxKindLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
@@ -123,7 +125,7 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, directory, principals, inboxKinds, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
+export const buildApp = async ({ store = new MemoryEventStore(), verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, callers }: EventsOptions = {}) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -237,6 +239,18 @@ export const buildApp = async ({ store = new MemoryEventStore(), verifyService, 
         const big = notification.actions?.find((a) => a.intent.payload !== undefined && Buffer.byteLength(JSON.stringify(a.intent.payload)) > ACTION_PAYLOAD_BYTES);
         if (big) return reply.code(400).send({ error: 'bad_request', message: `The payload of “${big.label}” is over ${ACTION_PAYLOAD_BYTES} bytes. Send an id and let the app look the rest up.` });
         if (!toTeam && !principals && !notification.recipients.length) return reply.code(400).send({ error: 'bad_request', message: 'Name the recipients, or send to the team.' });
+        if (notification.kind) {
+          let declared: string[] | undefined;
+          try {
+            declared = notificationKinds ? await notificationKinds(notification.app) : undefined;
+          } catch (err) {
+            if (!(err instanceof GrantsUnavailable)) throw err;
+            return reply.code(503).send({ error: 'unavailable', message: 'The kinds of notification the app declares can’t be checked right now.' });
+          }
+          if (declared && !declared.includes(notification.kind)) {
+            return reply.code(400).send({ error: 'bad_request', message: `${notification.app} doesn’t declare the notification kind "${notification.kind}" in its manifest (notifications.kinds).` });
+          }
+        }
         if (principals) {
           // Reaching people by role or across the org is the platform's: an app names the people it means.
           if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send to an audience. Name the recipients.' });

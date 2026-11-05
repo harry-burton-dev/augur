@@ -1,6 +1,7 @@
 import type { Scope } from './apps.js';
 import { serviceHeaders, type ServiceCredentials } from './service.js';
 import { withDeadline } from './deadline.js';
+import { BoundedMap } from './cache.js';
 
 /** The registry could not say what an app is granted; the call should be refused for now, not let through. */
 export class GrantsUnavailable extends Error {}
@@ -24,7 +25,7 @@ export type GrantLookup = (app: string, workspace?: string) => Promise<readonly 
  * within that time. A failed lookup isn't remembered.
  */
 export const registryGrants = ({ registryUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: GrantsOptions): GrantLookup => {
-  const cache = new Map<string, { scopes: readonly Scope[]; at: number }>();
+  const cache = new BoundedMap<string, { scopes: readonly Scope[]; at: number }>();
   return async (app, workspace) => {
     const key = `${app} ${workspace ?? ''}`;
     const hit = cache.get(key);
@@ -55,7 +56,7 @@ export type NotificationKindsLookup = InboxKindsLookup;
 const registryKinds =
   (field: 'inboxKinds' | 'notificationKinds') =>
   ({ registryUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: GrantsOptions): InboxKindsLookup => {
-    const cache = new Map<string, { kinds: string[] | undefined; at: number }>();
+    const cache = new BoundedMap<string, { kinds: string[] | undefined; at: number }>();
     return async (app) => {
       const hit = cache.get(app);
       if (hit && now() - hit.at < ttlMs) return hit.kinds;
