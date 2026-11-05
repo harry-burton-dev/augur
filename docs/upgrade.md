@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The first admin's department is called Administration on new servers
+
+**From** unreleased
+
+Nothing to do on a server that's already running: its departments keep their names, because the realm reads `PLATFORM_ADMIN_DEPARTMENT` only at first start. On a new server, the first admin's department is now called `Administration` instead of `Platform` unless `PLATFORM_ADMIN_DEPARTMENT` names another. To rename an existing one, use Admin → Departments.
+
 ### Adding someone sends an invite email
 
 **From** unreleased
@@ -67,12 +73,6 @@ Where email is set up (`SMTP_*`, docs/deploy.md, Email), Admin → People → Ad
 **From** augur@0.22.0
 
 AUGUR's email now comes from the sender set in Admin → Organisation: the organisation's name unless an admin changed it, rather than the product's name. Once an address is set there, it replaces `SMTP_FROM`. Nothing to do. The realm job now also reads identity's database, using the `IDENTITY_DATABASE_PASSWORD` identity already uses. After changing the sender, run `pc up -d` so Keycloak's emails pick it up.
-
-### The first admin's department is called Administration on new servers
-
-**From** unreleased
-
-Nothing to do on a server that's already running: its departments keep their names, because the realm reads `PLATFORM_ADMIN_DEPARTMENT` only at first start. On a new server, the first admin's department is now called `Administration` instead of `Platform` unless `PLATFORM_ADMIN_DEPARTMENT` names another. To rename an existing one, use Admin → Departments.
 
 ### Desktops without a GPU can go without blur
 
