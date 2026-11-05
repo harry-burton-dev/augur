@@ -1,3 +1,4 @@
+import { mailRelayFromEnv, type MailRelay } from '@augur/service-kit';
 import { createHash } from 'node:crypto';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, PLATFORM_ROLES, SIGN_IN_FLOW, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
 import type { AppClients } from './clients.ts';
@@ -394,56 +395,17 @@ export const applyServiceAccountRights = async (kc: KeycloakDirectory, clientId:
   }
 };
 
-/** How the realm sends email: the organisation's own SMTP relay (ADR 0035). */
-export interface RealmMail {
-  host: string;
-  port: number;
-  /** STARTTLS after connecting (587), TLS from the start (465), or neither (a relay on the same trusted network). */
-  security: 'starttls' | 'tls' | 'none';
-  from: string;
-  replyTo?: string;
-  user?: string;
-  password?: string;
-}
-
-/** Where the relay's settings are kept in the realm's attributes, so a changed password is noticed without reading it back. */
-export const MAIL_FINGERPRINT = 'augurSmtpFingerprint';
-
-const MAIL_SECURITY = ['starttls', 'tls', 'none'] as const;
-
+/** The organisation's relay, read by the service kit from the `SMTP_*` settings AUGUR's own sender also uses (ADR 0065). */
+export type RealmMail = MailRelay;
 /**
  * The relay from a deployment's environment: SMTP_HOST and SMTP_FROM, with SMTP_PORT, SMTP_SECURITY,
  * SMTP_USER, SMTP_PASSWORD and SMTP_REPLY_TO. Undefined without a host, so a deployment with no relay
  * keeps working and its screens say email is off.
  */
-export const realmMailFromEnv = (env: Record<string, string | undefined>, warn: (message: string) => void = () => undefined): RealmMail | undefined => {
-  const host = env.SMTP_HOST?.trim();
-  if (!host) return undefined;
-  const from = env.SMTP_FROM?.trim();
-  if (!from || !/^[^\s@]+@[^\s@]+$/.test(from)) {
-    warn(`SMTP_HOST is set but SMTP_FROM ${from ? `(${from}) isn't an email address` : 'is empty'}, so the realm sends no email. Set SMTP_FROM to the address mail comes from.`);
-    return undefined;
-  }
-  const askedSecurity = env.SMTP_SECURITY?.trim().toLowerCase();
-  const askedPort = env.SMTP_PORT?.trim();
-  const port = askedPort ? Number(askedPort) : undefined;
-  if (askedPort && (!Number.isInteger(port) || port! < 1 || port! > 65535)) {
-    warn(`SMTP_PORT ${askedPort} isn't a port, so the realm sends no email.`);
-    return undefined;
-  }
-  let security: RealmMail['security'];
-  if (!askedSecurity) security = port === 465 ? 'tls' : 'starttls';
-  else if ((MAIL_SECURITY as readonly string[]).includes(askedSecurity)) security = askedSecurity as RealmMail['security'];
-  else {
-    warn(`SMTP_SECURITY ${askedSecurity} is none of ${MAIL_SECURITY.join(', ')}, so the realm sends no email.`);
-    return undefined;
-  }
-  const user = env.SMTP_USER?.trim() || undefined;
-  const password = env.SMTP_PASSWORD || undefined;
-  if (password && !user) warn('SMTP_PASSWORD is set without SMTP_USER, so the relay is used without signing in.');
-  const replyTo = env.SMTP_REPLY_TO?.trim() || undefined;
-  return { host, port: port ?? (security === 'tls' ? 465 : security === 'starttls' ? 587 : 25), security, from, ...(replyTo ? { replyTo } : {}), ...(user ? { user, ...(password ? { password } : {}) } : {}) };
-};
+export const realmMailFromEnv = mailRelayFromEnv;
+
+/** Where the relay's settings are kept in the realm's attributes, so a changed password is noticed without reading it back. */
+export const MAIL_FINGERPRINT = 'augurSmtpFingerprint';
 
 /** Keycloak's smtpServer for a relay. Its values are all strings; `fromDisplayName` is the product's name, never a literal. */
 export const smtpServer = (mail: RealmMail, productName?: string): Record<string, string> => ({

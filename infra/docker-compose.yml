@@ -132,6 +132,11 @@ services:
       OIDC_AUDIENCE: platform-api
       # Your own machine may be filled with sample data (pnpm seed, docs/seed.md).
       SEED_ALLOWED: "true"
+      # Mail lands in Mailpit (http://localhost:8025), never out; Status says whether it answers.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_SECURITY: none
+      SMTP_FROM: augur@localhost
       # Each app's service, name=url. The platform knows no app by name.
       APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086,mandate=http://mandate:8087
     ports: ["8080:8080"]

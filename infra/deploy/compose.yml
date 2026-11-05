@@ -382,6 +382,13 @@ services:
       PUBLIC_ACCESS_FILE: /run/augur/tailscale/public-until
       # Whether an admin may fill this deployment with synthetic sample data (pnpm seed, ADR 0056). Off unless set.
       SEED_ALLOWED: ${SEED_ALLOWED:-false}
+      # The organisation's SMTP relay (ADR 0035), only so Admin → Status can say whether email can be sent (ADR 0065).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       # Each app's service, name=url: the apps that ship with AUGUR.
       APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086,mandate=http://mandate:8087
       # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).

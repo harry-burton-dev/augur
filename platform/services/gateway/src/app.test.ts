@@ -5,6 +5,7 @@ import { CALLER_KEYS_PATH, callerCheckFor, callerSigner } from '@augur/service-k
 import { buildApp, defaultUpstreams, parseUpstreams } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
+import { Mailer, NO_RELAY } from '@augur/service-kit/mail';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { AppAccessUnavailable, registryAppAccess } from './uploads.ts';
 import { registryUpstreams, UpstreamsUnavailable } from './upstreams.ts';
@@ -455,6 +456,17 @@ describe('gateway', () => {
     expect(await ask(true)).toEqual({ allowed: true });
     expect(await ask(false)).toMatchObject({ allowed: false, whoCanChange: expect.stringContaining('SEED_ALLOWED') });
     expect((await ask()).allowed).toBe(false);
+  });
+
+  it('says whether email can be sent, and why not', async () => {
+    const ask = async (mailer: Mailer) => {
+      const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }), mailer });
+      return (await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } })).json().email;
+    };
+    expect(await ask(new Mailer())).toEqual({ state: 'off', problem: NO_RELAY });
+    const relay = { host: 'relay.example.org', port: 587, security: 'starttls' as const, from: 'augur@example.org' };
+    const verify = vi.fn().mockRejectedValue(Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }));
+    expect(await ask(new Mailer({ relay, transport: { verify, sendMail: vi.fn() } }))).toMatchObject({ state: 'attention', relay: 'relay.example.org:587', problem: expect.stringContaining('SMTP_HOST') });
   });
 
   it('keeps the platform’s status from people who aren’t admins, and from nobody signed in', async () => {
