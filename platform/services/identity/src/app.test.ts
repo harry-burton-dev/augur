@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { callerCheckFor, callerHeaders, callerSigner, signedCallerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
-import { MemoryWorkspaceStore } from './workspaces.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
 
-describe('identity', () => {
+const db = identityDb();
+
+describe.runIf(DATABASE_URL)('identity', () => {
   it('reports healthy', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const res = await app.inject({ method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ status: 'ok', service: 'identity', version: expect.stringMatching(/^\d+\.\d+\.\d+/), api: 'v1' });
   });
 
   it('says who the caller is', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const caller = { id: 'u-1', name: 'Alex Rivera', departments: ['Finance'], roles: ['admin'] };
     const res = await app.inject({ method: 'GET', url: '/v1/me', headers: callerHeaders(caller) });
     expect(res.json()).toEqual(caller);
@@ -20,7 +21,7 @@ describe('identity', () => {
 
   it('believes only the caller the gateway signed, once it checks callers', async () => {
     const gateway = callerSigner();
-    const app = await buildApp({ callers: callerCheckFor(gateway, 'identity') });
+    const app = await db.app({ callers: callerCheckFor(gateway, 'identity') });
     const caller = { id: 'u-1', name: 'Alex Rivera', departments: ['Finance'], roles: ['admin'] };
     // Anyone on the network could send these; without the gateway's signature they name nobody.
     expect((await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/me', headers: callerHeaders(caller) })).statusCode).toBe(401);
@@ -31,13 +32,13 @@ describe('identity', () => {
   });
 
   it('turns away a request that reached it without a caller', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const res = await app.inject({ method: 'GET', url: '/v1/me' });
     expect(res.statusCode).toBe(401);
   });
 
   it('keeps each person’s preferences, refusing what it does not know', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: [] });
     const sam = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: [] });
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences', headers: alex })).json()).toEqual({});
@@ -55,7 +56,7 @@ describe('identity', () => {
     const verifyService = async (headers: Record<string, string | string[] | undefined>) =>
       headers.authorization === 'Bearer registry' ? ({ kind: 'platform', name: 'registry' } as const) : headers.authorization === 'Bearer app' ? ({ kind: 'app', app: 'library' } as const) : undefined;
     const tree = async () => {
-      const workspaces = new MemoryWorkspaceStore();
+      const workspaces = db.workspaces;
       const org = await workspaces.org();
       const finance = await workspaces.createTeam('Finance');
       const payroll = await workspaces.createTeam('Payroll', finance.id);
@@ -63,7 +64,7 @@ describe('identity', () => {
       await workspaces.setMember(payroll.id, 'u-1', 'member');
       await workspaces.setMember(legal.id, 'u-2', 'member');
       const own = await workspaces.personal('u-1', 'Alex');
-      return { workspaces, org, finance, payroll, legal, own, app: await buildApp({ workspaces, verifyService }) };
+      return { workspaces, org, finance, payroll, legal, own, app: await db.app({ workspaces, verifyService }) };
     };
 
     it('tells the platform’s services where a floor sits, and no one else', async () => {

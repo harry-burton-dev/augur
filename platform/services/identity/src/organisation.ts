@@ -79,16 +79,6 @@ export interface OrganisationStore {
   put(kept: Kept): Promise<void>;
 }
 
-export class MemoryOrganisationStore implements OrganisationStore {
-  private kept: Kept = {};
-  async get() {
-    return { ...this.kept };
-  }
-  async put(kept: Kept) {
-    this.kept = { ...kept };
-  }
-}
-
 export const organisationMigrations: Migration[] = [
   {
     id: 'organisation_001_settings',
