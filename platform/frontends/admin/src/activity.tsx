@@ -80,6 +80,13 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} created the ${String(d.name ?? names.department(target))} department`;
     case 'department.renamed':
       return `${who} renamed ${String(d.from)} to ${String(d.to)}`;
+    case 'organisation.changed': {
+      const to = (d.to ?? {}) as Record<string, unknown>;
+      const what = [to.name !== undefined ? 'name' : '', to.timeZone !== undefined ? 'time zone' : '', to.sender !== undefined ? 'email sender' : ''].filter(Boolean);
+      return to.name !== undefined && what.length === 1
+        ? `${who} renamed the organisation to ${String(to.name)}`
+        : `${who} changed the organisation’s ${what.length ? what.join(' and ') : 'settings'}`;
+    }
     case 'department.member-added':
       return `${who} added ${names.person(String(d.person))} to ${names.department(target)}`;
     case 'department.member-removed':
