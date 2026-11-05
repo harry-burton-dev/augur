@@ -9,6 +9,12 @@ test('a report may name only our own packages', () => {
   assert.deepEqual(foreignImports(text), ['react']);
 });
 
+test('the service kit may name Fastify and jose, and nothing else foreign', () => {
+  const text = report("import type { FastifyInstance } from 'fastify';\nimport { JWTVerifyGetKey } from 'jose';\nimport { Transporter } from 'nodemailer';\n\n// @public\nexport const a: number;");
+  assert.deepEqual(foreignImports(text, '@augur/service-kit'), ['nodemailer']);
+  assert.deepEqual(foreignImports(text, '@augur/mfe-sdk'), ['fastify', 'jose', 'nodemailer']);
+});
+
 test('additions need a minor, removals and changes a major', () => {
   const before = report('// @public\nexport interface A {\n    id: string;\n}');
   assert.equal(requiredBump(before, before), 'none');

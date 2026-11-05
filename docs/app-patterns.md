@@ -12,6 +12,7 @@ Each app still owns its own tables, in its own schema ([App storage](app-storage
 - [Publishing up, and one owner](#publishing-up-and-one-owner)
 - [One place only](#one-place-only)
 - [Screens](#screens)
+  - [The design direction (pending Harry's review)](#the-design-direction-pending-harrys-review)
 - [Checklist for a new app](#checklist-for-a-new-app)
 
 ## Records in a tree of levels
@@ -111,6 +112,15 @@ Someone who reaches something through several floors sees it in **one place**: t
 - Use the kit's pieces for these, not your own: `Cards` for what holds things, `Details` for a record's properties, `Lifecycle` for where it is in its lifecycle (with a button for each move the person may make, and why when there are none), and `Path` for its chain up the floors, with the floor that owns it marked.
 - Publishing up is a dialog on the record: where it is now and who owns it, each step it took (to take back, for whoever published it), and the floors above it, each one it can't go to still listed with why. Artifacts' `folio-publish-up` is the one to copy.
 - Whatever was published up to a floor shows on that floor under **From below** until its leads give it a place.
+
+### The design direction (pending Harry's review)
+
+The four picks from the cinematic shortlist (PER-282, PER-283). They are in the kit, each off until an app turns it on, and AUGUR's own apps turn them on behind feature previews. Storybook shows each one: **Design direction / The four picks**. These rules are pending Harry's review; until he accepts them, the rules above stand.
+
+- **Focal planes.** When something needs the person, it comes forward and the rest goes quiet: `FocusField pulled` round the screen, `FocusItem pulled` on what needs them and `ambient` on what can wait. Light always carries words: a `Signal` (a streak with its count, a bloom saying "Needs you"), never a glow alone. Home does this with what needs you (preview `focal-planes`).
+- **The radial menu past eight actions.** With `ringOverflow="more"` (`overflow` on a `RingProvider`), the first seven keep their fixed directions and More takes the slot left free, north-west when it is; More opens the rest as their own ring, and Esc comes back to it. The app's order decides what goes into More, so put what people use least last. Every row in a list gets its ring too (`List` `ringFor`), with its "more" mark for the keyboard and touch. Home does this with what needs you (preview `radial-menu`).
+- **The urgent path.** `Letterbox` `look="see-through"`: solid bars that close in from the edges and carry the item's kind, floor, source, queue and who has seen it, and a frame that shows the work behind it, out of focus. The frame never scrolls: what doesn't fit goes behind its More (`more`), and long lists belong in the app that owns them, behind an action. Esc steps back to the edge rule; nothing dismisses it.
+- **The lit path.** `PathTree` `trail="draw"`: when the place changes, the line draws itself from the top down to where you are, a level at a time, so you see the way you came. Reduced motion draws it at once.
 
 ## Checklist for a new app
 

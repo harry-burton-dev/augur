@@ -53,7 +53,7 @@ import { strings } from './update-schemas.ts';
 import { overviewBuilder, overviewRoutes } from './overview.ts';
 import { reportRoutes, ReportSender, type Reporting } from './report.ts';
 import { alertRoutes, type AlertRouteOptions } from './alerts.ts';
-import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
+import { featurePreviewRoutes, platformRecord, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
 import {
@@ -313,7 +313,14 @@ export const buildApp = async ({
               const { category } = kindOf(r.entry, feed);
               return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
             });
-          const apps = [...platformApps.filter((a) => !unbuiltApps.has(a.id)), ...registered];
+          // AUGUR's own apps' feature previews, at the server's default: on for those who turned them on.
+          const platform = platformApps
+            .filter((a) => !unbuiltApps.has(a.id))
+            .map((a) => {
+              const on = a.previews?.length ? previewsOnFor(platformRecord(a), optIns, updates.ring, at) : [];
+              return on.length ? { ...a, previewsOn: on } : a;
+            });
+          const apps = [...platform, ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
         },
       );
