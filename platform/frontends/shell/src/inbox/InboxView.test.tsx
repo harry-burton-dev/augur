@@ -7,7 +7,7 @@ import { InboxView } from './InboxView.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const manifest: AppManifestEntry[] = [{ id: 'mandate', name: 'Intent', route: '/intent', entry: '/e.js', version: '1.0.0', sdk: '^1.0.0', inbox: { kinds: [{ id: 'assignment', label: 'Assigned to you' }] } }];
+const manifest: AppManifestEntry[] = [{ id: 'mandate', name: 'Intent', route: '/intent', entry: '/e.js', version: '1.0.0', sdk: '^1.0.0 || ^2.0.0', inbox: { kinds: [{ id: 'assignment', label: 'Assigned to you' }] } }];
 const floors = [{ id: 'fin', kind: 'team', name: 'Finance', slug: 'finance', path: [], role: 'member' } as Workspace];
 const item = (id: string, more: Partial<InboxItem> = {}): InboxItem => ({
   id,
