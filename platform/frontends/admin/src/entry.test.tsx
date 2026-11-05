@@ -565,11 +565,11 @@ describe('Apps', () => {
     };
     const runner: Answer = (method, url) => (url.startsWith('/api/registry/v1/app-runner/') && method === 'GET' ? Response.json(installs) : undefined);
 
-    it('lists what the feed offers and what waits for an admin, and installs on confirming', async () => {
+    it('lists what the feed offers, leaves updates waiting to the Upgrade Centre, and installs on confirming', async () => {
       const { sent } = gateway(runner);
       const el = await open('/apps');
       expect(el.querySelector('[data-available]')?.textContent).toContain('Tasks 1.2.0');
-      expect(el.querySelector('[data-waiting]')?.textContent).toContain('Notes 2.0.0');
+      expect(el.querySelector('[data-waiting]')).toBeNull();
       await press(button('Install', el.querySelector('[data-available]')!));
       expect(document.querySelector('.augur-dialog')!.textContent).toContain('Keeps a database on the server');
       await press(button('Install', document.querySelector('.augur-dialog')!));
@@ -583,9 +583,9 @@ describe('Apps', () => {
       const el = await open('/apps');
       Object.defineProperty(window, 'location', { configurable: true, value: { ...location, pathname: '/admin/apps', search: '', assign } });
       try {
-        await press(button('Install', el.querySelector('[data-waiting]')!));
+        await press(button('Install', el.querySelector('[data-available]')!));
         await press(button('Install', document.querySelector('.augur-dialog')!));
-        expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/admin/apps?install=notes%402.0.0')}`);
+        expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/admin/apps?install=tasks%401.2.0')}`);
         expect(document.querySelector('.augur-dialog')).not.toBeNull();
       } finally {
         Object.defineProperty(window, 'location', { configurable: true, value: location });

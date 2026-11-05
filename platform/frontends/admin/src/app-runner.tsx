@@ -1,9 +1,9 @@
-import { Button, Dialog, Section, Select, Status, TagPicker } from '@augur/app-kit';
+import { Button, Dialog, Section, Status, TagPicker } from '@augur/app-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, fullName, type AdminApi, type AppChannel, type AppInstalls, type AppPolicy, type InstalledApp, type Person } from './api.js';
-import { FOLLOW_KEY, scopeWords } from './apps-model.js';
-import { AppHistory, ChangeList, JobSteps } from './changes.js';
-import { asksWords, channelChoices, JOB_REFRESH_MS, jobOpen, jobWords, POLICY_CHOICES, policyHint, waitingWhy } from './installs.js';
+import { ApiError, fullName, type AdminApi, type AppInstalls, type InstalledApp, type Person } from './api.js';
+import { scopeWords } from './apps-model.js';
+import { JobSteps } from './changes.js';
+import { asksWords, JOB_REFRESH_MS, jobOpen, jobWords } from './installs.js';
 import { Line, Problem, Quiet } from './parts.js';
 
 /** A release about to be installed, while the admin confirms: with what it asks, or why it waited. */
@@ -33,34 +33,10 @@ export function useInstalls(api: AdminApi, then: () => void) {
 
   const ask = useCallback((app: string, version: string, i = latest.current) => {
     const offered = i?.available.find((a) => a.app === app && a.version === version);
-    const installed = i?.installed.find((a) => a.app === app && (a.update?.version === version || a.older?.some((o) => o.version === version)));
     if (offered) setConfirmInstall({ app, name: offered.name, version, notes: [...asksWords(offered.asks, scopeWords), ...(offered.problem ? [offered.problem] : [])] });
-    else if (installed) setConfirmInstall({ app, name: installed.name, version, notes: installed.update?.version === version ? installed.update.needs : [] });
   }, []);
 
-  const follow = useCallback(
-    async (app: InstalledApp, channel: AppChannel, policy: AppPolicy) => {
-      setError('');
-      try {
-        setInstalls(await api.followApp(app.app, channel, policy));
-      } catch (err) {
-        if (err instanceof ApiError && err.code === 'sign_in_again') {
-          // Kept in this tab only, never in the address: a link can't make the change for someone.
-          try {
-            sessionStorage.setItem(FOLLOW_KEY, JSON.stringify({ app: app.app, channel, policy }));
-          } catch {
-            // Private browsing: they choose again when they're back.
-          }
-          signInAgain('follow=1');
-          return;
-        }
-        setError((err as Error).message);
-      }
-    },
-    [api],
-  );
-
-  /** Back from entering the password again (`?install=<app>@<version>`, `?uninstall=<app>` or `?follow=1` with the change kept in this tab): ask once more. */
+  /** Back from entering the password again (`?install=<app>@<version>` or `?uninstall=<app>`): ask once more. */
   const resume = useCallback(
     (i: AppInstalls) => {
       if (resumed.current) return;
@@ -68,30 +44,16 @@ export function useInstalls(api: AdminApi, then: () => void) {
       const params = new URLSearchParams(window.location.search);
       const install = params.get('install');
       const uninstall = params.get('uninstall');
-      const following = params.get('follow');
-      if (!install && !uninstall && !following) return;
+      if (!install && !uninstall) return;
       params.delete('install');
       params.delete('uninstall');
-      params.delete('follow');
       const rest = params.toString();
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
       const at = install?.lastIndexOf('@') ?? -1;
       if (install && at > 0) ask(install.slice(0, at), install.slice(at + 1), i);
       if (uninstall) setConfirmRemove(i.installed.find((x) => x.app === uninstall));
-      if (following) {
-        // The change they made in this tab before entering the password: made once more, as they chose it.
-        let kept: { app?: string; channel?: AppChannel; policy?: AppPolicy } = {};
-        try {
-          kept = JSON.parse(sessionStorage.getItem(FOLLOW_KEY) ?? '{}');
-          sessionStorage.removeItem(FOLLOW_KEY);
-        } catch {
-          // Nothing kept: they choose again.
-        }
-        const installed = i.installed.find((x) => x.app === kept.app);
-        if (installed && kept.channel && kept.policy) void follow(installed, kept.channel, kept.policy);
-      }
     },
-    [ask, follow],
+    [ask],
   );
 
   const load = useCallback(async () => {
@@ -198,49 +160,34 @@ export function useInstalls(api: AdminApi, then: () => void) {
     </>
   );
 
-  return { installs, error, checking, check, ask, follow, people, loadPeople, setDevelopers, remove: setConfirmRemove, dialogs };
+  return { installs, error, checking, check, ask, people, loadPeople, setDevelopers, remove: setConfirmRemove, dialogs };
 }
 
 export type Installs = ReturnType<typeof useInstalls>;
 
 const WAIT = 'Wait for the server to finish its current job with this app.';
 
-/** For an app the app runner installed: how it takes new releases, a newer one waiting, what the runner is doing, and Remove. */
-export function RunnerControls({ installed, ins }: { installed: InstalledApp; ins: Installs }) {
+/**
+ * For an app the app runner installed: what the runner is doing, its developers and previews, and
+ * Remove. How it takes new releases, a newer one waiting, its history and going back are in the
+ * Upgrade Centre (ADR 0030), so Admin doesn't keep a second copy of them.
+ */
+export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: { installed: InstalledApp; ins: Installs; openUpgrades: () => void; upgradesName: string }) {
   const { loadPeople } = ins;
   useEffect(() => loadPeople(), [loadPeople]);
-  const waiting = waitingWhy(installed);
   const open = jobOpen(installed.job);
-  const update = installed.update;
   return (
     <div data-runner className="admin-stack-wide">
-      <Select label="New releases" hint={ins.installs?.channelNote} options={channelChoices(ins.installs?.ring)} value={installed.channel} onChange={(v) => void ins.follow(installed, v as AppChannel, installed.policy)} />
-      <Select label="When one is out" hint={policyHint(installed.policy)} options={POLICY_CHOICES} value={installed.policy} onChange={(v) => void ins.follow(installed, installed.channel, v as AppPolicy)} />
-      {update && !open ? (
-        <>
-          <p className="admin-flat">
-            Version {update.version} is out
-            {waiting.length ? `, and waits for you: ${waiting.join(' ')}` : installed.policy === 'hold' ? ', but it’s held.' : '; it installs by itself shortly.'}{' '}
-            {update.notesUrl ? (
-              <a href={update.notesUrl} target="_blank" rel="noopener">
-                What’s new
-              </a>
-            ) : null}
-          </p>
-          {installed.policy === 'automatic' && !waiting.length ? null : (
-            <div>
-              <Button kind="secondary" size="sm" onPress={() => ins.ask(installed.app, update.version)}>
-                Install {update.version}
-              </Button>
-            </div>
-          )}
-        </>
-      ) : null}
-      {update?.changes?.length ? (
-        <Section label={`What’s new in ${update.version}`} count={-1} limit={0}>
-          <ChangeList changes={update.changes} shortParts={() => installed.name} />
-        </Section>
-      ) : null}
+      <div data-moved className="admin-stack">
+        <p className="admin-flat">
+          {installed.update ? `Version ${installed.update.version} is out. ` : ''}New releases, installing one, going back and its history are in the {upgradesName}.
+        </p>
+        <div>
+          <Button kind="secondary" size="sm" onPress={openUpgrades}>
+            Open the {upgradesName}
+          </Button>
+        </div>
+      </div>
       {installed.job ? (
         <>
           <p className="admin-flat" data-job>
@@ -248,30 +195,6 @@ export function RunnerControls({ installed, ins }: { installed: InstalledApp; in
           </p>
           {open || installed.job.state === 'failed' ? <JobSteps job={installed.job} /> : null}
         </>
-      ) : null}
-      {installed.history?.length ? (
-        <Section label="History" count={-1} limit={0}>
-          <AppHistory history={installed.history} />
-        </Section>
-      ) : null}
-      {installed.older?.length ? (
-        <Section label="Go back" count={-1} limit={0}>
-          <div data-app-go-back>
-            {installed.older.map((o) => (
-              <Line
-                key={o.version}
-                end={
-                  <Button kind="tertiary" size="sm" disabled={open} reason={WAIT} onPress={() => ins.ask(installed.app, o.version)}>
-                    Go back
-                  </Button>
-                }
-              >
-                {installed.name} {o.version}
-              </Line>
-            ))}
-            <p className="admin-flat admin-muted">Going back holds the app on that version, so it isn’t updated again by itself. Its data stays as it is.</p>
-          </div>
-        </Section>
       ) : null}
       <div data-developers>
         <TagPicker
@@ -310,11 +233,10 @@ export function RunnerControls({ installed, ins }: { installed: InstalledApp; in
   );
 }
 
-/** What the app feed offers to install, what's waiting on an admin, and whether there's a runner to do it. */
+/** What the app feed offers to install, what's under way, and whether there's a runner to do it. Updates waiting on an admin are in the Upgrade Centre's Needs you. */
 export function InstallsSection({ ins }: { ins: Installs }) {
   const i = ins.installs;
   if (!i) return <Problem>{ins.error}</Problem>;
-  const waiting = i.installed.filter((a) => waitingWhy(a).length);
   const busy = [...i.installed, ...i.available].filter((a) => jobOpen(a.job));
   const offered = i.available.filter((a) => !jobOpen(a.job));
   return (
@@ -328,23 +250,6 @@ export function InstallsSection({ ins }: { ins: Installs }) {
           {busy.map((a) => (
             <Line key={a.app} end={jobWords(a.job!)}>
               {a.name}
-            </Line>
-          ))}
-        </Section>
-      ) : null}
-      {waiting.length ? (
-        <Section label="Needs you" limit={0}>
-          {waiting.map((a) => (
-            <Line
-              key={a.app}
-              data-waiting=""
-              end={
-                <Button kind="secondary" size="sm" onPress={() => ins.ask(a.app, a.update!.version)}>
-                  Install
-                </Button>
-              }
-            >
-              {a.name} {a.update!.version} <Quiet>· {waitingWhy(a).join(' ')}</Quiet>
             </Line>
           ))}
         </Section>
