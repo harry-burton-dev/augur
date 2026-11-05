@@ -1,5 +1,25 @@
 # @augur/service-kit
 
+## 0.13.0
+
+### Minor Changes
+
+- 7dbdf7b: The app-service starter: `startAppService({ manifest, buildApp, jobs })` starts an app's service the one way every app does (listen, jobs, frontend, registration, clean stop), and `appServer` gives its Fastify instance signed callers, problem details and /healthz. `floorCaller` and `signedInCaller` name the app from its manifest; `auditFor`, `notifyFor` and `peopleFor` replace each app's own copies. The create-app template uses them.
+
+  Jobs gain `elsewhere(name, { concurrency, workerConcurrency })`: a service can queue runs that another process, such as a Python worker on DBOS, takes off the queue `<app>.<name>`.
+
+- 2dbdc22: Apps hear more of what changes about people (PER-148). `platform.person.joined` when an admin adds someone, and `platform.person.changed` (`{ person, changed }`, naming which of `name`, `email`, `roles` and `teams` changed, never the values) when an admin changes their details. Every team someone joins or leaves is now `platform.team.member-added` or `-removed` on that team's floor, also when it happened by adding the person or changing their list of teams, which before sent nothing; each is in that floor's Activity too. `PLATFORM_TOPICS` names the two new topics. See docs/domain-events.md.
+- 0ec750c: The Inbox's items (ADR 0026, PER-146): apps' services put work that waits on a person or a team in their inbox with the new `inbox:write` scope (`inboxItem`, `updateInboxItem`, `getInboxItem` in the service kit), keyed by the app's own id, and close it when it's done or withdraw it. People list theirs (`/v1/inbox`, `/v1/inbox/counts`) and take, release, decline, hand on or mark done; each step is in the item's history and the audit log, and published as `platform.inbox.*`. The notification stream also carries `inbox` events, so the shell's count stays live. Closed items are kept `INBOX_KEEP_DAYS` (90) days. Admin names the scope "Put work in people's inboxes". Events API 1.9.0.
+- 7518ce8: Apps declare the kinds of work they put in people's inboxes in their manifest's `inbox.kinds` (SDK 1.12: `id`, `label`, `icon`, up to 10), and the events service refuses an item of a kind the app doesn't declare. The registry names them in an app's grants (`inboxKinds`), read with `registryInboxKinds` from the service kit. The SDK gains the Inbox's types (`InboxItem`, `InboxKind`, `InboxCounts`, `InboxChange`) and `INBOX_TOPICS`.
+- dec1a40: Background and scheduled jobs for services: `createJobs` in the service kit, on DBOS Transact (ADR 0014). Runs are durable, queued runs go to one instance, scheduled ones run once per tick, and each run that ends is recorded in the audit log. The storage service gives each app a `<id>_jobs` schema to keep them in.
+- 566f261: The service kit has one migration runner, `runMigrations(pool, { schema, migrations })`, and the events, identity, models and registry services use it in place of their own copies; what they do at start is unchanged. New migrations are linted with Squawk (ADR 0053), which catches drops, renames and type changes the old check missed.
+
+### Patch Changes
+
+- 7517bd7: `release/shipped-apps.json` is now the one list of the apps that ship with AUGUR. The updater reads it from its image to restart them in order and check each comes back, and refuses an upgrade with an image for a part the server runs that it doesn't know, instead of restarting it unchecked. `pnpm check:release` fails when a compose file disagrees with it. The registry refuses an app whose id a part of AUGUR answers to (a platform service, a platform app, a deployment service or a path the front door serves), saying which, and storage makes no schema under such an id (`RESERVED_APP_IDS` in the service kit).
+
+  The updater restarts AUGUR's own Keycloak image first, giving it up to five minutes to be ready, and keeps it running when going back to a release from before that image.
+
 ## 0.12.0
 
 ### Minor Changes

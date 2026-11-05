@@ -1,5 +1,23 @@
 # @augur/storage
 
+## 0.4.2
+
+### Patch Changes
+
+- dec1a40: Background and scheduled jobs for services: `createJobs` in the service kit, on DBOS Transact (ADR 0014). Runs are durable, queued runs go to one instance, scheduled ones run once per tick, and each run that ends is recorded in the audit log. The storage service gives each app a `<id>_jobs` schema to keep them in.
+- 7517bd7: `release/shipped-apps.json` is now the one list of the apps that ship with AUGUR. The updater reads it from its image to restart them in order and check each comes back, and refuses an upgrade with an image for a part the server runs that it doesn't know, instead of restarting it unchecked. `pnpm check:release` fails when a compose file disagrees with it. The registry refuses an app whose id a part of AUGUR answers to (a platform service, a platform app, a deployment service or a path the front door serves), saying which, and storage makes no schema under such an id (`RESERVED_APP_IDS` in the service kit).
+
+  The updater restarts AUGUR's own Keycloak image first, giving it up to five minutes to be ready, and keeps it running when going back to a release from before that image.
+
+- Updated dependencies [7dbdf7b]
+- Updated dependencies [2dbdc22]
+- Updated dependencies [0ec750c]
+- Updated dependencies [7518ce8]
+- Updated dependencies [dec1a40]
+- Updated dependencies [566f261]
+- Updated dependencies [7517bd7]
+  - @augur/service-kit@0.13.0
+
 ## 0.4.1
 
 ### Patch Changes
