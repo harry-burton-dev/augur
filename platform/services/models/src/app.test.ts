@@ -16,6 +16,8 @@ const asApp = (app: string, workspace?: string) =>
 // Library may use models on Finance only; Scribe, an AI app, everywhere.
 const grants = async (app: string, workspace?: string): Promise<Scope[]> =>
   app === 'scribe' || (app === 'library' && workspace === 'w-finance') ? ['models:use'] : [];
+// Scribe needs no role of its own unless a test says so.
+const requiredRole = async (): Promise<string | null> => null;
 const hello = { messages: [{ role: 'user', content: 'Hello' }] };
 
 type App = Awaited<ReturnType<typeof buildApp>>;
@@ -30,7 +32,7 @@ const start = async (options: ModelsOptions = {}, { on = true } = {}) => {
   const audited: { entry: NewAuditEntry; workspace?: string }[] = [];
   const store = options.store ?? new MemoryModelStore();
   if (on) await store.saveSettings({ enabled: true, dailyLimit: 500 }, 'u-1');
-  open = await buildApp({ provider: standIn(), verifyService, grants, audit: async (entry, workspace) => void audited.push({ entry, workspace }), store, ...options });
+  open = await buildApp({ provider: standIn(), verifyService, grants, requiredRole, audit: async (entry, workspace) => void audited.push({ entry, workspace }), store, ...options });
   return { app: open, audited, store };
 };
 
@@ -104,6 +106,24 @@ describe('models', () => {
     await failing.app.close();
     const unchecked = await start({ grants: async () => Promise.reject(new GrantsUnavailable('down')) });
     expect((await unchecked.app.inject({ method: 'POST', url: '/v1/chat', headers: sam, payload: { agent: 'scribe', ...hello } })).statusCode).toBe(503);
+  });
+
+  it('holds a person to the role an AI app needs, as the gateway holds its own API', async () => {
+    const chat = (app: App, headers: Record<string, string>) => app.inject({ method: 'POST', url: '/v1/chat', headers, payload: { agent: 'scribe', ...hello } });
+    const analysts = await start({ requiredRole: async (app) => (app === 'scribe' ? 'analyst' : null) });
+    const refused = await chat(analysts.app, sam);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().message).toBe('scribe needs the analyst role, which an admin can give you.');
+    // Nothing was spent or recorded for the refused call.
+    expect(analysts.audited).toEqual([]);
+    const analyst = callerHeaders({ id: 'u-3', name: 'Ana', departments: [], roles: ['analyst'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
+    expect((await chat(analysts.app, analyst)).statusCode).toBe(200);
+    // The shell's own assistant needs no app role.
+    expect((await analysts.app.inject({ method: 'POST', url: '/v1/chat', headers: sam, payload: { agent: 'assistant', ...hello } })).statusCode).toBe(200);
+    await analysts.app.close();
+    // A registry that can't say is a refusal for now, not a way in.
+    const unsure = await start({ requiredRole: async () => undefined });
+    expect((await chat(unsure.app, sam)).statusCode).toBe(503);
   });
 
   it('answers with the provider’s problem in words', async () => {
