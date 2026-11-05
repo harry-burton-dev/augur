@@ -177,6 +177,10 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
       const said = await command('docker', ['image', 'inspect', '--format', '{{json .RepoDigests}}', config.services[service].image], env());
       return JSON.parse(said) as string[];
     },
+    async images(version) {
+      const config = JSON.parse(await compose(['config', '--format', 'json'], { PLATFORM_VERSION: version })) as { services: Record<string, { image?: string }> };
+      return Object.fromEntries(Object.entries(config.services).flatMap(([service, { image }]) => (image ? [[service, image]] : [])));
+    },
     async up(services) {
       await compose(['up', '-d', '--no-deps', ...services]);
     },
