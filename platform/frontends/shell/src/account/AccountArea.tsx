@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Preferences } from '../host/preferences.js';
 import { type AccountApi, type AccountSession, type HeldCredential, type ProfileChanges, type Security, type SignIn } from './api.js';
 import { currentFormats, writeDate, type Formats } from '../host/formats.js';
+import { whatsNewFor } from './whats-new.js';
 import { actionWords, ago, clientWords, DATE_REGIONS, dayAndTime, languageName, regionName, signInWords, timeZones } from './words.js';
 
 /** The Account area's sections (ADR 0036), in the rail's order. Privacy and data comes later. */
@@ -859,7 +860,8 @@ function Leave({ api }: Pick<AccountAreaProps, 'api'>) {
   );
 }
 
-function AboutSection({ version }: AccountAreaProps) {
+function AboutSection({ version, product }: AccountAreaProps) {
+  const news = whatsNewFor(product);
   const keys: [string, string][] = [
     ['`', 'Open or close the shell (also Ctrl or ⌘ K)'],
     ['← →', 'Move along the arc'],
@@ -870,9 +872,20 @@ function AboutSection({ version }: AccountAreaProps) {
   ];
   return (
     <>
-      <PageHead eyebrow="Account" heading="About and help" summary="What’s running, and the keys" />
+      <PageHead eyebrow="Account" heading="About and help" summary="What’s running, what’s new, and the keys" />
       <Section label="What’s running" count={-1}>
         <Rows items={version ? [{ label: 'Version', value: version }] : []} empty="This build doesn’t say its version." />
+      </Section>
+      <Section label={`What’s new in ${news.name}`} count={-1}>
+        <p className="account-news-summary">{news.summary}</p>
+        <dl className="account-news">
+          {news.items.map((i) => (
+            <div key={i.title}>
+              <dt>{i.title}</dt>
+              <dd>{i.text}</dd>
+            </div>
+          ))}
+        </dl>
       </Section>
       <Section label="Keys" count={-1}>
         <dl className="account-keys">

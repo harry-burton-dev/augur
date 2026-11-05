@@ -7,6 +7,7 @@ plugins:
   - techdocs-core
 nav:
   - Your account: account.md
+  - For alpha testers: alpha-testers.md
   - Agents and models: agents.md
   - API contracts: api-contracts.md
   - App patterns: app-patterns.md
