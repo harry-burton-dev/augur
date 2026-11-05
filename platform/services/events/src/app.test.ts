@@ -461,7 +461,7 @@ describe.runIf(DATABASE_URL)('events', () => {
       const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });
       const blocked = await publish({ ...as('folio'), 'x-workspace-id': 'w-finance' }, [published('d1', 'w-finance'), published('d2', 'w-legal')]);
       expect([blocked.statusCode, blocked.json().message]).toEqual([400, 'folio isn’t granted events:publish on that floor.']);
-      expect((await publish(as('folio'), [published('d3', 'w-legal')])).statusCode).toBe(403);
+      expect((await publish(as('folio'), [published('d3', 'w-legal')])).statusCode).toBe(400);
       expect((await publish(platform, [{ topic: 'platform.team.renamed', id: 'p1', payload: {}, workspace: 'w-legal' }])).statusCode).toBe(202);
       expect((await publish(as('folio'), [published('d4', 'w-finance'), published('d5')])).json()).toEqual({ added: 2, repeated: 0 });
       // None of a refused batch is kept.
