@@ -1112,11 +1112,15 @@ export class PeopleUnavailable extends Error {
 }
 
 // @public
+export const PERSONAL_DETAIL_KEYS: readonly ["username", "email", "firstName", "lastName", "name", "ip", "ips", "message"];
+
+// @public
 export const PLATFORM_TOPICS: {
     readonly personJoined: "platform.person.joined";
     readonly personChanged: "platform.person.changed";
     readonly personDisabled: "platform.person.disabled";
     readonly personEnabled: "platform.person.enabled";
+    readonly personLeft: "platform.person.left";
     readonly teamCreated: "platform.team.created";
     readonly teamRenamed: "platform.team.renamed";
     readonly memberAdded: "platform.team.member-added";
@@ -1279,6 +1283,9 @@ export const registryInboxKinds: (input: GrantsOptions) => InboxKindsLookup;
 
 // @public
 export const registryNotificationKinds: (input: GrantsOptions) => InboxKindsLookup;
+
+// @public
+export const REMOVED = "[removed]";
 
 // @public
 export const REQUEST_ID_HEADER = "x-request-id";
