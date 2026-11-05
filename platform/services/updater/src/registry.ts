@@ -1,4 +1,4 @@
-import { appClientId, clientCredentials, registerApp, serviceHeaders, type ServiceCredentials } from '@augur/service-kit';
+import { appClientId, clientCredentials, registerApp, serviceHeaders, withDeadline, type ServiceCredentials } from '@augur/service-kit';
 import type { AppJob, JobReporter, PlatformCalls } from './runner.ts';
 import { Withdrawn, type AfterWatchLook, type Report, type Reporter, type Target } from './upgrade.ts';
 
@@ -17,7 +17,7 @@ export const registryClient = ({ registryUrl, credentials, retryForMs = 5 * 60_0
 
   /** The open upgrade, or undefined when there's nothing to do. */
   const target = async (): Promise<Target | undefined> => {
-    const res = await fetchImpl(url('/target'), { headers: await serviceHeaders(credentials) });
+    const res = await withDeadline(fetchImpl)(url('/target'), { headers: await serviceHeaders(credentials) });
     if (res.status === 204) return undefined;
     if (!res.ok) throw new Error(`The registry answered ${res.status} when asked what to upgrade to.`);
     return (await res.json()) as Target;
@@ -31,7 +31,7 @@ export const registryClient = ({ registryUrl, credentials, retryForMs = 5 * 60_0
       let problem = '';
       while (Date.now() - started <= retryForMs) {
         try {
-          const res = await fetchImpl(url('/progress'), {
+          const res = await withDeadline(fetchImpl)(url('/progress'), {
             method: 'POST',
             headers: { 'content-type': 'application/json', ...(await serviceHeaders(credentials)) },
             body: JSON.stringify({ id, ...report }),
@@ -52,7 +52,7 @@ export const registryClient = ({ registryUrl, credentials, retryForMs = 5 * 60_0
 
   /** The light watch's next look, or undefined when none is due. */
   const afterWatch = async (): Promise<AfterWatchLook | undefined> => {
-    const res = await fetchImpl(url('/after-watch'), { headers: await serviceHeaders(credentials) });
+    const res = await withDeadline(fetchImpl)(url('/after-watch'), { headers: await serviceHeaders(credentials) });
     if (res.status === 204 || res.status === 404) return undefined;
     if (!res.ok) throw new Error(`The registry answered ${res.status} when asked about the light watch.`);
     return (await res.json()) as AfterWatchLook;
@@ -60,7 +60,7 @@ export const registryClient = ({ registryUrl, credentials, retryForMs = 5 * 60_0
 
   /** Tells the registry what one look of the light watch saw. */
   const afterLook = async (look: { id: string; calls: number; serverErrors: number; signInProblem?: string }) => {
-    const res = await fetchImpl(url('/after-watch'), { method: 'POST', headers: { 'content-type': 'application/json', ...(await serviceHeaders(credentials)) }, body: JSON.stringify(look) });
+    const res = await withDeadline(fetchImpl)(url('/after-watch'), { method: 'POST', headers: { 'content-type': 'application/json', ...(await serviceHeaders(credentials)) }, body: JSON.stringify(look) });
     // 404: an upgrade since ended it.
     if (!res.ok && res.status !== 404) throw new Error(`The registry answered ${res.status} to the light watch’s look.`);
   };
@@ -75,7 +75,7 @@ export const registryClient = ({ registryUrl, credentials, retryForMs = 5 * 60_0
 export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, retryForMs = 60_000, retryMs = 2_000, fetchImpl = fetch }: RegistryOptions & { identityUrl: string; oidc: { tokenUrl: string } }) => {
   const registry = (path: string) => `${registryUrl.replace(/\/$/, '')}/v1${path}`;
   const call = async (url: string, method: string, body: unknown, what: string, as: ServiceCredentials = credentials) => {
-    const res = await fetchImpl(url, { method, headers: { 'content-type': 'application/json', ...(await serviceHeaders(as)) }, body: JSON.stringify(body) });
+    const res = await withDeadline(fetchImpl)(url, { method, headers: { 'content-type': 'application/json', ...(await serviceHeaders(as)) }, body: JSON.stringify(body) });
     if (!res.ok) {
       const said = ((await res.json().catch(() => ({}))) as { message?: string }).message;
       throw new Error(`${what}: it answered ${res.status}${said ? `, ${said.replace(/\.$/, '')}` : ''}.`);
@@ -84,7 +84,7 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
 
   /** The oldest open job, or undefined when there's nothing to do. */
   const next = async (): Promise<AppJob | undefined> => {
-    const res = await fetchImpl(registry('/app-runner/next'), { headers: await serviceHeaders(credentials) });
+    const res = await withDeadline(fetchImpl)(registry('/app-runner/next'), { headers: await serviceHeaders(credentials) });
     if (res.status === 204) return undefined;
     if (!res.ok) throw new Error(`The registry answered ${res.status} when asked for the app runner’s next job.`);
     return (await res.json()) as AppJob;
@@ -98,7 +98,7 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
       let problem = '';
       while (Date.now() - started <= retryForMs) {
         try {
-          const res = await fetchImpl(registry(`/app-runner/jobs/${encodeURIComponent(id)}/progress`), {
+          const res = await withDeadline(fetchImpl)(registry(`/app-runner/jobs/${encodeURIComponent(id)}/progress`), {
             method: 'POST',
             headers: { 'content-type': 'application/json', ...(await serviceHeaders(credentials)) },
             body: JSON.stringify(report),

@@ -1,4 +1,4 @@
-import { callerHeaders, signedCallerHeaders, type Caller, type CallerSigner, type CallerWorkspace } from '@augur/service-kit';
+import { callerHeaders, signedCallerHeaders, withDeadline, type Caller, type CallerSigner, type CallerWorkspace } from '@augur/service-kit';
 
 /** A floor the caller can stand on, as identity's `GET /v1/me/workspaces` lists it. */
 export type FloorAccess = CallerWorkspace;
@@ -36,7 +36,7 @@ export const identityFloors = ({ identityUrl, signer, ttlMs = 30_000, fetchImpl 
       try {
         const asked = { ...caller, workspace: undefined };
         const headers = { ...callerHeaders(asked), ...(signer ? await signedCallerHeaders(signer, asked, 'identity') : {}) };
-        res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/me/workspaces`, { headers });
+        res = await withDeadline(fetchImpl)(`${identityUrl.replace(/\/$/, '')}/v1/me/workspaces`, { headers });
       } catch (err) {
         throw new FloorLookupError(`identity could not be reached (${(err as Error).message})`);
       }

@@ -1,4 +1,5 @@
 import { callService, serviceHeaders, ServiceCallError, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
 
 /**
  * Domain events: what one service tells others has happened ("folio.document.published"),
@@ -162,7 +163,7 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
   const poll = async (): Promise<number> => {
     const after = await cursor.load();
     const query = new URLSearchParams({ topics: topics.join(','), limit: String(batch), ...(after ? { after } : {}) });
-    const res = await fetchImpl(`${eventsUrl.replace(/\/$/, '')}/v1/domain-events?${query}`, { headers: await serviceHeaders(credentials) });
+    const res = await withDeadline(fetchImpl)(`${eventsUrl.replace(/\/$/, '')}/v1/domain-events?${query}`, { headers: await serviceHeaders(credentials) });
     const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; message?: string };
     if (!res.ok) throw new ServiceCallError(`Couldn't read events (${topics.join(', ')}): it answered ${res.status}${reply.message ? `: ${reply.message}` : ''}.`);
     for (const event of reply.events ?? []) {

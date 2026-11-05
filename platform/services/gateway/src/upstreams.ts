@@ -1,4 +1,4 @@
-import { callerHeaders, GATEWAY_CALLER, signedCallerHeaders, type CallerSigner } from '@augur/service-kit';
+import { callerHeaders, GATEWAY_CALLER, signedCallerHeaders, withDeadline, type CallerSigner } from '@augur/service-kit';
 import type { Upstreams } from './app.ts';
 
 /**
@@ -37,7 +37,7 @@ export const registryUpstreams = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
     let res: Response;
     try {
       const headers = { ...callerHeaders(GATEWAY_CALLER), ...(signer ? await signedCallerHeaders(signer, GATEWAY_CALLER, 'registry') : {}) };
-      res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/upstreams`, { headers });
+      res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/upstreams`, { headers });
     } catch (err) {
       throw new UpstreamsUnavailable(`the registry could not be reached (${(err as Error).message})`);
     }

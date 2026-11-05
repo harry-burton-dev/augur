@@ -1,10 +1,12 @@
 import { defaultFunctions } from '@augur/shell-kit';
 import { describe, expect, it } from 'vitest';
-import { ACCOUNT_AREA, AGENTS_UNAVAILABLE, alphaFunctions } from './App.js';
+import { ACCOUNT_AREA, AGENTS_WHY, alphaFunctions } from './App.js';
 
 describe('the Shell’s functions', () => {
-  it('keeps Agents, not built yet, where they would be, under an id that explains rather than opens', () => {
-    expect(alphaFunctions.find((f) => f.label === 'Agents')?.id).toBe(AGENTS_UNAVAILABLE);
+  it('keeps Agents, not built yet, where they would be, unavailable and saying why', () => {
+    expect(alphaFunctions.find((f) => f.label === 'Agents')?.id).toBe('agents');
+    expect(alphaFunctions.find((f) => f.id === 'agents')?.unavailable).toBe(AGENTS_WHY);
+    expect(alphaFunctions.filter((f) => f.unavailable)).toHaveLength(1);
   });
 
   it('opens the Account area from Account, with Settings folded into it (ADR 0036)', () => {

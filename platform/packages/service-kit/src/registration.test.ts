@@ -14,6 +14,7 @@ describe('registerApp', () => {
       method: 'PUT',
       headers: { 'content-type': 'application/json', authorization: 'Bearer s3cret' },
       body: JSON.stringify(manifest),
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -47,7 +48,7 @@ describe('appSettings', () => {
   it('reads the app’s settings as itself, by id', async () => {
     const fetchImpl = vi.fn(async () => reply(200, { settings: [{ id: 'retentionDays', label: 'Keep for', type: 'integer', min: 1, max: 365, default: 30, value: 90 }] }));
     expect(await appSettings({ registryUrl: 'http://registry:8082/', credentials, app: 'library', fetchImpl })).toEqual({ retentionDays: 90 });
-    expect(fetchImpl).toHaveBeenCalledWith('http://registry:8082/v1/apps/library/settings', { headers: { authorization: 'Bearer s3cret' } });
+    expect(fetchImpl).toHaveBeenCalledWith('http://registry:8082/v1/apps/library/settings', { headers: { authorization: 'Bearer s3cret' }, signal: expect.any(AbortSignal) });
   });
 
   it('says why when the registry can’t say', async () => {
