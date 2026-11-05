@@ -1,5 +1,39 @@
 # @augur/identity
 
+## 1.2.0
+
+### Minor Changes
+
+- 8d5b585: Account's Home and apps section: the floor AUGUR opens on, pinned apps first on Home and in the list of apps, clearing recent apps, and each app's own `settings` surface. Identity's preferences keep `pinned` and `startFloor`.
+- 54b0d26: Account, Language and region: choose your language from the ones the deployment offers (`REALM_LANGUAGES`, which identity now reads too; kept as the profile's `locale`, so sign-in pages and emails follow it), how dates and times are written (`dateFormat` and `clock` preferences), with examples. The shell writes its dates and times their way, in their time zone. Part of PER-193.
+- eac9902: Account gets Privacy and data: download a copy of what AUGUR keeps about you (identity `GET /me/data`, with events' notifications, inbox and Activity from `GET /v1/people/{id}/data`), see who sees what about you, and ask to leave or take it back (`/me/leave`; admins are told once). Part of PER-193.
+- 866c076: The leaver flow and signing out everywhere (ADR 0040, part of PER-194). Turning someone's sign-in off now signs them out everywhere at once: every Keycloak session and every offline token an app holds for them. Admin → People gets "They're leaving": their sign-in goes off, they're signed out, and identity records `person.left`, which the events service publishes as `platform.person.left` `{ person, handOverTo? }` so apps hand on what the leaver owns (`PLATFORM_TOPICS.personLeft`). People marks who asked to leave in their account, and the leaver flow closes the request (`GET /admin/leave-requests`, `POST /admin/people/{id}/leave`, identity contract 1.22.0). Guide: docs/people.md.
+- 04d7ed1: Choosing notifications per kind (ADR 0036). The events service keeps a notification's `kind` and refuses one the app's manifest doesn't declare (migration 008). Identity's preferences keep `quietKinds` (`<app>:<kind>`). Account, Notifications lists each app's kinds, On Home or Quiet, and the shell lands a quiet kind in the stream without a pulse, uncounted, off Home and with no toast (Aerie 0.7.0). The service kit's `NewNotification` and `AppNotice` take `kind`.
+- 0c6bf6a: Organisation settings (ADR 0042): `GET /v1/organisation` gives the organisation's name, time zone and email sender to anyone signed in and to any service, and `PATCH /v1/admin/organisation` lets an admin change them, audited as `organisation.changed`. The name is the organisation's floor's name, seeded once from `ORG_NAME`. Migration: adds `identity.organisation`.
+
+### Patch Changes
+
+- 2f2b01a: The rest of PER-213:
+
+  - **Bounded caches.** The service kit's floor, people and grant lookups now remember at most 5,000 answers each (`BoundedMap`), dropping the least recently used one when full.
+  - **Paged Keycloak lists.** Identity reads Keycloak's lists of people, groups, group members and role holders 500 at a time, so a realm with more than 10,000 people no longer loses the rest without a word.
+  - **Query time limit.** `steadyPool` gives each new database connection a statement timeout: a minute by default, set with `DATABASE_STATEMENT_TIMEOUT_SECONDS`, 0 for no limit. A query stuck on a lock or a bad plan now fails its request instead of holding a connection. Migrations lift the limit for themselves.
+
+- 9f6301f: Identity won't issue or set an app's sign-in under an id AUGUR keeps for itself (`reservedIdProblem`), as the registry and storage already refuse.
+- 90057d9: Every call one service makes to another now has a deadline (PER-213). `withDeadline` and `serviceTimeoutMs` in the service kit give each call 5 seconds unless `SERVICE_CALL_TIMEOUT_SECONDS` says otherwise. The kit's helpers (callService, floors, people, grants, settings, the service token, domain events) use it, as do the gateway's calls to identity and the registry, identity's calls to Keycloak (15 seconds), storage's to Garage and the updater's to the registry. A hung service now gives the caller its usual "can't be reached" error, so it answers 503 within seconds rather than waiting minutes. Calls to the model gateway get 3 minutes, and frontend uploads get 2.
+- 33b6fa3: AUGUR's own email sender (ADR 0065): `@augur/service-kit/mail` sends notice emails through the organisation's relay with Nodemailer, from React Email templates, and says why when it can't. The relay settings (`mailRelayFromEnv`) move into the service kit, shared with the realm job. The gateway's status now says whether email can be sent, and Admin → Status shows it with what to check.
+- Updated dependencies [1f83a5f]
+- Updated dependencies [2f2b01a]
+- Updated dependencies [7886a1e]
+- Updated dependencies [f902da5]
+- Updated dependencies [866c076]
+- Updated dependencies [04d7ed1]
+- Updated dependencies [4f8d944]
+- Updated dependencies [90057d9]
+- Updated dependencies [858fad1]
+- Updated dependencies [33b6fa3]
+  - @augur/service-kit@0.14.0
+
 ## 1.1.0
 
 ### Minor Changes

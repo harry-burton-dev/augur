@@ -1,5 +1,29 @@
 # @augur/events
 
+## 0.9.0
+
+### Minor Changes
+
+- eac9902: Account gets Privacy and data: download a copy of what AUGUR keeps about you (identity `GET /me/data`, with events' notifications, inbox and Activity from `GET /v1/people/{id}/data`), see who sees what about you, and ask to leave or take it back (`/me/leave`; admins are told once). Part of PER-193.
+- 1f83a5f: Activity can be filtered by target, person and kind (sign-ins or changes), downloaded as CSV or JSON lines (admins, at most 366 days at a time), keeps entries for the organisation's retention period (365 days by default, pruned nightly), and identity can remove a deleted person's personal values from it. Service kit adds `PERSONAL_DETAIL_KEYS` and `REMOVED`.
+- f6629c4: Someone who leaves a team, or whose sign-in is turned off, gives back the team inbox items they had taken: they're open to the team again, written to the audit log, and published as `platform.inbox.released` with `left: true`.
+- 866c076: The leaver flow and signing out everywhere (ADR 0040, part of PER-194). Turning someone's sign-in off now signs them out everywhere at once: every Keycloak session and every offline token an app holds for them. Admin → People gets "They're leaving": their sign-in goes off, they're signed out, and identity records `person.left`, which the events service publishes as `platform.person.left` `{ person, handOverTo? }` so apps hand on what the leaver owns (`PLATFORM_TOPICS.personLeft`). People marks who asked to leave in their account, and the leaver flow closes the request (`GET /admin/leave-requests`, `POST /admin/people/{id}/leave`, identity contract 1.22.0). Guide: docs/people.md.
+- 04d7ed1: Choosing notifications per kind (ADR 0036). The events service keeps a notification's `kind` and refuses one the app's manifest doesn't declare (migration 008). Identity's preferences keep `quietKinds` (`<app>:<kind>`). Account, Notifications lists each app's kinds, On Home or Quiet, and the shell lands a quiet kind in the stream without a pulse, uncounted, off Home and with no toast (Aerie 0.7.0). The service kit's `NewNotification` and `AppNotice` take `kind`.
+
+### Patch Changes
+
+- Updated dependencies [1f83a5f]
+- Updated dependencies [2f2b01a]
+- Updated dependencies [7886a1e]
+- Updated dependencies [f902da5]
+- Updated dependencies [866c076]
+- Updated dependencies [04d7ed1]
+- Updated dependencies [4f8d944]
+- Updated dependencies [90057d9]
+- Updated dependencies [858fad1]
+- Updated dependencies [33b6fa3]
+  - @augur/service-kit@0.14.0
+
 ## 0.8.0
 
 ### Minor Changes

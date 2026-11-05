@@ -1,5 +1,15 @@
 # @augur/home
 
+## 0.3.5
+
+### Patch Changes
+
+- 21ee89a: Serve Quill 0.8.0 (kit bundle 0.5.3): its dates follow each person's `ctx.formats` (PER-323), and `AppError` reads a service's problem as AUGUR sends it.
+- Updated dependencies [f12bbaf]
+- Updated dependencies [4f8d944]
+- Updated dependencies [cbd1abc]
+  - @augur/mfe-sdk@2.0.0
+
 ## 0.3.4
 
 ### Patch Changes

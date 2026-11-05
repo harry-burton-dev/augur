@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MountContext } from '@augur/mfe-sdk';
-import { Button, Cards, Heading, Icon, List, State, Surface, type IconName, type ListItem } from '@augur/app-kit';
+import { Button, Cards, FocusField, FocusItem, Heading, Icon, List, RingProvider, Signal, State, Surface, type IconName, type ListItem, type RingSubject } from '@augur/app-kit';
 
 const greeting = (hour: number) => (hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening');
 
@@ -61,6 +61,22 @@ const toItem = (n: HomeNeed, now: number): ListItem => ({
   meta: ago(n.time, now),
   status: 'needs',
   actions: n.actions.map((label, i) => ({ id: String(i), label })),
+});
+
+/**
+ * Home's feature previews (its manifest's `previews` in the registry): the design direction, PER-283. Each is
+ * off until a person turns it on in Previews.
+ */
+export const HOME_PREVIEWS = { focalPlanes: 'focal-planes', radialMenu: 'radial-menu' } as const;
+
+/** A need's actions as a radial menu: Open in the north, then its own actions, in the order its app gave them. */
+export const needRing = (n: HomeNeed, ctx: MountContext): RingSubject => ({
+  label: n.title,
+  actions: [
+    { id: 'open', label: 'Open', icon: 'arrow', slot: 'n', preview: `Opens it in ${n.appName}` },
+    ...n.actions.map((label, i) => ({ id: String(i), label, icon: 'check' as const })),
+  ],
+  onAction: (id) => (id === 'open' ? ctx.bus.emit(HOME_CHANNEL.open, { id: n.id }) : ctx.bus.emit(HOME_CHANNEL.act, { id: n.id, index: Number(id) })),
 });
 
 /** How long Home waits to hear from the shell before saying nothing needs you. */
@@ -131,34 +147,48 @@ export function Home({ ctx }: { ctx: MountContext }) {
   const needs = state?.needs ?? [];
   const cards = state?.cards ?? [];
   const nothing = state && !needs.length && !cards.length;
-  return (
+  const planes = ctx.previewOn(HOME_PREVIEWS.focalPlanes);
+  const ring = ctx.previewOn(HOME_PREVIEWS.radialMenu);
+  // Focal planes: what needs you comes forward and the glance cards go quiet behind it.
+  const pulled = planes && needs.length > 0;
+  const ringOf = (id: string) => {
+    const n = needs.find((x) => x.id === id);
+    return n ? needRing(n, ctx) : undefined;
+  };
+  const page = (
     <div className="mx-auto flex max-w-wide flex-col gap-6 px-edge py-7">
       <Heading eyebrow={floor || undefined} heading={`${greeting(new Date().getHours())}, ${first}`} summary={state && !nothing ? needsWords(needs.length) : undefined} level={1} size="l" />
       {nothing ? (
         <State heading="Nothing needs you right now." />
       ) : (
-        <>
+        <FocusField pulled={pulled} className="flex flex-col gap-6">
           {needs.length || !state ? (
-            <Surface kind="pane">
-              <List
-                label="What needs you"
-                noun={['thing', 'things']}
-                items={needs.map((n) => toItem(n, Date.now()))}
-                loading={!state}
-                empty="Nothing needs you right now."
-                onOpen={(item) => ctx.bus.emit(HOME_CHANNEL.open, { id: item.id })}
-                onAction={(item, action) => ctx.bus.emit(HOME_CHANNEL.act, { id: item.id, index: Number(action.id) })}
-              />
-            </Surface>
+            <FocusItem pulled={pulled}>
+              {pulled ? <Signal kind="streak" count={needs.length} label={needs.length === 1 ? 'needs you' : 'need you'} /> : null}
+              <Surface kind="pane">
+                <List
+                  label="What needs you"
+                  noun={['thing', 'things']}
+                  items={needs.map((n) => toItem(n, Date.now()))}
+                  loading={!state}
+                  empty="Nothing needs you right now."
+                  onOpen={(item) => ctx.bus.emit(HOME_CHANNEL.open, { id: item.id })}
+                  onAction={(item, action) => ctx.bus.emit(HOME_CHANNEL.act, { id: item.id, index: Number(action.id) })}
+                  ringFor={ring ? (item) => ringOf(item.id) : undefined}
+                />
+              </Surface>
+            </FocusItem>
           ) : null}
           {cards.length ? (
-            <Cards>
-              {cards.map((c) => (
-                <CardTile key={c.app} card={c} ctx={ctx} />
-              ))}
-            </Cards>
+            <FocusItem ambient={pulled}>
+              <Cards>
+                {cards.map((c) => (
+                  <CardTile key={c.app} card={c} ctx={ctx} />
+                ))}
+              </Cards>
+            </FocusItem>
           ) : null}
-        </>
+        </FocusField>
       )}
       <div>
         <Button kind="tertiary" onPress={() => ctx.notify({ title: 'This is a test notification', body: 'Sent from Home', needsYou: true })}>
@@ -167,4 +197,6 @@ export function Home({ ctx }: { ctx: MountContext }) {
       </div>
     </div>
   );
+  // The radial menu needs a provider to draw in; without the preview, Home is as it was.
+  return ring ? <RingProvider overflow="more">{page}</RingProvider> : page;
 }

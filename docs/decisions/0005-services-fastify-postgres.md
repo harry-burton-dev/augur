@@ -20,7 +20,7 @@ AUGUR's backend is a set of small services behind one gateway: identity, registr
 ## Consequences
 
 - One Postgres can serve every service now, and a service can move to its own database later without code changes.
-- Per-service database logins are still an open security item.
+- Per-service database logins are still an open security item. *Update 2026-11-05: done. Each service and app signs in to Postgres as its own login (`<SERVICE>_DATABASE_PASSWORD`, infra/deploy/settings.schema.json).*
 
 ## Links
 

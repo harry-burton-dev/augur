@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { InboxSignal } from './inbox.ts';
-import { MemoryEventStore, PgEventStore, type AuditFilter, type DomainEvent, type EventStore, type Notification } from './store.ts';
+import { PgEventStore, type AuditFilter, type DomainEvent, type EventStore, type Notification } from './store.ts';
 
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs' as const, title: 'Review the budget paper', link: '/doc/7' };
 
@@ -271,9 +271,6 @@ const behavesLikeAnInbox = (make: () => EventStore, reset: () => Promise<void> =
     expect(await store.inbox.byKey('mandate', 'live')).toMatchObject({ state: 'open' });
   });
 };
-
-describe('MemoryEventStore', () => behavesLikeAStore(() => new MemoryEventStore()));
-describe('MemoryEventStore inbox', () => behavesLikeAnInbox(() => new MemoryEventStore()));
 
 // Runs wherever DATABASE_URL points at a Postgres; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {

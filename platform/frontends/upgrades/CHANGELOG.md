@@ -1,5 +1,16 @@
 # @augur/upgrades
 
+## 0.1.5
+
+### Patch Changes
+
+- 21ee89a: Serve Quill 0.8.0 (kit bundle 0.5.3): its dates follow each person's `ctx.formats` (PER-323), and `AppError` reads a service's problem as AUGUR sends it.
+- 1e58d38: A printable card for the admin who wakes to an upgrade that went back by itself, didn't install, or kept running after its watch saw a problem: docs/upgrade-went-back.md. The updater's, the after-watch's and the Upgrade Centre's messages now point at it. deploy.md's restore now stops everything but Postgres, as its words always said.
+- Updated dependencies [f12bbaf]
+- Updated dependencies [4f8d944]
+- Updated dependencies [cbd1abc]
+  - @augur/mfe-sdk@2.0.0
+
 ## 0.1.4
 
 ### Patch Changes

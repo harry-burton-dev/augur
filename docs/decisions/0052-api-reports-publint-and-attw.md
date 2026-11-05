@@ -32,6 +32,10 @@ Option 1:
 - About a minute more of `build-test` on pull requests that touch the libraries; seconds otherwise (Harry's CI budget rule).
 - The checks: `scripts/check-api.mjs` (with `check-api.test.mjs`) and `checkPacked` in `scripts/publish-packages.mjs`.
 
+## Amended 2026-11-05
+
+The service kit has its reports (one per entry point: `.`, `/telemetry`, `/mail`). Its handlers, hooks and `startAppService` take and give Fastify's types, and its caller checks take jose's key types. Wrapping Fastify would mean a second web framework API over the one every service is written in (ADR 0005), so the kit may name `fastify` and `jose`, and no other foreign package: `ALLOWED_FOREIGN` in `scripts/check-api.mjs` lists them, and a Fastify or jose major is a service-kit major. Nodemailer stays behind the kit's own `MailTransport`. The SDK and the records package still may name nothing foreign. `check:api` runs on a pull request only when `platform/packages`, the check, `package.json` or the lockfile changed (Harry's CI budget rule), and always on `main`.
+
 ## Links
 
 - Linear PER-264 (W1.1, SDK 2.0 cut and frozen), PER-222.

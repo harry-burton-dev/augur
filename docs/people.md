@@ -17,9 +17,43 @@ People don't delete their own account. They ask to leave in their account (Priva
 
 Rules that hold for every step: an admin can't turn off their own sign-in, take away their own admin role or run the leaver flow on themselves, and only a deployment admin can do any of these to a deployment admin. Work is handed only to someone else whose sign-in is on.
 
+## Where each account stands
+
+People shows each person's state and their last sign-in. Identity works the state out from Keycloak (is their sign-in on, have they chosen a password) and from what it keeps in `identity.person_lifecycle`: first and last sign-in (from the sign-ins it copies, below), why the sign-in went off, and that they left.
+
+| State | When | Shown in People |
+| --- | --- | --- |
+| `invited` | Added, and no sign-in seen yet | Invited, last sign-in "Never" |
+| `active` | Their sign-in is on and they have signed in, or were here before AUGUR kept sign-ins | Active |
+| `disabled` | Their sign-in is off; `disabledCause` says why when AUGUR knows (`admin`, `leaver`; later `idle`) | Off |
+| `left` | The leaver flow ran. It is for good: their sign-in can't be turned back on (409), and the flow can't run twice. Add them again if they return | Left, with the date and who took on their work |
+
+Last sign-in starts when identity first runs with this version. Before that, People says "Not seen yet".
+
 ## For apps
 
 Follow `platform.person.left` (`PLATFORM_TOPICS.personLeft` in the service kit). When `handOverTo` is there, move what the leaver owns to that person, or offer it to them. When it isn't, keep it and show it as the leaver's until an admin or a team lead hands it on. Team inbox items a person had taken go back to their team when their sign-in goes off (docs/inbox.md).
+
+## Sign-ins in Activity
+
+Identity copies Keycloak's sign-in events into Activity each minute, so they share its filters, download and retention (docs/observability.md, Activity). Each entry is under app `identity`, about the person it happened to, with `detail.kind` `sign-in`; Activity's Sign-ins filter is `kind=sign-in`.
+
+| Keycloak event | Activity action | Detail |
+| --- | --- | --- |
+| `LOGIN` | `sign-in.succeeded` | `client`, `ip`, `method` (`password`, `passkey` or `federated`) |
+| `LOGIN_ERROR` for someone who has an account | `sign-in.failed` | `client`, `ip`, `error` |
+| `LOGIN_ERROR` for a name nobody has | `sign-in.failed-unknown`, by identity itself, counted per hour | `count`, `ips` (at most 20). The name that was tried is not kept |
+| `USER_DISABLED_BY_TEMPORARY_LOCKOUT` | `sign-in.locked` | `ip` |
+| `LOGOUT` | `sign-in.signed-out` | `client` |
+| `UPDATE_PASSWORD`, or `UPDATE_CREDENTIAL` for a password | `account.password-changed` | |
+| `UPDATE_TOTP`, `UPDATE_CREDENTIAL` | `account.two-step-added` | `credential` |
+| `REMOVE_TOTP`, `REMOVE_CREDENTIAL` | `account.two-step-removed` | `credential` |
+| `UPDATE_EMAIL` | `account.email-changed` | `email` `{ from, to }`, removed when the person is deleted |
+| `VERIFY_EMAIL` | `account.email-verified` | |
+| `IDENTITY_PROVIDER_FIRST_LOGIN` | `sign-in.federated-first` | `provider` |
+| `FEDERATED_IDENTITY_LINK` | `sign-in.linked` | `provider` |
+
+Every entry also keeps `at` (when Keycloak recorded it) and `keycloakEvent`. Copying starts when identity first runs with this version: what Keycloak held before stays only in Keycloak, for `REALM_SIGN_IN_EVENT_DAYS`. Where it got to is kept in `identity.sign_in_cursor`, so a restart never copies one twice, and with several identities only one copies at a time. If identity can't read events (its sign-in lacks `view-events`; the realm job gives it), it says so in its log each minute and Activity has no sign-ins.
 
 ## The API
 
@@ -27,4 +61,4 @@ Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/
 
 ## Not built yet
 
-Email invites, idle accounts turning off on their own (60 and 90 days), deletion after retention with `platform.person.deleted`, linking an Entra first sign-in by verified email, and sign-in events, an export and a retention setting in Activity. Each comes with PER-194.
+Email invites, idle accounts turning off on their own (60 and 90 days), deletion after retention with `platform.person.deleted`, linking an Entra first sign-in by verified email, and Locked, Idle and Leaving states on People. Each comes with PER-194.

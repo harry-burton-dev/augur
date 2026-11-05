@@ -316,14 +316,29 @@ export const menuWarnings = (entry: Pick<AppEntry, 'name' | 'icon' | 'menu' | 'a
  * "/" is the shell's own: Title, where every app is a chapter.
  */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0 || ^2.0.0', icon: 'home', description: 'What needs you', category: 'platform' },
+  {
+    id: 'home',
+    name: 'Home',
+    route: '/home',
+    entry: '/apps/home/entry.js',
+    version: PLATFORM_APP_VERSIONS.home,
+    sdk: '^2.0.0',
+    icon: 'home',
+    description: 'What needs you',
+    category: 'platform',
+    // The design direction (PER-283), off until a person turns it on in Previews.
+    previews: [
+      { id: 'focal-planes', name: 'What needs you comes forward', detail: 'What needs you pulls focus and the glance cards go quiet behind it, with a count in light and words.' },
+      { id: 'radial-menu', name: 'A ring of actions on each thing', detail: 'Right-click, long-press or use the "more" mark on something that needs you to see its actions in a ring.' },
+    ],
+  },
   {
     id: 'admin',
     name: 'Admin',
     route: '/admin',
     entry: '/apps/admin/entry.js',
     version: PLATFORM_APP_VERSIONS.admin,
-    sdk: '^1.0.0 || ^2.0.0',
+    sdk: '^2.0.0',
     icon: 'admin',
     description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
@@ -377,7 +392,7 @@ export const platformApps: AppEntry[] = [
     route: '/upgrades',
     entry: '/apps/upgrades/entry.js',
     version: PLATFORM_APP_VERSIONS.upgrades,
-    sdk: '^1.9.0 || ^2.0.0',
+    sdk: '^2.0.0',
     icon: 'download',
     description: 'What this deployment runs, and upgrading it',
     requiredRole: 'admin',

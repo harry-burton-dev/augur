@@ -1,12 +1,15 @@
 # Agents and models
 
-AUGUR has one way to reach an AI model: the **model gateway** (`platform/services/models`). It is the only place a provider's key is kept. Apps' services and the shell's Agents ask the gateway, and the gateway asks the model, so no app or browser ever holds an AI key or knows which provider is behind it.
+AUGUR has one way to reach an AI model: the **model gateway** (`platform/services/models`). It is the only place a provider's key is kept. Apps' services ask the gateway, and the gateway asks the model, so no app or browser ever holds an AI key or knows which provider is behind it.
 
 The gateway:
 
 - records every call in the audit log (`model.called`: who, for which app, which model, how many messages, which tools; never what was said) **before** making it, and makes no call it can't record;
 - gives each app a number of calls a day (UTC), 500 unless an admin changes it; the shell's own assistant counts as one app, `assistant`;
 - is **off** until an admin turns it on in Admin, and can't be turned on until the server has a model.
+- lets a person talk to an AI app's agent only where that app is granted `models:use` on their floor, and only when they have the role its manifest's `requiredRole` names, the same rule the gateway applies to the app's own API. Without the role the call is refused, saying which role is needed.
+
+The shell's own Agents aren't built yet. The Shell shows them as unavailable, saying they arrive with a later release, so nobody can turn them on (`AGENTS_WHY` in the shell's `App.tsx`).
 
 ## Setting up the model
 
@@ -23,7 +26,7 @@ Some choices:
 - **OpenRouter**, one key for many providers' models: `MODEL_API_URL=https://openrouter.ai/api/v1`, `MODEL_NAME=openai/gpt-4o-mini` (or any model id from openrouter.ai/models).
 - **LiteLLM**, a proxy you run that routes to whichever providers you configure, with its own keys and budgets: `MODEL_API_URL=http://litellm:4000/v1` (as the compose network reaches it), `MODEL_NAME` one of its model names. This is the way to use the org's own Azure OpenAI or Bedrock deployment later.
 - **Any OpenAI-compatible server**, including local ones (Ollama at `http://<host>:11434/v1`, vLLM).
-- **The stand-in**: `MODEL_API_URL=stand-in` needs no key and doesn't think. It answers with what you said, and offers a tool when your words match its description, so the whole path (Agents, a confirmation card, an intent) can be tried on a server with no provider. The local dev stack uses it.
+- **The stand-in**: `MODEL_API_URL=stand-in` needs no key and doesn't think. It answers with what you said, and offers a tool when your words match its description, so the whole path (an app's call, a tool, an intent) can be tried on a server with no provider. The local dev stack uses it.
 
 The gateway also needs its own sign-in, `MODELS_CLIENT_SECRET` (`openssl rand -hex 32`), to check apps' grants and write the audit log. Then `pc up -d`, and turn models on in Admin.
 
