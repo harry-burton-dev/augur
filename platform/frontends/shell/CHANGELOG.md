@@ -1,5 +1,23 @@
 # @augur/shell
 
+## 0.16.0
+
+### Minor Changes
+
+- 304aee2: The shell's Account area (ADR 0036, PER-191): Account on the arc opens Profile, Sign-in and security (with where you're signed in and recent sign-ins), Notifications, Appearance, Language and region, and About and help, over whatever is on screen. Credential changes open Keycloak's own screens and come back. Settings is folded into Appearance.
+- 7599be1: The Inbox in the shell (ADR 0026, PER-146): a function after Find whose label carries the count ("Inbox 3"), and a view with For you, Your teams and Done. Each row says which app and kind it's from, what it's about and when it's due, with Open (raising the item's intent, or opening its app at its path, on its own floor) and a menu to take it, give it back, hand it on to a person or team, decline it with a reason, or mark it done where the app allows. Anything that can't be done stays, disabled, saying why. Home lists the first five open items on its floor above the notifications that need you. The count and the list stay live from the notification stream's `inbox` events.
+- eb6aed9: AUGUR serves kit 0.5.1 (Quill 0.7.0, Aerie 0.6.0): apps get the Tiptap editor with mentions as chips (ADR 0058), a date field with a real calendar, and the people picker that SDK 1.12's `searchPrincipals` answers. In Admin, the activity filters' dates open that calendar.
+- 0b8018d: With the kit's accessibility pass (kit 0.4.0 and later), the shell's stage is the page's one `main` landmark, named for the open app; a new thing that needs you is said once by a polite live region; every icon-only control in the band shows its name on hover and focus; Reduce motion stops every loop; and floors move with Alt+Page Up and Alt+Page Down, leaving Page Up and Page Down to the app. In Admin, turning off someone's sign-in, giving them a new one-time password, turning an app off and removing a site apps load from each ask twice in place (`AskTwice`) instead of opening a confirmation. The contract job runs axe on the shell and fails on any serious finding (ADR 0063).
+- dcae52f: The product's name is a deployment setting, `ORG_PRODUCT_NAME` (default AUGUR). The web container writes it into the shell's page, so the browser tab says it, and the realm job makes it the realm's display name, so the sign-in pages, Keycloak's emails (their subjects and AUGUR's layout) and passkey prompts show it.
+- 81041b0: The shell runs Grafana Faro once someone is signed in, when the deployment collects browser telemetry (ADR 0059): errors from the shell and every app, each put down to its app and version, and a trace for each call a page makes, sent through the gateway with nothing that names a person.
+
+### Patch Changes
+
+- b4cad59: Feature previews can be turned on for chosen floors: Admin → Apps picks the floors, the preview is on there and on the floors beneath them, and off everywhere else, without a release (ADR 0021, amended). `ctx.previewOn` is unchanged; an app's service passes `?workspace=` when it asks the registry for a person.
+- Updated dependencies [7518ce8]
+- Updated dependencies [cceb953]
+  - @augur/mfe-sdk@1.12.0
+
 ## 0.15.0
 
 ### Minor Changes
