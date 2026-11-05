@@ -14,9 +14,10 @@
 //   node scripts/check-settings.mjs            (--write rewrites that list from the schema)
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parse } from 'yaml';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 
 /** Ids kept on purpose so live servers keep working (AGENTS.md, Names): not a deployment's literal. */
 export const KEPT_IDS = ['ghcr.io/harry-burton-dev/im-platform'];
@@ -247,7 +248,7 @@ const walk = (dir, out = []) => {
 
 const read = (path) => readFileSync(join(root, path), 'utf8');
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const schema = JSON.parse(read('infra/deploy/settings.schema.json'));
   const files = {};
   const want = ['infra/deploy/compose.yml', 'infra/deploy/.env.example'];

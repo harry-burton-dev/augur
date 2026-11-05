@@ -17,6 +17,7 @@ import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { HALTED_ASSET, haltedOf } from './publish-feed.mjs';
 import { REPO } from './repo.mjs';
@@ -208,7 +209,7 @@ const main = async () => {
   console.log(`Mirrored AUGUR ${version}. Servers: PLATFORM_IMAGES=${to} and RELEASE_FEED_URL pointing at releases.json (docs/mirror.md).`);
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main().catch((err) => {
     console.error(`✗ ${err.message}`);
     process.exit(1);

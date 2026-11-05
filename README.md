@@ -2,7 +2,7 @@
 
 AUGUR is proprietary; see `LICENSE`. Open-source parts are listed in `THIRD_PARTY_NOTICES.md`.
 
-AUGUR is an app platform for the organisation's cloud. A **shell** in the browser loads independently built **apps** as micro frontends. Behind one **gateway** sit a few **core services** (who people are, which apps exist, notifications and audit). Apps live in `apps/` and only reach AUGUR through its published `@augur/*` packages and APIs. The Library app is the first one, and it is paused while the shell is finished.
+AUGUR is an app platform for the organisation's cloud. A **shell** in the browser loads independently built **apps** as micro frontends. Behind one **gateway** sit a few **core services** (who people are, which apps exist, notifications and audit). Apps live in their own repositories (ADR 0012) and only reach AUGUR through its published `@augur/*` packages and APIs.
 
 ## How a request flows
 

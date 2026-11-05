@@ -20,9 +20,9 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const LOCK = 'release/migrations.lock.json';
 const RELEASE_FILE = 'release/augur-release.json';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));

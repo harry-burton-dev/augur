@@ -6,8 +6,9 @@
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const here = new URL('.', import.meta.url).pathname;
+const here = fileURLToPath(new URL('.', import.meta.url));
 const { version } = JSON.parse(readFileSync(join(here, '../packages/mfe-sdk/package.json'), 'utf8'));
 const release = version.split('.').slice(0, 2).join('.');
 const frozen = join(here, 'frozen');

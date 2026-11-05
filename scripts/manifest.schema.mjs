@@ -7,9 +7,9 @@
 // scripts/check-manifests.mjs fails when either file is out of step.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 export const SCHEMA_FILE = 'contracts/manifest.schema.json';
 /** The copy published inside @augur/app-tools, so an app repository's manifest points into node_modules at the
  * schema of the tools it builds with: "$schema": "./node_modules/@augur/app-tools/manifest.schema.json". */

@@ -4,6 +4,7 @@ name: AUGUR dev builds
 # with the version <next patch>-dev.<run>, released as the pre-release augur@<that version>. What it
 # changes and its notes come from the changesets waiting. Only the workbench (SERVER_RING=dev) takes
 # it, by itself and after a backup, as it would a release. AUGUR keeps its newest few dev builds.
+# It waits for CI on the same commit first, so a merge that breaks main never reaches the workbench.
 # See docs/release-channels.md, "AUGUR dev builds".
 on:
   push:
@@ -31,7 +32,29 @@ env:
   # first name, where servers pull them from; the IMAGE_REPO variable moves them (docs/upgrade.md).
   IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/im-platform', github.repository_owner) }}
 jobs:
+  # A pull request's CI ran on its own branch, so main can still break when it merges. This waits on the
+  # push's run of CI rather than starting from it (workflow_run), so the paths above, the commit built
+  # and the identity a dev build is signed with all stay as they are.
+  ci:
+    if: github.ref_name == 'main'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 45
+    permissions:
+      actions: read
+    steps:
+      - name: Did CI pass on this commit?
+        run: |
+          for _ in $(seq 1 30); do
+            run=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+            [ -n "$run" ] && break
+            sleep 10
+          done
+          if [ -z "$run" ]; then echo "::error title=No CI run::CI didn't start on $GITHUB_SHA, so no dev build was made."; exit 1; fi
+          gh run watch "$run" --repo "$GITHUB_REPOSITORY" --exit-status --interval 30 > /dev/null
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   dev:
+    needs: ci
     if: github.ref_name == 'main'
     # Builds and pushes images, so only on an x86-64 runner: RELEASE_RUNNER, if CI_RUNNER names an Arm one.
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}

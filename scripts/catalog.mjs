@@ -5,10 +5,11 @@
 //   pnpm check:catalog     fail if either is out of date
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parse, stringify } from 'yaml';
 import { AUGUR_HOME, DECISIONS_URL } from './repo.mjs';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 const REPO = AUGUR_HOME;
 const SOURCE = `https://github.com/${REPO}/tree/main`;
 const OWNER = 'group:default/augur-core';

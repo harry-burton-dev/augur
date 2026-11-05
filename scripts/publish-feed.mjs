@@ -19,6 +19,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { asMirrored } from './mirror-release.mjs';
 import { REPO } from './repo.mjs';
@@ -180,7 +181,7 @@ const main = async (args) => {
   }
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main(process.argv.slice(2)).catch((err) => {
     console.error(err.message);
     process.exit(1);

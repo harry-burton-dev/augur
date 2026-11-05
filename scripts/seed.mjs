@@ -9,8 +9,9 @@
 // AUGUR_TOKEN skips the sign-in with an admin's access token, for scripts that already hold one.
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 export const DEFAULT_DATA = join(root, 'scripts/seed/cast.json');
 const KEY = /^[a-z0-9][a-z0-9-]{0,39}$/;
 /** The floor every cast can name without making it: the organisation's own. */
@@ -371,7 +372,7 @@ const main = async () => {
   if (ledger.skipped.length) console.log(`${ledger.skipped.length} things were left out; each says why above.`);
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   main().catch((err) => {
     console.error(`✗ ${err instanceof SeedRefused || err instanceof ApiError ? err.message : err.stack}`);
     process.exit(1);

@@ -18,8 +18,9 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const root = new URL('..', import.meta.url).pathname;
+const root = fileURLToPath(new URL('..', import.meta.url));
 
 /** "1.2.3" → [1, 2, 3]; anything after the numbers is ignored. */
 const parse = (v) => (/^(\d+)\.(\d+)\.(\d+)/.exec(v ?? '') ?? []).slice(1).map(Number);
@@ -244,4 +245,4 @@ const main = () => {
   console.log(`✓ Ready: set PLATFORM_VERSION=${release.version}, then pc pull && pc up -d --remove-orphans.`);
 };
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) main();
