@@ -5,10 +5,11 @@ import { Activity } from './activity.js';
 import { Apps } from './apps.js';
 import { Departments } from './departments.js';
 import { Pipeline } from './line.js';
+import { Organisation } from './organisation.js';
 import { People } from './people.js';
 import { Status } from './status.js';
 
-const screens = ['people', 'departments', 'apps', 'status', 'updates', 'activity'] as const;
+const screens = ['people', 'departments', 'apps', 'organisation', 'status', 'updates', 'activity'] as const;
 export type Screen = (typeof screens)[number];
 
 /** Which screen a path inside Admin opens. Its Orbit lives at "/", so anything else falls back to People. */
@@ -23,6 +24,7 @@ const RAIL: { screen: Screen; label: string; icon: IconName }[] = [
   { screen: 'people', label: 'People', icon: 'people' },
   { screen: 'departments', label: 'Departments', icon: 'department' },
   { screen: 'apps', label: 'Apps', icon: 'apps' },
+  { screen: 'organisation', label: 'Organisation', icon: 'org' },
   { screen: 'status', label: 'Status', icon: 'gauge' },
   { screen: 'updates', label: 'Dev to production', icon: 'pulse' },
   { screen: 'activity', label: 'Activity', icon: 'clock' },
@@ -100,6 +102,8 @@ export function AdminApp({ api, me, path: start }: { api: AdminApi; me: string; 
           <Departments key={path} api={api} adding={adding} />
         ) : screen === 'apps' ? (
           <Apps api={api} />
+        ) : screen === 'organisation' ? (
+          <Organisation api={api} />
         ) : screen === 'status' ? (
           <Status api={api} openUpgrades={openUpgrades} />
         ) : screen === 'updates' ? (
