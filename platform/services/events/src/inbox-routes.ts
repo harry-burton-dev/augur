@@ -40,6 +40,36 @@ export interface InboxDeps {
   floorOf: (req: FastifyRequest, reply: FastifyReply) => Promise<(EventFloor & { kind: string }) | null | undefined>;
 }
 
+/**
+ * Gives the team items a person had taken back to their teams when they leave one (`team`), or every
+ * team when their sign-in is turned off, so the work isn't left with someone who can't do it. Each is
+ * written to the audit log as the events service's step, and published as `platform.inbox.released`
+ * with `left: true`. Items owned by the person themselves stay theirs: handing those over is the
+ * leaver flow's (PER-194). Returns how many went back.
+ */
+export const releaseLeaver = async (store: EventStore, person: string, team?: string): Promise<number> => {
+  const inbox = store.inbox;
+  let released = 0;
+  let before: string | undefined;
+  for (;;) {
+    const page = await inbox.list({ person, teams: [], tab: 'you', before, limit: PAGE });
+    for (const item of page) {
+      if (item.owner.kind !== 'team' || item.takenBy !== person || (team && item.owner.id !== team)) continue;
+      const r = await inbox.act(item.id, { action: 'released', by: person });
+      if (!('item' in r)) continue;
+      released++;
+      await store.appendAudit(
+        { actor: { id: 'events', kind: 'service' }, app: 'events', action: 'inbox.released', target: item.id, detail: { app: item.app, key: item.key, kind: item.kind, person, left: team ? 'team' : 'turned-off' } },
+        item.workspace,
+        'events',
+      );
+      await store.publish('events', [{ topic: 'platform.inbox.released', id: `inbox-${r.step}`, payload: { item: item.id, app: item.app, key: item.key, by: person, left: true }, floor: item.workspace }]);
+    }
+    if (page.length < PAGE) return released;
+    before = page.at(-1)!.id;
+  }
+};
+
 /** The teams a person is on, from identity. Without identity (local dev), the team they stand on. */
 export const teamsOf = async (caller: Caller, principals: PrincipalLookup | undefined): Promise<string[]> => {
   if (!principals) return caller.workspace ? [caller.workspace.id] : [];
