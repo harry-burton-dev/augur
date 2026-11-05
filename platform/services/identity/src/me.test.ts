@@ -100,6 +100,16 @@ describe.runIf(DATABASE_URL)('the caller’s account', () => {
     const plain = (await app.inject({ method: 'GET', url: '/v1/me/security', headers: callerHeaders(alex) })).json();
     expect(plain.codeApps[0]).toMatchObject({ removable: true });
     expect(plain.twoStep.required).toBe(false);
+    expect(plain.emails).toEqual({ on: false, address: 'alex@example.org', verified: true });
+  });
+
+  it('says whether changes to how they sign in are emailed, and where', async () => {
+    const accounts = accountsWithAlex();
+    accounts.emailsSecurity = true;
+    const app = await db.app({ accounts });
+    expect((await app.inject({ method: 'GET', url: '/v1/me/security', headers: callerHeaders(alex) })).json().emails).toEqual({ on: true, address: 'alex@example.org', verified: true });
+    accounts.people.get('u-1')!.profile.emailVerified = false;
+    expect((await app.inject({ method: 'GET', url: '/v1/me/security', headers: callerHeaders(alex) })).json().emails).toMatchObject({ on: true, verified: false });
   });
 
   it('says an organisation sign-in holds the password and sets the email', () => {

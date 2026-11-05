@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.24.0
+  version: 1.25.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -712,6 +712,7 @@ components:
         - linked
         - canLink
         - actions
+        - emails
       properties:
         password:
           type: object
@@ -879,6 +880,22 @@ components:
               reason:
                 type: string
                 description: Why not, and who can change it
+        emails:
+          type: object
+          required:
+            - on
+            - verified
+          properties:
+            on:
+              type: boolean
+              description: This deployment emails people when their password, code app or passkeys change
+            address:
+              type: string
+              description: Where those emails go
+            verified:
+              type: boolean
+              description: They have confirmed that address
+          description: Emails about changes to how they sign in
       description: "How they sign in. Each change is made on Keycloak’s own screen: sign in again with kc_action set to its action, and come back."
     AccountSession:
       type: object

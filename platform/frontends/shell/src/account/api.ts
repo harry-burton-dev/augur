@@ -45,6 +45,8 @@ export interface Security {
   linked: { provider: string; name: string; username?: string }[];
   canLink: { alias: string; name: string; action: string }[];
   actions: { id: AccountActionId; action: string; available: boolean; reason?: string }[];
+  /** Whether a change to how they sign in is emailed to them, and where; absent from an older identity. */
+  emails?: { on: boolean; address?: string; verified: boolean };
 }
 
 export interface AccountSession {
