@@ -56,6 +56,11 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The first admin's department is called Administration on new servers
+
+**From** unreleased
+
+Nothing to do on a server that's already running: its departments keep their names, because the realm reads `PLATFORM_ADMIN_DEPARTMENT` only at first start. On a new server, the first admin's department is now called `Administration` instead of `Platform` unless `PLATFORM_ADMIN_DEPARTMENT` names another. To rename an existing one, use Admin → Departments.
 ### Idle accounts are warned, then turned off
 
 **From** unreleased
