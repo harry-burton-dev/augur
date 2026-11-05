@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { callerHeaders, GrantsUnavailable, serviceHeaders, type NewAuditEntry, type Scope } from '@augur/service-kit';
 import { buildApp, type ModelsOptions } from './app.ts';
 import { standIn, type ModelProvider } from './provider.ts';
-import { MemoryModelStore } from './store.ts';
+import { DATABASE_URL, modelsDb } from './db.testing.ts';
 
 const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const sam = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
@@ -20,6 +20,8 @@ const grants = async (app: string, workspace?: string): Promise<Scope[]> =>
 const requiredRole = async (): Promise<string | null> => null;
 const hello = { messages: [{ role: 'user', content: 'Hello' }] };
 
+const db = modelsDb();
+
 type App = Awaited<ReturnType<typeof buildApp>>;
 let open: App | undefined;
 afterEach(async () => {
@@ -28,15 +30,15 @@ afterEach(async () => {
 });
 
 /** A gateway with the stand-in model, turned on, recording into `audited`. */
-const start = async (options: ModelsOptions = {}, { on = true } = {}) => {
+const start = async (options: Partial<ModelsOptions> = {}, { on = true } = {}) => {
   const audited: { entry: NewAuditEntry; workspace?: string }[] = [];
-  const store = options.store ?? new MemoryModelStore();
+  const store = options.store ?? db.store;
   if (on) await store.saveSettings({ enabled: true, dailyLimit: 500 }, 'u-1');
   open = await buildApp({ provider: standIn(), verifyService, grants, requiredRole, audit: async (entry, workspace) => void audited.push({ entry, workspace }), store, ...options });
   return { app: open, audited, store };
 };
 
-describe('models', () => {
+describe.runIf(DATABASE_URL)('models', () => {
   it('reports healthy', async () => {
     const { app } = await start();
     expect((await app.inject({ method: 'GET', url: '/healthz' })).json()).toMatchObject({ status: 'ok', service: 'models', api: 'v1' });
@@ -84,7 +86,7 @@ describe('models', () => {
   });
 
   it('holds each app to its calls a day', async () => {
-    const store = new MemoryModelStore();
+    const store = db.store;
     await store.saveSettings({ enabled: true, dailyLimit: 2 }, 'u-1');
     const { app } = await start({ store }, { on: false });
     const call = (agent: string) => app.inject({ method: 'POST', url: '/v1/chat', headers: sam, payload: { agent, ...hello } });
