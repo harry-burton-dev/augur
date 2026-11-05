@@ -14,8 +14,8 @@ the repository. Questions go to the address at the end of that file.
 | Every `package.json` | `"license": "UNLICENSED"`, npm's value for "not licensed for use by others", beside `"private": true`, which stops an accidental `npm publish`. |
 | Every image AUGUR builds | `org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"`, an SPDX licence reference, next to the `source` label (`infra/service.Dockerfile`, `infra/web.Dockerfile`). |
 
-A new `package.json` or image stage carries the same value. `pnpm create-app` writes it into a new
-app's packages.
+A new `package.json` or image stage carries the same value. A new app made from augur-app-template
+has it in its packages already.
 
 ## Open-source parts
 

@@ -1,5 +1,5 @@
 import { Transform } from 'node:stream';
-import { callerHeaders, signedCallerHeaders, type Caller, type CallerSigner } from '@augur/service-kit';
+import { callerHeaders, signedCallerHeaders, withDeadline, type Caller, type CallerSigner } from '@augur/service-kit';
 
 /** What an app may be sent in one request when the registry doesn't say: the registry's own default. */
 export const DEFAULT_UPLOAD_MB = 10;
@@ -42,7 +42,7 @@ export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
       let res: Response;
       try {
         const headers = { ...callerHeaders(caller), ...(signer ? await signedCallerHeaders(signer, caller, 'registry') : {}) };
-        res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/manifest${floor ? `?workspace=${encodeURIComponent(floor)}` : ''}`, { headers });
+        res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/manifest${floor ? `?workspace=${encodeURIComponent(floor)}` : ''}`, { headers });
       } catch (err) {
         throw new AppAccessUnavailable(`the registry could not be reached (${(err as Error).message})`);
       }

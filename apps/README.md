@@ -2,7 +2,7 @@
 
 Each folder is one product app that runs on the platform. An app owns its service, its database schema, its object storage bucket ([App storage](../docs/app-storage.md)) and its frontend, and ships a `manifest.json` describing it.
 
-Start a new one with `pnpm create-app <id>` and run it with `pnpm dev:app <id>`; [Build an app](../docs/build-an-app.md) goes from there to an app in the shell.
+A new app starts in its own repository, made from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), and `pnpm dev:app ../augur-<id>` runs it here in a stand-in shell; [Build an app](../docs/build-an-app.md) goes from there to an app in the shell.
 
 An app reaches the platform only through `@augur/*` packages, the gateway, the registry manifest and events. It never imports another app, and the platform never imports an app; `pnpm check:boundaries` enforces both.
 

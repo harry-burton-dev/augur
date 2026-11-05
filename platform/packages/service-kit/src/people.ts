@@ -1,4 +1,5 @@
 import { serviceHeaders, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
 
 /** Identity could not say who someone is; the call should be refused for now, not let through. */
 export class PeopleUnavailable extends Error {}
@@ -23,7 +24,7 @@ export type PrincipalLookup = (person: string) => Promise<string[]>;
 const ask = async (fetchImpl: typeof fetch, url: string | URL, credentials: ServiceCredentials) => {
   let res: Response;
   try {
-    res = await fetchImpl(url, { headers: await serviceHeaders(credentials) });
+    res = await withDeadline(fetchImpl)(url, { headers: await serviceHeaders(credentials) });
   } catch (err) {
     throw new PeopleUnavailable(`Identity could not be reached (${(err as Error).message}).`);
   }

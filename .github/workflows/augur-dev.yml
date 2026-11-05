@@ -61,7 +61,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/buildx-deps
-          key: buildx-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'package.json', 'platform/*/*/package.json', 'platform/contract/package.json', 'apps/*/*/package.json', 'scripts/templates/*/*/package.json', 'infra/*.Dockerfile') }}
+          key: buildx-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'package.json', 'platform/*/*/package.json', 'platform/contract/package.json', 'apps/*/*/package.json', 'infra/*.Dockerfile') }}
           restore-keys: buildx-deps-${{ runner.os }}-
       - name: Build, push and sign the images
         run: infra/release-images.sh "${{ steps.build.outputs.version }}" dev > "$RUNNER_TEMP/images.json"
