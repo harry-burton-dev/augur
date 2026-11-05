@@ -2,7 +2,7 @@ import { Button, DateField, Details, Dialog, Select, Table, type SelectOption, t
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fullName, type AdminApi, type AuditEntry, type AuditQuery, type CatalogueApp, type Department, type Person } from './api.js';
 import { floorTree } from './apps-model.js';
-import { Page } from './parts.js';
+import { Page, Problem } from './parts.js';
 
 const PAGE = 50;
 const ANYONE = '*';
@@ -22,7 +22,7 @@ export const namesFrom = (people: Person[], departments: Department[], apps: Cat
 };
 
 /** Where an entry was recorded, in words: the platform's own services by what they look after. */
-export const areaName = (app: string, names: Names) => (app === 'identity' ? 'People and departments' : app === 'registry' ? 'App catalogue' : names.app(app));
+export const areaName = (app: string, names: Names) => (app === 'identity' ? 'People and departments' : app === 'registry' ? 'App catalogue' : app === 'events' ? 'Activity' : names.app(app));
 
 const changedWords: Record<string, string> = { firstName: 'name', lastName: 'name', email: 'email', roles: 'roles', departments: 'departments', enabled: 'sign-in' };
 
@@ -44,6 +44,38 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} turned off ${names.person(target)}’s sign-in`;
     case 'person.password-reset':
       return `${who} gave ${names.person(target)} a new password`;
+    case 'person.left':
+      return d.handOverTo ? `${who} marked ${names.person(target)} as a leaver, handing their work to ${names.person(String(d.handOverTo))}` : `${who} marked ${names.person(target)} as a leaver`;
+    case 'sign-in.succeeded':
+      return d.method === 'federated' ? `${names.person(target)} signed in through the organisation’s sign-in` : d.method === 'passkey' ? `${names.person(target)} signed in with a passkey` : `${names.person(target)} signed in`;
+    case 'sign-in.failed':
+      return `Someone failed to sign in as ${names.person(target)}`;
+    case 'sign-in.failed-unknown':
+      return `${Number(d.count ?? 1) === 1 ? 'Someone' : `${String(d.count)} times, someone`} tried to sign in with a name nobody has`;
+    case 'sign-in.locked':
+      return `${names.person(target)} was locked out for a while after repeated wrong passwords`;
+    case 'sign-in.signed-out':
+      return `${names.person(target)} signed out`;
+    case 'sign-in.federated-first':
+      return `${names.person(target)} signed in through the organisation’s sign-in for the first time`;
+    case 'sign-in.linked':
+      return `${names.person(target)}’s account was linked to the organisation’s sign-in`;
+    case 'account.password-changed':
+      return `${names.person(target)} changed their password`;
+    case 'account.two-step-added':
+      return `${names.person(target)} added a second step to their sign-in`;
+    case 'account.two-step-removed':
+      return `${names.person(target)} removed a second step from their sign-in`;
+    case 'account.email-changed':
+      return `${names.person(target)}’s email address changed`;
+    case 'account.email-verified':
+      return `${names.person(target)} confirmed their email address`;
+    case 'audit.exported':
+      return `${who} downloaded Activity`;
+    case 'audit.pruned':
+      return `${String(d.removed)} ${d.removed === 1 ? 'entry' : 'entries'} older than ${String(d.keepDays)} days ${d.removed === 1 ? 'was' : 'were'} removed`;
+    case 'audit.redacted':
+      return `Personal details of a deleted person were removed from Activity`;
     case 'department.created':
       return `${who} created the ${String(d.name ?? names.department(target))} department`;
     case 'department.renamed':
@@ -141,16 +173,24 @@ const periods: SelectOption[] = [
   { value: 'custom', label: 'Between dates' },
 ];
 
+const kinds: SelectOption[] = [
+  { value: 'change', label: 'Changes' },
+  { value: 'sign-in', label: 'Sign-ins' },
+  { value: ANYONE, label: 'Everything' },
+];
+
 const columns: TableColumn[] = [
   { key: 'at', label: 'When', kind: 'date', sortable: true, sortFirst: 'desc' },
   { key: 'what', label: 'What happened', wrap: true },
   { key: 'area', label: 'Where', sortable: true },
 ];
 
-type Filters = { who: string; area: string; floor: string; period: Period; from: string; to: string };
+type Filters = { kind: string; who: string; area: string; floor: string; period: Period; from: string; to: string };
 
 const queryFor = (f: Filters, before?: string): AuditQuery => ({
-  ...(f.who !== ANYONE ? { actor: f.who } : {}),
+  ...(f.kind === 'change' || f.kind === 'sign-in' ? { kind: f.kind } : {}),
+  // A person's sign-ins are about them, so "who" asks for anything by or about them there.
+  ...(f.who !== ANYONE ? (f.kind === 'change' ? { actor: f.who } : { person: f.who }) : {}),
   ...(f.area !== ANYONE ? { app: f.area } : {}),
   ...(f.floor !== ANYONE ? { workspace: f.floor } : {}),
   ...rangeFor(f.period, new Date(), f.from, f.to),
@@ -163,7 +203,9 @@ export function Activity({ api }: { api: AdminApi }) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [names, setNames] = useState<Names>(() => namesFrom([], [], []));
   const [options, setOptions] = useState<{ people: SelectOption[]; areas: SelectOption[]; floors: SelectOption[] }>({ people: [], areas: [], floors: [] });
-  const [filters, setFilters] = useState<Filters>({ who: ANYONE, area: ANYONE, floor: ANYONE, period: 'week', from: '', to: '' });
+  const [filters, setFilters] = useState<Filters>({ kind: 'change', who: ANYONE, area: ANYONE, floor: ANYONE, period: 'week', from: '', to: '' });
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [loading, setLoading] = useState(true);
   const [more, setMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -244,12 +286,32 @@ export function Activity({ api }: { api: AdminApi }) {
   };
 
   const set = (k: keyof Filters) => (value: string) => setFilters((f) => ({ ...f, [k]: value }));
+
+  /** Everything the filters show, not only the pages loaded, as a spreadsheet file. */
+  const download = async () => {
+    setExporting(true);
+    setExportError('');
+    try {
+      const query = Object.fromEntries(Object.entries(queryFor(filters)).filter(([k]) => k !== 'before' && k !== 'limit')) as Omit<AuditQuery, 'before' | 'limit'>;
+      const { blob, filename } = await api.exportAudit(query);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (err) {
+      setExportError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  };
   const rows: TableRow[] = entries.map((e) => ({ id: e.id, at: e.at, what: describe(e, names), area: areaName(e.app, names) }));
   const e = entries.find((x) => x.id === open);
 
   return (
-    <Page heading="Activity" summary="Every change made through AUGUR: who, what, where and when. Nothing here can be edited or removed.">
+    <Page heading="Activity" summary="Every change made through AUGUR, and every sign-in: who, what, where and when. Nothing here can be edited or removed by hand; entries older than the organisation’s retention period go each night.">
       <div className="admin-filters" data-filters>
+        <Select label="Kind" options={kinds} value={filters.kind} onChange={set('kind')} />
         <Select label="Who" options={options.people} value={filters.who} onChange={set('who')} />
         <Select label="Where" options={options.areas} value={filters.area} onChange={set('area')} />
         <Select label="Floor" options={options.floors} value={filters.floor} onChange={set('floor')} />
@@ -261,7 +323,22 @@ export function Activity({ api }: { api: AdminApi }) {
           </>
         ) : null}
       </div>
-      <Table noun="changes" columns={columns} rows={rows} loading={loading} error={error} empty="Nothing was changed in this time." onOpen={(row) => setOpen(row.id)} onRetry={() => void load()} />
+      <Table
+        noun="changes"
+        columns={columns}
+        rows={rows}
+        loading={loading}
+        error={error}
+        empty={filters.kind === 'sign-in' ? 'Nobody signed in in this time.' : 'Nothing was changed in this time.'}
+        onOpen={(row) => setOpen(row.id)}
+        onRetry={() => void load()}
+        actions={
+          <Button kind="secondary" size="sm" busy={exporting} busyLabel="Making the file…" disabled={loading || Boolean(error)} reason={error ? 'Activity couldn’t be loaded. Try again first.' : 'Wait for Activity to load.'} onPress={() => void download()}>
+            Download CSV
+          </Button>
+        }
+      />
+      <Problem>{exportError}</Problem>
       {more && !loading ? (
         <div className="admin-more">
           <Button kind="secondary" size="sm" busy={loadingMore} onPress={() => void loadOlder()}>
