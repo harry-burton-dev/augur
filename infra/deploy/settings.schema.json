@@ -533,6 +533,24 @@
       ],
       "x-docs": "docs/deploy.md#off-server-copy"
     },
+    "PITR_KEEP_DAYS": {
+      "type": "string",
+      "description": "How many days back the database can be restored to a point in time: the nightly base backups kept, here and in the off-server copy (ADR 0064).",
+      "default": "7",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/deploy.md#restore-to-a-point-in-time"
+    },
+    "PITR_ARCHIVE_SECONDS": {
+      "type": "string",
+      "description": "At most how many seconds of database changes wait before Postgres archives them (ADR 0064).",
+      "default": "900",
+      "x-services": [
+        "postgres"
+      ],
+      "x-docs": "docs/deploy.md#restore-to-a-point-in-time"
+    },
     "MODEL_API_URL": {
       "type": "string",
       "description": "An OpenAI-style API for the model behind Agents, or stand-in; without it models stay off.",

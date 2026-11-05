@@ -373,14 +373,16 @@ jobs:
           for i in $(seq 1 20); do curl -fsI http://localhost:8090/admin > /tmp/headers-dev2 && break; sleep 1; done
           ! grep -i "ts.net" /tmp/headers-dev2
           docker rm -f web-dev2
-      - name: The nightly backup writes a restorable dump
+      - name: The nightly backup writes a restorable dump, and a base backup for the archived WAL
         run: |
-          docker run -d --name pg -e POSTGRES_PASSWORD=ci postgres:16-alpine
+          # Started as compose.yml starts it, archiving its WAL (ADR 0064), with its data in a volume to restore into later.
+          mkdir -p /tmp/wal
+          docker run -d --name pg -e POSTGRES_USER=platform -e POSTGRES_PASSWORD=ci -e PITR_ARCHIVE_SECONDS=60 -v pgci:/var/lib/postgresql/data -v /tmp/wal:/wal-archive \
+            -v "$PWD/infra/deploy/postgres:/etc/augur:ro" --entrypoint /bin/sh postgres:16-alpine /etc/augur/start.sh
           # Over TCP: during first start Postgres answers on its socket before its real start.
-          until docker exec pg pg_isready -h 127.0.0.1 -U postgres; do sleep 1; done
+          until docker exec pg pg_isready -h 127.0.0.1 -U platform; do sleep 1; done
           # Just enough of the platform's and Keycloak's tables for the restore test to look for.
-          docker exec -i pg psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
-          create database platform;
+          docker exec -i pg psql -U platform -v ON_ERROR_STOP=1 <<'SQL'
           create database keycloak;
           \c platform
           create schema registry; create table registry.apps (id text);
@@ -394,16 +396,18 @@ jobs:
           # Stand-in for Garage's volumes: a block, a metadata snapshot, and the live database the backup leaves out.
           mkdir -p /tmp/objects/data/00 /tmp/objects/meta/snapshots
           echo block > /tmp/objects/data/00/block; echo snap > /tmp/objects/meta/snapshots/s1; echo live > /tmp/objects/meta/db.sqlite
-          docker run --rm --link pg -e PGHOST=pg -e PGUSER=postgres -e PGPASSWORD=ci \
-            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro \
+          docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
+            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro -v /tmp/wal:/wal-archive \
             postgres:16-alpine /bin/sh /backup/backup.sh --once
           zcat /tmp/backups/platform-*.sql.gz | grep -q "PostgreSQL database cluster dump complete"
           grep -q '"ok":true' /tmp/backups/last-backup.json
+          cat /tmp/backups/pitr.json
+          grep -q '"ok":true,"bases":1,"earliest"' /tmp/backups/pitr.json && sudo test -s /tmp/backups/base-*/base.tar.gz
           tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
           grep -q '^data/00/block$' /tmp/objects.txt && grep -q '^meta/snapshots/s1$' /tmp/objects.txt && ! grep -q 'db.sqlite' /tmp/objects.txt
       - name: The updater's backup is a fresh one, and the newest
         run: |
-          docker run --rm --link pg -e PGHOST=pg -e PGUSER=postgres -e PGPASSWORD=ci \
+          docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
             -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
             postgres:16-alpine /bin/sh /backup/backup.sh --now | tee /tmp/now.log
           grep -E "backup: wrote /backups/platform-[0-9-]+T[0-9]+Z\.sql\.gz" /tmp/now.log
@@ -436,3 +440,21 @@ jobs:
           sudo mv /tmp/aside/* /tmp/backups/
           ! offsite wrong --offsite
           grep -q '"ok":false.*wrong password' /tmp/backups/offsite.json
+      - name: The archived WAL replays onto the base backup, and the database goes back to a moment
+        run: |
+          pitr() { docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/wal:/wal-archive "$@"; }
+          docker exec pg psql -U platform -qc "insert into registry.apps values ('kept')"
+          pitr postgres:16-alpine /bin/sh /backup/backup.sh --pitr-test
+          cat /tmp/backups/pitr-test.json
+          grep -q '"ok":true' /tmp/backups/pitr-test.json
+          # A mistake after the moment: going back to the moment undoes it.
+          sleep 1; moment=$(date -u +'%Y-%m-%d %H:%M:%S'); sleep 1
+          docker exec pg psql -U platform -qc "delete from registry.apps where id = 'kept'"
+          segment=$(docker exec pg psql -U platform -tAc "select pg_walfile_name(pg_switch_wal())")
+          until test -e "/tmp/wal/$segment.gz"; do sleep 1; done
+          docker stop pg
+          docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/wal:/wal-archive -v pgci:/pgdata \
+            --entrypoint /bin/sh postgres:16-alpine /backup/restore-to-time.sh "$moment"
+          docker start pg
+          until docker exec pg psql -U platform -tAc "select pg_is_in_recovery()" | grep -qx f; do sleep 1; done
+          test "$(docker exec pg psql -U platform -tAc "select count(*) from registry.apps where id = 'kept'")" = 1

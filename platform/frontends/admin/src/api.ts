@@ -161,6 +161,17 @@ export interface BackupStatus {
   lastBackup?: { at: string; ok: boolean; file?: string; bytes?: number; problem?: string };
   /** The last copy off the server (ADR 0060); absent while backups stay on the server only. */
   offsite?: { at: string; ok: boolean; snapshot?: string; keepDays?: number; problem?: string };
+  /** Restoring to a point in time (ADR 0064); absent where Postgres doesn't archive yet. */
+  pointInTime?: {
+    at: string;
+    ok: boolean;
+    bases?: number;
+    earliest?: string;
+    archivedAt?: string;
+    copiedAt?: string;
+    problem?: string;
+    lastTest?: { at: string; ok: boolean; base?: string; seconds?: number; mark?: string; reached?: string; problem?: string };
+  };
   lastRestoreTest?: { at: string; ok: boolean; from?: 'local' | 'offsite'; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
 }
 
