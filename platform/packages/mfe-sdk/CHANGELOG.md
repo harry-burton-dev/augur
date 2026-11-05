@@ -1,5 +1,11 @@
 # @augur/mfe-sdk
 
+## 2.1.0
+
+### Minor Changes
+
+- 8eba62b: Apps say they bind their things to entities with `links: { entities: true }` and name the types they bind in `bindings` (lowercase, up to 10, never `entity` or `role`; SDK 2.1, ADR 0066). The registry lists those apps and types for any service at `GET /v1/entity-links`, and the service kit's `registryBindingApps` reads it, cached, so a follower such as Data Atlas subscribes to exactly `<app>.<type>.entity-bound` and `-unbound`.
+
 ## 2.0.0
 
 ### Major Changes
