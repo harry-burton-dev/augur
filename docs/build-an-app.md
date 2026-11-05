@@ -265,7 +265,13 @@ The manifest has a published JSON Schema, `contracts/manifest.schema.json`. It i
 { "$schema": "../../contracts/manifest.schema.json", "id": "expenses", … }
 ```
 
-The path is relative to the manifest; in an app's own repository, point it at the file in an AUGUR checkout or a copy of it. The registry accepts `$schema` and doesn't use it. A registry from before the schema was published refuses it as an unknown field, so leave it out of an app that may register with a deployment that hasn't upgraded.
+The path is relative to the manifest. In an app's own repository, point it at the copy inside `@augur/app-tools`, which every app already builds with, so the schema matches the tools it releases with and needs no checkout of AUGUR:
+
+```json
+{ "$schema": "./node_modules/@augur/app-tools/manifest.schema.json", "id": "expenses", … }
+```
+
+The registry accepts `$schema` and doesn't use it. A registry from before the schema was published refuses it as an unknown field, so leave it out of an app that may register with a deployment that hasn't upgraded.
 
 To check manifests, build AUGUR, then name them, or name none to check every `apps/<id>/manifest.json`:
 
@@ -274,7 +280,7 @@ pnpm build
 node scripts/check-manifests.mjs path/to/manifest.json
 ```
 
-Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes is then put to the registry in memory, for the rules a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json` is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
+Each manifest is checked against the schema first, and each problem names where it is in plain words (`menu[0].items[2].path doesn't have the form it needs`). One that passes is then put to the registry in memory, for the rules a schema can't say: a semver version and range, surfaces on the app's floors, a route of its own. The check also fails when `contracts/manifest.schema.json`, or its copy in `@augur/app-tools`, is out of step with the registry; `pnpm build && pnpm manifest-schema` writes it again.
 
 ### Find
 

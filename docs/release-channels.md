@@ -18,7 +18,7 @@ CI holds these rules on every pull request (`node scripts/promote.mjs check-pr`)
 
 Open pull requests against `main`, with a changeset ([versioning.md](versioning.md#making-a-change)). Merging releases nothing on its own: the Release workflow keeps the **Version packages** pull request open while changesets wait. Merging that bumps each changed package, writes the changelogs and `release/augur-release.json`, and then, in the same run, builds, pushes and signs each unit whose version has no release yet, and makes its GitHub pre-release with its release file. The feed is published once at the end. Servers following beta (the preview ring) see it at their next check; production servers, which follow stable, don't.
 
-The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: betas too** on the installed app in Admin → Apps, so its betas install there.
+The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: Preview releases too** on the installed app in Admin → Apps, so its betas install there.
 
 ## Promote to stable
 
