@@ -21,13 +21,13 @@ const manifest = {
   storage: { database: true, bucket: true },
 };
 const parts = {
-  service: { name: '@apps/notes', version: '0.4.0', description: 'Notes service' },
-  frontend: { name: '@apps/notes-frontend', version: '1.0.0' },
+  service: { name: '@acme/notes', version: '0.4.0', description: 'Notes service' },
+  frontend: { name: '@acme/notes-frontend', version: '1.0.0' },
 };
 
 test('an app is a system with its parts, its intents and what it keeps, and says its kind', () => {
   const entities = appCatalog({ manifest, parts, repo: 'o/augur-notes' });
-  assert.deepEqual(entities.map((e) => `${e.kind}:${e.metadata.name}`), ['System:notes', 'Component:apps-notes-frontend', 'Component:apps-notes', 'API:notes-intents', 'Resource:notes-db', 'Resource:notes-bucket']);
+  assert.deepEqual(entities.map((e) => `${e.kind}:${e.metadata.name}`), ['System:notes', 'Component:acme-notes-frontend', 'Component:acme-notes', 'API:notes-intents', 'Resource:notes-db', 'Resource:notes-bucket']);
   const [system, frontend, service] = entities;
   assert.equal(system.metadata.annotations['augur.dev/category'], 'pillar');
   assert.equal(system.metadata.annotations['augur.dev/release-unit'], 'app/notes');
