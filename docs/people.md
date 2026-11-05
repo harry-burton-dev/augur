@@ -67,9 +67,17 @@ The first comparison only takes note: accounts already off then are kept as off 
 
 Where a deployment has set up Entra (docs/deploy.md, Entra), someone's first sign-in through it links them to the account with the same email, or makes one when nobody has it, with no AUGUR password asked for. From then on `source` is `federated` and their dialog says they sign in with the organisation's sign-in; their name and email follow Entra. An account made this way is recorded as `person.added` with `method: 'federated'` by Keycloak (Activity: "Sam joined through the organisation's sign-in"), so followers hear `platform.person.joined` as for anyone an admin adds; it starts with no roles or teams.
 
+## Deleting leavers' accounts
+
+A leaver's account is deleted once the organisation's leaver retention has passed (Admin → Organisation, Security and retention, 90 days unless changed; ADR 0072). Identity checks every five minutes. People shows the day on a leaver as **Account deleted**. A deployment admin who entered their password in the last 10 minutes can also **Delete their account now** on a leaver (`DELETE /admin/people/{id}`; `401 sign_in_again` otherwise, and 409 for someone who hasn't left).
+
+The steps run in this order, and each is kept, so one that fails is carried on from where it stopped five minutes later: Activity removes their personal values and their notifications (the events service's redaction, `audit.redacted`), identity forgets their preferences and request to leave, takes them off their teams, and renames and archives their own floor as "Deleted person", then Keycloak deletes the account. Only then is `person.deleted` recorded (with `now` when an admin chose it), which followers hear as `platform.person.deleted` `{ person }`. Their id stays in Activity, with nothing kept that maps it back to them.
+
 ## For apps
 
 Follow `platform.person.left` (`PLATFORM_TOPICS.personLeft` in the service kit). When `handOverTo` is there, move what the leaver owns to that person, or offer it to them. When it isn't, keep it and show it as the leaver's until an admin or a team lead hands it on. Team inbox items a person had taken go back to their team when their sign-in goes off (docs/inbox.md).
+
+Follow `platform.person.deleted` (`PLATFORM_TOPICS.personDeleted`) too: delete or anonymise anything personal you still keep about them. Their id is all that's left.
 
 ## Sign-ins in Activity
 
@@ -98,8 +106,4 @@ Keycloak sends the invite, through the realm's relay (`SMTP_*` in `.env`, docs/d
 
 ## The API
 
-Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/identity.openapi.yaml): `POST /admin/people` (`start`; answers `invite` and, for a one-time password, `temporaryPassword`), `POST /admin/people/{id}/invite`, `GET /admin/lifecycle` (`email`), `PATCH /admin/people/{id}` (`enabled: false` signs them out everywhere), `POST /admin/people/{id}/leave` (`handOverTo`, `note`, `lastDay`), `DELETE /admin/people/{id}/leave` (cancel a last day), `POST /admin/people/{id}/unlock` and `GET /admin/leave-requests`. `GET /admin/lifecycle` also answers `today` in the organisation's time zone and `lastDayAhead`.
-
-## Not built yet
-
-Deletion after retention with `platform.person.deleted` comes with PER-194.
+Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/identity.openapi.yaml): `POST /admin/people` (`start`; answers `invite` and, for a one-time password, `temporaryPassword`), `POST /admin/people/{id}/invite`, `GET /admin/lifecycle` (`email`), `PATCH /admin/people/{id}` (`enabled: false` signs them out everywhere), `POST /admin/people/{id}/leave` (`handOverTo`, `note`, `lastDay`), `DELETE /admin/people/{id}/leave` (cancel a last day), `POST /admin/people/{id}/unlock`, `DELETE /admin/people/{id}` (delete a leaver now) and `GET /admin/leave-requests`. `GET /admin/lifecycle` also answers `today` in the organisation's time zone and `lastDayAhead`.

@@ -21,7 +21,9 @@ export interface Person {
   /** Why their sign-in is off, when AUGUR knows. */
   disabledCause?: 'admin' | 'idle' | 'leaver' | 'outside';
   /** When they left, who ran the leaver flow, and who took on their work. */
-  left?: { at: string; by: string; handOverTo?: string };
+  left?: { at: string; by: string; handOverTo?: string; deleteAfter?: string };
+  /** Deleting their account has started and got this far (ADR 0072); it carries on by itself. */
+  deleting?: 'redacted' | 'tidied' | 'keycloak-deleted';
   /** How they sign in: a password here, or the organisation's sign-in (Entra). */
   source?: 'local' | 'federated';
   /** Locked out for now after repeated wrong passwords. */
@@ -609,6 +611,8 @@ export class AdminApi {
   person = (id: string) => this.call<Person>('GET', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`);
   /** Lifts a lockout for wrong passwords. */
   unlock = (id: string) => this.call<void>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/unlock`);
+  /** Deletes a leaver's account now (deployment admins only). Turned down with `sign_in_again` unless the admin just entered their password. */
+  deletePerson = (id: string) => this.call<{ deleted: true }>('DELETE', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`);
   /** Cancels a leaver flow set for after their last day. */
   cancelLeave = (id: string) => this.call<Person>('DELETE', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`);
   updatePerson = (id: string, changes: PersonChanges) => this.call<Person>('PATCH', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`, changes);

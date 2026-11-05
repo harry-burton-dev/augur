@@ -407,4 +407,24 @@ describe.runIf(DATABASE_URL)('admin: locked, leaving and idle (ADR 0040)', () =>
     const never = await add(call, 'nev@example.org');
     expect((await call('GET', `/people/${never.id}`)).json().idle).toBeUndefined();
   });
+
+  it('deletes a leaver now, only for a deployment admin who just signed in, and refuses someone who hasn’t left', async () => {
+    const directory = new MemoryDirectory();
+    const audit = vi.fn<(e: NewAuditEntry) => Promise<void>>(async () => undefined);
+    const redact = vi.fn(async () => undefined);
+    const app = await db.app({ directory, audit, store: db.store, redact });
+    const call = (method: 'POST' | 'DELETE' | 'GET', url: string, headers: Record<string, string>, payload?: object) =>
+      app.inject({ method, url: `/v1/admin${url}`, headers, ...(payload ? { payload } : {}) });
+    const fresh = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date().toISOString() });
+    const stale = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date(Date.now() - 3_600_000).toISOString() });
+    const kim = (await call('POST', '/people', admin, { firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org' })).json().person as { id: string };
+    expect((await call('DELETE', `/people/${kim.id}`, admin)).statusCode).toBe(403);
+    expect((await call('DELETE', `/people/${kim.id}`, stale)).json().error).toBe('sign_in_again');
+    expect((await call('DELETE', `/people/${kim.id}`, fresh)).statusCode).toBe(409);
+    expect((await call('POST', `/people/${kim.id}/leave`, admin, {})).statusCode).toBe(200);
+    expect((await call('DELETE', `/people/${kim.id}`, fresh)).json()).toEqual({ deleted: true });
+    expect(redact).toHaveBeenCalledWith(kim.id);
+    expect(audit.mock.calls.at(-1)![0]).toMatchObject({ action: 'person.deleted', target: kim.id, actor: { id: 'admin-9' }, detail: { now: true } });
+    expect((await call('GET', `/people/${kim.id}`, admin)).statusCode).toBe(404);
+  });
 });
