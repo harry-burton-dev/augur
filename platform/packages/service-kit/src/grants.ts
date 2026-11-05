@@ -80,3 +80,35 @@ export const registryInboxKinds = registryKinds('inboxKinds');
 
 /** Which notification kinds an app declares (its `notifications.kinds`). An app that isn't registered has none. */
 export const registryNotificationKinds = registryKinds('notificationKinds');
+
+/** An app that binds its things to entities (manifest links.entities, SDK 2.1) and the types it names in `bindings`. */
+export interface BindingApp {
+  app: string;
+  /** Each is published on `<app>.<type>.entity-bound` and `-unbound` (bindingTopics). Empty when the app names none: follow `<app>.*`. */
+  types: string[];
+}
+
+/**
+ * Which apps bind their things to entities, and the types they bind, so a follower such as the
+ * entity catalogue subscribes to exactly those topics (ADR 0066). Asks the registry at most once
+ * per `ttlMs` (5 minutes by default). When the registry can't be reached it keeps the last answer,
+ * and throws GrantsUnavailable only when it has none. A registry too old to say answers none.
+ */
+export const registryBindingApps = ({ registryUrl, credentials, ttlMs = 300_000, fetchImpl = fetch, now = Date.now }: GrantsOptions): (() => Promise<BindingApp[]>) => {
+  let last: { apps: BindingApp[]; at: number } | undefined;
+  return async () => {
+    if (last && now() - last.at < ttlMs) return last.apps;
+    let apps: BindingApp[];
+    try {
+      const res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/entity-links`, { headers: await serviceHeaders(credentials) });
+      if (res.status === 404) apps = [];
+      else if (res.ok) apps = (await res.json()) as BindingApp[];
+      else throw new Error(`the registry answered ${res.status}`);
+    } catch (err) {
+      if (last) return last.apps;
+      throw new GrantsUnavailable(`The registry could not say which apps link to entities (${(err as Error).message}).`);
+    }
+    last = { apps, at: now() };
+    return apps;
+  };
+};

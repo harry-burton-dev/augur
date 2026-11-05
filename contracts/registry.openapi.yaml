@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.34.0
+  version: 1.35.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -1794,6 +1794,24 @@ components:
               maxItems: 10
           additionalProperties: false
           description: The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)
+        links:
+          type: object
+          properties:
+            entities:
+              type: boolean
+              description: The app binds its things to entities and publishes the binding events (ADR 0066), so the entity catalogue follows them
+          additionalProperties: false
+          description: What the app links its things to elsewhere in AUGUR (SDK 2.1)
+        bindings:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{0,39}$
+            description: 'A type of thing the app binds, as it names it in its topics: "intent"'
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          description: With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound (SDK 2.1)
         scopes:
           type: array
           items:
@@ -2352,6 +2370,44 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors, or the sign-in service that checks the caller's token, can't be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /entity-links:
+    get:
+      summary: The apps that bind their things to entities, and the types they bind (services only)
+      description: "Every registered app whose manifest sets links.entities, with the types of thing it names in bindings, each published on <app>.<type>.entity-bound and <app>.<type>.entity-unbound (ADR 0066). An app that sets links.entities without bindings has no types listed: follow its <app>.* topics and read each event with the service kit's readBinding. For any service, AUGUR's own or an app's."
+      responses:
+        "200":
+          description: The apps that link to entities, by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - app
+                    - types
+                  properties:
+                    app:
+                      type: string
+                      description: The app's id
+                    types:
+                      type: array
+                      items:
+                        type: string
+                      description: The types of thing it binds (its manifest's bindings)
+                description: The apps that link to entities, by id
+        "403":
+          description: Not a service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service that checks the caller's token can't be reached right now
           content:
             application/problem+json:
               schema:
