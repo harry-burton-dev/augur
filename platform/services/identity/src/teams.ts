@@ -103,6 +103,14 @@ export class TeamDirectory implements Directory {
     return this.signIn.endSessions(id);
   }
 
+  lockout(id: string) {
+    return this.signIn.lockout(id);
+  }
+
+  unlock(id: string) {
+    return this.signIn.unlock(id);
+  }
+
   roles() {
     return this.signIn.roles();
   }

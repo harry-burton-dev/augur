@@ -156,7 +156,7 @@ describe.runIf(DATABASE_URL)('admin: invites (ADR 0040)', () => {
   it('invites by email when email works, with a link for 72 hours and no password', async () => {
     const { call, directory, audit } = await setup();
     directory.emailWorks = true;
-    expect((await call('GET', '/lifecycle')).json()).toEqual({ email: true });
+    expect((await call('GET', '/lifecycle')).json()).toMatchObject({ email: true, lastDayAhead: 90 });
     const res = await call('POST', '/people', jo);
     expect(res.statusCode).toBe(201);
     const { person, invite, temporaryPassword } = res.json();
@@ -177,7 +177,7 @@ describe.runIf(DATABASE_URL)('admin: invites (ADR 0040)', () => {
 
   it('gives a one-time password when email isn’t set up, and refuses an invite it can’t send', async () => {
     const { call, directory } = await setup();
-    expect((await call('GET', '/lifecycle')).json()).toEqual({ email: false });
+    expect((await call('GET', '/lifecycle')).json()).toMatchObject({ email: false });
     const refused = await call('POST', '/people', { ...jo, start: 'email' });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().message).toMatch(/Email isn’t set up/);
@@ -356,5 +356,55 @@ describe('helpers', () => {
 
   it('makes passwords without look-alike characters', () => {
     for (let i = 0; i < 50; i++) expect(temporaryPassword()).not.toMatch(/[01ilo]/);
+  });
+});
+
+describe.runIf(DATABASE_URL)('admin: locked, leaving and idle (ADR 0040)', () => {
+  const add = async (call: Awaited<ReturnType<typeof setup>>['call'], email = 'kim@example.org') =>
+    (await call('POST', '/people', { firstName: 'Kim', lastName: 'Lee', email })).json().person as { id: string };
+
+  it('shows a lockout and lets an admin lift it', async () => {
+    const { call, directory, audit, lifecycle } = await setup();
+    const kim = await add(call);
+    await lifecycle.signedIn(kim.id, new Date(Date.now() - 3_600_000).toISOString());
+    expect((await call('POST', `/people/${kim.id}/unlock`)).statusCode).toBe(409);
+    await lifecycle.locked(kim.id, new Date(Date.now() - 60_000).toISOString());
+    directory.lockedOut.add(kim.id);
+    expect((await call('GET', '/people')).json().find((p: { id: string }) => p.id === kim.id)).toMatchObject({ state: 'active', locked: true });
+    expect((await call('GET', `/people/${kim.id}`)).json()).toMatchObject({ locked: true, lockout: { locked: true, failures: 10 } });
+    expect((await call('POST', `/people/${kim.id}/unlock`)).statusCode).toBe(204);
+    expect(audit.mock.calls.at(-1)![0]).toMatchObject({ action: 'person.unlocked', target: kim.id });
+    const after = (await call('GET', `/people/${kim.id}`)).json();
+    expect(after.locked).toBeUndefined();
+    expect(after.lockout).toMatchObject({ locked: false });
+  });
+
+  it('sets the leaver flow for after a last day, moves it, cancels it, and refuses days out of range', async () => {
+    const { call, audit } = await setup();
+    const kim = await add(call);
+    const { today } = (await call('GET', '/lifecycle')).json();
+    const later = new Date(Date.parse(`${today}T00:00:00Z`) + 10 * 86_400_000).toISOString().slice(0, 10);
+    const res = await call('POST', `/people/${kim.id}/leave`, { lastDay: later, note: 'Moving on' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ enabled: true, leaving: { on: later } });
+    expect(audit.mock.calls.at(-1)![0]).toMatchObject({ action: 'person.leave-scheduled', detail: { lastDay: later } });
+    expect((await call('POST', `/people/${kim.id}/leave`, { lastDay: '2000-01-01' })).statusCode).toBe(400);
+    expect((await call('POST', `/people/${kim.id}/leave`, { lastDay: '2999-01-01' })).statusCode).toBe(400);
+    expect((await call('DELETE', `/people/${kim.id}/leave`)).statusCode).toBe(200);
+    expect((await call('GET', `/people/${kim.id}`)).json().leaving).toBeUndefined();
+    expect(audit.mock.calls.at(-1)![0]).toMatchObject({ action: 'person.leave-cancelled' });
+    expect((await call('DELETE', `/people/${kim.id}/leave`)).statusCode).toBe(409);
+  });
+
+  it('says when an idle sign-in turns off, or why it won’t', async () => {
+    const { call, directory, lifecycle } = await setup();
+    const kim = await add(call);
+    const at = '2026-10-01T09:00:00.000Z';
+    await lifecycle.signedIn(kim.id, at);
+    expect((await call('GET', `/people/${kim.id}`)).json().idle).toEqual({ exempt: 'no-email' });
+    directory.emailWorks = true;
+    expect((await call('GET', `/people/${kim.id}`)).json().idle).toMatchObject({ warnsAt: '2026-11-30T09:00:00.000Z', turnsOffAt: '2026-12-30T09:00:00.000Z' });
+    const never = await add(call, 'nev@example.org');
+    expect((await call('GET', `/people/${never.id}`)).json().idle).toBeUndefined();
   });
 });

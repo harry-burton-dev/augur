@@ -307,7 +307,7 @@ export const buildApp = async ({ store, workspaces, directory, accounts, appClie
         },
       );
 
-      await app.register(adminRoutes({ directory: teams, workspaces, audit, store, lifecycle }), { prefix: '/admin' });
+      await app.register(adminRoutes({ directory: teams, workspaces, audit, store, lifecycle, organisation }), { prefix: '/admin' });
       await app.register(appClientRoutes({ clients: appClients, audit }), { prefix: '/admin/apps' });
     },
     { prefix: `/${API_VERSION}` },

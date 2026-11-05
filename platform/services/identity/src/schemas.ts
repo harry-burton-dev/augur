@@ -164,6 +164,37 @@ export const Person = Type.Object(
     left: Type.Optional(
       Type.Object({ at: Type.String({ format: 'date-time' }), by: Type.String(), handOverTo: Type.Optional(Type.String()) }, { description: 'When they left, who ran the leaver flow, and who took on their work' }),
     ),
+    source: Type.Optional(choice(['local', 'federated'], { description: 'How they sign in: a password here, or the organisation’s sign-in (Entra) since their first sign-in through it' })),
+    locked: Type.Optional(Type.Boolean({ description: 'Locked out for now after repeated wrong passwords; an admin can lift it' })),
+    leaving: Type.Optional(
+      Type.Object(
+        { on: Type.String({ format: 'date', description: 'Their last day, in the organisation’s time zone' }), handOverTo: Type.Optional(Type.String()) },
+        { description: 'A leaver flow set to run once their last day is over' },
+      ),
+    ),
+    idle: Type.Optional(
+      Type.Union(
+        [
+          Type.Object(
+            {
+              warnsAt: Type.String({ format: 'date-time', description: 'When they’re emailed that their sign-in will turn off, unless they sign in first' }),
+              turnsOffAt: Type.String({ format: 'date-time', description: 'When their sign-in turns off, unless they sign in first' }),
+              warned: Type.Boolean({ description: 'The warning day has passed' }),
+            },
+            { additionalProperties: false },
+          ),
+          Type.Object(
+            {
+              exempt: choice(['off', 'no-email', 'deployment-admin', 'not-tracked'], {
+                description: 'Why their sign-in won’t turn off for being idle: idle accounts are off, email isn’t set up so nobody could be warned, they’re a deployment admin, or AUGUR hasn’t seen them sign in yet',
+              }),
+            },
+            { additionalProperties: false },
+          ),
+        ],
+        { description: 'For an active person: when an idle sign-in turns off, from their last sign-in and the organisation’s days' },
+      ),
+    ),
   },
   { $id: 'Person' },
 );

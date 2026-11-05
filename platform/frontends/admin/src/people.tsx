@@ -1,7 +1,7 @@
-import { AskTwice, Button, Checkbox, CheckboxGroup, Dialog, Select, Status, Table, TextField, type TableColumn, type TableRow } from '@augur/app-kit';
+import { AskTwice, Button, Checkbox, CheckboxGroup, DateField, Details, Dialog, Select, Status, Table, TextField, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
-import { departmentPath, fullName, type AdminApi, type Department, type LeaveRequest, type Person, type Role } from './api.js';
-import { lastSignIn, Page, PasswordNote, Problem, statusOf } from './parts.js';
+import { departmentPath, fullName, type AdminApi, type Department, type LeaveRequest, type LifecycleInfo, type Person, type Role } from './api.js';
+import { day, lastSignIn, lifecycleFacts, Page, PasswordNote, Problem, statusOf } from './parts.js';
 
 const NO_DEPARTMENT = '';
 /** The leaver flow's choice when nobody takes on their work: apps keep it until someone does. */
@@ -43,8 +43,11 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const [leaving, setLeaving] = useState<LeaveRequest[]>([]);
   const [heir, setHeir] = useState(NO_ONE);
   const [leaverNote, setLeaverNote] = useState('');
-  /** Whether invites can be emailed here; until known, the one-time password is offered. */
-  const [canEmail, setCanEmail] = useState(false);
+  /** Their last day, when the leaver flow should wait for it; empty runs it now. */
+  const [lastDay, setLastDay] = useState('');
+  /** Whether invites can be emailed here, and today where the organisation is; until known, the one-time password is offered. */
+  const [info, setInfo] = useState<LifecycleInfo>({ email: false });
+  const canEmail = info.email;
   const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
@@ -57,7 +60,7 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
       setRoles(r);
       // Who asked to leave is a hint for the leaver flow: People still works if it can't be read.
       setLeaving(await api.leaveRequests().catch(() => []));
-      setCanEmail((await api.lifecycle().catch(() => ({ email: false }))).email);
+      setInfo(await api.lifecycle().catch(() => ({ email: false })));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -75,8 +78,15 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     setChosenRoles(people.find((p) => p.id === id)?.roles ?? []);
     setHeir(NO_ONE);
     setLeaverNote('');
-    if (id) setEditing(id);
-    else setAdding(true);
+    setLastDay('');
+    if (id) {
+      setEditing(id);
+      // Whether they're locked out now, as the sign-in service has it; the list's word is a guess from Activity.
+      api
+        .person(id)
+        .then(replace)
+        .catch(() => undefined);
+    } else setAdding(true);
   };
 
   const departmentOptions = [
@@ -182,12 +192,34 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     setLiveResult('New one-time password given: their old password no longer works.');
   };
 
-  /** The leaver flow, at once: off, signed out everywhere, and apps told who takes on what they own. */
+  /** Lifts a lockout at once, so they can sign in again. */
+  const unlock = async (p: Person) => {
+    setLiveResult('');
+    setLiveError('');
+    await api.unlock(p.id);
+    replace({ ...p, locked: false, ...(p.lockout ? { lockout: { ...p.lockout, locked: false } } : {}) });
+    setLiveResult('Unlocked: they can sign in again now.');
+  };
+
+  /** Cancels a leaver flow set for after their last day; nothing had happened to them yet. */
+  const cancelLeaving = async (p: Person) => {
+    setLiveResult('');
+    setLiveError('');
+    replace(await api.cancelLeave(p.id));
+    setLiveResult('They’re no longer leaving. Nothing had changed for them yet.');
+  };
+
+  /** The leaver flow, at once or after their last day: off, signed out everywhere, and apps told who takes on what they own. */
   const runLeaver = async (p: Person) => {
     setLiveResult('');
     setLiveError('');
     const to = people.find((x) => x.id === heir);
-    replace(await api.leave(p.id, { ...(to ? { handOverTo: to.id } : {}), ...(leaverNote.trim() ? { note: leaverNote.trim() } : {}) }));
+    const updated = await api.leave(p.id, { ...(to ? { handOverTo: to.id } : {}), ...(leaverNote.trim() ? { note: leaverNote.trim() } : {}), ...(lastDay ? { lastDay } : {}) });
+    replace(updated);
+    if (lastDay) {
+      setLiveResult(`They leave after ${day(`${lastDay}T12:00:00`)}: until then nothing changes for them. You can cancel it here.`);
+      return;
+    }
     setLeaving((all) => all.filter((r) => r.person !== p.id));
     setLiveResult(
       to
@@ -279,6 +311,14 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
           onClose={() => setEditing(undefined)}
           fields={fields(person)}
         >
+          <section className="admin-facts" aria-labelledby="admin-facts-label" data-facts>
+            <div className="admin-part-head">
+              <h3 id="admin-facts-label" className="admin-part-label">
+                Their account
+              </h3>
+            </div>
+            <Details items={lifecycleFacts(person, (id) => fullName(people.find((x) => x.id === id) ?? { firstName: 'Someone', lastName: 'else', username: '' }))} limit={0} />
+          </section>
           <section className="admin-live" aria-labelledby="admin-live-label" data-live>
             <div className="admin-part-head">
               <h3 id="admin-live-label" className="admin-part-label">
@@ -325,6 +365,16 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
                   Send a new invite
                 </Button>
               ) : null}
+              <Button
+                kind="secondary"
+                size="sm"
+                busyLabel="Unlocking…"
+                disabled={!(person.lockout?.locked ?? person.locked)}
+                reason="They aren’t locked out."
+                onPress={() => unlock(person).catch((err: Error) => setLiveError(err.message))}
+              >
+                Unlock
+              </Button>
               <AskTwice size="sm" confirm="Press again: their current password stops working" busyLabel="Making one…" onPress={() => resetPassword(person).catch((err: Error) => setLiveError(err.message))}>
                 Give them a new one-time password
               </AskTwice>
@@ -334,6 +384,8 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
               <p className="admin-muted">
                 {person.state === 'left'
                   ? `They left on ${new Date(person.left!.at).toLocaleDateString()}${person.left!.handOverTo ? `, handing their work to ${fullName(people.find((x) => x.id === person.left!.handOverTo) ?? { firstName: 'someone', lastName: 'else', username: '' })}` : ''}.`
+                  : person.leaving
+                  ? `They leave after ${day(`${person.leaving.on}T12:00:00`)}. Until then nothing changes for them; change the day or cancel it here.`
                   : askedToLeave(person.id)
                   ? `They asked to leave on ${new Date(askedToLeave(person.id)!.requestedAt).toLocaleDateString()}${askedToLeave(person.id)!.note ? `: “${askedToLeave(person.id)!.note}”` : '.'}`
                   : 'For someone leaving the organisation. Their sign-in goes off, they’re signed out everywhere, and apps hand on what they own. Their teams and history stay.'}
@@ -341,17 +393,37 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
             </div>
             <Select label="Hand their work to" optional options={heirOptions(person)} value={heir} onChange={setHeir} />
             <TextField label="Note for Activity" optional multiline rows={2} maxLength={500} value={leaverNote} onChange={setLeaverNote} hint="Why, or what was agreed. Shown in Activity." />
+            <DateField
+              label="Last day"
+              optional
+              value={lastDay}
+              onChange={setLastDay}
+              empty="Leave now"
+              disabled={!info.today}
+              hint={
+                info.today
+                  ? `Leave it empty to run the leaver flow now. With a day, it runs once that day is over, up to ${info.lastDayAhead ?? 90} days ahead.`
+                  : 'A last day can’t be set while identity can’t read the organisation’s time zone. Run it now, or try again later.'
+              }
+              state={lastDay && info.today && lastDay < info.today ? 'error' : undefined}
+              message={lastDay && info.today && lastDay < info.today ? 'That day is past. Leave it empty to run it now.' : undefined}
+            />
             <div className="admin-live-actions">
               <AskTwice
                 size="sm"
-                confirm="Press again: they leave now"
+                confirm={lastDay ? `Press again: they leave after ${day(`${lastDay}T12:00:00`)}` : 'Press again: they leave now'}
                 busyLabel="Leaving…"
                 disabled={person.id === me || person.state === 'left'}
                 reason={person.state === 'left' ? 'They’ve already left.' : 'You can’t run the leaver flow on yourself. Ask another admin.'}
                 onPress={() => runLeaver(person).catch((err: Error) => setLiveError(err.message))}
               >
-                They’re leaving
+                {lastDay ? (person.leaving ? 'Move their last day' : 'Set their last day') : 'They’re leaving'}
               </AskTwice>
+              {person.leaving ? (
+                <Button kind="secondary" size="sm" busyLabel="Cancelling…" onPress={() => cancelLeaving(person).catch((err: Error) => setLiveError(err.message))}>
+                  Cancel leaving
+                </Button>
+              ) : null}
             </div>
             {liveResult ? (
               <p role="status" className="admin-muted" data-live-result>

@@ -5,7 +5,9 @@ import Type from 'typebox';
 import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type Person as DirectoryPerson } from './directory.ts';
 import { choice, Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, ref, refused, Role, TeamLevels } from './schemas.ts';
-import { withLifecycle, type LifecycleStore } from './lifecycle.ts';
+import { withLifecycle, type IdlePolicy, type LifecycleStore } from './lifecycle.ts';
+import { addDays, runLeaver, todayIn } from './leavers.ts';
+import { organisationSettings, type OrganisationStore } from './organisation.ts';
 import type { PreferenceStore } from './store.ts';
 import { DEFAULT_LEVELS, MAX_TEAM_DEPTH, type WorkspaceStore } from './workspaces.ts';
 
@@ -38,7 +40,12 @@ interface AdminOptions {
   store?: PreferenceStore;
   /** What identity keeps about each account's life: last sign-in, why it's off, that they left. */
   lifecycle?: LifecycleStore;
+  /** The organisation's idle-account days and time zone, for when an idle sign-in turns off and when a last day ends. */
+  organisation?: OrganisationStore;
 }
+
+/** How far ahead a leaver's last day can be set (PER-194 spec 5). */
+const LAST_DAY_AHEAD = 90;
 
 /** The longest note an admin can leave on a leaver, for whoever reads Activity later. */
 const LEAVER_NOTE = 500;
@@ -50,7 +57,7 @@ const LEAVER_NOTE = 500;
  * can give or take away that role, or change a deployment admin's sign-in.
  */
 export const adminRoutes =
-  ({ directory, workspaces, audit, store, lifecycle }: AdminOptions) =>
+  ({ directory, workspaces, audit, store, lifecycle, organisation }: AdminOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     app.addHook('onRequest', async (req, reply) => {
@@ -99,10 +106,18 @@ export const adminRoutes =
       for (const id of before.filter((d) => !after.includes(d))) await record(req, 'department.member-removed', id, { person });
     };
 
+    /** The organisation's settings, when identity keeps them. */
+    const org = async () => (workspaces && organisation ? organisationSettings(workspaces, organisation) : undefined);
+    /** Whether, and when, idle sign-ins turn off here; unknown (and not shown) when it can't be read. */
+    const idlePolicy = async (): Promise<IdlePolicy | undefined> => {
+      const [settings, canEmail] = await Promise.all([org().catch(() => undefined), dir().canEmail().catch(() => undefined)]);
+      return settings && canEmail !== undefined ? { ...settings.idle, canEmail } : undefined;
+    };
     /** People as admins see them: with their state and what is kept about their account's life. */
     const decorate = async <P extends DirectoryPerson>(people: P[]) => {
-      const kept = lifecycle ? await lifecycle.get(people.length === 1 ? [people[0]!.id] : undefined) : new Map();
-      return people.map((p) => withLifecycle(p, kept.get(p.id)));
+      const [kept, policy] = await Promise.all([lifecycle ? lifecycle.get(people.length === 1 ? [people[0]!.id] : undefined) : new Map(), idlePolicy()]);
+      const at = new Date();
+      return people.map((p) => withLifecycle(p, kept.get(p.id), at, policy));
     };
     const one = async <P extends DirectoryPerson>(p: P) => (await decorate([p]))[0]!;
     const now = () => new Date().toISOString();
@@ -124,11 +139,41 @@ export const adminRoutes =
       {
         schema: {
           summary: 'One person',
+          description: 'With `lockout` as the sign-in service has it now: whether wrong passwords have locked them out, and how many in a row.',
           params: IdParams,
-          response: { 200: { ...ref(Person), description: 'The person' }, ...guarded, 404: refused('No such person') },
+          response: {
+            200: {
+              ...Type.Intersect([
+                ref(Person),
+                Type.Object({
+                  lockout: Type.Optional(
+                    Type.Object(
+                      { locked: Type.Boolean(), failures: Type.Integer({ minimum: 0 }), lastFailureAt: Type.Optional(Type.String({ format: 'date-time' })) },
+                      { description: 'Left out when the sign-in service couldn’t say' },
+                    ),
+                  ),
+                }),
+              ]),
+              description: 'The person',
+            },
+            ...guarded,
+            404: refused('No such person'),
+          },
         },
       },
-      async (req) => one(await dir().person(req.params.id)),
+      async (req) => {
+        const p = await one(await dir().person(req.params.id));
+        const lockout = await dir()
+          .lockout(p.id)
+          .catch((err: Error) => {
+            req.log.warn({ err: err.message }, 'lockout not read');
+            return undefined;
+          });
+        if (!lockout) return p;
+        // The sign-in service's own answer beats the one worked out from copied events.
+        const { locked: _guess, ...rest } = p as typeof p & { locked?: boolean };
+        return { ...rest, ...(lockout.locked && p.state === 'active' ? { locked: true } : {}), lockout };
+      },
     );
 
     /** How long an invite's link works: 72 hours (PER-194 spec). */
@@ -162,11 +207,23 @@ export const adminRoutes =
       {
         schema: {
           summary: 'What the account lifecycle can do on this deployment',
-          description: 'For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites.',
-          response: { 200: Type.Object({ email: Type.Boolean() }, { description: 'What works' }), ...guarded },
+          description: [
+            'For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites.',
+            '`today` is the date in the organisation’s time zone, the earliest last day a leaver can have.',
+          ].join(' '),
+          response: {
+            200: Type.Object(
+              { email: Type.Boolean(), today: Type.Optional(Type.String({ format: 'date' })), lastDayAhead: Type.Optional(Type.Integer({ description: 'How many days ahead a last day can be' })) },
+              { description: 'What works' },
+            ),
+            ...guarded,
+          },
         },
       },
-      async () => ({ email: await dir().canEmail() }),
+      async () => {
+        const settings = await org().catch(() => undefined);
+        return { email: await dir().canEmail(), ...(settings ? { today: todayIn(settings.timeZone), lastDayAhead: LAST_DAY_AHEAD } : {}) };
+      },
     );
 
     app.post(
@@ -329,24 +386,28 @@ export const adminRoutes =
       '/people/:id/leave',
       {
         schema: {
-          summary: 'Someone leaves the organisation: the leaver flow',
+          summary: 'Someone leaves the organisation: the leaver flow, now or after their last day',
           description: [
             'Turns off their sign-in, signs them out everywhere (sessions and offline tokens) and records',
             '`person.left`, which followers hear as `platform.person.left` so apps hand on or archive what the',
             'person owns, to `handOverTo` when it is given. Their teams, roles and data stay as they were until',
             "the deployment's retention period ends. Closes their request to leave, if they made one.",
+            `With \`lastDay\` (today to ${LAST_DAY_AHEAD} days ahead, in the organisation's time zone) nothing happens yet:`,
+            'the flow is set to run once that day is over (`leaving` on the person), recorded as `person.leave-scheduled`,',
+            'and can be cancelled until then. Sending it again moves the day.',
           ].join(' '),
           params: IdParams,
           body: Type.Object(
             {
               handOverTo: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: 'Who takes on what they own: someone whose sign-in is on' })),
               note: Type.Optional(Type.String({ maxLength: LEAVER_NOTE, description: 'Why, or what was agreed, for Activity' })),
+              lastDay: Type.Optional(Type.String({ format: 'date', pattern: '^\\d{4}-\\d{2}-\\d{2}$', description: 'Their last day; the flow runs once it is over' })),
             },
             { additionalProperties: false },
           ),
           response: {
-            200: { ...ref(Person), description: 'The person, now turned off' },
-            400: refused('The person to hand over to is the leaver, is turned off, or isn’t in the directory'),
+            200: { ...ref(Person), description: 'The person, now turned off, or with `leaving` set' },
+            400: refused('The person to hand over to is the leaver, is turned off, or isn’t in the directory, or the last day is in the past or too far ahead'),
             ...guarded,
             403: deploymentAdmins,
             404: refused('No such person'),
@@ -361,7 +422,7 @@ export const adminRoutes =
         const before = await dir().person(id);
         if (before.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
         if ((await one(before)).state === 'left') return reply.code(409).send({ error: 'conflict', message: 'They’ve already left.' });
-        const { handOverTo } = req.body;
+        const { handOverTo, lastDay } = req.body;
         const note = req.body.note?.trim() || undefined;
         if (handOverTo !== undefined) {
           if (handOverTo === id) return reply.code(400).send({ error: 'bad_request', message: 'Hand their work to someone else, not to the person leaving.' });
@@ -374,16 +435,79 @@ export const adminRoutes =
           if (!heir) return reply.code(400).send({ error: 'bad_request', message: 'The person to hand over to isn’t in the directory.' });
           if (!heir.enabled) return reply.code(400).send({ error: 'bad_request', message: `${heir.firstName} ${heir.lastName}’s sign-in is off, so they can’t take this on. Pick someone who can sign in.` });
         }
-        const after = before.enabled ? await dir().updatePerson(id, { enabled: false }) : before;
-        if (before.enabled) {
-          await lifecycle?.disabled(id, 'leaver', now());
-          await record(req, 'person.disabled', id, { username: after.username });
+        if (lastDay !== undefined) {
+          if (!lifecycle) return reply.code(503).send({ error: 'unavailable', message: 'A last day can’t be kept here yet. Run the leaver flow now instead.' });
+          const today = todayIn((await org())?.timeZone ?? 'UTC');
+          if (lastDay < today) return reply.code(400).send({ error: 'bad_request', message: 'Their last day is in the past. Leave it empty to run the leaver flow now.' });
+          if (lastDay > addDays(today, LAST_DAY_AHEAD)) return reply.code(400).send({ error: 'bad_request', message: `Set a last day within ${LAST_DAY_AHEAD} days, and move it later if it changes.` });
+          await lifecycle.scheduleLeave(id, { on: lastDay, by: me.id, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) });
+          await record(req, 'person.leave-scheduled', id, { username: before.username, lastDay, ...(handOverTo ? { handOverTo } : {}) });
+          return one(before);
         }
-        await dir().endSessions(id);
-        const asked = store ? await store.withdrawLeave(id) : false;
-        await lifecycle?.left(id, { at: now(), by: me.id, ...(handOverTo ? { handOverTo } : {}) });
-        await record(req, 'person.left', id, { username: after.username, asked, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) });
+        const after = await runLeaver(
+          { directory: dir(), lifecycle, store, audit: (entry) => record(req, entry.action, entry.target!, entry.detail) ?? Promise.resolve(), now },
+          id,
+          { by: me.id, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) },
+        );
         return one(after);
+      },
+    );
+
+    app.delete(
+      '/people/:id/leave',
+      {
+        schema: {
+          summary: 'Cancel a leaver flow set for after someone’s last day',
+          description: 'Recorded as `person.leave-cancelled`. Nothing had happened to them yet, so nothing is undone.',
+          params: IdParams,
+          response: {
+            200: { ...ref(Person), description: 'The person, no longer leaving' },
+            ...guarded,
+            403: deploymentAdmins,
+            404: refused('No such person'),
+            409: refused('No leaver flow was set for them, or it has already run'),
+          },
+        },
+      },
+      async (req, reply) => {
+        const p = await dir().person(req.params.id);
+        if (p.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
+        if (!(await lifecycle?.cancelLeave(p.id))) {
+          return reply.code(409).send({ error: 'conflict', message: (await one(p)).state === 'left' ? 'They’ve already left; a leaver doesn’t come back.' : 'They weren’t set to leave.' });
+        }
+        await record(req, 'person.leave-cancelled', p.id, { username: p.username });
+        return one(p);
+      },
+    );
+
+    app.post(
+      '/people/:id/unlock',
+      {
+        schema: {
+          summary: 'Lift a lockout for wrong passwords',
+          description: 'They can sign in again at once. Recorded as `person.unlocked`.',
+          params: IdParams,
+          response: {
+            204: empty('Unlocked'),
+            ...guarded,
+            403: deploymentAdmins,
+            404: refused('No such person'),
+            409: refused('They aren’t locked out'),
+          },
+        },
+      },
+      async (req, reply) => {
+        const p = await dir().person(req.params.id);
+        if (p.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
+        const { locked, failures } = await dir().lockout(p.id);
+        if (!locked) {
+          await lifecycle?.unlocked(p.id);
+          return reply.code(409).send({ error: 'conflict', message: 'They aren’t locked out.' });
+        }
+        await dir().unlock(p.id);
+        await lifecycle?.unlocked(p.id);
+        await record(req, 'person.unlocked', p.id, { username: p.username, failures });
+        return reply.code(204).send(null);
       },
     );
 

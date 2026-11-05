@@ -22,6 +22,26 @@ export interface Person {
   disabledCause?: 'admin' | 'idle' | 'leaver' | 'outside';
   /** When they left, who ran the leaver flow, and who took on their work. */
   left?: { at: string; by: string; handOverTo?: string };
+  /** How they sign in: a password here, or the organisation's sign-in (Entra). */
+  source?: 'local' | 'federated';
+  /** Locked out for now after repeated wrong passwords. */
+  locked?: boolean;
+  /** As the sign-in service has it now; only on one person read on their own. */
+  lockout?: { locked: boolean; failures: number; lastFailureAt?: string };
+  /** A leaver flow set for after their last day (YYYY-MM-DD, the organisation's time zone). */
+  leaving?: { on: string; handOverTo?: string };
+  /** For an active person: when an idle sign-in turns off, or why it won't. */
+  idle?: { warnsAt: string; turnsOffAt: string; warned: boolean } | { exempt: 'off' | 'no-email' | 'deployment-admin' | 'not-tracked' };
+}
+
+/** What the account lifecycle can do here. */
+export interface LifecycleInfo {
+  /** Whether invites can be emailed. */
+  email: boolean;
+  /** Today where the organisation is: the earliest last day a leaver can have. */
+  today?: string;
+  /** How many days ahead a last day can be. */
+  lastDayAhead?: number;
 }
 
 /** Someone who asked to leave in their account (ADR 0040), until an admin's leaver flow closes it. */
@@ -612,13 +632,19 @@ export class AdminApi {
   addPerson = (person: NewPerson) => this.call<{ person: Person; invite?: InviteResult; temporaryPassword?: string }>('POST', '/api/identity/v1/admin/people', person);
   /** A new invite email for someone who hasn't set up yet. */
   resendInvite = (id: string) => this.call<{ invite: InviteResult }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/invite`);
-  /** What the account lifecycle can do here: whether invites can be emailed. */
-  lifecycle = () => this.call<{ email: boolean }>('GET', '/api/identity/v1/admin/lifecycle');
+  /** What the account lifecycle can do here: whether invites can be emailed, and today's date for a last day. */
+  lifecycle = () => this.call<LifecycleInfo>('GET', '/api/identity/v1/admin/lifecycle');
+  /** One person, with whether they're locked out as the sign-in service has it now. */
+  person = (id: string) => this.call<Person>('GET', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`);
+  /** Lifts a lockout for wrong passwords. */
+  unlock = (id: string) => this.call<void>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/unlock`);
+  /** Cancels a leaver flow set for after their last day. */
+  cancelLeave = (id: string) => this.call<Person>('DELETE', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`);
   updatePerson = (id: string, changes: PersonChanges) => this.call<Person>('PATCH', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`, changes);
   resetPassword = (id: string) => this.call<{ temporaryPassword: string }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/password`);
   leaveRequests = () => this.call<LeaveRequest[]>('GET', '/api/identity/v1/admin/leave-requests');
   /** The leaver flow: their sign-in off, signed out everywhere, and apps told to hand on what they own. */
-  leave = (id: string, how: { handOverTo?: string; note?: string }) => this.call<Person>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`, how);
+  leave = (id: string, how: { handOverTo?: string; note?: string; lastDay?: string }) => this.call<Person>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`, how);
   roles = () => this.call<Role[]>('GET', '/api/identity/v1/admin/roles');
 
   departments = () => this.call<Department[]>('GET', '/api/identity/v1/admin/departments');

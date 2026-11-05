@@ -261,6 +261,29 @@ describe('People', () => {
     expect(shut(button('They’re leaving'))).toBe(true);
   });
 
+  it('says who is locked out, leaving or idle, shows their account’s facts, and unlocks', async () => {
+    const kim = { ...alex, id: 'u-4', username: 'kim', firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org', roles: [], departments: [], state: 'active', locked: true, lastSignInAt: '2026-11-05T09:00:00Z' };
+    const lou = { ...kim, id: 'u-5', username: 'lou', firstName: 'Lou', lastName: 'Ng', email: 'lou@example.org', locked: false, leaving: { on: '2026-11-20' } };
+    const ida = { ...kim, id: 'u-6', username: 'ida', firstName: 'Ida', lastName: 'Fox', email: 'ida@example.org', locked: false, idle: { warnsAt: '2026-11-01T09:00:00Z', turnsOffAt: '2026-12-01T09:00:00Z', warned: true } };
+    const { sent } = gateway((method, url) => {
+      if (url === '/api/identity/v1/admin/people' && method === 'GET') return Response.json([alex, kim, lou, ida]);
+      if (url === '/api/identity/v1/admin/people/u-4' && method === 'GET') return Response.json({ ...kim, lockout: { locked: true, failures: 10 } });
+      if (url === '/api/identity/v1/admin/people/u-4/unlock') return new Response(null, { status: 204 });
+      return undefined;
+    });
+    const el = await open('/people');
+    const rows = rowsOf(el);
+    expect(rows.find((r) => r[0] === 'Kim Lee')![4]).toBe('Locked');
+    expect(rows.find((r) => r[0] === 'Lou Ng')![4]).toMatch(/^Leaving /);
+    expect(rows.find((r) => r[0] === 'Ida Fox')![4]).toBe('Idle');
+    await openRow(el, 'Kim Lee');
+    expect(document.querySelector('[data-facts]')!.textContent).toContain('After 10 wrong passwords in a row');
+    await press(button('Unlock'));
+    expect(sent.some((c) => c.url === '/api/identity/v1/admin/people/u-4/unlock' && c.method === 'POST')).toBe(true);
+    expect(document.querySelector('[data-live-result]')!.textContent).toContain('Unlocked');
+    expect(shut(button('Unlock'))).toBe(true);
+  });
+
   it('won’t let an admin run the leaver flow on themselves', async () => {
     gateway();
     const el = await open('/people');
@@ -442,6 +465,11 @@ describe('Activity', () => {
     expect(sentence(entry('person.disabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true } }), names)).toBe('Sam Okafor’s sign-in was turned off in the sign-in service, not in AUGUR');
     expect(sentence(entry('person.disabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true, cause: 'idle', days: 90 } }), names)).toBe('Sam Okafor’s sign-in was turned off after 90 days without a sign-in');
     expect(sentence(entry('person.enabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true } }), names)).toBe('Sam Okafor’s sign-in was turned back on in the sign-in service, not in AUGUR');
+    expect(sentence(entry('person.added', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { method: 'federated' } }), names)).toBe('Sam Okafor joined through the organisation’s sign-in');
+    expect(sentence(entry('person.unlocked', { target: 'u-2' }), names)).toBe('Alex Rivera unlocked Sam Okafor after repeated wrong passwords');
+    expect(sentence(entry('person.leave-scheduled', { target: 'u-2', detail: { lastDay: '2026-11-20' } }), names)).toBe(`Alex Rivera set Sam Okafor to leave after ${new Date('2026-11-20T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
+    expect(sentence(entry('person.leave-cancelled', { target: 'u-2' }), names)).toBe('Alex Rivera cancelled Sam Okafor’s leaving');
+    expect(sentence(entry('person.left', { target: 'u-2', detail: { lastDay: '2026-11-20', handOverTo: 'u-1' } }), names)).toMatch(/^Sam Okafor left after their last day, .+, handing their work to Alex Rivera$/);
     expect(sentence(entry('audit.exported', { app: 'events' }), names)).toBe('Alex Rivera downloaded Activity');
     expect(sentence(entry('audit.pruned', { app: 'events', actor: { id: 'events', kind: 'service' }, detail: { removed: 12, keepDays: 365 } }), names)).toBe('12 entries older than 365 days were removed');
   });
