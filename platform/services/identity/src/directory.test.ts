@@ -56,4 +56,16 @@ describe('identity’s sign-in to Keycloak', () => {
     holders = [{ id: 'u-1' }];
     expect(await directory.ensureRoleHolder('deployment-admin', 'harry')).toBe(false);
   });
+
+  it('reads past one page of a list, so a big realm loses nobody', async () => {
+    const everyone = Array.from({ length: 1201 }, (_, i) => ({ id: `u-${i}`, username: `p${i}`, enabled: true }));
+    const { calls, fetchImpl } = keycloak((_method, path) => {
+      const page = /^\/users\?briefRepresentation=false&first=(\d+)&max=(\d+)$/.exec(path);
+      if (page) return everyone.slice(Number(page[1]), Number(page[1]) + Number(page[2]));
+      return [];
+    });
+    const directory = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn: { client: { id: 'platform-identity', secret: 's' } }, fetchImpl });
+    expect((await directory.people()).length).toBe(1201);
+    expect(calls.filter((c) => c.url.includes('/users?')).length).toBe(3);
+  });
 });

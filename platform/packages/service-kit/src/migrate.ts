@@ -29,6 +29,8 @@ export const runMigrations = async (pool: Pool, { schema, migrations }: { schema
   const client = await pool.connect();
   try {
     await client.query('begin');
+    // Migrations may take as long as they need, and so may waiting for another instance's: the pool's statement timeout is lifted for this transaction.
+    await client.query('set local statement_timeout = 0');
     await client.query('select pg_advisory_xact_lock(hashtext($1))', [`${schema}.migrate`]);
     const { rowCount: hasSchema } = await client.query('select 1 from pg_namespace where nspname = $1', [schema]);
     if (!hasSchema) await client.query(`create schema ${schema}`);

@@ -1,6 +1,7 @@
 export * from './caller.js';
 export * from './service.js';
 export * from './deadline.js';
+export * from './cache.js';
 export * from './registration.js';
 export * from './events.js';
 export * from './inbox.js';
