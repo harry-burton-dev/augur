@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.26.0
+  version: 1.27.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -351,6 +351,55 @@ components:
             handOverTo:
               type: string
           description: When they left, who ran the leaver flow, and who took on their work
+        locked:
+          type: boolean
+          description: Locked out for now after repeated wrong passwords; an admin can lift it
+        leaving:
+          type: object
+          required:
+            - on
+          properties:
+            on:
+              type: string
+              format: date
+              description: Their last day, in the organisation’s time zone
+            handOverTo:
+              type: string
+          description: A leaver flow set to run once their last day is over
+        idle:
+          anyOf:
+            - type: object
+              required:
+                - warnsAt
+                - turnsOffAt
+                - warned
+              properties:
+                warnsAt:
+                  type: string
+                  format: date-time
+                  description: When they’re emailed that their sign-in will turn off, unless they sign in first
+                turnsOffAt:
+                  type: string
+                  format: date-time
+                  description: When their sign-in turns off, unless they sign in first
+                warned:
+                  type: boolean
+                  description: The warning day has passed
+              additionalProperties: false
+            - type: object
+              required:
+                - exempt
+              properties:
+                exempt:
+                  type: string
+                  enum:
+                    - off
+                    - no-email
+                    - deployment-admin
+                    - not-tracked
+                  description: "Why their sign-in won’t turn off for being idle: idle accounts are off, email isn’t set up so nobody could be warned, they’re a deployment admin, or AUGUR hasn’t seen them sign in yet"
+              additionalProperties: false
+          description: "For an active person: when an idle sign-in turns off, from their last sign-in and the organisation’s days"
     NewPerson:
       type: object
       required:
@@ -2406,6 +2455,7 @@ paths:
   /admin/people/{id}:
     get:
       summary: One person
+      description: "With `lockout` as the sign-in service has it now: whether wrong passwords have locked them out, and how many in a row."
       parameters:
         - schema:
             type: string
@@ -2418,7 +2468,26 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Person"
+                allOf:
+                  - $ref: "#/components/schemas/Person"
+                  - type: object
+                    properties:
+                      lockout:
+                        type: object
+                        required:
+                          - locked
+                          - failures
+                        properties:
+                          locked:
+                            type: boolean
+                          failures:
+                            type: integer
+                            minimum: 0
+                          lastFailureAt:
+                            type: string
+                            format: date-time
+                        description: Left out when the sign-in service couldn’t say
+                description: The person
         "401":
           description: No signed-in caller
           content:
@@ -2504,7 +2573,7 @@ paths:
   /admin/lifecycle:
     get:
       summary: What the account lifecycle can do on this deployment
-      description: "For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites."
+      description: "For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites. `today` is the date in the organisation’s time zone, the earliest last day a leaver can have."
       responses:
         "200":
           description: What works
@@ -2517,6 +2586,12 @@ paths:
                 properties:
                   email:
                     type: boolean
+                  today:
+                    type: string
+                    format: date
+                  lastDayAhead:
+                    type: integer
+                    description: How many days ahead a last day can be
                 description: What works
         "401":
           description: No signed-in caller
@@ -2651,8 +2726,8 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /admin/people/{id}/leave:
     post:
-      summary: "Someone leaves the organisation: the leaver flow"
-      description: Turns off their sign-in, signs them out everywhere (sessions and offline tokens) and records `person.left`, which followers hear as `platform.person.left` so apps hand on or archive what the person owns, to `handOverTo` when it is given. Their teams, roles and data stay as they were until the deployment's retention period ends. Closes their request to leave, if they made one.
+      summary: "Someone leaves the organisation: the leaver flow, now or after their last day"
+      description: "Turns off their sign-in, signs them out everywhere (sessions and offline tokens) and records `person.left`, which followers hear as `platform.person.left` so apps hand on or archive what the person owns, to `handOverTo` when it is given. Their teams, roles and data stay as they were until the deployment's retention period ends. Closes their request to leave, if they made one. With `lastDay` (today to 90 days ahead, in the organisation's time zone) nothing happens yet: the flow is set to run once that day is over (`leaving` on the person), recorded as `person.leave-scheduled`, and can be cancelled until then. Sending it again moves the day."
       requestBody:
         required: true
         content:
@@ -2669,6 +2744,11 @@ paths:
                   type: string
                   maxLength: 500
                   description: Why, or what was agreed, for Activity
+                lastDay:
+                  type: string
+                  format: date
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                  description: Their last day; the flow runs once it is over
               additionalProperties: false
       parameters:
         - schema:
@@ -2678,13 +2758,13 @@ paths:
           required: true
       responses:
         "200":
-          description: The person, now turned off
+          description: The person, now turned off, or with `leaving` set
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Person"
         "400":
-          description: The person to hand over to is the leaver, is turned off, or isn’t in the directory
+          description: The person to hand over to is the leaver, is turned off, or isn’t in the directory, or the last day is in the past or too far ahead
           content:
             application/problem+json:
               schema:
@@ -2709,6 +2789,95 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: The caller is the leaver, or they have already left
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Cancel a leaver flow set for after someone’s last day
+      description: Recorded as `person.leave-cancelled`. Nothing had happened to them yet, so nothing is undone.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The person, no longer leaving
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: No leaver flow was set for them, or it has already run
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/unlock:
+    post:
+      summary: Lift a lockout for wrong passwords
+      description: They can sign in again at once. Recorded as `person.unlocked`.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Unlocked
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: They aren’t locked out
           content:
             application/problem+json:
               schema:

@@ -2,7 +2,7 @@ import { Button, DateField, Details, Dialog, Select, Table, type SelectOption, t
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fullName, type AdminApi, type AuditEntry, type AuditQuery, type CatalogueApp, type Department, type Person } from './api.js';
 import { floorTree } from './apps-model.js';
-import { Page, Problem } from './parts.js';
+import { day as shortDay, Page, Problem } from './parts.js';
 
 const PAGE = 50;
 const ANYONE = '*';
@@ -47,7 +47,14 @@ export const describe = (e: AuditEntry, names: Names): string => {
       return `${who} turned off ${names.person(target)}’s sign-in`;
     case 'person.password-reset':
       return `${who} gave ${names.person(target)} a new password`;
+    case 'person.unlocked':
+      return `${who} unlocked ${names.person(target)} after repeated wrong passwords`;
+    case 'person.leave-scheduled':
+      return `${who} set ${names.person(target)} to leave after ${shortDay(`${String(d.lastDay)}T12:00:00`)}${d.handOverTo ? `, handing their work to ${names.person(String(d.handOverTo))}` : ''}`;
+    case 'person.leave-cancelled':
+      return `${who} cancelled ${names.person(target)}’s leaving`;
     case 'person.left':
+      if (d.lastDay) return `${names.person(target)} left after their last day, ${shortDay(`${String(d.lastDay)}T12:00:00`)}${d.handOverTo ? `, handing their work to ${names.person(String(d.handOverTo))}` : ''}`;
       return d.handOverTo ? `${who} marked ${names.person(target)} as a leaver, handing their work to ${names.person(String(d.handOverTo))}` : `${who} marked ${names.person(target)} as a leaver`;
     case 'sign-in.succeeded':
       return d.method === 'federated' ? `${names.person(target)} signed in through the organisation’s sign-in` : d.method === 'passkey' ? `${names.person(target)} signed in with a passkey` : `${names.person(target)} signed in`;

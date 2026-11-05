@@ -10,6 +10,7 @@ import { PgWorkspaceStore } from './workspaces.ts';
 import { organisationSettings, PgOrganisationStore } from './organisation.ts';
 import { PgLifecycleStore } from './lifecycle.ts';
 import { reconcile, PgReconcileStore } from './reconcile.ts';
+import { leaveDueLeavers } from './leavers.ts';
 import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
 
 const log = startupLog('identity');
@@ -123,7 +124,7 @@ const dataFrom =
 if (keycloakEvents && audit) {
   const events = keycloakEvents;
   const copy = () =>
-    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at) }).catch((err: Error) =>
+    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at), locked: (person, at) => lifecycle.locked(person, at) }).catch((err: Error) =>
       log.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
     );
   setInterval(copy, 60_000).unref();
@@ -140,6 +141,16 @@ if (directory) {
     );
   setInterval(compare, 5 * 60_000).unref();
   void compare();
+
+  // A leaver flow an admin set for after someone's last day runs once that day is over where the organisation is.
+  const leavers = async () => {
+    const { timeZone } = await organisationSettings(workspaces, organisation);
+    const gone = await leaveDueLeavers({ directory: people, lifecycle, store, audit }, timeZone, new Date(), (m) => log.warn(m));
+    if (gone.length) log.info(`${gone.length} leaver flow${gone.length === 1 ? '' : 's'} ran after a last day.`);
+  };
+  const sweep = () => leavers().catch((err: Error) => log.error(`Leaver flows set for after a last day couldn't be checked; identity tries again in five minutes (${err.message}).`));
+  setInterval(sweep, 5 * 60_000).unref();
+  void sweep();
 }
 
 const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle });

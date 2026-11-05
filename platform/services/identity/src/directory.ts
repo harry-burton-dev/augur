@@ -108,6 +108,10 @@ export interface Directory {
    * holds for them, so turning them off takes effect now rather than when a token runs out.
    */
   endSessions(id: string): Promise<void>;
+  /** Whether wrong passwords have locked them out for now, and how many in a row (Keycloak's brute-force detection). */
+  lockout(id: string): Promise<Lockout>;
+  /** Lifts a lockout, so they can sign in again at once. */
+  unlock(id: string): Promise<void>;
   departments(): Promise<Department[]>;
   createDepartment(name: string, parentId?: string): Promise<Department>;
   renameDepartment(id: string, name: string): Promise<Department>;
@@ -115,6 +119,12 @@ export interface Directory {
   removeMember(department: string, person: string): Promise<void>;
   /** The roles an admin can give people. */
   roles(): Promise<Role[]>;
+}
+
+export interface Lockout {
+  locked: boolean;
+  failures: number;
+  lastFailureAt?: string;
 }
 
 /** For tests, and for running identity locally without Keycloak. */
@@ -207,6 +217,19 @@ export class MemoryDirectory implements Directory {
 
   async resetPassword(id: string) {
     this.known(id).invited = true;
+  }
+
+  /** Who is locked out now, for tests. */
+  readonly lockedOut = new Set<string>();
+
+  async lockout(id: string) {
+    this.known(id);
+    return this.lockedOut.has(id) ? { locked: true, failures: 10 } : { locked: false, failures: 0 };
+  }
+
+  async unlock(id: string) {
+    this.known(id);
+    this.lockedOut.delete(id);
   }
 
   async departments() {
@@ -593,6 +616,20 @@ export class KeycloakDirectory implements Directory {
     // Offline tokens outlive sessions: revoking each app's consent ends them too.
     const { data: consents } = await this.call<{ clientId: string }[]>('GET', `${user}/consents`);
     for (const { clientId } of consents ?? []) await this.call('DELETE', `${user}/consents/${encodeURIComponent(clientId)}`);
+  }
+
+  async lockout(id: string): Promise<Lockout> {
+    const { data } = await this.call<{ disabled?: boolean; numFailures?: number; lastFailure?: number }>(
+      'GET',
+      `/attack-detection/brute-force/users/${encodeURIComponent(id)}`,
+      undefined,
+      'That person isn’t in the directory.',
+    );
+    return { locked: Boolean(data.disabled), failures: data.numFailures ?? 0, ...(data.lastFailure ? { lastFailureAt: new Date(data.lastFailure).toISOString() } : {}) };
+  }
+
+  async unlock(id: string) {
+    await this.call('DELETE', `/attack-detection/brute-force/users/${encodeURIComponent(id)}`, undefined, 'That person isn’t in the directory.');
   }
 
   async resetPassword(id: string, temporaryPassword: string) {
