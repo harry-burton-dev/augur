@@ -25,3 +25,4 @@ export * from './problems.js';
 export * from './reserved.js';
 export * from './app-service.js';
 export * from './mail-relay.js';
+export * from './personal.js';

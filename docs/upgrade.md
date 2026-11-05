@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Activity keeps a year
+
+**From** unreleased
+
+Activity (Admin's record of who did what) now keeps entries for 365 days. Each night at 03:00 UTC the events service removes older ones, and Activity records how many it removed. On the first night after the upgrade, anything older than a year goes. To keep it, download it first, signed in as an admin: open `/api/events/v1/audit/export?since=2025-01-01T00:00:00Z&until=2026-01-01T00:00:00Z` on your AUGUR's address (CSV, at most 366 days per download; Admin's own download button comes with a later release). When the organisation's policy sets a different period (Admin, Settings), the events service uses that instead.
+
 ### Time limits between services and on database queries
 
 **From** unreleased

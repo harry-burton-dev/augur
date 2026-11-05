@@ -63,6 +63,14 @@ The gateway records, as metrics:
 - `augur_gateway_requests_total`: the calls it answered, by `part` (`platform` or `apps`) and `status_class` (`2xx`, `4xx`, `5xx`).
 - `augur_backup_ok`: 1 when the last backup and restore test can be relied on, 0 when not. Only when the gateway is told where backups are (`BACKUP_DIR`).
 
+## Activity
+
+Activity is AUGUR's record of who did what, kept by the events service (`events.audit`) and read in Admin.
+
+- **Kept for the retention period.** The organisation's policy sets it (365 days when identity can't say, and the events log says it used the default). Each night at 03:00 UTC older entries are removed, and the removal is itself an entry (`audit.pruned`).
+- **Entries are never edited, except redaction of a deleted person's personal values; they're removed only by the retention period. Both are recorded in Activity.** When identity deletes someone, it asks events to replace every value under service-kit's `PERSONAL_DETAIL_KEYS` (names, usernames, email and IP addresses, free text) with `[removed]` in entries by, about or naming them, and to delete their notifications (`audit.redacted`). Their id stays, now pseudonymous. A service writing Activity keeps personal values only under those keys, so redaction finds them.
+- **Download.** An admin downloads Activity as CSV or JSON lines, with the same filters as the list (app, actor, target, person, kind, floor), at most 366 days at a time (`GET /v1/audit/export`). Each download is recorded (`audit.exported`). Cells a spreadsheet would run as a formula start with `'`.
+
 ## For a service
 
 Nothing to do. Compose loads `@augur/service-kit/telemetry` before every Node service starts (`NODE_OPTIONS`). An app service built on the service kit gets the same when its compose entry carries the `x-telemetry` settings. Of the standard `OTEL_*` settings, compose passes `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG` from `.env`, such as `OTEL_TRACES_SAMPLER=parentbased_traceidratio` with `OTEL_TRACES_SAMPLER_ARG=0.1` to keep one trace in ten. Another one needs adding to the `x-telemetry` settings in `compose.yml` and to `infra/deploy/settings.schema.json`.

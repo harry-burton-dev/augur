@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
 import { INBOX_CHANNEL, inboxMigration, MemoryInboxStore, PgInboxStore, type InboxStore } from './inbox.ts';
-import { runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
+import { PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
 export interface EventFloor {
@@ -52,8 +52,54 @@ export interface AuditFilter {
   before?: string;
   /** Only entries on this floor or a floor below it, as they stood when written. */
   workspace?: string;
+  /** Only entries about this target. */
+  target?: string;
+  /** Only entries by, about or naming this person: the actor, the target or `detail.person`. */
+  person?: string;
+  /** Sign-ins (`detail.kind` is `sign-in`, copied from the sign-in service) or every other change. */
+  kind?: 'change' | 'sign-in';
   limit: number;
 }
+
+/** What redacting one person removed. */
+export interface Redacted {
+  entries: number;
+  notifications: number;
+}
+
+const PERSONAL = new Set<string>(PERSONAL_DETAIL_KEYS);
+
+/**
+ * A detail with every personal value replaced (ADR 0040): values under PERSONAL_DETAIL_KEYS, at any depth, and both
+ * sides of a `{ from, to }` change under one. Undefined when nothing changed.
+ */
+export const redactDetail = (detail: Record<string, unknown> | undefined): Record<string, unknown> | undefined => {
+  let changed = false;
+  const walk = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(walk);
+    if (!value || typeof value !== 'object') return value;
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => {
+        if (!PERSONAL.has(k)) return [k, walk(v)];
+        if (v === REMOVED) return [k, v];
+        if (v && typeof v === 'object' && !Array.isArray(v) && ('from' in v || 'to' in v)) {
+          const pair = v as Record<string, unknown>;
+          const out = { ...('from' in pair ? { from: REMOVED } : {}), ...('to' in pair ? { to: REMOVED } : {}) };
+          if (Object.entries(pair).some(([side, x]) => out[side as 'from' | 'to'] !== x)) changed = true;
+          return [k, out];
+        }
+        changed = true;
+        return [k, REMOVED];
+      }),
+    );
+  };
+  const out = walk(detail) as Record<string, unknown> | undefined;
+  return changed ? out : undefined;
+};
+
+/** Whether an entry is by, about or names this person. */
+const concerns = (e: AuditEntry, person: string) => e.actor.id === person || e.target === person || (e.detail as { person?: unknown } | undefined)?.person === person;
+const isSignIn = (e: AuditEntry) => (e.detail as { kind?: unknown } | undefined)?.kind === 'sign-in';
 
 export type Listener = (n: Notification) => void;
 /** Hears each domain event as it is published, on any instance: a live hint, not the record (read that with `readEvents`). */
@@ -110,6 +156,10 @@ export interface EventStore {
   notificationsOf(recipient: string, limit: number): Promise<Notification[]>;
   /** Marks a person's notification read or unread; false when they have no such notification. */
   setRead(recipient: string, id: string, read: boolean): Promise<boolean>;
+  /**
+   * Entries are never edited, except redaction of a deleted person's personal values; they're removed only by the
+   * retention period. Both are recorded in Activity.
+   */
   appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string): Promise<AuditEntry>;
   /** Newest first. */
   audit(filter: AuditFilter): Promise<AuditEntry[]>;
@@ -128,6 +178,13 @@ export interface EventStore {
   readEvents(query: EventsQuery): Promise<DomainEvent[]>;
   /** Forgets events older than this many days; returns how many went. */
   pruneEvents(keepDays: number): Promise<number>;
+  /** Removes Activity entries older than this many days (the retention period, ADR 0040); returns how many went. */
+  pruneAudit(keepDays: number): Promise<number>;
+  /**
+   * Forgets a deleted person (ADR 0040): replaces the personal values in every Activity entry by, about or naming
+   * them, and deletes their notifications. Their id stays, now pseudonymous.
+   */
+  redactPerson(person: string): Promise<Redacted>;
 }
 
 const fromInput = (n: NewNotification, recipient: string, id: string, createdAt: string, floor?: EventFloor): Notification => ({
@@ -193,13 +250,44 @@ export class MemoryEventStore implements EventStore {
     return e;
   }
 
-  async audit({ app, actor, since, until, before, workspace, limit }: AuditFilter) {
+  async audit({ app, actor, since, until, before, workspace, target, person, kind, limit }: AuditFilter) {
     const cursor = before === undefined ? this.entries.length : this.entries.findIndex((e) => e.id === before);
     return this.entries
       .slice(0, cursor < 0 ? 0 : cursor)
-      .filter((e) => (!app || e.app === app) && (!actor || e.actor.id === actor) && (!since || e.at >= since) && (!until || e.at < until) && (!workspace || under(e.workspace, workspace)))
+      .filter(
+        (e) =>
+          (!app || e.app === app) &&
+          (!actor || e.actor.id === actor) &&
+          (!since || e.at >= since) &&
+          (!until || e.at < until) &&
+          (!workspace || under(e.workspace, workspace)) &&
+          (!target || e.target === target) &&
+          (!person || concerns(e, person)) &&
+          (!kind || (kind === 'sign-in') === isSignIn(e)),
+      )
       .reverse()
       .slice(0, limit);
+  }
+
+  async pruneAudit(keepDays: number) {
+    const cutoff = new Date(Date.now() - keepDays * 86_400_000).toISOString();
+    const before = this.entries.length;
+    this.entries = this.entries.filter((e) => e.at >= cutoff);
+    return before - this.entries.length;
+  }
+
+  async redactPerson(person: string) {
+    let entries = 0;
+    this.entries = this.entries.map((e) => {
+      if (!concerns(e, person)) return e;
+      const detail = redactDetail(e.detail as Record<string, unknown> | undefined);
+      if (!detail) return e;
+      entries++;
+      return { ...e, detail };
+    });
+    const before = this.notifications.length;
+    this.notifications = this.notifications.filter((n) => n.recipient !== person);
+    return { entries, notifications: before - this.notifications.length };
   }
 
   subscribe(listener: Listener) {
@@ -340,6 +428,13 @@ export const migrations: Migration[] = [
     sql: `
       -- Which of the app's declared kinds a notification is (ADR 0036): people choose how each kind reaches them.
       alter table events.notifications add column kind text;`,
+  },
+  {
+    id: '009_audit_by_person',
+    sql: `
+      -- A person's Activity (ADR 0040): entries about them, and entries naming them in their detail.
+      create index audit_target on events.audit (target, at desc);
+      create index audit_detail_person on events.audit ((detail->>'person'));`,
   },
 ];
 
@@ -560,7 +655,7 @@ export class PgEventStore implements EventStore {
     return fromAuditRow(rows[0]);
   }
 
-  async audit({ app, actor, since, until, before, workspace, limit }: AuditFilter) {
+  async audit({ app, actor, since, until, before, workspace, target, person, kind, limit }: AuditFilter) {
     // The cursor is an entry's id; a page continues from that entry's place in (at, id) order.
     const { rows } = await this.pool.query<AuditRow>(
       `select * from events.audit
@@ -568,10 +663,44 @@ export class PgEventStore implements EventStore {
          and ($3::timestamptz is null or at >= $3) and ($4::timestamptz is null or at < $4)
          and ($5::bigint is null or (at, id) < (select at, id from events.audit where id = $5))
          and ($7::text is null or workspace_path @> array[$7::text])
+         and ($8::text is null or target = $8)
+         and ($9::text is null or actor_id = $9 or target = $9 or detail->>'person' = $9)
+         and ($10::text is null or (($10 = 'sign-in') = coalesce(detail->>'kind' = 'sign-in', false)))
        order by at desc, id desc limit $6`,
-      [app ?? null, actor ?? null, since ?? null, until ?? null, before ?? null, limit, workspace ?? null],
+      [app ?? null, actor ?? null, since ?? null, until ?? null, before ?? null, limit, workspace ?? null, target ?? null, person ?? null, kind ?? null],
     );
     return rows.map(fromAuditRow);
+  }
+
+  async pruneAudit(keepDays: number) {
+    const { rowCount } = await this.pool.query('delete from events.audit where at < now() - make_interval(days => $1)', [keepDays]);
+    return rowCount ?? 0;
+  }
+
+  async redactPerson(person: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const { rows } = await client.query<{ id: string; detail: Record<string, unknown> | null }>(
+        `select id, detail from events.audit where detail is not null and (actor_id = $1 or target = $1 or detail->>'person' = $1) for update`,
+        [person],
+      );
+      let entries = 0;
+      for (const r of rows) {
+        const detail = redactDetail(r.detail ?? undefined);
+        if (!detail) continue;
+        await client.query('update events.audit set detail = $2 where id = $1', [r.id, detail]);
+        entries++;
+      }
+      const { rowCount } = await client.query('delete from events.notifications where recipient = $1', [person]);
+      await client.query('commit');
+      return { entries, notifications: rowCount ?? 0 };
+    } catch (err) {
+      await client.query('rollback');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   subscribe(listener: Listener) {
