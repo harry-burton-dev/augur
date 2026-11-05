@@ -268,14 +268,14 @@ export const menuWarnings = (entry: Pick<AppEntry, 'name' | 'icon' | 'menu' | 'a
  * "/" is the shell's own: Title, where every app is a chapter.
  */
 export const platformApps: AppEntry[] = [
-  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0', icon: 'home', description: 'What needs you', category: 'platform' },
+  { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: PLATFORM_APP_VERSIONS.home, sdk: '^1.0.0 || ^2.0.0', icon: 'home', description: 'What needs you', category: 'platform' },
   {
     id: 'admin',
     name: 'Admin',
     route: '/admin',
     entry: '/apps/admin/entry.js',
     version: PLATFORM_APP_VERSIONS.admin,
-    sdk: '^1.0.0',
+    sdk: '^1.0.0 || ^2.0.0',
     icon: 'admin',
     description: 'People, departments, apps, status, updates and activity',
     requiredRole: 'admin',
@@ -329,7 +329,7 @@ export const platformApps: AppEntry[] = [
     route: '/upgrades',
     entry: '/apps/upgrades/entry.js',
     version: PLATFORM_APP_VERSIONS.upgrades,
-    sdk: '^1.9.0',
+    sdk: '^1.9.0 || ^2.0.0',
     icon: 'download',
     description: 'What this deployment runs, and upgrading it',
     requiredRole: 'admin',
