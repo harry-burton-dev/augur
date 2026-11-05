@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { callerHeaders, type NewAuditEntry } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { MemoryDirectory } from './directory.ts';
-import { MemoryPreferenceStore } from './store.ts';
-import { MemoryLifecycleStore } from './lifecycle.ts';
 import { temporaryPassword, usernameFrom } from './admin.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
+
+const db = identityDb();
 
 const admin = callerHeaders({ id: 'admin-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -12,15 +12,15 @@ const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: [
 const setup = async () => {
   const directory = new MemoryDirectory();
   const audit = vi.fn<(e: NewAuditEntry) => Promise<void>>(async () => undefined);
-  const store = new MemoryPreferenceStore();
-  const lifecycle = new MemoryLifecycleStore();
-  const app = await buildApp({ directory, audit, store, lifecycle });
+  const store = db.store;
+  const lifecycle = db.lifecycle;
+  const app = await db.app({ directory, audit, store });
   const call = async (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, payload?: object, headers = admin) =>
     app.inject({ method, url: `/v1/admin${url}`, headers, ...(payload ? { payload } : {}) });
   return { app, directory, audit, store, lifecycle, call };
 };
 
-describe('admin: deployment admins', () => {
+describe.runIf(DATABASE_URL)('admin: deployment admins', () => {
   const deployer = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'] });
 
   it('lets only a deployment admin make one, or change one’s role or sign-in', async () => {
@@ -46,7 +46,7 @@ describe('admin: deployment admins', () => {
   });
 });
 
-describe('admin: turning off and leavers (ADR 0040)', () => {
+describe.runIf(DATABASE_URL)('admin: turning off and leavers (ADR 0040)', () => {
   const add = async (call: Awaited<ReturnType<typeof setup>>['call'], first: string) =>
     (await call('POST', '/people', { firstName: first, lastName: 'Smith', email: `${first.toLowerCase()}@example.org` })).json().person as { id: string };
   const actions = (audit: Awaited<ReturnType<typeof setup>>['audit']) => audit.mock.calls.map(([e]) => [e.action, e.target, e.detail]);
@@ -149,7 +149,7 @@ describe('admin: turning off and leavers (ADR 0040)', () => {
   });
 });
 
-describe('admin: people', () => {
+describe.runIf(DATABASE_URL)('admin: people', () => {
   it('is for admins only', async () => {
     const { call } = await setup();
     expect((await call('GET', '/people', undefined, editor)).statusCode).toBe(403);
@@ -157,7 +157,7 @@ describe('admin: people', () => {
   });
 
   it('says so when no directory is connected', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const res = await app.inject({ method: 'GET', url: '/v1/admin/people', headers: admin });
     expect(res.statusCode).toBe(503);
   });
@@ -238,7 +238,7 @@ describe('admin: people', () => {
   });
 });
 
-describe('admin: departments', () => {
+describe.runIf(DATABASE_URL)('admin: departments', () => {
   it('creates, renames and refuses a name already taken', async () => {
     const { call, audit } = await setup();
     const finance = (await call('POST', '/departments', { name: 'Finance' })).json();
@@ -271,7 +271,7 @@ describe('admin: departments', () => {
   });
 });
 
-describe('admin: levels', () => {
+describe.runIf(DATABASE_URL)('admin: levels', () => {
   it('names each level of department, audited, for admins only', async () => {
     const { call, audit } = await setup();
     expect((await call('GET', '/levels')).json()).toEqual({ levels: ['Department', 'Team'], max: 5 });

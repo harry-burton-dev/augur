@@ -20,7 +20,7 @@ export const STEP_WORDS: Record<AppJobStepState['step'], string> = {
 
 /**
  * Which releases an app follows: production (stable) only, preview (beta) too, or dev builds too, of
- * every merge into dev. A production server takes neither of the last two, and the list says so.
+ * every merge into main. A production server takes neither of the last two, and the list says so.
  */
 export const channelChoices = (ring: AppInstalls['ring'] = 'preview'): SelectOption[] => [
   { value: 'stable', label: 'Production releases' },
@@ -29,7 +29,7 @@ export const channelChoices = (ring: AppInstalls['ring'] = 'preview'): SelectOpt
     : { value: 'beta', label: 'Preview releases too' },
   ring === 'production'
     ? { value: 'dev', label: 'Dev builds too', detail: 'Not on a production server', disabled: true }
-    : { value: 'dev', label: 'Dev builds too', detail: 'Every merge into dev, with a backup before each' },
+    : { value: 'dev', label: 'Dev builds too', detail: 'Every merge into main, with a backup before each' },
 ];
 
 const MODE_LABELS: Record<FeaturePreviewMode, string> = { off: 'Off', 'opt-in': 'For those who turn it on', everyone: 'On for everyone', floors: 'On for chosen floors' };

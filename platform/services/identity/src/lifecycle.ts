@@ -51,36 +51,6 @@ export const withLifecycle = <P extends Person>(p: P, l: Lifecycle = {}) => ({
   ...(l.left ? { left: l.left } : {}),
 });
 
-export class MemoryLifecycleStore implements LifecycleStore {
-  private readonly rows = new Map<string, Lifecycle>();
-  private row(person: string) {
-    let r = this.rows.get(person);
-    if (!r) this.rows.set(person, (r = {}));
-    return r;
-  }
-  async get(ids?: string[]) {
-    const out = new Map<string, Lifecycle>();
-    for (const [id, r] of this.rows) if (!ids || ids.includes(id)) out.set(id, structuredClone(r));
-    return out;
-  }
-  async signedIn(person: string, at: string) {
-    const r = this.row(person);
-    r.joinedAt ??= at;
-    if (!r.lastSignInAt || r.lastSignInAt < at) r.lastSignInAt = at;
-  }
-  async disabled(person: string, cause: DisabledCause, at: string) {
-    Object.assign(this.row(person), { disabledAt: at, disabledCause: cause });
-  }
-  async enabled(person: string) {
-    const r = this.row(person);
-    delete r.disabledAt;
-    delete r.disabledCause;
-  }
-  async left(person: string, left: { at: string; by: string; handOverTo?: string }) {
-    this.row(person).left = { ...left };
-  }
-}
-
 export const lifecycleMigrations: Migration[] = [
   {
     id: 'lifecycle_001_people',
