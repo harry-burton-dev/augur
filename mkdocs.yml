@@ -1,7 +1,7 @@
 # Written by `pnpm catalog` from the repository (docs/catalog.md). Don't edit it by hand.
 site_name: AUGUR
 docs_dir: docs
-repo_url: https://github.com/harry-burton-dev/im-platform
+repo_url: https://github.com/harry-burton-dev/augur
 edit_uri: edit/dev/docs/
 plugins:
   - techdocs-core

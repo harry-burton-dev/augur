@@ -41,7 +41,7 @@ FROM nginxinc/nginx-unprivileged:1.30-alpine AS web
 USER root
 RUN apk upgrade --no-cache
 USER 101
-LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/augur"
 LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""

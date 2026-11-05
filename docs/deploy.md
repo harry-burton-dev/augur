@@ -23,7 +23,7 @@ The server doesn't need Tailscale installed itself. The `tailscale` container jo
 ## First start
 
 ```sh
-git clone https://github.com/harry-burton-dev/im-platform.git platform && cd platform
+git clone https://github.com/harry-burton-dev/augur.git platform && cd platform
 git checkout augur@0.1.1        # the release you'll run: the newest augur@ under Releases
 cp infra/deploy/.env.example infra/deploy/.env
 ```

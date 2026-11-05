@@ -3,7 +3,7 @@
 AUGUR is proprietary: © 2026 Harry Burton, all rights reserved. Anyone, Harry's organisation included,
 uses it only under a written agreement with the copyright holder. The decision is recorded in the
 handbook's Decision register as a PDR ("AUGUR stays proprietary until Harry chooses to open it"); the
-text is in [`LICENSE`](https://github.com/harry-burton-dev/im-platform/blob/main/LICENSE) at the root of
+text is in [`LICENSE`](https://github.com/harry-burton-dev/augur/blob/main/LICENSE) at the root of
 the repository. Questions go to the address at the end of that file.
 
 ## How the repository says so

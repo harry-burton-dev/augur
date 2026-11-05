@@ -102,9 +102,9 @@ Since augur@0.17.0, AUGUR no longer builds Artifacts, Explorer and Data Atlas it
 
 ### AUGUR's repository gets a new name
 
-AUGUR's repository is being renamed from `im-platform` (Linear PER-244). Every release is signed by the repository's workflows, so from this release the updater and registry take AUGUR's releases, dev builds and feed signed under either name. A server must run this release **before** the rename, or it refuses everything released after it.
+AUGUR's repository was renamed from `im-platform` to `augur` on 5 November 2026 (Linear PER-162). Every release is signed by the repository's workflows, so from this release the updater and registry take AUGUR's releases, dev builds and feed signed under either name. A server must run this release **before** the rename, or it refuses everything released after it.
 
-Nothing else moves. Images and the feed stay at `ghcr.io/harry-burton-dev/im-platform`, so `PLATFORM_IMAGES` and your read key stay as they are, and GitHub forwards the old addresses to the new one. A git checkout of the repository keeps working too; to use the new address, run `git remote set-url origin https://github.com/harry-burton-dev/<new name>.git`.
+Nothing else moves. Images and the feed stay at `ghcr.io/harry-burton-dev/im-platform`, so `PLATFORM_IMAGES` and your read key stay as they are, and GitHub forwards the old addresses to the new one. A git checkout of the repository keeps working too; to use the new address, run `git remote set-url origin https://github.com/harry-burton-dev/augur.git`.
 
 ### The first upgrade on each server is yours, and a 0.x minor waits for you
 

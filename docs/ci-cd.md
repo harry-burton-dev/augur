@@ -217,9 +217,9 @@ release runs, third-party ones included ([deploy-test.md](deploy-test.md)).
 The billed minutes of recent runs, by workflow and job, from the API (needs `gh` signed in):
 
 ```sh
-gh api "repos/harry-burton-dev/im-platform/actions/runs?per_page=100&created=>=$(date -u -d '2 days ago' +%F)" \
+gh api "repos/harry-burton-dev/augur/actions/runs?per_page=100&created=>=$(date -u -d '2 days ago' +%F)" \
   -q '.workflow_runs[].id' | while read -r id; do
-  gh api "repos/harry-burton-dev/im-platform/actions/runs/$id/jobs" -q '.jobs[] |
+  gh api "repos/harry-burton-dev/augur/actions/runs/$id/jobs" -q '.jobs[] |
     select(.conclusion != "skipped" and .started_at and .completed_at) |
     [.name, ((.completed_at | fromdate) - (.started_at | fromdate))] | @tsv'
 done | awk -F'\t' '{m=int(($2+59)/60); t[$1]+=m; s+=m} END {for (j in t) print t[j], j; print s, "total"}' | sort -rn
