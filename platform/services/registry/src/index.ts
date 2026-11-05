@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, floorPlaces, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorPlaces, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
@@ -12,6 +12,8 @@ import { reportingFrom } from './report.ts';
 import { ringFrom, takesPreview } from './ring.ts';
 import { PgAppStore, type AppStore } from './store.ts';
 import { updateNotices } from './notices.ts';
+
+const log = startupLog('registry');
 
 // Every setting the registry reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('registry', [
@@ -54,12 +56,12 @@ const store: AppStore = await PgAppStore.connect(process.env.DATABASE_URL);
 const { EVENTS_URL } = process.env;
 const credentials = platformCredentialsFromEnv('registry');
 const audit = EVENTS_URL && credentials ? auditTo(EVENTS_URL, credentials) : undefined;
-if (!audit) console.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: changes to the catalogue are not audited.');
+if (!audit) log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: changes to the catalogue are not audited.');
 
 // Where floors sit comes from identity, asked as the registry.
 const { IDENTITY_URL = 'http://localhost:8081' } = process.env;
 const floors = credentials ? floorPlaces({ identityUrl: IDENTITY_URL, credentials }) : undefined;
-if (!floors) console.warn('SERVICE_CLIENT_SECRET is not set: the catalogue can’t be read floor by floor.');
+if (!floors) log.warn('SERVICE_CLIENT_SECRET is not set: the catalogue can’t be read floor by floor.');
 
 // New AUGUR releases: with the deployment's read key, the feed the Release workflow keeps beside the images
 // on GitHub's container registry; without one, this repo's GitHub releases (with RELEASE_FEED_TOKEN's older
@@ -105,7 +107,7 @@ appUpdates.start();
 
 // Apps' frontends, kept by version in the frontends bucket (FRONTENDS_BUCKET_SECRET, made by the storage service).
 const frontendFiles = frontendFilesFromEnv();
-if (!frontendFiles) console.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ frontends are served from where their manifests say, not kept by version.');
+if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ frontends are served from where their manifests say, not kept by version.');
 
 // Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
 // this deployment ships with, which register themselves like any other.
@@ -114,5 +116,5 @@ await app.listen({ port, host: '0.0.0.0' });
 
 // Deployment admins hear when a release is available and how each update ended, in the shell (ADR 0044).
 if (EVENTS_URL && credentials) {
-  updateNotices({ eventsUrl: EVENTS_URL, credentials, store, updates, appUpdates, timeZone, onError: (err) => console.error(`An update notice wasn’t sent: ${err.message}`) }).start();
-} else console.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: nobody is told about new releases or how updates ended.');
+  updateNotices({ eventsUrl: EVENTS_URL, credentials, store, updates, appUpdates, timeZone, onError: (err) => log.error(`An update notice wasn’t sent: ${err.message}`) }).start();
+} else log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: nobody is told about new releases or how updates ended.');
