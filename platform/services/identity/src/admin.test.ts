@@ -66,6 +66,8 @@ describe('admin: people', () => {
     const entry = audit.mock.calls.map(([e]) => e).find((e) => e.action === 'person.added')!;
     expect(entry).toMatchObject({ actor: { id: 'admin-1', kind: 'user' }, app: 'identity', target: person.id });
     expect(JSON.stringify(entry)).not.toContain(password);
+    // Joining a department on the way in is recorded on it, as the membership routes do.
+    expect(audit.mock.calls).toContainEqual([expect.objectContaining({ action: 'department.member-added', target: dept.id, detail: { person: person.id } }), dept.id]);
   });
 
   it('refuses what it can’t use', async () => {
@@ -91,6 +93,23 @@ describe('admin: people', () => {
     expect(actions).toEqual(expect.arrayContaining(['person.updated', 'person.disabled']));
     const update = audit.mock.calls.map(([e]) => e).find((e) => e.action === 'person.updated')!;
     expect(update.detail).toMatchObject({ roles: { from: [], to: ['admin', 'editor'] } });
+  });
+
+  it('records each department someone joins or leaves when their list changes, on that department', async () => {
+    const { call, audit } = await setup();
+    const legal = (await call('POST', '/departments', { name: 'Legal' })).json();
+    const finance = (await call('POST', '/departments', { name: 'Finance' })).json();
+    const { person } = (await call('POST', '/people', { firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', departments: [legal.id] })).json();
+    audit.mockClear();
+    await call('PATCH', `/people/${person.id}`, { departments: [finance.id] });
+    const moves = audit.mock.calls.filter(([e]) => e.action.startsWith('department.member-')).map(([e, floor]) => [e.action, e.target, e.detail, floor]);
+    expect(moves).toEqual([
+      ['department.member-added', finance.id, { person: person.id }, finance.id],
+      ['department.member-removed', legal.id, { person: person.id }, legal.id],
+    ]);
+    audit.mockClear();
+    await call('PATCH', `/people/${person.id}`, { firstName: 'Joanne' });
+    expect(audit.mock.calls.map(([e]) => e.action)).toEqual(['person.updated']);
   });
 
   it('won’t let an admin lock themselves out', async () => {

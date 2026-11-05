@@ -194,9 +194,12 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
 /**
  * The platform's own topics, which any follower may read. The events service publishes
  * them as identity and the registry record the change, with the audit entry's floor.
- * Payloads: `{ person }`, `{ team, name? }`, `{ team, person }`, `{ app }`.
+ * Payloads: `{ person }`, `{ person, changed }` (some of `name`, `email`, `roles`, `teams`), `{ team, name? }`,
+ * `{ team, person }`, `{ app }`.
  */
 export const PLATFORM_TOPICS = {
+  personJoined: 'platform.person.joined',
+  personChanged: 'platform.person.changed',
   personDisabled: 'platform.person.disabled',
   personEnabled: 'platform.person.enabled',
   teamCreated: 'platform.team.created',

@@ -81,7 +81,12 @@ import {
   type ServerNotification,
   type Session,
 } from './host/index.js';
+import { AccountApi } from './account/api.js';
+import type { Preferences } from './host/preferences.js';
+import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
+import { ACTION_STATUS } from './host/session.js';
+import { productName } from './host/menus.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { InboxView } from './inbox/InboxView.js';
@@ -114,8 +119,17 @@ const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name,
  * do, this becomes that.
  */
 export const AGENTS_UNAVAILABLE = 'agents-unavailable';
+/**
+ * Account opens the shell's Account area (ADR 0036), which the host draws, and Settings has moved into it
+ * (Appearance), so the Shell's own small Account and Settings views aren't offered.
+ */
+export const ACCOUNT_AREA = 'account-area';
+/** Where the Account area is in the address: `?account=<section>`, so a reload and Keycloak's screens come back to it. */
+export const ACCOUNT_PARAM = 'account';
 /** What the Shell offers; floors replace Switch workspace. */
-export const alphaFunctions = defaultFunctions.map((f) => (f.id === 'agents' ? { ...f, id: AGENTS_UNAVAILABLE } : f));
+export const alphaFunctions = defaultFunctions
+  .filter((f) => f.id !== 'settings')
+  .map((f) => (f.id === 'agents' ? { ...f, id: AGENTS_UNAVAILABLE } : f.id === 'account' ? { ...f, id: ACCOUNT_AREA } : f));
 /** For an app's developers: its pull requests' previews, to switch to for themselves. */
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
@@ -173,6 +187,16 @@ export function Host({
   const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
   const [agentsWhy, setAgentsWhy] = useState(false);
+  /** The Account area's open section, from `?account=`; null when it's closed. */
+  const [accountSection, setAccountSection] = useState<AccountSection | null>(() => {
+    const s = new URLSearchParams(window.location.search).get(ACCOUNT_PARAM);
+    return isAccountSection(s) ? s : null;
+  });
+  /** How the last of Keycloak's screens went, said once in the Account area. */
+  const [actionStatus] = useState(() => new URLSearchParams(window.location.search).get(ACTION_STATUS));
+  const accountApi = useMemo(() => new AccountApi({ getToken: session.getToken, fetchImpl }), [session, fetchImpl]);
+  /** The preferences the Account area shows; the shell's own copy is in `prefs`. */
+  const [chosen, setChosen] = useState<Preferences>({});
   /** The Inbox (ADR 0026): whether its view is open, the counts in its label, and Home's first items on this floor. */
   const [inboxOpen, setInboxOpen] = useState(false);
   const [inboxCounts, setInboxCounts] = useState<InboxCounts | undefined>(undefined);
@@ -223,6 +247,21 @@ export function Host({
       }),
     [preferencesUrl, session, fetchImpl, tell],
   );
+  /** Applies one choice from the Account area at once, and saves it. */
+  const choose = useCallback(
+    <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
+      prefs.set(key, value);
+      const now = prefs.current;
+      setChosen(now);
+      applyPreferences(now);
+      const shell = shellRef.current;
+      if (!shell) return;
+      shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
+      shell.away = !!now.away;
+      shell.muted = now.muted ?? [];
+    },
+    [prefs],
+  );
 
   /** The catalogue, and the floor it's for: until the new floor's arrives, nothing is shown from the last one's. */
   const [catalogue, setCatalogue] = useState<{ floor: string; apps: AppManifestEntry[] } | null>(null);
@@ -264,8 +303,23 @@ export function Host({
     [],
   );
 
+  /** Opens the Account area at a section, or closes it (null), keeping the address in step. */
+  const showAccount = useCallback((section: AccountSection | null) => {
+    const url = new URL(window.location.href);
+    if (section) url.searchParams.set(ACCOUNT_PARAM, section);
+    else url.searchParams.delete(ACCOUNT_PARAM);
+    url.searchParams.delete(ACTION_STATUS);
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.pushState(null, '', next);
+    setAccountSection(section);
+  }, []);
+
   useEffect(() => {
-    const onPop = () => setPathname(settled());
+    const onPop = () => {
+      const s = new URLSearchParams(window.location.search).get(ACCOUNT_PARAM);
+      setAccountSection(isAccountSection(s) ? s : null);
+      setPathname(settled());
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [settled]);
@@ -783,9 +837,16 @@ export function Host({
     void prefs.load().then((p) => {
       const shell = shellRef.current;
       if (!live || !shell) return;
-      applyPreferences(p);
-      shell.settings = { reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts };
-      shell.away = !!p.away;
+      // Away with an end ends by itself once that time has passed.
+      if (p.away && p.awayUntil && Date.parse(p.awayUntil) <= Date.now()) {
+        prefs.set('away', false);
+        prefs.set('awayUntil', undefined);
+      }
+      const now = prefs.current;
+      applyPreferences(now);
+      setChosen(now);
+      shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
+      shell.away = !!now.away;
       shell.muted = p.muted ?? [];
       shell.recent = [...new Set([...shell.recent, ...(p.recent ?? [])])].slice(0, 6);
     });
@@ -860,12 +921,17 @@ export function Host({
       else if (id === 'previews') setPreviewsOpen(true);
       else if (id === 'inbox') setInboxOpen(true);
       else if (id === AGENTS_UNAVAILABLE) setAgentsWhy(true);
+      else if (id === ACCOUNT_AREA) {
+        shell.close();
+        showAccount('profile');
+      }
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
       if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts') prefs.set(key, !!value);
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       applyPreferences(prefs.current);
+      setChosen(prefs.current);
     };
     // Home and Title in the band: straight there, from whatever screen you're on.
     const onNav = (e: Event) => {
@@ -935,7 +1001,7 @@ export function Host({
       shell.removeEventListener('ui-nav', onNav);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, inboxForHome, openInboxItem]);
+  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, showAccount, inboxForHome, openInboxItem]);
 
   // The open app is a pull request's preview: say so, with the way back.
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
@@ -979,6 +1045,23 @@ export function Host({
         onDone={toastDone}
       />
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
+      {accountSection ? (
+        <AccountArea
+          section={accountSection}
+          onSection={showAccount}
+          onClose={() => showAccount(null)}
+          api={accountApi}
+          prefs={chosen}
+          onPreference={choose}
+          onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
+          onSignOut={() => void session.signOut()}
+          apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name }))}
+          shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
+          product={productName()}
+          version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
+          actionStatus={actionStatus}
+        />
+      ) : null}
       {screen && screen.kind !== 'app' && manifest?.length ? (
         <CentreMenu
           key={screen.kind === 'orbit' ? `orbit:${screen.app.id}` : 'title'}

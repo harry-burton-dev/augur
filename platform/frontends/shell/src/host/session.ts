@@ -8,7 +8,15 @@ export interface Session {
   floors: Workspace[];
   getToken(): Promise<string>;
   signOut(): Promise<void>;
+  /**
+   * Opens one of Keycloak's own screens (an application-initiated action, such as UPDATE_PASSWORD) and
+   * comes back to `returnTo`, with `kc_action_status` (success, cancelled or error) added to it.
+   */
+  startAction(action: string, returnTo: string): Promise<void>;
 }
+
+/** Keycloak's word on how an application-initiated action went, added to the address it returns to. */
+export const ACTION_STATUS = 'kc_action_status';
 
 /** Where the sign-in service sends people back to after they sign in. */
 export const CALLBACK_PATH = '/auth/callback';
@@ -24,7 +32,7 @@ export class SessionError extends Error {}
 /** The parts of an OIDC client the shell uses; oidc-client-ts's UserManager fits it. */
 export interface Authenticator {
   getUser(): Promise<SignedIn | null>;
-  signinRedirect(args?: { state?: unknown; prompt?: string; max_age?: number }): Promise<void>;
+  signinRedirect(args?: { state?: unknown; prompt?: string; max_age?: number; extraQueryParams?: Record<string, string> }): Promise<void>;
   signinRedirectCallback(url?: string): Promise<SignedIn>;
   signinSilent(): Promise<SignedIn | null>;
   signoutRedirect(): Promise<void>;
@@ -49,6 +57,13 @@ export interface StartOptions {
 
 /** Only a path on this site is a safe place to return to after signing in. */
 const returnPath = (state: unknown) => (typeof state === 'string' && state.startsWith('/') && !state.startsWith('//') ? state : '/');
+
+/** `path` with `key=value` in its query. */
+const withParam = (path: string, key: string, value: string) => {
+  const url = new URL(path, 'http://here');
+  url.searchParams.set(key, value);
+  return `${url.pathname}${url.search}${url.hash}`;
+};
 
 /** A usable sign-in, renewed with the refresh token when it has expired. */
 const current = async (auth: Authenticator): Promise<SignedIn | null> => {
@@ -87,7 +102,9 @@ export async function startSession(
     } catch {
       throw new SessionError('Signing in did not finish. Sign in again.');
     }
-    history.replaceState(null, '', returnPath(signedIn.state));
+    // Back from one of Keycloak's screens: say how it went where the person returns to.
+    const status = new URL(location.href).searchParams.get(ACTION_STATUS);
+    history.replaceState(null, '', status ? withParam(returnPath(signedIn.state), ACTION_STATUS, status) : returnPath(signedIn.state));
   } else if (location.pathname === SIGN_IN_AGAIN_PATH) {
     await auth.signinRedirect({ state: returnPath(new URLSearchParams(location.search).get('return')), prompt: 'login', max_age: 0 });
     return 'redirecting';
@@ -113,5 +130,6 @@ export async function startSession(
     floors,
     getToken,
     signOut: () => auth.signoutRedirect(),
+    startAction: (action, returnTo) => auth.signinRedirect({ state: returnPath(returnTo), extraQueryParams: { kc_action: action } }),
   };
 }
