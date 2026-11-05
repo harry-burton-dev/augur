@@ -1,4 +1,5 @@
 import dbos from '@dbos-inc/dbos-sdk';
+import { prepareJobsSchema } from './jobs-schema.js';
 
 const { DBOS } = dbos;
 
@@ -248,6 +249,7 @@ const durableJobs = ({ app, databaseUrl, schema = jobsSchemaFor(app), log = cons
           listenQueues: [app, ...[...queues].filter(([, c]) => c !== undefined).map(([name]) => `${app}.${name}`)],
         });
         try {
+          await prepareJobsSchema(databaseUrl, schema);
           await DBOS.launch();
         } catch (err) {
           throw new Error(

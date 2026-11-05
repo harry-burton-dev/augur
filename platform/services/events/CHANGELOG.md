@@ -1,5 +1,31 @@
 # @augur/events
 
+## 0.10.1
+
+### Patch Changes
+
+- 4cfab7e: Jobs start with a login that can't create schemas, as every service and app has on a server. DBOS's first step, `create schema if not exists`, is refused by Postgres from such a login even when the storage service has already made the schema, so the events service didn't start on 0.23.0. The kit now records that step as done when the schema is there.
+- Updated dependencies [4cfab7e]
+  - @augur/service-kit@0.17.1
+
+## 0.10.0
+
+### Minor Changes
+
+- 2b58f5f: The Inbox's Done tab looks back `INBOX_DONE_DAYS` days (30 by default) instead of a fixed 30. `GET /v1/inbox/counts` now says the window as `doneDays` (events API 1.12.0), and the shell's empty Done tab reads its number from there instead of repeating it.
+- 5397ee5: Daily and weekly digests: each person who chose one gets an email at 08:00 their time (Mondays for weekly) gathering
+  what they haven't read and weren't already emailed, after their quiet hours, never twice for one morning.
+- 1a8561d: The events service emails people the notifications that need them, as they chose in Account → Notifications: not
+  when email is off, the app is muted or the kind is Quiet, and after their quiet hours. From the organisation's
+  sender, in their language, with a link back to the notification. The service kit's notice template takes a `lang`.
+
+### Patch Changes
+
+- 6ec3e70: What these services say as they start, and the storage and realm jobs as they run, goes through the service kit's `startupLog` instead of `console`: the same JSON lines as the rest of their logs, sent to the deployment's telemetry stack with them.
+- Updated dependencies [1a8561d]
+- Updated dependencies [c678672]
+  - @augur/service-kit@0.17.0
+
 ## 0.9.2
 
 ### Patch Changes

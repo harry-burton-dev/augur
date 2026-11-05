@@ -1,5 +1,19 @@
 # @augur/shell
 
+## 0.19.0
+
+### Minor Changes
+
+- dec8350: Home puts the cards of apps for the work (pillar apps and every other app) before platform apps' cards, among apps not opened lately (PER-179, ADR 0032).
+- f4b3551: A notice email's link opens its notification in the shell, on its floor. Account → Notifications says whether email
+  reaches you, and if not why: no mail relay on the deployment, no address yet, or an address not checked yet.
+- 32f90b8: People are emailed when their password, code app or passkeys change. With a relay, the realm job turns on Keycloak's email listener, and AUGUR's Keycloak image leaves failed sign-ins out. Identity's `GET /v1/me/security` says whether those emails are on and where they go (contract 1.25.0), and Account → Sign-in and security says so. Until people choose a time zone of their own, times follow the organisation's time zone from Admin → Organisation, and then the browser's. Account → Language and region says which one they follow.
+- 6196c61: Account → About and help says what's new in the release, for people: Ibis's highlights, with the deployment's own name for AUGUR in them. A guide for alpha testers, docs/alpha-testers.md, says what to try, what doesn't work yet and how to report a problem.
+
+### Patch Changes
+
+- 2b58f5f: The Inbox's Done tab looks back `INBOX_DONE_DAYS` days (30 by default) instead of a fixed 30. `GET /v1/inbox/counts` now says the window as `doneDays` (events API 1.12.0), and the shell's empty Done tab reads its number from there instead of repeating it.
+
 ## 0.18.0
 
 ### Minor Changes

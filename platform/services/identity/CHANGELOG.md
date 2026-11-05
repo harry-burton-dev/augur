@@ -1,5 +1,32 @@
 # @augur/identity
 
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [4cfab7e]
+  - @augur/service-kit@0.17.1
+
+## 1.5.0
+
+### Minor Changes
+
+- 697fe20: Admins invite people by email: a link that lasts 72 hours to confirm their email and choose a password, sent again from their details, with Invite expired shown after. Without email the one-time password stays, and Admin says why (docs/people.md).
+- fdbfa23: Admin → Organisation keeps the idle-account days: a warning after 60 days without a sign-in and a turn-off at 90 by default. They are kept now and applied by the sign-in service in a later release.
+- 255db6f: The realm job keeps Keycloak's idle-account Workflow in step with Admin → Organisation: a warning email after the warning days without a sign-in, and the sign-in turned off at the turn-off days, never for deployment admins and never without email. Identity records such a turn-off as being idle.
+- 8b22fe4: Identity answers `GET /v1/notice-settings` for the events service: each person's confirmed address,
+  language, time zone (theirs, else the organisation's) and choices in Account → Notifications, so
+  notices can be emailed. Storage gives each platform service a jobs schema of its own.
+- 32f90b8: People are emailed when their password, code app or passkeys change. With a relay, the realm job turns on Keycloak's email listener, and AUGUR's Keycloak image leaves failed sign-ins out. Identity's `GET /v1/me/security` says whether those emails are on and where they go (contract 1.25.0), and Account → Sign-in and security says so. Until people choose a time zone of their own, times follow the organisation's time zone from Admin → Organisation, and then the browser's. Account → Language and region says which one they follow.
+- b5dc60c: Identity notices a sign-in turned off or on in Keycloak itself within five minutes: it ends their sessions, keeps the change and records it in Activity as the sign-in service's doing.
+
+### Patch Changes
+
+- 6ec3e70: What these services say as they start, and the storage and realm jobs as they run, goes through the service kit's `startupLog` instead of `console`: the same JSON lines as the rest of their logs, sent to the deployment's telemetry stack with them.
+- Updated dependencies [1a8561d]
+- Updated dependencies [c678672]
+  - @augur/service-kit@0.17.0
+
 ## 1.4.0
 
 ### Minor Changes
