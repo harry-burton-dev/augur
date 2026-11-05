@@ -1,5 +1,6 @@
 import { serviceHeaders, type ServiceCredentials } from './service.js';
 import { withDeadline } from './deadline.js';
+import { BoundedMap } from './cache.js';
 
 /** Where a floor sits, as identity tells the platform's services. */
 export interface FloorPlace {
@@ -34,7 +35,7 @@ export type FloorLookup = (id: string) => Promise<FloorPlace | undefined>;
  * lookup isn't remembered.
  */
 export const floorPlaces = ({ identityUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: FloorPlacesOptions): FloorLookup => {
-  const cache = new Map<string, { place: FloorPlace | undefined; at: number }>();
+  const cache = new BoundedMap<string, { place: FloorPlace | undefined; at: number }>();
   return async (id) => {
     const hit = cache.get(id);
     if (hit && now() - hit.at < ttlMs) return hit.place;
