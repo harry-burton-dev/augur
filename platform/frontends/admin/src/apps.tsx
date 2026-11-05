@@ -2,7 +2,7 @@ import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { InstallsSection, RunnerControls, useInstalls, type Installs } from './app-runner.js';
-import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
+import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, inboxWords, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
 import { featureHint, featureModeChoices } from './installs.js';
 import { day, Line, Page, Problem, Quiet, Secret } from './parts.js';
 
@@ -103,6 +103,7 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
   const refused = refusedKindNote(app);
   const installed = ins.installs?.installed.find((i) => i.app === app.id);
   const s = appStatus(app);
+  const inbox = inboxWords(app);
   const facts: Detail[] = [
     { label: 'Kind', value: kindWords(app).fact },
     { label: 'Version', value: app.pinnedVersion ? `${app.version}, held` : app.version },
@@ -111,6 +112,7 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
     ...(app.entry.startsWith('/') && !app.entry.startsWith('//') ? [] : [{ label: 'Loads from', value: app.entry }]),
     ...(app.requiredRole ? [{ label: 'Only for', value: app.requiredRole }] : []),
     ...(app.platform ? [] : [{ label: 'May', value: scopeWords(app.grantedScopes ?? app.scopes) }]),
+    ...(inbox ? [{ label: 'Inbox work', value: inbox }] : []),
   ];
   const act = async (call: () => Promise<CatalogueApp>) => {
     setProblem('');

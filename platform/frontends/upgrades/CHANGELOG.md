@@ -1,5 +1,15 @@
 # @augur/upgrades
 
+## 0.1.4
+
+### Patch Changes
+
+- eb6aed9: AUGUR serves kit 0.5.1 (Quill 0.7.0, Aerie 0.6.0): apps get the Tiptap editor with mentions as chips (ADR 0058), a date field with a real calendar, and the people picker that SDK 1.12's `searchPrincipals` answers. In Admin, the activity filters' dates open that calendar.
+- 8606741: The registry sends its signed record to Backstage at least every 15 minutes, not once a day, so Backstage can raise the alarm when a deployment goes quiet (ADR 0059). The record's reason for a send with nothing new is `heartbeat` (contract 1.32.0), and the Upgrade Centre calls it the regular record.
+- Updated dependencies [7518ce8]
+- Updated dependencies [cceb953]
+  - @augur/mfe-sdk@1.12.0
+
 ## 0.1.3
 
 ### Patch Changes

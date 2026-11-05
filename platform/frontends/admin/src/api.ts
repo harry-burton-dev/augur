@@ -59,6 +59,8 @@ export interface CatalogueApp extends AppManifestEntry {
   settings?: AppSetting[];
   /** Features it's trying before they're everyone's (SDK 1.7). */
   previews?: { id: string; name: string; detail?: string; until?: string }[];
+  /** The kinds of work it puts in people's inboxes, from its manifest (SDK 1.12). */
+  inbox?: { kinds: { id: string; label: string; icon?: string }[] };
 }
 
 /** One setting an app offers admins: a whole number between min and max. */

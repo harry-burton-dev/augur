@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KeycloakDirectory } from './directory.ts';
-import { applyLook, applyRealmSettings, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { applyLook, applyMail, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -172,5 +172,67 @@ describe('the sign-in pages’ look and languages', () => {
     await applyLook(kc, { theme: SIGN_IN_THEME, languages: ['en'] }, [], (m) => warnings.push(m));
     expect(calls.find((c) => c.method === 'PUT')!.body).toMatchObject({ loginTheme: '', emailTheme: '' });
     expect(warnings[0]).toContain(`no ${SIGN_IN_THEME} theme`);
+  });
+});
+
+describe('email through the organisation’s relay (ADR 0035)', () => {
+  it('reads the relay from the environment, guessing security from the port, and sends nothing without a host or a sender', () => {
+    expect(realmMailFromEnv({})).toBeUndefined();
+    expect(realmMailFromEnv({ SMTP_HOST: 'relay.example', SMTP_FROM: 'augur@example.org' })).toEqual({ host: 'relay.example', port: 587, security: 'starttls', from: 'augur@example.org' });
+    expect(realmMailFromEnv({ SMTP_HOST: 'relay.example', SMTP_PORT: '465', SMTP_FROM: 'a@b.c', SMTP_USER: 'u', SMTP_PASSWORD: 'p' })).toMatchObject({ port: 465, security: 'tls', user: 'u', password: 'p' });
+    expect(realmMailFromEnv({ SMTP_HOST: 'mailpit', SMTP_SECURITY: 'none', SMTP_FROM: 'a@b.c' })).toMatchObject({ port: 25, security: 'none' });
+    const warnings: string[] = [];
+    expect(realmMailFromEnv({ SMTP_HOST: 'relay.example' }, (m) => warnings.push(m))).toBeUndefined();
+    expect(realmMailFromEnv({ SMTP_HOST: 'relay.example', SMTP_FROM: 'a@b.c', SMTP_PORT: 'many' }, (m) => warnings.push(m))).toBeUndefined();
+    expect(realmMailFromEnv({ SMTP_HOST: 'relay.example', SMTP_FROM: 'a@b.c', SMTP_SECURITY: 'maybe' }, (m) => warnings.push(m))).toBeUndefined();
+    expect(warnings).toEqual([expect.stringContaining('SMTP_FROM'), expect.stringContaining('SMTP_PORT many'), expect.stringContaining('SMTP_SECURITY maybe')]);
+  });
+
+  const realmAt = (start: Record<string, unknown>) => {
+    let realm: Record<string, unknown> = start;
+    const k = keycloak((method, path, body) => {
+      if (path !== '') return undefined;
+      if (method === 'PUT') {
+        const b = body as Record<string, unknown> & { smtpServer?: Record<string, string> };
+        // Keycloak never reads a password back.
+        realm = { ...realm, ...b, ...(b.smtpServer ? { smtpServer: { ...b.smtpServer, ...(b.smtpServer.password ? { password: '**********' } : {}) } } : {}) };
+      }
+      return method === 'GET' ? realm : undefined;
+    });
+    return { ...k, realm: () => realm };
+  };
+
+  it('points the realm at the relay with the product as the sender, turns on verification and resets, and writes again only when something changed', async () => {
+    const t = realmAt({ attributes: { other: 'kept' }, verifyEmail: false, resetPasswordAllowed: false });
+    const mail = realmMailFromEnv({ SMTP_HOST: 'relay.example', SMTP_FROM: 'augur@example.org', SMTP_USER: 'u', SMTP_PASSWORD: 'secret' })!;
+    const changes: string[] = [];
+    await applyMail(t.kc, mail, changes, 'Skein');
+    expect(t.realm()).toMatchObject({
+      verifyEmail: true,
+      resetPasswordAllowed: true,
+      smtpServer: { host: 'relay.example', port: '587', from: 'augur@example.org', fromDisplayName: 'Skein', starttls: 'true', ssl: 'false', auth: 'true', user: 'u' },
+      attributes: { other: 'kept', [MAIL_FINGERPRINT]: expect.any(String) },
+    });
+    expect(JSON.stringify(t.realm().attributes)).not.toContain('secret');
+    expect(changes).toEqual(['email: relay relay.example:587, verifyEmail on, resetPasswordAllowed on']);
+    const puts = () => t.calls.filter((c) => c.method === 'PUT').length;
+    await applyMail(t.kc, mail, changes, 'Skein');
+    expect(puts()).toBe(1);
+    // A new password is noticed though Keycloak never shows the old one.
+    await applyMail(t.kc, { ...mail, password: 'rotated' }, changes, 'Skein');
+    expect(puts()).toBe(2);
+    expect(changes.at(-1)).toBe('email: relay relay.example:587');
+  });
+
+  it('without a relay, keeps one set in the console and offers resets only when there is one', async () => {
+    const kept = realmAt({ smtpServer: { host: 'console.example' }, verifyEmail: false, resetPasswordAllowed: false });
+    await applyMail(kept.kc, undefined, []);
+    expect(kept.realm()).toMatchObject({ smtpServer: { host: 'console.example' }, verifyEmail: true, resetPasswordAllowed: true });
+    const none = realmAt({ verifyEmail: true, resetPasswordAllowed: true });
+    const changes: string[] = [];
+    await applyMail(none.kc, undefined, changes);
+    expect(none.realm()).toMatchObject({ verifyEmail: false, resetPasswordAllowed: false });
+    expect(none.realm().smtpServer).toBeUndefined();
+    expect(changes).toEqual(['email: verifyEmail off, resetPasswordAllowed off']);
   });
 });

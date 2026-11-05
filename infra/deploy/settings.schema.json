@@ -477,6 +477,69 @@
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
+    "SMTP_HOST": {
+      "type": "string",
+      "description": "The organisation's SMTP relay. Empty: AUGUR sends no email, offers no password reset or address check, and says so.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#email"
+    },
+    "SMTP_PORT": {
+      "type": "string",
+      "description": "The relay's port. Empty: 587, or 465 with SMTP_SECURITY tls.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#email"
+    },
+    "SMTP_SECURITY": {
+      "type": "string",
+      "description": "starttls (the default), tls from the start, or none for a relay on a trusted network.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#email"
+    },
+    "SMTP_FROM": {
+      "type": "string",
+      "description": "The address email comes from, which the relay must accept. The product's name is shown as the sender.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#email"
+    },
+    "SMTP_REPLY_TO": {
+      "type": "string",
+      "description": "Where replies go, if not to SMTP_FROM.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#email"
+    },
+    "SMTP_USER": {
+      "type": "string",
+      "description": "The relay's sign-in, if it wants one.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#email"
+    },
+    "SMTP_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "That sign-in's password.",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/deploy.md#email"
+    },
     "ORG_LOGO_URL": {
       "type": "string",
       "description": "A link to the organisation's logo, shown on the sign-in pages and in emails. Empty shows none.",

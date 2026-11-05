@@ -1,4 +1,4 @@
-import type { NotificationAction } from '@augur/mfe-sdk';
+import type { InboxChange, NotificationAction } from '@augur/mfe-sdk';
 import type { ShellNotification } from '@augur/shell-kit';
 import { usableActions } from './notifications.js';
 
@@ -37,6 +37,11 @@ export interface FeedOptions {
   /** Everything unread, on start and again after each reconnect, so nothing missed while offline is lost. */
   onList(list: ServerNotification[]): void;
   onNotification(n: ServerNotification): void;
+  /**
+   * An inbox item the person can see changed (`event: inbox` on the same stream), or, with nothing,
+   * the stream (re)connected and anything may have changed while it was away: load the Inbox again.
+   */
+  onInbox?(change?: InboxChange): void;
   /** Whether the stream is working, in words the Shell can show. */
   onState(state: { loading: boolean; error: string }): void;
   fetchImpl?: typeof fetch;
@@ -119,15 +124,18 @@ export class NotificationFeed {
         const res = await this.fetchImpl(`${this.baseUrl}/notifications/stream`, { headers: await this.headers(), signal });
         if (!res.ok || !res.body) throw new Error(`answered ${res.status}`);
         this.opts.onState({ loading: false, error: '' });
+        this.opts.onInbox?.();
         pause = retryMs;
         const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
         let buffer = '';
         for (;;) {
           const { value, done } = await reader.read();
           if (done) break;
-          const parsed = parseEvents(buffer + value);
+          const text = buffer + value;
+          const parsed = parseEvents(text);
           buffer = parsed.rest;
           parsed.events.forEach((n) => this.opts.onNotification(n));
+          parseEvents<InboxChange>(text, 'inbox').events.forEach((c) => this.opts.onInbox?.(c));
         }
       } catch {
         if (signal.aborted) return;

@@ -16,3 +16,5 @@ Could steer: A, D.
 Used in [`2026-11-03-the-switchboard`](../runs/2026-11-03-the-switchboard/): editions list every source, even at zero.
 
 Used in [`2026-11-03-paper-and-the-desk`](../runs/2026-11-03-paper-and-the-desk/): a card the round didn't reach says "not checked this round" (board V6).
+
+On the writing track, in [`2026-11-05-the-safety-card`](../runs/2026-11-05-the-safety-card/): `[open: ...]` in the text, never silence; "Way back [open]" on 30 cards is honest but noisy, and the fix is the missing fact, not dropping the mark. In the reader test, a list of what the text can't tell you, at the top and phrased as the reader's own questions, let readers stop at about 100 words; a one-line warning didn't.

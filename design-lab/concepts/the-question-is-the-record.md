@@ -10,3 +10,5 @@ A saved question keeps its words, each sharpening choice (and who made it), its 
 First found in: [`2026-11-03-the-reference-desk`](../runs/2026-11-03-the-reference-desk/) (saved V2, V5 and V6, example V6, combined V1).
 
 Could steer: Artifacts publishing (S), the minute (T), the case file (U).
+
+In [`2026-11-05-the-type-specimen`](../runs/2026-11-05-the-type-specimen/) (data track): a run keeps its count, both clocks and its floors, never its rows; keeping the rows (across time T1) leaked them and lost every reason.

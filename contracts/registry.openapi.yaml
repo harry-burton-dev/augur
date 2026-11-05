@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.32.0
+  version: 1.33.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -1723,6 +1723,37 @@ components:
             $ref: "#/components/schemas/AppSetting"
           maxItems: 10
           description: Settings the app offers admins in Admin, Apps; its service reads them from the registry
+        inbox:
+          type: object
+          required:
+            - kinds
+          properties:
+            kinds:
+              type: array
+              items:
+                type: object
+                required:
+                  - id
+                  - label
+                properties:
+                  id:
+                    type: string
+                    pattern: ^[a-z][a-z0-9-]{0,39}$
+                    description: "How the app's service names it: \"assignment\""
+                  label:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                    description: 'What the Inbox shows for it: "Assigned to you"'
+                  icon:
+                    type: string
+                    maxLength: 40
+                    description: A UI kit icon name
+                additionalProperties: false
+              minItems: 1
+              maxItems: 10
+          additionalProperties: false
+          description: The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)
         scopes:
           type: array
           items:
@@ -2221,7 +2252,7 @@ paths:
   /apps/{id}/grants:
     get:
       summary: What an app may do on a floor (platform services only)
-      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007).
+      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007). With them, the inbox kinds its manifest declares, which the events service checks items against.
       parameters:
         - schema:
             type: string
@@ -2245,6 +2276,7 @@ paths:
                 required:
                   - app
                   - scopes
+                  - inboxKinds
                 properties:
                   app:
                     type: string
@@ -2254,6 +2286,11 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Scope"
+                  inboxKinds:
+                    type: array
+                    items:
+                      type: string
+                    description: The ids of the inbox kinds the app's manifest declares
                 description: The app's grants
         "403":
           description: Not a platform service

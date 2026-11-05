@@ -21,3 +21,20 @@ Without a connected Keycloak, everything but preferences answers 503 and says a 
 Identity never changes a password, a code app, a passkey, recovery codes or the email address itself. `GET /me/security` names Keycloak's application-initiated action for each (`UPDATE_PASSWORD`, `CONFIGURE_TOTP`, `webauthn-register-passwordless`, `CONFIGURE_RECOVERY_AUTHN_CODES`, `UPDATE_EMAIL`, `delete_credential:<id>`, `idp_link:<alias>`). The shell signs in again with `kc_action` set to it; Keycloak shows its own screen (in AUGUR's sign-in theme) and returns with `kc_action_status`. The realm job turns each of these actions on.
 
 Someone whose role needs two-step sign-in (ADR 0038) can't remove their last code app or passkey: the summary marks it, with the reason. Someone who signs in through their organisation and has no password here is told their password is changed there.
+
+## The Account area in the shell
+
+Account on the shell's arc opens the Account area (`platform/frontends/shell/src/account/`) over whatever is on screen, in an app's frame, at `?account=<section>`, so a reload or a trip to one of Keycloak's screens comes back to the same section. Escape or Close puts the screen back as it was. Settings is no longer a separate view: its switches are under Appearance.
+
+| Section | What's in it |
+| --- | --- |
+| Profile | Name, job title, phone and pronouns, saved as each field is left; the email address, changed on Keycloak's screen; away, with what it says and when it ends; sign out. |
+| Sign-in and security | Password, code apps, passkeys and recovery codes, each changed on Keycloak's screen; the organisation sign-ins to link; where you're signed in, with sign out there or everywhere else (the shell knows its own session by the `sid` claim in its token); recent sign-ins. |
+| Notifications | Email for things that need you, a digest, quiet hours, and On Home or Quiet for each app. AUGUR doesn't send email yet, and the section says so. |
+| Appearance | Reduce motion, area titles, toasts and density. |
+| Language and region | Time zone (the browser's unless chosen). English only for now, and it says so. |
+| About and help | What's running, and the keys. |
+
+Home and apps, and Privacy and data, are still to come (PER-193). Choosing a kind of notification per app waits for apps to name their kinds in the manifest.
+
+Coming back from Keycloak's screen, the shell's sign-in callback adds `kc_action_status` to the address it returns to, and the section says once whether the change was made.
