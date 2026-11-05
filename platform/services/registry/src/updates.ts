@@ -10,7 +10,7 @@ import type { AppRecord, Upgrade } from './store.ts';
 
 /**
  * Which releases a deployment follows: stable (promoted to production) only, beta too (on preview;
- * every release starts there), or dev too (a build of every merge into dev, for the workbench only).
+ * every release starts there), or dev too (a build of every merge into main, for the workbench only).
  * Admin calls them Production, Preview and Dev builds (docs/release-channels.md).
  */
 export type Channel = 'stable' | 'beta' | 'dev';
