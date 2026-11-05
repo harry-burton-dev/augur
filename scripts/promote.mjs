@@ -8,7 +8,7 @@
 //   node scripts/promote.mjs stable <unit> [<v>]    from the Promote workflow: makes the release stable, with promotion.json
 //   node scripts/promote.mjs versions [<ref>]       prints each unit's version at a ref (default HEAD)
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import semver from 'semver';
@@ -60,6 +60,20 @@ export const versionsFrom = (read, appIds) => {
   const versions = { [AUGUR]: json('release/augur-release.json')?.version };
   for (const id of appIds) versions[id] = json(`apps/${id}/manifest.json`)?.version;
   return versions;
+};
+
+/**
+ * Where a unit's releases are, for a promotion: AUGUR and the apps released from this repository are
+ * here; an app in its own repository (release/app-repos.json, ADR 0047) is there, and is changed with
+ * APP_PROMOTE_TOKEN. A pillar app is refused: it reaches stable inside the AUGUR release that ships it
+ * (ADR 0049). Returns { repo, own } or { problem }.
+ */
+export const promotionSource = (unit, { repo, here = [], own = {}, shipped = [] }) => {
+  if (unit === AUGUR || here.includes(unit)) return { repo, own: false };
+  if (own[unit]) return { repo: own[unit], own: true };
+  if (shipped.includes(unit)) return { problem: `${unit} ships with AUGUR (release/shipped-apps.json, ADR 0049), so it becomes stable with the AUGUR release that ships it. Promote augur instead.` };
+  const all = [AUGUR, ...here, ...Object.keys(own)];
+  return { problem: `"${unit}" is not a unit: ${all.join(', ')}.` };
 };
 
 /** The tag a unit's release has. */
@@ -146,11 +160,18 @@ const main = async () => {
     console.log(`✓ ${head} may go into ${base}.`);
   } else if (mode === 'stable') {
     const [unit, wanted] = args;
-    if (unit !== AUGUR && !appIds.includes(unit)) throw new Error(`"${unit}" is not a unit: augur, or one of ${appIds.join(', ')}.`);
+    const json = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
+    const source = promotionSource(unit, { repo: REPO, here: appIds, own: json('release/app-repos.json').apps ?? {}, shipped: Object.keys(json('release/shipped-apps.json').apps ?? {}) });
+    if (source.problem) throw new Error(source.problem);
     const owner = REPO.split('/')[0];
     const actor = process.env.GITHUB_ACTOR;
     if (actor !== owner) throw new Error(`Only the repository's owner (${owner}) makes a release stable, not ${actor ?? 'someone unknown'}.`);
-    const releases = JSON.parse(gh('release', 'list', '--limit', '500', '--json', 'tagName,isPrerelease'));
+    // An app's own repository is changed with a token that may write its releases, kept for this workflow alone.
+    const promoteToken = process.env.APP_PROMOTE_TOKEN?.trim();
+    if (source.own && !promoteToken) throw new Error(`${unit} is released from ${source.repo}, and APP_PROMOTE_TOKEN isn’t set to mark its releases stable (docs/release-channels.md, "An app in its own repository").`);
+    const ghAt = (...args) =>
+      source.own ? execFileSync('gh', [...args, '--repo', source.repo], { cwd: root, encoding: 'utf8', env: { ...process.env, GH_TOKEN: promoteToken } }).trim() : gh(...args);
+    const releases = JSON.parse(ghAt('release', 'list', '--limit', '500', '--json', 'tagName,isPrerelease'));
     const target = promotionTarget(unit, wanted, releases);
     if (!target) throw new Error(wanted ? `${tagOf(unit, wanted)} isn't released.` : `${unit} has no beta release to promote.`);
     const tag = tagOf(unit, target.version);
@@ -166,11 +187,11 @@ const main = async () => {
     const dir = mkdtempSync(join(tmpdir(), 'promote-'));
     const file = join(dir, 'promotion.json');
     writeFileSync(file, `${JSON.stringify(promotionRecord({ unit, version: target.version, actor, at: new Date().toISOString(), run: process.env.GITHUB_RUN_ID, bake: verdict.record }), null, 2)}\n`);
-    gh('release', 'upload', tag, file, '--clobber');
+    ghAt('release', 'upload', tag, file, '--clobber');
     // AUGUR's newest stable release is the repository's latest; an app's never is.
     const newest = unit === AUGUR && !releases.some((r) => r.tagName.startsWith('augur@') && !r.isPrerelease && semver.valid(r.tagName.slice(6)) && semver.gt(r.tagName.slice(6), target.version));
-    gh('release', 'edit', tag, '--prerelease=false', `--latest=${newest}`);
-    console.log(`${tag} is stable.`);
+    ghAt('release', 'edit', tag, '--prerelease=false', `--latest=${newest}`);
+    console.log(`${tag} is stable${source.own ? ` in ${source.repo}` : ''}.`);
     if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `promoted=${tag}\n`);
   } else {
     console.error('Usage: node scripts/promote.mjs check-pr | stable <unit> [<version>] | versions [<ref>]');

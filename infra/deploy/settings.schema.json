@@ -34,7 +34,8 @@
     "PLATFORM_ADMIN_EMAIL",
     "PLATFORM_ADMIN_FIRST_NAME",
     "PLATFORM_ADMIN_LAST_NAME",
-    "ALERT_WEBHOOK_TOKEN"
+    "ALERT_WEBHOOK_TOKEN",
+    "GRAFANA_ADMIN_PASSWORD"
   ],
   "patternProperties": {
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
@@ -1144,7 +1145,7 @@
       "writeOnly": true,
       "minLength": 16,
       "x-generate": true,
-      "description": "Grafana's admin password (otel-lgtm), at least 16 characters.",
+      "description": "Grafana's admin password (otel-lgtm), at least 16 characters. Required, as Grafana would otherwise take admin/admin. The updater makes it up on upgrade.",
       "x-services": [
         "otel-lgtm"
       ],
