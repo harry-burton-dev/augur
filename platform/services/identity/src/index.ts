@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
-import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, steadyPool } from '@augur/service-kit';
+import { callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, notify, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, steadyPool } from '@augur/service-kit';
 import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { KeycloakAccounts, type AccountSource } from './me.ts';
@@ -97,5 +97,12 @@ const { REGISTRY_URL } = process.env;
 const grants = REGISTRY_URL && credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 if (!grants) console.warn('REGISTRY_URL or SERVICE_CLIENT_SECRET is not set: apps can’t look people up.');
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants });
+// Admins hear when someone asks to leave; a person's download carries what the events service keeps about them.
+const tell = EVENTS_URL && credentials ? (notification: Parameters<typeof notify>[0]['notification']) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) : undefined;
+const dataFrom =
+  EVENTS_URL && credentials
+    ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) }
+    : undefined;
+
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom });
 await app.listen({ port, host: '0.0.0.0' });

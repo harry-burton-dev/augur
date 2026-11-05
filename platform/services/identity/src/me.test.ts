@@ -121,6 +121,45 @@ describe('the caller’s account', () => {
   });
 });
 
+describe('privacy and data', () => {
+  it('records a request to leave, tells admins once, and lets them take it back', async () => {
+    const audited: { action: string }[] = [];
+    const told: { title: string; audience?: string[] }[] = [];
+    const app = await buildApp({ accounts: accountsWithAlex(), audit: async (e) => void audited.push(e), tell: async (n) => void told.push(n) });
+    const me = callerHeaders(alex);
+    expect((await app.inject({ method: 'GET', url: '/v1/me/leave', headers: me })).json()).toEqual({});
+    const asked = await app.inject({ method: 'POST', url: '/v1/me/leave', headers: me, payload: { note: 'Moving on in December' } });
+    expect(asked.statusCode).toBe(201);
+    const first = asked.json().requestedAt;
+    const again = await app.inject({ method: 'POST', url: '/v1/me/leave', headers: me, payload: {} });
+    expect(again.json()).toEqual({ requestedAt: first });
+    expect(told).toEqual([expect.objectContaining({ title: 'Alex Rivera asked to leave', audience: ['role:admin'] })]);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/me/leave', headers: me })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'GET', url: '/v1/me/leave', headers: me })).json()).toEqual({});
+    expect(audited.map((e) => e.action)).toEqual(['account.leave-requested', 'account.leave-requested', 'account.leave-withdrawn']);
+  });
+
+  it('gives a copy of their data, saying which parts it couldn’t read, and records it', async () => {
+    const audited: { action: string }[] = [];
+    const dataFrom = { events: async () => ({ notifications: [{ title: 'Hello' }] }), storage: async () => Promise.reject(new Error('it answered 503')) };
+    const app = await buildApp({ accounts: accountsWithAlex(), audit: async (e) => void audited.push(e), dataFrom });
+    const res = await app.inject({ method: 'GET', url: '/v1/me/data', headers: callerHeaders(alex) });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toMatch(/^attachment; filename="my-data-\d{4}-\d{2}-\d{2}\.json"$/);
+    const data = res.json();
+    expect(data.you).toMatchObject({ id: 'u-1', name: 'Alex Rivera' });
+    expect(data.profile).toMatchObject({ username: 'alex' });
+    expect(data.sessions).toHaveLength(2);
+    expect(data.events).toEqual({ notifications: [{ title: 'Hello' }] });
+    expect(data.missing).toEqual(['storage: it answered 503']);
+    expect(JSON.stringify(data)).not.toMatch(/secretData|credentialData|hashedPassword/i);
+    expect(audited.map((e) => e.action)).toEqual(['account.data-downloaded']);
+    // Without the sign-in service, the account's parts are named as missing, and the rest still comes.
+    const bare = await (await buildApp({})).inject({ method: 'GET', url: '/v1/me/data', headers: callerHeaders(alex) });
+    expect(bare.json().missing).toHaveLength(5);
+  });
+});
+
 describe('accounts in Keycloak', () => {
   /** A Keycloak admin API that answers from a table of paths, recording what was sent. */
   const keycloak = (routes: Record<string, unknown>) => {
