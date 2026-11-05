@@ -1,6 +1,6 @@
 {
   "name": "@augur/storage",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "@augur/service-kit": "workspace:*",
-    "@aws-sdk/client-s3": "^3.1156.0",
-    "pg": "^8.23.1"
+    "@aws-sdk/client-s3": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/pg": "^8.23.1",
-    "typescript": "^5.6.0",
-    "vitest": "^3.2.0"
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   }
 }

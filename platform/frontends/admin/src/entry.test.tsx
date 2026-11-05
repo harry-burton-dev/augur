@@ -312,7 +312,7 @@ describe('Organisation', () => {
     expect(zoneLabel('Not/AZone')).toBe('Not/AZone');
   });
 
-  it('shows the settings, says the sender isn’t used for email yet, and saves a new name', async () => {
+  it('shows the settings, says email uses the sender, and saves a new name', async () => {
     const { sent } = gateway((method, url, body) => {
       if (url === '/api/identity/v1/organisation') return Response.json(org);
       if (url === '/api/identity/v1/admin/organisation/time-zones') return Response.json(['UTC', 'Europe/London']);
@@ -322,7 +322,7 @@ describe('Organisation', () => {
     const el = await open('/organisation');
     expect(title(el)).toBe('Organisation');
     expect(el.textContent).toContain('Northwind');
-    expect(el.textContent).toContain('Not used for email yet.');
+    expect(el.textContent).toContain('Email from AUGUR uses these.');
     await press(button('Change', el));
     await type(fieldNamed('Name'), 'Northwind Trading');
     await press(button('Save'));

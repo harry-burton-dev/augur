@@ -1,8 +1,9 @@
 /**
  * The one way AUGUR's own services send email (ADR 0065): Nodemailer to the organisation's relay (ADR 0035), from
  * the React Email templates in `mail-templates.tsx`. The relay settings are the same `SMTP_*` ones the realm job
- * gives Keycloak. Without a relay the sender says so instead of failing, so a screen that would email can fall back
- * and Admin → Status can say why.
+ * gives Keycloak. Mail comes from the organisation's sender (Admin → Organisation, kept by identity, ADR 0042) when one
+ * is set, else from SMTP_FROM under the product's name. Without a relay the sender says so instead of failing, so a
+ * screen that would email can fall back and Admin → Status can say why.
  *
  * Import it from `@augur/service-kit/mail`, so services that never email don't load Nodemailer or React.
  */
@@ -22,8 +23,10 @@ export interface MailStatus {
   problem?: string;
   /** The relay, as `host:port`, when one is set. Never its sign-in. */
   relay?: string;
-  /** The address mail comes from. */
+  /** The address mail comes from: the organisation's sender address, or SMTP_FROM. */
   from?: string;
+  /** The name mail comes from: the organisation's sender name, or the product's name. */
+  fromName?: string;
   /** When the relay was last checked. */
   checkedAt?: string;
 }
@@ -36,6 +39,52 @@ export const NO_RELAY =
 
 /** How long a relay check is trusted before it is asked again. */
 export const MAIL_CHECK_MS = 5 * 60_000;
+
+/** Who mail says it is from, as the organisation set it (identity's `GET /v1/organisation`, `sender`). */
+export interface MailFrom {
+  name: string;
+  /** Absent until an admin sets one; SMTP_FROM is used meanwhile. */
+  address?: string;
+}
+
+/** Where the organisation's sender is read from; undefined when it can't be, so SMTP_FROM and the product's name stand. */
+export type SenderLookup = () => Promise<MailFrom | undefined>;
+
+/**
+ * The organisation's sender from identity (`GET /v1/organisation`), kept for `ttlMs`. When identity can't answer, the
+ * last answer stands, or none, so mail still goes from SMTP_FROM. `headers` signs the request in, as the calling service.
+ */
+export const organisationSender = ({
+  identityUrl,
+  headers,
+  ttlMs = 60_000,
+  fetchImpl = fetch,
+  now = Date.now,
+  warn = () => undefined,
+}: {
+  identityUrl: string;
+  headers: () => Promise<Record<string, string>>;
+  ttlMs?: number;
+  fetchImpl?: typeof fetch;
+  now?: () => number;
+  warn?: (message: string) => void;
+}): SenderLookup => {
+  let last: { at: number; sender?: MailFrom } | undefined;
+  return async () => {
+    if (last && now() - last.at < ttlMs) return last.sender;
+    try {
+      const res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/organisation`, { headers: await headers(), signal: AbortSignal.timeout(5_000) });
+      if (!res.ok) throw new Error(`identity answered ${res.status}`);
+      const { sender } = (await res.json()) as { sender?: Partial<MailFrom> };
+      last = { at: now(), sender: sender?.name ? { name: sender.name, ...(sender.address ? { address: sender.address } : {}) } : undefined };
+    } catch (err) {
+      warn(`The organisation’s email sender couldn’t be read, so mail goes from SMTP_FROM meanwhile: ${(err as Error).message}`);
+      last = { at: now(), sender: last?.sender };
+    }
+    return last.sender;
+  };
+};
+
 
 /** One message as the sender hands it to the transport. */
 export interface MailMessage {
@@ -61,6 +110,8 @@ export interface MailerOptions {
   relay?: MailRelay;
   /** The product's name as people know it (ORG_PRODUCT_NAME), shown as the sender's name and in templates. */
   productName?: string;
+  /** The organisation's sender (`organisationSender`); without one, mail goes from SMTP_FROM under `productName`. */
+  sender?: SenderLookup;
   /** For tests: a stand-in for the relay. */
   transport?: MailTransport;
   now?: () => number;
@@ -70,12 +121,14 @@ export class Mailer {
   readonly relay?: MailRelay;
   readonly productName: string;
   private readonly transport?: MailTransport;
+  private readonly sender?: SenderLookup;
   private readonly now: () => number;
   private checked?: { at: number; status: MailStatus };
 
-  constructor({ relay, productName = 'AUGUR', transport, now = Date.now }: MailerOptions = {}) {
+  constructor({ relay, productName = 'AUGUR', sender, transport, now = Date.now }: MailerOptions = {}) {
     this.relay = relay;
     this.productName = productName;
+    this.sender = sender;
     this.now = now;
     this.transport =
       transport ??
@@ -97,11 +150,20 @@ export class Mailer {
     return !!this.relay;
   }
 
+  /** Who mail comes from now: the organisation's sender where it has one, else SMTP_FROM under the product's name. */
+  async from(): Promise<{ name: string; address: string }> {
+    const set = await this.sender?.().catch(() => undefined);
+    return { name: set?.name ?? this.productName, address: set?.address ?? this.relay?.from ?? '' };
+  }
+
   /** Whether email can be sent, checking the relay at most every `MAIL_CHECK_MS` (or now, with `fresh`). */
   async status({ fresh = false }: { fresh?: boolean } = {}): Promise<MailStatus> {
     if (!this.relay || !this.transport) return { state: 'off', problem: NO_RELAY };
-    if (!fresh && this.checked && this.now() - this.checked.at < MAIL_CHECK_MS) return this.checked.status;
-    const base = { relay: `${this.relay.host}:${this.relay.port}`, from: this.relay.from, checkedAt: new Date(this.now()).toISOString() };
+    // Who mail comes from is read each time (the lookup keeps its own short cache), so a change in Admin shows at once.
+    const from = await this.from();
+    const sender = { from: from.address, fromName: from.name };
+    if (!fresh && this.checked && this.now() - this.checked.at < MAIL_CHECK_MS) return { ...this.checked.status, ...sender };
+    const base = { relay: `${this.relay.host}:${this.relay.port}`, checkedAt: new Date(this.now()).toISOString() };
     let status: MailStatus;
     try {
       await this.transport.verify();
@@ -110,17 +172,17 @@ export class Mailer {
       status = { state: 'attention', ...base, problem: relayProblem(err) };
     }
     this.checked = { at: this.now(), status };
-    return status;
+    return { ...status, ...sender };
   }
 
   /** Sends one notice email. Never throws: a missing or failing relay comes back as `{ sent: false, reason }`. */
   async sendNotice(to: string, notice: Omit<NoticeEmailProps, 'productName'> & { subject: string }): Promise<MailResult> {
     if (!this.relay || !this.transport) return { sent: false, reason: NO_RELAY };
     const { subject, ...props } = notice;
-    const { html, text } = await renderNotice({ ...props, productName: this.productName });
+    const [{ html, text }, from] = await Promise.all([renderNotice({ ...props, productName: this.productName }), this.from()]);
     try {
       const info = await this.transport.sendMail({
-        from: { name: this.productName, address: this.relay.from },
+        from,
         ...(this.relay.replyTo ? { replyTo: this.relay.replyTo } : {}),
         to,
         subject,

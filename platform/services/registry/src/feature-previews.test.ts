@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders, FloorsUnavailable, type FloorPlace } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { ended } from './feature-previews.ts';
 import { UpdateChecker } from './updates.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const board = { id: 'board', name: 'Board view', detail: 'Tasks as columns.' };
 const old = { id: 'old', name: 'Old idea', until: '2020-01-01' };
@@ -18,7 +20,7 @@ const service = { authorization: 'Bearer app-notes' };
 
 const setup = async (ring: 'preview' | 'production') => {
   const entries: { action: string; detail?: Record<string, unknown> }[] = [];
-  const app = await buildApp({ verifyService, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring }), audit: async (e) => void entries.push(e) });
+  const app = await db.app({ verifyService, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring }), audit: async (e) => void entries.push(e) });
   expect((await app.inject({ method: 'PUT', url: '/v1/apps/notes', headers: service, payload: notes })).statusCode).toBeLessThan(300);
   const mine = async (headers = sam) => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers })).json().apps.filter((a: { app: string }) => a.app === 'notes');
   const choose = (on: boolean, preview = 'board', headers = sam) => app.inject({ method: 'PUT', url: `/v1/feature-previews/notes/${preview}`, headers, payload: { on } });
@@ -27,9 +29,9 @@ const setup = async (ring: 'preview' | 'production') => {
   return { app, entries, mine, choose, set, catalogue };
 };
 
-describe('feature previews', () => {
+describe.runIf(DATABASE_URL)('feature previews', () => {
   it('turns away a manifest that offers one preview twice', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/notes', headers: service, payload: { ...notes, previews: [board, board] } });
     expect(res.statusCode).toBe(400);
     expect(res.json().message).toMatch(/offers the preview "board" twice/);
@@ -96,7 +98,7 @@ describe('feature previews', () => {
       if (down) throw new FloorsUnavailable('identity is down');
       return id === 'org' ? places.o : places[id];
     };
-    const app = await buildApp({ verifyService, floors, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring: 'production' }), audit: async (e) => void entries.push(e) });
+    const app = await db.app({ verifyService, floors, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring: 'production' }), audit: async (e) => void entries.push(e) });
     await app.inject({ method: 'PUT', url: '/v1/apps/notes', headers: service, payload: { ...notes, floors: ['personal', 'team', 'org'] } });
     const on = (id: string) => callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: [], workspace: { id, kind: places[id].kind, role: 'member' } });
     const set = (payload: Record<string, unknown>) => app.inject({ method: 'PUT', url: '/v1/apps/notes/feature-previews/board', headers: admin, payload });
@@ -143,9 +145,9 @@ describe('feature previews', () => {
   });
 });
 
-describe("AUGUR's own apps' feature previews", () => {
+describe.runIf(DATABASE_URL)("AUGUR's own apps' feature previews", () => {
   it('are at the server default, opt-in on a preview server: a person turns one on and the catalogue says so; Admin cannot change them', async () => {
-    const app = await buildApp({ verifyService, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring: 'preview' }) });
+    const app = await db.app({ verifyService, updates: new UpdateChecker({ running: AUGUR_RELEASE, ring: 'preview' }) });
     const homeOf = async () => (await app.inject({ method: 'GET', url: '/v1/feature-previews', headers: sam })).json().apps.find((a: { app: string }) => a.app === 'home');
     const home = await homeOf();
     expect(home.previews.map((p: { id: string; mode: string; on: boolean }) => [p.id, p.mode, p.on])).toEqual([

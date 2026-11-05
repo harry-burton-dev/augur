@@ -128,6 +128,14 @@ jobs:
             fs.appendFileSync(process.env.GITHUB_OUTPUT, `tasks=${n}\ntests=${Math.min(n, 2)}\n`);
           '
       - run: pnpm build --concurrency=${{ steps.fit.outputs.tasks }}
+      # Dead code: files, exports and dependencies nothing uses (Knip, knip.json, ADR 0069). A few seconds, so on
+      # every run; a warning with its list in the run's summary until main is clean, then a failing check.
+      - name: Is there dead code? (a warning for now)
+        run: |
+          pnpm knip --no-progress --reporter markdown > "$RUNNER_TEMP/knip.md" && echo "Knip found no dead code." || {
+            echo "::warning title=Dead code::Knip found unused files, exports or dependencies. The run's summary lists them."
+            cat "$RUNNER_TEMP/knip.md" >> "$GITHUB_STEP_SUMMARY"
+          }
       # Each library's public surface (the SDK, records, the service kit) against its committed report, and the
       # changeset its change needs (ADR 0052). On a pull request, only when the libraries or the check changed.
       - name: Do the libraries' API reports match?
@@ -161,9 +169,14 @@ jobs:
           # Into main, a migration already on main is frozen too: dev builds have run it on the workbench.
           MIGRATIONS_FROZEN_AT: ${{ github.base_ref == 'main' && 'origin/main' || '' }}
       - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
-      - run: pnpm test --concurrency=${{ steps.fit.outputs.tests }}
+      # On a push to main the tests also measure coverage (Vitest's v8 coverage, ADR 0069) and the next step
+      # writes a table of it to the run's summary. Only there: a pull request's tests stay as fast as they were.
+      - run: pnpm turbo run test --concurrency=${{ steps.fit.outputs.tests }} ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '-- --coverage.enabled --coverage.reporter=json-summary' || '' }}
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
+      - name: Test coverage
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: pnpm coverage:summary >> "$GITHUB_STEP_SUMMARY"
 
 
   # The shell keeps its promise to apps: the reference app, as built today and

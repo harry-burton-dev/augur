@@ -15,6 +15,10 @@ export class Mailer {
     constructor(input?: MailerOptions);
     // (undocumented)
     get configured(): boolean;
+    from(): Promise<{
+        name: string;
+        address: string;
+    }>;
     // (undocumented)
     readonly productName: string;
     // (undocumented)
@@ -33,7 +37,15 @@ export interface MailerOptions {
     now?: () => number;
     productName?: string;
     relay?: MailRelay;
+    sender?: SenderLookup;
     transport?: MailTransport;
+}
+
+// @public
+export interface MailFrom {
+    address?: string;
+    // (undocumented)
+    name: string;
 }
 
 // @public
@@ -88,6 +100,7 @@ export type MailResult = {
 export interface MailStatus {
     checkedAt?: string;
     from?: string;
+    fromName?: string;
     problem?: string;
     relay?: string;
     state: 'off' | 'ok' | 'attention';
@@ -120,6 +133,16 @@ export interface NoticeEmailProps {
 }
 
 // @public
+export const organisationSender: (input: {
+    identityUrl: string;
+    headers: () => Promise<Record<string, string>>;
+    ttlMs?: number;
+    fetchImpl?: typeof fetch;
+    now?: () => number;
+    warn?: (message: string) => void;
+}) => SenderLookup;
+
+// @public
 export const relayProblem: (err: unknown) => string;
 
 // @public
@@ -127,6 +150,9 @@ export const renderNotice: (props: NoticeEmailProps) => Promise<{
     html: string;
     text: string;
 }>;
+
+// @public
+export type SenderLookup = () => Promise<MailFrom | undefined>;
 
 // (No @packageDocumentation comment for this package)
 
