@@ -14,13 +14,13 @@ export const LIVE_NEEDS_TAILNET = 'This workbench isn’t at a Tailscale address
 /** The tailnet a `https://<machine>.<tailnet>.ts.net` address is on, or nothing for any other address. */
 export const tailnetOf = (url?: string) => url?.match(/^https:\/\/[a-z0-9-]+\.([a-z0-9-]+)\.ts\.net(?::\d{1,5})?(?:\/|$)/i)?.[1]?.toLowerCase();
 
-/** A frontend entry on a machine on the tailnet: https, a *.ts.net name, and a JavaScript or TypeScript module. */
-const LIVE_URL = /^https:\/\/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+ts\.net(:\d{1,5})?\/[^\s?#]*\.(?:m?js|ts)$/;
+/** A frontend entry on a machine on the tailnet: https, a *.ts.net name, and a JavaScript or TypeScript module (a React app's is .tsx). */
+const LIVE_URL = /^https:\/\/([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+ts\.net(:\d{1,5})?\/[^\s?#]*\.(?:m?js|tsx?)$/;
 
 /** Why `url` can't be loaded live from a machine on `tailnet`, or nothing. */
 export const liveUrlProblem = (url: string, tailnet?: string) => {
   if (url.length > 2048 || !LIVE_URL.test(url)) {
-    return 'That isn’t an app entry on your machine. Use the address `pnpm dev:app <id> --live` prints: https://<your machine>.ts.net/…/entry.ts.';
+    return 'That isn’t an app entry on your machine. Use the address `pnpm dev:app <id> --live` prints: https://<your machine>.ts.net/…/entry.tsx.';
   }
   if (!tailnet || !new URL(url).hostname.endsWith(`.${tailnet}.ts.net`)) {
     return `That machine isn’t on this workbench’s tailnet (${tailnet ?? 'none'}.ts.net), so the shell won’t load scripts from it.`;

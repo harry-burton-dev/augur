@@ -4,7 +4,7 @@
   "route": "/reference",
   "entry": "/apps/reference/entry.js",
   "version": "0.0.0",
-  "sdk": "^1.0.0",
+  "sdk": "^1.0.0 || ^2.0.0",
   "description": "Uses every part of the mount context, for the contract tests",
   "icon": "apps",
   "handles": ["reference.show", "reference.answer"],

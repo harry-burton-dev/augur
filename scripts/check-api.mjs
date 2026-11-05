@@ -13,7 +13,7 @@
 // node scripts/check-api.mjs [update]   Needs the packages built (pnpm build). BASE_REF names the branch
 // a pull request goes into; without it the changeset rule is skipped.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -88,6 +88,8 @@ function main() {
   const bin = join(root, 'node_modules', '.bin', 'api-extractor');
   const list = reports();
   for (const { pkgDir, config, report } of list) {
+    // A library's first report needs its etc/ folder.
+    if (update) mkdirSync(join(root, report, '..'), { recursive: true });
     try {
       execFileSync(bin, ['run', '--config', config, ...(update ? ['--local'] : [])], { cwd: pkgDir, stdio: 'pipe', encoding: 'utf8' });
     } catch (err) {
