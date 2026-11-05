@@ -73,7 +73,8 @@ const signInCheck = serviceSecret
 // checks them with the platform's own parts. An image without the file knows the platform's only, and refuses
 // an upgrade of a server that runs any other part (upgrade.ts).
 const shippedFile = '/augur/shipped-apps.json';
-const parts = partsFor(existsSync(shippedFile) ? shippedAppsFrom(JSON.parse(readFileSync(shippedFile, 'utf8'))) : []);
+const shipped = existsSync(shippedFile) ? shippedAppsFrom(JSON.parse(readFileSync(shippedFile, 'utf8'))) : [];
+const parts = partsFor(shipped);
 const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl, signIn: signInCheck, healthUrls: parts.health });
 
 if (process.argv[2] === 'replace') {
@@ -150,6 +151,9 @@ const afterWatchOnce = async () => {
 /** One turn of the app runner: stops old versions whose time is up, then does the next job, if any. Off without APP_SECRETS_KEY. */
 const appsOnce = async () => {
   if (!envValue(await server.readEnv(), 'APP_SECRETS_KEY')) return;
+  // An app the runner installed that now ships with AUGUR (as Mandate became) is AUGUR's from now on.
+  const handedOver = await runner.handOver(shipped.map((app) => app.id));
+  if (handedOver.length) log('apps now shipped with AUGUR, runner copies stopped', { apps: handedOver });
   await runner.retireDue();
   const job = await apps.next();
   if (!job) return;
