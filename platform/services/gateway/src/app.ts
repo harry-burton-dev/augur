@@ -30,6 +30,7 @@ import { GatewayMetrics } from './metrics.ts';
 import { browserTelemetryFrom, forward, ForwardFailed, SendLimit, stamped, TELEMETRY_BODY_LIMIT, type BrowserTelemetry as BrowserTelemetrySettings, type Signal } from './telemetry.ts';
 import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
+import { Mailer, mailRelayFromEnv, type MailStatus } from '@augur/service-kit/mail';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
 
 /** The major version of the gateway's own API (Status); see contracts/ for its full version. */
@@ -112,6 +113,8 @@ export interface GatewayOptions {
   metrics?: GatewayMetrics;
   /** Sends browser telemetry on to the collector. */
   fetchImpl?: typeof fetch;
+  /** Checks the organisation's mail relay for Status (ADR 0065). Defaults to the SMTP_* settings. */
+  mailer?: Mailer;
 }
 
 /**
@@ -129,7 +132,15 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer }: GatewayOptions = {}) => {
+  const mail = mailer ?? new Mailer({ relay: mailRelayFromEnv(process.env, (message) => console.warn(message)) });
+  /** Status never waits long on the relay: a check slower than 2 seconds carries on behind, and says so meanwhile. */
+  let lastEmail: MailStatus | undefined;
+  const emailStatus = async (): Promise<MailStatus> => {
+    const checking = mail.status().then((s) => (lastEmail = s));
+    const waited = await Promise.race([checking, new Promise<undefined>((done) => (setTimeout(done, 2_000) as { unref?: () => void }).unref?.())]);
+    return waited ?? lastEmail ?? { state: 'attention', problem: 'Still checking the mail relay. Look again in a moment.' };
+  };
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
@@ -220,6 +231,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
           'waits on a slow service. A component that failed its last check, or has',
           'not answered for 2 minutes, is down. `backups` is present when the',
           'gateway is told where the backup container writes (BACKUP_DIR).',
+          '`email` says whether mail can be sent through the relay (SMTP_*),',
+          'checked at most every 5 minutes.',
           '`seeding` says whether sample data may be added here (SEED_ALLOWED).',
         ].join(' '),
         response: {
@@ -236,6 +249,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         components: statusMonitor.snapshot({ version, api: API_VERSION }),
         ...(backupDir ? { backups: await backupStatus(backupDir) } : {}),
         ...(publicAccessFile ? { publicAccess: await publicAccess(publicAccessFile) } : {}),
+        email: await emailStatus(),
         // Whether `pnpm seed` may add synthetic people and content here, and who can change that.
         seeding: seedAllowed
           ? { allowed: true }

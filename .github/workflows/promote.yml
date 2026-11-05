@@ -2,12 +2,13 @@ name: Promote to stable
 # Makes a beta release stable (docs/release-channels.md): the same release, built and signed once, is
 # marked stable, with promotion.json attached to say who did it and when. Nothing is rebuilt, and no
 # branch or pull request is made. Only the repository's owner may run it. The unit is augur or an
-# app's id; the version, by default, is that unit's newest beta.
+# app's id; the version, by default, is that unit's newest beta. An app in its own repository has its
+# release there made stable, with APP_PROMOTE_TOKEN; a pillar app is stable with AUGUR's release.
 on:
   workflow_dispatch:
     inputs:
       unit:
-        description: 'What to make stable: augur, or the id of an app released from this repository'
+        description: 'What to make stable: augur, or the id of an app released from this repository or from its own (release/app-repos.json)'
         required: true
         default: augur
       version:
@@ -60,6 +61,8 @@ jobs:
           SKIP_BAKE: ${{ inputs.skip_bake }}
           PORTAL_URL: ${{ vars.PORTAL_URL }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Writes an app repository's releases, for an app in its own repository; nothing else has it.
+          APP_PROMOTE_TOKEN: ${{ secrets.APP_PROMOTE_TOKEN }}
   # Deployments learn the release is stable from the feed beside the images.
   feed:
     needs: promote

@@ -5,8 +5,8 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.19.0
-  description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
+  version: 1.22.0
+  description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
     Refusal:
@@ -505,6 +505,18 @@ components:
           minLength: 1
           maxLength: 64
           description: IANA, such as Europe/London; without it the organisation's, then the browser's
+        dateFormat:
+          type: string
+          minLength: 2
+          maxLength: 35
+          pattern: ^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$
+          description: The region whose way of writing dates, times and numbers they want, as a language tag such as en-GB; without it their language’s, then the browser’s (since 1.20)
+        clock:
+          type: string
+          enum:
+            - "12"
+            - "24"
+          description: A 12- or 24-hour clock; without it, as their date format writes it (since 1.20)
         notifications:
           type: object
           properties:
@@ -583,6 +595,11 @@ components:
         managedBy:
           type: string
           description: That sign-in’s name
+        languages:
+          type: array
+          items:
+            type: string
+          description: The languages this deployment offers, the first its default (since 1.20)
     AccountProfileChanges:
       type: object
       properties:
@@ -607,6 +624,10 @@ components:
           type: string
           maxLength: 2048
           description: A link, or empty to take it away
+        locale:
+          type: string
+          maxLength: 35
+          description: One of `languages`, or empty for the deployment’s default (since 1.20)
       additionalProperties: false
       minProperties: 1
       description: Only what changes. An empty string takes a fact away. The email address changes through the email action.
@@ -1252,6 +1273,196 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Identity isn't connected to the sign-in service, or can't reach it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /organisation:
+    get:
+      summary: The organisation's name, time zone and email sender
+      description: For anyone signed in, and any service signed in as itself, so every part of AUGUR shows the same name and times (ADR 0042).
+      responses:
+        "200":
+          description: The organisation's settings (ADR 0042)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - name
+                  - timeZone
+                  - sender
+                properties:
+                  name:
+                    type: string
+                    description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"
+                  timeZone:
+                    type: string
+                    description: An IANA time zone, e.g. Europe/London. UTC until an admin chooses one
+                  sender:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 100
+                        pattern: ^[^\r\n]*$
+                        description: Who email says it is from, e.g. the organisation's name
+                      address:
+                        type: string
+                        format: email
+                        maxLength: 254
+                        description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
+                    additionalProperties: false
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: When an admin last changed them
+                  updatedBy:
+                    type: string
+                    description: Who last changed them
+                description: The organisation's settings (ADR 0042)
+        "401":
+          description: Not signed in, and not a service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Services' sign-ins can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation/time-zones:
+    get:
+      summary: The time zones an admin can choose (admins only)
+      responses:
+        "200":
+          description: IANA names, UTC first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: IANA names, UTC first
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation:
+    patch:
+      summary: Change the organisation's settings, audited as organisation.changed (admins only)
+      description: Only the fields sent change. The name renames the organisation’s floor, which everyone sees.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  pattern: ^[^\r\n/]*[^\s/][^\r\n/]*$
+                  description: No slash and not only spaces
+                timeZone:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  description: An IANA time zone; GET /admin/organisation/time-zones lists them
+                sender:
+                  type: object
+                  required:
+                    - name
+                    - address
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                      maxLength: 100
+                      pattern: ^[^\r\n]*\S[^\r\n]*$
+                    address:
+                      anyOf:
+                        - type: string
+                          format: email
+                          maxLength: 254
+                        - type: "null"
+                      description: null takes the address away
+                  additionalProperties: false
+              additionalProperties: false
+              minProperties: 1
+              description: Only what changes
+        description: Only what changes
+      responses:
+        "200":
+          description: The settings now
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - name
+                  - timeZone
+                  - sender
+                properties:
+                  name:
+                    type: string
+                    description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"
+                  timeZone:
+                    type: string
+                    description: An IANA time zone, e.g. Europe/London. UTC until an admin chooses one
+                  sender:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 100
+                        pattern: ^[^\r\n]*$
+                        description: Who email says it is from, e.g. the organisation's name
+                      address:
+                        type: string
+                        format: email
+                        maxLength: 254
+                        description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
+                    additionalProperties: false
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: When an admin last changed them
+                  updatedBy:
+                    type: string
+                    description: Who last changed them
+                description: The settings now
+        "400":
+          description: A name with a slash or only spaces, an unknown time zone, or a sender that is not one line or not an email address
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
           content:
             application/problem+json:
               schema:
@@ -2003,6 +2214,119 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: The change would lock the caller out, or the email is taken
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/leave-requests:
+    get:
+      summary: Everyone who has asked to leave, oldest first
+      description: People ask in their account (POST /me/leave); the leaver flow closes the request.
+      responses:
+        "200":
+          description: Open requests to leave
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - person
+                    - requestedAt
+                  properties:
+                    person:
+                      type: string
+                    requestedAt:
+                      type: string
+                      format: date-time
+                    note:
+                      type: string
+                description: Open requests to leave
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/leave:
+    post:
+      summary: "Someone leaves the organisation: the leaver flow"
+      description: Turns off their sign-in, signs them out everywhere (sessions and offline tokens) and records `person.left`, which followers hear as `platform.person.left` so apps hand on or archive what the person owns, to `handOverTo` when it is given. Their teams, roles and data stay as they were until the deployment's retention period ends. Closes their request to leave, if they made one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                handOverTo:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: "Who takes on what they own: someone whose sign-in is on"
+                note:
+                  type: string
+                  maxLength: 500
+                  description: Why, or what was agreed, for Activity
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The person, now turned off
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "400":
+          description: The person to hand over to is the leaver, is turned off, or isn’t in the directory
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The caller is the leaver
           content:
             application/problem+json:
               schema:

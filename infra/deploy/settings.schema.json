@@ -34,7 +34,8 @@
     "PLATFORM_ADMIN_EMAIL",
     "PLATFORM_ADMIN_FIRST_NAME",
     "PLATFORM_ADMIN_LAST_NAME",
-    "ALERT_WEBHOOK_TOKEN"
+    "ALERT_WEBHOOK_TOKEN",
+    "GRAFANA_ADMIN_PASSWORD"
   ],
   "patternProperties": {
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
@@ -512,7 +513,7 @@
     },
     "ORG_NAME": {
       "type": "string",
-      "description": "What the top floor, the whole organisation, is called.",
+      "description": "What the organisation is called at first start. After that an admin changes it in Admin, Organisation (ADR 0042); the sign-in pages still read it.",
       "default": "Organisation",
       "x-services": [
         "identity",
@@ -535,7 +536,8 @@
       "description": "The organisation's SMTP relay. Empty: AUGUR sends no email, offers no password reset or address check, and says so.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -544,7 +546,8 @@
       "description": "The relay's port. Empty: 587, or 465 with SMTP_SECURITY tls.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -553,7 +556,8 @@
       "description": "starttls (the default), tls from the start, or none for a relay on a trusted network.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -562,7 +566,8 @@
       "description": "The address email comes from, which the relay must accept. The product's name is shown as the sender.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -580,7 +585,8 @@
       "description": "The relay's sign-in, if it wants one.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -589,7 +595,8 @@
       "writeOnly": true,
       "description": "That sign-in's password.",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "gateway"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -1138,7 +1145,7 @@
       "writeOnly": true,
       "minLength": 16,
       "x-generate": true,
-      "description": "Grafana's admin password (otel-lgtm), at least 16 characters.",
+      "description": "Grafana's admin password (otel-lgtm), at least 16 characters. Required, as Grafana would otherwise take admin/admin. The updater makes it up on upgrade.",
       "x-services": [
         "otel-lgtm"
       ],
@@ -1641,10 +1648,11 @@
     },
     "REALM_LANGUAGES": {
       "type": "string",
-      "description": "The languages offered at sign-in, comma separated, the first the default (say en,de,fr). Empty offers English only.",
+      "description": "The languages offered at sign-in and in Account, comma separated, the first the default (say en,de,fr). Empty offers English only.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "identity"
       ],
       "x-docs": "docs/deploy.md#whats-in-it"
     },

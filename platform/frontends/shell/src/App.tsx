@@ -85,6 +85,7 @@ import {
 } from './host/index.js';
 import { AccountApi } from './account/api.js';
 import type { Preferences } from './host/preferences.js';
+import { currentFormats, formatsFrom, languageOf, setFormats } from './host/formats.js';
 import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { ACTION_STATUS } from './host/session.js';
@@ -260,6 +261,25 @@ export function Host({
       }),
     [preferencesUrl, session, fetchImpl, tell],
   );
+  /** Their language, from their sign-in (Keycloak's locale) until they choose another in Account. */
+  const language = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    void session.getToken().then(
+      (token) => {
+        language.current ??= languageOf(token);
+        setFormats(formatsFrom(prefs.current, language.current));
+      },
+      () => undefined,
+    );
+  }, [session, prefs]);
+  /** A language chosen in Account: dates follow it at once, unless they chose a date format of their own. */
+  const chooseLanguage = useCallback(
+    (locale: string | undefined) => {
+      language.current = locale;
+      setFormats(formatsFrom(prefs.current, locale));
+    },
+    [prefs],
+  );
   /** Applies one choice from the Account area at once, and saves it. */
   const choose = useCallback(
     <K extends keyof Preferences>(key: K, value: Preferences[K]) => {
@@ -267,6 +287,7 @@ export function Host({
       const now = prefs.current;
       setChosen(now);
       applyPreferences(now);
+      setFormats(formatsFrom(now, language.current));
       const shell = shellRef.current;
       if (!shell) return;
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
@@ -531,6 +552,10 @@ export function Host({
       intent,
       reply,
       previewOn: (id) => app.previewsOn?.includes(id) ?? false,
+      // Read live, so a change in Account reaches apps already open.
+      get formats() {
+        return currentFormats();
+      },
     }),
     [session, bus, raise, request, floor, home, fetchImpl, tell],
   );
@@ -875,6 +900,7 @@ export function Host({
       }
       const now = prefs.current;
       applyPreferences(now);
+      setFormats(formatsFrom(now, language.current));
       setChosen(now);
       shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
       shell.away = !!now.away;
@@ -1091,6 +1117,7 @@ export function Host({
           api={accountApi}
           prefs={chosen}
           onPreference={choose}
+          onLanguage={chooseLanguage}
           onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
           onSignOut={() => void session.signOut()}
           apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}

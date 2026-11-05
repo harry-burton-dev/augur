@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { callerHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryDirectory } from './directory.ts';
+import { MemoryPreferenceStore } from './store.ts';
 import { temporaryPassword, usernameFrom } from './admin.ts';
 
 const admin = callerHeaders({ id: 'admin-1', name: 'Alex', departments: [], roles: ['admin'] });
@@ -10,10 +11,11 @@ const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: [
 const setup = async () => {
   const directory = new MemoryDirectory();
   const audit = vi.fn<(e: NewAuditEntry) => Promise<void>>(async () => undefined);
-  const app = await buildApp({ directory, audit });
+  const store = new MemoryPreferenceStore();
+  const app = await buildApp({ directory, audit, store });
   const call = async (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, payload?: object, headers = admin) =>
     app.inject({ method, url: `/v1/admin${url}`, headers, ...(payload ? { payload } : {}) });
-  return { app, directory, audit, call };
+  return { app, directory, audit, store, call };
 };
 
 describe('admin: deployment admins', () => {
@@ -39,6 +41,81 @@ describe('admin: deployment admins', () => {
     const { person } = (await call('POST', '/people', { firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org' })).json();
     expect((await call('PATCH', `/people/${person.id}`, { roles: ['deployment-admin'] })).statusCode).toBe(403);
     expect((await call('PATCH', `/people/${person.id}`, { enabled: false })).statusCode).toBe(200);
+  });
+});
+
+describe('admin: turning off and leavers (ADR 0040)', () => {
+  const add = async (call: Awaited<ReturnType<typeof setup>>['call'], first: string) =>
+    (await call('POST', '/people', { firstName: first, lastName: 'Smith', email: `${first.toLowerCase()}@example.org` })).json().person as { id: string };
+  const actions = (audit: Awaited<ReturnType<typeof setup>>['audit']) => audit.mock.calls.map(([e]) => [e.action, e.target, e.detail]);
+
+  it('signs someone out everywhere when their sign-in is turned off, and again if asked again', async () => {
+    const { call, directory } = await setup();
+    const jo = await add(call, 'Jo');
+    expect((await call('PATCH', `/people/${jo.id}`, { firstName: 'Joanne' })).statusCode).toBe(200);
+    expect(directory.signedOut).toEqual([]);
+    expect((await call('PATCH', `/people/${jo.id}`, { enabled: false })).statusCode).toBe(200);
+    expect((await call('PATCH', `/people/${jo.id}`, { enabled: false })).statusCode).toBe(200);
+    expect(directory.signedOut).toEqual([jo.id, jo.id]);
+  });
+
+  it('runs the leaver flow: off, signed out, handed over, the request closed, each step recorded', async () => {
+    const { call, directory, audit, store } = await setup();
+    const jo = await add(call, 'Jo');
+    const sam = await add(call, 'Sam');
+    await store.requestLeave(jo.id, 'Moving on in June');
+    expect((await call('GET', '/leave-requests')).json()).toEqual([{ person: jo.id, requestedAt: expect.any(String), note: 'Moving on in June' }]);
+    audit.mockClear();
+
+    const res = await call('POST', `/people/${jo.id}/leave`, { handOverTo: sam.id, note: ' Agreed with their lead ' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ id: jo.id, enabled: false });
+    expect(directory.signedOut).toEqual([jo.id]);
+    expect(actions(audit)).toEqual([
+      ['person.disabled', jo.id, { username: 'jo' }],
+      ['person.left', jo.id, { username: 'jo', asked: true, handOverTo: sam.id, note: 'Agreed with their lead' }],
+    ]);
+    expect((await call('GET', '/leave-requests')).json()).toEqual([]);
+  });
+
+  it('runs it for someone already turned off, and without a hand-over', async () => {
+    const { call, audit } = await setup();
+    const jo = await add(call, 'Jo');
+    await call('PATCH', `/people/${jo.id}`, { enabled: false });
+    audit.mockClear();
+    expect((await call('POST', `/people/${jo.id}/leave`, {})).statusCode).toBe(200);
+    expect(actions(audit)).toEqual([['person.left', jo.id, { username: 'jo', asked: false }]]);
+  });
+
+  it('hands over only to someone else who can sign in', async () => {
+    const { call, audit } = await setup();
+    const jo = await add(call, 'Jo');
+    const sam = await add(call, 'Sam');
+    await call('PATCH', `/people/${sam.id}`, { enabled: false });
+    audit.mockClear();
+    const refusal = async (body: object) => (await call('POST', `/people/${jo.id}/leave`, body)).json().message as string;
+    expect(await refusal({ handOverTo: jo.id })).toMatch(/someone else/);
+    expect(await refusal({ handOverTo: sam.id })).toMatch(/Sam Smith’s sign-in is off/);
+    expect(await refusal({ handOverTo: 'nobody' })).toMatch(/isn’t in the directory/);
+    // Nothing happened to the leaver while the hand-over was wrong.
+    expect(audit).not.toHaveBeenCalled();
+    expect((await call('GET', `/people/${jo.id}`)).json().enabled).toBe(true);
+  });
+
+  it('keeps an admin off themselves, and a deployment admin for deployment admins', async () => {
+    const { call } = await setup();
+    expect((await call('POST', '/people/admin-1/leave', {})).statusCode).toBe(409);
+    const deployer = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'] });
+    const { person } = (await call('POST', '/people', { firstName: 'Ops', lastName: 'Person', email: 'ops@example.org', roles: ['deployment-admin'] }, deployer)).json();
+    expect((await call('POST', `/people/${person.id}/leave`, {})).statusCode).toBe(403);
+    expect((await call('POST', `/people/${person.id}/leave`, {}, deployer)).statusCode).toBe(200);
+    expect((await call('POST', '/people/nobody/leave', {})).statusCode).toBe(404);
+  });
+
+  it('is for admins only', async () => {
+    const { call } = await setup();
+    expect((await call('GET', '/leave-requests', undefined, editor)).statusCode).toBe(403);
+    expect((await call('POST', '/people/x/leave', {}, editor)).statusCode).toBe(403);
   });
 });
 

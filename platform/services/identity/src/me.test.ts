@@ -42,6 +42,17 @@ describe('the caller’s account', () => {
     expect((await accounts.profile('u-2')).jobTitle).toBeUndefined();
   });
 
+  it('offers the deployment’s languages and keeps theirs, refusing one it doesn’t offer', async () => {
+    const app = await buildApp({ accounts: accountsWithAlex(), languages: ['en', 'de'] });
+    const me = callerHeaders(alex);
+    expect((await app.inject({ method: 'GET', url: '/v1/me/profile', headers: me })).json().languages).toEqual(['en', 'de']);
+    const chosen = await app.inject({ method: 'PATCH', url: '/v1/me/profile', headers: me, payload: { locale: 'de' } });
+    expect(chosen.json()).toMatchObject({ locale: 'de', languages: ['en', 'de'] });
+    const refused = await app.inject({ method: 'PATCH', url: '/v1/me/profile', headers: me, payload: { locale: 'fr' } });
+    expect([refused.statusCode, refused.json().message]).toEqual([400, expect.stringContaining('A deployment admin can offer more')]);
+    expect((await app.inject({ method: 'PATCH', url: '/v1/me/profile', headers: me, payload: { locale: '' } })).json().locale).toBeUndefined();
+  });
+
   it('refuses a change to what the organisation’s sign-in sets, and says where to change it', async () => {
     const accounts = new MemoryAccounts();
     accounts.add('u-1', { username: 'alex', firstName: 'Alex', managed: ['firstName', 'lastName', 'email'], managedBy: 'Contoso' });
@@ -112,10 +123,10 @@ describe('the caller’s account', () => {
   it('keeps a time zone, away message and notification choices, refusing ones that make no sense', async () => {
     const app = await buildApp();
     const me = callerHeaders(alex);
-    const prefs = { quietKinds: ['folio:comment'], pinned: ['folio', 'atlas'], startFloor: 'ws-finance', timeZone: 'Europe/London', awayMessage: 'Back Monday', awayUntil: '2026-11-09T09:00:00.000Z', notifications: { email: false, digest: 'weekly', quietHours: { from: '22:00', to: '07:00' } } };
+    const prefs = { quietKinds: ['folio:comment'], pinned: ['folio', 'atlas'], startFloor: 'ws-finance', timeZone: 'Europe/London', dateFormat: 'en-US', clock: '24', awayMessage: 'Back Monday', awayUntil: '2026-11-09T09:00:00.000Z', notifications: { email: false, digest: 'weekly', quietHours: { from: '22:00', to: '07:00' } } };
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: me, payload: prefs })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences', headers: me })).json()).toEqual(prefs);
-    for (const bad of [{ timeZone: 'Mars/Olympus' }, { notifications: { quietHours: { from: '22:00', to: '22:00' } } }, { notifications: { quietHours: { from: '25:00', to: '07:00' } } }, { notifications: { digest: 'hourly' } }, { pinned: ['folio', 'folio'] }, { quietKinds: ['folio'] }]) {
+    for (const bad of [{ timeZone: 'Mars/Olympus' }, { dateFormat: 'zz-ZZ' }, { dateFormat: 'not a tag' }, { clock: '13' }, { notifications: { quietHours: { from: '22:00', to: '22:00' } } }, { notifications: { quietHours: { from: '25:00', to: '07:00' } } }, { notifications: { digest: 'hourly' } }, { pinned: ['folio', 'folio'] }, { quietKinds: ['folio'] }]) {
       expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: me, payload: bad })).statusCode).toBe(400);
     }
   });

@@ -68,6 +68,8 @@ Two GitHub settings the workflow needs: Settings → Actions → General → Wor
 
 When the release bumps the SDK's minor, keep the reference app built against it for the contract tests: `pnpm build && pnpm --filter @augur/contract-tests freeze`, then commit the new `platform/contract/frozen/` folder. Where no package token can build it, such as a cloud session, run Actions → Lockfile on the branch with **freeze** ticked and it pushes the folder. Every later shell is tested against it (see [platform/contract](../platform/contract/README.md)). A build byte-for-byte the newest kept one isn't kept: `freeze` says so, and that folder stands for both minors. At SDK 2.0, a major that 1.x apps don't run on, the 1.x builds retire from the contract tests, and each 2.x minor is frozen from then on.
 
+An empty changeset (`pnpm changeset --empty`) bumps nothing, so it never holds back a release. When only empty changesets wait on the branch, as when a tooling PR merges right after the Version packages PR, the Release workflow sets them aside for that run (`scripts/empty-changesets.mjs`) and releases anyway; the next Version packages PR consumes them.
+
 To do the same by hand: `pnpm version-packages`, review, commit, merge, then let the Release workflow make the AUGUR and app releases.
 
 ### App releases
@@ -165,6 +167,7 @@ Apps don't bundle React or the kit: the shell serves one copy of each through an
 Every frontend is React. Since SDK 1.10 the shell serves React 19 (`react`, `react/jsx-runtime`, `react/jsx-dev-runtime`, `react-dom`, `react-dom/client`), Common (`@augur/kit-common`) and Quill, the app kit (`@augur/app-kit`), through the same import map, so a React app's bundle carries none of them. Since ADR 0048 they come as one kit bundle, a signed release of the `augur-kit` repository: an AUGUR release pins its version in `release/kit.json` (written by `pnpm kit:pin`, checked by `pnpm check:kit`), the Release workflow checks its signature before it builds the images (`node scripts/kit.mjs verify`), and the web image serves it at `KIT_URL` ([deploy.md](deploy.md#the-ui-kit)). They keep the same promise:
 
 - Within an SDK major the shell serves React on one major (19.x), and Common and Quill on their same major. Moving React to a new major is an SDK major.
+- Common and Quill are still `0.x`, where a minor may break (as semver allows before 1.0), so for them "the same major" means the same minor until they reach 1.0.0. Moving `release/kit.json` to a new kit minor is listed as breaking in its changeset, and apps built on the minor before are checked on it before the release. A kit patch never breaks.
 - Aerie, the shell kit (`@augur/shell-kit`), is the shell's own: it is never in the import map and not part of the promise. It is published only for the shell to build with. `pnpm check:boundaries` fails if anything but the shell imports it.
 - The tokens live in `packages/kit-common/tokens/` in the `augur-kit` repository, and Common's build writes the Tailwind v4 theme from them. An app styles its own layout with `@import 'tailwindcss/utilities' layer(utilities); @import '@augur/app-kit/theme.css';`, and only AUGUR's tokens exist as classes. It leaves out Tailwind's preflight: the shell already sets the page's base.
 

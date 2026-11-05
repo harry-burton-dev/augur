@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { runMigrations, type Migration } from '@augur/service-kit';
+import { organisationMigrations } from './organisation.ts';
 import { workspaceMigrations } from './workspaces.ts';
 
 /** What someone has chosen for the shell. Every field is optional: what's missing takes the shell's default. */
@@ -26,6 +27,10 @@ export interface Preferences {
   awayUntil?: string;
   /** Their time zone (IANA, such as Europe/London); without it, the organisation's, then the browser's. */
   timeZone?: string;
+  /** The region whose way of writing dates, times and numbers they want (a language tag such as en-GB); without it, their language's, then the browser's. */
+  dateFormat?: string;
+  /** A 12- or 24-hour clock; without it, as their date format writes it. */
+  clock?: '12' | '24';
   /** How AUGUR reaches them beyond the shell. */
   notifications?: NotificationChoices;
 }
@@ -57,8 +62,10 @@ export interface PreferenceStore {
   leaveRequest(person: string): Promise<LeaveRequest | undefined>;
   /** Records a request to leave, keeping the first one's time when they ask again. */
   requestLeave(person: string, note?: string): Promise<LeaveRequest>;
-  /** Takes a request back; false when there was none. */
+  /** Takes a request back, or closes it once an admin's leaver flow has acted on it; false when there was none. */
   withdrawLeave(person: string): Promise<boolean>;
+  /** Every open request to leave, oldest first, for the admins who act on them. */
+  leaveRequests(): Promise<(LeaveRequest & { person: string })[]>;
 }
 
 /** For tests, and for running identity locally without Postgres. Forgets everything on restart. */
@@ -89,6 +96,10 @@ export class MemoryPreferenceStore implements PreferenceStore {
   async withdrawLeave(person: string) {
     return this.leaving.delete(person);
   }
+
+  async leaveRequests() {
+    return [...this.leaving].map(([person, r]) => ({ person, ...r })).sort((a, b) => a.requestedAt.localeCompare(b.requestedAt));
+  }
 }
 
 /**
@@ -116,6 +127,7 @@ export const migrations: Migration[] = [
         requested_at timestamptz not null default now()
       );`,
   },
+  ...organisationMigrations,
 ];
 
 export class PgPreferenceStore implements PreferenceStore {
@@ -165,6 +177,11 @@ export class PgPreferenceStore implements PreferenceStore {
   async withdrawLeave(person: string) {
     const { rowCount } = await this.pool.query('delete from identity.leave_requests where person = $1', [person]);
     return (rowCount ?? 0) > 0;
+  }
+
+  async leaveRequests() {
+    const { rows } = await this.pool.query<{ person: string; note: string | null; requested_at: Date }>('select person, note, requested_at from identity.leave_requests order by requested_at');
+    return rows.map((r) => ({ person: r.person, requestedAt: r.requested_at.toISOString(), ...(r.note ? { note: r.note } : {}) }));
   }
 
   close() {

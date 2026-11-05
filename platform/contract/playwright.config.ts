@@ -17,6 +17,10 @@ export default defineConfig({
   testDir: 'tests',
   outputDir: `test-results/${process.env.CONTRACT_TARGET ?? 'source'}${folioPort ? '-folio' : ''}`,
   timeout: 30_000,
+  // Each check waits for a state; on a busy runner the shell can take longer than Playwright's 5 seconds to get there (PER-322).
+  expect: { timeout: process.env.CI ? 10_000 : 5_000 },
+  // Warms the dev server before the first test (warm.setup.ts).
+  globalSetup: './warm.setup.ts',
   retries: 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {

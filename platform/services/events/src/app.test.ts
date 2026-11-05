@@ -181,6 +181,64 @@ describe('events', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/audit?since=yesterday', headers: alex })).statusCode).toBe(400);
   });
 
+  it('filters Activity by target, person and kind', async () => {
+    const app = (open = await buildApp({ verifyService }));
+    const write = (payload: object) => app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload });
+    await write({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' });
+    await write({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-2' });
+    await write({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'team.member-added', target: 'w-finance', detail: { person: 'u-2' } });
+    await write({ actor: { id: 'u-3', kind: 'user' }, app: 'identity', action: 'sign-in.succeeded', detail: { kind: 'sign-in', ip: '10.0.0.1' } });
+    const actions = async (query: string) => (await app.inject({ method: 'GET', url: `/v1/audit?${query}`, headers: alex })).json().map((e: { action: string }) => e.action);
+    expect(await actions('target=doc-7')).toEqual(['document.published']);
+    expect(await actions('person=u-2')).toEqual(['team.member-added', 'person.disabled', 'document.published']);
+    expect(await actions('kind=sign-in')).toEqual(['sign-in.succeeded']);
+    expect(await actions('kind=change&person=u-1')).toEqual(['team.member-added', 'person.disabled']);
+    expect((await app.inject({ method: 'GET', url: '/v1/audit?kind=other', headers: alex })).statusCode).toBe(400);
+  });
+
+  it('lets an admin download Activity as CSV or JSON lines, and records the download', async () => {
+    const app = (open = await buildApp({ verifyService }));
+    await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: { actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: '=HYPERLINK("x")', detail: { title: 'Q3' } } });
+    expect((await app.inject({ method: 'GET', url: '/v1/audit/export', headers: sam })).statusCode).toBe(403);
+    const csv = await app.inject({ method: 'GET', url: '/v1/audit/export?app=library&since=2026-01-01T00:00:00Z&until=2026-12-31T00:00:00Z', headers: alex });
+    expect(csv.statusCode).toBe(200);
+    expect(csv.headers['content-disposition']).toBe('attachment; filename="activity-2026-01-01-2026-12-31.csv"');
+    const [head, row, ...rest] = csv.body.trimEnd().split('\n');
+    expect(head).toBe('at,actor,actorKind,app,action,target,floor,detail');
+    // A cell a spreadsheet would run as a formula is kept as text; quotes inside are doubled.
+    expect(row).toMatch(/,"u-2","user","library","document\.published","'=HYPERLINK\(""x""\)","","\{""title"":""Q3""\}"$/);
+    expect(rest).toEqual([]);
+    const jsonl = await app.inject({ method: 'GET', url: '/v1/audit/export?format=jsonl&app=library', headers: alex });
+    expect(jsonl.body.trimEnd().split('\n').map((l) => JSON.parse(l).action)).toEqual(['document.published']);
+    const tooLong = await app.inject({ method: 'GET', url: '/v1/audit/export?since=2024-01-01T00:00:00Z&until=2026-01-01T00:00:00Z', headers: alex });
+    expect([tooLong.statusCode, tooLong.json().error]).toEqual([400, 'range_too_long']);
+    const recorded = (await app.inject({ method: 'GET', url: '/v1/audit?app=events', headers: alex })).json();
+    expect(recorded).toMatchObject([
+      { action: 'audit.exported', actor: { id: 'u-1', kind: 'user' }, detail: { app: 'library', format: 'jsonl' } },
+      { action: 'audit.exported', detail: { app: 'library', format: 'csv', since: '2026-01-01T00:00:00.000Z' } },
+    ]);
+  });
+
+  it('lets identity, and only identity, remove a deleted person’s details', async () => {
+    const app = (open = await buildApp({ verifyService }));
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
+    const write = (payload: object) => app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload });
+    await write({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-2', detail: { email: { from: 'sam@old.example', to: 'sam@new.example' }, roles: ['editor'] } });
+    await write({ actor: { id: 'u-2', kind: 'user' }, app: 'identity', action: 'sign-in.succeeded', detail: { kind: 'sign-in', ip: '10.0.0.2', username: 'sam' } });
+    await write({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-3', detail: { email: 'kim@example.org' } });
+    const registry = await serviceHeaders({ name: 'registry', getToken: async () => 'platform-registry' });
+    for (const headers of [registry, alex]) expect((await app.inject({ method: 'POST', url: '/v1/audit/redact', headers, payload: { person: 'u-2' } })).statusCode).toBe(403);
+    const res = await app.inject({ method: 'POST', url: '/v1/audit/redact', headers: platform, payload: { person: 'u-2' } });
+    expect(res.json()).toEqual({ entries: 2, notifications: 1 });
+    const log = (await app.inject({ method: 'GET', url: '/v1/audit', headers: alex })).json();
+    expect(log[0]).toMatchObject({ action: 'audit.redacted', app: 'events', detail: { person: 'u-2', entries: 2 } });
+    expect(log[1].detail).toEqual({ email: 'kim@example.org' });
+    expect(log[2].detail).toEqual({ kind: 'sign-in', ip: '[removed]', username: '[removed]' });
+    expect(log[3].detail).toEqual({ email: { from: '[removed]', to: '[removed]' }, roles: ['editor'] });
+    expect((await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json()).toEqual([]);
+    expect((await app.inject({ method: 'GET', url: '/v1/notifications', headers: alex })).json()).toHaveLength(1);
+  });
+
   describe('apps signed in as themselves', () => {
     const as = (app: string, workspace?: string) => ({ authorization: `Bearer app-${app}`, ...(workspace ? { 'x-workspace-id': workspace } : {}) });
     const asked: [string, string | undefined][] = [];
@@ -331,6 +389,9 @@ describe('events', () => {
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'department.member-added', target: 'w-legal', detail: { person: 'u-2' } }, 'w-legal');
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-9', detail: { username: 'jo', firstName: { from: 'Jo', to: 'Joanne' }, lastName: { from: 'S', to: 'T' }, departments: { from: [], to: ['w-legal'] } } });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.password-reset', target: 'u-9' });
+      // A leaver, handed over and not: who takes on their things, never the admin's note.
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-9', detail: { username: 'jo', asked: true, handOverTo: 'u-2', note: 'Agreed' } });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-8', detail: { username: 'al', asked: false } });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.blocked', target: 'notes' }, 'w-legal');
       const { events } = (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=platform.*', headers: as('notes') })).json();
@@ -339,6 +400,8 @@ describe('events', () => {
         { topic: 'platform.team.member-added', payload: { team: 'w-legal', person: 'u-2' }, workspace: { id: 'w-legal' } },
         // What changed, never the values: a follower asks identity for those.
         { topic: 'platform.person.changed', publisher: 'identity', payload: { person: 'u-9', changed: ['name', 'teams'] } },
+        { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-9', handOverTo: 'u-2' } },
+        { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-8' } },
         { topic: 'platform.app.turned-off', publisher: 'registry', payload: { app: 'notes' } },
         { topic: 'platform.app.blocked', payload: { app: 'notes' }, workspace: { id: 'w-legal' } },
       ]);

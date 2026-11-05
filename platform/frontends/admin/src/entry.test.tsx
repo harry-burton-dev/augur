@@ -201,6 +201,33 @@ describe('People', () => {
     await press(button('Done'));
     expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/New one-time password given/);
   });
+
+  it('shows who asked to leave, and runs the leaver flow after asking twice', async () => {
+    const samOn = { ...sam, enabled: true };
+    const { sent } = gateway((method, url) => {
+      if (url === '/api/identity/v1/admin/people' && method === 'GET') return Response.json([alex, samOn]);
+      if (url === '/api/identity/v1/admin/leave-requests') return Response.json([{ person: 'u-2', requestedAt: '2026-11-01T09:00:00Z', note: 'Moving on' }]);
+      if (url === '/api/identity/v1/admin/people/u-2/leave' && method === 'POST') return Response.json({ ...samOn, enabled: false });
+      return undefined;
+    });
+    const el = await open('/people');
+    expect(rowsOf(el).find((r) => r[0] === 'Sam Okafor')!.join(' ')).toContain('Asked to leave');
+    await openRow(el, 'Sam Okafor');
+    const live = document.querySelector('[data-live]')!;
+    expect(live.querySelector('[data-leaver]')!.textContent).toContain('“Moving on”');
+    await press(button('They’re leaving'));
+    expect(sent.some((c) => c.url.endsWith('/u-2/leave'))).toBe(false);
+    await press(live.querySelector('[data-armed]'));
+    expect(sent.find((c) => c.url.endsWith('/u-2/leave'))!.body).toEqual({});
+    expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/They’ve left: signed out everywhere\. Apps keep what they own/);
+  });
+
+  it('won’t let an admin run the leaver flow on themselves', async () => {
+    gateway();
+    const el = await open('/people');
+    await openRow(el, 'Alex Rivera');
+    expect(shut(button('They’re leaving'))).toBe(true);
+  });
 });
 
 describe('Departments', () => {
@@ -251,7 +278,7 @@ describe('Status', () => {
     };
     gateway((_m, url) =>
       url === '/api/gateway/v1/status'
-        ? Response.json({ components, backups, publicAccess: { open: true, until: '2026-10-28T18:00:00Z' } })
+        ? Response.json({ components, backups, publicAccess: { open: true, until: '2026-10-28T18:00:00Z' }, email: { state: 'attention', relay: 'relay.example.org:587', from: 'augur@example.org', problem: 'AUGUR can’t reach the relay. Check SMTP_HOST.' } })
         : url === '/api/registry/v1/platform/updates'
           ? Response.json({ running: { version: '0.13.1', channel: 'stable' }, channel: 'stable', feed: 'on', newer: [], needsYou: [], available: { version: '0.13.2', channel: 'stable', breaking: [], parts: [] } })
           : undefined,
@@ -264,6 +291,9 @@ describe('Status', () => {
     expect(el.textContent).toContain('Any moment since');
     expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
     expect(el.textContent).toContain('AUGUR 0.13.2 is out.');
+    expect(el.querySelector('[data-email]')!.textContent).toContain('Email needs a look');
+    expect(el.textContent).toContain('relay.example.org:587');
+    expect(el.textContent).toContain('Check SMTP_HOST.');
     await openRow(el, 'library');
     const dialog = document.querySelector('.augur-dialog')!;
     expect(dialog.textContent).toContain('It can’t be reached.');

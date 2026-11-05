@@ -7,13 +7,15 @@
     "005_audit_recorded_by": "3f2610f0eccb896b",
     "006_notification_keys": "5be3ec9616ff89c3",
     "007_inbox": "40aac179ecbfe3a7",
-    "008_notification_kinds": "6eea4513b4123b12"
+    "008_notification_kinds": "6eea4513b4123b12",
+    "009_audit_by_person": "7d6352a8630b9708"
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",
     "002_workspaces": "54f71c8c9cc46c8c",
     "003_team_levels": "4f354b7fa3c5c9d8",
-    "004_leave_requests": "42153718f683907e"
+    "004_leave_requests": "42153718f683907e",
+    "organisation_001_settings": "4fff491ac7f81693"
   },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"
@@ -37,6 +39,7 @@
     "016_desired_state": "e980edefce9d09fb",
     "017_deployment_key": "e6e0addb0f5d02e1",
     "018_after_watch": "a3ded298146207db",
-    "019_frontend_folders": "ea9a435440fa75fd"
+    "019_frontend_folders": "ea9a435440fa75fd",
+    "020_upgrade_setting_names": "6f195be93ba70025"
   }
 }

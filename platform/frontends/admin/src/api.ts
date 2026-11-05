@@ -14,6 +14,13 @@ export interface Person {
   createdAt?: string;
 }
 
+/** Someone who asked to leave in their account (ADR 0040), until an admin's leaver flow closes it. */
+export interface LeaveRequest {
+  person: string;
+  requestedAt: string;
+  note?: string;
+}
+
 export interface Department {
   id: string;
   name: string;
@@ -183,12 +190,25 @@ export interface PublicAccess {
   until?: string;
 }
 
+/** Whether AUGUR can send email through the organisation's relay (ADR 0035, 0065). */
+export interface EmailStatus {
+  state: 'off' | 'ok' | 'attention';
+  /** Why, and who can change it, when it isn't ok. */
+  problem?: string;
+  /** host:port, never its sign-in. */
+  relay?: string;
+  from?: string;
+  checkedAt?: string;
+}
+
 export interface PlatformStatus {
   components: ComponentStatus[];
   /** Absent when the gateway isn't told where backups are. */
   backups?: BackupStatus;
   /** Absent when the gateway isn't told where to look. */
   publicAccess?: PublicAccess;
+  /** Absent from a gateway older than the mail sender. */
+  email?: EmailStatus;
 }
 
 /** One change in a changelog, and the parts it moved (registry's changes.ts). */
@@ -510,6 +530,9 @@ export class AdminApi {
   addPerson = (person: NewPerson) => this.call<{ person: Person; temporaryPassword: string }>('POST', '/api/identity/v1/admin/people', person);
   updatePerson = (id: string, changes: PersonChanges) => this.call<Person>('PATCH', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`, changes);
   resetPassword = (id: string) => this.call<{ temporaryPassword: string }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/password`);
+  leaveRequests = () => this.call<LeaveRequest[]>('GET', '/api/identity/v1/admin/leave-requests');
+  /** The leaver flow: their sign-in off, signed out everywhere, and apps told to hand on what they own. */
+  leave = (id: string, how: { handOverTo?: string; note?: string }) => this.call<Person>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`, how);
   roles = () => this.call<Role[]>('GET', '/api/identity/v1/admin/roles');
 
   departments = () => this.call<Department[]>('GET', '/api/identity/v1/admin/departments');

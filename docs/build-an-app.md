@@ -247,7 +247,7 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
 - `search: true` puts the app's content in the shell's Find; see [Find](#find) below. SDK 1.3.
 - `maxUpload` is the largest request, in MB (1 to 2048), the gateway lets through to your service; 10 without it. Bodies stream through the gateway and are never held there, and one past the limit gets 413 before your service sees it. An admin can lower it in Admin, Apps. The manifest the shell gives your frontend has the limit in force, so check a file against it before sending. SDK 1.4.
 - `inbox` (SDK 1.12) declares the kinds of work your service puts in people's inboxes: `{ "kinds": [{ "id": "assignment", "label": "Assigned to you", "icon": "compass" }] }`, up to 10, each id once. The Inbox shows the label and icon on each item, and an item of a kind you didn't declare is refused. It goes with `inbox:write` ([The Inbox](inbox.md)).
-- `notifications` (SDK 1.13) declares the kinds of notification your service sends: `{ "kinds": [{ "id": "comment", "label": "Comments on your documents", "detail": "When someone comments on one you own" }] }`, up to 10, each id once. Send each notification with its `kind`. Account, Notifications lists them under your app, and each person chooses which kinds reach them out loud and which wait quietly ([Your account](account.md)). A notification of a kind you didn't declare is refused. It goes with `notifications:send`.
+- `notifications` (SDK 2.0) declares the kinds of notification your service sends: `{ "kinds": [{ "id": "comment", "label": "Comments on your documents", "detail": "When someone comments on one you own" }] }`, up to 10, each id once. Send each notification with its `kind`. Account, Notifications lists them under your app, and each person chooses which kinds reach them out loud and which wait quietly ([Your account](account.md)). A notification of a kind you didn't declare is refused. It goes with `notifications:send`.
 - `settings` are what admins can change about your app, in Admin, Apps: up to 10, each a whole number with an `id`, a `label`, an optional `detail` and `unit`, and its `min`, `max` and `default`. Your service reads them as itself with `appSettings({ registryUrl, credentials, app })` from the service kit, which gives each id's value: an admin's, or the default. Ask again each time you use one, since an admin can change it at any time; changes are in the activity log. If a newer version narrows a range past an admin's value, the default is used until an admin sets it again.
 
   ```json
@@ -357,17 +357,23 @@ if (passage) {
 
 ### Binding your things to entities
 
-An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox (ADR 0025, docs/domain-events.md). Publish `<app>.bound` when someone links one of your things to an entity and `<app>.unbound` when they take the link away. The payload is an `EntityBinding` (SDK 1.10): your thing as a `Ref`, plus the `EntityRef`.
+An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox, in the same transaction as the link (ADR 0025, ADR 0066, docs/domain-events.md). The topic is `<app>.<type>.entity-bound` when someone links one of your things to an entity and `<app>.<type>.entity-unbound` when they take the link away; the payload is the thing's id under its type, the entity's id, and a role. The service kit writes both:
 
 ```ts
-import type { EntityBinding, Ref } from '@augur/mfe-sdk';
+import { bindingTopics, outboxBinding } from '@augur/service-kit';
 
-const task: Ref = { kind: 'ref', app: 'intent', type: 'task', id: 't-41', label: 'Brief the desk' };
-const binding: EntityBinding = { subject: task, entity: ship };
-// in the same transaction as the link: outbox.add('intent.bound', binding)
+// inside the transaction that saves the link:
+await outboxBinding(tx, { app: 'expenses', type: 'claim', id: claim.id, entity: ship.id, role: 'about' }, 'bound', floorId);
+// → expenses.claim.entity-bound { claim: 'c-41', entity: 'ent_…', role: 'about' }
 ```
 
+Ask for `events:publish`; `bindingTopics('expenses', 'claim')` names the two topics. Send ids only: a thing another app needs more ids to open can carry them in `more` (Artifacts sends `library` and `level`), never titles. A follower reads any app's binding events with `readBinding(event)`. In the browser, `EntityBinding` (a `Ref` and an `EntityRef`) is how a frontend passes the same link around.
+
 A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`. Data Atlas follows the events to answer "what points at this entity", so binding still works while Atlas is off.
+
+### Dates and times, the person's way
+
+`ctx.formats` (SDK 2.0) says how the person wants dates and times written, from Account's Language and region: `language`, the `locale` to write dates in (their date format, else their language), their `timeZone` and their clock as `hourCycle`. It is read live, so it follows a change they make while your app is open. Quill's `writeDate(when, options)` and `useFormats()` use it for you; outside Quill, pass it to `Intl.DateTimeFormat`. Any part left out means the browser's, and an older shell leaves out `formats` entirely. The words AUGUR shows stay English for now (PER-183).
 
 ### Reserved: markings and working context
 

@@ -68,4 +68,12 @@ describe('identity’s sign-in to Keycloak', () => {
     expect((await directory.people()).length).toBe(1201);
     expect(calls.filter((c) => c.url.includes('/users?')).length).toBe(3);
   });
+
+  it('signs someone out everywhere: their sessions, then each app’s offline tokens', async () => {
+    const { calls, fetchImpl } = keycloak((method, path) => (method === 'GET' && path === '/users/u-1/consents' ? [{ clientId: 'platform-shell' }, { clientId: 'folio' }] : undefined));
+    const directory = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn: { client: { id: 'platform-identity', secret: 's' } }, fetchImpl });
+    await directory.endSessions('u-1');
+    const admin = calls.filter((c) => !c.url.endsWith('/token')).map((c) => `${c.method} ${c.url.replace('http://kc/admin/realms/platform', '')}`);
+    expect(admin).toEqual(['POST /users/u-1/logout', 'GET /users/u-1/consents', 'DELETE /users/u-1/consents/platform-shell', 'DELETE /users/u-1/consents/folio']);
+  });
 });
