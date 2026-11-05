@@ -9,6 +9,9 @@
  * the kit bundle, at the deployment's kit URL (ADR 0048). Aerie, the shell's
  * own kit, is never shared. SDK 2 dropped Lit and the Lit kit
  * (`@augur/ui-kit`): an app that still imports them doesn't load.
+ *
+ * `react/jsx-dev-runtime` works in production too: React's own production
+ * build of it has no `jsxDEV`, so the shell serves one made from `jsx`.
  */
 export const sharedModules: readonly string[] = [
   'react',

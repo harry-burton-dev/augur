@@ -447,10 +447,48 @@ describe('gateway', () => {
     ]);
   });
 
+  it('says whether sample data may be seeded here, and is off unless the deployment allows it', async () => {
+    const ask = async (seedAllowed?: boolean) => {
+      const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }), ...(seedAllowed === undefined ? {} : { seedAllowed }) });
+      return (await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${await sign(ada)}` } })).json().seeding;
+    };
+    expect(await ask(true)).toEqual({ allowed: true });
+    expect(await ask(false)).toMatchObject({ allowed: false, whoCanChange: expect.stringContaining('SEED_ALLOWED') });
+    expect((await ask()).allowed).toBe(false);
+  });
+
   it('keeps the platform’s status from people who aren’t admins, and from nobody signed in', async () => {
     const app = await buildApp({ upstreams: {}, auth, monitor: new HealthMonitor({ probes: [] }) });
     const sam = await sign({ ...ada, sub: 'u-2', roles: [] });
     expect((await app.inject({ method: 'GET', url: '/api/gateway/v1/status', headers: { authorization: `Bearer ${sam}` } })).statusCode).toBe(403);
     expect((await app.inject({ method: 'GET', url: '/api/gateway/v1/status' })).statusCode).toBe(401);
+  });
+
+  it('tells the shell whether to send browser telemetry, and why not', async () => {
+    const off = await buildApp({ upstreams: {}, auth, browserTelemetry: { on: false, why: 'No collector is named.' } });
+    const token = await sign(ada);
+    const res = await off.inject({ method: 'GET', url: '/api/gateway/v1/telemetry', headers: { authorization: `Bearer ${token}` } });
+    expect(res.json()).toEqual({ on: false, why: 'No collector is named.' });
+    const sent = await off.inject({ method: 'POST', url: '/api/gateway/v1/telemetry/v1/logs', headers: { authorization: `Bearer ${token}` }, payload: { resourceLogs: [] } });
+    expect(sent.statusCode).toBe(409);
+    expect((await off.inject({ method: 'GET', url: '/api/gateway/v1/telemetry' })).statusCode).toBe(401);
+  });
+
+  it('passes a signed-in browser’s errors on to the collector, stamped as the browser’s', async () => {
+    const sent: { url: string; body: string }[] = [];
+    const fetchImpl = (async (url: string, init: RequestInit) => {
+      sent.push({ url, body: String(init.body) });
+      return new Response('{}');
+    }) as typeof fetch;
+    const app = await buildApp({ upstreams: {}, auth, fetchImpl, browserTelemetry: { on: true, endpoint: 'http://collector:4318', headers: {}, resource: { 'deployment.environment.name': 'dev' } } });
+    const token = await sign(ada);
+    const payload = { resourceLogs: [{ resource: { attributes: [{ key: 'service.name', value: { stringValue: 'identity' } }] }, scopeLogs: [] }] };
+    const res = await app.inject({ method: 'POST', url: '/api/gateway/v1/telemetry/v1/logs', headers: { authorization: `Bearer ${token}` }, payload });
+    expect(res.statusCode).toBe(200);
+    expect(sent[0].url).toBe('http://collector:4318/v1/logs');
+    expect(sent[0].body).toContain('augur-browser');
+    expect(sent[0].body).not.toContain('identity');
+    expect((await app.inject({ method: 'POST', url: '/api/gateway/v1/telemetry/v1/logs', payload })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/api/gateway/v1/telemetry/v1/traces', headers: { authorization: `Bearer ${token}` }, payload })).statusCode).toBe(400);
   });
 });

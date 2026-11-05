@@ -1,5 +1,5 @@
 /** One app the platform keeps a database schema and a bucket for, and the secrets they open with. */
-import { appSecretFor } from '@augur/service-kit';
+import { appSecretFor, reservedIdProblem } from '@augur/service-kit';
 
 export interface AppStorage {
   app: string;
@@ -71,7 +71,12 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
       continue;
     }
     if (app.startsWith('augur-')) {
-      problems.push(`"${app}" in APP_STORAGE starts with augur-, which is kept for the platform's own buckets.`);
+      problems.push(`"${app}" in APP_STORAGE starts with augur-, which is kept for AUGUR's own buckets.`);
+      continue;
+    }
+    const reserved = reservedIdProblem(app);
+    if (reserved) {
+      problems.push(`APP_STORAGE: ${reserved}`);
       continue;
     }
     const { prefix, databasePassword, bucketSecret } = secretsOf(app);

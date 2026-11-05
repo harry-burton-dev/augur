@@ -2,6 +2,8 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import replyFrom from '@fastify/reply-from';
 import type { IncomingHttpHeaders } from 'node:http';
 import proxy from '@fastify/http-proxy';
+import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import type { Static } from 'typebox';
 import {
   CALLER_KEYS_PATH,
   CALLER_TOKEN_HEADER,
@@ -19,9 +21,13 @@ import {
   type CallerSigner,
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
+import { describeApi } from './contract.ts';
+import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
 import { Traffic, TRAFFIC_PATH, type TrafficPart } from './traffic.ts';
+import { GatewayMetrics } from './metrics.ts';
+import { browserTelemetryFrom, forward, ForwardFailed, SendLimit, stamped, TELEMETRY_BODY_LIMIT, type BrowserTelemetry as BrowserTelemetrySettings, type Signal } from './telemetry.ts';
 import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
@@ -51,7 +57,7 @@ export const defaultUpstreams = (env = process.env): Upstreams => {
   const apps = parseUpstreams(env.APP_UPSTREAMS);
   // A platform name in APP_UPSTREAMS would quietly send that service's traffic to an app.
   const taken = Object.keys(apps).filter((name) => PLATFORM_SERVICES.includes(name) || name === 'gateway');
-  if (taken.length) throw new Error(`APP_UPSTREAMS can't name ${taken.join(', ')}: ${taken.length === 1 ? 'that name belongs' : 'those names belong'} to the platform.`);
+  if (taken.length) throw new Error(`APP_UPSTREAMS can't name ${taken.join(', ')}: ${taken.length === 1 ? 'that name belongs' : 'those names belong'} to AUGUR’s own services.`);
   return {
     identity: env.IDENTITY_URL ?? 'http://localhost:8081',
     registry: env.REGISTRY_URL ?? 'http://localhost:8082',
@@ -90,6 +96,8 @@ export interface GatewayOptions {
   backupDir?: string;
   /** What infra/deploy/public.sh writes (PUBLIC_ACCESS_FILE). Without it Status says nothing about the internet. */
   publicAccessFile?: string;
+  /** Whether this deployment lets an admin fill it with synthetic sample data (SEED_ALLOWED, ADR 0056). Off unless set. */
+  seedAllowed?: boolean;
   /** Which floors a caller is on. Defaults to asking the identity upstream. */
   floors?: FloorLookup;
   /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
@@ -98,6 +106,12 @@ export interface GatewayOptions {
   access?: AppAccess;
   /** Where apps' services are beyond `upstreams`. Defaults to asking the registry upstream. */
   apps?: AppUpstreams;
+  /** Whether and where browser telemetry goes (ADR 0059). Defaults to the OTEL_* settings. */
+  browserTelemetry?: BrowserTelemetrySettings;
+  /** What the alert rules read (ADR 0059). Defaults to the OpenTelemetry API's meter, a no-op without a collector. */
+  metrics?: GatewayMetrics;
+  /** Sends browser telemetry on to the collector. */
+  fetchImpl?: typeof fetch;
 }
 
 /**
@@ -115,26 +129,44 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, signer = callerSignerFromEnv(), access, apps, traffic = new Traffic() }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch }: GatewayOptions = {}) => {
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
-  const app = Fastify(serviceLogging());
+  const app = Fastify(serviceLogging()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
+  await describeApi(app, `/api/gateway/${API_VERSION}`, `/${API_VERSION}`);
   // Someone reporting a problem can quote it, and it finds the request in every service's logs.
   app.addHook('onSend', async (req, reply) => {
     reply.header(REQUEST_ID_HEADER, req.id);
   });
-  app.get('/healthz', async () => health('gateway', version, API_VERSION));
+  app.get('/healthz', { schema: { hide: true } }, async () => health('gateway', version, API_VERSION));
   // How calls through the gateway have answered lately, for the updater's watch after an upgrade.
   // Only the deployment's own network reaches it: nginx forwards only /api/.
   app.addHook('onResponse', async (req, reply) => {
     if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
-    traffic.record(reply.statusCode, trafficPart(req.url));
+    const part = trafficPart(req.url);
+    traffic.record(reply.statusCode, part);
+    metrics.request(reply.statusCode, part);
   });
-  app.get<{ Querystring: { minutes?: number } }>(TRAFFIC_PATH, { schema: { querystring: { type: 'object', properties: { minutes: { type: 'integer', minimum: 1, maximum: 15 } } } } }, async (req) => traffic.snapshot(req.query.minutes));
+  app.get<{ Querystring: { minutes?: number } }>(TRAFFIC_PATH, { schema: { hide: true, querystring: { type: 'object', properties: { minutes: { type: 'integer', minimum: 1, maximum: 15 } } } } }, async (req) => traffic.snapshot(req.query.minutes));
   // The public key services check signed callers with. It is public, so anyone may fetch it.
-  app.get(CALLER_KEYS_PATH, async () => signer.keys());
+  app.get(
+    CALLER_KEYS_PATH,
+    {
+      schema: {
+        summary: 'The public key signed callers are checked with',
+        description: [
+          "A JSON Web Key Set with the gateway's Ed25519 key. No sign-in is needed.",
+          'The key is new each time the gateway starts unless CALLER_SIGNING_KEY is',
+          "set, so fetch it again when a token names a key id you don't have.",
+        ].join(' '),
+        response: { 200: CallerKeys },
+      },
+    },
+    // jose types a key loosely; the gateway signs only with its Ed25519 key.
+    async () => (await signer.keys()) as Static<typeof CallerKeys>,
+  );
 
   const statusMonitor =
     monitor ??
@@ -147,6 +179,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     statusMonitor.start();
     app.addHook('onClose', async () => statusMonitor.stop());
   }
+  metrics.watch({ components: () => statusMonitor.snapshot({ version, api: API_VERSION }), ...(backupDir ? { backups: () => backupStatus(backupDir) } : {}) });
 
   app.addHook('onRequest', async (req, reply) => {
     // Decided by the route the request matched, never by its raw URL: the router decodes
@@ -176,14 +209,99 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   });
 
   // The gateway's own API: whether every part of the platform is answering, for admins.
-  app.get(`/api/gateway/${API_VERSION}/status`, async (req, reply) => {
-    if (!req.caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only admins can see the platform’s status.' });
-    return {
-      components: statusMonitor.snapshot({ version, api: API_VERSION }),
-      ...(backupDir ? { backups: await backupStatus(backupDir) } : {}),
-      ...(publicAccessFile ? { publicAccess: await publicAccess(publicAccessFile) } : {}),
-    };
-  });
+  app.get(
+    `/api/gateway/${API_VERSION}/status`,
+    {
+      schema: {
+        summary: 'Whether every part of AUGUR is answering (admins only)',
+        description: [
+          "The gateway checks every service's /healthz and the sign-in service's",
+          'signing keys every 30 seconds and keeps the last answer, so this never',
+          'waits on a slow service. A component that failed its last check, or has',
+          'not answered for 2 minutes, is down. `backups` is present when the',
+          'gateway is told where the backup container writes (BACKUP_DIR).',
+          '`seeding` says whether sample data may be added here (SEED_ALLOWED).',
+        ].join(' '),
+        response: {
+          200: Status,
+          401: refused('No signed-in caller'),
+          403: refused('Not an admin, or not on the floor X-Workspace-Id names'),
+          503: refused("Sign-in or floors can't be checked right now"),
+        },
+      },
+    },
+    async (req, reply) => {
+      if (!req.caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only admins can see AUGUR’s status.' });
+      return {
+        components: statusMonitor.snapshot({ version, api: API_VERSION }),
+        ...(backupDir ? { backups: await backupStatus(backupDir) } : {}),
+        ...(publicAccessFile ? { publicAccess: await publicAccess(publicAccessFile) } : {}),
+        // Whether `pnpm seed` may add synthetic people and content here, and who can change that.
+        seeding: seedAllowed
+          ? { allowed: true }
+          : { allowed: false, why: 'This deployment doesn’t allow sample data.', whoCanChange: 'A deployment admin, by setting SEED_ALLOWED=true in its .env.' },
+      };
+    },
+  );
+
+  // Browser telemetry (ADR 0059): whether the shell should send it, and where it sends.
+  app.get(
+    `/api/gateway/${API_VERSION}/telemetry`,
+    {
+      schema: {
+        summary: 'Whether this deployment collects browser errors and traces',
+        description: [
+          'The shell asks once after sign-in and starts Faro only when on is true: when the deployment names a',
+          'collector (OTEL_EXPORTER_OTLP_ENDPOINT). When off, why says so.',
+        ].join(' '),
+        response: { 200: ref(BrowserTelemetry), 401: refused('No signed-in caller') },
+      },
+    },
+    async () => (browserTelemetry.on ? { on: true } : { on: false, ...(browserTelemetry.why ? { why: browserTelemetry.why } : {}) }),
+  );
+
+  const limit = new SendLimit();
+  for (const signal of ['logs', 'traces'] as Signal[]) {
+    app.post(
+      `/api/gateway/${API_VERSION}/telemetry/v1/${signal}`,
+      {
+        bodyLimit: TELEMETRY_BODY_LIMIT,
+        schema: {
+          summary: `Browser ${signal} from the shell, passed on to the deployment's collector`,
+          description: [
+            `OTLP/HTTP JSON ${signal}, as Grafana Faro's OTLP transport sends them (ADR 0059). The gateway stamps each`,
+            `resource as service.name=augur-browser with the deployment's own attributes, takes out anything that`,
+            'could name a person and query strings from URLs, and forwards it. At most 256 KB a send and 60 sends a',
+            'minute a person.',
+          ].join(' '),
+          body: OtlpExport,
+          response: {
+            200: { description: 'Passed on', type: 'object', additionalProperties: true },
+            400: refused('Not an OTLP body of this signal'),
+            401: refused('No signed-in caller'),
+            409: refused('Browser telemetry is off here, with why (error telemetry_off)'),
+            429: refused('More than 60 sends this minute'),
+            502: refused("The collector didn't take it"),
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!browserTelemetry.on) return reply.code(409).send({ error: 'telemetry_off', message: browserTelemetry.why ?? 'Browser telemetry is off here.' });
+        if (!limit.take(req.caller!.id)) return reply.code(429).send({ error: 'too_many', message: 'Too many sends this minute. The next minute takes them again.' });
+        const body = stamped(req.body, signal, browserTelemetry.resource);
+        if (!body) return reply.code(400).send({ error: 'bad_request', message: `That isn’t OTLP ${signal}.` });
+        try {
+          await forward(browserTelemetry, signal, body, fetchImpl);
+        } catch (err) {
+          if (!(err instanceof ForwardFailed)) throw err;
+          req.log.warn({ err: err.message }, 'browser telemetry not forwarded');
+          return reply.code(502).send({ error: 'collector_unavailable', message: err.message });
+        }
+        // As an OTLP collector answers: an ExportResponse with nothing rejected.
+        return {};
+      },
+    );
+  }
 
   /**
    * The floor an app call is checked on: the one the caller named, or else the organisation's, so a

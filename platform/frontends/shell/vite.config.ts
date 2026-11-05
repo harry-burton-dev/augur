@@ -1,10 +1,10 @@
-import { createReadStream, existsSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { createReadStream, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { kitDir, readKit } from '@augur/kit-bundle';
 import { isSharedModule, sharedModules } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
-import { defineConfig, normalizePath, type Plugin, type ProxyOptions } from 'vite';
+import { defineConfig, normalizePath, type HtmlTagDescriptor, type Plugin, type ProxyOptions } from 'vite';
 
 /**
  * Local stand-in for where apps are hosted: /apps/<id>/* is served from that
@@ -67,15 +67,33 @@ const serveApps = (): Plugin => ({
  *
  * In dev the kit is served from its development build, and the shell's own imports of it resolve to
  * those same files rather than to Vite's copies.
+ *
+ * One module comes from the shell itself, in production only: `react/jsx-dev-runtime`, whose production
+ * build in React has no `jsxDEV`. vite.shared.config.ts builds a stand-in into shared-build/, served at
+ * /shared/, and it wins over the kit's in the import map.
  */
 export const KIT_URL_PLACEHOLDER = '@KIT_URL@';
+/**
+ * The product's name in the page (its title, and the `augur-product` meta the shell reads for the tab):
+ * the web container fills it in from ORG_PRODUCT_NAME, as it does KIT_URL. index.html and dev have AUGUR.
+ */
+export const PRODUCT_NAME_PLACEHOLDER = '@PRODUCT_NAME@';
+const DEFAULT_PRODUCT_NAME = 'AUGUR';
 const kit = readKit();
 /** Every module the SDK promises apps must come from the kit: since SDK 2 nothing else serves one. */
 const notInKit = sharedModules.filter((s) => !(s in kit.imports));
 if (notInKit.length) throw new Error(`Kit ${kit.version} doesn't serve ${notInKit.join(', ')}, which the SDK promises apps: pin a kit that does (node scripts/kit.mjs pin).`);
 const sharedModulesMap = (): Plugin => {
+  const dir = fileURLToPath(new URL('./shared-build/', import.meta.url));
   let dev = false;
   let outDir = 'dist';
+  /** What shared-build/ serves: nothing in dev, where the kit's development build has a real `jsxDEV`. */
+  const shared = (): Record<string, string> => {
+    if (dev) return {};
+    const file = join(dir, 'importmap.json');
+    if (!existsSync(file)) throw new Error('shared-build/ is missing: run `pnpm --filter @augur/shell build:shared` first.');
+    return (JSON.parse(readFileSync(file, 'utf8')) as { imports: Record<string, string> }).imports;
+  };
   const kitBase = () => `${dev ? '/kit/' : KIT_URL_PLACEHOLDER}${kit.version}/`;
   const kitBuild = () => (dev ? kit.dev : kit);
   const importMap = () => {
@@ -85,7 +103,8 @@ const sharedModulesMap = (): Plugin => {
     const integrity = dev
       ? undefined
       : Object.fromEntries(Object.entries(kit.integrity).filter(([file]) => file.endsWith('.js') && !file.startsWith('dev/')).map(([file, hash]) => [`${base}${file}`, hash]));
-    return { imports: kitImports, ...(integrity ? { integrity } : {}) };
+    // shared-build/ comes last: in production it serves react/jsx-dev-runtime in place of the kit's (vite.shared.config.ts).
+    return { imports: { ...kitImports, ...shared() }, ...(integrity ? { integrity } : {}) };
   };
   return {
     name: 'shared-modules',
@@ -121,15 +140,16 @@ const sharedModulesMap = (): Plugin => {
       return fromKit ? join(kitDir, fromKit) : undefined;
     },
     generateBundle() {
+      for (const fileName of readdirSync(dir)) this.emitFile({ type: 'asset', fileName: `shared/${fileName}`, source: readFileSync(join(dir, fileName)) });
       // The production bundle, where the default KIT_URL (/kit/) finds it. Its development build stays out.
       for (const file of Object.keys(kit.integrity).filter((f) => !f.startsWith('dev/'))) {
         this.emitFile({ type: 'asset', fileName: `kit/${kit.version}/${file}`, source: readFileSync(join(kitDir, file)) });
       }
       this.emitFile({ type: 'asset', fileName: `kit/${kit.version}/kit.json`, source: readFileSync(join(kitDir, 'kit.json')) });
     },
-    transformIndexHtml: () => {
+    transformIndexHtml: (html) => {
       const base = kitBase();
-      return [
+      const tags: HtmlTagDescriptor[] = [
         { tag: 'script', attrs: { type: 'importmap' }, children: JSON.stringify(importMap()), injectTo: 'head-prepend' },
         // Where the kit is, for the shell to show (Settings, About) and to name when it can't be loaded.
         { tag: 'meta', attrs: { name: 'augur-kit', content: JSON.stringify({ version: kit.version, url: base }) }, injectTo: 'head-prepend' },
@@ -140,14 +160,15 @@ const sharedModulesMap = (): Plugin => {
         })),
         { tag: 'script', children: KIT_FAILED, injectTo: 'head-prepend' },
       ];
+      return { html: dev ? html.replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME) : html, tags };
     },
-    // index.template.html keeps the placeholder for the web container; index.html has the default, /kit/.
+    // index.template.html keeps the placeholders for the web container; index.html has the defaults.
     writeBundle() {
       const page = join(outDir, 'index.html');
       if (dev || !existsSync(page)) return;
       const html = readFileSync(page, 'utf8');
       writeFileSync(join(outDir, 'index.template.html'), html);
-      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/'));
+      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/').replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME));
     },
   };
 };
@@ -156,7 +177,7 @@ const sharedModulesMap = (): Plugin => {
  * If the shell's code or the kit can't be loaded, nothing of the shell runs, so a small script in the
  * page says why instead of leaving it blank, and names the setting and who can change it.
  */
-const KIT_FAILED = `addEventListener('error',function(e){var t=e.target,m=document.querySelector('meta[name="augur-kit"]');if(!m||!t||!(t.tagName==='SCRIPT'&&t.type==='module'||t.tagName==='LINK'&&t.rel==='stylesheet'))return;if(document.getElementById('augur-kit-failed'))return;var k=JSON.parse(m.content),p=document.createElement('p');p.id='augur-kit-failed';p.setAttribute('role','alert');p.style.cssText='font:16px/1.5 system-ui,sans-serif;max-width:40em;margin:4em auto;padding:0 1em';p.textContent='AUGUR could not load its UI kit '+k.version+' from '+k.url+': the address could not be reached, or what it sent was not the kit this release pinned. A deployment admin can change KIT_URL in the .env file on the server.';(document.body||document.documentElement).appendChild(p)},true);`;
+const KIT_FAILED = `addEventListener('error',function(e){var t=e.target,m=document.querySelector('meta[name="augur-kit"]');if(!m||!t||!(t.tagName==='SCRIPT'&&t.type==='module'||t.tagName==='LINK'&&t.rel==='stylesheet'))return;if(document.getElementById('augur-kit-failed'))return;var k=JSON.parse(m.content),p=document.createElement('p');p.id='augur-kit-failed';p.setAttribute('role','alert');p.style.cssText='font:16px/1.5 system-ui,sans-serif;max-width:40em;margin:4em auto;padding:0 1em';var n=document.querySelector('meta[name="augur-product"]');p.textContent=(n&&n.content||'AUGUR')+' could not load its UI kit '+k.version+' from '+k.url+': the address could not be reached, or what it sent was not the kit this release pinned. A deployment admin can change KIT_URL in the .env file on the server.';(document.body||document.documentElement).appendChild(p)},true);`;
 
 /**
  * `pnpm dev:app <id>` sets DEV_APP to the app's folder: the shell opens with

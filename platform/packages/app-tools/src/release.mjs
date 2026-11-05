@@ -113,6 +113,6 @@ export const releaseNotes = (release, { target = 'main' } = {}) =>
  * each signature against.
  */
 export const signerOf = (env = process.env) => ({
-  repository: env.GITHUB_REPOSITORY ?? 'harry-burton-dev/im-platform',
+  repository: env.GITHUB_REPOSITORY ?? 'harry-burton-dev/augur',
   workflow: env.GITHUB_WORKFLOW_REF?.replace(/^[^/]+\/[^/]+\//, '').replace(/@.*$/, '') ?? '.github/workflows/release.yml',
 });

@@ -65,9 +65,9 @@ everything.
 
 | Job | Pull request runs it when it changes | On a push | What it does |
 |---|---|---|---|
-| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, script tests, the hotfix rule, a changeset, build, manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
+| `build-test` | always | always | install, boundaries, reasons, ESLint, versions, release file, catalog, licences, repository security (below), script tests, the hotfix rule, a changeset, build, the API reports and (when `platform/packages` changed) publint and Are the Types Wrong on the packed packages (ADR 0052), manifests, migrations (frozen once on `main`), typecheck, tests against Postgres |
 | `scan` | always | never | gitleaks on the pull request's commits; OSV-Scanner, failing only on vulnerabilities the pull request brings in (ADR 0043) |
-| `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, the Folio pin (`release/shipped-apps.json`, `infra/shipped-app.sh`), the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio (from the release AUGUR ships) on and off |
+| `contract` | `platform/frontends` (not Admin or the Upgrade Centre), `platform/packages`, `platform/contract`, the Folio pin (`release/shipped-apps.json`, `infra/shipped-app.sh`), the root `package.json` or the lockfile | never | the reference app, today's build and frozen ones from earlier SDK releases, mounted by the real shell in Chromium, with Folio (from the release AUGUR ships) on and off, and axe on the shell once (ADR 0063) |
 | `app-scaffold` | the app template, `create-app`, the shared packages, the registry, or the scripts that check apps | never | `pnpm create-app` still makes an app that builds, passes its tests and is accepted |
 | `deploy-images` | `infra`, `.dockerignore`, any `package.json`, the workspace file or the lockfile | never | the compose files are valid; the four main images build, the web image serves the shipped apps' frontends, and none runs as root; nginx and its Content Security Policy; the backup and restore scripts |
 
@@ -104,7 +104,8 @@ newest waiting one runs.
 **App dev builds (`app-dev.yml`)** and **App previews (`app-preview.yml`)** do the same for apps
 in `apps/` that are released on their own (not Folio, Explorer or Data Atlas, which go out with
 AUGUR): a dev build per merge, and a preview per pull request that deployments can switch to
-([app-previews.md](app-previews.md)). Closing the pull request deletes its previews.
+([app-previews.md](app-previews.md)). Closing the pull request deletes its previews. The release feed
+is signed again only when a preview was released or deleted, not after every push to the pull request.
 
 **How the images are built.** `infra/release-images.sh` builds the platform's images with one Buildx
 builder, each with provenance and an SBOM, pushes them to `ghcr.io/<repo>/<name>`, and signs each by
@@ -114,9 +115,14 @@ it, copies its service image under AUGUR's images by digest and signs it again, 
 that image carries into the web image (`.shipped/frontends/<id>`). Reading the app repositories takes
 the `APP_RELEASES_TOKEN` and `PACKAGES_READ_TOKEN` secrets. Two things keep it short:
 
-- `infra/service.Dockerfile` and `infra/web.Dockerfile` start with the same five lines (copy the
-  repository, `pnpm install`), before any build argument, so the workspace is installed once and every
-  later image reuses that layer. Keep those lines identical.
+- `infra/service.Dockerfile` and `infra/web.Dockerfile` start the same way, up to the build stage's
+  `COPY . .` and before any build argument, so the workspace is installed once and every later image
+  reuses that layer. Keep that part identical.
+- The install (the `deps` stage) starts from the workspace's manifests alone (every `package.json`,
+  the lockfile, `pnpm-workspace.yaml`, `.npmrc`), so it changes only when the dependencies do. The dev
+  build keeps it in GitHub's cache between runs (`BUILDX_CACHE`, keyed by those files and the
+  Dockerfiles), saved again only when they change, and CI's `deploy-images` job reads the same entry.
+  Only that stage is kept, so a release's base image and Alpine fixes are always fresh.
 - Artifacts' worker (Torch and Docling's models, about six minutes) isn't in its app release, so it's
   built from augur-folio at the pinned release's tag, and also tagged `src-<git tree of worker/>`. A
   dev build whose worker folder is unchanged reuses that image, tags it for the new build and signs it
@@ -168,6 +174,34 @@ so it never lands in a layer.
 for a change that adds or bumps a kit package, made where no package token is set, such as a cloud
 session: pnpm can't resolve those packages there.
 
+## Repository security
+
+`pnpm check:repo-security` (`scripts/check-repo-security.mjs`, in `build-test`) holds the rules a
+pull request could otherwise quietly undo:
+
+- every action a workflow uses is pinned to a full commit SHA, with its version in a comment
+  (Renovate keeps the pins current);
+- every workflow has a top-level `permissions:` block;
+- no `run:` script expands text someone else chose (a branch name, a title, a comment) with `${{ }}`;
+  it goes through `env:` and is used as `"$NAME"`;
+- CI tests on the Postgres major that `infra/deploy/compose.yml` runs. Local dev
+  (`infra/docker-compose.yml`) stays on its own major so existing dev data still starts; moving
+  servers to a new major needs an upgrade note in [upgrade.md](upgrade.md) first.
+
+The rest lives in GitHub's settings, which a cloud session can't change. The owner keeps them:
+
+- a ruleset on `main` in this repository, augur-kit, each app repository and the app template: no
+  force pushes or deletion, changes through a pull request with CI green;
+- a ruleset on `release/**` that lets only the owner create, push or delete those branches, since
+  the updater and the registry trust signatures from any `release/<unit>-<x>.<y>` branch;
+- `APP_RELEASES_TOKEN` as a fine-grained token with only what it is used for: Contents read on the app
+  repositories (their releases and source) and Actions write on this one (an app's release starts the
+  Release feed), set in this repository and each app repository, expiring after 90 days.
+
+Each release image carries a signed SBOM and SLSA provenance
+([release-channels.md](release-channels.md#signatures)), and the deploy test runs Trivy over every image a
+release runs, third-party ones included ([deploy-test.md](deploy-test.md)).
+
 ## Adding or changing a job
 
 1. Ask whether it needs to run on every pull request. If it can wait for the Version packages pull
@@ -183,9 +217,9 @@ session: pnpm can't resolve those packages there.
 The billed minutes of recent runs, by workflow and job, from the API (needs `gh` signed in):
 
 ```sh
-gh api "repos/harry-burton-dev/im-platform/actions/runs?per_page=100&created=>=$(date -u -d '2 days ago' +%F)" \
+gh api "repos/harry-burton-dev/augur/actions/runs?per_page=100&created=>=$(date -u -d '2 days ago' +%F)" \
   -q '.workflow_runs[].id' | while read -r id; do
-  gh api "repos/harry-burton-dev/im-platform/actions/runs/$id/jobs" -q '.jobs[] |
+  gh api "repos/harry-burton-dev/augur/actions/runs/$id/jobs" -q '.jobs[] |
     select(.conclusion != "skipped" and .started_at and .completed_at) |
     [.name, ((.completed_at | fromdate) - (.started_at | fromdate))] | @tsv'
 done | awk -F'\t' '{m=int(($2+59)/60); t[$1]+=m; s+=m} END {for (j in t) print t[j], j; print s, "total"}' | sort -rn

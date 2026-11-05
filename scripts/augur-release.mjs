@@ -31,7 +31,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFil
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import semver from 'semver';
-import { readShipped, shippedParts } from './shipped-apps.mjs';
+import { layoutProblems, readShipped, shippedParts, SHIPPED_FILE } from './shipped-apps.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const RELEASE_FILE = 'release/augur-release.json';
@@ -338,11 +338,18 @@ const main = () => {
       const shipped = existsSync(join(root, VERSION_FILE)) ? readFileSync(join(root, VERSION_FILE), 'utf8') : '';
       if (shipped !== versionModule(previous)) problems.push(`${VERSION_FILE} doesn't match ${RELEASE_FILE}`);
     }
-    if (problems.length) {
-      console.error(problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`).join('\n'));
+    // The compose files name the apps that ship with AUGUR themselves, so they're held to the one list of them.
+    const layout = layoutProblems(shipped);
+    if (problems.length || layout.length) {
+      console.error(
+        [
+          ...problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`),
+          ...layout.map((p) => `✗ ${p} ${SHIPPED_FILE} is the one list of the apps that ship with AUGUR; make the compose file agree with it.`),
+        ].join('\n'),
+      );
       process.exit(1);
     }
-    console.log(`AUGUR release ${previous.version} is in step.`);
+    console.log(`AUGUR release ${previous.version} is in step, and the compose files run the apps it ships.`);
   } else if (mode === 'pending' || mode === 'publish') {
     if (!previous) throw new Error(`${RELEASE_FILE} is missing.`);
     const tag = `augur@${previous.version}`;

@@ -1,6 +1,16 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { dropDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+
+describe('an app’s schema', () => {
+  it('is never one named for a part of AUGUR, made or dropped', async () => {
+    const said: string[] = [];
+    const sql = { query: async (text: string) => (said.push(text), { rows: [], rowCount: 0 }) } as unknown as Parameters<typeof provisionDatabase>[0];
+    await expect(provisionDatabase(sql, { app: 'registry', password: 'p'.repeat(20) })).rejects.toThrow('No schema was made for it: "registry" is kept for the registry');
+    await expect(dropDatabase(sql, 'public')).rejects.toThrow('Nothing was dropped');
+    expect(said).toEqual([]);
+  });
+});
 
 // Runs wherever DATABASE_URL points at a Postgres with pgvector; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
@@ -13,6 +23,7 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
   });
   afterAll(async () => {
     await admin.query(`drop schema if exists ${schemaFor(app)} cascade`);
+    await admin.query(`drop schema if exists ${jobsSchemaFor(app)} cascade`);
     await admin.query(`drop owned by ${roleFor(app)}`).catch(() => {});
     await admin.query(`drop role if exists ${roleFor(app)}`);
     await admin.end();
@@ -26,6 +37,17 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
     await client.connect();
     return client;
   };
+
+  it('owns a schema for its jobs too', async () => {
+    await provisionDatabase(admin, { app, password: 'jobs-password-456' });
+    const client = await asApp('jobs-password-456');
+    try {
+      await client.query(`create table ${jobsSchemaFor(app)}.workflow_status (id text)`);
+      expect((await client.query(`select count(*)::int as n from ${jobsSchemaFor(app)}.workflow_status`)).rows).toEqual([{ n: 0 }]);
+    } finally {
+      await client.end();
+    }
+  });
 
   it('owns its schema, can use pgvector and pg_trgm, and can’t reach the platform’s schemas', async () => {
     await provisionDatabase(admin, { app, password: 'first-password-123' });
@@ -71,6 +93,7 @@ describe.runIf(process.env.DATABASE_URL)('a preview’s scratch database', () =>
     await dropDatabase(admin, app);
     expect((await admin.query('select 1 from pg_roles where rolname = $1', [roleFor(app)])).rowCount).toBe(0);
     expect((await admin.query('select 1 from information_schema.schemata where schema_name = $1', [schemaFor(app)])).rowCount).toBe(0);
+    expect((await admin.query('select 1 from information_schema.schemata where schema_name = $1', [jobsSchemaFor(app)])).rowCount).toBe(0);
     await dropDatabase(admin, app);
   });
 });

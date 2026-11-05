@@ -15,12 +15,24 @@ x-hardened: &hardened
   security_opt: [no-new-privileges:true]
   cap_drop: [ALL]
 
+# Every container's log, kept by Docker: at most three files of 10 MB each, so logs can't fill the disk.
+# `pc logs` reads them as before. LOG_MAX_SIZE and LOG_MAX_FILES in .env change the limits.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: ${LOG_MAX_SIZE:-10m}
+    max-file: "${LOG_MAX_FILES:-3}"
+
 # OpenTelemetry (ADR 0034, docs/observability.md): every Node service loads the service kit's telemetry
 # first. It does nothing unless OTEL_EXPORTER_OTLP_ENDPOINT names a collector, such as the
 # `observability` profile's at http://otel-lgtm:4318.
 x-telemetry: &telemetry
   NODE_OPTIONS: --import @augur/service-kit/telemetry
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+  # A collector's key, and which traces to keep (the SDK's defaults when empty).
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
+  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
   OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production}
 
 x-service: &service
@@ -67,7 +79,8 @@ services:
   # infra/deploy/public.sh has it open, Tailscale Funnel serves the same address to the internet too
   # (tailscale/start.sh; docs/deploy.md, "Open AUGUR to the internet for a while").
   tailscale:
-    image: tailscale/tailscale:v1.76.6
+    logging: *logging
+    image: tailscale/tailscale:v1.104.4
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/config/start.sh"]
     hostname: ${TS_HOSTNAME:-platform}
@@ -82,6 +95,7 @@ services:
     depends_on: [web]
 
   web:
+    logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/web:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     healthcheck:
@@ -96,6 +110,8 @@ services:
       APP_ORIGINS: ${APP_ORIGINS:-}
       # Where the UI kit is loaded from: this server's /kit/ unless set (docs/deploy.md, "The UI kit").
       KIT_URL: ${KIT_URL:-/kit/}
+      # The product's name in the browser tab (docs/deploy.md, "First start"); AUGUR unless set.
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
       # The front door's limits (docs/deploy.md, "Limits at the front door"); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}
@@ -110,10 +126,13 @@ services:
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
       # Its tailnet is the only one it loads apps from then (infra/deploy/live-origins.envsh).
       PLATFORM_URL: ${PLATFORM_URL}
-    depends_on: [gateway, keycloak]
+    depends_on:
+      gateway: { condition: service_started }
+      keycloak: { condition: service_healthy }
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.
   postgres:
+    logging: *logging
     image: pgvector/pgvector:0.8.0-pg16
     restart: unless-stopped
     environment:
@@ -130,8 +149,11 @@ services:
       retries: 20
 
   # A dump of the whole database every night into infra/deploy/backups, keeping 14 days,
-  # and once a week a test restore of the newest into a throwaway database.
+  # and once a week a test restore of the newest into a throwaway database. Once OFFSITE_REPOSITORY is
+  # set, each night's dump and apps' files are also copied off the server with restic, encrypted before
+  # they leave, and the weekly restore test restores from that copy (ADR 0060; docs/deploy.md, "Backups").
   backup:
+    logging: *logging
     image: postgres:16-alpine
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/backup/backup.sh"]
@@ -142,22 +164,53 @@ services:
       BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-2}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       RESTORE_TEST_WEEKDAY: ${RESTORE_TEST_WEEKDAY:-0}
+      # The off-server copy: a restic repository in an S3-compatible bucket, its encryption password, and
+      # the bucket's key. Empty, nothing leaves the server.
+      RESTIC_REPOSITORY: ${OFFSITE_REPOSITORY:-}
+      RESTIC_PASSWORD: ${OFFSITE_PASSWORD:-}
+      AWS_ACCESS_KEY_ID: ${OFFSITE_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${OFFSITE_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${OFFSITE_REGION:-}
+      OFFSITE_KEEP_DAILY: ${OFFSITE_KEEP_DAILY:-30}
     volumes:
       - ./backup:/backup:ro
       - ./backups:/backups
       # Apps' files, read only: backed up beside the database.
       - garage-meta:/objects/meta:ro
       - garage-data:/objects/data:ro
+      # restic, put there by backup-tools.
+      - backup-tools:/tools:ro
     depends_on:
       postgres: { condition: service_healthy }
+      backup-tools: { condition: service_completed_successfully }
+
+  # Puts restic's binary (one static file) where the backup container runs it from, then stops. Runs on
+  # every `up`, so a new restic arrives with the image tag here.
+  backup-tools:
+    logging: *logging
+    image: restic/restic:0.19.1
+    restart: on-failure
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    entrypoint: ["/bin/sh", "-c", "cp /usr/bin/restic /tools/restic.new && mv /tools/restic.new /tools/restic"]
+    volumes:
+      - backup-tools:/tools
 
   # Apps' files: an S3-compatible object store, reached only inside the compose network.
   garage:
+    logging: *logging
     image: dxflrs/garage:v2.4.1
     restart: unless-stopped
     environment:
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in .env}
       GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in .env}
+    # Ready once the node answers its own status (the image has only Garage's binary).
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     volumes:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
@@ -167,6 +220,7 @@ services:
   # APP_STORAGE its own database login and schema, and its own bucket and key, from the secrets
   # in .env, then stops. Runs on every `up`; see docs/app-storage.md.
   storage:
+    logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     restart: on-failure
@@ -182,11 +236,15 @@ services:
       PLATFORM_DATABASE_LOGINS: identity registry events models
     depends_on:
       postgres: { condition: service_healthy }
-      garage: { condition: service_started }
+      garage: { condition: service_healthy }
 
-  # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it.
+  # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it. Moving to a
+  # new minor migrates Keycloak's database on its first start, which can't be undone: take a backup
+  # first (docs/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0.8
+    logging: *logging
+    # AUGUR's Keycloak: Keycloak with AUGUR's sign-in and email theme (ADR 0041, infra/service.Dockerfile).
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/keycloak:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     restart: unless-stopped
     command: ["start", "--import-realm"]
     environment:
@@ -206,7 +264,7 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       # Read by the realm file on first start: who you sign in as.
       PLATFORM_URL: ${PLATFORM_URL}
-      # And identity's own sign-in, which manages the realm, so identity never needs Keycloak's admin.
+      # And identity's own sign-in, so identity never needs Keycloak's admin.
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:?set PLATFORM_ADMIN_USER in .env}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?set PLATFORM_ADMIN_PASSWORD in .env}
@@ -214,11 +272,63 @@ services:
       PLATFORM_ADMIN_FIRST_NAME: ${PLATFORM_ADMIN_FIRST_NAME:?set PLATFORM_ADMIN_FIRST_NAME in .env}
       PLATFORM_ADMIN_LAST_NAME: ${PLATFORM_ADMIN_LAST_NAME:?set PLATFORM_ADMIN_LAST_NAME in .env}
       PLATFORM_ADMIN_DEPARTMENT: ${PLATFORM_ADMIN_DEPARTMENT:-Platform}
+      # Shown on the sign-in pages and in emails: the organisation's name (as identity has it) and, if
+      # set, a link to its logo. The product's name is the realm's display name (keycloak-config sets it).
+      ORG_NAME: ${ORG_NAME:-Organisation}
+      ORG_LOGO_URL: ${ORG_LOGO_URL:-}
+    # Its share of the server's memory: Keycloak sizes its Java heap from it.
+    mem_limit: ${KEYCLOAK_MEM_LIMIT:-2g}
+    # Ready once it answers on its management port (9000, inside the container only). The image has no
+    # curl or wget, so bash asks it directly.
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /sso/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      # Its first start after an upgrade migrates its database, which can take a few minutes.
+      start_period: 300s
     volumes:
       - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
+      # The breached-password list the realm's password policy checks against (ADR 0038).
+      - ./keycloak/password-blacklists:/opt/keycloak/data/password-blacklists:ro
     depends_on: *own-login
 
+  # The realm as code (ADR 0057): brings Keycloak's realm to what this release declares (password
+  # policy, two-step sign-in for admin roles, passkeys, sessions, events, profile, roles, the services'
+  # sign-ins and identity's rights), then stops. Runs on every `up`, so on every upgrade, before
+  # identity starts. It is the only part of AUGUR that signs in as Keycloak's master admin.
+  keycloak-config:
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/identity:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: on-failure:3
+    command: ["node", "dist/realm-job.js"]
+    environment:
+      NODE_ENV: production
+      KEYCLOAK_URL: http://keycloak:8080/sso
+      KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
+      IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+      # Each platform service's sign-in in Keycloak, made or set to these secrets.
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env}
+      # Given the deployment-admin role if nobody has it yet.
+      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
+      # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
+      REALM_PASSWORD_MIN_LENGTH: ${REALM_PASSWORD_MIN_LENGTH:-}
+      REALM_PASSWORD_DENYLIST: ${REALM_PASSWORD_DENYLIST:-}
+      REALM_SESSION_IDLE_HOURS: ${REALM_SESSION_IDLE_HOURS:-}
+      REALM_SESSION_MAX_HOURS: ${REALM_SESSION_MAX_HOURS:-}
+      REALM_SIGN_IN_EVENT_DAYS: ${REALM_SIGN_IN_EVENT_DAYS:-}
+      REALM_ADMIN_EVENT_DAYS: ${REALM_ADMIN_EVENT_DAYS:-}
+      # The languages offered at sign-in, comma separated, the first the default (default en).
+      REALM_LANGUAGES: ${REALM_LANGUAGES:-}
+      # The product's name, as the realm's display name: the sign-in pages, emails and passkeys show it.
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
+    depends_on:
+      keycloak: { condition: service_healthy }
+
   gateway:
+    logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/gateway:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     healthcheck:
@@ -243,14 +353,19 @@ services:
       BACKUP_DIR: /backups
       # And whether AUGUR is open to the internet, and until when, from what infra/deploy/public.sh wrote.
       PUBLIC_ACCESS_FILE: /run/augur/tailscale/public-until
+      # Whether an admin may fill this deployment with synthetic sample data (pnpm seed, ADR 0056). Off unless set.
+      SEED_ALLOWED: ${SEED_ALLOWED:-false}
       # Each app's service, name=url: the apps that ship with AUGUR.
       APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086
+      # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
+      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
     volumes:
       - ./backups:/backups:ro
       - ./tailscale:/run/augur/tailscale:ro
     depends_on: [identity, registry, events, models]
 
   identity:
+    logging: *logging
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/identity:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
@@ -265,20 +380,20 @@ services:
       # Its own login, owning only the identity schema.
       DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # Admin's People screen: identity manages people in Keycloak as its own client, whose rights in
-      # the realm come from the realm file. Keycloak's master admin is not in identity's settings; see
-      # docs/deploy.md, "Keycloak's admin", to repair a lost sign-in. Departments are identity's own
-      # teams, copied in once from Keycloak's groups.
+      # the realm (people, departments and apps' sign-ins, not the realm's settings) are given by
+      # keycloak-config. Keycloak's master admin is never in identity's settings. Departments are
+      # identity's own teams, copied in once from Keycloak's groups.
       KEYCLOAK_URL: http://keycloak:8080/sso
-      # Given the deployment-admin role if nobody has it yet.
-      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # What the top floor, the whole organisation, is called.
       ORG_NAME: ${ORG_NAME:-Organisation}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
-      # Identity makes each platform service's sign-in in Keycloak with these secrets.
-      SERVICE_CLIENT_SECRETS: platform-identity=${IDENTITY_CLIENT_SECRET},platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:?set FOLIO_CLIENT_SECRET in .env},app-auspex=${AUSPEX_CLIENT_SECRET:?set AUSPEX_CLIENT_SECRET in .env},app-atlas=${ATLAS_CLIENT_SECRET:?set ATLAS_CLIENT_SECRET in .env}
-    depends_on: *own-login
+    depends_on:
+      <<: *own-login
+      keycloak: { condition: service_healthy }
+      keycloak-config: { condition: service_completed_successfully }
 
   registry:
+    logging: *logging
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/registry:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
@@ -317,6 +432,8 @@ services:
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
+      # Who must sign the release feed, for AUGUR published from a fork (docs/upgrade.md, The signed feed).
+      FEED_SIGNER: ${FEED_SIGNER:-}
     volumes:
       # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/upgrade.md).
       - ./secrets:/run/secrets/augur:ro
@@ -325,6 +442,7 @@ services:
     depends_on: *own-login
 
   events:
+    logging: *logging
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/events:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
@@ -339,11 +457,14 @@ services:
       SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}"
       # Its own login, owning only the events schema: the audit log, notifications and domain events.
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
+      DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
   # no model and Agents stay off; with one, an admin turns models on in Admin. See docs/agents.md.
   models:
+    logging: *logging
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/models:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
@@ -362,12 +483,15 @@ services:
       MODEL_API_KEY: "${MODEL_API_KEY:-}"
       MODEL_NAME: "${MODEL_NAME:-}"
       MODEL_EMBEDDING_NAME: "${MODEL_EMBEDDING_NAME:-}"
+      # How long to wait for the model, in seconds (60 when empty).
+      MODEL_TIMEOUT_SECONDS: "${MODEL_TIMEOUT_SECONDS:-}"
     depends_on: *own-login
 
   # Folio, the document libraries: the app every deployment ships with (a pillar app). It's an ordinary
   # app all the same, with its own sign-in, schema and bucket, and it puts itself in the catalogue when it
   # starts. Admins turn it off org-wide or floor by floor in Admin, Apps; it can't be removed.
   folio:
+    logging: *logging
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
@@ -381,14 +505,19 @@ services:
       <<: [*folio-storage, *env]
       PORT: 8083
       SERVICE_CLIENT_SECRET: ${FOLIO_CLIENT_SECRET}
-    depends_on:
+    depends_on: &shipped-app
       postgres: { condition: service_healthy }
       storage: { condition: service_completed_successfully }
+      # It signs in as itself and gives the registry its frontend once, when it starts: so after the
+      # realm job has made its sign-in (it retries the registry for a few seconds), or a fresh server never lists it.
+      keycloak-config: { condition: service_completed_successfully }
+      registry: { condition: service_started }
 
   # Auspex, where you are on AUGUR and why you can or can't use things: the second app every deployment
   # ships with. It keeps nothing of its own (no schema, no bucket), so it gets no database login: it reads
   # identity, the registry and the last 30 days of events, and remembers them in memory.
   auspex:
+    logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     healthcheck:
@@ -409,12 +538,18 @@ services:
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
       SERVICE_CLIENT_SECRET: ${AUSPEX_CLIENT_SECRET}
-    depends_on: [identity, registry, events]
+    # Like the other shipped apps, it starts once its sign-in exists.
+    depends_on:
+      identity: { condition: service_started }
+      events: { condition: service_started }
+      keycloak-config: { condition: service_completed_successfully }
+      registry: { condition: service_started }
 
   # Data Atlas, the entities the org knows about and how they connect: the third app every deployment
   # ships with. Its graph lives in Postgres, in its own schema (it uses pg_trgm and pgvector, which the
   # storage service makes); it follows Mandate's bindings and Artifacts' withdrawals through events.
   atlas:
+    logging: *logging
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
@@ -428,16 +563,17 @@ services:
       <<: [*atlas-storage, *env]
       PORT: 8086
       SERVICE_CLIENT_SECRET: ${ATLAS_CLIENT_SECRET}
-    depends_on:
-      postgres: { condition: service_healthy }
-      storage: { condition: service_completed_successfully }
+    depends_on: *shipped-app
 
   # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
   # It works on the tables Folio's service makes, so it waits for the service to start.
   folio-worker:
+    logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     restart: unless-stopped
+    # Reading an uploaded file (Docling, torch) can take as much memory as it finds: this keeps it to its share.
+    mem_limit: ${FOLIO_WORKER_MEM_LIMIT:-4g}
     environment:
       <<: *folio-storage
     depends_on: [folio]
@@ -447,6 +583,7 @@ services:
   # COMPOSE_PROFILES=updater in .env. It drives Docker, which can start anything, so it has the run of
   # the server: only it can reach docker-proxy, on a network of their own.
   updater:
+    logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/updater:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     profiles: [updater]
@@ -465,6 +602,11 @@ services:
       GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
       # Before read keys: who the pull token in secrets/image-pull-token belongs to.
       IMAGE_PULL_USER: "${IMAGE_PULL_USER:-}"
+      # Who must sign AUGUR's images and its dev builds, for AUGUR published from a fork; the publisher's
+      # workflows when empty (docs/release-channels.md, Signatures).
+      IMAGE_SIGNER: "${IMAGE_SIGNER:-}"
+      IMAGE_SIGNER_ISSUER: "${IMAGE_SIGNER_ISSUER:-}"
+      AUGUR_DEV_SIGNER: "${AUGUR_DEV_SIGNER:-}"
     volumes:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro
@@ -473,6 +615,7 @@ services:
 
   # The Docker API, for the updater only, without the parts it doesn't need (swarm, secrets, builds, plugins).
   docker-proxy:
+    logging: *logging
     image: tecnativa/docker-socket-proxy:v0.5.0
     profiles: [updater]
     restart: unless-stopped
@@ -486,9 +629,11 @@ services:
   # COMPOSE_PROFILES and set OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-lgtm:4318 in .env.
   # Grafana answers on the server itself only, at http://127.0.0.1:3001.
   otel-lgtm:
+    logging: *logging
     image: grafana/otel-lgtm:0.37.0
     profiles: [observability]
     restart: unless-stopped
+    mem_limit: ${OTEL_LGTM_MEM_LIMIT:-2g}
     environment:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
     ports:
@@ -507,4 +652,6 @@ volumes:
   tailscale:
   garage-meta:
   garage-data:
+  # restic, for the backup container (backup-tools fills it on every `up`).
+  backup-tools:
   otel-lgtm:

@@ -50,8 +50,9 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - Old ids kept on purpose so live servers keep working: Keycloak realm
   `platform` and clients `platform-*`, Postgres db/user `platform`, Compose
   project `platform`, `PLATFORM_*` env keys, and the image and feed path
-  `ghcr.io/harry-burton-dev/im-platform` (it stays when the repository is
-  renamed). Don't rename them without an
+  `ghcr.io/harry-burton-dev/im-platform` (it stayed when the repository was
+  renamed to `augur`). The updater and registry also still trust releases
+  signed under the old repository name. Don't rename them without an
   upgrade note in docs/upgrade.md.
 
 ## Structure (ADR 0002)
@@ -87,7 +88,8 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 ## Working on a change
 - `pnpm install`, then `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint`. Also run
   `pnpm check:boundaries`, `pnpm check:manifest`, `pnpm check:migrations`,
-  `pnpm check:reasons` and `pnpm check:catalog` when you touch those areas.
+  `pnpm check:reasons`, `pnpm check:catalog` and `pnpm check:settings` (any setting a
+  deployment or a service reads: infra/deploy/settings.schema.json) when you touch those areas.
 - Shell or kit changes: run the contract tests in `platform/contract`.
 - Every PR carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`),
   see docs/versioning.md.

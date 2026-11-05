@@ -51,6 +51,9 @@ describe('the app runner', () => {
     const folio = { ...release, id: 'folio', manifest: { ...manifest, id: 'folio', route: '/folio' } };
     expect((await ask({ action: 'install', release: folio })).json().message).toMatch(/ships with AUGUR/);
     expect((await ask({ action: 'remove', app: 'folio' })).statusCode).toBe(409);
+    // An id a part of AUGUR answers to: its schema, its /api/ path and its Compose service would be the platform's.
+    const events = { ...release, id: 'events', manifest: { ...manifest, id: 'events', route: '/events' } };
+    expect((await ask({ action: 'install', release: events })).json().message).toBe('"events" is kept for the events service, a part of AUGUR. Choose another id for the app.');
   });
 
   it('keeps one job open per app, and lets an admin take back one that hasn’t started', async () => {

@@ -12,3 +12,5 @@ First found in: [`2026-11-03-room-tone`](../runs/2026-11-03-room-tone/) (pointer
 Seen as a picture in [reach before act](reach-before-act.md).
 
 Could steer: Approvals, Artifacts publish, privacy.
+
+Seen as a reach ruler in [`2026-11-03-the-label`](../runs/2026-11-03-the-label/) (sharing V4, combined V3): each paragraph's limit is drawn on the audience scale before you choose.

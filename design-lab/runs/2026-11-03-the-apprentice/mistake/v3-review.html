@@ -1,0 +1,547 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>A mistake · V3 · The review</title>
+<link rel="stylesheet" href="../../../_kit/tokens.css">
+<script src="../../../_kit/icons.js"></script>
+<style>
+/* ---------------------------------------------------------------
+   Proposed tokens. All are mixes of kit tokens; listed as
+   "needs token" in each notes.md. Carried marks first, then new.
+   --------------------------------------------------------------- */
+:root{
+  /* carried: not yours to see (135 degree hatch), quiet, micro type, the lit next step */
+  --x-proposed-unseen: repeating-linear-gradient(135deg, transparent 0 calc(var(--space-1) - 1px), var(--hairline-strong) calc(var(--space-1) - 1px) var(--space-1));
+  --x-proposed-quiet: .62;
+  --x-proposed-type-micro: .6875rem;
+  --x-proposed-lit: color-mix(in srgb, var(--green) 80%, var(--light));
+  --x-proposed-lit-wash: color-mix(in srgb, var(--green) 9%, transparent);
+  /* carried: sources disagree, a warning-tinted edge, never red */
+  --x-proposed-disagree: color-mix(in srgb, var(--warning) 70%, var(--ink));
+  --x-proposed-disagree-wash: color-mix(in srgb, var(--warning) 7%, transparent);
+  /* carried: pencil (reference desk), what a model or an agent wrote until a person accepts it */
+  --x-proposed-pencil: color-mix(in srgb, var(--ink-muted) 70%, transparent);
+  --x-proposed-pencil-wash: color-mix(in srgb, var(--ink) 3%, transparent);
+  /* carried: a visible repair (wear and time) */
+  --x-proposed-seam: color-mix(in srgb, var(--info) 70%, var(--ink));
+  --x-proposed-seam-wash: color-mix(in srgb, var(--info) 8%, transparent);
+  /* NEW: standby, the lamp an agent lights when it holds before something it can't undo.
+     Steady, never pulsing. Warm white, so it doesn't read as the Team floor's amber */
+  --x-proposed-standby: color-mix(in srgb, var(--warning) 45%, var(--light));
+  --x-proposed-standby-wash: color-mix(in srgb, var(--warning) 10%, transparent);
+  /* NEW: the ceiling, what no agent does alone: a solid bar, never a hatch (hatch means "not yours to see") */
+  --x-proposed-ceiling: color-mix(in srgb, var(--ink) 55%, transparent);
+  /* NEW: the maker's mark, an agent's monogram, at text size */
+  --x-proposed-mark-size: 1.375rem;
+}
+button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+:focus-visible{outline:var(--focus-ring) solid var(--focus);outline-offset:var(--focus-gap)}
+h1,h2,h3,p{margin:0}
+.eyebrow{font:400 var(--type-label)/var(--leading-label) var(--font-mono);letter-spacing:var(--tracking-label);text-transform:uppercase;color:var(--ink-muted);margin:0}
+.mono{font-family:var(--font-mono)}
+.num{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-muted)}
+.lite{color:var(--light)}
+.small{font-size:var(--type-small);line-height:var(--leading-small)}
+.meta{font-size:var(--type-meta);line-height:var(--leading-meta)}
+.kbd{display:inline-block;font:400 var(--x-proposed-type-micro)/1 var(--font-mono);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);padding:2px var(--space-1);color:var(--ink);min-width:1.6em;text-align:center}
+.hints{display:flex;flex-wrap:wrap;gap:var(--space-1) var(--space-3);align-items:center;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted)}
+.hints span{display:inline-flex;gap:var(--space-1);align-items:center;white-space:nowrap}
+.hints .on{color:var(--x-proposed-lit)}
+.scroll{overflow:auto;scrollbar-width:thin;scrollbar-color:var(--hairline-strong) transparent}
+.title{font-weight:200;font-size:var(--type-title-s);line-height:var(--leading-title-s);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0}
+.h{font-weight:300;font-size:var(--type-heading);line-height:var(--leading-heading);color:var(--light);letter-spacing:var(--tracking-tight)}
+.lead{font-size:var(--type-lead);line-height:var(--leading-lead);color:var(--ink)}
+.rule{height:1px;background:linear-gradient(90deg,var(--hairline-strong),transparent)}
+.pane{background:var(--surface-pane);border:1px solid var(--hairline);border-radius:var(--radius-inset);backdrop-filter:blur(var(--surface-blur))}
+.inset{background:var(--surface-inset);border:1px solid var(--hairline);border-radius:var(--radius-inset)}
+
+/* floors */
+[data-tier="department"]{--fc:var(--floor-department-high);--fl:var(--floor-department-low)}
+[data-tier="team"]{--fc:var(--floor-team-high);--fl:var(--floor-team-low)}
+[data-tier="org"]{--fc:var(--floor-org-high);--fl:var(--floor-org-low)}
+[data-tier="you"]{--fc:var(--floor-you-high);--fl:var(--floor-you-low)}
+.fchip{display:inline-flex;align-items:center;gap:var(--space-2);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink);white-space:nowrap}
+.fchip::before{content:"";width:var(--space-4);height:2px;background:var(--fc);border-radius:1px}
+.fword{color:var(--fc)}
+
+/* two registers: ADR 0014 words one step down, shown with T */
+.tk{display:none;font:400 var(--x-proposed-type-micro)/1.5 var(--font-mono);color:var(--ink-muted);opacity:var(--x-proposed-quiet);margin:0}
+.tech .tk{display:block}
+.tech span.tk{display:inline}
+
+/* the maker's mark: an agent's monogram, dotted while its work is pencil, solid once a person accepts it */
+.mm{display:inline-flex;align-items:center;justify-content:center;flex:none;min-width:var(--x-proposed-mark-size);height:var(--x-proposed-mark-size);padding:0 var(--space-1);border:1px dotted var(--x-proposed-pencil);border-radius:var(--radius-key);font:500 var(--x-proposed-type-micro)/1 var(--font-mono);letter-spacing:var(--tracking-soft);color:var(--ink);background:var(--x-proposed-pencil-wash);vertical-align:1px}
+.mm.ink{border-style:solid;border-color:var(--hairline-strong);background:none}
+.mm.lg{--x-proposed-mark-size:2.25rem;font-size:var(--type-meta);border-radius:var(--radius-key)}
+.who{display:inline-flex;align-items:center;gap:var(--space-2);white-space:nowrap}
+
+/* pencil and ink */
+.pencil{border:1px dotted var(--x-proposed-pencil);background:var(--x-proposed-pencil-wash);border-radius:var(--radius-key)}
+.pencil .pt,.pt.pen{font-style:italic;color:var(--ink)}
+.pencil.inked{border-style:solid;border-color:var(--hairline-strong);background:none}
+.pencil.inked .pt{font-style:normal}
+.pen{font-style:italic}
+
+/* the seam: a visible repair */
+.seam{border-left:2px solid var(--x-proposed-seam);background:var(--x-proposed-seam-wash);padding:var(--space-1) var(--space-3)}
+.struck{text-decoration:line-through;text-decoration-color:var(--x-proposed-seam);color:var(--ink-muted)}
+
+/* standby lamp: steady, lit while an agent holds; out on go */
+.lamp{display:inline-block;flex:none;width:var(--space-3);height:var(--space-3);border-radius:50%;border:1px solid var(--x-proposed-standby);background:transparent;vertical-align:-1px;transition:background var(--motion-base) var(--ease-standard),box-shadow var(--motion-base) var(--ease-standard)}
+.lamp.on{background:var(--x-proposed-standby);box-shadow:0 0 var(--space-3) color-mix(in srgb,var(--x-proposed-standby) 60%,transparent)}
+.lamp.go{border-color:var(--x-proposed-lit);background:var(--x-proposed-lit);box-shadow:0 0 var(--space-3) color-mix(in srgb,var(--x-proposed-lit) 50%,transparent)}
+.lamp.off{border-color:var(--hairline-strong)}
+
+/* the ladder, at word size: four rungs, the cap drawn as a short bar above the highest rung it may reach */
+.rungs{display:inline-flex;align-items:flex-end;gap:2px;height:var(--space-4);vertical-align:-3px;position:relative}
+.rungs i{width:var(--space-2);border-radius:1px;background:var(--hairline-strong)}
+.rungs i:nth-child(1){height:25%}.rungs i:nth-child(2){height:50%}.rungs i:nth-child(3){height:75%}.rungs i:nth-child(4){height:100%}
+.rungs i.on{background:var(--ink)}
+.rungs i.at{background:var(--light)}
+.rungs i.capped{background:none;outline:1px dashed var(--hairline);outline-offset:-1px}
+.lvl{display:inline-flex;align-items:center;gap:var(--space-2);white-space:nowrap;font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:var(--space-2);height:var(--target-sm);padding:0 var(--space-4);border:1px solid var(--hairline-strong);border-radius:var(--radius-key);font-size:var(--type-meta);color:var(--ink);white-space:nowrap;transition:background var(--motion-quick) var(--ease-standard),border-color var(--motion-quick) var(--ease-standard)}
+.btn:hover{background:var(--surface-raised)}
+.btn.sm{height:calc(var(--target-sm) - var(--space-2));padding:0 var(--space-3);font-size:var(--type-small)}
+.btn.go{border-color:var(--x-proposed-lit);color:var(--light);background:var(--x-proposed-lit-wash)}
+.btn.hold{border-color:var(--x-proposed-standby);color:var(--light);background:var(--x-proposed-standby-wash)}
+.btn[aria-disabled="true"]{opacity:var(--x-proposed-quiet);cursor:not-allowed}
+.btn[aria-pressed="true"]{background:var(--surface-raised);border-color:var(--ink-muted);color:var(--light)}
+
+/* marks for other ways to be */
+.unseen{display:inline-flex;align-items:center;gap:var(--space-1);background:var(--x-proposed-unseen),var(--surface-inset);border:1px solid var(--hairline);border-radius:2px;padding:0 var(--space-2);color:var(--ink-muted);font-size:var(--type-small);line-height:var(--leading-small);white-space:nowrap}
+.mk-disagree{display:inline-block;width:var(--space-4);height:var(--space-3);border-left:2px solid var(--x-proposed-disagree);border-right:2px solid var(--x-proposed-disagree);background:var(--x-proposed-disagree-wash);flex:none;vertical-align:-1px}
+
+/* app frame */
+.app{height:100vh;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.top{display:flex;align-items:center;gap:var(--space-4);padding:var(--space-3) var(--edge);border-bottom:1px solid var(--hairline);background:color-mix(in srgb,var(--slate-deep) 70%,transparent);min-width:0}
+.brand{font:400 var(--type-meta)/1 var(--font-sans);letter-spacing:var(--tracking-title);text-transform:uppercase;color:var(--light);margin:0;white-space:nowrap}
+.crumb{display:flex;align-items:center;gap:var(--space-2);font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink-muted);white-space:nowrap;min-width:0;overflow:hidden}
+.crumb b{font-weight:400;color:var(--light)}
+.crumb svg{opacity:var(--x-proposed-quiet);flex:none}
+.top .hints{margin-left:auto;justify-content:flex-end}
+.main{min-height:0;padding:var(--space-4) var(--edge) calc(var(--space-6) + var(--space-1));overflow:hidden}
+
+/* the mode line (now, next, stops), from aviation's flight mode annunciator */
+.mode{display:grid;grid-template-columns:auto minmax(0,1.3fr) minmax(0,1.3fr) minmax(0,1fr) auto;align-items:stretch;border:1px solid var(--hairline);border-radius:var(--radius-inset);background:var(--surface-inset);font-size:var(--type-small);line-height:var(--leading-small);min-width:0}
+.mode > div{padding:var(--space-2) var(--space-3);border-left:1px solid var(--hairline);min-width:0}
+.mode > div:first-child{border-left:0;display:flex;align-items:center;gap:var(--space-2)}
+.mode .ml{display:block;font:400 var(--x-proposed-type-micro)/1.4 var(--font-mono);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--ink-muted)}
+.mode .mv{display:block;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mode .mv b{font-weight:500;color:var(--light)}
+.mode .boxed{outline:1px solid var(--x-proposed-lit);outline-offset:-3px;border-radius:var(--radius-key)}
+.mode.v{grid-template-columns:minmax(0,1fr)}
+.mode.v > div{border-left:0;border-top:1px solid var(--hairline)}
+.mode.v > div:first-child{border-top:0}
+.mode.held .now .mv b{color:var(--x-proposed-standby)}
+
+/* deposit, once */
+.dep{transition:opacity var(--motion-calm) var(--ease-out),transform var(--motion-calm) var(--ease-out);transition-delay:calc(var(--i, 0) * var(--motion-instant))}
+.pre .dep{opacity:0;transform:translateY(var(--space-1))}
+@media (prefers-reduced-motion: reduce){.pre .dep{transform:none}.dep{transition-delay:0ms}}
+.x-cap{max-width:calc(100vw - 2 * var(--edge-tight))}
+
+/* ---- V3: a short blameless review. What happened, why it made sense, what caught it, why the checks didn't, what changes ---- */
+.wrap{height:100%;display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,var(--measure-card));gap:var(--space-6);max-width:calc(var(--measure-wide) + var(--measure-card) + var(--space-6));margin:0 auto}
+.form{min-height:0;display:flex;flex-direction:column;gap:var(--space-3)}
+.q{display:grid;grid-template-columns:var(--space-6) minmax(0,1fr);gap:var(--space-3);padding:var(--space-3) 0;border-top:1px solid var(--hairline)}
+.q .n{font:200 var(--type-title-s)/1 var(--font-sans);color:var(--light)}
+.q h3{margin:0 0 var(--space-1);font-weight:400;font-size:var(--type-meta);color:var(--light)}
+.q p{font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.q p + p{margin-top:var(--space-1)}
+.q .ink{color:var(--ink)}
+.q .pen{color:var(--ink)}
+.q .by{display:block;font:400 var(--x-proposed-type-micro)/1.6 var(--font-mono);color:var(--ink-muted);margin-top:var(--space-1)}
+.chg{display:grid;gap:var(--space-1);margin-top:var(--space-1)}
+.chg label{display:flex;gap:var(--space-2);align-items:flex-start;font-size:var(--type-meta);line-height:var(--leading-meta);color:var(--ink)}
+.chg input{accent-color:var(--green);margin-top:var(--space-1)}
+.side{min-height:0;display:flex;flex-direction:column;gap:var(--space-3);padding-top:var(--space-7)}
+.box{padding:var(--space-3) var(--space-4);border:1px solid var(--hairline);border-radius:var(--radius-inset);font-size:var(--type-small);line-height:var(--leading-small);color:var(--ink-muted);display:grid;gap:var(--space-2)}
+.box h3{margin:0;font-weight:400;font-size:var(--type-meta);color:var(--light)}
+.box b{font-weight:400;color:var(--ink)}
+.q.hot{background:linear-gradient(90deg,var(--x-proposed-lit-wash),transparent 60%)}
+</style>
+</head>
+<body class="pre">
+<div class="app" id="app"></div>
+<div class="x-cap"><b>A mistake · V3</b> the review: what happened, why it made sense, what caught it, why the checks didn't, what changes · just culture, M&amp;M, CHIRP</div>
+<script>
+/* Sample data. Every name, label, count, date and floor below is deployment data:
+   nothing in the markup or the scripts repeats any of it. One object for the whole run. */
+const DATA = {
+  org: 'Westmere Port Authority',
+  me: 'p1',
+  today: 'Mon 9 Nov', now: '09:04', awaySince: 'Fri 6 Nov, 17:10',
+  /* floors, top first. reach = people who can read something kept on this floor */
+  floors: {
+    org:        { name: 'Westmere Port Authority', word: 'Org',        reach: 640 },
+    department: { name: 'Marine Operations',       word: 'Department', reach: 58 },
+    team:       { name: 'Vessel Records',          word: 'Team',       reach: 7 }
+  },
+  floorOrder: ['org', 'department', 'team'],
+  people: {
+    p1: { name: 'Ana Ferreira',   role: 'Vessel Records lead',       floor: 'team' },
+    p2: { name: 'Tom Okoye',      role: 'Records officer',           floor: 'team' },
+    p3: { name: 'Rhiannon Price', role: 'Harbourmaster',             floor: 'department' },
+    p4: { name: 'Malik Haddad',   role: 'Deployment admin',          floor: 'org' },
+    p5: { name: 'Jess Lindqvist', role: 'Head of Marine Operations', floor: 'department' }
+  },
+  /* the model gateway, as Admin shows it (docs/agents.md) */
+  gateway: { on: true, admin: 'p4', perDay: 500, model: 'openai/gpt-4o-mini', resets: '00:00 UTC' },
+
+  /* the ladder of autonomy. Four rungs; no rung above 3: a person is always the master */
+  ladder: [
+    { n: 0, short: 'Shadow', name: 'Shadow',            guild: 'on trial',           alone: 'Nothing it does is kept. Its work is set beside what people did, to compare.',
+      check: 'Nobody checks: nothing is kept', sv: 4, tech: 'shadow run · read grants only · outputs compared, then discarded' },
+    { n: 1, short: 'Each time', name: 'Asks each time',    guild: 'apprentice',         alone: 'Reads and drafts. Each piece waits in pencil for a person.',
+      check: 'A person accepts each piece', sv: 5, tech: 'one Triage proposal or Inbox checkpoint per piece' },
+    { n: 2, short: 'Batch', name: 'Asks for the batch', guild: 'journeyman',        alone: 'Drafts a run’s work as one batch, in pencil.',
+      check: 'A person checks a sample, then signs the batch', sv: 5, tech: 'one checkpoint per run · sample drawn by AUGUR, across kinds · batch accept records the sample' },
+    { n: 3, short: 'Acts', name: 'Acts, then shows',  guild: 'trusted journeyman', alone: 'Does reversible work in its own area at once, marked as its work.',
+      check: 'A person checks a sample in the diary; it can be undone for 14 days', sv: 7, tech: 'writes under its own grants · diary countersign · undo window 14 days' }
+  ],
+  undoDays: 14,
+  /* minutes a person spends: checking one piece one by one, checking one sample item, signing a batch */
+  minutes: { each: 1, sample: 1.5, sign: .5 },
+  /* how long a widening lasts before a person renews it */
+  permitWeeks: 12,
+  /* Sheridan and Verplank's ten levels, and where each sits in AUGUR */
+  sv: [
+    { n: 1, w: 'The person does it all', use: 'how people work today' },
+    { n: 2, w: 'Offers every option', use: 'not used' },
+    { n: 3, w: 'Narrows the options', use: 'not used' },
+    { n: 4, w: 'Suggests one', use: 'Shadow' },
+    { n: 5, w: 'Does it if a person approves', use: 'Asks each time, Asks for the batch' },
+    { n: 6, w: 'Does it unless a person vetoes in time', use: 'never: silence is not a yes' },
+    { n: 7, w: 'Does it, then tells', use: 'Acts, then shows' },
+    { n: 8, w: 'Tells only if asked', use: 'never: the diary always tells' },
+    { n: 9, w: 'Tells only if it decides to', use: 'never' },
+    { n: 10, w: 'Ignores the person', use: 'never' }
+  ],
+  /* what no agent does alone, at any rung. AUGUR's list, not a setting */
+  ceiling: [
+    { w: 'Delete, purge or withdraw anything',            why: 'it can’t be undone',            tech: 'DELETE, purge, withdraw' },
+    { w: 'Publish, share or send what people will read',   why: 'it reaches other people',       tech: 'publish, share, mail relay' },
+    { w: 'Tell anyone but its supervisor',                 why: 'it reaches other people',       tech: 'notify, inboxItem to others' },
+    { w: 'Accept a proposal, its own or another agent’s',  why: 'a person signs every fact',     tech: 'Triage accept' },
+    { w: 'Choose between sources that disagree',           why: 'that is a judgement',           tech: 'resolve dispute' },
+    { w: 'Change an intent’s state, owner or deadline',    why: 'that is a commitment',          tech: 'Mandate intent write' },
+    { w: 'Approve anything',                               why: 'approvals are people’s',        tech: 'approval decide' },
+    { w: 'Change its own scope, level or grants',          why: 'trust is a person’s decision',  tech: 'grant write' },
+    { w: 'Work on a floor it isn’t granted, or open restricted records', why: 'outside its scope', tech: 'workspace grant check' },
+    { w: 'Act as a person',                                why: 'it always signs as itself',     tech: 'on-behalf-of tokens' }
+  ],
+
+  /* agents: each is an app (ADR 0014), working under a person */
+  agents: {
+    a1: { name: 'Survey reader', mark: 'SR', floor: 'team', supervisor: 'p1', deputy: 'p2',
+      does: 'reads vessel survey reports as they arrive in Artifacts and proposes what they say to Data Atlas',
+      level: 2, since: 'Wed 4 Nov', calls: { used: 212, limit: 500 }, schedule: 'each night at 22:00, and when a report arrives',
+      reads: ['Vessel surveys (Artifacts)', 'Vessels, owners and certificates (Data Atlas)'],
+      now:  { w: 'Reading', what: 'Lloyd’s Register annual survey, MV Kittiwake', step: 'page 3 of 7', tech: 'run r-2291 · step extract 4 of 9' },
+      next: [ { w: 'Propose', what: 'what it read, to Triage, as this morning’s batch', when: 'when the report is read' },
+              { w: 'Stop', what: 'when no reports are left, or at 500 model calls', when: '' } ],
+      app: 'survey-reader', manifest: 'agents.survey-reader',
+      history: [ { d: '26 Oct', w: 'bound it', by: 'p1' }, { d: 'Wed 4 Nov', w: 'widened class survey details to rung 2', by: 'p1', why: 'Replay on October: 173 of 180 agree; the 7 are understood.' }, { d: 'Fri 6 Nov', w: 'narrowed Nordhavn Class to rung 1', by: 'p1', why: 'Read net tonnage as gross on 6 of 9 certificates.' } ] },
+    a2: { name: 'Filing clerk', mark: 'FC', floor: 'team', supervisor: 'p2', deputy: 'p1',
+      does: 'files incoming certificates into the Vessel surveys library and tags each with its vessel',
+      level: 3, since: '12 Oct', calls: { used: 40, limit: 200 }, schedule: 'when a document arrives in Incoming',
+      now:  { w: 'Holding', what: 'withdraw 3 superseded certificates', step: 'waits for Tom Okoye’s go', tech: 'run r-2290 · checkpoint standby' },
+      next: [ { w: 'File', what: 'the next certificate that arrives', when: 'on arrival' } ],
+      app: 'filing-clerk', manifest: 'agents.filing-clerk' },
+    a3: { name: 'Notice drafter', mark: 'ND', floor: 'department', supervisor: 'p3', deputy: 'p5',
+      does: 'drafts Notices to Mariners from the harbour log and the buoy register',
+      level: 1, since: '28 Oct', calls: { used: 18, limit: 100 }, schedule: 'when the harbour log records a fault',
+      now:  { w: 'Holding', what: 'publish Notice to Mariners 41/2026', step: 'stands by for Rhiannon Price', tech: 'run r-2293 · checkpoint standby' },
+      next: [ { w: 'Publish', what: 'the notice, once Rhiannon says go', when: '' }, { w: 'Stop', what: 'after publishing', when: '' } ],
+      app: 'notice-drafter', manifest: 'agents.notice-drafter' }
+  },
+
+  /* kinds of work Survey reader does. cap = the highest rung the kind can reach (set by AUGUR and the app);
+     level = where its supervisor has put it. record counts are since it started (26 Oct) */
+  kinds: [
+    { id: 'k1', perWeek: 230, until: 'Wed 27 Jan', permit: 'SR-02', from: 'Wed 4 Nov', w: 'Details from class survey reports',         cap: 2, level: 2, acc: 214, chg: 9, rej: 3, run: 60, why: 'Facts reach Data Atlas only through Triage, so a person always signs.' },
+    { id: 'k2', perWeek: 6, permit: 'SR-03', from: 'Wed 4 Nov', w: 'Details from Nordhavn Class certificates',  cap: 2, level: 1, acc: 31,  chg: 6, rej: 0, run: 0,  why: 'Narrowed on Fri 6 Nov after a mistake. Back to 2 after 20 unchanged in a row.' },
+    { id: 'k3', perWeek: 25, w: 'Links from a vessel to its owner or manager', cap: 2, level: 1, acc: 58, chg: 4, rej: 5, run: 11, why: '' },
+    { id: 'k4', perWeek: 4, w: 'New vessels',                               cap: 2, level: 1, acc: 12,  chg: 1, rej: 2, run: 4,  why: '' },
+    { id: 'k5', perWeek: 140, until: 'Mon 18 Jan', permit: 'SR-01', from: '26 Oct', w: 'Filing the report in Vessel surveys',       cap: 3, level: 3, acc: 301, chg: 2, rej: 0, run: 140, why: 'Filing keeps the same readers, so it can be undone without anyone noticing.' },
+    { id: 'k6', perWeek: 2, w: 'Withdrawing a superseded report',           cap: 1, level: 1, acc: 0,   chg: 0, rej: 0, run: 0,  why: 'Withdrawing stops a document counting as evidence: always asks first.' }
+  ],
+  /* where it may work: floors × apps. read / propose / act */
+  scopeGrid: {
+    cols: ['Artifacts', 'Data Atlas', 'Mandate', 'Notifications'],
+    rows: [
+      { floor: 'org',        cells: ['read', 'read', 'none', 'none'] },
+      { floor: 'department', cells: ['read', 'read', 'none', 'none'] },
+      { floor: 'team',       cells: ['act', 'propose', 'none', 'supervisor'] }
+    ]
+  },
+
+  /* the diary while Ana was away: Fri 17:10 to Mon 09:04. Counts on every page are summed from here */
+  diary: [
+    { id: 'd1', place: 'triage', t: 'Fri 22:00', day: 'Fri', agent: 'a1', kind: 'batch',   n: 22, reports: 14, run: 'r-2284', sample: 4, text: 'details from 14 class survey reports, as one batch', tech: 'checkpoint · batch of 22 · sample 4' },
+    { id: 'd2', place: 'triage', t: 'Fri 22:00', day: 'Fri', agent: 'a1', kind: 'held',    n: 3,  run: 'r-2284', text: 'details from 3 Nordhavn Class certificates, one by one', why: 'Nordhavn Class is back at “asks each time” since Fri 15:40', tech: 'checkpoint × 3 · kind k2 at rung 1' },
+    { id: 'd3', place: 'dept', t: 'Sat 03:10', day: 'Sat', agent: 'a1', kind: 'outside', n: 1,  run: 'r-2284', text: 'a survey of MV Gannet, kept on the Marine Operations floor', why: 'it may read the Department floor but not propose there', ask: 'p3', tech: 'workspace grant: team only' },
+    { id: 'd4', place: 'triage', t: 'Sat 22:00', day: 'Sat', agent: 'a1', kind: 'batch',   n: 15, reports: 9, run: 'r-2287', sample: 3, text: 'details from 9 class survey reports, as one batch', tech: 'checkpoint · batch of 15 · sample 3' },
+    { id: 'd5', place: 'triage', t: 'Sat 22:00', day: 'Sat', agent: 'a1', kind: 'held',    n: 1,  run: 'r-2287', text: 'a new vessel, MV Saltire Spirit', why: 'new vessels always ask each time', tech: 'Triage proposal · new entity' },
+    { id: 'd6', place: 'surveys', t: 'Sun 14:12', day: 'Sun', agent: 'a2', kind: 'done',    n: 11, run: 'r-2289', text: 'certificates filed in Vessel surveys and tagged', why: 'filing keeps the same readers', undoUntil: 'Sun 22 Nov', tech: 'writes · undo window 14 days' },
+    { id: 'd7', place: 'surveys', t: 'Sun 14:20', day: 'Sun', agent: 'a2', kind: 'standby', n: 3,  run: 'r-2290', text: 'withdraw 3 certificates that newer ones replace', why: 'withdrawing can’t be undone', waits: 'p2', tech: 'checkpoint standby · Inbox item owned by Tom Okoye' },
+    { id: 'd8', place: 'vessels', t: 'Sun 22:00', day: 'Sun', agent: 'a1', kind: 'disagree', n: 1, run: 'r-2290', text: 'MV Arctic Dawn’s flag: the survey says Malta, Data Atlas says Liberia', why: 'choosing between sources is a person’s call', tech: 'Triage proposal · second answer' },
+    { id: 'd9', place: 'surveys', t: 'Sun 22:51', day: 'Sun', agent: 'a1', kind: 'limit',   n: 6,  run: 'r-2290', text: 'reports not read: it reached 500 model calls for the day', why: 'the daily limit, set in Admin', resumed: 'Mon 00:00', tech: 'model gateway 429 · resumes 00:00 UTC' },
+    { id: 'd10', place: 'triage', t: 'Mon 00:00', day: 'Mon', agent: 'a1', kind: 'batch',  n: 9,  reports: 5, run: 'r-2291', sample: 2, text: 'details from the 5 reports left on Sunday, as one batch', tech: 'checkpoint · batch of 9 · sample 2', open: true }
+  ],
+  /* the agent's suggested order of work, drafted by the model (pencil). Each item points at a diary line */
+  handoverRec: [
+    { w: 'Friday’s batch first: it is the oldest, and Tom opened it on Saturday without signing.', ref: 'd1' },
+    { w: 'Then MV Arctic Dawn’s flag: a pilot boards it on Wednesday.', ref: 'd8' },
+    { w: 'The Nordhavn three can wait for the 20-in-a-row count.', ref: 'd2' }
+  ],
+  /* the places agents work, as the walk-round plan draws them */
+  places: [
+    { id: 'incoming', w: 'Incoming',       app: 'Artifacts',  floor: 'team', note: 'where certificates and reports arrive' },
+    { id: 'surveys',  w: 'Vessel surveys', app: 'Artifacts',  floor: 'team', note: 'the library of survey reports' },
+    { id: 'triage',   w: 'Triage',         app: 'Data Atlas', floor: 'team', note: 'what sources propose waits here' },
+    { id: 'vessels',  w: 'Vessels',        app: 'Data Atlas', floor: 'team', note: 'the vessel records' },
+    { id: 'dept',     w: 'Marine Operations records', app: 'Data Atlas', floor: 'department', note: 'may read, may not propose' }
+  ],
+  /* what a batch holds, for the sampling page: issuers and kinds of detail, in the order the batch was read */
+  batchMix: {
+    issuers: ['Lloyd’s Register', 'DNV', 'Bureau Veritas', 'ClassNK'],
+    details: ['Gross tonnage', 'Next special survey due', 'Class', 'Owner', 'Built'],
+    vessels: ['MV Kestrel Isle', 'MV Brent Goose', 'MV Solent Pride', 'MV Wight Trader', 'MV Calshot', 'MV Hamble Star', 'MV Netley', 'MV Itchen', 'MV Beaulieu', 'MV Lepe', 'MV Hythe Rose', 'MV Fawley Spirit', 'MV Needles', 'MV Gurnard']
+  },
+  sampleTable: [ { upTo: 10, n: 2 }, { upTo: 20, n: 3 }, { upTo: 30, n: 4 }, { upTo: 45, n: 7 }, { upTo: 60, n: 8 }, { upTo: 120, n: 12 } ],
+  /* who touched the agents while Ana was away */
+  visitors: [
+    { t: 'Sat 10:02', who: 'p2', what: 'opened Friday’s batch, didn’t sign it' },
+    { t: 'Sun 09:15', who: 'p4', what: 'raised the gateway’s total limit for the deployment (Survey reader’s stays at 500)' }
+  ],
+
+  /* one proposal waiting, from Monday's batch */
+  proposal: {
+    id: 'P-8812', run: 'r-2291', agent: 'a1', kind: 'k1',
+    entity: { name: 'MV Northern Tern', kindWord: 'Vessel', ids: 'IMO 9412337', floor: 'team' },
+    doc: { title: 'Lloyd’s Register annual survey, MV Northern Tern, 2026', library: 'Vessel surveys', page: 2, pages: 6, issuer: 'Lloyd’s Register', arrived: 'Sun 21:48' },
+    /* existing ink on the record, and what the agent proposes */
+    known: [
+      { k: 'IMO number', v: '9412337', src: 'Port register 2024' },
+      { k: 'Flag', v: 'Norway', src: 'Port register 2024' },
+      { k: 'Built', v: '2009', src: 'Port register 2024' },
+      { k: 'Owner', v: 'Northern Tern Shipping AS', src: 'Port register 2024' }
+    ],
+    lines: [
+      { id: 'L1', k: 'Gross tonnage', v: '3,412', page: 2, quote: 'Gross tonnage (GT) ............ 3 412', rule: '3 412', agree: true, isNew: true, focal: true },
+      { id: 'L2', k: 'Next special survey due', v: '14 Mar 2027', page: 2, quote: 'Special Survey due: 14.03.2027', rule: '14 Mar 2027', agree: true, isNew: true },
+      { id: 'L3', k: 'Class', v: 'Lloyd’s Register, ✠100A1', page: 1, quote: 'Class: ✠100A1 Ice Class 1C', rule: '—', agree: null, isNew: true },
+      { id: 'L4', k: 'Owner', v: 'Tern Shipping Ltd', page: 1, quote: 'Registered owner: Tern Shipping Ltd, Aberdeen', rule: 'Tern Shipping Ltd', agree: true, isNew: false, disagrees: 'Northern Tern Shipping AS' }
+    ],
+    steps: [
+      { w: 'Found the report in Vessel surveys when it arrived', tech: 'event artifact.created · library Vessel surveys', at: 'Sun 21:48' },
+      { w: 'Matched it to MV Northern Tern by its IMO number on page 1', tech: 'key match IMO 9412337 · no model call', model: false },
+      { w: 'Read pages 1 and 2 for tonnage, class, survey dates and owner', tech: 'askModel × 2 · 1,840 tokens · audited before each call', model: true },
+      { w: 'Read the same lines again by pattern, without the model', tech: 'rule reader · labels “Gross tonnage”, “Special Survey due”, “Registered owner”', model: false },
+      { w: 'Compared with what Data Atlas already knows', tech: 'atlas details for entity v-4471', model: false },
+      { w: 'Proposed 4 details in this morning’s batch: 3 new, 1 that disagrees', tech: 'Triage proposals ×4 · proposedBy agent:survey-reader · run r-2291', model: false }
+    ],
+    rejectReasons: ['Wrong vessel', 'Wrong value', 'Wrong unit or format', 'Not in the source', 'Out of date', 'Not ours to record'],
+    people: { id: 'P-8807', who: 'p2', what: 'Call sign for MV Kittiwake: MKTW4', from: 'a phone call with the ship’s master', when: 'Sat 10:40' }
+  },
+
+  /* standby and go: the Notice drafter holds before publishing */
+  standby: {
+    agent: 'a3', run: 'r-2293', me: 'p3', title: 'Notice to Mariners 41/2026', subject: 'Ridge buoy off station',
+    body: 'The Ridge east cardinal buoy is reported 0.2 nautical miles south of its charted position. Mariners are advised to give the Ridge a wide berth until further notice.',
+    position: { charted: '50°48.21′N 001°17.40′W', reported: '50°48.01′N 001°17.42′W' },
+    raisedAt: '08:52', ackAt: '08:53', framedAt: '09:02', deputyAt: '09:41', goBy: '10:30', goByWhy: 'the 10:30 pilot boarding at the Ridge',
+    expires: '12:00', deputy: 'p5',
+    done: [ { w: 'Drafted the notice from the harbour log entry at 08:41', undo: true },
+            { w: 'Checked the position against the buoy register in Data Atlas', undo: true },
+            { w: 'Saved the draft in Notices to Mariners, unpublished', undo: true } ],
+    irreversible: [
+      { w: 'Publish it in Notices to Mariners', reach: 640, floor: 'org', undoWord: 'can be withdrawn, but stays as withdrawn: readers will have seen it', tech: 'artifact publish · library Notices to Mariners (Org)' },
+      { w: 'Email it to the notice list through the organisation’s mail relay', reach: 212, ext: true, undoWord: 'can’t be unsent', tech: 'mail relay (ADR 0035) · list nm-subscribers · 212 addresses' }
+    ],
+    checks: [
+      { w: 'The right buoy', v: 'Ridge east cardinal (buoy register B-117)', ok: true },
+      { w: 'The right position', v: 'reported 0.2 nm south of charted', ok: true },
+      { w: 'The right readers', v: '640 on the Org floor, 212 emailed', ok: true },
+      { w: 'If it’s wrong', v: 'withdraw it and send a cancellation notice', ok: true }
+    ],
+    readBack: { ask: 'How many addresses will it email?', answer: '212' },
+    log: [ { t: '08:41', w: 'Pilot launch reports Ridge east cardinal buoy out of position, about 0.2 nm south.' },
+           { t: '08:44', w: 'Buoy tender tasked for this afternoon’s low water.' } ],
+    /* other standbys on the floor today, for the cue sheet */
+    others: [ { agent: 'a2', w: 'Withdraw 3 certificates that newer ones replace', reach: 7, undoWord: 'can’t be undone', waits: 'p2', goBy: '', since: 'Sun 14:20' } ]
+  },
+
+  /* the mistake: found on Fri 6 Nov */
+  mistake: {
+    repairedAt: 'Fri 13:05', narrowedAt: 'Fri 15:40', pausedAt: 'Fri 11:24',
+    record: [ { k: 'Flag', v: 'Liberia', src: 'Port register 2024' }, { k: 'Built', v: '2011', src: 'Port register 2024' } ],
+    found: { who: 'p3', when: 'Fri 6 Nov, 11:20', at: 'Fri 11:20', how: 'Berth allocation put MV Arctic Dawn in a berth for vessels under 3,000 GT. Rhiannon knew it is nearer 5,000.' },
+    fact: { entity: 'MV Arctic Dawn', k: 'Gross tonnage', wrong: '2,890', right: '5,140', what: 'its net tonnage, read as gross' },
+    why: 'Nordhavn Class certificates put net tonnage before gross, under the headings “NT” and “GT”. The agent took the first number. Since 2025 Nordhavn has printed gross first, so its newer certificates were read correctly.',
+    batch: { day: 'Thu 5 Nov', n: 52, sample: 8, nordhavnInSample: 1, signedBy: 'p1' },
+    lot: { rule: 'details from Nordhavn Class certificates', since: 'Wed 4 Nov', runs: 'r-2271 to r-2283' },
+    /* every detail made the same way: 9 tonnages from 9 Nordhavn certificates */
+    siblings: [
+      { v: 'MV Arctic Dawn',   proposed: '2,890', right: '5,140', layout: 'old', used: 2 },
+      { v: 'MV Skua',          proposed: '1,204', right: '2,377', layout: 'old', used: 0 },
+      { v: 'MV Fulmar Bay',    proposed: '3,310', right: '6,021', layout: 'old', used: 1 },
+      { v: 'MV Petrel',        proposed: '880',   right: '1,690', layout: 'old', used: 0 },
+      { v: 'MV Guillemot',     proposed: '2,045', right: '4,102', layout: 'old', used: 0 },
+      { v: 'MV Shearwater',    proposed: '1,566', right: '3,020', layout: 'old', used: 0 },
+      { v: 'MV Eider',         proposed: '4,410', right: '4,410', layout: 'new', used: 0 },
+      { v: 'MV Razorbill',     proposed: '2,980', right: '2,980', layout: 'new', used: 0 },
+      { v: 'MV Puffin Star',   proposed: '1,150', right: '1,150', layout: 'new', used: 0 }
+    ],
+    /* where the wrong numbers were used */
+    used: [
+      { what: 'Winter lay-up berths', app: 'Mandate', kindWord: 'intent', owner: 'p3', floor: 'department', reach: 9, effect: 'MV Arctic Dawn was put in a berth for vessels under 3,000 GT', vessel: 'MV Arctic Dawn' },
+      { what: 'Lay-up capacity, November', app: 'Artifacts', kindWord: 'briefing', owner: 'p5', floor: 'department', reach: 58, effect: 'says “2 vessels under 3,000 GT”; the right number is 0', vessel: 'MV Arctic Dawn' },
+      { what: 'Lay-up capacity, November', app: 'Artifacts', kindWord: 'briefing', owner: 'p5', floor: 'department', reach: 58, effect: 'counts MV Fulmar Bay in the small berths', vessel: 'MV Fulmar Bay', dup: true }
+    ],
+    options: [
+      { id: 'keep',   w: 'Keep its level',                  then: 'Nordhavn certificates go on in batches, with a sample drawn across issuers', load: 0 },
+      { id: 'narrow', w: 'Narrow Nordhavn Class to “asks each time”', then: 'about 6 a week wait for you one by one; everything else stays in batches', load: 6, rec: true },
+      { id: 'all',    w: 'Narrow all details to “asks each time”',     then: 'about 230 a week wait for you one by one', load: 230 },
+      { id: 'pause',  w: 'Pause Survey reader',             then: 'nothing is read until you resume it; reports wait in Vessel surveys', load: 0 }
+    ],
+    back: 'Back to “asks for the batch” after 20 Nordhavn details accepted unchanged in a row (you decide then)'
+  },
+
+  /* the week in Triage, Mon 2 to Fri 6 Nov (combined screen 1) */
+  week: [
+    { d: 'Mon 2 Nov', level: 1, proposed: 41, acc: 37, chg: 3, rej: 1, mins: 46, sample: null, note: 'Every detail checked one by one.' },
+    { d: 'Tue 3 Nov', level: 1, proposed: 38, acc: 36, chg: 2, rej: 0, mins: 41, sample: null, note: '60 in a row accepted unchanged. AUGUR suggests a replay.' },
+    { d: 'Wed 4 Nov', level: 2, proposed: 44, acc: 44, chg: 0, rej: 0, mins: 18, sample: 7, note: 'Replay on October: 173 of 180 agree, and the 7 are understood. Ana widens class survey details to the batch.' },
+    { d: 'Thu 5 Nov', level: 2, proposed: 52, acc: 52, chg: 0, rej: 0, mins: 14, sample: 8, note: 'Sample of 8 passes. 1 of the 8 is a Nordhavn certificate, in the new layout.' },
+    { d: 'Fri 6 Nov', level: 2, proposed: 47, acc: 41, chg: 6, rej: 0, mins: 52, sample: 8, note: 'Rhiannon finds a wrong tonnage. 6 of 9 Nordhavn tonnages repaired. Nordhavn narrowed.' }
+  ],
+  replay: { of: 'October', checked: 180, agree: 173, differ: 7, differWhy: [ { n: 5, w: 'a survey date read month first, from reports printed in the US' }, { n: 2, w: 'matched to a sister ship with a similar name, where page 1 had no IMO number' } ] }
+};
+
+/* ---- shared helpers (same in every page of the run) ---- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const I = (n, size = 16, stroke = 1.5) => Icons.svg(n, { size, stroke });
+const P = id => DATA.people[id];
+const F = id => DATA.floors[id];
+const A = id => DATA.agents[id];
+const K = id => DATA.kinds.find(k => k.id === id);
+const L = n => DATA.ladder[n];
+const first = id => P(id).name.split(' ')[0];
+const fmt = n => n.toLocaleString('en-GB');
+const plural = (n, one, many) => `${fmt(n)} ${n === 1 ? one : (many || one + 's')}`;
+const sum = (a, f) => a.reduce((t, x) => t + f(x), 0);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const ms = v => parseFloat(css(v)) || 0;
+const STATE = { tech: false, gateway: DATA.gateway.on };
+let ME = DATA.me;
+
+/* the maker's mark */
+const mm = (aid, ink = false, lg = false) => `<span class="mm${ink ? ' ink' : ''}${lg ? ' lg' : ''}" title="${A(aid).name}, an agent">${A(aid).mark}</span>`;
+/* the ladder at word size, with the kind's cap */
+function rungs(level, cap = 3) {
+  return `<span class="rungs" aria-hidden="true">${DATA.ladder.map(r => `<i class="${r.n < level ? 'on' : r.n === level ? 'at' : r.n > cap ? 'capped' : ''}"></i>`).join('')}</span>`;
+}
+const lvl = (level, cap = 3, withName = true) => `<span class="lvl" title="Rung ${level} of ${DATA.ladder.length - 1}: ${L(level).name}">${rungs(level, cap)}${withName ? L(level).name : ''}</span>`;
+const fchip = fl => `<span class="fchip" data-tier="${fl}">${F(fl).name} · ${F(fl).word}</span>`;
+const person = (id, extra = '') => `<span class="who">${P(id).name}${extra ? `<span class="muted">${extra}</span>` : ''}</span>`;
+
+/* the mode line: what the agent is doing now, what it will do next, what stops it */
+function modeHTML(aid, opts = {}) {
+  const a = A(aid), g = STATE.gateway;
+  const held = a.now.w === 'Holding';
+  const now = !g && !held ? { w: 'Paused', what: 'the model gateway is off', step: `${P(DATA.gateway.admin).name} can turn it on`, tech: 'gateway 403 · run waits, nothing lost' } : a.now;
+  const nx = opts.next || a.next[0];
+  return `<div class="mode ${held ? 'held' : ''} ${opts.v ? 'v' : ''}" role="status" aria-label="${a.name}: ${now.w} ${now.what}">
+    <div>${mm(aid)}<span><span class="ml">Agent</span><span class="mv"><b>${a.name}</b></span></span></div>
+    <div class="now ${opts.boxNow ? 'boxed' : ''}"><span class="ml">Now</span><span class="mv"><b>${now.w}</b> ${now.what}</span><span class="mv muted">${now.step}</span><span class="tk">${now.tech}</span></div>
+    <div class="${opts.boxNext ? 'boxed' : ''}"><span class="ml">Next</span><span class="mv"><b>${nx.w}</b> ${nx.what}</span><span class="mv muted">${a.next[1] ? 'then ' + a.next[1].w.toLowerCase() + ' ' + a.next[1].what : (nx.when || '&nbsp;')}</span></div>
+    <div><span class="ml">Works under</span><span class="mv">${P(a.supervisor).name}</span><span class="mv muted">deputy ${P(a.deputy).name}</span></div>
+    <div><span class="ml">Rung</span><span class="mv">${lvl(a.level)}</span><span class="mv muted num">${a.calls.used} of ${a.calls.limit} calls today</span></div>
+  </div>`;
+}
+
+/* top bar */
+function topHTML(crumbs, hints, floor) {
+  const me = P(ME), fl = floor || me.floor;
+  return `<header class="top"><p class="brand">AUGUR</p>
+    <nav class="crumb" aria-label="Where you are">${crumbs.map((c, i) => (i ? I('chevron-right', 14) : '') + (i === crumbs.length - 1 ? `<b>${c}</b>` : `<span>${c}</span>`)).join('')}</nav>
+    <span class="fchip" data-tier="${fl}">${F(fl).name} · ${F(fl).word}</span>
+    <div class="hints">${hints.map(([k, w, id]) => `<span ${id ? `id="${id}"` : ''}><span class="kbd">${k}</span>${w}</span>`).join('')}</div></header>`;
+}
+const STD = [['T', 'ADR words', 'h-t'], ['G', 'gateway off', 'h-g'], ['R', 'replay']];
+
+/* keys shared by every page */
+function commonKeys(e, rerender, replay) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  if (e.target.closest && e.target.closest('input,textarea,select')) return false;
+  const k = e.key.toLowerCase();
+  if (k === 'r') { replay(); return true; }
+  if (k === 't') { STATE.tech = !STATE.tech; document.body.classList.toggle('tech', STATE.tech); return true; }
+  if (k === 'g') { STATE.gateway = !STATE.gateway; rerender(); return true; }
+  return false;
+}
+function markKeys() { $('#h-t')?.classList.toggle('on', STATE.tech); $('#h-g')?.classList.toggle('on', !STATE.gateway); }
+
+/* timers for the auto demo, cleared on replay */
+let TIMERS = [];
+const later = (fn, t) => TIMERS.push(setTimeout(fn, reduced ? Math.min(t, 50) : t));
+const clearLater = () => { TIMERS.forEach(clearTimeout); TIMERS = []; };
+const MOMENT = () => ms('--motion-run'); /* the moment plays at ~1.2 s */
+function settle() { document.body.classList.add('pre'); requestAnimationFrame(() => requestAnimationFrame(() => document.body.classList.remove('pre'))); }
+
+/* diary sums: every count on every page is summed from DATA.diary */
+const D = {
+  of: (kind, aid) => DATA.diary.filter(d => d.kind === kind && (!aid || d.agent === aid)),
+  n: (kind, aid) => sum(D.of(kind, aid), d => d.n),
+  reports: aid => sum(DATA.diary.filter(d => d.kind === 'batch' && (!aid || d.agent === aid)), d => d.reports || 0),
+  waiting: () => D.n('batch') + D.n('held') + D.n('disagree')
+};
+const KIND_WORD = { batch: 'Waits as a batch', held: 'Waits one by one', outside: 'Outside its scope', done: 'Done, can be undone', standby: 'Stands by', disagree: 'Sources disagree', limit: 'Couldn’t do' };
+const KIND_ICON = { batch: 'layers', held: 'hand', outside: 'fence', done: 'check', standby: 'circle-pause', disagree: 'split', limit: 'gauge' };
+
+const MK = DATA.mistake, f = MK.fact, AG = 'a1', a = A(AG), B = MK.batch, wrong = MK.siblings.filter(s => s.proposed !== s.right).length;
+const S = { hot: -1 };
+const QS = () => [
+  { h: 'What happened', p: [`${a.name} proposed ${f.k.toLowerCase()} ${f.wrong} for ${f.entity}: ${f.what}. ${wrong} of ${MK.siblings.length} Nordhavn Class tonnages since ${MK.lot.since} were wrong the same way.`], by: 'counted from the recall' },
+  { h: 'Why it made sense', p: [MK.why], by: `from ${a.name}’s workings for each of the ${MK.siblings.length}` },
+  { h: 'What caught it', p: [`${P(MK.found.who).name}, ${MK.found.at}. ${MK.found.how}`], by: 'from the flag' },
+  { h: 'Why the checks didn’t', p: [`The batch on ${B.day} was ${B.n} details with a sample of ${B.sample}. The sample held ${B.nordhavnInSample} Nordhavn certificate, in the new layout, so it passed.`, `Read twice didn’t help: the pattern reader also took the first number under “NT | GT”. Two readers with the same wrong idea agree.`], by: 'from the batch and both readings' },
+  { h: 'What changes', p: [], by: `${P(a.supervisor).name} decides; ticked items are the record`, changes: [
+    ['Draw the sample across issuers and their layouts, not across issuers alone', true],
+    ['Teach the pattern reader the column headings, not the column order', true],
+    [`Narrow ${MK.lot.rule} to “asks each time” (see the scope review)`, true],
+    ['Retrain or replace the model', false]] }
+];
+function render() {
+  $('#app').innerHTML = topHTML(['Admin', 'Agents', a.name, 'Review of Fri 6 Nov'], [['↑ ↓', 'question'], ['R', 'replay'], ['T', 'ADR words']]) +
+  `<main class="main"><div class="wrap">
+    <section class="form scroll"><div><p class="eyebrow">${mm(AG)} Review · written ${MK.narrowedAt} · open to everyone it touched</p><h1 class="title">What we learned</h1></div>
+      ${QS().map((q, i) => `<div class="q dep ${S.hot === i ? 'hot' : ''}" style="--i:${i}"><span class="n">${i + 1}</span><div><h3>${q.h}</h3>${q.p.map(t => `<p>${t}</p>`).join('')}${q.changes ? `<div class="chg">${q.changes.map(([w, on]) => `<label><input type="checkbox" ${on ? 'checked' : ''}> ${w}</label>`).join('')}</div>` : ''}<span class="by">${q.by}</span></div></div>`).join('')}
+    </section>
+    <aside class="side">
+      <div class="box"><h3>No one is blamed</h3><span>Not ${a.name}: it did what its method said. Not <b>${P(B.signedBy).name}</b>: the sample signed was the one AUGUR drew. The review is about the method and the checks.</span></div>
+      <div class="box"><h3>Who sees it</h3><span>${P(MK.found.who).name}, who found it; the owners of the ${MK.used.filter(u => !u.dup).length} places the wrong numbers were used; anyone who opens a seam on the ${wrong} vessels.</span></div>
+      <div class="box"><h3>Written by template</h3><span>Questions 1 to 4 are counted and quoted from the records, never written by the model. Question 5 is a person’s.</span></div>
+      <p class="tk">review = audit query over the lot + the batch + both readings · changes become grant and sampling settings</p>
+    </aside></div></main>`;
+  Icons.hydrate($('#app')); markKeys();
+}
+function replay() { clearLater(); S.hot = -1; settle(); render(); later(() => { S.hot = 3; render(); }, MOMENT()); }
+document.addEventListener('keydown', e => {
+  if (commonKeys(e, render, replay)) { markKeys(); return; }
+  if (e.key === 'ArrowDown') { S.hot = (S.hot + 1) % QS().length; render(); }
+  if (e.key === 'ArrowUp') { S.hot = (S.hot - 1 + QS().length) % QS().length; render(); }
+});
+replay();
+</script>
+</body>
+</html>

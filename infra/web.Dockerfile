@@ -4,14 +4,23 @@
 #   NODE_AUTH_TOKEN=<read:packages token> docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/web.Dockerfile .
 # The shipped apps' frontends come from their releases (ADR 0049): infra/release-images.sh puts each in
 # .shipped/frontends/<id> first. Without that folder the image has the platform's own frontends only.
-# The first five lines are the same in infra/service.Dockerfile, so the services' images reuse this
-# install (see there). Keep them identical.
-FROM node:22-alpine AS build
-RUN corepack enable
+# Everything up to the build stage's `COPY . .` is the same in infra/service.Dockerfile, so the services'
+# images reuse this install (see there). Keep it identical.
+FROM node:22-alpine AS manifests
 WORKDIR /repo
 COPY . .
+# Only what pnpm install reads: every package.json, the lockfile, the workspace and .npmrc. The install
+# below starts from these alone, so it is cached until the dependencies change, not on every change.
+RUN rm -rf .shipped && find . -type f ! -name package.json ! -name pnpm-lock.yaml ! -name pnpm-workspace.yaml ! -name .npmrc -delete \
+ && find . -mindepth 1 -type d -empty -delete
+FROM node:22-alpine AS deps
+RUN corepack enable
+WORKDIR /repo
+COPY --from=manifests /repo .
 # AUGUR's kit packages come from GitHub Packages (.npmrc): a build secret, so the token stays out of the image.
 RUN --mount=type=secret,id=node_auth_token,env=NODE_AUTH_TOKEN pnpm install --frozen-lockfile
+FROM deps AS build
+COPY . .
 # A path: the shell signs in against Keycloak on whatever address it is served from.
 ENV VITE_OIDC_AUTHORITY=/sso/realms/platform
 RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/admin..." --filter "@augur/upgrades..." build \
@@ -21,6 +30,7 @@ RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/a
  && cp -r platform/frontends/admin/dist /site/apps/admin \
  && cp -r platform/frontends/upgrades/dist /site/apps/upgrades \
  && if [ -d .shipped/frontends ]; then cp -r .shipped/frontends/. /site/apps/; fi \
+ && mkdir -p /site/legal && cp LICENSE /site/legal/licence.txt && cp THIRD_PARTY_NOTICES.md /site/legal/third-party.txt \
  && mv /site/index.template.html /index.template.html \
  && node scripts/kit.mjs check
 
@@ -31,7 +41,8 @@ FROM nginxinc/nginx-unprivileged:1.30-alpine AS web
 USER root
 RUN apk upgrade --no-cache
 USER 101
-LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/im-platform"
+LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/augur"
+LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 # Other sites apps may load from, space separated; see infra/deploy/nginx.conf.
 ENV APP_ORIGINS=""
 # Set from SERVER_RING and PLATFORM_URL when the container starts (infra/deploy/live-origins.envsh): the workbench's own tailnet, on the workbench only.
@@ -41,6 +52,9 @@ COPY --chmod=755 infra/deploy/live-origins.envsh /docker-entrypoint.d/15-live-or
 # another host serving the same files. When the container starts, infra/deploy/kit-url.envsh writes the
 # shell's page for it, and the hashes and the kit's site the Content Security Policy needs.
 ENV KIT_URL=/kit/
+# The product's name in the shell's page (its title, and a meta tag the shell reads for the tab), also
+# written by kit-url.envsh. A deployment sets its own in ORG_PRODUCT_NAME.
+ENV ORG_PRODUCT_NAME=AUGUR
 COPY --chmod=755 infra/deploy/kit-url.envsh /docker-entrypoint.d/16-kit-url.envsh
 # What the front door holds callers to (infra/deploy/nginx.conf). Requests a second from one address,
 # and the burst let through at once, for the API and for sign-in; the largest upload in MB; and

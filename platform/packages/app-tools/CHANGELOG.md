@@ -1,5 +1,12 @@
 # @augur/app-tools
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [b3060e0]
+  - @augur/service-kit@0.12.0
+
 ## 0.2.0
 
 ### Minor Changes

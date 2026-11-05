@@ -3,6 +3,8 @@
   "description": "Dependency updates for AUGUR: weekly, grouped, never merged by Renovate. See docs/decisions/0033-renovate-for-dependency-updates.md.",
   "extends": [
     "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "docker:pinDigests",
     ":dependencyDashboard",
     ":disableRateLimiting"
   ],
@@ -100,6 +102,27 @@
         "platform/contract/frozen/**"
       ],
       "enabled": false
+    },
+    {
+      "description": "AUGUR's UI kit (augur-kit, ADRs 0046 and 0048): its packages together, as soon as a kit is released, so release/kit.json never falls behind. The Renovate changeset workflow re-pins the kit on the PR. Reading GitHub Packages needs the npm.pkg.github.com host rule in Renovate's Credentials (docs/versioning.md).",
+      "matchPackageNames": [
+        "@harry-burton-dev/augur-kit-common",
+        "@harry-burton-dev/augur-app-kit",
+        "@harry-burton-dev/augur-shell-kit",
+        "@harry-burton-dev/augur-kit-bundle"
+      ],
+      "groupName": "AUGUR kit",
+      "groupSlug": "augur-kit",
+      "schedule": [
+        "at any time"
+      ],
+      "minimumReleaseAge": null,
+      "rangeStrategy": "bump",
+      "dependencyDashboardApproval": false,
+      "labels": [
+        "dependencies",
+        "kit"
+      ]
     }
   ]
 }

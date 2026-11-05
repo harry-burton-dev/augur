@@ -1,0 +1,422 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:augur:app-manifest",
+  "title": "AUGUR app manifest",
+  "description": "An app's manifest.json: what the registry accepts when the app registers (PUT /v1/apps/{id}). Generated from the registry's schema by pnpm manifest-schema; check a manifest with node scripts/check-manifests.mjs <manifest.json>.",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "route",
+    "entry",
+    "version",
+    "sdk"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "maxLength": 500,
+      "description": "Where editors find this schema, contracts/manifest.schema.json: a path or an address. The registry doesn't use it."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,39}$",
+      "description": "The app's id, such as \"board\"; its route, client and storage are named after it"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 60,
+      "description": "What people call the app"
+    },
+    "route": {
+      "type": "string",
+      "pattern": "^/[a-z0-9][a-z0-9/-]*$",
+      "maxLength": 100,
+      "description": "Route prefix the shell maps to this app"
+    },
+    "entry": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^[^\\\\\\u0000-\\u001f\\u007f]+$",
+      "description": "URL of the app's ES module entry: a path on AUGUR (/apps/…) or a full https address. No backslashes or control characters."
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40,
+      "description": "The app's release, semver"
+    },
+    "sdk": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "The @augur/mfe-sdk releases the app works with, a semver range such as ^1.0.0. The shell will not open an app whose range its SDK does not satisfy."
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 140,
+      "description": "One line shown under the app name in the shell"
+    },
+    "icon": {
+      "type": "string",
+      "maxLength": 40,
+      "description": "A UI kit icon name"
+    },
+    "requiredRole": {
+      "type": "string",
+      "maxLength": 60,
+      "description": "Only people with this role can open it"
+    },
+    "handles": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9.-]*$",
+        "maxLength": 80
+      },
+      "maxItems": 50,
+      "description": "Intent types this app handles, such as document.open"
+    },
+    "ai": {
+      "type": "boolean",
+      "description": "The app is an AI; the menus draw it as a bubble"
+    },
+    "search": {
+      "type": "boolean",
+      "description": "The app's service answers GET /v1/search?q=, and the shell's Find asks it"
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "database": {
+          "type": "boolean"
+        },
+        "bucket": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false,
+      "description": "The storage the app keeps on AUGUR: its own database schema, its own bucket. See docs/app-storage.md"
+    },
+    "maxUpload": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2048,
+      "description": "The largest request body, in MB, the gateway lets through to the app's service; 10 without it. An admin can lower it."
+    },
+    "previews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "description": "How the app names it: \"board-view\""
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "A sentence on what it changes, for the person choosing it"
+          },
+          "until": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "Its last day, YYYY-MM-DD; after it, it's off for everyone and Admin says the app should drop it or ship it"
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 8,
+      "description": "Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in, and the app asks ctx.previewOn(id)"
+    },
+    "settings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "type",
+          "min",
+          "max",
+          "default"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-zA-Z0-9]{0,39}$",
+            "description": "How the app's service names it: \"retentionDays\""
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "A sentence on what it changes"
+          },
+          "type": {
+            "enum": [
+              "integer"
+            ]
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 20,
+            "description": "What the number counts, shown after it: \"days\""
+          },
+          "min": {
+            "type": "integer"
+          },
+          "max": {
+            "type": "integer"
+          },
+          "default": {
+            "type": "integer",
+            "description": "Between min and max"
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 10,
+      "description": "Settings the app offers admins in Admin, Apps; its service reads them from the registry"
+    },
+    "scopes": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "notifications:send",
+          "audit:write",
+          "models:use",
+          "events:publish",
+          "events:subscribe",
+          "people:read"
+        ]
+      },
+      "uniqueItems": true,
+      "maxItems": 6,
+      "description": "What the app's service asks to do on AUGUR, such as \"notifications:send\". An app may always register itself."
+    },
+    "floors": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "personal",
+          "team",
+          "org"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "maxItems": 3,
+      "description": "The kinds of floor the app works on; every kind without it"
+    },
+    "surfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "floor",
+          "slot",
+          "module"
+        ],
+        "properties": {
+          "floor": {
+            "enum": [
+              "personal",
+              "team",
+              "org"
+            ],
+            "description": "\"team\" means any team, at any depth"
+          },
+          "slot": {
+            "enum": [
+              "page",
+              "card",
+              "panel",
+              "settings",
+              "admin"
+            ]
+          },
+          "module": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_./-]+$",
+            "maxLength": 100,
+            "description": "The module the app's entry exposes for it"
+          },
+          "role": {
+            "enum": [
+              "member",
+              "lead"
+            ],
+            "description": "Only for people with this role on the floor"
+          },
+          "rollup": {
+            "type": "boolean",
+            "description": "Shows this floor and the teams below it that the person is on, using AUGUR's roll-up"
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 30,
+      "description": "What the app shows on each kind of floor, for the shell to place. Each surface's floor must be in floors."
+    },
+    "orbit": {
+      "type": "boolean",
+      "description": "false: the app keeps its own menu inside it and the shell never shows its Orbit"
+    },
+    "sameOnEveryFloor": {
+      "type": "boolean",
+      "description": "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why (SDK 1.6)"
+    },
+    "followsAddress": {
+      "type": "boolean",
+      "description": "true: the app follows the address itself, so the shell keeps it mounted on Back and Forward inside it (SDK 1.11)"
+    },
+    "focus": {
+      "type": "boolean",
+      "description": "true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029)"
+    },
+    "category": {
+      "enum": [
+        "platform",
+        "pillar"
+      ],
+      "description": "The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed"
+    },
+    "areas": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$"
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "icon": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "A UI kit icon name, not the app's own"
+          },
+          "detail": {
+            "type": "string",
+            "maxLength": 60,
+            "description": "One line on what's in it"
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 6,
+      "description": "The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See docs/shell-principles.md"
+    },
+    "menu": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "label",
+          "items"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 40
+          },
+          "icon": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "A UI kit icon name"
+          },
+          "ai": {
+            "type": "boolean"
+          },
+          "area": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "The id of the app's area the group belongs to (SDK 1.5)"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "label",
+                "path"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 60
+                },
+                "icon": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "description": "A UI kit icon name"
+                },
+                "detail": {
+                  "type": "string",
+                  "maxLength": 60,
+                  "description": "One short fact, never a sentence"
+                },
+                "keywords": {
+                  "type": "string",
+                  "maxLength": 140,
+                  "description": "Extra words search finds it by"
+                },
+                "ai": {
+                  "type": "boolean"
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "^/.+",
+                  "maxLength": 200,
+                  "description": "Where in the app it opens, below the app's route"
+                }
+              },
+              "additionalProperties": false
+            },
+            "minItems": 1,
+            "maxItems": 12
+          }
+        },
+        "additionalProperties": false
+      },
+      "maxItems": 8,
+      "description": "The app's menu, shown by the shell as Orbit at the app's root. A group with one item opens it directly"
+    }
+  },
+  "additionalProperties": false
+}

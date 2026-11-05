@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import { steadyPool, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
+import { runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
 export interface EventFloor {
@@ -53,6 +53,8 @@ export interface AuditFilter {
 }
 
 export type Listener = (n: Notification) => void;
+/** Hears each domain event as it is published, on any instance: a live hint, not the record (read that with `readEvents`). */
+export type EventListener = (e: DomainEvent) => void;
 
 /**
  * Something that happened in a service, told to whichever services follow its
@@ -105,6 +107,11 @@ export interface EventStore {
   /** Newest first. */
   audit(filter: AuditFilter): Promise<AuditEntry[]>;
   subscribe(listener: Listener): () => void;
+  /**
+   * Tells the listener of each domain event as it is published, on every instance. At most once and
+   * only while listening: for a browser to refresh what it shows, never for a service to keep up.
+   */
+  onEvent(listener: EventListener): () => void;
   /** Whether a team has turned team notices on. */
   teamNotices(workspace: string): Promise<boolean>;
   setTeamNotices(workspace: string, on: boolean, by: string): Promise<void>;
@@ -193,6 +200,11 @@ export class MemoryEventStore implements EventStore {
     else this.teams.delete(workspace);
   }
 
+  onEvent(listener: EventListener) {
+    this.emitter.on('domain-event', listener);
+    return () => void this.emitter.off('domain-event', listener);
+  }
+
   private domainEvents: DomainEvent[] = [];
   private eventSeq = 0;
 
@@ -201,7 +213,9 @@ export class MemoryEventStore implements EventStore {
     const at = new Date().toISOString();
     for (const e of events) {
       if (this.domainEvents.some((d) => d.publisher === publisher && d.id === e.id)) continue;
-      this.domainEvents.push({ seq: String(++this.eventSeq), topic: e.topic, id: e.id, publisher, at, ...(e.floor ? { workspace: e.floor } : {}), payload: e.payload });
+      const event: DomainEvent = { seq: String(++this.eventSeq), topic: e.topic, id: e.id, publisher, at, ...(e.floor ? { workspace: e.floor } : {}), payload: e.payload };
+      this.domainEvents.push(event);
+      this.emitter.emit('domain-event', event);
       added++;
     }
     return { added, repeated: events.length - added };
@@ -220,7 +234,7 @@ export class MemoryEventStore implements EventStore {
 }
 
 /** Schema changes, applied in order and recorded so each runs once. The events service owns the `events` schema. */
-export const migrations: { id: string; sql: string }[] = [
+export const migrations: Migration[] = [
   {
     id: '001_notifications_and_audit',
     sql: `
@@ -307,6 +321,8 @@ export const migrations: { id: string; sql: string }[] = [
 ];
 
 const CHANNEL = 'events_notification';
+/** Each new domain event, for the browser stream; one too big for a NOTIFY goes by its seq and is read back. */
+const EVENT_CHANNEL = 'events_domain_event';
 const NOTIFY_BYTES = 7900;
 
 type NotificationRow = {
@@ -326,6 +342,19 @@ type NotificationRow = {
 };
 
 const floorFrom = (id: string | null, path: string[] | null) => (id ? { workspace: { id, path: path ?? [id] } } : {});
+
+/** A domain event as Postgres hands it back, or as `row_to_json` sends it in a NOTIFY (seq a number, at a string). */
+type DomainEventRow = { seq: string | number; topic: string; id: string; publisher: string; at: Date | string; workspace_id: string | null; workspace_path: string[] | null; payload: unknown };
+
+const fromEventRow = (r: DomainEventRow): DomainEvent => ({
+  seq: String(r.seq),
+  topic: r.topic,
+  id: r.id,
+  publisher: r.publisher,
+  at: new Date(r.at).toISOString(),
+  ...floorFrom(r.workspace_id, r.workspace_path),
+  payload: r.payload,
+});
 
 const fromRow = (r: NotificationRow): Notification => ({
   id: r.id,
@@ -387,27 +416,7 @@ export class PgEventStore implements EventStore {
   }
 
   async migrate() {
-    const client = await this.pool.connect();
-    try {
-      await client.query('begin');
-      await client.query("select pg_advisory_xact_lock(hashtext('events.migrate'))");
-      // On a server the storage job makes the schema for events's own login, which may not create schemas.
-      const { rowCount: hasSchema } = await client.query("select 1 from pg_namespace where nspname = 'events'");
-      if (!hasSchema) await client.query('create schema events');
-      await client.query('create table if not exists events.migrations (id text primary key, applied_at timestamptz not null default now())');
-      const { rows } = await client.query<{ id: string }>('select id from events.migrations');
-      const applied = new Set(rows.map((r) => r.id));
-      for (const m of migrations.filter((m) => !applied.has(m.id))) {
-        await client.query(m.sql);
-        await client.query('insert into events.migrations (id) values ($1)', [m.id]);
-      }
-      await client.query('commit');
-    } catch (err) {
-      await client.query('rollback');
-      throw err;
-    } finally {
-      client.release();
-    }
+    await runMigrations(this.pool, { schema: 'events', migrations });
   }
 
   /**
@@ -434,6 +443,7 @@ export class PgEventStore implements EventStore {
     client.on('error', (err) => again(err.message));
     client.on('end', () => again('it ended'));
     client.on('notification', (msg) => {
+      if (msg.channel === EVENT_CHANNEL && msg.payload) return void this.heardEvent(msg.payload);
       if (msg.channel !== CHANNEL || !msg.payload) return;
       const sent = JSON.parse(msg.payload) as Notification | { ref: string };
       if (!('ref' in sent)) return void this.emitter.emit('notification', sent);
@@ -444,6 +454,21 @@ export class PgEventStore implements EventStore {
         .catch(() => undefined);
     });
     await client.query(`listen ${CHANNEL}`);
+    await client.query(`listen ${EVENT_CHANNEL}`);
+  }
+
+  private heardEvent(payload: string) {
+    const sent = JSON.parse(payload) as DomainEventRow | { ref: string };
+    if (!('ref' in sent)) return void this.emitter.emit('domain-event', fromEventRow(sent));
+    void this.pool
+      .query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events where seq = $1', [sent.ref])
+      .then(({ rows }) => rows[0] && this.emitter.emit('domain-event', fromEventRow(rows[0])))
+      .catch(() => undefined);
+  }
+
+  onEvent(listener: EventListener) {
+    this.emitter.on('domain-event', listener);
+    return () => void this.emitter.off('domain-event', listener);
   }
 
   async addNotifications(n: NewNotification, floor?: EventFloor) {
@@ -532,14 +557,23 @@ export class PgEventStore implements EventStore {
   }
 
   async publish(publisher: string, events: NewDomainEvent[]) {
-    const { rowCount } = await this.pool.query(
-      `insert into events.domain_events (topic, id, publisher, workspace_id, workspace_path, payload)
-       select e.topic, e.id, $1, e.workspace_id, e.workspace_path, coalesce(e.payload, 'null'::jsonb)
-       from jsonb_to_recordset($2::jsonb) as e(topic text, id text, workspace_id text, workspace_path text[], payload jsonb)
-       on conflict (publisher, id) do nothing`,
-      [publisher, JSON.stringify(events.map((e) => ({ topic: e.topic, id: e.id, workspace_id: e.floor?.id ?? null, workspace_path: e.floor?.path ?? null, payload: e.payload ?? null })))],
+    // Each event added is announced as the statement commits; one already sent (same id) isn't.
+    const { rows } = await this.pool.query<{ added: number }>(
+      `with added as (
+         insert into events.domain_events (topic, id, publisher, workspace_id, workspace_path, payload)
+         select e.topic, e.id, $1, e.workspace_id, e.workspace_path, coalesce(e.payload, 'null'::jsonb)
+         from jsonb_to_recordset($2::jsonb) as e(topic text, id text, workspace_id text, workspace_path text[], payload jsonb)
+         on conflict (publisher, id) do nothing
+         returning seq, topic, id, publisher, at, workspace_id, workspace_path, payload
+       ), told as (
+         select pg_notify($3, case when octet_length(j) < $4::int then j else json_build_object('ref', seq::text)::text end)
+         from (select seq, row_to_json(added)::text as j from added) as a
+       )
+       select (select count(*) from added)::int as added, (select count(*) from told) as told`,
+      [publisher, JSON.stringify(events.map((e) => ({ topic: e.topic, id: e.id, workspace_id: e.floor?.id ?? null, workspace_path: e.floor?.path ?? null, payload: e.payload ?? null }))), EVENT_CHANNEL, NOTIFY_BYTES],
     );
-    return { added: rowCount ?? 0, repeated: events.length - (rowCount ?? 0) };
+    const added = rows[0]?.added ?? 0;
+    return { added, repeated: events.length - added };
   }
 
   async readEvents({ topics, after, limit }: EventsQuery) {
@@ -547,14 +581,14 @@ export class PgEventStore implements EventStore {
     const families = topics.filter((t) => t.endsWith('.*')).map((t) => `${t.slice(0, -1)}%`);
     // Only what every earlier transaction has settled: a seq handed out to a transaction still
     // running would otherwise commit below the follower's cursor and never be read.
-    const { rows } = await this.pool.query<{ seq: string; topic: string; id: string; publisher: string; at: Date; workspace_id: string | null; workspace_path: string[] | null; payload: unknown }>(
+    const { rows } = await this.pool.query<DomainEventRow>(
       `select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events
        where seq > $1 and (topic = any($2::text[]) or topic like any($3::text[]))
          and xid < pg_snapshot_xmin(pg_current_snapshot())
        order by seq limit $4`,
       [after ?? '0', exact, families, limit],
     );
-    return rows.map((r) => ({ seq: String(r.seq), topic: r.topic, id: r.id, publisher: r.publisher, at: r.at.toISOString(), ...floorFrom(r.workspace_id, r.workspace_path), payload: r.payload }));
+    return rows.map(fromEventRow);
   }
 
   async pruneEvents(keepDays: number) {

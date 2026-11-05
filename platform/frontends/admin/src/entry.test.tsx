@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appStatus, floorStatus, floorTree, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
+import { appEyebrow, appStatus, floorStatus, floorTree, kindOf, kindWords, refusedKindNote, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
 import { headline, stateOf } from './status.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { placeOf, portalLink } from './line.js';
@@ -165,9 +165,41 @@ describe('People', () => {
     gateway();
     const el = await open('/people');
     await openRow(el, 'Alex Rivera');
-    const toggle = document.querySelector('.augur-dialog [role="switch"], .augur-dialog input[type="checkbox"]') as HTMLElement;
-    expect(shut(toggle) || toggle.getAttribute('aria-readonly') === 'true' || toggle.hasAttribute('disabled')).toBe(true);
+    expect(shut(button('Turn off their sign-in'))).toBe(true);
     expect(document.querySelector('.augur-dialog')!.textContent).toContain('You can’t turn off your own sign-in.');
+  });
+
+  it('keeps what acts at once apart from Save, and asks twice before turning a sign-in off or giving a new password', async () => {
+    const samOn = { ...sam, enabled: true };
+    const { sent } = gateway((method, url, body) => {
+      if (url === '/api/identity/v1/admin/people' && method === 'GET') return Response.json([alex, samOn]);
+      if (url === '/api/identity/v1/admin/people/u-2' && method === 'PATCH') return Response.json({ ...samOn, ...(body as object) });
+      if (url === '/api/identity/v1/admin/people/u-2/password') return Response.json({ temporaryPassword: 'pppp-qqqq-pppp' });
+      return undefined;
+    });
+    const el = await open('/people');
+    await openRow(el, 'Sam Okafor');
+    const live = document.querySelector('[data-live]')!;
+    expect(live.textContent).toContain('Takes effect at once');
+    expect(document.querySelector('.augur-dialog-fields')!.textContent).toContain('Nothing here changes until you press Save.');
+    expect(live.closest('.augur-dialog-fields')).toBeNull();
+
+    // Turning off asks twice in place, and nothing is sent until the second press.
+    await press(button('Turn off their sign-in'));
+    expect(sent.some((c) => c.method === 'PATCH')).toBe(false);
+    expect(live.textContent).toContain('Press again: they can’t sign in from now');
+    await press(live.querySelector('[data-armed]'));
+    expect(sent.find((c) => c.method === 'PATCH')!.body).toEqual({ enabled: false });
+    expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/Sign-in turned off/);
+
+    // A new password asks twice too, then shows it once and says what happened.
+    await press(button('Give them a new one-time password'));
+    expect(sent.some((c) => c.url.endsWith('/u-2/password'))).toBe(false);
+    await press(live.querySelector('[data-armed]'));
+    expect(sent.some((c) => c.url.endsWith('/u-2/password'))).toBe(true);
+    expect(document.querySelector('[data-password]')!.textContent!.trim()).toBe('pppp-qqqq-pppp');
+    await press(button('Done'));
+    expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/New one-time password given/);
   });
 });
 
@@ -210,7 +242,12 @@ describe('Status', () => {
 
   it('shows every part, what to check for one that’s down, that AUGUR is open to the internet, and that a release is out', async () => {
     const components = [part('gateway', 'up', { kind: 'gateway', version: '0.2.0' }), part('library', 'down', { kind: 'app', problem: 'It can’t be reached.' })];
-    const backups = { state: 'ok', lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 }, lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, people: 3 } };
+    const backups = {
+      state: 'ok',
+      lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 },
+      offsite: { at: '2026-10-22T02:01:00Z', ok: true, keepDays: 30 },
+      lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, from: 'offsite', people: 3 },
+    };
     gateway((_m, url) =>
       url === '/api/gateway/v1/status'
         ? Response.json({ components, backups, publicAccess: { open: true, until: '2026-10-28T18:00:00Z' } })
@@ -221,6 +258,8 @@ describe('Status', () => {
     const el = await open('/status');
     expect(title(el)).toBe('1 part is down');
     expect(el.textContent).toContain('Backups restore cleanly');
+    expect(el.textContent).toContain('30 days kept');
+    expect(el.textContent).toContain('Restored from the copy off the server, 3 people');
     expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
     expect(el.textContent).toContain('AUGUR 0.13.2 is out.');
     await openRow(el, 'library');
@@ -278,6 +317,38 @@ describe('Apps', () => {
     const kept = (version: string, entry = library.entry) => ({ version, entry: { ...library, version, entry }, registeredBy: 'library', registeredAt: '', serving: false });
     expect(rollbackNote(library, kept('0.1.0'))).toMatch(/loads from the same address as 0.2.0/);
     expect(rollbackNote(library, kept('0.1.0', '/apps/library/0.1.0/entry.js'))).toBe('');
+  });
+
+  it('says what kind of app each is, from the kind in force, and why a claimed kind isn’t used', () => {
+    expect(appStatus({ ...library, sdk: '^2.0.0' }, '1.0.0').why).toBe('It works with AUGUR SDK ^2.0.0; this deployment has 1.0.0.');
+    const explorer = { ...library, id: 'auspex', name: 'Explorer', category: 'platform' as const, ships: true, pillar: true };
+    const artifacts = { ...library, id: 'folio', name: 'Artifacts', category: 'pillar' as const, ships: true, pillar: true };
+    const mandate = { ...library, id: 'mandate', name: 'Mandate', category: 'pillar' as const, registeredBy: 'mandate' };
+    const rogue = { ...library, registeredBy: 'library', categoryRefused: { asked: 'pillar', why: 'x' } };
+    expect([catalogue[0]!, explorer, artifacts, mandate, rogue].map((a) => kindWords(a).label)).toEqual(['Platform app', 'Platform app', 'Pillar app', 'Pillar app', 'App']);
+    expect(appEyebrow(catalogue[0]!)).toBe('Platform app · built into AUGUR');
+    expect(appEyebrow(explorer)).toBe('Platform app · ships with AUGUR');
+    expect(appEyebrow(artifacts)).toBe('Pillar app · ships with AUGUR');
+    expect(appEyebrow(mandate)).toBe('Pillar app · registered by mandate');
+    expect(appEyebrow(rogue)).toBe('Registered by library');
+    // A shipped app that says no kind, and a registry from before `ships`.
+    expect(appEyebrow({ ...library, pillar: true })).toBe('Ships with AUGUR');
+    // A kind this Admin doesn't know reads as an app.
+    expect(kindOf({ ...library, category: 'tool' as never })).toBeUndefined();
+    expect(refusedKindNote(rogue)).toBe('Its manifest says it’s a pillar app. Only apps that ship with AUGUR or come from its app feed can be one, so it’s listed as an app.');
+    expect(refusedKindNote(mandate)).toBe('');
+  });
+
+  it('lists each app’s kind and explains a refused one in its dialog', async () => {
+    const rogue = { ...library, registeredBy: 'library', categoryRefused: { asked: 'platform', why: 'x' } };
+    gateway((_m, url) => (url === '/api/registry/v1/apps' ? Response.json([...catalogue, rogue]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
+    const el = await open('/apps');
+    expect(el.textContent).toContain('Kind');
+    expect(el.textContent).toContain('Platform app');
+    await openRow(el, 'Library');
+    const dialog = document.querySelector('.augur-dialog')!;
+    expect(dialog.textContent).toContain('Registered by library');
+    expect(dialog.querySelector('[data-kind-refused]')?.textContent).toContain('Its manifest says it’s a platform app.');
   });
 
   it('offers only lower upload limits, and lays floors out as a tree, deciding each as the registry does', () => {

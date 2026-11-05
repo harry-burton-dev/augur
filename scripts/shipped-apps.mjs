@@ -11,12 +11,14 @@
 //                                    digest, as its app-release.json names it, after checking the file and who
 //                                    signed it, as JSON { <id>: { repo, version, tag, service, build } }
 //   node scripts/shipped-apps.mjs check
-//                                    in CI, no network: the file is well formed
+//                                    no network: the file is well formed, and the compose files run each app and
+//                                    its workers as it says (pnpm check:release runs the same check in CI)
 // Reads the app repositories with APP_RELEASES_TOKEN, as the release feed does; without it, through the GitHub CLI.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import semver from 'semver';
+import { parse as parseYaml } from 'yaml';
 
 const root = new URL('..', import.meta.url).pathname;
 export const SHIPPED_FILE = 'release/shipped-apps.json';
@@ -31,6 +33,7 @@ const DIGEST = /@sha256:[0-9a-f]{64}$/;
 /** What's wrong with release/shipped-apps.json, as sentences; empty when nothing is. */
 export const problemsOf = (json) => {
   const problems = [];
+  const ports = new Map();
   const apps = json?.apps;
   if (!apps || typeof apps !== 'object') return [`${SHIPPED_FILE} has no "apps".`];
   for (const [id, pin] of Object.entries(apps)) {
@@ -44,8 +47,96 @@ export const problemsOf = (json) => {
       if (!ID.test(image)) problems.push(`${id}: "${image}" can't name an image.`);
       if (typeof dockerfile !== 'string' || dockerfile.startsWith('/') || dockerfile.includes('..')) problems.push(`${id}: ${image}'s Dockerfile must be a path inside the app's repository.`);
     }
+    if (!Number.isInteger(pin?.port) || pin.port < 1024 || pin.port > 65535) problems.push(`${id}: "port" must be the port its service answers on in the Compose network (1024 to 65535).`);
+    else if (ports.has(pin.port)) problems.push(`${id}: port ${pin.port} is ${ports.get(pin.port)}'s too.`);
+    else ports.set(pin.port, id);
+    const workers = pin?.workers ?? [];
+    if (!Array.isArray(workers)) problems.push(`${id}: "workers" must list image names.`);
+    else {
+      for (const worker of workers) if (!(worker in (pin?.build ?? {}))) problems.push(`${id}: its worker "${worker}" isn't one of the images in its "build".`);
+      // The updater tells each part came back by what it is: a service answers /healthz, a worker stays up.
+      for (const image of Object.keys(pin?.build ?? {})) if (!workers.includes(image)) problems.push(`${id}: ${image} is built but isn't in "workers", so the updater wouldn't know how to tell it came back.`);
+    }
   }
+  const images = Object.entries(apps).flatMap(([id, pin]) => [id, ...Object.keys(pin?.build ?? {})]);
+  for (const image of new Set(images)) if (images.filter((i) => i === image).length > 1) problems.push(`"${image}" is named by two apps' images.`);
   return problems;
+};
+
+/**
+ * The images the shipped apps run, in the order the updater restarts them: each app's service (named by its
+ * id), then its workers.
+ */
+export const shippedImages = (json) =>
+  Object.entries(json.apps).flatMap(([id, pin]) => [{ image: id, app: id, role: 'service', port: pin.port }, ...(pin.workers ?? []).map((image) => ({ image, app: id, role: 'worker' }))]);
+
+/** The compose files that run the shipped apps, beside this file, and whether each is an overlay of another. */
+export const COMPOSE_FILES = { 'infra/deploy/compose.yml': 'deployment', 'infra/docker-compose.yml': 'local', 'infra/deploy/compose.build.yml': 'overlay' };
+
+/** The image a compose service runs as one of AUGUR's (`${PLATFORM_IMAGES...}/<name>:<tag>`), by name; undefined for any other. */
+const augurImage = (service) => (typeof service?.image === 'string' && service.image.startsWith('${PLATFORM_IMAGES') ? /\}\/([a-z][a-z0-9-]*):/.exec(service.image)?.[1] : undefined);
+const envOf = (service) => (Array.isArray(service?.environment) ? Object.fromEntries(service.environment.map((e) => String(e).split(/=(.*)/s).slice(0, 2))) : (service?.environment ?? {}));
+/** A list setting's words, leaving out what .env adds (`${...}`). */
+const words = (value) => String(value ?? '').replace(/\$\{[^}]*\}/g, ' ').split(/[\s,]+/).filter(Boolean);
+
+/**
+ * What's wrong with a compose file against release/shipped-apps.json, as sentences. Compose can't read the
+ * file, so each names the apps itself; this holds them to it. `kind`: "deployment" or "local" run every
+ * part, an "overlay" (compose.build.yml) only changes how parts are built. `platform`: the platform's own
+ * parts, which may run AUGUR's images without being shipped apps.
+ */
+export const composeProblems = (json, file, text, kind, platform) => {
+  const problems = [];
+  const services = parseYaml(text, { merge: true })?.services ?? {};
+  const shipped = shippedImages(json);
+  const ids = Object.keys(json.apps);
+  for (const { image, app, role, port } of shipped) {
+    const service = services[image];
+    if (!service) {
+      problems.push(`${file} has no ${image} service, and release/shipped-apps.json ships it (${app}'s ${role}).`);
+      continue;
+    }
+    if (augurImage(service) !== image) problems.push(`${file}: ${image} doesn't run AUGUR's ${image} image (\${PLATFORM_IMAGES...}/${image}:<version>).`);
+    if (kind === 'overlay') {
+      if (service.build) problems.push(`${file}: ${image} is built here, but it comes from ${app}'s release (ADR 0049).`);
+      continue;
+    }
+    if (role !== 'service') continue;
+    const said = envOf(service).PORT;
+    if (String(said) !== String(port)) problems.push(`${file}: ${image} answers on PORT ${said ?? '(none)'}, and release/shipped-apps.json says ${port}.`);
+    const check = JSON.stringify(service.healthcheck?.test ?? '');
+    if (service.healthcheck && !check.includes(`:${port}/healthz`)) problems.push(`${file}: ${image}'s healthcheck doesn't ask port ${port}'s /healthz.`);
+  }
+  for (const [name, service] of Object.entries(services)) {
+    const image = augurImage(service) ?? name;
+    if (!augurImage(service) && kind !== 'overlay') continue;
+    if (!platform.includes(image) && !shipped.some((s) => s.image === image)) problems.push(`${file}: ${name} runs AUGUR's ${image} image, which is neither a platform part nor in release/shipped-apps.json.`);
+  }
+  if (kind === 'overlay') return problems;
+  const pillars = words(envOf(services.registry).PILLAR_APPS);
+  if (pillars.slice().sort().join() !== ids.slice().sort().join()) problems.push(`${file}: the registry's PILLAR_APPS is "${pillars.join(' ')}", and release/shipped-apps.json ships ${ids.join(' ')}.`);
+  const upstreams = Object.fromEntries(words(envOf(services.gateway).APP_UPSTREAMS).map((u) => u.split(/=(.*)/s).slice(0, 2)));
+  for (const [id, pin] of Object.entries(json.apps)) {
+    if (upstreams[id] !== `http://${id}:${pin.port}`) problems.push(`${file}: the gateway's APP_UPSTREAMS has ${id}=${upstreams[id] ?? '(nothing)'}, not ${id}=http://${id}:${pin.port}.`);
+  }
+  for (const id of Object.keys(upstreams)) if (!ids.includes(id)) problems.push(`${file}: the gateway's APP_UPSTREAMS names ${id}, which isn't in release/shipped-apps.json.`);
+  // The service that gives Keycloak its clients' secrets (identity's realm job, keycloak-config, since ADR 0057).
+  const [secretsBy, secrets] = Object.entries(services).map(([name, s]) => [name, envOf(s).SERVICE_CLIENT_SECRETS]).find(([, v]) => v) ?? ['identity', ''];
+  const clients = words(secrets).map((c) => c.split('=')[0]);
+  for (const id of ids) if (!clients.includes(`app-${id}`)) problems.push(`${file}: ${secretsBy}'s SERVICE_CLIENT_SECRETS has no app-${id}, so ${id} can't sign in.`);
+  for (const id of words(envOf(services.storage).APP_STORAGE)) if (!ids.includes(id)) problems.push(`${file}: storage's APP_STORAGE names ${id}, which isn't in release/shipped-apps.json; other apps' storage goes in .env.`);
+  return problems;
+};
+
+/** The platform's own parts that run its images: each service under platform/services, AUGUR's Keycloak and the front door. */
+export const platformParts = (dir = join(root, 'platform/services')) => [...readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name), 'keycloak', 'web'];
+
+/** What's wrong with every compose file against release/shipped-apps.json. */
+export const layoutProblems = (json = readShipped()) => {
+  const platform = platformParts();
+  return Object.entries(COMPOSE_FILES).flatMap(([file, kind]) =>
+    existsSync(join(root, file)) ? composeProblems(json, file, readFileSync(join(root, file), 'utf8'), kind, platform) : [`${file} is missing.`],
+  );
 };
 
 /** release/shipped-apps.json, checked. */
@@ -130,8 +221,12 @@ const main = async () => {
   const [mode, id, version] = process.argv.slice(2);
   const file = join(root, SHIPPED_FILE);
   if (mode === 'check') {
-    readShipped(file);
-    return console.log(`${SHIPPED_FILE} is in order.`);
+    const problems = layoutProblems(readShipped(file));
+    if (problems.length) {
+      console.error(problems.map((p) => `✗ ${p}`).join('\n'));
+      process.exit(1);
+    }
+    return console.log(`${SHIPPED_FILE} is in order, and the compose files run what it ships.`);
   }
   if (mode === 'resolve') {
     const json = readShipped(file);

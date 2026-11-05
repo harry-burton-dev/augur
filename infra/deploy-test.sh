@@ -5,6 +5,7 @@
 #   infra/deploy-test.sh fresh                    # a new server on the images built from this checkout
 #   infra/deploy-test.sh upgrade <from-version>   # that release first, with data, then this checkout, then back
 #   infra/deploy-test.sh broken                   # a fresh install with the updater, broken on purpose: its check must see it
+#   THEN='<command>' infra/deploy-test.sh fresh   # a fresh install that allows sample data, with <command> run against it
 #
 # The release under test is PLATFORM_VERSION=$LOCAL_TAG: a published release's version, whose images
 # are pulled, or (default "ci") images built from this checkout first, which BUILD=1 does. Tailscale isn't started: the front door is published on
@@ -71,6 +72,9 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   echo "$key=$value"
 done > "$deploy/.env"
 
+# A command run against a fresh install (the run suite's dry run) seeds it first, so the install allows sample data.
+if [ -n "${THEN:-}" ]; then echo 'SEED_ALLOWED=true' >> "$deploy/.env"; fi
+
 # Broken mode runs the updater too (its profile), which reads the deploy folder at its path here and
 # signs in with its own secret, as on a server that turned it on (docs/upgrade.md, "The updater").
 if [ "$mode" = broken ]; then
@@ -88,7 +92,9 @@ EOF
 # the project, so both see the same data, as on a server.
 pc() {
   local files=(-f "$dir/compose.yml")
-  [ -e "$dir/compose.build.yml" ] && files+=(-f "$dir/compose.build.yml")
+  # Only a build from this checkout uses the build file: a release under test runs its published
+  # images, as a server does, including the apps that ship with it (ADR 0049).
+  if [ "${BUILD:-}" = 1 ] && [ "$dir" = "$deploy" ] && [ -e "$dir/compose.build.yml" ]; then files+=(-f "$dir/compose.build.yml"); fi
   docker compose -p "$project" "${files[@]}" -f "$work/compose.test.yml" --env-file "$dir/.env" "$@"
 }
 # Which release's deploy files and images to run: this checkout's, or the one it upgrades from.
@@ -100,25 +106,35 @@ use() {
 }
 services() { pc config --services | grep -vx tailscale; }
 
-# Each service's /healthz, as the compose network sees it, from a container that has Node.
-HEALTH='{"gateway":"http://gateway:8080","identity":"http://identity:8081","registry":"http://registry:8082","events":"http://events:8084","models":"http://models:8085","folio":"http://folio:8083","auspex":"http://auspex:8090","atlas":"http://atlas:8086"}'
+# Each service's /healthz, as the compose network sees it: every service whose healthcheck asks for one in
+# the compose file in use, so a release's own parts, and the apps it ships, are what's probed.
+health_urls() {
+  pc config --format json | jq -c '[.services | to_entries[]
+    | (.value.healthcheck.test // [] | tostring | capture("127\\.0\\.0\\.1:(?<port>[0-9]+)/healthz")) as $h
+    | {key, value: "http://\(.key):\($h.port)"}] | from_entries'
+}
+# Asked from a container that has Node.
 probe() {
+  local health
+  health=$(health_urls) || return 1
   pc exec -T gateway node -e '
     const urls = JSON.parse(process.argv[1]);
     Promise.all(Object.entries(urls).map(async ([name, url]) => {
       try { const r = await fetch(`${url}/healthz`); return [name, r.ok ? (await r.json()).version : `HTTP ${r.status}`]; }
       catch { return [name, "down"]; }
     })).then((rows) => console.log(JSON.stringify(Object.fromEntries(rows))));
-  ' "$HEALTH" 2>/dev/null
+  ' "$health" 2>/dev/null
 }
 
-# The front door serves the shell, sign-in and the pillar apps' frontends.
+# The front door serves the shell, sign-in and the frontends of the apps that ship with the release (the
+# registry's PILLAR_APPS in the compose file in use).
 serving() {
   curl -fsS -o /dev/null "http://localhost:$port/" &&
-    curl -fsS -o /dev/null "http://localhost:$port/sso/realms/platform/.well-known/openid-configuration" &&
-    curl -fsS -o /dev/null "http://localhost:$port/apps/folio/entry.js" &&
-    curl -fsS -o /dev/null "http://localhost:$port/apps/auspex/entry.js" &&
-    curl -fsS -o /dev/null "http://localhost:$port/apps/atlas/entry.js"
+    curl -fsS -o /dev/null "http://localhost:$port/sso/realms/platform/.well-known/openid-configuration" || return 1
+  local app
+  for app in $(pc config --format json | jq -r '.services.registry.environment.PILLAR_APPS // ""'); do
+    curl -fsS -o /dev/null "http://localhost:$port/apps/$app/entry.js" || return 1
+  done
 }
 
 # Waits until every service answers its /healthz and the front door serves; prints the versions they report.
@@ -140,15 +156,36 @@ wait_ready() {
 # Every AUGUR container runs the image it was meant to (the old ones aren't left running).
 on_version() {
   local want=$1 wrong
-  wrong=$(pc ps --format json | jq -rs --arg want ":$want" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
+  # A build from this checkout runs the shipped apps' images of a release, not ones built here.
+  local skip='[]'
+  if [ "${BUILD:-}" = 1 ] && [ "$want" = "$local_tag" ]; then skip=$(jq -c '[.apps | to_entries[] | .key, (.value.build // {} | keys[])]' "$here/../release/shipped-apps.json"); fi
+  wrong=$(pc ps --format json | jq -rs --arg want ":$want" --argjson skip "$skip" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Service as $s | $skip | index($s) | not) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
   if [ -n "$wrong" ]; then echo "Not on $want:"$'\n'"$wrong" >&2; return 1; fi
 }
 
 # A container that keeps restarting is a failure even when its neighbours look fine.
 no_restarts() {
   local bad
-  bad=$(pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]')
+  bad=$(pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and (.Service != "keycloak-config") and (.Service != "backup-tools") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]')
   if [ -n "$bad" ]; then echo "$bad" >&2; return 1; fi
+}
+
+# The Keycloak version the deploy files in use run. Moving Keycloak to a new minor migrates its database,
+# which can't be undone, so going back across one is a restore of Keycloak's database (docs/upgrade.md).
+# AUGUR's Keycloak image is tagged with AUGUR's version, so the version is Keycloak's own image label,
+# which AUGUR's image keeps; an image without it is told apart by its name.
+keycloak_image() { pc config --format json | jq -r '.services.keycloak.image'; }
+keycloak_version() {
+  local image
+  image=$(keycloak_image)
+  docker image inspect --format '{{index .Config.Labels "version"}}' "$image" 2>/dev/null | grep . || echo "$image"
+}
+save_keycloak() { pc exec -T postgres pg_dump -U platform -d keycloak -Fc > "$work/keycloak.dump"; }
+restore_keycloak() {
+  echo "Keycloak moved from $1 to $2: going back restores its database from before the upgrade." >&2
+  pc stop keycloak >&2
+  pc exec -T postgres psql -U platform -d platform -v ON_ERROR_STOP=1 -c 'drop database keycloak with (force)' -c 'create database keycloak owner keycloak' >&2
+  pc exec -T postgres pg_restore -U platform -d keycloak --no-owner --role=keycloak < "$work/keycloak.dump"
 }
 
 # What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's left out.
@@ -168,6 +205,22 @@ kept() {
 }
 
 up() { pc up -d --no-build --remove-orphans $(services) >&2; }
+
+# The first admin signs in in a real browser, and Home and each app that ships with AUGUR render with
+# the kit from KIT_URL (infra/deploy-browser-check.mjs, in Playwright's own image). BROWSER_CHECK=0 skips it;
+# BROWSER_CHECK_OUT keeps its screenshots.
+PLAYWRIGHT=1.56.1
+browser_check() {
+  # It changes the first admin's password, which THEN's command still has to change itself.
+  [ "${BROWSER_CHECK:-1}" = 1 ] && [ -z "${THEN:-}" ] || return 0
+  local env=$deploy/.env apps shots="${BROWSER_CHECK_OUT:-$work/browser-check}"
+  apps="home $( [ -e "$here/../release/shipped-apps.json" ] && jq -r '.apps | keys | join(" ")' "$here/../release/shipped-apps.json")"
+  mkdir -p "$shots"
+  docker run --rm --network host --ipc=host -e OUT=/out -v "$shots:/out" \
+    -v "$here/deploy-browser-check.mjs:/check/check.mjs:ro" "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" \
+    sh -c 'cd /check && npm install --silent --no-save --no-audit --no-fund "playwright@$0" >/dev/null && node check.mjs "$@"' \
+    "$PLAYWRIGHT" "http://localhost:$port" "$(sed -n 's/^PLATFORM_ADMIN_USER=//p' "$env")" "$(sed -n 's/^PLATFORM_ADMIN_PASSWORD=//p' "$env")" $apps >&2
+}
 
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
 # wanted: `pass`, or `fail <part>`, which must be named among the problems. Its exit code must agree.
@@ -197,7 +250,10 @@ traffic() {
 # calls to an app's API through the front door land under apps, not platform. Without a signed-in
 # person the gateway answers them itself (401), which is enough to see where they're counted.
 counted_apart() {
-  local before after app=folio calls=10
+  local before after app calls=10
+  # Any app the release ships: the first of the registry's PILLAR_APPS.
+  app=$(pc config --format json | jq -r '.services.registry.environment.PILLAR_APPS // "" | split(" ") | map(select(. != "")) | .[0] // empty')
+  [ -n "$app" ] || { echo "The release ships no app to count calls to." >&2; return 1; }
   before=$(traffic)
   for _ in $(seq "$calls"); do curl -s -o /dev/null "http://localhost:$port/api/$app/healthz" || true; done
   after=$(traffic)
@@ -210,7 +266,7 @@ counted_apart() {
 }
 
 if [ "${BUILD:-}" = 1 ]; then
-  pc build $(services | grep -vx -e postgres -e backup -e garage -e keycloak -e docker-proxy) >&2
+  pc build $(services | grep -vx -e postgres -e backup -e backup-tools -e garage -e docker-proxy) >&2
   # The build cache isn't needed again, and on a CI runner its space is.
   docker builder prune -af >/dev/null
 fi
@@ -218,10 +274,22 @@ fi
 case "$mode" in
   fresh)
     use "$local_tag"
+    # IMAGES_OUT gets every image the release's compose file runs, third-party ones too, for the
+    # vulnerability scan (Tailscale among them, though the test never starts it).
+    if [ -n "${IMAGES_OUT:-}" ]; then pc config --images | sort -u > "$IMAGES_OUT"; fi
     up
     wait_ready "Fresh install of this checkout"
     no_restarts
     on_version "$local_tag"
+    browser_check
+    # THEN runs once the install is ready, before it is removed, with its address and the first admin's
+    # sign-in (whose password must be changed at first sign-in). Its exit status is the test's.
+    if [ -n "${THEN:-}" ]; then
+      setting() { grep -m1 "^$1=" "$deploy/.env" | cut -d= -f2-; }
+      echo "Running against the fresh install: $THEN" >&2
+      AUGUR_URL="http://localhost:$port" AUGUR_ADMIN_USER=$(setting PLATFORM_ADMIN_USER) AUGUR_ADMIN_PASSWORD=$(setting PLATFORM_ADMIN_PASSWORD) bash -c "$THEN"
+      no_restarts
+    fi
     ;;
   upgrade)
     [ -n "$from" ] || { echo "upgrade needs the release to start from, such as 0.13.1" >&2; exit 2; }
@@ -231,9 +299,12 @@ case "$mode" in
     no_restarts
     on_version "$from"
     tables > "$work/before"
+    keycloak_from=$(keycloak_version)
+    save_keycloak
 
     use "$local_tag"
     up
+    keycloak_to=$(keycloak_version)
     new=$(wait_ready "Upgrade from augur@$from to this checkout")
     no_restarts
     tables > "$work/after"
@@ -244,6 +315,7 @@ case "$mode" in
 
     # A server can always go back to the release it came from, so its tables must still work for it.
     use "$from"
+    if [ "$keycloak_from" != "$keycloak_to" ]; then restore_keycloak "$keycloak_from" "$keycloak_to"; fi
     up
     wait_ready "Back to augur@$from" >/dev/null
     no_restarts

@@ -61,6 +61,8 @@ export interface RunningApp {
   until?: string;
   /** The manifest it was registered with, so the runner can go back to it. Absent for versions installed by an older runner. */
   manifest?: AppRelease['manifest'];
+  /** The repository whose release this is. Absent for versions installed by an older runner. */
+  repository?: string;
 }
 /** A pull request's preview, as the runner keeps it. */
 export interface RunningPreview {
@@ -329,12 +331,16 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
     } catch (err) {
       throw new StepFailed(`The service image isn’t signed by ${publisher}${dev ? ' on dev' : ''}: ${reason(err)}`);
     }
-    // A dev build runs on the server's real data: a backup first, to go back to.
-    if (dev) {
+    // A dev build runs on the server's real data, and the first release from another repository (an app
+    // moving into its own, ADR 0047) takes over the data the old one left: a backup first, to go back to.
+    const running = job.action === 'install' ? (await host.readState()).apps[job.app]?.active : undefined;
+    const handover = running !== undefined && running.repository !== release.signer.repository;
+    if (dev || handover) {
+      const why = dev ? 'a dev build needs' : `the move from ${running?.repository ?? 'where it came from'} to ${release.signer.repository} needs`;
       const file = await host.backup().catch((err) => {
-        throw new StepFailed(`The backup a dev build needs first couldn’t be taken: ${reason(err)}`);
+        throw new StepFailed(`The backup ${why} first couldn’t be taken: ${reason(err)}`);
       });
-      await report({ step: 'verify', state: 'done', message: `Signed on dev. Backup ${file} taken first.` });
+      await report({ step: 'verify', state: 'done', message: `${dev ? 'Signed on dev.' : `Signed in ${release.signer.repository}, where ${job.app} now comes from.`} Backup ${file} taken first.` });
     } else await report({ step: 'verify', state: 'done' });
     return { release: release as AppRelease & { service: { image: string } }, env };
   };
@@ -387,7 +393,7 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
       delete current.retiring;
     }
     const slot: Slot = current.active?.slot === 'blue' ? 'green' : 'blue';
-    const candidate: RunningApp = { slot, version: release.version, image: release.service.image, storage, manifest: release.manifest };
+    const candidate: RunningApp = { slot, version: release.version, image: release.service.image, storage, manifest: release.manifest, repository: release.signer.repository };
     const withCandidate: RunnerState = { apps: { ...state.apps, [app]: { ...current, retiring: candidate } } };
     // Written as retiring with no end, so a runner that restarts now still knows the container is there.
     await save(withCandidate, env);

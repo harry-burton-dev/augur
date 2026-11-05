@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders, GATEWAY_CALLER, packFrontend, type FloorPlace } from '@augur/service-kit';
 import { MemoryFrontendFiles, servedEntry } from './frontends.ts';
 import { buildApp } from './app.ts';
+import type { AppEntry } from './manifest.ts';
+import { MemoryAppStore } from './store.ts';
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0', handles: ['document.open'] };
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
@@ -153,6 +155,9 @@ describe('registry', () => {
     expect((await put({ ...library, sameOnEveryFloor: true })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, sameOnEveryFloor: true, maxUpload: 10 });
     expect((await put({ ...library, sameOnEveryFloor: 'yes' })).statusCode).toBe(400);
+    expect((await put({ ...library, followsAddress: true })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, followsAddress: true, maxUpload: 10 });
+    expect((await put({ ...library, followsAddress: 'yes' })).statusCode).toBe(400);
     expect((await put({ ...library, focus: true })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, focus: true, maxUpload: 10 });
     expect((await put({ ...library, focus: 'yes' })).statusCode).toBe(400);
@@ -321,9 +326,9 @@ describe('registry', () => {
     // Never the app itself, nor anyone else; never the platform's own parts.
     expect((await set('http://evil:1', service)).statusCode).toBe(403);
     expect((await set('http://evil:1', editor)).statusCode).toBe(403);
-    for (const bad of ['http://identity:8081', 'http://keycloak:8080', 'ftp://x:1', 'http://u:p@x:1', 'http://x:1/path', 'nonsense']) expect((await set(bad)).statusCode).toBe(400);
-    expect((await set('http://x:1', admin, 'home')).statusCode).toBe(409);
-    expect((await set('http://x:1', admin, 'nothing')).statusCode).toBe(404);
+    for (const bad of ['http://identity:8081', 'http://identity.:8081', 'http://platform-identity-1:8081', 'http://127.0.0.2:80', 'http://0.0.0.0:80', 'http://keycloak:8080', 'ftp://x:1', 'http://u:p@x:1', 'http://x:1/path', 'nonsense']) expect((await set(bad)).statusCode).toBe(400);
+    expect((await set('http://app-x:1', admin, 'home')).statusCode).toBe(409);
+    expect((await set('http://app-x:1', admin, 'nothing')).statusCode).toBe(404);
 
     // Registering a new version keeps it; null forgets it.
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
@@ -358,6 +363,10 @@ describe('registry', () => {
       expect(refused.json().message).toMatch(/loads from https:\/\/apps\.example\.org, which isn't a place apps are allowed/);
       expect((await register(app, { ...library, entry: '//apps.example.org/x.js' })).statusCode).toBe(400);
       expect((await register(app, { ...library, entry: 'javascript:alert(1)' })).statusCode).toBe(400);
+      // Browsers read a backslash as a slash, and drop tabs and newlines: each of these is another site.
+      for (const entry of ['/\\evil.example/x.js', '/\\/evil.example/x.js', '\\\\evil.example/x.js', '/\t/evil.example/x.js', '/\n/evil.example/x.js', 'entry.js']) {
+        expect((await register(app, { ...library, entry })).statusCode, entry).toBe(400);
+      }
     });
 
     it('takes an entry from an origin an admin allowed, and audits the choice', async () => {
@@ -492,6 +501,41 @@ describe('registry', () => {
       expect(removed.json().message).toBe('Library ships with AUGUR and can’t be removed. Turn it off instead.');
       expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } })).statusCode).toBe(409);
       expect(ids((await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json())).toContain('library');
+    });
+  });
+
+  describe('kinds of app (ADR 0032)', () => {
+    const manifestFor = (id: string, name: string, category?: string) => ({ ...library, id, name, route: `/${id}`, entry: `/apps/${id}/entry.js`, handles: [], ...(category ? { category } : {}) });
+
+    it('reports the kind in force: its own apps, shipped and feed apps’ claims, and no one else’s', async () => {
+      const store = new MemoryAppStore();
+      // Mandate came from the signed app feed, through the app runner.
+      const release = { schema: 'augur.app-release/v1' as const, id: 'mandate', version: '0.1.0', channel: 'stable', manifest: manifestFor('mandate', 'Mandate', 'pillar') as AppEntry, service: null, frontend: null, signer: { repository: 'r', workflow: 'w' } };
+      await store.requestAppJob({ id: 'j1', app: 'mandate', action: 'install', release, requestedBy: 'u-1' });
+      await store.progressAppJob('j1', { step: 'switch', state: 'done' }, { state: 'done' });
+      const app = await buildApp({ verifyService, floors, store, pillars: ['auspex', 'folio'] });
+      const reg = (id: string, name: string, category?: string) => app.inject({ method: 'PUT', url: `/v1/apps/${id}`, headers: as(`app-${id}`), payload: manifestFor(id, name, category) });
+      expect((await reg('auspex', 'Explorer', 'platform')).statusCode).toBe(201);
+      expect((await reg('folio', 'Artifacts', 'pillar')).statusCode).toBe(201);
+      expect((await reg('mandate', 'Mandate', 'pillar')).statusCode).toBe(201);
+      expect((await reg('rogue', 'Rogue', 'platform')).statusCode).toBe(201);
+      expect((await reg('odd', 'Odd', 'tool')).statusCode).toBe(400);
+
+      type Row = { id: string; category?: string; ships?: boolean; pillar?: boolean; categoryRefused?: { asked: string } };
+      const kinds = (rows: Row[]) => Object.fromEntries(rows.map((a) => [a.id, a.category]));
+      const manifest: Row[] = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
+      expect(kinds(manifest)).toEqual({ home: 'platform', admin: 'platform', upgrades: 'platform', auspex: 'platform', folio: 'pillar', mandate: 'pillar', rogue: undefined });
+      const mine: Row[] = (await app.inject({ method: 'GET', url: '/v1/me/apps?workspace=f', headers: on('f') })).json().apps;
+      expect(kinds(mine)).toEqual({ home: 'platform', admin: 'platform', upgrades: 'platform', auspex: 'platform', folio: 'pillar', mandate: 'pillar', rogue: undefined });
+      const catalogue: Row[] = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
+      expect(kinds(catalogue)).toEqual(kinds(manifest));
+      expect(catalogue.find((a) => a.id === 'rogue')?.categoryRefused).toMatchObject({ asked: 'platform' });
+      expect(catalogue.find((a) => a.id === 'mandate')?.categoryRefused).toBeUndefined();
+      // `ships` says what the deprecated `pillar` says, exactly where it says it.
+      for (const rows of [mine, catalogue]) {
+        expect(rows.filter((a) => a.ships).map((a) => a.id)).toEqual(['auspex', 'folio']);
+        expect(rows.filter((a) => a.pillar).map((a) => a.id)).toEqual(['auspex', 'folio']);
+      }
     });
   });
 

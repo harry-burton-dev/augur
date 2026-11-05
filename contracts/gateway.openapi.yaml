@@ -1,55 +1,211 @@
+# Generated from platform/services/gateway: its routes' TypeBox schemas and src/contract.ts (ADR 0055).
+# Change those, then run pnpm contracts. CI fails when this file is out of step.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.4.0
-  description: >
-    The gateway's own API, beside the services it forwards to. Reached at
-    /api/gateway/v1 by a signed-in caller. Everything else under /api/<service>
-    is forwarded to that service with the caller in x-user-* headers and in
-    x-augur-caller, a token the gateway signs (EdDSA, one minute) for that
-    service alone (its `aud` is the service's name), and without the caller's
-    Authorization header. Services that check callers believe only the signed
-    one. Every path but /healthz and /caller-keys needs a signed-in caller,
-    however it is spelt. x-user-signed-in-at (and the token's `signedInAt`)
-    carries when the caller last entered their password (the token's
-    auth_time, ISO 8601), for a service that wants a fresh sign-in for
-    something drastic; the shell's /auth/again?return=<path> asks for the
-    password and comes back.
-# Paths below are relative to the server: the major of info.version is the path prefix.
-# A breaking change bumps the major and is served under /v2 beside /v1.
-servers:
-  - url: /v1
+  version: 1.7.0
+  description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz and /caller-keys needs a signed-in caller, however it is spelt. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
+components:
+  schemas:
+    Refusal:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
+        - error
+        - message
+      properties:
+        type:
+          type: string
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
+          type: string
+          description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
+    ComponentStatus:
+      type: object
+      required:
+        - name
+        - kind
+        - state
+      properties:
+        name:
+          type: string
+          description: The name it is reached at, e.g. "registry" or "sign-in"
+        kind:
+          enum:
+            - gateway
+            - service
+            - app
+            - sign-in
+          description: A platform service, or an app's own service
+        state:
+          enum:
+            - up
+            - slow
+            - down
+            - checking
+          description: '"slow" answered in more than 2 seconds; "checking" has not been checked yet'
+        version:
+          type: string
+          description: The release its /healthz reports
+        api:
+          type: string
+          description: The API major it serves, e.g. "v1"
+        latencyMs:
+          type: integer
+          description: How long the last answer took
+        checkedAt:
+          type: string
+          format: date-time
+        seenAt:
+          type: string
+          format: date-time
+          description: When it last answered
+        problem:
+          type: string
+          description: Why it is down, in words an admin can act on
+    BackupRun:
+      type: object
+      required:
+        - at
+        - ok
+      properties:
+        at:
+          type: string
+          format: date-time
+        ok:
+          type: boolean
+        file:
+          type: string
+        bytes:
+          type: integer
+        problem:
+          type: string
+    PublicAccess:
+      type: object
+      required:
+        - open
+      properties:
+        open:
+          type: boolean
+        until:
+          type: string
+          format: date-time
+          description: When it closes by itself
+      description: Whether AUGUR is open to the internet through Tailscale Funnel (infra/deploy/public.sh). Absent when the gateway isn't told.
+    OffsiteCopy:
+      type: object
+      required:
+        - at
+        - ok
+      properties:
+        at:
+          type: string
+          format: date-time
+        ok:
+          type: boolean
+        snapshot:
+          type: string
+          description: The database copy's restic snapshot, its first 8 characters
+        keepDays:
+          type: integer
+          description: How many days of copies the bucket keeps
+        problem:
+          type: string
+      description: The last copy of the night's backup off the server, with restic (ADR 0060)
+    BackupStatus:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          enum:
+            - ok
+            - attention
+          description: '"attention" when backups cannot be relied on right now'
+        problem:
+          type: string
+          description: Why, in words an admin can act on
+        lastBackup:
+          $ref: "#/components/schemas/BackupRun"
+        offsite:
+          $ref: "#/components/schemas/OffsiteCopy"
+        lastRestoreTest:
+          allOf:
+            - $ref: "#/components/schemas/BackupRun"
+            - type: object
+              properties:
+                from:
+                  enum:
+                    - local
+                    - offsite
+                  description: Restored from the backup on this server, or from the off-server copy
+                seconds:
+                  type: integer
+                people:
+                  type: integer
+                  description: People in the restored sign-in realm
+                apps:
+                  type: integer
+                auditEntries:
+                  type: integer
+    Seeding:
+      type: object
+      required:
+        - allowed
+      properties:
+        allowed:
+          type: boolean
+        why:
+          type: string
+          description: Why not, when it is off
+        whoCanChange:
+          type: string
+          description: Who can turn it on, and how
+      description: Whether `pnpm seed` may fill this deployment with synthetic sample data (SEED_ALLOWED, ADR 0056)
+    BrowserTelemetry:
+      type: object
+      required:
+        - on
+      properties:
+        on:
+          type: boolean
+          description: Whether the shell should send browser errors and traces here
+        why:
+          type: string
+          description: Why it is off, and who can change that
+      description: Whether this deployment collects browser telemetry (ADR 0059)
 paths:
-  /status:
-    get:
-      summary: Whether every part of the platform is answering (admins only)
-      description: >
-        The gateway checks every service's /healthz and the sign-in service's
-        signing keys every 30 seconds and keeps the last answer, so this never
-        waits on a slow service. A component that failed its last check, or has
-        not answered for 2 minutes, is down. `backups` is present when the
-        gateway is told where the backup container writes (BACKUP_DIR).
-      responses:
-        "200":
-          description: Every component, the gateway first
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [components]
-                properties:
-                  components: { type: array, items: { $ref: "#/components/schemas/ComponentStatus" } }
-                  backups: { $ref: "#/components/schemas/BackupStatus" }
-                  publicAccess: { $ref: "#/components/schemas/PublicAccess" }
-        "401": { description: No signed-in caller }
-        "403": { description: Not an admin }
   /caller-keys:
     get:
       summary: The public key signed callers are checked with
-      description: >
-        A JSON Web Key Set with the gateway's Ed25519 key. No sign-in is needed.
-        The key is new each time the gateway starts unless CALLER_SIGNING_KEY is
-        set, so fetch it again when a token names a key id you don't have.
+      description: A JSON Web Key Set with the gateway's Ed25519 key. No sign-in is needed. The key is new each time the gateway starts unless CALLER_SIGNING_KEY is set, so fetch it again when a token names a key id you don't have.
       responses:
         "200":
           description: The keys
@@ -57,64 +213,231 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [keys]
+                required:
+                  - keys
                 properties:
                   keys:
                     type: array
                     items:
                       type: object
-                      required: [kty, crv, x, kid, alg]
+                      required:
+                        - kty
+                        - crv
+                        - x
+                        - kid
+                        - alg
                       properties:
-                        kty: { const: OKP }
-                        crv: { const: Ed25519 }
-                        x: { type: string }
-                        kid: { type: string }
-                        alg: { const: EdDSA }
-                        use: { const: sig }
-components:
-  schemas:
-    ComponentStatus:
-      type: object
-      required: [name, kind, state]
-      properties:
-        name: { type: string, description: 'The name it is reached at, e.g. "registry" or "sign-in"' }
-        kind: { enum: [gateway, service, app, sign-in], description: A platform service, or an app's own service }
-        state: { enum: [up, slow, down, checking], description: '"slow" answered in more than 2 seconds; "checking" has not been checked yet' }
-        version: { type: string, description: The release its /healthz reports }
-        api: { type: string, description: 'The API major it serves, e.g. "v1"' }
-        latencyMs: { type: integer, description: How long the last answer took }
-        checkedAt: { type: string, format: date-time }
-        seenAt: { type: string, format: date-time, description: When it last answered }
-        problem: { type: string, description: Why it is down, in words an admin can act on }
-    BackupRun:
-      type: object
-      required: [at, ok]
-      properties:
-        at: { type: string, format: date-time }
-        ok: { type: boolean }
-        file: { type: string }
-        bytes: { type: integer }
-        problem: { type: string }
-    PublicAccess:
-      type: object
-      description: Whether AUGUR is open to the internet through Tailscale Funnel (infra/deploy/public.sh). Absent when the gateway isn't told.
-      required: [open]
-      properties:
-        open: { type: boolean }
-        until: { type: string, format: date-time, description: When it closes by itself }
-    BackupStatus:
-      type: object
-      required: [state]
-      properties:
-        state: { enum: [ok, attention], description: '"attention" when backups cannot be relied on right now' }
-        problem: { type: string, description: Why, in words an admin can act on }
-        lastBackup: { $ref: "#/components/schemas/BackupRun" }
-        lastRestoreTest:
-          allOf:
-            - $ref: "#/components/schemas/BackupRun"
-            - type: object
+                        kty:
+                          type: string
+                          enum:
+                            - OKP
+                        crv:
+                          type: string
+                          enum:
+                            - Ed25519
+                        x:
+                          type: string
+                        kid:
+                          type: string
+                        alg:
+                          type: string
+                          enum:
+                            - EdDSA
+                        use:
+                          type: string
+                          enum:
+                            - sig
+                description: The keys
+  /status:
+    get:
+      summary: Whether every part of AUGUR is answering (admins only)
+      description: The gateway checks every service's /healthz and the sign-in service's signing keys every 30 seconds and keeps the last answer, so this never waits on a slow service. A component that failed its last check, or has not answered for 2 minutes, is down. `backups` is present when the gateway is told where the backup container writes (BACKUP_DIR). `seeding` says whether sample data may be added here (SEED_ALLOWED).
+      responses:
+        "200":
+          description: Every component, the gateway first
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - components
+                  - seeding
+                properties:
+                  components:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ComponentStatus"
+                  backups:
+                    $ref: "#/components/schemas/BackupStatus"
+                  publicAccess:
+                    $ref: "#/components/schemas/PublicAccess"
+                  seeding:
+                    $ref: "#/components/schemas/Seeding"
+                description: Every component, the gateway first
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not on the floor X-Workspace-Id names
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Sign-in or floors can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /telemetry:
+    get:
+      summary: Whether this deployment collects browser errors and traces
+      description: "The shell asks once after sign-in and starts Faro only when on is true: when the deployment names a collector (OTEL_EXPORTER_OTLP_ENDPOINT). When off, why says so."
+      responses:
+        "200":
+          description: Whether this deployment collects browser telemetry (ADR 0059)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrowserTelemetry"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /telemetry/v1/logs:
+    post:
+      summary: Browser logs from the shell, passed on to the deployment's collector
+      description: OTLP/HTTP JSON logs, as Grafana Faro's OTLP transport sends them (ADR 0059). The gateway stamps each resource as service.name=augur-browser with the deployment's own attributes, takes out anything that could name a person and query strings from URLs, and forwards it. At most 256 KB a send and 60 sends a minute a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
               properties:
-                seconds: { type: integer }
-                people: { type: integer, description: People in the restored sign-in realm }
-                apps: { type: integer }
-                auditEntries: { type: integer }
+                resourceLogs:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+                resourceSpans:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+              additionalProperties: true
+              description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+        description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+      responses:
+        "200":
+          description: Passed on
+          content:
+            application/json:
+              schema:
+                description: Passed on
+                type: object
+                additionalProperties: true
+        "400":
+          description: Not an OTLP body of this signal
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Browser telemetry is off here, with why (error telemetry_off)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "429":
+          description: More than 60 sends this minute
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The collector didn't take it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /telemetry/v1/traces:
+    post:
+      summary: Browser traces from the shell, passed on to the deployment's collector
+      description: OTLP/HTTP JSON traces, as Grafana Faro's OTLP transport sends them (ADR 0059). The gateway stamps each resource as service.name=augur-browser with the deployment's own attributes, takes out anything that could name a person and query strings from URLs, and forwards it. At most 256 KB a send and 60 sends a minute a person.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                resourceLogs:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+                resourceSpans:
+                  type: array
+                  items:
+                    type: object
+                    properties: {}
+                    additionalProperties: true
+              additionalProperties: true
+              description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+        description: "OTLP/HTTP JSON: resourceLogs for logs, resourceSpans for traces"
+      responses:
+        "200":
+          description: Passed on
+          content:
+            application/json:
+              schema:
+                description: Passed on
+                type: object
+                additionalProperties: true
+        "400":
+          description: Not an OTLP body of this signal
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Browser telemetry is off here, with why (error telemetry_off)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "429":
+          description: More than 60 sends this minute
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The collector didn't take it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+servers:
+  - url: /v1

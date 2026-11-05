@@ -22,11 +22,11 @@ export const stateOf = (c: Pick<ComponentStatus, 'state'>): { status: StatusName
 export const headline = (components: ComponentStatus[], backups?: BackupStatus): { heading: string; summary: string } => {
   const down = components.filter((c) => c.state === 'down').length;
   const slow = components.filter((c) => c.state === 'slow').length;
-  if (!components.length) return { heading: 'Status', summary: 'Whether every part of the platform is answering.' };
+  if (!components.length) return { heading: 'Status', summary: 'Whether every part of AUGUR is answering.' };
   if (down) return { heading: `${down === 1 ? '1 part is' : `${down} parts are`} down`, summary: 'People may not be able to use what depends on it. Open a row to see what to check.' };
   if (slow) return { heading: `${slow === 1 ? '1 part is' : `${slow} parts are`} slow`, summary: 'Everything is answering, but not all of it quickly.' };
   if (backups?.state === 'attention') return { heading: 'Backups need a look', summary: backups.problem ?? 'Everything is running, but backups can’t be relied on right now.' };
-  return { heading: 'Everything is running', summary: 'Every part of the platform answered its last check.' };
+  return { heading: 'Everything is running', summary: 'Every part of AUGUR answered its last check.' };
 };
 
 /** What to try for a part that's down, by kind. */
@@ -34,7 +34,7 @@ const advice = (c: ComponentStatus) =>
   c.kind === 'sign-in'
     ? 'Nobody can sign in while this is down. Check the sign-in service’s container and its database.'
     : c.kind === 'app'
-      ? `People can’t use ${c.name} while its service is down; the rest of the platform is unaffected. Check its container.`
+      ? `People can’t use ${c.name} while its service is down; the rest of AUGUR is unaffected. Check its container.`
       : `Check the ${c.name} container and its logs. Other parts that depend on it may fail too.`;
 
 const columns: TableColumn[] = [
@@ -93,7 +93,7 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
     const s = stateOf(c);
     return { id: c.name, name: c.name, kind: kindWords[c.kind], version: c.version ?? '', state: s.label, stateStatus: s.status, seenAt: c.seenAt ?? '' };
   });
-  const { heading, summary } = error ? { heading: 'Status', summary: 'Whether every part of the platform is answering.' } : headline(components, backups);
+  const { heading, summary } = error ? { heading: 'Status', summary: 'Whether every part of AUGUR is answering.' } : headline(components, backups);
   const c = components.find((x) => x.name === open);
   const out = updates?.available?.version;
 
@@ -123,8 +123,21 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
             items={[
               { label: 'Last backup', value: backups.lastBackup ? (backups.lastBackup.ok ? when(backups.lastBackup.at) : 'Failed') : 'Never' },
               ...(backups.lastBackup?.ok && backups.lastBackup.bytes !== undefined ? [{ label: 'Size', value: size(backups.lastBackup.bytes) }] : []),
+              {
+                label: 'Copy off the server',
+                value: backups.offsite ? (backups.offsite.ok ? `${when(backups.offsite.at)}, ${backups.offsite.keepDays ?? 30} days kept` : 'Failed') : 'Not set up',
+              },
               { label: 'Last restore test', value: backups.lastRestoreTest ? when(backups.lastRestoreTest.at) : 'Never' },
-              ...(backups.lastRestoreTest ? [{ label: 'Result', value: backups.lastRestoreTest.ok ? `Restored, ${backups.lastRestoreTest.people ?? 0} people` : 'Failed' }] : []),
+              ...(backups.lastRestoreTest
+                ? [
+                    {
+                      label: 'Result',
+                      value: backups.lastRestoreTest.ok
+                        ? `Restored ${backups.lastRestoreTest.from === 'offsite' ? 'from the copy off the server' : 'from this server'}, ${backups.lastRestoreTest.people ?? 0} people`
+                        : 'Failed',
+                    },
+                  ]
+                : []),
             ]}
           />
           {backups.problem ? <p className="admin-flat">{backups.problem}</p> : null}

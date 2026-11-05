@@ -64,6 +64,40 @@ export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...arg
       return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
     }
     if (path.startsWith('/api/events/v1/notifications/')) return new Response(null, { status: 204 });
+    if (path === '/api/events/v1/domain-events/stream') return devEventStream(url.searchParams.get('topics') ?? '', new Headers(init?.headers).get('x-workspace-id'), init?.signal);
     return real(input, init);
   };
+};
+
+/** The window event `pnpm dev:app` turns into a domain event on its stand-in stream. */
+export const DEV_EVENT = 'augur:dev-domain-event';
+
+/**
+ * The stand-in for the events service's browser stream. Nothing is on it until a domain event is
+ * sent from the page, as from the console, to try an app's `refreshOn`:
+ * `dispatchEvent(new CustomEvent('augur:dev-domain-event', { detail: { topic: 'folio.document.published', payload: { document: 'd1' } } }))`.
+ * Like the real one it carries only the topics asked for, on the floor asked for (the current one unless `workspace` names another).
+ */
+const devEventStream = (topics: string, floor: string | null, signal?: AbortSignal | null) => {
+  const wanted = topics.split(',').filter(Boolean);
+  const matches = (topic: string) => wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
+  let seq = 0;
+  let hear: ((e: Event) => void) | undefined;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      hear = (e: Event) => {
+        const { topic, payload = {}, workspace = floor } = (e as CustomEvent<{ topic: string; payload?: unknown; workspace?: string }>).detail ?? {};
+        if (!topic || !matches(topic) || workspace !== floor) return;
+        const event = { seq: String(++seq), topic, id: `dev-${seq}`, publisher: topic.split('.')[0], at: new Date().toISOString(), workspace: { id: floor, path: [floor] }, payload };
+        controller.enqueue(new TextEncoder().encode(`event: domain-event\ndata: ${JSON.stringify(event)}\n\n`));
+      };
+      window.addEventListener(DEV_EVENT, hear);
+      controller.enqueue(new TextEncoder().encode(': connected\n\n'));
+      signal?.addEventListener('abort', () => {
+        window.removeEventListener(DEV_EVENT, hear!);
+        controller.error(new DOMException('Aborted', 'AbortError'));
+      });
+    },
+  });
+  return new Response(body, { headers: { 'content-type': 'text/event-stream' } });
 };

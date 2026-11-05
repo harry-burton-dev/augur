@@ -8,8 +8,8 @@ import { dirname, join, relative } from 'node:path';
 import { parse, stringify } from 'yaml';
 
 const root = new URL('..', import.meta.url).pathname;
-const REPO = 'harry-burton-dev/im-platform';
-const SOURCE = `https://github.com/${REPO}/tree/dev`;
+const REPO = 'harry-burton-dev/augur';
+const SOURCE = `https://github.com/${REPO}/tree/main`;
 const OWNER = 'group:default/augur-core';
 const HEADER = '# Written by `pnpm catalog` from the repository (docs/catalog.md). Don\'t edit it by hand.\n';
 
@@ -233,7 +233,7 @@ files['catalog/all.yaml'] = doc([
   {
     apiVersion: 'backstage.io/v1alpha1',
     kind: 'Location',
-    metadata: { name: 'augur', description: 'Everything in im-platform: register this one file in Backstage' },
+    metadata: { name: 'augur', description: 'Everything in the augur repository: register this one file in Backstage' },
     spec: { targets: Object.keys(files).map((p) => `./${relative('catalog', p)}`) },
   },
 ]);

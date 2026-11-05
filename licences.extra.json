@@ -1,0 +1,15 @@
+{
+  "images": [
+    { "image": "quay.io/keycloak/keycloak", "licence": "Apache-2.0", "homepage": "https://www.keycloak.org", "note": "The base of AUGUR's own Keycloak image (infra/service.Dockerfile, target keycloak)." },
+    { "image": "postgres", "licence": "PostgreSQL", "homepage": "https://www.postgresql.org", "note": "" },
+    { "image": "pgvector/pgvector", "licence": "PostgreSQL", "homepage": "https://github.com/pgvector/pgvector", "note": "" },
+    { "image": "dxflrs/garage", "licence": "AGPL-3.0", "homepage": "https://garagehq.deuxfleurs.fr", "note": "Run unmodified as its own program; AUGUR talks to it over its S3 API" },
+    { "image": "grafana/otel-lgtm", "licence": "Apache-2.0 and AGPL-3.0 (Grafana, Loki, Tempo)", "homepage": "https://github.com/grafana/docker-otel-lgtm", "note": "Run unmodified as its own program" },
+    { "image": "restic/restic", "licence": "BSD-2-Clause", "homepage": "https://restic.net", "note": "Only its binary, copied into the backup container, which runs it as its own program (ADR 0060)" },
+    { "image": "tailscale/tailscale", "licence": "BSD-3-Clause", "homepage": "https://tailscale.com", "note": "" },
+    { "image": "tecnativa/docker-socket-proxy", "licence": "Apache-2.0", "homepage": "https://github.com/Tecnativa/docker-socket-proxy", "note": "" },
+    { "image": "nginxinc/nginx-unprivileged", "licence": "BSD-2-Clause", "homepage": "https://github.com/nginxinc/docker-nginx-unprivileged", "note": "Base of AUGUR's web image" },
+    { "image": "node", "licence": "MIT", "homepage": "https://github.com/nodejs/docker-node", "note": "Base of AUGUR's service images, with Alpine's packages (cosign and the Docker CLI in the registry and updater images, Apache-2.0)" }
+  ],
+  "data": []
+}

@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { reservedIdProblem } from '@augur/service-kit';
 
 /** What the database work needs from a connection: one statement at a time. */
 export interface Sql {
@@ -9,6 +10,8 @@ export interface Sql {
 export const roleFor = (app: string) => `app_${app.replace(/-/g, '_')}`;
 /** The schema an app owns: "folio" → folio, "team-notes" → team_notes. */
 export const schemaFor = (app: string) => app.replace(/-/g, '_');
+/** Where the service kit keeps an app's jobs (ADR 0014): "folio" → folio_jobs. Matches the kit's jobsSchemaFor. */
+export const jobsSchemaFor = (app: string) => `${schemaFor(app)}_jobs`;
 
 /**
  * Once per database, by an admin login: the extensions apps may use (pgvector, for
@@ -31,6 +34,9 @@ export async function prepareDatabase(sql: Sql): Promise<void> {
  * The login can't read any other schema: the platform's belong to the admin login.
  */
 export async function provisionDatabase(sql: Sql, { app, password }: { app: string; password: string }): Promise<void> {
+  // A schema named for a part of AUGUR (identity, registry, public…) would sit among the platform's own.
+  const reserved = reservedIdProblem(app);
+  if (reserved) throw new Error(`No schema was made for it: ${reserved}`);
   const role = pg.escapeIdentifier(roleFor(app));
   const schema = pg.escapeIdentifier(schemaFor(app));
   const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
@@ -40,13 +46,20 @@ export async function provisionDatabase(sql: Sql, { app, password }: { app: stri
   await sql.query(`grant connect on database ${pg.escapeIdentifier(rows[0].db)} to ${role}`);
   await sql.query(`create schema if not exists ${schema} authorization ${role}`);
   await sql.query(`alter schema ${schema} owner to ${role}`);
+  // Its jobs' runs and schedules, kept apart from its own tables (the kit's jobs on DBOS).
+  const jobs = pg.escapeIdentifier(jobsSchemaFor(app));
+  await sql.query(`create schema if not exists ${jobs} authorization ${role}`);
+  await sql.query(`alter schema ${jobs} owner to ${role}`);
   await sql.query(`alter role ${role} set search_path = ${schema}, public`);
 }
 
 /** Takes a preview's login and schema away, with everything in the schema. Nothing happens when there's none. */
 export async function dropDatabase(sql: Sql, app: string): Promise<void> {
+  const reserved = reservedIdProblem(app);
+  if (reserved) throw new Error(`Nothing was dropped: ${reserved}`);
   const role = pg.escapeIdentifier(roleFor(app));
   await sql.query(`drop schema if exists ${pg.escapeIdentifier(schemaFor(app))} cascade`);
+  await sql.query(`drop schema if exists ${pg.escapeIdentifier(jobsSchemaFor(app))} cascade`);
   const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
   if (!exists.rowCount) return;
   await sql.query(`drop owned by ${role}`);

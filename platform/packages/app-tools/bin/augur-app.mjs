@@ -6,7 +6,8 @@
 //   augur-app pending                  prints [{ id, version, channel }] when the manifest's version has no release yet, else []
 //   augur-app dev <run>                gives this checkout the dev build version <next patch>-dev.<run> and prints it
 //   augur-app preview <pr> <run>       gives this checkout the preview version <x.y.z>-pr.<pr>.<run> and prints it
-//   augur-app bundle <channel>         builds, pushes and signs the service image and the built frontend, and prints
+//   augur-app bundle <channel>         builds, pushes and signs the service image (with its SBOM and provenance attested)
+//                                      and the built frontend, and prints
 //                                      where each landed, by digest, as JSON (needs docker buildx, oras and cosign)
 //   augur-app describe [bundle.json]   prints the app-release.json it would attach
 //   augur-app publish <bundle.json>    makes the GitHub release app/<id>@<version> with app-release.json attached
@@ -50,6 +51,23 @@ const notesFor = (version) =>
     .filter(Boolean)
     .join('\n\n');
 
+/**
+ * What is inside the service image and how it was built, signed beside its signature: BuildKit writes a
+ * Syft SBOM (SPDX) and SLSA provenance into the image (--sbom, --provenance), and cosign attests both
+ * keylessly as this workflow, as AUGUR's own release does (PER-270). Provenance is SLSA v1
+ * (buildDefinition) from current BuildKit and v0.2 (builder) from older ones; the type follows it.
+ */
+const attest = (ref, out) => {
+  for (const [kind, field, type] of [['sbom', '.SBOM.SPDX', 'spdxjson'], ['provenance', '.Provenance.SLSA', 'slsaprovenance']]) {
+    const value = run('docker', ['buildx', 'imagetools', 'inspect', ref, '--format', `{{ json ${field} }}`]).trim();
+    if (!value || value === 'null') throw new Error(`${ref} has no ${kind}: build it with --sbom=true --provenance=true.`);
+    const file = join(out, `${kind}.json`);
+    writeFileSync(file, value);
+    const as = kind === 'provenance' && 'buildDefinition' in JSON.parse(value) ? 'slsaprovenance1' : type;
+    run('cosign', ['attest', '--yes', '--type', as, '--predicate', file, ref], { stdio: ['ignore', 2, 2] });
+  }
+};
+
 const bundle = async (channel) => {
   const { id, version } = manifest();
   const repo = (process.env.IMAGE_REPO ?? `ghcr.io/${process.env.GITHUB_REPOSITORY ?? ''}`).toLowerCase();
@@ -61,6 +79,7 @@ const bundle = async (channel) => {
     run('docker', ['buildx', 'build', '--push', '--provenance=true', '--sbom=true', '--label', `org.opencontainers.image.version=${version}`, '--label', `org.opencontainers.image.title=${id}`, '-t', `${repo}/${id}:${version}`, '-t', `${repo}/${id}:${channel}`, '--metadata-file', join(out, 'service.json'), '.'], { stdio: ['ignore', 2, 2] });
     const digest = JSON.parse(readFileSync(join(out, 'service.json'), 'utf8'))['containerimage.digest'];
     run('cosign', ['sign', '--yes', `${repo}/${id}@${digest}`], { stdio: ['ignore', 2, 2] });
+    attest(`${repo}/${id}@${digest}`, out);
     service = `${repo}/${id}@${digest}`;
   }
   let frontend = null;
