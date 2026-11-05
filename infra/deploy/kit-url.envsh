@@ -35,7 +35,15 @@ case "$KIT_URL" in https://*) KIT_ORIGIN=$(printf '%s' "$KIT_URL" | sed -E 's#^(
 PRODUCT_NAME=$(printf '%s' "${ORG_PRODUCT_NAME:-AUGUR}" | tr -d '\n\r' | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&#39;/g" -e 's/[#&\\]/\\&/g')
 [ -n "$PRODUCT_NAME" ] || PRODUCT_NAME=AUGUR
 
-sed -e "s#@KIT_URL@#${KIT_URL}#g" -e "s#@PRODUCT_NAME@#${PRODUCT_NAME}#g" "$template" > "$page"
+# How focus is drawn (FOCUS_DEPTH; PDR-010, ADR 0068), for the page's augur-depth meta: veil, lens or scrim,
+# or empty to leave it to each app. Anything else is ignored, and said.
+FOCUS_DEPTH="${FOCUS_DEPTH:-}"
+case "$FOCUS_DEPTH" in
+  '' | veil | lens | scrim) ;;
+  *) echo "kit-url: FOCUS_DEPTH ($FOCUS_DEPTH) must be veil, lens or scrim. Leaving it to each app." >&2; FOCUS_DEPTH="" ;;
+esac
+
+sed -e "s#@KIT_URL@#${KIT_URL}#g" -e "s#@PRODUCT_NAME@#${PRODUCT_NAME}#g" -e "s#@FOCUS_DEPTH@#${FOCUS_DEPTH}#g" "$template" > "$page"
 
 # The hash of each inline script in the page (the import map, and the note shown if the kit can't be
 # loaded), as the CSP takes it: base64 of the sha256 of its exact text. busybox has sha256sum but no
