@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { appFeed, AppUpdateChecker, newestOn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
-import type { AppRelease } from './store.ts';
+import { MemoryAppStore, type AppRelease } from './store.ts';
 import { UpdateChecker } from './updates.ts';
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
@@ -94,14 +94,14 @@ describe('installs and updates in Admin → Apps', () => {
     headers.authorization === 'Bearer platform-updater' ? { kind: 'platform' as const, name: 'updater' } : undefined;
   const runner = { authorization: 'Bearer platform-updater' };
 
-  const setup = async (releases: AppFeedRelease[], ring?: 'preview' | 'production') => {
+  const setup = async (releases: AppFeedRelease[], ring?: 'preview' | 'production', more: { store?: MemoryAppStore; pillars?: string[] } = {}) => {
     let feed = releases;
     // Each check a minute after the last, so none is answered from the one before.
     let minutes = 0;
     const checker = new AppUpdateChecker(async () => feed, () => new Date(Date.UTC(2026, 9, 27, 12, minutes++)));
     const entries: { action: string; detail?: Record<string, unknown> }[] = [];
     const updates = new UpdateChecker({ running: { version: '0.9.0', channel: 'beta' }, ring });
-    const server = await buildApp({ verifyService, appUpdates: checker, updates, allowPrPreviews: ring !== 'production', audit: async (e) => void entries.push(e) });
+    const server = await buildApp({ verifyService, appUpdates: checker, updates, allowPrPreviews: ring !== 'production', audit: async (e) => void entries.push(e), ...more });
     await checker.check();
     /** Plays the runner: takes the next job and says it went as `outcome`. */
     const runNext = async (outcome: 'done' | 'failed' = 'done') => {
@@ -130,6 +130,19 @@ describe('installs and updates in Admin → Apps', () => {
     const view = await t.view();
     expect(view.available).toEqual([]);
     expect(view.installed).toEqual([expect.objectContaining({ app: 'notes', version: '1.0.0', channel: 'stable', policy: 'automatic' })]);
+  });
+
+  it('stops listing an app the runner installed once it ships with AUGUR', async () => {
+    const store = new MemoryAppStore();
+    const before = await setup(feedOf(release('1.0.0')), undefined, { store });
+    await before.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
+    await before.runNext();
+    expect((await before.view()).installed.map((i: { app: string }) => i.app)).toEqual(['notes']);
+    // The next release ships it: it's upgraded with AUGUR from now on, so Admin → Apps neither lists nor offers it.
+    const after = await setup(feedOf(release('1.0.0')), undefined, { store, pillars: ['notes'] });
+    const view = await after.view();
+    expect(view.installed).toEqual([]);
+    expect(view.available).toEqual([]);
   });
 
   it('installs a newer version by itself when it asks for nothing new, once', async () => {

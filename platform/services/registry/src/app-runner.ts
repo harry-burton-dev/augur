@@ -175,7 +175,10 @@ export const appRunnerRoutes =
 
     /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
     const appsView = async () => {
-      const [installed, follows, jobs, running, developers] = await Promise.all([store.installedApps(), store.follows(), store.appJobs(), store.runningPreviews(), store.developers()]);
+      const [all, follows, jobs, running, developers] = await Promise.all([store.installedApps(), store.follows(), store.appJobs(), store.runningPreviews(), store.developers()]);
+      // An app the runner installed before it shipped with AUGUR (as Mandate did) is AUGUR's now: the
+      // updater stops the runner's copy, and the app is upgraded with AUGUR, so it isn't listed here.
+      const installed = all.filter((i) => !pillars.includes(i.app));
       const { checkedAt, problem, releases } = updates.result;
       const installedIds = new Set(installed.map((i) => i.app));
       const latestJob = (id: string) => jobs.find((j) => j.app === id && j.pr === undefined);
