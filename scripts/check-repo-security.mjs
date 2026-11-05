@@ -7,7 +7,7 @@
 //     into the shell: pass it through `env:` instead;
 //   - CI tests on the Postgres major that servers run (PER-219), so a feature of a newer major can't
 //     pass CI and fail on a server.
-// The rulesets on main and release/** are GitHub settings, not files: docs/ci-cd.md lists them.
+// The rulesets on main and release/** are GitHub settings, not files: CI/CD in the AUGUR handbook, 03 Architecture/Engineering lists them.
 //
 // node scripts/check-repo-security.mjs
 import { readdirSync, readFileSync } from 'node:fs';

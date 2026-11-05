@@ -14,7 +14,7 @@ service that has a contract in `contracts/`. For each `contracts/<service>.opena
 Nothing per service is written by hand. `scripts/generate.mjs` reads every `contracts/*.openapi.yaml` and
 writes `src/generated/` (not committed) before each build, typecheck and test, so the package is always the
 contracts it was built from. The contracts come from the services' route schemas
-([ADR 0055](../../../docs/decisions/0055-schema-first-apis-with-typebox.md), [api-contracts.md](../../../docs/api-contracts.md)):
+(ADR 0055, [api-contracts.md](../../../docs/api-contracts.md)):
 to change a client, change the service's API, then `pnpm build && pnpm contracts`. A new contract gets
 its client on the next build.
 

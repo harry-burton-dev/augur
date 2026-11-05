@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { parse, stringify } from 'yaml';
-import { AUGUR_HOME } from './repo.mjs';
+import { AUGUR_HOME, DECISIONS_URL } from './repo.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
 const REPO = AUGUR_HOME;
@@ -96,6 +96,8 @@ const platform = [
       title: 'AUGUR platform',
       description: 'The shell, SDK, UI kit, gateway, identity, registry, events, models, storage and updater',
       annotations: { ...github, 'backstage.io/techdocs-ref': 'dir:..', 'augur.dev/release-unit': 'augur', 'augur.dev/version': json('release/augur-release.json').version },
+      // Decisions, principles and architecture live in the AUGUR handbook on Google Drive, not here.
+      links: [{ url: DECISIONS_URL, title: 'Decision register (AUGUR handbook, 04 Decisions)', icon: 'docs' }],
     },
     spec: { owner: OWNER, domain: 'augur' },
   },
@@ -177,13 +179,6 @@ files['catalog/all.yaml'] = doc([
 // TechDocs: every guide in docs/, in one site on the platform system.
 const guides = readdirSync(join(root, 'docs')).filter((f) => f.endsWith('.md')).sort();
 const titleOf = (f) => (read(`docs/${f}`).match(/^#\s+(.+)$/m)?.[1] ?? f.replace('.md', '')).trim();
-// Decision records (docs/decisions/, ADR 0001): the index first, then each record in number order.
-const decisions = existsSync(join(root, 'docs/decisions'))
-  ? readdirSync(join(root, 'docs/decisions')).filter((f) => /^\d{4}-.+\.md$/.test(f)).sort()
-  : [];
-const decisionsNav = decisions.length
-  ? [{ Decisions: [{ Index: 'decisions/README.md' }, ...decisions.map((f) => ({ [titleOf(`decisions/${f}`)]: `decisions/${f}` }))] }]
-  : [];
 files['mkdocs.yml'] =
   HEADER +
   stringify(
@@ -193,7 +188,7 @@ files['mkdocs.yml'] =
       repo_url: `https://github.com/${REPO}`,
       edit_uri: 'edit/main/docs/',
       plugins: ['techdocs-core'],
-      nav: [...guides.map((f) => ({ [titleOf(f)]: f })), ...decisionsNav],
+      nav: guides.map((f) => ({ [titleOf(f)]: f })),
     },
     { lineWidth: 0 },
   );

@@ -1,6 +1,6 @@
 # Upgrade Centre
 
-`@augur/upgrades` is the Upgrade Centre: a platform frontend at `/upgrades`, for admins ([ADR 0030](../../../docs/decisions/0030-upgrade-centre-platform-frontend.md)). It shows what this deployment runs, what's on offer and how each unit (AUGUR and each installed app) moves. It is React (ADR 0015) on Quill (`@augur/app-kit`): `AppFrame` with a rail of units and History, the front page as `FrontPage` (Needs you, On offer, Worth knowing), an `About` drawer on each unit, and Common's controls. Its name and icon come from the manifest. Tailwind, limited to AUGUR's tokens, lays out the rest.
+`@augur/upgrades` is the Upgrade Centre: a platform frontend at `/upgrades`, for admins (ADR 0030). It shows what this deployment runs, what's on offer and how each unit (AUGUR and each installed app) moves. It is React (ADR 0015) on Quill (`@augur/app-kit`): `AppFrame` with a rail of units and History, the front page as `FrontPage` (Needs you, On offer, Worth knowing), an `About` drawer on each unit, and Common's controls. Its name and icon come from the manifest. Tailwind, limited to AUGUR's tokens, lays out the rest.
 
 | Page | Path | What it shows |
 | --- | --- | --- |

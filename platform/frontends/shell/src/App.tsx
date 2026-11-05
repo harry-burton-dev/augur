@@ -120,7 +120,7 @@ const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name,
 
 /**
  * Agents aren't built yet: they are still being designed and have nothing
- * behind them. Rather than hiding them (Nothing is obtuse, docs/shell-principles.md),
+ * behind them. Rather than hiding them (Nothing is obtuse, Shell principles in the AUGUR handbook, 02 Principles),
  * the Shell keeps them in its functions as unavailable, so they look it and say
  * why on hover and focus, and pressing them does nothing.
  */

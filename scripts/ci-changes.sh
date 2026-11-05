@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Which of CI's jobs this change needs, written to $GITHUB_OUTPUT as <job>=true|false
-# (.github/workflows/ci.yml, docs/ci-cd.md). A job CI doesn't need is skipped before it starts a
+# (.github/workflows/ci.yml, CI/CD in the AUGUR handbook, 03 Architecture/Engineering). A job CI doesn't need is skipped before it starts a
 # runner, so it costs no minutes and still counts as passed where it is a required check.
 #
 # A pull request is compared with where it left its base branch; a push with the push before it.

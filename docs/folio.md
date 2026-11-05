@@ -2,7 +2,7 @@
 
 Artifacts is AUGUR's document libraries. (Its code name is Folio, which is still the name of its containers, its database schema and its address, `/folio`.) Every deployment runs it. It keeps a floor's documents in one place with the same shape everywhere, shows each one as a page you can read, and publishes them up the floors to the people who need them, in the states you choose.
 
-The first half of this guide is for everyone who uses it. The second half is for admins. Artifacts lives in its own repository, [augur-folio](https://github.com/harry-burton-dev/augur-folio), which builds, signs and releases it; how it's built, and its API, are in its README there. Every AUGUR release ships the release of it that `release/shipped-apps.json` pins ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)).
+The first half of this guide is for everyone who uses it. The second half is for admins. Artifacts lives in its own repository, [augur-folio](https://github.com/harry-burton-dev/augur-folio), which builds, signs and releases it; how it's built, and its API, are in its README there. Every AUGUR release ships the release of it that `release/shipped-apps.json` pins (ADR 0049).
 
 - [Using Artifacts](#using-artifacts)
   - [Getting around](#getting-around)

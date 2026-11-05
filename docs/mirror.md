@@ -56,7 +56,7 @@ A server with no outbound traffic at all checks them offline instead, from a cop
 
 ## Halted releases
 
-When the publisher halts a release ([release-channels.md](release-channels.md#halting-a-release)), the mirror script copies the mark onto that release in your feed, and a later resume takes it off. It only sees the mark when it runs, so mirror a halted release again to pass the halt on to your servers (`node scripts/mirror-release.mjs <version> --to …`, and `apps` for an app's). The Upgrade Centre shows a mirror's feed as your organisation's own: the publisher's feed signature covers the publisher's feed, not the one the mirror writes, so it can't vouch for yours ([ADR 0031](decisions/0031-mirror-feeds-are-the-organisations-own.md)). Every image is still checked against the publisher's signature.
+When the publisher halts a release ([release-channels.md](release-channels.md#halting-a-release)), the mirror script copies the mark onto that release in your feed, and a later resume takes it off. It only sees the mark when it runs, so mirror a halted release again to pass the halt on to your servers (`node scripts/mirror-release.mjs <version> --to …`, and `apps` for an app's). The Upgrade Centre shows a mirror's feed as your organisation's own: the publisher's feed signature covers the publisher's feed, not the one the mirror writes, so it can't vouch for yours (ADR 0031). Every image is still checked against the publisher's signature.
 
 ## Mirror apps
 

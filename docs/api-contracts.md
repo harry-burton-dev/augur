@@ -1,7 +1,7 @@
 # API contracts
 
 Each platform service's API has one source: the TypeBox schemas on its Fastify routes
-([ADR 0055](decisions/0055-schema-first-apis-with-typebox.md)). Request validation, the handlers' types
+(ADR 0055). Request validation, the handlers' types
 and the contract in `contracts/<service>.openapi.yaml` all come from them.
 
 ## Changing an API

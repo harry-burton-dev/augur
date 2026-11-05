@@ -1,6 +1,6 @@
 # Notifications
 
-A notification tells a person something, in the shell. A [domain event](domain-events.md) tells other services; an [Inbox](inbox.md) item (ADR 0026) waits for someone to act. The contract is [ADR 0044](decisions/0044-notifications-contract.md).
+A notification tells a person something, in the shell. A [domain event](domain-events.md) tells other services; an [Inbox](inbox.md) item (ADR 0026) waits for someone to act. The contract is ADR 0044.
 
 ## Floor or global
 

@@ -8,17 +8,23 @@ registry, events, storage, models, updater. It is in BETA; there is no phone
 layout yet.
 
 ## Where to look first
-1. **Decisions:** `docs/decisions/` (ADRs). Check the ones that touch your
-   work before changing it. If your change goes against an Accepted record,
-   add a new Proposed record in the same PR, tell Harry, and don't merge the
-   deviating part until he accepts it (ADR 0001).
+1. **Decisions:** the Decision register in the AUGUR handbook (Google Drive
+   folder "Augur", `04 Decisions`,
+   https://drive.google.com/drive/folders/16wXmUMRNP2_vXAlf4kBMF9hCDNUXg7yO)
+   lists every ADR and PDR, with its status and a link. Check the ones that
+   touch your work before changing it. If your change goes against an Accepted
+   record, it needs a new Proposed record first, and the deviating part doesn't
+   merge until Harry accepts it. Records are never written into a repository:
+   ask for a number and send what was decided and why.
 2. **The task:** its Linear issue (team PER, initiative AUGUR).
-3. **Product, principles, naming, how we work:** the AUGUR handbook, Google
-   Drive folder "Augur", starting from its "Start here" document
+3. **Product, principles, architecture, naming:** the AUGUR handbook, starting
+   from "00 Start here"
    (https://drive.google.com/drive/folders/1CDGBoi620UrDG3DY2biDXIHrpA8dICDh).
-   Its Decision register lists every ADR and PDR; add a row when you add one.
-4. **Guides:** `docs/` has one guide per topic; update the matching guide in
-   the same PR.
+   Shell principles and App patterns are in its `02 Principles`; CI/CD and the
+   deploy test in `03 Architecture/Engineering`.
+4. **Guides:** `docs/` holds only the guides that ship with a release, one per
+   topic; update the matching guide in the same PR. Any other Markdown file
+   fails `pnpm check:docs`: documents belong in the handbook.
 
 Project memory holds current state (what's in flight, ids, links), not rules.
 If a rule is only in memory, it belongs here, in an ADR or in the handbook.
@@ -33,7 +39,8 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   dependency, tool or service needs an ADR.
 - **Explain, never hide.** Anything unavailable stays visible, looks
   unavailable and says why and who can change it. Hide only what someone may
-  not know exists. Full rules: docs/shell-principles.md.
+  not know exists. Full rules: Shell principles, in the handbook's
+  `02 Principles`.
 - **Recommend what it should be,** not only what was asked, and say where you
   went beyond the ask.
 
@@ -78,15 +85,15 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   also be copied into the design tool Wave is made in (tell Harry).
 - Icons come from Lucide through Common's `Icon` (`icon.tsx` in `augur-kit`).
   Never hand-write SVG.
-- App layout and interaction rules agreed with Harry live in
-  docs/app-patterns.md. A live design session writes each agreed rule there
-  in the same PR.
+- App layout and interaction rules agreed with Harry live in App patterns,
+  in the AUGUR handbook's `02 Principles`. A live design session sends each
+  agreed rule to be written there.
 - Design research lives outside this repository, in the Design lab (Google
   Drive folder "Design lab",
   https://drive.google.com/drive/folders/1FL9KAmvd_wEkOfLO5-lxm3t1JI4jyY17).
   Nothing there ships; an idea moves into the product only through a record
-  or docs/app-patterns.md. The lab's history up to its move is in git (the
-  last commit with `design-lab/` is c1fd921).
+  or App patterns. The lab's history up to its move is in git (the last
+  commit with `design-lab/` is c1fd921).
 
 ## Working on a change
 - `pnpm install`, then `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint`. Also run

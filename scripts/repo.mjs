@@ -6,6 +6,9 @@
 /** AUGUR's own repository, where its docs link to. */
 export const AUGUR_HOME = 'harry-burton-dev/augur';
 
+/** The AUGUR handbook's decisions folder on Google Drive, which holds the Decision register (ADRs and PDRs live there, not here). */
+export const DECISIONS_URL = 'https://drive.google.com/drive/folders/16wXmUMRNP2_vXAlf4kBMF9hCDNUXg7yO';
+
 /** The repository a script releases, promotes or halts in. */
 export const repoFrom = (env = process.env) => env.AUGUR_REPO || env.GITHUB_REPOSITORY || AUGUR_HOME;
 

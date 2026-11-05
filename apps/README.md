@@ -35,4 +35,4 @@ await notify({ eventsUrl, credentials, workspace, notification: {
 } });
 ```
 
-The apps that ship with AUGUR live in their own repositories: Artifacts in [augur-folio](https://github.com/harry-burton-dev/augur-folio), Explorer in [augur-auspex](https://github.com/harry-burton-dev/augur-auspex) Data Atlas in [augur-atlas](https://github.com/harry-burton-dev/augur-atlas) and Mandate in [augur-mandate](https://github.com/harry-burton-dev/augur-mandate). AUGUR's releases ship the release of each that `release/shipped-apps.json` pins ([ADR 0049](../docs/decisions/0049-pillar-apps-shipped-from-their-releases.md)).
+The apps that ship with AUGUR live in their own repositories: Artifacts in [augur-folio](https://github.com/harry-burton-dev/augur-folio), Explorer in [augur-auspex](https://github.com/harry-burton-dev/augur-auspex) Data Atlas in [augur-atlas](https://github.com/harry-burton-dev/augur-atlas) and Mandate in [augur-mandate](https://github.com/harry-burton-dev/augur-mandate). AUGUR's releases ship the release of each that `release/shipped-apps.json` pins (ADR 0049).

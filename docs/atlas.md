@@ -2,7 +2,7 @@
 
 Data Atlas holds the things the organisation keeps track of (ships, ports, organisations, people, places, events), what is known about each, and how they connect. Artifacts holds what was published, Mandate holds what people mean to do, and Data Atlas holds what those are about. It ships with AUGUR, like Artifacts (a pillar app), at `/atlas`.
 
-Data Atlas lives in its own repository, [augur-atlas](https://github.com/harry-burton-dev/augur-atlas), whose README is the app's own guide, with its API. Every AUGUR release ships the release of it that `release/shipped-apps.json` pins ([ADR 0049](decisions/0049-pillar-apps-shipped-from-their-releases.md)).
+Data Atlas lives in its own repository, [augur-atlas](https://github.com/harry-burton-dev/augur-atlas), whose README is the app's own guide, with its API. Every AUGUR release ships the release of it that `release/shipped-apps.json` pins (ADR 0049).
 
 ## What people see
 
@@ -23,7 +23,7 @@ Data Atlas lives in its own repository, [augur-atlas](https://github.com/harry-b
 
 ## Maps
 
-Data Atlas puts places, and what's at them, on a map ([ADR 0071](decisions/0071-data-atlas-maps-with-maplibre-and-pmtiles.md)). A place's Location written as a point, latitude then longitude, such as `57.70, 11.97`, puts it on the map. An entity page shows **Where it is**, and the explorer offers **Show on a map**.
+Data Atlas puts places, and what's at them, on a map (ADR 0071). A place's Location written as a point, latitude then longitude, such as `57.70, 11.97`, puts it on the map. An entity page shows **Where it is**, and the explorer offers **Show on a map**.
 
 The base map comes from your server, never the internet. Without one, points go on a plain background, and the map says an admin can add one. To add one:
 

@@ -266,7 +266,7 @@ export interface CheckResult {
  * of `services` is ready now, and AUGUR's own calls through the gateway in the last `minutes` mostly
  * succeeded. The watch lets sign-in miss once and waits for parts to come back; one look doesn't, so
  * anything wrong now is a problem. The deploy test breaks AUGUR on purpose and needs this to see it
- * (docs/deploy-test.md). `parts`: what each part is (parts.ts), with the apps that ship with this release.
+ * (The deploy test in the AUGUR handbook, 03 Architecture/Engineering). `parts`: what each part is (parts.ts), with the apps that ship with this release.
  */
 export const checkOnce = async (server: Pick<Server, 'signInProblem' | 'traffic' | 'health' | 'exitCode'>, services: readonly string[], minutes = WATCH_MS / 60_000, parts: Parts = partsFor()): Promise<CheckResult> => {
   const problems: string[] = [];
