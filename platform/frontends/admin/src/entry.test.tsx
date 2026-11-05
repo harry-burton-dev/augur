@@ -8,7 +8,7 @@ import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kind
 import { headline, stateOf } from './status.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { placeOf, portalLink } from './line.js';
-import { changesFrom, daysCheck, orgNameCheck, zoneLabel } from './organisation.js';
+import { changesFrom, daysCheck, languageLabel, noticeChangesFrom, orgNameCheck, securityChangesFrom, zoneLabel } from './organisation.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -295,7 +295,34 @@ describe('Departments', () => {
 });
 
 describe('Organisation', () => {
-  const org = { name: 'Northwind', timeZone: 'UTC', sender: { name: 'Northwind' }, idle: { on: true, warningDays: 60, turnOffDays: 90 } };
+  const org = {
+    name: 'Northwind',
+    timeZone: 'UTC',
+    sender: { name: 'Northwind' },
+    idle: { on: true, warningDays: 60, turnOffDays: 90 },
+    notice: { on: false, version: 0 },
+    languages: ['en'],
+    defaultLanguage: 'en',
+    security: { twoStepForAll: false, leaverRetentionDays: 90, activityRetentionDays: 365 },
+  };
+
+  it('sends only the notice’s and security’s changes, and asks everyone again only for a notice that is on', () => {
+    expect(noticeChangesFrom(org.notice, { noticeOn: 'off', noticeTitle: '', noticeText: '', askAgain: 'yes' })).toBeUndefined();
+    expect(noticeChangesFrom(org.notice, { noticeOn: 'on', noticeTitle: ' Before you start ', noticeText: 'Be kind.', askAgain: 'yes' })).toEqual({ on: true, title: 'Before you start', text: 'Be kind.', askAgain: true });
+    expect(noticeChangesFrom({ on: true, title: 'T', text: 'X', version: 1 }, { noticeOn: 'on', noticeTitle: 'T', noticeText: 'X', askAgain: 'no' })).toBeUndefined();
+    expect(securityChangesFrom(org.security, { twoStepForAll: 'on', leaverRetentionDays: '90', activityRetentionDays: '400' })).toEqual({ twoStepForAll: true, activityRetentionDays: 400 });
+    expect(securityChangesFrom(org.security, { twoStepForAll: 'off', leaverRetentionDays: '90', activityRetentionDays: '365' })).toBeUndefined();
+    expect(languageLabel('fr')).toBe('French, fr');
+  });
+
+  it('says only a deployment admin can change security and retention, and offers it to one', async () => {
+    gateway((_m, url) => (url === '/api/identity/v1/organisation' ? Response.json(org) : undefined));
+    const el = await open('/organisation');
+    expect(el.textContent).toContain('Only a deployment admin can change these.');
+    expect(button('Change rules', el)).toBeFalsy();
+    expect(el.textContent).toContain('Admin roles only');
+    expect(el.textContent).toContain('No logo yet');
+  });
 
   it('sends only what changed, and takes a sender address away when it’s emptied', () => {
     expect(changesFrom(org, { name: ' Northwind ', timeZone: 'UTC', senderName: 'Northwind', senderAddress: '' })).toEqual({});

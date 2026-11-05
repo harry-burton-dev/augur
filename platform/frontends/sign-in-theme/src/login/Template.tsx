@@ -4,9 +4,15 @@ import { useInitialize } from 'keycloakify/login/Template.useInitialize';
 import type { TemplateProps } from 'keycloakify/login/TemplateProps';
 import { getKcClsx } from 'keycloakify/login/lib/kcClsx';
 import { useSetClassName } from 'keycloakify/tools/useSetClassName';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import type { I18n } from './i18n';
 import type { KcContext } from './KcContext';
+
+/** The logo an admin keeps in Admin → Organisation; it answers 404 when there is none, and the page shows no logo. */
+const ORGANISATION_LOGO = '/api/identity/v1/public/organisation/logo';
+
+/** The words of a bit of HTML, never its markup. */
+const textOf = (html: string | undefined) => (html ? (new DOMParser().parseFromString(html, 'text/html').body.textContent ?? '').trim() : '');
 
 const MESSAGE_ICON: Record<'success' | 'warning' | 'error' | 'info', IconName> = {
   success: 'check',
@@ -26,11 +32,13 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
   const { msg, msgStr, currentLanguage, enabledLanguages } = i18n;
   const { realm, auth, url, message, isAppInitiatedAction, properties } = kcContext;
   // The product's name is the realm's display name, which the realm job sets from ORG_PRODUCT_NAME (so
-  // emails' subjects agree); the organisation's comes from Keycloak's environment (vite.config.ts).
-  // Neither is written here.
+  // emails' subjects agree). The organisation's is the realm's HTML display name, which the realm job sets from
+  // Admin → Organisation, else Keycloak's environment (vite.config.ts). The logo is the one kept in Admin →
+  // Organisation, served without a sign-in, unless ORG_LOGO_URL names another. Neither is written here.
   const product = realm.displayName || realm.name;
-  const org = properties.ORG_NAME;
-  const logo = properties.ORG_LOGO_URL;
+  const org = textOf(realm.displayNameHtml) || properties.ORG_NAME;
+  const logo = properties.ORG_LOGO_URL || ORGANISATION_LOGO;
+  const [logoMissing, setLogoMissing] = useState(false);
 
   useEffect(() => {
     document.title = documentTitle ?? msgStr('loginTitle', product);
@@ -48,7 +56,7 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
     <div className="augur-signin">
       <main className="augur-signin-card">
         <header className="augur-signin-head">
-          {logo ? <img className="augur-signin-logo" src={logo} alt={org} /> : null}
+          {logo && !logoMissing ? <img className="augur-signin-logo" src={logo} alt={org} onError={() => setLogoMissing(true)} /> : null}
           <div className="augur-heading" data-size="s">
             {org ? <div className="augur-eyebrow">{org}</div> : null}
             <h1 className="augur-title" id="kc-page-title">

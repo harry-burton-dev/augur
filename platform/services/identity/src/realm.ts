@@ -1,6 +1,8 @@
 import { mailRelayFromEnv, type MailRelay } from '@augur/service-kit';
 import { createHash } from 'node:crypto';
-import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, PLATFORM_ROLES, SIGN_IN_FLOW, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
+import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, PLATFORM_ROLES, SIGN_IN_FLOW, TERMS_ACTION, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
+import { noticeHtml } from './organisation.ts';
+import type { RealmOrganisation } from './realm-sender.ts';
 import type { AppClients } from './clients.ts';
 
 /**
@@ -553,6 +555,78 @@ export const applyIdleWorkflow = async (
   }
 };
 
+/** Escaped for the realm's `displayNameHtml`, which Keycloak's own pages show as HTML. */
+const escapeHtml = (text: string) => text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/** Keycloak's own words for its Terms and Conditions page, which the notice replaces in each language offered. */
+export const NOTICE_KEYS = { title: 'termsTitle', text: 'termsText' } as const;
+
+/**
+ * The organisation's name on the sign-in pages (the realm's `displayNameHtml`; the product's name stays its
+ * `displayName`), and its sign-in notice as Keycloak's Terms and Conditions step: on for new people and for anyone
+ * an admin asked again, with the notice's words in place of Keycloak's in every language offered. Off, the step is
+ * turned off, so nobody is asked, and Keycloak's words come back.
+ */
+export const applyOrganisation = async (kc: KeycloakDirectory, org: RealmOrganisation | undefined, languages: string[], changes: Changes) => {
+  if (!org) return;
+  const { data: realm } = await kc.call<{ displayNameHtml?: string }>('GET', '');
+  if (org.name && realm.displayNameHtml !== escapeHtml(org.name)) {
+    await kc.call('PUT', '', { displayNameHtml: escapeHtml(org.name) });
+    changes.push('organisation’s name on sign-in pages');
+  }
+
+  const { data: actions } = await kc.call<{ alias: string; name: string; enabled: boolean; defaultAction: boolean }[]>('GET', '/authentication/required-actions');
+  let terms = actions.find((a) => a.alias.toUpperCase() === TERMS_ACTION);
+  if (!terms && org.notice.on) {
+    const { data: unregistered } = await kc.call<{ providerId: string; name: string }[]>('GET', '/authentication/unregistered-required-actions');
+    const found = unregistered.find((u) => u.providerId.toUpperCase() === TERMS_ACTION);
+    if (!found) throw new DirectoryError(`Keycloak has no ${TERMS_ACTION} required action, so the sign-in notice can’t be shown.`, 503);
+    await kc.call('POST', '/authentication/register-required-action', { providerId: found.providerId, name: found.name });
+    terms = (await kc.call<typeof actions>('GET', '/authentication/required-actions')).data.find((a) => a.alias.toUpperCase() === TERMS_ACTION);
+  }
+  if (terms && (terms.enabled !== org.notice.on || terms.defaultAction !== org.notice.on)) {
+    await kc.call('PUT', `/authentication/required-actions/${encodeURIComponent(terms.alias)}`, { ...terms, enabled: org.notice.on, defaultAction: org.notice.on });
+    changes.push(`sign-in notice ${org.notice.on ? 'on' : 'off'}`);
+  }
+
+  const words = org.notice.on && org.notice.title && org.notice.text ? { [NOTICE_KEYS.title]: escapeHtml(org.notice.title), [NOTICE_KEYS.text]: noticeHtml(org.notice.text) } : undefined;
+  const touched: string[] = [];
+  for (const locale of languages) {
+    const { data: have } = await kc.call<Record<string, string>>('GET', `/localization/${encodeURIComponent(locale)}`);
+    if (words) {
+      if (Object.entries(words).some(([k, v]) => have?.[k] !== v)) {
+        await kc.call('POST', `/localization/${encodeURIComponent(locale)}`, words);
+        touched.push(locale);
+      }
+      continue;
+    }
+    for (const key of Object.values(NOTICE_KEYS)) {
+      if (have?.[key] === undefined) continue;
+      await kc.call('DELETE', `/localization/${encodeURIComponent(locale)}/${key}`);
+      if (!touched.includes(locale)) touched.push(locale);
+    }
+  }
+  if (touched.length) changes.push(`sign-in notice words: ${touched.join(', ')}`);
+};
+
+/**
+ * Two steps for everyone: `TWO_STEP_ROLE` inside the realm's default roles, which every account holds, so the
+ * sign-in flow asks everyone for a code app or a passkey. Off, only the admin roles hold it (`applyRoles`).
+ */
+export const applyTwoStepForAll = async (kc: KeycloakDirectory, on: boolean | undefined, changes: Changes) => {
+  if (on === undefined) return;
+  const { data: realm } = await kc.call<{ defaultRole?: { name: string } }>('GET', '');
+  const defaults = realm.defaultRole?.name;
+  if (!defaults) throw new DirectoryError('The realm has no default roles, so two steps for everyone can’t be set.', 503);
+  const path = `/roles/${encodeURIComponent(defaults)}/composites`;
+  const { data: inside } = await kc.call<{ name: string }[]>('GET', path);
+  const has = inside.some((r) => r.name === TWO_STEP_ROLE.name);
+  if (has === on) return;
+  const { data: role } = await kc.call<{ id: string; name: string }>('GET', `/roles/${encodeURIComponent(TWO_STEP_ROLE.name)}`);
+  await kc.call(on ? 'POST' : 'DELETE', path, [role]);
+  changes.push(on ? 'everyone now signs in with two steps' : 'two steps for the admin roles only');
+};
+
 /** Whether Keycloak can send email: the organisation's relay, or one set in Keycloak's console. */
 const canEmail = async (kc: KeycloakDirectory, mail: RealmMail | undefined) =>
   Boolean(mail) || Boolean((await kc.call<{ smtpServer?: { host?: string } }>('GET', '')).data.smtpServer?.host);
@@ -578,6 +652,8 @@ export interface ApplyOptions {
   sender?: { name: string; address?: string };
   /** The organisation's idle-account days (`realmIdleFromDb`); without them the idle Workflow is left as it is. */
   idle?: IdleDays;
+  /** The rest of Admin → Organisation (`realmOrganisationFromDb`); its languages replace `look`'s. Without it, left as it is. */
+  organisation?: RealmOrganisation;
 }
 
 /**
@@ -587,7 +663,8 @@ export interface ApplyOptions {
 export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): Promise<Changes> => {
   const changes: Changes = [];
   await applyRealmSettings(kc, options.settings, changes, options.productName);
-  if (options.look) await applyLook(kc, options.look, changes, options.warn);
+  const look = options.look && options.organisation?.languages ? { ...options.look, languages: options.organisation.languages } : options.look;
+  if (look) await applyLook(kc, look, changes, options.warn);
   const { mail, fromName } = withSender(options.mail, options.sender, options.productName);
   await applyMail(kc, mail, changes, fromName);
   await applyIdleWorkflow(kc, options.idle, await canEmail(kc, mail), changes, options.warn);
@@ -595,6 +672,11 @@ export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): 
   await applyRoles(kc, changes);
   await applyUserProfile(kc, changes);
   await applySignInFlow(kc, changes);
+  await applyTwoStepForAll(kc, options.organisation?.twoStepForAll, changes);
+  if (options.organisation) {
+    const { data: realm } = await kc.call<{ supportedLocales?: string[] }>('GET', '');
+    await applyOrganisation(kc, options.organisation, realm.supportedLocales?.length ? realm.supportedLocales : ['en'], changes);
+  }
   const secrets = options.identity ? [[options.identity.clientId, options.identity.secret] as [string, string], ...options.serviceSecrets.filter(([id]) => id !== options.identity!.clientId)] : options.serviceSecrets;
   for (const [clientId, secret] of secrets) await options.clients.ensure(clientId, secret);
   if (options.identity) await applyServiceAccountRights(kc, options.identity.clientId, IDENTITY_RIGHTS, changes);

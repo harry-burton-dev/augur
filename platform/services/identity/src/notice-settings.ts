@@ -74,7 +74,8 @@ export interface NoticeSettingsOptions {
   workspaces: WorkspaceStore;
   organisation: OrganisationStore;
   verifyService?: ServiceVerifier;
-  languages: string[];
+  /** The languages offered, the default first. */
+  languages: string[] | (() => Promise<string[]>);
 }
 
 export const noticeSettingsRoutes =
@@ -117,11 +118,12 @@ export const noticeSettingsRoutes =
         if (ids && ids.length > NOTICE_SETTINGS_MAX) return reply.code(400).send({ error: 'bad_request', message: `At most ${NOTICE_SETTINGS_MAX} people at once.` });
         const people = ids ?? (await store.withDigest(req.query.digest!));
         const { timeZone } = await organisationSettings(workspaces, organisation);
+        const offered = typeof languages === 'function' ? await languages() : languages;
         const found = await Promise.all(
           people.map(async (person) => {
             const profile = accounts ? await accounts.profile(person).catch(() => undefined) : undefined;
             if (accounts && !profile) return undefined;
-            return settingsFrom(person, await store.get(person), profile, timeZone, languages);
+            return settingsFrom(person, await store.get(person), profile, timeZone, offered);
           }),
         );
         return { people: found.filter((s): s is NoticeSettings => !!s) };

@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The organisation's logo, sign-in notice, languages and security move into Admin
+
+**From** unreleased
+
+Admin → Organisation now also keeps the organisation's logo, a sign-in notice, the languages offered and, for a deployment admin, two steps for everyone and how long leavers and Activity are kept (docs/deploy.md, "Organisation settings"). Nothing to do. If you set `ORG_LOGO_URL`, it still wins; take it out of `.env` to use the logo kept in Admin. Languages chosen in Admin replace `REALM_LANGUAGES`. The sign-in pages pick up the notice, languages and the organisation's name at the next `pc up -d`.
+
 ### An app's updates are in the Upgrade Centre only
 
 **From** unreleased

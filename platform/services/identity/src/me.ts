@@ -11,7 +11,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, type Caller, type NewAuditEntry, type NewNotification } from '@augur/service-kit';
 import { DirectoryError, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
-import { SECURITY_EMAIL_LISTENER } from './realm.ts';
+import { SECURITY_EMAIL_LISTENER, TWO_STEP_ROLES } from './realm.ts';
 import { choice, empty, IdParams, Preferences, ref, refused } from './schemas.ts';
 import type { LeaveRequest, PreferenceStore, Preferences as Prefs } from './store.ts';
 
@@ -398,7 +398,17 @@ export const securityOf = (
     codeApps: creds.filter((c) => c.type === 'otp').map(held),
     passkeys: creds.filter((c) => c.type === 'webauthn' || c.type === 'webauthn-passwordless').map(held),
     recoveryCodes: codes ? held(codes) : null,
-    twoStep: { required, set: seconds.length > 0, ...(required ? { reason: 'Your role can change AUGUR for everyone, so it signs in with a second step (ADR 0038).' } : {}) },
+    twoStep: {
+      required,
+      set: seconds.length > 0,
+      ...(required
+        ? {
+            reason: caller.roles.some((r) => (TWO_STEP_ROLES as readonly string[]).includes(r))
+              ? 'Your role can change AUGUR for everyone, so it signs in with a second step (ADR 0038).'
+              : 'Your organisation asks everyone to sign in with a second step.',
+          }
+        : {}),
+    },
     linked,
     canLink: providers.filter((p) => !linked.some((l) => l.provider === p.alias)).map((p) => ({ alias: p.alias, name: p.name, action: `idp_link:${p.alias}` })),
     actions: (Object.entries(ACCOUNT_ACTIONS) as [AccountAction, string][]).map(([id, action]) => {
@@ -560,8 +570,8 @@ export interface MeOptions {
   tell?: (n: NewNotification) => Promise<void>;
   /** What another service keeps about a person, for their download, by the name of the service. */
   dataFrom?: Record<string, (person: string) => Promise<unknown>>;
-  /** The languages this deployment offers (REALM_LANGUAGES, as the realm job sets them), the first the default. */
-  languages?: string[];
+  /** The languages this deployment offers (Admin → Organisation, else REALM_LANGUAGES), the first the default. */
+  languages?: string[] | (() => Promise<string[]>);
 }
 
 /** Who acts on a request to leave: the people who run AUGUR (ADR 0040's leaver flow is theirs). */
@@ -580,8 +590,9 @@ const unavailable = 'Your account can’t be read right now: the sign-in service
 
 /** The /me/* routes beside /me itself: preferences, and the account. Registered under /v1, behind the signed-in check. */
 export const meRoutes =
-  ({ store, accounts, audit, tell, dataFrom = {}, languages = ['en'] }: MeOptions) =>
+  ({ store, accounts, audit, tell, dataFrom = {}, languages: offered = ['en'] }: MeOptions) =>
   async (plain: FastifyInstance) => {
+    const offeredNow = async () => (typeof offered === 'function' ? offered() : offered);
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const unauthenticated = refused('No signed-in caller');
     const noAccounts = refused('The sign-in service isn’t connected, or can’t be reached right now');
@@ -642,7 +653,7 @@ export const meRoutes =
           response: { 200: { ...ref(AccountProfile), description: 'Their profile' }, 401: unauthenticated, 503: noAccounts },
         },
       },
-      async (req) => ({ ...(await acct().profile(caller(req.headers).id)), languages }),
+      async (req) => ({ ...(await acct().profile(caller(req.headers).id)), languages: await offeredNow() }),
     );
 
     app.patch(
@@ -666,6 +677,7 @@ export const meRoutes =
         const managed = (Object.keys(req.body) as ProfileField[]).find((k) => now.managed.includes(k) && req.body[k as keyof ProfileChanges] !== now[k]);
         if (managed) throw new DirectoryError(`${now.managedBy ?? 'Your organisation’s sign-in'} sets your ${FIELD_WORDS[managed]}, so it’s changed there.`, 409);
         const locale = req.body.locale?.trim();
+        const languages = await offeredNow();
         if (locale && !languages.includes(locale)) throw new DirectoryError(`${locale} isn’t one of the languages offered here (${languages.join(', ')}). A deployment admin can offer more.`, 400);
         return { ...(await acct().updateProfile(id, req.body)), languages };
       },

@@ -45,7 +45,7 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from identity.migrations');
-    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor', 'lifecycle_001_people', 'lifecycle_002_invites', 'reconcile_001_since', 'organisation_002_idle']);
+    expect(rows.map((r) => r.id)).toEqual(['001_preferences', '002_workspaces', '003_team_levels', '004_leave_requests', 'organisation_001_settings', 'signins_001_cursor', 'lifecycle_001_people', 'lifecycle_002_invites', 'reconcile_001_since', 'organisation_002_idle', 'organisation_003_logo_notice_languages_security']);
   });
 
   it('keeps the organisation settings in one row', async () => {
@@ -55,6 +55,11 @@ describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {
     await org.put({ timeZone: 'Europe/Paris', senderName: 'Acme', senderAddress: 'no-reply@acme.example', updatedAt: '2026-11-05T02:00:00.000Z', updatedBy: 'u-2' });
     expect(await org.get()).toEqual({ timeZone: 'Europe/Paris', senderName: 'Acme', senderAddress: 'no-reply@acme.example', updatedAt: '2026-11-05T02:00:00.000Z', updatedBy: 'u-2' });
     expect((await admin.query('select count(*)::int as n from identity.organisation')).rows[0].n).toBe(1);
+    // The logo is kept apart, so saving the other settings never drops it.
+    await org.setLogo({ png: Buffer.from('png'), sha256: 'abc', width: 100, height: 40 });
+    await org.put({ ...(await org.get()), languages: ['en', 'fr'], defaultLanguage: 'fr', notice: { on: true, title: 'T', text: 'X', version: 2 }, security: { twoStepForAll: true } });
+    expect(await org.get()).toMatchObject({ logo: { sha256: 'abc', width: 100, height: 40 }, languages: ['en', 'fr'], defaultLanguage: 'fr', notice: { on: true, title: 'T', text: 'X', version: 2 }, security: { twoStepForAll: true } });
+    expect((await org.logo())?.png.toString()).toBe('png');
   });
 
   it('keeps where sign-in copying has got to, and lets one identity copy at a time', async () => {

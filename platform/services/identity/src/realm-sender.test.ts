@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { realmIdleFromDb, realmSenderFromDb } from './realm-sender.ts';
+import { realmIdleFromDb, realmOrganisationFromDb, realmSenderFromDb } from './realm-sender.ts';
 
 describe('the organisation’s sender, for the realm job', () => {
   it('says nothing, and warns, when the database can’t be read', async () => {
@@ -48,5 +48,20 @@ describe.runIf(process.env.DATABASE_URL)('the organisation’s sender, read from
     expect(await read()).toEqual({ on: true, warningDays: 60, turnOffDays: 120 });
     await q('update identity.organisation set idle_on = false');
     expect((await read())?.on).toBe(false);
+  });
+
+  it('reads the notice, languages and two steps for everyone, with the defaults before identity has them', async () => {
+    const q = (sql: string) => admin.query(sql.replaceAll('identity.', 'realm_sender_test.'));
+    const read = () => realmOrganisationFromDb(url, undefined, 'realm_sender_test');
+    await q('drop table if exists identity.organisation');
+    expect(await read()).toEqual({ name: 'Finance Group', notice: { on: false }, twoStepForAll: false });
+    await q('create table identity.organisation (only_row boolean primary key default true, sender_name text)');
+    expect(await read()).toEqual({ name: 'Finance Group', notice: { on: false }, twoStepForAll: false });
+    await q('alter table identity.organisation add column notice_on boolean, add column notice_title text, add column notice_text text, add column languages text[], add column default_language text, add column two_step_for_all boolean');
+    await q("insert into identity.organisation (notice_on, notice_title, notice_text, languages, default_language, two_step_for_all) values (true, 'T', 'X', '{en,fr,de}', 'fr', true)");
+    expect(await read()).toEqual({ name: 'Finance Group', notice: { on: true, title: 'T', text: 'X' }, languages: ['fr', 'en', 'de'], twoStepForAll: true });
+    // On without words is off: Keycloak would show an empty page.
+    await q("update identity.organisation set notice_text = null");
+    expect((await read())?.notice.on).toBe(false);
   });
 });
