@@ -18,7 +18,7 @@ CI holds these rules on every pull request (`node scripts/promote.mjs check-pr`)
 
 Open pull requests against `main`, with a changeset ([versioning.md](versioning.md#making-a-change)). Merging releases nothing on its own: the Release workflow keeps the **Version packages** pull request open while changesets wait. Merging that bumps each changed package, writes the changelogs and `release/augur-release.json`, and then, in the same run, builds, pushes and signs each unit whose version has no release yet, and makes its GitHub pre-release with its release file. The feed is published once at the end. Servers following beta (the preview ring) see it at their next check; production servers, which follow stable, don't.
 
-The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: betas too** on the installed app in Admin → Apps, so its betas install there.
+The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A production server follows stable by itself once it has `SERVER_RING=production` (below). For an app, choose **New releases: Preview releases too** on the installed app in Admin → Apps, so its betas install there.
 
 ## Promote to stable
 
@@ -130,6 +130,8 @@ Admin → **Upgrade Centre** (it replaced Updates) shows it as **The line**: eac
 An app can ship a feature before it's everyone's, on any server, production included: it lists it in its manifest's `previews` (SDK 1.7), with an `id`, a `name`, a sentence of `detail` and, if you like, its last day, `until`. The app asks `ctx.previewOn('<id>')` and works as before when the answer is no; its service can ask the registry the same for a person (`GET /v1/apps/<id>/feature-previews/people/<person>`).
 
 Who gets each is an admin's call, in **Admin → Apps** on the app, under **Feature previews**: **Off**, **For those who turn it on**, **On for everyone**, or **On for chosen floors**. Chosen floors try a feature on one team (or a few) first, without a release: it's on there and on every floor beneath them, personal floors included when the org is chosen, and off everywhere else. Nobody turns a floor preview on or off for themselves; the shell's **Previews** says it's on for some floors only. The app still just asks `ctx.previewOn('<id>')`: the shell's catalogue for the floor someone stands on already says. Its service passes the floor too (`?workspace=<floor>` on the call above); without it, floor previews count as off. Until an admin chooses, a preview server makes it opt-in and a production server keeps it off. People turn the opt-in ones on for themselves in the shell's **Previews** (in the band), which mounts the app again with it; while one is on, the app says **Preview on** above it, with the way back. After its `until` day a preview is off for everyone, and Admin says the app should drop it or make it everyone's. Each choice an admin makes is in Activity as `app.preview-set`.
+
+AUGUR's own apps (Home, Admin, …) can offer feature previews too, in their entries in `platformApps` (`platform/services/registry/src/manifest.ts`). They aren't in the catalogue table, so an admin can't choose who gets them yet: each stays at the server's default (opt-in on a dev or preview server, off on a production one), and Admin says so if asked to change one. Home offers the design direction this way: `focal-planes` and `radial-menu` (PER-283).
 
 ## The live dev loop
 

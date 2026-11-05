@@ -255,7 +255,7 @@ files['mkdocs.yml'] =
       site_name: 'AUGUR',
       docs_dir: 'docs',
       repo_url: `https://github.com/${REPO}`,
-      edit_uri: 'edit/dev/docs/',
+      edit_uri: 'edit/main/docs/',
       plugins: ['techdocs-core'],
       nav: [...guides.map((f) => ({ [titleOf(f)]: f })), ...decisionsNav],
     },
