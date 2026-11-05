@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { RESERVED_APP_IDS, reservedIdProblem } from './reserved.js';
 
@@ -13,6 +13,15 @@ describe('the ids AUGUR keeps', () => {
     expect(reservedIdProblem('notes')).toBeUndefined();
     expect(reservedIdProblem('storage-test-1')).toBeUndefined();
     expect(reservedIdProblem('constructor')).toBeUndefined();
+  });
+
+  it('keeps the ids of .env settings shaped like an app’s own, and the jobs schemas, and leaves the shipped apps theirs', () => {
+    expect(reservedIdProblem('frontends')).toContain('FRONTENDS_BUCKET_SECRET');
+    expect(reservedIdProblem('entra')).toContain('ENTRA_CLIENT_SECRET');
+    expect(reservedIdProblem('notes-jobs')).toContain('ends with -jobs');
+    expect(reservedIdProblem('jobs')).toBeUndefined();
+    const shipped = JSON.parse(readFileSync(new URL('release/shipped-apps.json', repo), 'utf8')) as { apps: Record<string, unknown> };
+    for (const id of Object.keys(shipped.apps)) expect(reservedIdProblem(id)).toBeUndefined();
   });
 
   it('keeps every platform service’s and platform app’s id', () => {

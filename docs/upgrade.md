@@ -56,6 +56,14 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### App ids that are now reserved, and previews to remove by hand
+
+**From** unreleased
+
+The ids `frontends` and `entra`, and any id ending in `-jobs`, are now reserved, because they collide with AUGUR's own secrets or with another app's jobs schema. If you installed a third-party app under one of these, it must take another id before its next release can register.
+
+A pull request's preview dropped from the app runner's records by an earlier install keeps running with nothing to stop it. List them with `docker ps --filter name=app-` and remove any whose pull request has closed with `docker rm -f <container>`.
+
 ### Leavers' accounts are deleted after the retention period
 
 **From** unreleased

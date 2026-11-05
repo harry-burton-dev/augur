@@ -85,9 +85,18 @@ export async function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id
 }
 
 /**
+ * Whether the events service turned events down for what they are, so sending them again won't help:
+ * 400 for a topic, floor or payload it won't take, 413 for a batch too big to read. A 403 is about the
+ * publisher (a scope not granted yet), so it doesn't count: every row would go.
+ */
+const refusedEvents = (err: unknown) => err instanceof ServiceCallError && /it answered (400|413)\b/.test(err.message);
+
+/**
  * Sends what's waiting in the outbox to the events service, oldest first, and marks it
  * sent. Several instances can run at once: each takes rows the others haven't locked.
- * Until the events service takes them, rows stay and are tried again.
+ * Until the events service takes them, rows stay and are tried again. A batch it refuses goes
+ * again one row at a time, so one bad row doesn't hold up the rest: a row refused alone is set
+ * aside, marked sent and left in the table, and goes to `onError` (else the console).
  */
 export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 100, intervalMs = 1000, onError }: EventsAddress & {
   pool: ConnectionPool;
@@ -96,9 +105,10 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
   onError?: (err: unknown) => void;
 }) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  /** Sends one batch; returns how many went. */
+  /** Sends one batch; returns how many rows it dealt with, sent or set aside. */
   const flush = async (): Promise<number> => {
     const client = await pool.connect();
+    const setAside: unknown[] = [];
     try {
       await client.query('begin');
       const { rows } = await client.query(
@@ -106,15 +116,20 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
         [batch],
       );
       if (rows.length) {
-        await publishEvents({
-          eventsUrl,
-          credentials,
-          fetchImpl,
-          events: rows.map((r) => ({ topic: r.topic, id: r.event_id, payload: r.payload, ...(r.workspace_id ? { workspace: r.workspace_id } : {}) })),
+        const events: NewDomainEvent[] = rows.map((r) => ({ topic: r.topic, id: r.event_id, payload: r.payload, ...(r.workspace_id ? { workspace: r.workspace_id } : {}) }));
+        await publishEvents({ eventsUrl, credentials, fetchImpl, events }).catch(async (err) => {
+          if (!refusedEvents(err)) throw err;
+          for (const event of events) {
+            await publishEvents({ eventsUrl, credentials, fetchImpl, events: [event] }).catch((one) => {
+              if (!refusedEvents(one)) throw one;
+              setAside.push(new ServiceCallError(`Set aside outbox event ${event.id} (${event.topic}): ${(one as Error).message}`));
+            });
+          }
         });
         await client.query('update outbox set sent_at = now() where id = any($1::bigint[])', [rows.map((r) => r.id)]);
       }
       await client.query('commit');
+      for (const err of setAside) (onError ?? console.error)(err);
       return rows.length;
     } catch (err) {
       await client.query('rollback').catch(() => {});

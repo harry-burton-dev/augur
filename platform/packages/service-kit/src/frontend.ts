@@ -123,6 +123,7 @@ export const unpackFrontend = (tarball: Buffer, limits: { files: number; bytes: 
     const block = tar.subarray(at, at + BLOCK);
     if (block.every((b) => b === 0)) break;
     const size = parseInt(field(block, 124, 12).trim() || '0', 8);
+    if (size < 0) throw new FrontendProblem('The frontend’s tarball is damaged: an entry has a negative size.');
     const type = String.fromCharCode(block[156] || 48);
     const data = tar.subarray(at + BLOCK, at + BLOCK + size);
     if (Number.isNaN(size) || data.length < size) throw new FrontendProblem('The frontend’s tarball is cut short.');
