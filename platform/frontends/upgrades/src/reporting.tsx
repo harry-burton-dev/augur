@@ -7,6 +7,7 @@ import type { Overview, ReportingView } from './model/types.js';
 const REASON_WORDS: Record<NonNullable<ReportingView['last']>['reason'], string> = {
   started: 'when the registry started',
   changed: 'after a change',
+  heartbeat: 'the regular record',
   daily: 'the daily record',
   export: 'an export',
 };

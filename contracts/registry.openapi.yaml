@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.31.0
+  version: 1.32.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -1160,7 +1160,7 @@ components:
               enum:
                 - started
                 - changed
-                - daily
+                - heartbeat
                 - export
             ok:
               type: boolean
@@ -3213,6 +3213,73 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: Reporting is off, with why (error reporting_off)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/alerts:
+    post:
+      summary: Grafana's alerts, told to deployment admins as notices (ALERT_WEBHOOK_TOKEN only)
+      description: ADR 0059. The deployment's Grafana posts here when one of AUGUR's alert rules starts or stops firing, with ALERT_WEBHOOK_TOKEN as its bearer token. Each alert becomes one notice to deployment admins, keyed by its fingerprint and start, so a repeat tells nobody twice; a resolved alert says it cleared and how long it lasted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - alerts
+              properties:
+                alerts:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - status
+                    properties:
+                      status:
+                        type: string
+                      labels:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      annotations:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      startsAt:
+                        type: string
+                      endsAt:
+                        type: string
+                      fingerprint:
+                        type: string
+                    additionalProperties: true
+                  maxItems: 100
+              additionalProperties: true
+              description: "Grafana's webhook contact point body: the alerts that started or stopped firing"
+        description: "Grafana's webhook contact point body: the alerts that started or stopped firing"
+      responses:
+        "202":
+          description: Taken
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - told
+                properties:
+                  told:
+                    type: integer
+                    description: Notices sent
+                description: Taken
+        "401":
+          description: No ALERT_WEBHOOK_TOKEN, or not this one
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Notices can't be sent right now
           content:
             application/problem+json:
               schema:

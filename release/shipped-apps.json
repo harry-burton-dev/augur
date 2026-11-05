@@ -33,6 +33,15 @@
         "@apps/atlas": "0.2.2"
       },
       "port": 8086
+    },
+    "mandate": {
+      "repo": "harry-burton-dev/augur-mandate",
+      "version": "0.2.2",
+      "parts": {
+        "@apps/mandate-frontend": "0.2.2",
+        "@apps/mandate": "0.2.2"
+      },
+      "port": 8087
     }
   }
 }
