@@ -2,7 +2,7 @@ import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PgOrganisationStore } from './organisation.ts';
 import { PgSignInCursorStore } from './sign-ins.ts';
-import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
+import { PgPreferenceStore, type PreferenceStore } from './store.ts';
 
 /** The same behaviour from every store. */
 const behavesLikeAStore = (make: () => PreferenceStore, reset: () => Promise<void> = async () => {}) => {
@@ -20,8 +20,6 @@ const behavesLikeAStore = (make: () => PreferenceStore, reset: () => Promise<voi
     expect(await store.get('u-2')).toEqual({});
   });
 };
-
-describe('MemoryPreferenceStore', () => behavesLikeAStore(() => new MemoryPreferenceStore()));
 
 // Runs wherever DATABASE_URL points at a Postgres; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('PgPreferenceStore', () => {

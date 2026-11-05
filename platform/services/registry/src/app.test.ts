@@ -456,12 +456,18 @@ describe('registry', () => {
       const app = await buildApp({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
       const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers });
-      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w1', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [] });
+      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w1', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
       expect((await grants(as('app-library'))).statusCode).toBe(403);
       expect((await grants(admin)).statusCode).toBe(403);
       await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } });
       expect((await grants(as('platform-events'))).json().scopes).toEqual([]);
       expect((await app.inject({ method: 'GET', url: '/v1/apps/nope/grants', headers: as('platform-events') })).statusCode).toBe(404);
+    });
+
+    it('tells platform services the role an app needs, for the services a person reaches it through', async () => {
+      const app = await buildApp({ verifyService, floors });
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, requiredRole: 'analyst' } });
+      expect((await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers: as('platform-models') })).json().requiredRole).toBe('analyst');
     });
   });
 
@@ -673,7 +679,7 @@ describe('registry', () => {
     it('checks a call that names no floor on the organisation’s', async () => {
       const { app, set } = await setup({ ...library, scopes: ['notifications:send'] });
       const unnamed = async () => (await app.inject({ method: 'GET', url: '/v1/apps/library/grants', headers: as('platform-events') })).json();
-      expect(await unnamed()).toEqual({ app: 'library', workspace: 'o', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [] });
+      expect(await unnamed()).toEqual({ app: 'library', workspace: 'o', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
       // Off for the organisation but on for one team: naming no floor no longer gets it through.
       await set('o', 'off');
       await set('f', 'on');

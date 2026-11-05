@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GrantsUnavailable, registryBindingApps, registryGrants, registryInboxKinds, registryNotificationKinds } from './grants.js';
+import { GrantsUnavailable, registryBindingApps, registryGrants, registryInboxKinds, registryNotificationKinds, registryRequiredRole } from './grants.js';
 
 describe('registry grants', () => {
   it('asks once per app and floor while the answer is fresh, as a platform service', async () => {
@@ -35,6 +35,17 @@ describe('registry grants', () => {
     await expect(registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer(null, 502) })('library')).rejects.toBeInstanceOf(GrantsUnavailable);
     expect(await registryNotificationKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [], inboxKinds: ['review'], notificationKinds: ['comment'] }) })('library')).toEqual(['comment']);
     expect(await registryNotificationKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [], inboxKinds: [] }) })('library')).toBeUndefined();
+  });
+
+  it('names the role an app needs; none for an app it doesn’t know; undefined from an older registry', async () => {
+    const credentials = { name: 'models', getToken: async () => 'models-token' };
+    const answer = (body: object | null, status = 200) => (async () => (body ? Response.json(body, { status }) : new Response(null, { status }))) as typeof fetch;
+    const role = (fetchImpl: typeof fetch) => registryRequiredRole({ registryUrl: 'http://registry', credentials, fetchImpl })('helper');
+    expect(await role(answer({ scopes: [], requiredRole: 'analyst' }))).toBe('analyst');
+    expect(await role(answer({ scopes: [], requiredRole: null }))).toBeNull();
+    expect(await role(answer(null, 404))).toBeNull();
+    expect(await role(answer({ scopes: [], inboxKinds: [] }))).toBeUndefined();
+    await expect(role(answer(null, 502))).rejects.toBeInstanceOf(GrantsUnavailable);
   });
 
   it('lists the apps that bind to entities, asks again only when stale, and keeps the last answer when the registry is down', async () => {

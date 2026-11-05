@@ -2310,7 +2310,7 @@ paths:
   /apps/{id}/grants:
     get:
       summary: What an app may do on a floor (platform services only)
-      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007). With them, the inbox and notification kinds its manifest declares, which the events service checks against.
+      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007). With them, the inbox and notification kinds its manifest declares, which the events service checks against, and the role its manifest says a person needs, which models checks for an AI app.
       parameters:
         - schema:
             type: string
@@ -2336,6 +2336,7 @@ paths:
                   - scopes
                   - inboxKinds
                   - notificationKinds
+                  - requiredRole
                 properties:
                   app:
                     type: string
@@ -2355,6 +2356,11 @@ paths:
                     items:
                       type: string
                     description: The ids of the notification kinds the app's manifest declares
+                  requiredRole:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                    description: The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.
                 description: The app's grants
         "403":
           description: Not a platform service
