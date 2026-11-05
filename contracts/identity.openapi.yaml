@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.15.0
+  version: 1.16.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -631,7 +631,7 @@ paths:
   /directory:
     get:
       summary: Find people and teams (platform services, and apps with people:read)
-      description: "For sharing: people whose name, email or username has `q` in it, and teams whose name does, each sorted by name, first `limit` of each. With `ids` instead, the people and teams with those ids, so an app can name who it has shared with. People whose sign-in is turned off aren't listed."
+      description: "For sharing: people whose name, email or username has `q` in it, and teams whose name does, each sorted by name, first `limit` of each. With `ids` instead, the people and teams with those ids, so an app can name who it has shared with. People whose sign-in is turned off aren't listed. A signed-in person asks the same at /me/directory (1.15)."
       parameters:
         - schema:
             type: string
@@ -1173,6 +1173,93 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PersonMap"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/directory:
+    get:
+      summary: Find people and teams to share with
+      description: "What the people picker asks as someone types (searchPrincipals in the SDK, since 1.15): people whose name, email or username has `q` in it, and every team whose name does, each sorted by name, first `limit` of each. With `ids` instead, the people and teams with those ids, to name who something is shared with. Teams the caller isn't on are found too, as on their map: a team names only itself and where it sits. People whose sign-in is turned off aren't listed."
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: q
+          required: false
+        - schema:
+            type: string
+            maxLength: 4000
+          in: query
+          name: ids
+          required: false
+          description: Comma-separated person and team ids
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: People and teams
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                  - teams
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        email:
+                          type: string
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - within
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        within:
+                          type: array
+                          items:
+                            type: string
+                          description: Names of the teams it sits in, from the top down
+                        path:
+                          type: array
+                          items:
+                            type: string
+                          description: The ids of those teams, then its own (1.9)
+                description: People and teams
+        "400":
+          description: A query it does not know, or a value out of range
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
         "401":
           description: No signed-in caller
           content:

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GrantsUnavailable } from '@augur/service-kit';
+import { callerHeaders, GrantsUnavailable } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryDirectory } from './directory.ts';
 import { principalsOf } from './people.ts';
@@ -61,6 +61,22 @@ describe('people for apps', () => {
     expect(named.teams).toEqual([{ id: finance.id, name: 'Finance', within: [], path: [finance.id] }]);
     expect((await find('q=a&limit=1')).json().people).toHaveLength(1);
     expect((await app.inject({ method: 'GET', url: '/v1/directory?q=a', headers: { authorization: 'Bearer other' } })).statusCode).toBe(403);
+  });
+
+  it('lets a signed-in person find people and teams to share with', async () => {
+    const { app, alex, sam, finance, payroll, legal } = await setUp();
+    const me = callerHeaders({ id: sam.id, name: 'Sam Okafor', departments: [], roles: [] });
+    const find = (query: string, headers: Record<string, string> = me) => app.inject({ method: 'GET', url: `/v1/me/directory?${query}`, headers });
+    expect((await find('q=RIVÉ')).json()).toEqual({ people: [{ id: alex.id, name: 'Alex Rivera', email: 'alex@example.org' }], teams: [] });
+    // Sam is on no team, yet finds them all by name, as on their map; a turned-off sign-in isn't listed.
+    expect((await find('q=a')).json().teams.map((t: { id: string }) => t.id)).toEqual([finance.id, legal.id, payroll.id]);
+    expect((await find('q=ola')).json().people).toEqual([]);
+    expect((await find(`ids=${alex.id},${payroll.id}`)).json()).toEqual({
+      people: [{ id: alex.id, name: 'Alex Rivera', email: 'alex@example.org' }],
+      teams: [{ id: payroll.id, name: 'Payroll', within: ['Finance'], path: [finance.id, payroll.id] }],
+    });
+    expect((await find('q=a&limit=99')).statusCode).toBe(400);
+    expect((await find('q=a', {})).statusCode).toBe(401);
   });
 
   it('says who an audience reaches', async () => {

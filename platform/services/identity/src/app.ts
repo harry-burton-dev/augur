@@ -8,7 +8,7 @@ import { appClientRoutes, appRunnerRoutes, type AppClients } from './clients.ts'
 import type { Directory } from './directory.ts';
 import { mapFor } from './map.ts';
 import { MemoryOrganisationStore, organisationRoutes, type OrganisationStore } from './organisation.ts';
-import { peopleRoutes, principalsOf } from './people.ts';
+import { DirectoryAnswer, DirectoryQuery, findInDirectory, peopleRoutes, principalsOf, signedInPeople } from './people.ts';
 import { Caller, choice, Floor, IdParams, PersonMap, Preferences, ref, refused } from './schemas.ts';
 import { MemoryPreferenceStore, type PreferenceStore } from './store.ts';
 import { TeamDirectory } from './teams.ts';
@@ -230,14 +230,8 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       );
 
       // The caller's map of the org, for Auspex: their floors with who's there and why they can come in, and every other team as a closed door.
-      let names: { list: { id: string; name: string }[]; at: number } | undefined;
-      const everyone = async () => {
-        if (!teams) return [];
-        if (names && Date.now() - names.at < 30_000) return names.list;
-        const list = (await teams.people()).filter((p) => p.enabled).map((p) => ({ id: p.id, name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.username }));
-        names = { list, at: Date.now() };
-        return list;
-      };
+      const signedIn = signedInPeople(teams);
+      const everyone = async () => (await signedIn()).map((p) => ({ id: p.id, name: [p.firstName, p.lastName].filter(Boolean).join(' ') || p.username }));
       app.get(
         '/me/map',
         {
@@ -267,6 +261,32 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
             people: folks.length ? folks.map((p) => p.id) : [caller.id],
             principals: principalsOf(caller.id, all, mine),
           });
+        },
+      );
+
+      // People and teams by name, for the person choosing who to share with or mention (the SDK's searchPrincipals).
+      app.get(
+        '/me/directory',
+        {
+          schema: {
+            summary: 'Find people and teams to share with',
+            description: [
+              'What the people picker asks as someone types (searchPrincipals in the SDK,',
+              'since 1.15): people whose name, email or username has `q` in it, and',
+              'every team whose name does, each sorted by name, first `limit` of each.',
+              'With `ids` instead, the people and teams with those ids, to name who',
+              "something is shared with. Teams the caller isn't on are found too, as on",
+              'their map: a team names only itself and where it sits. People whose',
+              "sign-in is turned off aren't listed.",
+            ].join(' '),
+            querystring: DirectoryQuery,
+            response: { 200: DirectoryAnswer, 400: refused('A query it does not know, or a value out of range'), 401: unauthenticated },
+          },
+        },
+        async (req) => {
+          await teams?.ready();
+          const [all, folks] = await Promise.all([workspaces.teams(), signedIn()]);
+          return findInDirectory(folks, all, req.query);
         },
       );
 
