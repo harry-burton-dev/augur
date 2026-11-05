@@ -56,6 +56,9 @@ describe('feature previews', () => {
     expect(featureLine({ ...board, on: true })).toBe('On for you');
     expect(featureLine({ ...board, mode: 'off' })).toMatch(/an admin hasn’t opened it/);
     expect(featureLine({ ...board, mode: 'everyone', on: true })).toMatch(/On for everyone/);
+    expect(featureLine({ ...board, mode: 'floors', on: true })).toMatch(/On here/);
+    expect(featureLine({ ...board, mode: 'floors' })).toMatch(/some floors only/);
+    expect(choosable({ ...board, mode: 'floors' })).toBe(false);
     expect(featureLine({ ...board, ended: true })).toBe('Ended');
   });
 

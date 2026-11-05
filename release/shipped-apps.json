@@ -3,10 +3,10 @@
   "apps": {
     "folio": {
       "repo": "harry-burton-dev/augur-folio",
-      "version": "0.7.1",
+      "version": "0.8.0",
       "parts": {
-        "@apps/folio-frontend": "0.7.1",
-        "@apps/folio": "0.7.1"
+        "@apps/folio-frontend": "0.8.0",
+        "@apps/folio": "0.8.0"
       },
       "build": {
         "folio-worker": "worker/Dockerfile"
@@ -27,10 +27,10 @@
     },
     "atlas": {
       "repo": "harry-burton-dev/augur-atlas",
-      "version": "0.2.2",
+      "version": "0.3.0",
       "parts": {
-        "@apps/atlas-frontend": "0.2.2",
-        "@apps/atlas": "0.2.2"
+        "@apps/atlas-frontend": "0.3.0",
+        "@apps/atlas": "0.3.0"
       },
       "port": 8086
     },

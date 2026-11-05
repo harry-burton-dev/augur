@@ -85,7 +85,7 @@ export interface FeaturePreviewState {
   detail?: string;
   until?: string;
   /** Who gets it: nobody, those who turn it on, or everyone. An admin chooses in Admin → Apps. */
-  mode: 'off' | 'opt-in' | 'everyone';
+  mode: 'off' | 'opt-in' | 'everyone' | 'floors';
   ended?: boolean;
   on: boolean;
 }
@@ -132,6 +132,7 @@ export const choosable = (p: FeaturePreviewState) => p.mode === 'opt-in' && !p.e
 export const featureLine = (p: FeaturePreviewState) => {
   if (p.ended) return `Ended${p.until ? ` on ${new Date(`${p.until}T00:00:00Z`).toLocaleDateString()}` : ''}`;
   if (p.mode === 'everyone') return 'On for everyone: an admin chose that';
+  if (p.mode === 'floors') return p.on ? 'On here: an admin chose this floor' : 'On for some floors only: an admin chose which';
   if (p.mode === 'off') return 'Off for now: an admin hasn’t opened it';
   return `${p.on ? 'On for you' : 'Off'}${p.until ? ` · until ${new Date(`${p.until}T00:00:00Z`).toLocaleDateString()}` : ''}`;
 };

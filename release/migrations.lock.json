@@ -5,7 +5,8 @@
     "003_actions": "c244a195f2f90de2",
     "004_domain_events": "91ac9245ed5ceb72",
     "005_audit_recorded_by": "3f2610f0eccb896b",
-    "006_notification_keys": "5be3ec9616ff89c3"
+    "006_notification_keys": "5be3ec9616ff89c3",
+    "007_inbox": "40aac179ecbfe3a7"
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",

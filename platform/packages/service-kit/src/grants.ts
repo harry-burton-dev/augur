@@ -44,3 +44,30 @@ export const registryGrants = ({ registryUrl, credentials, ttlMs = 30_000, fetch
     return scopes;
   };
 };
+
+/** The ids of the inbox kinds an app's manifest declares; undefined from a registry too old to say. */
+export type InboxKindsLookup = (app: string) => Promise<string[] | undefined>;
+
+/**
+ * Asks the registry which inbox kinds an app declares (its `inbox.kinds`), with the same call
+ * as its grants, and remembers each answer for 30 seconds. An app that isn't registered has none.
+ */
+export const registryInboxKinds = ({ registryUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: GrantsOptions): InboxKindsLookup => {
+  const cache = new Map<string, { kinds: string[] | undefined; at: number }>();
+  return async (app) => {
+    const hit = cache.get(app);
+    if (hit && now() - hit.at < ttlMs) return hit.kinds;
+    let res: Response;
+    try {
+      res = await fetchImpl(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/grants`, { headers: await serviceHeaders(credentials) });
+    } catch (err) {
+      throw new GrantsUnavailable(`The registry could not be reached (${(err as Error).message}).`);
+    }
+    let kinds: string[] | undefined;
+    if (res.status === 404) kinds = [];
+    else if (res.ok) kinds = ((await res.json()) as { inboxKinds?: string[] }).inboxKinds;
+    else throw new GrantsUnavailable(`The registry answered ${res.status}.`);
+    cache.set(app, { kinds, at: now() });
+    return kinds;
+  };
+};

@@ -1,8 +1,8 @@
-import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
+import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TagPicker, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { InstallsSection, RunnerControls, useInstalls, type Installs } from './app-runner.js';
-import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
+import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, inboxWords, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
 import { featureHint, featureModeChoices } from './installs.js';
 import { day, Line, Page, Problem, Quiet, Secret } from './parts.js';
 
@@ -103,6 +103,7 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
   const refused = refusedKindNote(app);
   const installed = ins.installs?.installed.find((i) => i.app === app.id);
   const s = appStatus(app);
+  const inbox = inboxWords(app);
   const facts: Detail[] = [
     { label: 'Kind', value: kindWords(app).fact },
     { label: 'Version', value: app.pinnedVersion ? `${app.version}, held` : app.version },
@@ -111,6 +112,7 @@ function AppDetails({ api, app, ins, took, onIssue, onClose }: { api: AdminApi; 
     ...(app.entry.startsWith('/') && !app.entry.startsWith('//') ? [] : [{ label: 'Loads from', value: app.entry }]),
     ...(app.requiredRole ? [{ label: 'Only for', value: app.requiredRole }] : []),
     ...(app.platform ? [] : [{ label: 'May', value: scopeWords(app.grantedScopes ?? app.scopes) }]),
+    ...(inbox ? [{ label: 'Inbox work', value: inbox }] : []),
   ];
   const act = async (call: () => Promise<CatalogueApp>) => {
     setProblem('');
@@ -255,27 +257,70 @@ function AppSettings({ api, app }: { api: AdminApi; app: CatalogueApp }) {
   );
 }
 
-/** The features the app is trying, each with who gets it (SDK 1.7). */
+/** The features the app is trying, each with who gets it (SDK 1.7), down to chosen floors (ADR 0021, amended). */
 function FeaturePreviewsPart({ api, app }: { api: AdminApi; app: CatalogueApp }) {
   const { value: features, setValue, error, setError } = useLoaded<FeaturePreviews>(() => api.featurePreviews(app.id), Boolean(app.previews?.length));
+  // The floors to choose from, fetched only once someone targets floors.
+  const [floors, setFloors] = useState<AppFloor[] | undefined>();
+  // A preview being moved onto floors: nothing is saved until at least one floor is chosen.
+  const [picking, setPicking] = useState<string | undefined>();
+  const wantsFloors = Boolean(picking || features?.previews.some((p) => p.mode === 'floors'));
+  useEffect(() => {
+    if (!wantsFloors || floors) return;
+    Promise.all([api.org(), api.departments()])
+      .then(([org, departments]) => setFloors(floorTree(org, departments)))
+      .catch((err: Error) => setError(`The floors can’t be listed: ${err.message}`));
+  }, [api, wantsFloors, floors, setError]);
   if (!app.previews?.length) return null;
-  const set = async (preview: string, value: string) => {
+  const save = async (preview: string, mode: FeaturePreviewMode | null, chosen?: string[]) => {
     setError('');
     try {
-      setValue(await api.setFeaturePreview(app.id, preview, value === 'default' ? null : (value as FeaturePreviewMode)));
+      setValue(await api.setFeaturePreview(app.id, preview, mode, chosen));
+      setPicking(undefined);
     } catch (err) {
       setError((err as Error).message);
     }
   };
+  const set = (preview: string, value: string) => {
+    if (value === 'floors') {
+      setError('');
+      setPicking(preview);
+      return;
+    }
+    if (picking === preview) setPicking(undefined);
+    void save(preview, value === 'default' ? null : (value as FeaturePreviewMode));
+  };
+  const names = new Map((floors ?? []).map((f) => [f.id, f.name]));
+  const floorName = (id: string) => names.get(id) ?? 'a floor that’s gone';
   return (
     <section data-feature-previews className="admin-stack-wide">
-      <Heading heading="Feature previews" summary="Features it’s trying before they’re everyone’s. People turn the opt-in ones on for themselves in the shell’s Previews." size="s" />
+      <Heading heading="Feature previews" summary="Features it’s trying before they’re everyone’s. Turn one on for chosen floors to try it there first; people turn the opt-in ones on for themselves in the shell’s Previews." size="s" />
       {features ? (
-        features.previews.map((p) => (
-          <div key={p.id} data-feature-preview={p.id}>
-            <Select label={p.name} hint={featureHint(p)} options={featureModeChoices(p, features.defaultMode)} value={p.chosen ? p.mode : 'default'} onChange={(v) => void set(p.id, v)} />
-          </div>
-        ))
+        features.previews.map((p) => {
+          const onFloors = picking === p.id || (p.chosen && p.mode === 'floors');
+          return (
+            <div key={p.id} data-feature-preview={p.id} className="admin-stack">
+              <Select label={p.name} hint={featureHint(p, floorName)} options={featureModeChoices(p, features.defaultMode)} value={picking === p.id ? 'floors' : p.chosen ? p.mode : 'default'} onChange={(v) => set(p.id, v)} />
+              {onFloors ? (
+                <div data-preview-floors={p.id}>
+                  <TagPicker
+                    label="On for these floors"
+                    hint={picking === p.id ? 'Choose at least one: it’s saved once you do. The floors beneath each have it too.' : 'The floors beneath each have it too. To turn it off everywhere, choose Off above.'}
+                    placeholder={floors ? 'Type a floor’s name' : 'Listing the floors…'}
+                    disabled={!floors}
+                    reason={floors ? undefined : 'The floors are still being listed.'}
+                    options={(floors ?? []).map((f) => ({ value: f.id, label: f.name, detail: f.path.length > 2 ? f.path.slice(1, -1).map(floorName).join(' › ') : undefined }))}
+                    value={picking === p.id ? [] : (p.floors ?? [])}
+                    onChange={(ids) => {
+                      if (ids.length) void save(p.id, 'floors', ids);
+                      else setError(`${p.name} needs at least one floor. To turn it off everywhere, choose Off.`);
+                    }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          );
+        })
       ) : error ? null : (
         <p>Loading its previews…</p>
       )}

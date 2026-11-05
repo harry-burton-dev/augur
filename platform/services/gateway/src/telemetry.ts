@@ -43,6 +43,7 @@ export const parsePairs = (spec = ''): Record<string, string> =>
 export function browserTelemetryFrom(env: NodeJS.ProcessEnv = process.env): BrowserTelemetry {
   const endpoint = env.OTEL_EXPORTER_OTLP_ENDPOINT?.replace(/\/+$/, '');
   if (!endpoint) return { on: false, why: 'Browser errors aren’t collected here: no collector is named (OTEL_EXPORTER_OTLP_ENDPOINT in the deployment’s .env, docs/observability.md). A deployment admin can change that.' };
+  if (/^true$/i.test(env.OTEL_SDK_DISABLED?.trim() ?? '')) return { on: false, why: 'Browser errors aren’t collected here: telemetry is turned off (OTEL_SDK_DISABLED in the deployment’s .env, docs/observability.md). A deployment admin can change that.' };
   const { 'service.name': _, 'service.version': __, ...resource } = parsePairs(env.OTEL_RESOURCE_ATTRIBUTES);
   return { on: true, endpoint, headers: parsePairs(env.OTEL_EXPORTER_OTLP_HEADERS), resource };
 }

@@ -80,6 +80,16 @@ export const adminRoutes =
         req.log.error({ err: err.message, action }, 'audit entry not recorded'),
       );
 
+    /**
+     * Each department someone joins or leaves, however it happened (added with departments, or their list
+     * changed), is recorded on that department as the membership routes record it, so its floor's Activity
+     * shows it and followers hear platform.team.member-added or -removed there (docs/domain-events.md).
+     */
+    const joined = async (req: FastifyRequest, person: string, before: string[], after: string[]) => {
+      for (const id of after.filter((d) => !before.includes(d))) await record(req, 'department.member-added', id, { person });
+      for (const id of before.filter((d) => !after.includes(d))) await record(req, 'department.member-removed', id, { person });
+    };
+
     // What every /admin path can answer: the hooks above send these before a route runs.
     const guarded = {
       401: refused('No signed-in caller'),
@@ -136,6 +146,7 @@ export const adminRoutes =
         const password = temporaryPassword();
         const created = await dir().createPerson(person, password);
         await record(req, 'person.added', created.id, { username: created.username, roles: created.roles, departments: created.departments });
+        await joined(req, created.id, [], created.departments);
         return reply.code(201).send({ person: created, temporaryPassword: password });
       },
     );
@@ -185,6 +196,7 @@ export const adminRoutes =
         if (changed.length) {
           await record(req, 'person.updated', after.id, { username: after.username, ...Object.fromEntries(changed.map((k) => [k, { from: before[k], to: after[k] }])) });
         }
+        if (changed.includes('departments')) await joined(req, after.id, before.departments, after.departments);
         return after;
       },
     );
