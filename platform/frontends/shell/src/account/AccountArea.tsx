@@ -1,0 +1,583 @@
+import { AppFrame, AskTwice, Button, Choice, Notice, Note, PageHead, RailLink, Rows, Section, Select, State, TextField, Toggle, type IconName } from '@augur/app-kit';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { Preferences } from '../host/preferences.js';
+import { AccountError, type AccountApi, type AccountSession, type HeldCredential, type ProfileChanges, type Security, type SignIn } from './api.js';
+import { actionWords, ago, clientWords, dayAndTime, signInWords, timeZones } from './words.js';
+
+/** The Account area's sections (ADR 0036), in the rail's order. Home and apps, and Privacy and data, come later. */
+export const ACCOUNT_SECTIONS = [
+  { id: 'profile', label: 'Profile', icon: 'account' },
+  { id: 'security', label: 'Sign-in and security', icon: 'lock' },
+  { id: 'notifications', label: 'Notifications', icon: 'bell' },
+  { id: 'appearance', label: 'Appearance', icon: 'palette' },
+  { id: 'region', label: 'Language and region', icon: 'clock' },
+  { id: 'about', label: 'About and help', icon: 'info' },
+] as const satisfies readonly { id: string; label: string; icon: IconName }[];
+export type AccountSection = (typeof ACCOUNT_SECTIONS)[number]['id'];
+export const isAccountSection = (s: string | null | undefined): s is AccountSection => ACCOUNT_SECTIONS.some((x) => x.id === s);
+
+export interface AccountAreaProps {
+  section: AccountSection;
+  onSection: (section: AccountSection) => void;
+  onClose: () => void;
+  api: AccountApi;
+  /** What they've chosen, and how to change one choice: the shell saves it and applies it at once. */
+  prefs: Preferences;
+  onPreference: <K extends keyof Preferences>(key: K, value: Preferences[K]) => void;
+  /** Opens one of Keycloak's screens and comes back to this section. */
+  onAction: (kcAction: string, section: AccountSection) => void;
+  onSignOut: () => void;
+  /** The apps on this floor, for choosing how each one's notifications arrive. */
+  apps: { id: string; name: string }[];
+  /** The shell's own sign-in client, so the list of sessions can name it. */
+  shellClient: string;
+  product: string;
+  /** What's running, for About. */
+  version?: string;
+  /** How the last of Keycloak's screens went (kc_action_status), to say once. */
+  actionStatus?: string | null;
+}
+
+/**
+ * The one place a person manages themselves (ADR 0036): who they are, how they sign in and where,
+ * how they hear about things, how AUGUR looks for them, their time zone, and what's running. It
+ * opens over whatever was on screen, in an app's frame, and closes back to it.
+ */
+export function AccountArea(props: AccountAreaProps) {
+  const { section, onSection, onClose } = props;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented && !(e.target instanceof HTMLElement && e.target.closest('[role="dialog"], [role="listbox"]'))) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="account-area" role="region" aria-label="Your account">
+      <AppFrame
+        app={{ name: 'Account', icon: 'account' }}
+        onFront={() => onSection('profile')}
+        railLabel="Account"
+        rail={ACCOUNT_SECTIONS.map((s) => (
+          <RailLink key={s.id} icon={s.icon} label={s.label} current={s.id === section} onPress={() => onSection(s.id)} />
+        ))}
+        measure="read"
+        screen={section}
+      >
+        <div className="account-close">
+          <Button kind="tertiary" size="sm" onPress={onClose}>
+            Close
+          </Button>
+        </div>
+        {section === 'profile' ? <ProfileSection {...props} /> : null}
+        {section === 'security' ? <SecuritySection {...props} /> : null}
+        {section === 'notifications' ? <NotificationsSection {...props} /> : null}
+        {section === 'appearance' ? <AppearanceSection {...props} /> : null}
+        {section === 'region' ? <RegionSection {...props} /> : null}
+        {section === 'about' ? <AboutSection {...props} /> : null}
+      </AppFrame>
+    </div>
+  );
+}
+
+/** Loads something once per section visit, with its error as a sentence and a way to load it again. */
+function useLoad<T>(load: () => Promise<T>) {
+  const [state, setState] = useState<{ value?: T; error?: string; loading: boolean }>({ loading: true });
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let live = true;
+    setState((s) => ({ ...s, loading: true }));
+    load().then(
+      (value) => live && setState({ value, loading: false }),
+      (err: Error) => live && setState({ error: err.message, loading: false }),
+    );
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loads again only when asked
+  }, [attempt]);
+  return { ...state, set: (value: T) => setState({ value, loading: false }), again: () => setAttempt((n) => n + 1) };
+}
+
+function Loading({ what, error, onRetry }: { what: string; error?: string; onRetry: () => void }) {
+  if (error) return <State kind="error" heading={`Your ${what} didn’t load`} body={error} action="Try again" onAction={onRetry} />;
+  return <State kind="loading" heading={`Loading your ${what}…`} />;
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Profile
+
+const FIELDS: { key: keyof ProfileChanges; label: string; hint?: string; max: number; type?: 'tel' }[] = [
+  { key: 'firstName', label: 'First name', max: 120 },
+  { key: 'lastName', label: 'Last name', max: 120 },
+  { key: 'jobTitle', label: 'Job title', max: 120 },
+  { key: 'phone', label: 'Phone', hint: 'Digits, spaces, brackets, + and -', max: 40, type: 'tel' },
+  { key: 'pronouns', label: 'Pronouns', hint: 'Shown beside your name, such as they/them', max: 40 },
+];
+
+function ProfileSection({ api, prefs, onPreference, onAction, onSignOut }: AccountAreaProps) {
+  const profile = useLoad(() => api.profile());
+  const [saving, setSaving] = useState<keyof ProfileChanges | null>(null);
+  const [problem, setProblem] = useState<{ key: keyof ProfileChanges; message: string } | null>(null);
+  const p = profile.value;
+  const save = async (key: keyof ProfileChanges, value: string) => {
+    if (!p || (p[key] ?? '') === value) return;
+    setSaving(key);
+    setProblem(null);
+    try {
+      profile.set(await api.updateProfile({ [key]: value }));
+    } catch (err) {
+      setProblem({ key, message: (err as Error).message });
+    } finally {
+      setSaving(null);
+    }
+  };
+  const name = p ? [p.firstName, p.lastName].filter(Boolean).join(' ') || p.username : '';
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="Profile" summary={p ? `${name}${p.email ? ` · ${p.email}` : ''}` : 'Who you are, as others see you'} />
+      {!p ? (
+        <Loading what="profile" error={profile.error} onRetry={profile.again} />
+      ) : (
+        <>
+          {p.managed.length ? (
+            <Notice tone="info" heading={`${p.managedBy ?? 'Your organisation’s sign-in'} sets your name and email.`}>
+              It copies them in each time you sign in, so they’re changed there.
+            </Notice>
+          ) : null}
+          <Section label="About you" count={-1}>
+            <div className="account-fields">
+              {FIELDS.map((f) => {
+                const managed = p.managed.includes(f.key);
+                return (
+                  <TextField
+                    key={`${f.key}:${p[f.key] ?? ''}`}
+                    label={f.label}
+                    hint={f.hint}
+                    type={f.type}
+                    maxLength={f.max}
+                    defaultValue={p[f.key] ?? ''}
+                    required={f.key === 'firstName'}
+                    optional={f.key !== 'firstName' && f.key !== 'lastName'}
+                    disabled={managed}
+                    reason={managed ? `${p.managedBy ?? 'Your organisation’s sign-in'} sets this.` : undefined}
+                    busy={saving === f.key}
+                    state={problem?.key === f.key ? 'error' : undefined}
+                    message={problem?.key === f.key ? problem.message : undefined}
+                    onCommit={(v) => void save(f.key, v.trim())}
+                  />
+                );
+              })}
+            </div>
+          </Section>
+          <Section label="Email" count={-1}>
+            <div className="account-line">
+              <span>
+                {p.email ?? 'No email address yet'}
+                {p.email && !p.emailVerified ? <small> · not checked yet</small> : null}
+              </span>
+              <Button
+                kind="secondary"
+                size="sm"
+                disabled={p.managed.includes('email')}
+                reason={p.managed.includes('email') ? `${p.managedBy ?? 'Your organisation’s sign-in'} sets your email address.` : undefined}
+                onPress={() => onAction('UPDATE_EMAIL', 'profile')}
+              >
+                {p.email ? 'Change email' : 'Add email'}
+              </Button>
+            </div>
+            <Note>The sign-in page asks for the new address and sends it a link to check before it’s used.</Note>
+          </Section>
+        </>
+      )}
+      <Away prefs={prefs} onPreference={onPreference} />
+      <Section label="Signing out" count={-1}>
+        <div className="account-line">
+          <span>Sign out of AUGUR on this device.</span>
+          <Button kind="secondary" size="sm" onPress={onSignOut}>
+            Sign out
+          </Button>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/** "Show me as away", with what it says and when it ends by itself. */
+function Away({ prefs, onPreference }: Pick<AccountAreaProps, 'prefs' | 'onPreference'>) {
+  const until = prefs.awayUntil ? prefs.awayUntil.slice(0, 16) : '';
+  return (
+    <Section label="Away" count={-1}>
+      <Toggle label="Show me as away" hint="Others see you’re away beside your name." checked={!!prefs.away} onChange={(on) => onPreference('away', on)} />
+      {prefs.away ? (
+        <div className="account-fields">
+          <TextField
+            label="What it says"
+            optional
+            maxLength={140}
+            placeholder="Back on Monday"
+            defaultValue={prefs.awayMessage ?? ''}
+            onCommit={(v) => onPreference('awayMessage', v.trim() || undefined)}
+          />
+          <label className="account-native">
+            <span>Until</span>
+            <input
+              type="datetime-local"
+              value={until}
+              onChange={(e) => onPreference('awayUntil', e.currentTarget.value ? new Date(e.currentTarget.value).toISOString() : undefined)}
+            />
+            <small>Leave it empty to stay away until you turn it off.</small>
+          </label>
+        </div>
+      ) : null}
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Sign-in and security
+
+function SecuritySection({ api, onAction, actionStatus, shellClient, product }: AccountAreaProps) {
+  const security = useLoad(() => api.security());
+  const s = security.value;
+  const action = (id: string) => s?.actions.find((a) => a.id === id);
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="Sign-in and security" summary="How you sign in, and where you’re signed in" />
+      {actionStatus ? <ActionStatus status={actionStatus} /> : null}
+      {!s ? (
+        <Loading what="sign-in details" error={security.error} onRetry={security.again} />
+      ) : (
+        <>
+          {s.twoStep.required && !s.twoStep.set ? (
+            <Notice tone="needs" heading="Your role needs two-step sign-in." action="Set up a code app" onAction={() => onAction(action('code-app')!.action, 'security')}>
+              {s.twoStep.reason}
+            </Notice>
+          ) : null}
+          <Section label="Password" count={-1}>
+            <div className="account-line">
+              <span>
+                {s.password.set ? `Set${s.password.createdAt ? ` ${dayAndTime(s.password.createdAt)}` : ''}` : s.password.managedBy ? `You sign in through ${s.password.managedBy}.` : 'No password yet'}
+              </span>
+              <ActionButton act={action('password')} label={s.password.set ? 'Change password' : 'Set a password'} onAction={onAction} />
+            </div>
+          </Section>
+          <Section label="Two-step sign-in" count={-1} why={s.twoStep.required ? s.twoStep.reason : 'A second step after your password, so a stolen password alone can’t get in.'}>
+            <Credentials title="Code apps" empty="No code app yet." items={s.codeApps} onAction={onAction} />
+            <div className="account-line">
+              <span />
+              <ActionButton act={action('code-app')} label="Add a code app" onAction={onAction} />
+            </div>
+            <Credentials title="Passkeys" empty="No passkey yet." items={s.passkeys} onAction={onAction} />
+            <div className="account-line">
+              <span />
+              <ActionButton act={action('passkey')} label="Add a passkey" onAction={onAction} />
+            </div>
+            <div className="account-line">
+              <span>{s.recoveryCodes ? `Recovery codes set ${s.recoveryCodes.createdAt ? dayAndTime(s.recoveryCodes.createdAt) : ''}` : 'No recovery codes yet. They get you in if you lose your phone.'}</span>
+              <ActionButton act={action('recovery-codes')} label={s.recoveryCodes ? 'Make new codes' : 'Make recovery codes'} onAction={onAction} />
+            </div>
+          </Section>
+          <Section label="Your organisation’s sign-in" count={-1}>
+            {s.linked.length ? (
+              <Rows items={s.linked.map((l) => ({ label: l.name, value: l.username ?? 'Linked' }))} />
+            ) : (
+              <Note>Your account isn’t linked to an organisation sign-in.</Note>
+            )}
+            {s.canLink.map((p) => (
+              <div className="account-line" key={p.alias}>
+                <span>Sign in with {p.name} too</span>
+                <Button kind="secondary" size="sm" onPress={() => onAction(p.action, 'security')}>
+                  Link {p.name}
+                </Button>
+              </div>
+            ))}
+          </Section>
+        </>
+      )}
+      <Sessions api={api} shellClient={shellClient} product={product} />
+      <RecentSignIns api={api} shellClient={shellClient} product={product} />
+    </>
+  );
+}
+
+function ActionStatus({ status }: { status: string }) {
+  if (status === 'success') return <Notice tone="info" heading="Done.">The change is saved.</Notice>;
+  if (status === 'cancelled') return <Notice tone="info" heading="Nothing changed.">You came back without finishing.</Notice>;
+  return <Notice tone="warning" heading="That didn’t finish.">The sign-in page couldn’t make the change. Try again, or ask an admin if it keeps happening.</Notice>;
+}
+
+function ActionButton({ act, label, onAction }: { act?: Security['actions'][number]; label: string; onAction: AccountAreaProps['onAction'] }) {
+  if (!act) return null;
+  return (
+    <Button kind="secondary" size="sm" disabled={!act.available} reason={act.reason} onPress={() => onAction(act.action, 'security')}>
+      {label}
+    </Button>
+  );
+}
+
+function Credentials({ title, empty, items, onAction }: { title: string; empty: string; items: HeldCredential[]; onAction: AccountAreaProps['onAction'] }) {
+  return (
+    <div className="account-creds">
+      <h3 className="account-sub">{title}</h3>
+      {items.length ? (
+        <ul>
+          {items.map((c) => (
+            <li key={c.id} className="account-line">
+              <span>
+                {c.label || actionWords(c.type)}
+                {c.createdAt ? <small> · added {dayAndTime(c.createdAt)}</small> : null}
+              </span>
+              <AskTwice size="sm" confirm="Press again to remove" disabled={!c.removable} reason={c.reason} onPress={() => onAction(c.removeAction, 'security')}>
+                Remove
+              </AskTwice>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <Note>{empty}</Note>
+      )}
+    </div>
+  );
+}
+
+function Sessions({ api, shellClient, product }: Pick<AccountAreaProps, 'api' | 'shellClient' | 'product'>) {
+  const load = useCallback(async () => ({ list: await api.sessions(), here: await api.currentSession() }), [api]);
+  const sessions = useLoad(load);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const end = async (id: string | 'others') => {
+    setBusy(id);
+    setSaid(null);
+    try {
+      if (id === 'others') {
+        const n = await api.endSessions(sessions.value?.here);
+        setSaid(n ? `Signed out of ${n} other ${n === 1 ? 'place' : 'places'}.` : 'You weren’t signed in anywhere else.');
+      } else {
+        await api.endSession(id);
+        setSaid('Signed out there.');
+      }
+      sessions.again();
+    } catch (err) {
+      setSaid((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const v = sessions.value;
+  const others = v ? v.list.filter((s) => s.id !== v.here) : [];
+  return (
+    <Section label="Where you’re signed in" count={v ? v.list.length : -1}>
+      {!v ? (
+        <Loading what="sessions" error={sessions.error} onRetry={sessions.again} />
+      ) : (
+        <>
+          <ul className="account-sessions">
+            {v.list.map((s: AccountSession) => (
+              <li key={s.id} className="account-line">
+                <span>
+                  <b>{s.id === v.here ? 'This browser' : s.ipAddress ? `From ${s.ipAddress}` : 'Somewhere else'}</b>
+                  <small>
+                    {' '}
+                    · {clientWords(s.clients, shellClient, product)} · signed in {dayAndTime(s.startedAt)} · last used {ago(s.lastSeenAt)}
+                  </small>
+                </span>
+                {s.id === v.here ? null : (
+                  <Button kind="tertiary" size="sm" busy={busy === s.id} onPress={() => void end(s.id)}>
+                    Sign out there
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <div className="account-line">
+            {said ? <Note live>{said}</Note> : <span />}
+            <AskTwice size="sm" confirm="Press again to sign out everywhere else" disabled={!others.length} reason="You’re not signed in anywhere else." busy={busy === 'others'} onPress={() => void end('others')}>
+              Sign out everywhere else
+            </AskTwice>
+          </div>
+        </>
+      )}
+    </Section>
+  );
+}
+
+function RecentSignIns({ api, shellClient, product }: Pick<AccountAreaProps, 'api' | 'shellClient' | 'product'>) {
+  const list = useLoad(() => api.signIns(20));
+  const items = list.value;
+  return (
+    <Section label="Recent sign-ins" count={items ? items.length : -1} limit={5} why="Each sign-in, each failed try and each change to how you sign in, for as long as the sign-in service keeps them. One you don’t recognise? Change your password and sign out everywhere else.">
+      {!items ? (
+        <Loading what="recent sign-ins" error={list.error} onRetry={list.again} />
+      ) : items.length ? (
+        items.map((e: SignIn) => (
+          <div key={`${e.time}:${e.event}`} className="account-line" data-kind={e.kind}>
+            <span>
+              <b>{signInWords(e)}</b>
+              <small>
+                {' '}
+                · {dayAndTime(e.time)}
+                {e.ipAddress ? ` · from ${e.ipAddress}` : ''}
+                {e.client ? ` · ${clientWords([e.client], shellClient, product)}` : ''}
+              </small>
+            </span>
+          </div>
+        ))
+      ) : (
+        <Note>Nothing yet. Sign-ins show here from now on.</Note>
+      )}
+    </Section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Notifications
+
+function NotificationsSection({ prefs, onPreference, apps }: AccountAreaProps) {
+  const n = prefs.notifications ?? {};
+  const set = (next: NonNullable<Preferences['notifications']>) => onPreference('notifications', { ...n, ...next });
+  const muted = new Set(prefs.muted ?? []);
+  const quiet = n.quietHours;
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="Notifications" summary="How AUGUR tells you about things" />
+      <Notice tone="info" heading="AUGUR doesn’t send email yet.">Your choices are kept, and apply as soon as a deployment admin connects the organisation’s mail.</Notice>
+      <Section label="Email" count={-1}>
+        <Toggle label="Email me about things that need me" hint="One email for each notification that asks something of you." checked={n.email !== false} onChange={(on) => set({ email: on })} />
+        <Choice
+          label="Digest"
+          hint="One email gathering everything else."
+          value={n.digest ?? 'off'}
+          onChange={(v) => set({ digest: v as 'off' | 'daily' | 'weekly' })}
+          options={[
+            { value: 'off', label: 'None', detail: 'Only what needs you' },
+            { value: 'daily', label: 'Daily', detail: 'Each morning' },
+            { value: 'weekly', label: 'Weekly', detail: 'On Monday mornings' },
+          ]}
+        />
+      </Section>
+      <Section label="Quiet hours" count={-1} why="Between these times nothing is said out loud: no toasts and no email. Notifications still wait for you in the shell.">
+        <Toggle label="Keep quiet hours" checked={!!quiet} onChange={(on) => set({ quietHours: on ? { from: '22:00', to: '07:00' } : undefined })} />
+        {quiet ? (
+          <div className="account-fields account-pair">
+            <label className="account-native">
+              <span>From</span>
+              <input type="time" value={quiet.from} onChange={(e) => e.currentTarget.value && set({ quietHours: { ...quiet, from: e.currentTarget.value } })} />
+            </label>
+            <label className="account-native">
+              <span>To</span>
+              <input type="time" value={quiet.to} onChange={(e) => e.currentTarget.value && set({ quietHours: { ...quiet, to: e.currentTarget.value } })} />
+            </label>
+          </div>
+        ) : null}
+      </Section>
+      <Section label="Each app" count={apps.length} why="Quiet: the app’s notifications land in the shell without a sound and never on Home. Apps can’t name kinds of notification yet, so the choice is for the whole app.">
+        {apps.length ? (
+          apps.map((a) => (
+            <Toggle
+              key={a.id}
+              label={a.name}
+              onWord="On Home"
+              offWord="Quiet"
+              checked={!muted.has(a.id)}
+              onChange={(on) => onPreference('muted', on ? [...muted].filter((id) => id !== a.id) : [...muted, a.id])}
+            />
+          ))
+        ) : (
+          <Note>No apps on this floor send notifications.</Note>
+        )}
+      </Section>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Appearance, region, about
+
+function AppearanceSection({ prefs, onPreference }: AccountAreaProps) {
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="Appearance" summary="How AUGUR looks and moves for you, on every device" />
+      <Section label="Motion" count={-1}>
+        <Toggle label="Reduce motion" hint="Things fade in place of moving. Your device’s own setting is followed too." checked={!!prefs.reduceMotion} onChange={(on) => onPreference('reduceMotion', on)} />
+        <Toggle label="Area titles" hint="A title card on arriving at a floor or opening an app." checked={prefs.areaTitles !== false} onChange={(on) => onPreference('areaTitles', on)} />
+        <Toggle label="Toasts for new notifications" hint="Each one said once at the bottom of the screen." checked={!!prefs.toasts} onChange={(on) => onPreference('toasts', on)} />
+      </Section>
+      <Section label="Density" count={-1}>
+        <Choice
+          label="Spacing"
+          value={prefs.density ?? 'comfortable'}
+          onChange={(v) => onPreference('density', v === 'compact' ? 'compact' : 'comfortable')}
+          options={[
+            { value: 'comfortable', label: 'Comfortable', detail: 'Room to breathe' },
+            { value: 'compact', label: 'Compact', detail: 'More on screen' },
+          ]}
+        />
+      </Section>
+    </>
+  );
+}
+
+function RegionSection({ prefs, onPreference }: AccountAreaProps) {
+  const browser = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const zones = useMemo(() => timeZones(), []);
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="Language and region" summary="Times and dates, as you read them" />
+      <Section label="Time zone" count={-1}>
+        <Select
+          label="Your time zone"
+          hint={prefs.timeZone ? undefined : `Following this browser: ${browser}`}
+          options={[{ value: '', label: `This browser’s (${browser})` }, ...zones.map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))]}
+          value={prefs.timeZone ?? ''}
+          onChange={(v) => onPreference('timeZone', v || undefined)}
+        />
+      </Section>
+      <Section label="Language" count={-1}>
+        <Rows items={[{ label: 'Language', value: 'English' }]} />
+        <Note>AUGUR is in English only for now, so there’s nothing to choose yet.</Note>
+      </Section>
+    </>
+  );
+}
+
+function AboutSection({ version }: AccountAreaProps) {
+  const keys: [string, string][] = [
+    ['`', 'Open or close the shell (also Ctrl or ⌘ K)'],
+    ['← →', 'Move along the arc'],
+    ['Enter', 'Open'],
+    ['x', 'Dismiss a notification'],
+    ['Esc', 'Back, then close'],
+    ['Alt PgUp PgDn', 'Up or down a floor'],
+  ];
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="About and help" summary="What’s running, and the keys" />
+      <Section label="What’s running" count={-1}>
+        <Rows items={version ? [{ label: 'Version', value: version }] : []} empty="This build doesn’t say its version." />
+      </Section>
+      <Section label="Keys" count={-1}>
+        <dl className="account-keys">
+          {keys.map(([k, what]) => (
+            <Key key={k} k={k}>
+              {what}
+            </Key>
+          ))}
+        </dl>
+      </Section>
+    </>
+  );
+}
+
+function Key({ k, children }: { k: string; children: ReactNode }) {
+  return (
+    <>
+      <dt>
+        <kbd>{k}</kbd>
+      </dt>
+      <dd>{children}</dd>
+    </>
+  );
+}
+
+export { AccountError };

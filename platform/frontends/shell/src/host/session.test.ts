@@ -53,6 +53,18 @@ describe('startSession', () => {
     expect(session).toMatchObject({ user: me, floors: [own, org] });
   });
 
+  it('comes back from one of Keycloak’s screens to the Account area, saying how it went', async () => {
+    const auth = fakeAuth({ access_token: 'fresh' }, { signinRedirectCallback: vi.fn(async () => ({ access_token: 'fresh', state: '/@me?account=security' })) });
+    const history = { replaceState: vi.fn() };
+    const session = await startSession(auth, { location: at('/auth/callback', '?code=c&state=s&kc_action_status=success'), history, fetchImpl: okFetch });
+    expect(history.replaceState).toHaveBeenCalledWith(null, '', '/@me?account=security&kc_action_status=success');
+    if (session === 'redirecting') throw new Error('expected a session');
+    await session.startAction('UPDATE_PASSWORD', '/@me?account=security');
+    expect(auth.signinRedirect).toHaveBeenCalledWith({ state: '/@me?account=security', extraQueryParams: { kc_action: 'UPDATE_PASSWORD' } });
+    await session.startAction('CONFIGURE_TOTP', 'https://evil.example');
+    expect(auth.signinRedirect).toHaveBeenLastCalledWith({ state: '/', extraQueryParams: { kc_action: 'CONFIGURE_TOTP' } });
+  });
+
   it('never returns to another site after signing in', async () => {
     const auth = fakeAuth({ access_token: 'fresh' }, { signinRedirectCallback: vi.fn(async () => ({ access_token: 'fresh', state: '//evil.example' })) });
     const history = { replaceState: vi.fn() };
