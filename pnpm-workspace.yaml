@@ -4,9 +4,43 @@ packages:
   - "platform/frontends/*"
   - "platform/contract"
   - "apps/*/*"
+# The versions shared by more than one package (pnpm catalogs, PER-166): a package asks for
+# `catalog:` and gets the range here, so one line moves them all. `pnpm check:versions` fails when
+# two packages name the same dependency without it. Packages from AUGUR's other repositories (the
+# kit's `npm:` aliases) and peer ranges stay in each package.json.
+catalogMode: prefer
+catalog:
+  "@aws-sdk/client-s3": "^3.1156.0"
+  "@fastify/swagger": "^9.9.0"
+  "@fastify/type-provider-typebox": "^6.3.0"
+  "@opentelemetry/api": "^1.10.0"
+  "@tailwindcss/vite": "4.3.3"
+  "@types/node": "^22.0.0"
+  "@types/pg": "^8.23.1"
+  "@types/react": "^19.3.0"
+  "@types/react-dom": "^19.3.0"
+  "@types/semver": "^7.8.0"
+  "@vitejs/plugin-react": "^5.2.0"
+  fastify: "^5.12.7"
+  happy-dom: "^20.0.0"
+  jose: "^6.2.12"
+  pg: "^8.23.1"
+  react: "^19.3.1"
+  react-dom: "^19.3.1"
+  semver: "^7.8.5"
+  tailwindcss: "4.3.3"
+  typebox: "^1.4.0"
+  typescript: "^5.6.0"
+  vite: "^7.3.7"
+  vitest: "^3.2.0"
+  yaml: "^2.9.1"
 onlyBuiltDependencies:
   - esbuild
 # API Extractor pins minimatch to a release with a known vulnerability (GHSA-g3hv-75wg-m249); take the
 # patched release the rest of the tree already uses. Drop this once API Extractor moves past it.
 overrides:
   "@microsoft/api-extractor>minimatch": 10.2.6
+  # Vitest 3's coverage takes test-exclude 7 and glob 10, and glob before 14.0.2 has a known vulnerability
+  # (GHSA-3g3m-2fjr-6pw4). Take test-exclude 8 with the patched glob. Drop these once Vitest's coverage moves past it.
+  "@vitest/coverage-v8>test-exclude": 8.0.0
+  "test-exclude>glob": 14.0.3

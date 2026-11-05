@@ -13,9 +13,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import semver from 'semver';
 import { readApps } from './app-release.mjs';
+import { REPO } from './repo.mjs';
 
 const root = new URL('..', import.meta.url).pathname;
-const REPO = process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/augur';
 export const AUGUR = 'augur';
 /** The branch work merges into. */
 export const TRUNK = 'main';

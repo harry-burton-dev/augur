@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { tailnetOf } from './live.ts';
 import { appFeed, AppUpdateChecker, newestOn, previewsIn, type AppFeedRelease } from './app-updates.ts';
-import { MemoryAppStore, type AppRelease } from './store.ts';
+import { type AppRelease } from './store.ts';
 import { UpdateChecker } from './updates.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
 const release = (version: string, more: Partial<AppRelease> = {}): AppRelease => ({
@@ -35,9 +37,9 @@ const setup = async (ring?: 'dev' | 'preview', tailnet: string | null = 'tail123
   let minutes = 0;
   const now = () => new Date(Date.UTC(2026, 9, 27, 12, minutes++));
   const checker = new AppUpdateChecker(async () => feed, now);
-  const store = new MemoryAppStore();
+  const store = db.store;
   const entries: { action: string; detail?: Record<string, unknown> }[] = [];
-  const server = await buildApp({ store, verifyService, appUpdates: checker, audit: async (e) => void entries.push(e), tailnet: tailnet ?? undefined, ...(ring ? { updates: new UpdateChecker({ running: { version: '0.12.0', channel: 'beta' }, ring }) } : {}) });
+  const server = await db.app({ store, verifyService, appUpdates: checker, audit: async (e) => void entries.push(e), tailnet: tailnet ?? undefined, ...(ring ? { updates: new UpdateChecker({ running: { version: '0.12.0', channel: 'beta' }, ring }) } : {}) });
   await checker.check();
   const next = () => server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner });
   /** Plays the runner: takes the next job and says it went as `outcome`, a preview answering at `upstream`. */
@@ -59,7 +61,7 @@ const setup = async (ring?: 'dev' | 'preview', tailnet: string | null = 'tail123
   return { server, store, entries, next, runNext, check, developers };
 };
 
-describe('pull requests’ previews', () => {
+describe.runIf(DATABASE_URL)('pull requests’ previews', () => {
   it('reads pull requests’ builds from the feed as previews, which no channel follows', async () => {
     const gh = (tag: string) => ({ tag_name: tag, prerelease: true, draft: false, assets: [{ name: 'app-release.json', url: `https://api/assets/${tag}` }] });
     const fetchImpl = (async (url: string) => {
@@ -139,7 +141,7 @@ describe('pull requests’ previews', () => {
   });
 });
 
-describe('live on the workbench', () => {
+describe.runIf(DATABASE_URL)('live on the workbench', () => {
   const entry = 'https://laptop.tail1234.ts.net/@fs/home/me/augur/apps/notes/frontend/src/entry.tsx';
   const live = (t: Awaited<ReturnType<typeof setup>>, id: string, url: string | null) => t.server.inject({ method: 'PUT', url: '/v1/previews/notes/live', headers: person(id), payload: { url } });
   const catalogue = async (t: Awaited<ReturnType<typeof setup>>, id: string) => (await t.server.inject({ method: 'GET', url: '/v1/manifest', headers: person(id) })).json();

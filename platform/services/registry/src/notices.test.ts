@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { NewNotification } from '@augur/service-kit';
 import type { Overview, UnitOverview } from './overview.ts';
 import { noticesFrom, updateNotices } from './notices.ts';
-import { MemoryAppStore } from './store.ts';
+import { DATABASE_URL, registryDb } from './db.testing.ts';
+
+const db = registryDb();
 
 const now = new Date('2026-11-02T10:00:00Z');
 const unit = (over: Partial<UnitOverview> & Pick<UnitOverview, 'unit' | 'name' | 'running'>): UnitOverview => ({
@@ -13,7 +15,7 @@ const unit = (over: Partial<UnitOverview> & Pick<UnitOverview, 'unit' | 'name' |
 });
 const overview = (...units: UnitOverview[]): Overview => ({ ring: 'production', timeZone: 'UTC', feed: 'on', units, needsYou: [] });
 
-describe('update notices', () => {
+describe.runIf(DATABASE_URL)('update notices', () => {
   it('tells deployment admins about a new release, once per version, saying whether it waits for them', () => {
     const [takes, waits] = noticesFrom(
       overview(
@@ -50,7 +52,7 @@ describe('update notices', () => {
     let fail = true;
     const updates = { ring: 'production', channel: 'stable', running: { version: '0.14.0' }, result: { releases: [] } } as never;
     const appUpdates = { result: { releases: [] } } as never;
-    const store = new MemoryAppStore();
+    const store = db.store;
     await store.requestUpgrade({ id: 'u1', from: '0.13.0', version: '0.14.0', images: {}, requestedBy: 'automatic' });
     await store.progressUpgrade('u1', { step: 'verify', state: 'done' }, { state: 'done' });
     const loop = updateNotices({

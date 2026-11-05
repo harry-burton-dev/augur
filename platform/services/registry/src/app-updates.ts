@@ -6,8 +6,6 @@ import { FeedProblem, feedReader, feedSource, haltOf, type FeedChecking, type Gi
 
 /** Which of an app's releases a deployment takes: stable ones only, betas too, or dev builds too (a preview server only). */
 export type AppChannel = 'stable' | 'beta' | 'dev';
-/** What happens when a newer release is out on the app's channel. */
-export type AppPolicy = 'automatic' | 'ask' | 'hold';
 
 /**
  * One app release in the feed. Its release file is missing when it couldn't be read (or wasn't needed).
