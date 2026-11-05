@@ -12,6 +12,8 @@ How a person's account moves through AUGUR, for admins in Admin → People and f
 | Turn their sign-in off | They can't sign in, and they're **signed out everywhere at once**: every session, and every offline token an app holds for them. Turning it off again signs them out again, so an admin can retry if Keycloak couldn't be reached | `person.disabled` | `platform.person.disabled` |
 | Turn their sign-in on | They can sign in again | `person.enabled` | `platform.person.enabled` |
 | A new one-time password | Their old password stops working | `person.password-reset` | nothing |
+| Unlock | For someone **Locked** after 10 wrong passwords in a row: they can sign in again at once, without waiting out Keycloak's lockout (up to 15 minutes) | `person.unlocked`, with `failures` | nothing |
+| Set their last day | The leaver flow below, set to run once their last day (today to 90 days ahead, in the organisation's time zone) is over. Until then nothing changes for them and People shows **Leaving {date}**; setting it again moves the day, and **Cancel leaving** takes it away. Identity checks every five minutes and runs it as the admin who set it | `person.leave-scheduled` (`lastDay`, `handOverTo`), `person.leave-cancelled`; when it runs, as below with `lastDay` | nothing until it runs, then as below |
 | **They're leaving** (the leaver flow) | Their sign-in goes off, they're signed out everywhere, and apps are told to hand on what they own, to the person the admin chose to hand it to, or to keep it until someone takes it on. Their teams, roles and history stay until the deployment's retention period ends. A request to leave from their account is closed | `person.disabled` (if it was on), then `person.left` with `handOverTo`, `asked` and the admin's note | `platform.person.disabled`, then `platform.person.left` `{ person, handOverTo? }` |
 
 People don't delete their own account. They ask to leave in their account (Privacy and data, docs/account.md); admins are told once, People marks them **Asked to leave**, and the leaver flow closes the request.
@@ -28,6 +30,16 @@ People shows each person's state and their last sign-in. Identity works the stat
 | `active` | Their sign-in is on and they have signed in, or were here before AUGUR kept sign-ins | Active |
 | `disabled` | Their sign-in is off; `disabledCause` says why when AUGUR knows (`admin`, `leaver`; later `idle`) | Off |
 | `left` | The leaver flow ran. It is for good: their sign-in can't be turned back on (409), and the flow can't run twice. Add them again if they return | Left, with the date and who took on their work |
+
+Three more words in People come from flags on an active person rather than a state of their own:
+
+| Flag | When | Shown in People |
+| --- | --- | --- |
+| `locked` | Keycloak locked them out for wrong passwords (a copied `sign-in.locked`), they haven't signed in since, and the realm's longest wait (15 minutes) hasn't passed. A person's dialog asks Keycloak itself (`lockout` on `GET /admin/people/{id}`) | Locked |
+| `leaving` | A last day is set and the leaver flow hasn't run yet | Leaving {date} |
+| `idle` | When their sign-in turns off for being idle: `warnsAt` and `turnsOffAt`, counted from their last sign-in with the organisation's days, and `warned` once the warning day has passed. Or `exempt`, and why it won't: `off` (idle accounts are off), `no-email` (nobody could be warned), `deployment-admin`, or `not-tracked` (AUGUR hasn't seen them sign in, so the count starts at their next sign-in) | Idle, once warned |
+
+A person's dialog lists all of it under **Their account**: state, last sign-in, when they were added, the invite's end, a lockout, the idle warning and turn-off days or why there are none, and their last day or the day they left.
 
 Last sign-in starts when identity first runs with this version. Before that, People says "Not seen yet".
 
@@ -82,8 +94,8 @@ Keycloak sends the invite, through the realm's relay (`SMTP_*` in `.env`, docs/d
 
 ## The API
 
-Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/identity.openapi.yaml): `POST /admin/people` (`start`; answers `invite` and, for a one-time password, `temporaryPassword`), `POST /admin/people/{id}/invite`, `GET /admin/lifecycle` (`email`), `PATCH /admin/people/{id}` (`enabled: false` signs them out everywhere), `POST /admin/people/{id}/leave` (`handOverTo`, `note`) and `GET /admin/leave-requests`.
+Identity's `/v1/admin` paths, in [contracts/identity.openapi.yaml](../contracts/identity.openapi.yaml): `POST /admin/people` (`start`; answers `invite` and, for a one-time password, `temporaryPassword`), `POST /admin/people/{id}/invite`, `GET /admin/lifecycle` (`email`), `PATCH /admin/people/{id}` (`enabled: false` signs them out everywhere), `POST /admin/people/{id}/leave` (`handOverTo`, `note`, `lastDay`), `DELETE /admin/people/{id}/leave` (cancel a last day), `POST /admin/people/{id}/unlock` and `GET /admin/leave-requests`. `GET /admin/lifecycle` also answers `today` in the organisation's time zone and `lastDayAhead`.
 
 ## Not built yet
 
-Idle accounts turning off on their own (60 and 90 days), deletion after retention with `platform.person.deleted`, linking an Entra first sign-in by verified email, and Locked, Idle and Leaving states on People. Each comes with PER-194.
+Deletion after retention with `platform.person.deleted`, and linking an Entra first sign-in by verified email. Each comes with PER-194.
