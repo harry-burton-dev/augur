@@ -16,6 +16,7 @@ loadConfigOrExit('models', [
   { name: 'MODEL_API_KEY', about: 'the key to MODEL_API_URL.', secret: true },
   { name: 'MODEL_NAME', about: 'which model MODEL_API_URL serves.' },
   { name: 'MODEL_EMBEDDING_NAME', about: 'the model at MODEL_API_URL that turns text into vectors, for matching by meaning.' },
+  { name: 'MODEL_TIMEOUT_SECONDS', about: 'how long to wait for the model to answer, in seconds (default 60).' },
 ]);
 
 const port = Number(process.env.PORT ?? 8085);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KeycloakDirectory } from './directory.ts';
-import { applyLook, applyRealmSettings, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { applyLook, applyRealmSettings, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -59,6 +59,24 @@ describe('the realm’s settings', () => {
     expect(changes).toHaveLength(1);
     await applyRealmSettings(kc, REALM_FLOORS, changes);
     expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+  });
+
+  it('name the realm after the deployment’s product, for sign-in, emails and passkeys', async () => {
+    let realm: Record<string, unknown> = { displayName: 'AUGUR' };
+    const { calls, kc } = keycloak((method, path, body) => {
+      if (path !== '') return undefined;
+      if (method === 'PUT') realm = { ...realm, ...(body as object) };
+      return method === 'GET' ? realm : undefined;
+    });
+    const changes: string[] = [];
+    const product = productNameFromEnv({ ORG_PRODUCT_NAME: ' Example product ' });
+    await applyRealmSettings(kc, REALM_FLOORS, changes, product);
+    expect(calls.find((c) => c.method === 'PUT')!.body).toMatchObject({ displayName: 'Example product', webAuthnPolicyRpEntityName: 'Example product', webAuthnPolicyPasswordlessRpEntityName: 'Example product' });
+    expect(changes[0]).toContain('displayName');
+    await applyRealmSettings(kc, REALM_FLOORS, changes, product);
+    expect(calls.filter((c) => c.method === 'PUT')).toHaveLength(1);
+    expect(productNameFromEnv({})).toBe(DEFAULT_PRODUCT_NAME);
+    expect(productNameFromEnv({ ORG_PRODUCT_NAME: '  ' })).toBe(DEFAULT_PRODUCT_NAME);
   });
 });
 

@@ -1,7 +1,7 @@
 import { loadConfigOrExit } from '@augur/service-kit';
 import { KeycloakAppClients, parseClientSecrets, retrying } from './clients.ts';
 import { KeycloakDirectory } from './directory.ts';
-import { applyRealm, realmLookFromEnv, realmSettingsFromEnv } from './realm.ts';
+import { applyRealm, productNameFromEnv, realmLookFromEnv, realmSettingsFromEnv } from './realm.ts';
 
 /**
  * The realm job (ADR 0057): brings Keycloak's realm to what this release declares (`realm.ts`), then
@@ -22,6 +22,7 @@ loadConfigOrExit('realm job', [
   { name: 'REALM_SESSION_MAX_HOURS', about: 'how long a session may last; 10 or fewer.' },
   { name: 'REALM_SIGN_IN_EVENT_DAYS', about: 'how long sign-in events are kept; 90 or more.' },
   { name: 'REALM_ADMIN_EVENT_DAYS', about: 'how long admins’ changes in Keycloak are kept; 365 or more.' },
+  { name: 'ORG_PRODUCT_NAME', about: 'the product’s name on the sign-in pages and in emails, as the realm’s display name (default AUGUR).' },
   { name: 'REALM_LANGUAGES', about: 'the languages offered at sign-in, comma separated, the first the default (default en).' },
 ]);
 
@@ -38,6 +39,7 @@ try {
     () =>
       applyRealm(kc, {
         settings,
+        productName: productNameFromEnv(process.env),
         look,
         warn,
         identity: IDENTITY_CLIENT_SECRET ? { clientId: 'platform-identity', secret: IDENTITY_CLIENT_SECRET } : undefined,

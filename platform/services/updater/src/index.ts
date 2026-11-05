@@ -13,9 +13,10 @@ import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, 
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
+import { partsFor, shippedAppsFrom } from './parts.ts';
 import { composeAppHost, composeServer } from './server.ts';
-import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity } from './signers.ts';
-import { checkOnce, lookAfterWatch, ROLL_ORDER, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
+import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity, repositoryOfIdentity } from './signers.ts';
+import { checkOnce, lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('updater', [
@@ -28,6 +29,9 @@ loadConfigOrExit('updater', [
   { name: 'GITHUB_READ_USER', about: 'the GitHub account the deployment’s read key (secrets/github-read-key) belongs to, for private images.' },
   { name: 'IMAGE_PULL_USER', about: 'before read keys: who the pull token in secrets/image-pull-token belongs to.' },
   { name: 'APP_SECRETS_KEY', about: 'the key apps’ secrets are made from, for the app runner.', secret: true },
+  { name: 'IMAGE_SIGNER', about: 'who must sign AUGUR’s images and the apps the runner installs, for AUGUR published from a fork (default: the publisher’s Release workflow).' },
+  { name: 'IMAGE_SIGNER_ISSUER', about: 'who issues that signer’s certificates (default: GitHub Actions).' },
+  { name: 'AUGUR_DEV_SIGNER', about: 'who must sign AUGUR’s dev builds (default: the dev builds workflow in IMAGE_SIGNER’s repository, or the publisher’s).' },
 ]);
 
 const POLL_MS = 30_000;
@@ -52,8 +56,11 @@ const IMAGE_SIGNER = setting('IMAGE_SIGNER', RELEASE_SIGNER);
 const GITHUB_READ_USER = setting('GITHUB_READ_USER');
 const IMAGE_PULL_USER = setting('IMAGE_PULL_USER');
 if (!PLATFORM_DIR) throw new Error('PLATFORM_DIR is not set: the updater needs the deploy folder’s path on the host (docs/upgrade.md).');
-/** Who signs AUGUR's dev builds, which only a dev server runs: the dev builds workflow on dev, in the same repository. */
-const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity(AUGUR_REPOSITORIES));
+/**
+ * Who signs AUGUR's dev builds, which only a dev server runs: the dev builds workflow on main, in the
+ * repository IMAGE_SIGNER names when a fork sets it, else in the publisher's.
+ */
+const AUGUR_DEV_SIGNER = setting('AUGUR_DEV_SIGNER', augurDevIdentity(repositoryOfIdentity(IMAGE_SIGNER) ?? AUGUR_REPOSITORIES));
 const signer = { identity: IMAGE_SIGNER, issuer: setting('IMAGE_SIGNER_ISSUER', GITHUB_ISSUER) };
 // The watch after an upgrade checks the sign-in realm answers, as the updater reaches it inside Docker.
 const signInUrl = setting('OIDC_INTERNAL_URL') || setting('OIDC_ISSUER') || undefined;
@@ -62,7 +69,12 @@ const serviceSecret = process.env.SERVICE_CLIENT_SECRET;
 const signInCheck = serviceSecret
   ? () => clientCredentials({ tokenUrl: serviceAuthFromEnv().tokenUrl, clientId: platformClientId('updater'), clientSecret: serviceSecret })()
   : undefined;
-const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl, signIn: signInCheck });
+// The apps that ship with this release (release/shipped-apps.json, in this image): the updater restarts and
+// checks them with the platform's own parts. An image without the file knows the platform's only, and refuses
+// an upgrade of a server that runs any other part (upgrade.ts).
+const shippedFile = '/augur/shipped-apps.json';
+const parts = partsFor(existsSync(shippedFile) ? shippedAppsFrom(JSON.parse(readFileSync(shippedFile, 'utf8'))) : []);
+const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl, signIn: signInCheck, healthUrls: parts.health });
 
 if (process.argv[2] === 'replace') {
   // Lets the updater that started this finish saying how the upgrade went first.
@@ -74,8 +86,8 @@ if (process.argv[2] === 'replace') {
 
 if (process.argv[2] === 'check') {
   // The parts this deployment runs, as its compose.yml names them; every part AUGUR has, if that can't be read.
-  const named = await server.services().catch(() => [...ROLL_ORDER]);
-  const result = await checkOnce(server, ROLL_ORDER.filter((service) => named.includes(service)));
+  const named = await server.services().catch(() => [...parts.order]);
+  const result = await checkOnce(server, parts.order.filter((service) => named.includes(service)), undefined, parts);
   console.log(JSON.stringify(result));
   process.exit(result.ok ? 0 : 1);
 }
@@ -123,7 +135,7 @@ const once = async () => {
   }
   log('upgrading', { from: target.from, to: target.version });
   await signIn();
-  const outcome = await runUpgrade(target, server, report, { devIdentity: AUGUR_DEV_SIGNER });
+  const outcome = await runUpgrade(target, server, report, { devIdentity: AUGUR_DEV_SIGNER, parts });
   log('upgrade ended', { outcome, to: target.version });
   if (outcome === 'done' && target.images[UPDATER]) await server.replaceSelf();
 };

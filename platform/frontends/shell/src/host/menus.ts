@@ -168,10 +168,18 @@ export function backFrom(screen: Screen | undefined): string | undefined {
 }
 
 /**
- * The tab's title, most specific first: the page, the app, the floor, AUGUR.
- * The page is the app's menu item for where you are, when there is one.
+ * The product's name, as the deployment sets it (ORG_PRODUCT_NAME): the web
+ * container writes it into the page's `augur-product` meta. AUGUR without one.
  */
-export function titleFor(screen: Screen | undefined, floor: string | undefined, product = 'AUGUR'): string {
+export function productName(doc: Pick<Document, 'querySelector'> | undefined = typeof document === 'undefined' ? undefined : document): string {
+  return doc?.querySelector<HTMLMetaElement>('meta[name="augur-product"]')?.content.trim() || 'AUGUR';
+}
+
+/**
+ * The tab's title, most specific first: the page, the app, the floor, the
+ * product. The page is the app's menu item for where you are, when there is one.
+ */
+export function titleFor(screen: Screen | undefined, floor: string | undefined, product = productName()): string {
   const parts: string[] = [];
   if (screen && screen.kind !== 'title') {
     if (screen.kind === 'app') {

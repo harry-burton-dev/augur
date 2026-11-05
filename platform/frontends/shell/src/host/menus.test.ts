@@ -1,7 +1,7 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
 import type { MenuCategory } from '@augur/shell-kit';
-import { areaOf, backFrom, navsFor, navTarget, escapeIsFree, findPages, orbitIndexOf, orbitMenu, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
+import { areaOf, backFrom, navsFor, navTarget, escapeIsFree, findPages, orbitIndexOf, orbitMenu, productName, screenFor, titleFor, titleMenu, titleTarget, upFrom } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -171,6 +171,16 @@ describe('upFrom', () => {
   it('agrees with Esc everywhere Esc is the shell’s', () => {
     const screens = [{ kind: 'app' as const, app: board, path: '/labels' }, { kind: 'orbit' as const, app: board }, { kind: 'app' as const, app: home, path: '/' }, { kind: 'title' as const }];
     for (const s of screens) expect(backFrom(s)).toBe(upFrom(s)?.to);
+  });
+});
+
+describe('productName', () => {
+  it('is the deployment’s, from the page, and AUGUR without one', () => {
+    const page = (content?: string) => ({ querySelector: () => (content === undefined ? null : { content }) }) as unknown as Pick<Document, 'querySelector'>;
+    expect(productName(page(' Example, built on AUGUR '))).toBe('Example, built on AUGUR');
+    expect(productName(page(''))).toBe('AUGUR');
+    expect(productName(page())).toBe('AUGUR');
+    expect(productName(undefined)).toBe('AUGUR');
   });
 });
 

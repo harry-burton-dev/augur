@@ -22,10 +22,12 @@ import {
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
 import { describeApi } from './contract.ts';
-import { CallerKeys, refused, Status } from './schemas.ts';
+import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
 import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
 import { Traffic, TRAFFIC_PATH, type TrafficPart } from './traffic.ts';
+import { GatewayMetrics } from './metrics.ts';
+import { browserTelemetryFrom, forward, ForwardFailed, SendLimit, stamped, TELEMETRY_BODY_LIMIT, type BrowserTelemetry as BrowserTelemetrySettings, type Signal } from './telemetry.ts';
 import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
 import { Readable } from 'node:stream';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
@@ -104,6 +106,12 @@ export interface GatewayOptions {
   access?: AppAccess;
   /** Where apps' services are beyond `upstreams`. Defaults to asking the registry upstream. */
   apps?: AppUpstreams;
+  /** Whether and where browser telemetry goes (ADR 0059). Defaults to the OTEL_* settings. */
+  browserTelemetry?: BrowserTelemetrySettings;
+  /** What the alert rules read (ADR 0059). Defaults to the OpenTelemetry API's meter, a no-op without a collector. */
+  metrics?: GatewayMetrics;
+  /** Sends browser telemetry on to the collector. */
+  fetchImpl?: typeof fetch;
 }
 
 /**
@@ -121,7 +129,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic() }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch }: GatewayOptions = {}) => {
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
@@ -137,7 +145,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   // Only the deployment's own network reaches it: nginx forwards only /api/.
   app.addHook('onResponse', async (req, reply) => {
     if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
-    traffic.record(reply.statusCode, trafficPart(req.url));
+    const part = trafficPart(req.url);
+    traffic.record(reply.statusCode, part);
+    metrics.request(reply.statusCode, part);
   });
   app.get<{ Querystring: { minutes?: number } }>(TRAFFIC_PATH, { schema: { hide: true, querystring: { type: 'object', properties: { minutes: { type: 'integer', minimum: 1, maximum: 15 } } } } }, async (req) => traffic.snapshot(req.query.minutes));
   // The public key services check signed callers with. It is public, so anyone may fetch it.
@@ -169,6 +179,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     statusMonitor.start();
     app.addHook('onClose', async () => statusMonitor.stop());
   }
+  metrics.watch({ components: () => statusMonitor.snapshot({ version, api: API_VERSION }), ...(backupDir ? { backups: () => backupStatus(backupDir) } : {}) });
 
   app.addHook('onRequest', async (req, reply) => {
     // Decided by the route the request matched, never by its raw URL: the router decodes
@@ -232,6 +243,65 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       };
     },
   );
+
+  // Browser telemetry (ADR 0059): whether the shell should send it, and where it sends.
+  app.get(
+    `/api/gateway/${API_VERSION}/telemetry`,
+    {
+      schema: {
+        summary: 'Whether this deployment collects browser errors and traces',
+        description: [
+          'The shell asks once after sign-in and starts Faro only when on is true: when the deployment names a',
+          'collector (OTEL_EXPORTER_OTLP_ENDPOINT). When off, why says so.',
+        ].join(' '),
+        response: { 200: ref(BrowserTelemetry), 401: refused('No signed-in caller') },
+      },
+    },
+    async () => (browserTelemetry.on ? { on: true } : { on: false, ...(browserTelemetry.why ? { why: browserTelemetry.why } : {}) }),
+  );
+
+  const limit = new SendLimit();
+  for (const signal of ['logs', 'traces'] as Signal[]) {
+    app.post(
+      `/api/gateway/${API_VERSION}/telemetry/v1/${signal}`,
+      {
+        bodyLimit: TELEMETRY_BODY_LIMIT,
+        schema: {
+          summary: `Browser ${signal} from the shell, passed on to the deployment's collector`,
+          description: [
+            `OTLP/HTTP JSON ${signal}, as Grafana Faro's OTLP transport sends them (ADR 0059). The gateway stamps each`,
+            `resource as service.name=augur-browser with the deployment's own attributes, takes out anything that`,
+            'could name a person and query strings from URLs, and forwards it. At most 256 KB a send and 60 sends a',
+            'minute a person.',
+          ].join(' '),
+          body: OtlpExport,
+          response: {
+            200: { description: 'Passed on', type: 'object', additionalProperties: true },
+            400: refused('Not an OTLP body of this signal'),
+            401: refused('No signed-in caller'),
+            409: refused('Browser telemetry is off here, with why (error telemetry_off)'),
+            429: refused('More than 60 sends this minute'),
+            502: refused("The collector didn't take it"),
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!browserTelemetry.on) return reply.code(409).send({ error: 'telemetry_off', message: browserTelemetry.why ?? 'Browser telemetry is off here.' });
+        if (!limit.take(req.caller!.id)) return reply.code(429).send({ error: 'too_many', message: 'Too many sends this minute. The next minute takes them again.' });
+        const body = stamped(req.body, signal, browserTelemetry.resource);
+        if (!body) return reply.code(400).send({ error: 'bad_request', message: `That isn’t OTLP ${signal}.` });
+        try {
+          await forward(browserTelemetry, signal, body, fetchImpl);
+        } catch (err) {
+          if (!(err instanceof ForwardFailed)) throw err;
+          req.log.warn({ err: err.message }, 'browser telemetry not forwarded');
+          return reply.code(502).send({ error: 'collector_unavailable', message: err.message });
+        }
+        // As an OTLP collector answers: an ExportResponse with nothing rejected.
+        return {};
+      },
+    );
+  }
 
   /**
    * The floor an app call is checked on: the one the caller named, or else the organisation's, so a

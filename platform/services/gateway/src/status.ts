@@ -173,8 +173,19 @@ export interface BackupRun {
   problem?: string;
 }
 
+/** The last copy of the night's backup off the server (restic, ADR 0060), as the backup container wrote it. */
+export interface OffsiteCopy {
+  at: string;
+  ok: boolean;
+  snapshot?: string;
+  keepDays?: number;
+  problem?: string;
+}
+
 /** One weekly restore test: the newest backup loaded into a throwaway database and checked. */
 export interface RestoreTest extends BackupRun {
+  /** Restored from this server's backup, or from the off-server copy. */
+  from?: 'local' | 'offsite';
   seconds?: number;
   people?: number;
   apps?: number;
@@ -186,6 +197,8 @@ export interface BackupStatus {
   state: 'ok' | 'attention';
   problem?: string;
   lastBackup?: BackupRun;
+  /** Absent until a copy has been made: then backups stay on this server only. */
+  offsite?: OffsiteCopy;
   lastRestoreTest?: RestoreTest;
 }
 
@@ -214,14 +227,19 @@ export const publicAccess = async (file: string, now = Date.now()): Promise<Publ
   return seconds * 1000 > now ? { open: true, until: new Date(seconds * 1000).toISOString() } : { open: false };
 };
 
+/** Where an admin turns the off-server copy on or fixes it. */
+const OFFSITE_HOW = 'Set OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key in .env on the server (docs/deploy.md, "Off-server copy").';
+
 /**
- * What the backup container last wrote beside the backups: the night's dump
- * (expected within a day) and the weekly restore test (expected within 8 days).
+ * What the backup container last wrote beside the backups: the night's dump (expected within a day), its
+ * copy off the server (expected within a day; ADR 0060) and the weekly restore test (expected within 8
+ * days, and from the off-server copy once there is one).
  */
 export const backupStatus = async (dir: string, now = Date.now()): Promise<BackupStatus> => {
   const lastBackup = await readJson<BackupRun>(join(dir, 'last-backup.json'));
+  const offsite = await readJson<OffsiteCopy>(join(dir, 'offsite.json'));
   const lastRestoreTest = await readJson<RestoreTest>(join(dir, 'restore-test.json'));
-  const age = (run?: BackupRun) => (run ? now - Date.parse(run.at) : Infinity);
+  const age = (run?: { at: string }) => (run ? now - Date.parse(run.at) : Infinity);
   const problem = !lastBackup
     ? 'No backup has been taken yet.'
     : !lastBackup.ok
@@ -234,6 +252,20 @@ export const backupStatus = async (dir: string, now = Date.now()): Promise<Backu
             ? `The last restore test failed: ${lastRestoreTest.problem ?? 'it didn’t say why.'}`
             : age(lastRestoreTest) > 8 * DAY
               ? 'No restore test has run for over a week. Check the backup container is running.'
-              : undefined;
-  return { state: problem ? 'attention' : 'ok', ...(problem ? { problem } : {}), ...(lastBackup ? { lastBackup } : {}), ...(lastRestoreTest ? { lastRestoreTest } : {}) };
+              : !offsite
+                ? `Backups are kept on this server only, so losing the server would lose them too. ${OFFSITE_HOW}`
+                : !offsite.ok
+                  ? (offsite.problem ?? `The last copy off the server failed. ${OFFSITE_HOW}`)
+                  : age(offsite) > DAY + 2 * 3_600_000
+                    ? 'The last copy off the server is more than a day old. Check the backup container is running.'
+                    : lastRestoreTest.from !== 'offsite'
+                      ? 'No backup has been restored from the off-server copy yet. It runs with the next restore test.'
+                      : undefined;
+  return {
+    state: problem ? 'attention' : 'ok',
+    ...(problem ? { problem } : {}),
+    ...(lastBackup ? { lastBackup } : {}),
+    ...(offsite ? { offsite } : {}),
+    ...(lastRestoreTest ? { lastRestoreTest } : {}),
+  };
 };
