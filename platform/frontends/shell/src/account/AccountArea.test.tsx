@@ -71,6 +71,14 @@ const open = async (section: AccountSection, over: Partial<AccountAreaProps> = {
     onAction: vi.fn(),
     onSignOut: vi.fn(),
     apps: [{ id: 'board', name: 'Board' }],
+    floors: [
+      { id: 'w-me', name: 'Alex' },
+      { id: 'w-fin', name: 'Finance' },
+    ],
+    ownFloor: 'w-me',
+    appSettings: [],
+    mountSettings: vi.fn(async () => true),
+    unmountSettings: vi.fn(),
     shellClient: 'shell',
     product: 'AUGUR',
     ...over,
@@ -120,6 +128,27 @@ describe('the Account area', () => {
     const toggle = document.querySelector<HTMLInputElement>('[role="switch"], input[type="checkbox"]');
     expect(toggle).toBeTruthy();
     expect(props.onPreference).not.toHaveBeenCalled();
+  });
+
+  it('pins apps, clears recent ones and mounts each app’s own settings', async () => {
+    const mountSettings = vi.fn(async (el: HTMLElement) => {
+      el.textContent = 'Board’s own choices';
+      return true;
+    });
+    const { props, text, button } = await open('apps', { prefs: { pinned: ['gone'], recent: ['board'] }, appSettings: [{ id: 'board', name: 'Board' }], mountSettings });
+    expect(text()).toContain('One pinned app isn’t on this floor');
+    expect(text()).toContain('Board’s own choices');
+    expect(mountSettings).toHaveBeenCalledWith(expect.any(HTMLElement), 'board');
+    await act(async () => document.querySelector<HTMLElement>('[role="switch"], input[type="checkbox"]')!.click());
+    expect(props.onPreference).toHaveBeenCalledWith('pinned', ['gone', 'board']);
+    await act(async () => button('Clear recent apps')!.click());
+    expect(props.onPreference).toHaveBeenCalledWith('recent', []);
+  });
+
+  it('says when the floor they start on isn’t theirs any more', async () => {
+    const { text } = await open('apps', { prefs: { startFloor: 'w-old' } });
+    expect(text()).toContain('The floor you chose isn’t one of yours any more.');
+    expect(text()).toContain('No app on this floor has settings of its own.');
   });
 
   it('says once how the last of Keycloak’s screens went', async () => {

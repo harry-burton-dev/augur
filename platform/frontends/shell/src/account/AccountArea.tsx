@@ -1,16 +1,17 @@
 import { AppFrame, AskTwice, Button, Choice, Notice, Note, PageHead, RailLink, Rows, Section, Select, State, TextField, Toggle, type IconName } from '@augur/app-kit';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Preferences } from '../host/preferences.js';
 import { AccountError, type AccountApi, type AccountSession, type HeldCredential, type ProfileChanges, type Security, type SignIn } from './api.js';
 import { actionWords, ago, clientWords, dayAndTime, signInWords, timeZones } from './words.js';
 
-/** The Account area's sections (ADR 0036), in the rail's order. Home and apps, and Privacy and data, come later. */
+/** The Account area's sections (ADR 0036), in the rail's order. Privacy and data comes later. */
 export const ACCOUNT_SECTIONS = [
   { id: 'profile', label: 'Profile', icon: 'account' },
   { id: 'security', label: 'Sign-in and security', icon: 'lock' },
   { id: 'notifications', label: 'Notifications', icon: 'bell' },
   { id: 'appearance', label: 'Appearance', icon: 'palette' },
   { id: 'region', label: 'Language and region', icon: 'clock' },
+  { id: 'apps', label: 'Home and apps', icon: 'home' },
   { id: 'about', label: 'About and help', icon: 'info' },
 ] as const satisfies readonly { id: string; label: string; icon: IconName }[];
 export type AccountSection = (typeof ACCOUNT_SECTIONS)[number]['id'];
@@ -29,6 +30,13 @@ export interface AccountAreaProps {
   onSignOut: () => void;
   /** The apps on this floor, for choosing how each one's notifications arrive. */
   apps: { id: string; name: string }[];
+  /** Their floors, to choose the one AUGUR opens on, and which is their own. */
+  floors: { id: string; name: string }[];
+  ownFloor: string;
+  /** The apps on this floor with settings of their own (a `settings` surface), and how to show them. */
+  appSettings: { id: string; name: string }[];
+  mountSettings: (el: HTMLElement, app: string) => Promise<boolean>;
+  unmountSettings: (el: HTMLElement) => void;
   /** The shell's own sign-in client, so the list of sessions can name it. */
   shellClient: string;
   product: string;
@@ -74,6 +82,7 @@ export function AccountArea(props: AccountAreaProps) {
         {section === 'notifications' ? <NotificationsSection {...props} /> : null}
         {section === 'appearance' ? <AppearanceSection {...props} /> : null}
         {section === 'region' ? <RegionSection {...props} /> : null}
+        {section === 'apps' ? <AppsSection {...props} /> : null}
         {section === 'about' ? <AboutSection {...props} /> : null}
       </AppFrame>
     </div>
@@ -488,6 +497,96 @@ function NotificationsSection({ prefs, onPreference, apps }: AccountAreaProps) {
         )}
       </Section>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------------
+// Home and apps
+
+function AppsSection({ prefs, onPreference, apps, floors, ownFloor, appSettings, mountSettings, unmountSettings }: AccountAreaProps) {
+  const pinned = prefs.pinned ?? [];
+  const pinnedHere = new Set(pinned);
+  const elsewhere = pinned.filter((id) => !apps.some((a) => a.id === id)).length;
+  const recent = prefs.recent ?? [];
+  const nameOf = (id: string) => apps.find((a) => a.id === id)?.name;
+  const start = prefs.startFloor && floors.some((f) => f.id === prefs.startFloor) ? prefs.startFloor : ownFloor;
+  const lost = !!prefs.startFloor && start !== prefs.startFloor;
+  return (
+    <>
+      <PageHead eyebrow="Account" heading="Home and apps" summary="Where AUGUR opens for you, and the apps you keep close" />
+      <Section label="Start on" count={-1} why="AUGUR opens on this floor when you arrive at its front door. A link to somewhere in particular still goes there.">
+        {lost ? <Notice tone="warning" heading="The floor you chose isn’t one of yours any more.">AUGUR opens on your own floor until you choose another. An admin can add you back to it.</Notice> : null}
+        <Select
+          label="Floor"
+          options={floors.map((f) => ({ value: f.id, label: f.id === ownFloor ? `${f.name} (your own)` : f.name }))}
+          value={start}
+          onChange={(v) => onPreference('startFloor', v === ownFloor ? undefined : v)}
+        />
+      </Section>
+      <Section label="Pinned apps" count={pinned.length} why="Pinned apps come first on Home and in the list of apps, in the order you pinned them.">
+        {apps.length ? (
+          apps.map((a) => (
+            <Toggle
+              key={a.id}
+              label={a.name}
+              onWord="Pinned"
+              offWord="Not pinned"
+              checked={pinnedHere.has(a.id)}
+              onChange={(on) => onPreference('pinned', on ? [...pinned, a.id] : pinned.filter((id) => id !== a.id))}
+            />
+          ))
+        ) : (
+          <Note>There are no apps on this floor to pin.</Note>
+        )}
+        {elsewhere ? <Note>{elsewhere === 1 ? 'One pinned app isn’t' : `${elsewhere} pinned apps aren’t`} on this floor. Pins stay for the floors that have them.</Note> : null}
+      </Section>
+      <Section label="Recent apps" count={recent.length} why="The apps you opened last come next on Home and in the list of apps. Clearing them starts the list again from now.">
+        {recent.length ? (
+          <ul className="account-recent">
+            {recent.map((id) => (
+              <li key={id}>{nameOf(id) ?? 'An app that isn’t on this floor'}</li>
+            ))}
+          </ul>
+        ) : (
+          <Note>Nothing yet. The apps you open will show here.</Note>
+        )}
+        <div className="account-line">
+          <span />
+          <Button kind="secondary" size="sm" disabled={!recent.length} reason="There are no recent apps to clear." onPress={() => onPreference('recent', [])}>
+            Clear recent apps
+          </Button>
+        </div>
+      </Section>
+      <h3 className="account-sub">Each app’s own settings</h3>
+      {appSettings.length ? (
+        appSettings.map((a) => <AppSettings key={a.id} app={a} mount={mountSettings} unmount={unmountSettings} />)
+      ) : (
+        <Note>No app on this floor has settings of its own. An app adds them in its manifest, as a settings surface.</Note>
+      )}
+    </>
+  );
+}
+
+/** One app's own settings, mounted from the app; one that won't open says so and leaves the rest alone. */
+function AppSettings({ app, mount, unmount }: { app: { id: string; name: string }; mount: AccountAreaProps['mountSettings']; unmount: AccountAreaProps['unmountSettings'] }) {
+  const el = useRef<HTMLDivElement>(null);
+  const [shown, setShown] = useState<boolean | null>(null);
+  useEffect(() => {
+    const at = el.current;
+    if (!at) return;
+    let live = true;
+    void mount(at, app.id).then((ok) => live && setShown(ok));
+    return () => {
+      live = false;
+      unmount(at);
+    };
+  }, [app.id, mount, unmount]);
+  return (
+    <Section label={app.name} count={-1}>
+      {shown === false ? <Note>{app.name}’s settings didn’t open. Try again later; if it keeps happening, the app’s developers can see why.</Note> : null}
+      {shown === null ? <State kind="loading" heading={`Opening ${app.name}’s settings…`} /> : null}
+      <div ref={el} className="account-app-settings" />
+    </Section>
   );
 }
 
