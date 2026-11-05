@@ -20,6 +20,11 @@ export interface NewNotification {
    */
   key?: string;
   /**
+   * One of the kinds the app's manifest declares (`notifications.kinds`), so each person can
+   * choose in Account how this kind reaches them. One the manifest doesn't declare is refused.
+   */
+  kind?: string;
+  /**
    * Tells everyone on the team the call's floor names, instead of
    * `recipients`. Only on a team that has turned team notices on; who is on
    * it is checked as it's sent.

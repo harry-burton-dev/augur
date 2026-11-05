@@ -1,4 +1,6 @@
 import { serviceHeaders, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
+import { BoundedMap } from './cache.js';
 
 /** Identity could not say who someone is; the call should be refused for now, not let through. */
 export class PeopleUnavailable extends Error {}
@@ -23,7 +25,7 @@ export type PrincipalLookup = (person: string) => Promise<string[]>;
 const ask = async (fetchImpl: typeof fetch, url: string | URL, credentials: ServiceCredentials) => {
   let res: Response;
   try {
-    res = await fetchImpl(url, { headers: await serviceHeaders(credentials) });
+    res = await withDeadline(fetchImpl)(url, { headers: await serviceHeaders(credentials) });
   } catch (err) {
     throw new PeopleUnavailable(`Identity could not be reached (${(err as Error).message}).`);
   }
@@ -37,7 +39,7 @@ const ask = async (fetchImpl: typeof fetch, url: string | URL, credentials: Serv
  * failed lookup isn't remembered.
  */
 export const identityPrincipals = ({ identityUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: PeopleOptions): PrincipalLookup => {
-  const cache = new Map<string, { principals: string[]; at: number }>();
+  const cache = new BoundedMap<string, { principals: string[]; at: number }>();
   return async (person) => {
     const hit = cache.get(person);
     if (hit && now() - hit.at < ttlMs) return hit.principals;

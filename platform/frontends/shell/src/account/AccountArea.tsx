@@ -28,8 +28,8 @@ export interface AccountAreaProps {
   /** Opens one of Keycloak's screens and comes back to this section. */
   onAction: (kcAction: string, section: AccountSection) => void;
   onSignOut: () => void;
-  /** The apps on this floor, for choosing how each one's notifications arrive. */
-  apps: { id: string; name: string }[];
+  /** The apps on this floor, for choosing how each one's notifications arrive, with the kinds each declares. */
+  apps: { id: string; name: string; kinds?: { id: string; label: string; detail?: string }[] }[];
   /** Their floors, to choose the one AUGUR opens on, and which is their own. */
   floors: { id: string; name: string }[];
   ownFloor: string;
@@ -446,6 +446,7 @@ function NotificationsSection({ prefs, onPreference, apps }: AccountAreaProps) {
   const n = prefs.notifications ?? {};
   const set = (next: NonNullable<Preferences['notifications']>) => onPreference('notifications', { ...n, ...next });
   const muted = new Set(prefs.muted ?? []);
+  const quietKinds = prefs.quietKinds ?? [];
   const quiet = n.quietHours;
   return (
     <>
@@ -480,17 +481,40 @@ function NotificationsSection({ prefs, onPreference, apps }: AccountAreaProps) {
           </div>
         ) : null}
       </Section>
-      <Section label="Each app" count={apps.length} why="Quiet: the app’s notifications land in the shell without a sound and never on Home. Apps can’t name kinds of notification yet, so the choice is for the whole app.">
+      <Section label="Each app" count={apps.length} why="Quiet: notifications land in the shell without a sound, uncounted, and never on Home or as a toast. Apps that name their kinds of notification let you choose each kind.">
         {apps.length ? (
           apps.map((a) => (
-            <Toggle
-              key={a.id}
-              label={a.name}
-              onWord="On Home"
-              offWord="Quiet"
-              checked={!muted.has(a.id)}
-              onChange={(on) => onPreference('muted', on ? [...muted].filter((id) => id !== a.id) : [...muted, a.id])}
-            />
+            <div key={a.id} className="account-app">
+              <Toggle
+                label={a.name}
+                onWord="On Home"
+                offWord="Quiet"
+                checked={!muted.has(a.id)}
+                onChange={(on) => onPreference('muted', on ? [...muted].filter((id) => id !== a.id) : [...muted, a.id])}
+              />
+              {a.kinds?.length ? (
+                muted.has(a.id) ? (
+                  <Note>Every kind from {a.name} is quiet while the whole app is.</Note>
+                ) : (
+                  <div className="account-kinds">
+                    {a.kinds.map((k) => {
+                      const id = `${a.id}:${k.id}`;
+                      return (
+                        <Toggle
+                          key={id}
+                          label={k.label}
+                          {...(k.detail ? { hint: k.detail } : {})}
+                          onWord="On Home"
+                          offWord="Quiet"
+                          checked={!quietKinds.includes(id)}
+                          onChange={(on) => onPreference('quietKinds', on ? quietKinds.filter((q) => q !== id) : [...quietKinds, id])}
+                        />
+                      );
+                    })}
+                  </div>
+                )
+              ) : null}
+            </div>
           ))
         ) : (
           <Note>No apps on this floor send notifications.</Note>

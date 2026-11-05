@@ -151,6 +151,19 @@ describe('the Account area', () => {
     expect(text()).toContain('No app on this floor has settings of its own.');
   });
 
+  it('chooses each kind of notification an app names, unless the whole app is quiet', async () => {
+    const kinds = [{ id: 'comment', label: 'Comments on your documents' }, { id: 'approval', label: 'Approvals' }];
+    const { props, text } = await open('notifications', { prefs: { quietKinds: ['board:approval'] }, apps: [{ id: 'board', name: 'Board', kinds }] });
+    expect(text()).toContain('Comments on your documents');
+    const switches = [...document.querySelectorAll<HTMLInputElement>('.account-app [role="switch"], .account-app input[type="checkbox"]')];
+    expect(switches).toHaveLength(3);
+    await act(async () => switches[1]!.click());
+    expect(props.onPreference).toHaveBeenCalledWith('quietKinds', ['board:approval', 'board:comment']);
+    act(() => root?.unmount());
+    const muted = await open('notifications', { prefs: { muted: ['board'] }, apps: [{ id: 'board', name: 'Board', kinds }] });
+    expect(muted.text()).toContain('Every kind from Board is quiet while the whole app is.');
+  });
+
   it('says once how the last of Keycloak’s screens went', async () => {
     const { text } = await open('security', { actionStatus: 'cancelled' });
     expect(text()).toContain('Nothing changed.');

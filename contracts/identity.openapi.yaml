@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.17.0
+  version: 1.18.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
 components:
   schemas:
@@ -470,6 +470,14 @@ components:
           maxItems: 100
           uniqueItems: true
           description: App ids whose notifications land in the stream silently and never on Home
+        quietKinds:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}:[a-z][a-z0-9-]{0,39}$
+          maxItems: 200
+          uniqueItems: true
+          description: Kinds of notification, as "<app>:<kind>", that land in the stream silently and never on Home or as a toast
         pinned:
           type: array
           items:

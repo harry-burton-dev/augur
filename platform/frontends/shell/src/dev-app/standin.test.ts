@@ -1,6 +1,6 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it, vi } from 'vitest';
-import { DEV_EVENT, devHome, devUser, standInFetch } from './standin.js';
+import { DEV_EVENT, DEV_INBOX, devHome, devUser, standInFetch } from './standin.js';
 
 const app: AppManifestEntry = { id: 'hello', name: 'Hello', route: '/hello', entry: '/@fs/apps/hello/frontend/src/entry.ts', version: '0.0.0', sdk: '^1.0.0', requiredRole: 'editor' };
 
@@ -48,6 +48,21 @@ describe('the stand-in platform', () => {
     const text = (await reader.read()).value!;
     expect(text).toContain('event: domain-event');
     expect(JSON.parse(text.split('data: ')[1])).toMatchObject({ topic: 'hello.greeting.changed', publisher: 'hello', workspace: { id: 'dev-me' }, payload: { greeting: 'g1' } });
+    stop.abort();
+  });
+
+  it('keeps an inbox: an item sent from the page is listed and counted, the stream says so, and marking it done closes it', async () => {
+    const f = standInFetch({ ...app, inbox: { kinds: [{ id: 'check', label: 'To check' }] } });
+    const stop = new AbortController();
+    const reader = (await f('/api/events/v1/notifications/stream', { signal: stop.signal })).body!.pipeThrough(new TextDecoderStream()).getReader();
+    window.dispatchEvent(new CustomEvent(DEV_INBOX, { detail: { title: 'Check this', allow: { selfComplete: true } } }));
+    expect((await reader.read()).value).toContain('event: inbox');
+    const [item] = await (await f('/api/events/v1/inbox?tab=you')).json();
+    expect(item).toMatchObject({ app: 'hello', kind: 'check', title: 'Check this', state: 'open', owner: { kind: 'person', id: 'dev-person' }, allow: { decline: true, selfComplete: true } });
+    expect(await (await f('/api/events/v1/inbox/counts')).json()).toEqual({ you: 1, teams: 0, overdue: 0 });
+    await f(`/api/events/v1/inbox/${item.id}/done`, { method: 'POST' });
+    expect(await (await f('/api/events/v1/inbox?tab=you')).json()).toEqual([]);
+    expect((await (await f('/api/events/v1/inbox?tab=done')).json())[0]).toMatchObject({ id: item.id, state: 'done' });
     stop.abort();
   });
 

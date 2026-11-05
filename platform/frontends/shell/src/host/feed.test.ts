@@ -40,6 +40,12 @@ describe('fromServer', () => {
   it('keeps the floor it came from, for the gauge and its tag', () => {
     expect(fromServer({ ...n('2'), workspace: { id: 'fin', path: ['org', 'fin'] } }).floor).toBe('fin');
   });
+
+  it('lands a kind the person made quiet without a pulse', () => {
+    expect(fromServer({ ...n('3'), kind: 'comment' }, ['library:comment']).quiet).toBe(true);
+    expect(fromServer({ ...n('4'), kind: 'approval' }, ['library:comment']).quiet).toBeUndefined();
+    expect(fromServer(n('5'), ['library:comment']).quiet).toBeUndefined();
+  });
 });
 
 describe('NotificationFeed', () => {

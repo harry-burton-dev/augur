@@ -45,6 +45,8 @@ describe('the Inbox view', () => {
     const opens = rows.map((r) => [...r.querySelectorAll('button')].find((b) => b.textContent?.includes('Open')));
     expect(opens[0]?.getAttribute('aria-disabled')).not.toBe('true');
     expect(rows[1].textContent).toContain('gone');
+    // Each row's menu opens from a button.
+    expect(rows.every((r) => [...r.querySelectorAll('button')].some((b) => b.textContent === 'More'))).toBe(true);
     await unmount();
   });
 

@@ -1,4 +1,5 @@
 import { WORKSPACE_HEADERS } from './caller.js';
+import { serviceTimeoutMs, withDeadline } from './deadline.js';
 import { type ServiceIdentity, type ServiceVerifier, type TokenSource } from './apps.js';
 
 /**
@@ -39,17 +40,19 @@ export interface CallOptions {
   /** Delay before the first retry; doubles after each. */
   retryMs?: number;
   fetchImpl?: typeof fetch;
+  /** How long each attempt may take: serviceTimeoutMs() (a few seconds) unless the call needs longer. */
+  timeoutMs?: number;
 }
 
 /**
  * Calls another service, retrying while it is unreachable or failing. A refusal
  * (4xx: bad input, wrong token, a conflict) is not retried.
  */
-export async function callService({ method, url, credentials, body, what, workspace, attempts = 1, retryMs = 500, fetchImpl = fetch }: CallOptions): Promise<unknown> {
+export async function callService({ method, url, credentials, body, what, workspace, attempts = 1, retryMs = 500, fetchImpl = fetch, timeoutMs = serviceTimeoutMs() }: CallOptions): Promise<unknown> {
   let lastError = '';
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      const res = await fetchImpl(url, {
+      const res = await withDeadline(fetchImpl, timeoutMs)(url, {
         method,
         headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),

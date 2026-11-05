@@ -34,6 +34,10 @@ x-telemetry: &telemetry
   OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
   OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
   OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
+  # How long one service waits for another before it says that one can't be reached (5 seconds unless set).
+  SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
+  # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
+  DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
   # Which deployment it came from: its ring, and the name it reports to Backstage under.
   OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production},deployment.name=${DEPLOYMENT_ID:-${SERVER_RING:-production}}
 
