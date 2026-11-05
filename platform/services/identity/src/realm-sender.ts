@@ -73,3 +73,54 @@ export const realmIdleFromDb = async (
     await client.end().catch(() => undefined);
   }
 };
+
+/** What the realm job applies from Admin → Organisation beyond the sender and idle days (PER-196). */
+export interface RealmOrganisation {
+  /** The organisation's name: its floor's. */
+  name?: string;
+  /** The sign-in notice; off when none is kept. */
+  notice: { on: boolean; title?: string; text?: string };
+  /** The languages an admin chose, the default first; absent until one chooses, so REALM_LANGUAGES stands. */
+  languages?: string[];
+  /** Everyone signs in with two steps, not only the admin roles. */
+  twoStepForAll: boolean;
+}
+
+/**
+ * Reads the rest of Admin → Organisation from identity's own tables, for the realm job. An identity from before
+ * these settings gives their defaults; undefined when the database can't be read, and the job then leaves the
+ * notice, languages and two steps in Keycloak as they are.
+ */
+export const realmOrganisationFromDb = async (databaseUrl: string, warn: (message: string) => void = () => undefined, schema = 'identity'): Promise<RealmOrganisation | undefined> => {
+  const client = new pg.Client({ connectionString: databaseUrl, connectionTimeoutMillis: 10_000 });
+  try {
+    await client.connect();
+    const org = await client.query<{ name: string }>(`select name from ${schema}.workspaces where kind = 'org'`).catch((err: { code?: string }) => {
+      if (err.code === '42P01') return { rows: [] };
+      throw err;
+    });
+    const { rows } = await client
+      .query<{ notice_on: boolean | null; notice_title: string | null; notice_text: string | null; languages: string[] | null; default_language: string | null; two_step_for_all: boolean | null }>(
+        `select notice_on, notice_title, notice_text, languages, default_language, two_step_for_all from ${schema}.organisation`,
+      )
+      .catch((err: { code?: string }) => {
+        // No table yet (first install), or an identity from before these settings.
+        if (err.code === '42P01' || err.code === '42703') return { rows: [] };
+        throw err;
+      });
+    const r = rows[0];
+    const languages = r?.languages?.length ? r.languages : undefined;
+    const first = languages && r?.default_language && languages.includes(r.default_language) ? r.default_language : languages?.[0];
+    return {
+      ...(org.rows[0]?.name ? { name: org.rows[0].name } : {}),
+      notice: { on: Boolean(r?.notice_on && r.notice_title && r.notice_text), ...(r?.notice_title ? { title: r.notice_title } : {}), ...(r?.notice_text ? { text: r.notice_text } : {}) },
+      ...(languages && first ? { languages: [first, ...languages.filter((l) => l !== first)] } : {}),
+      twoStepForAll: r?.two_step_for_all ?? false,
+    };
+  } catch (err) {
+    warn(`The organisation’s settings couldn’t be read (${(err as Error).message}), so the sign-in notice, languages and two steps for everyone are left as they are.`);
+    return undefined;
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+};

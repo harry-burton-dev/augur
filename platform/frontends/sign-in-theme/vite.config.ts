@@ -15,9 +15,9 @@ export default defineConfig({
       groupId: 'augur',
       // One jar, for the Keycloak AUGUR runs (26.x): the other range Keycloakify can build for is 22 to 25.
       keycloakVersionTargets: { '22-to-25': false, 'all-other-versions': 'augur-theme.jar' },
-      // Read from Keycloak's environment when a page is shown. ORG_NAME is the organisation's name, as
-      // identity has it (compose.yml gives both the same setting), until it moves to identity's
-      // organisation settings (ADR 0042). ORG_LOGO_URL is optional: without it the page shows no logo.
+      // Read from Keycloak's environment when a page is shown. ORG_NAME is the organisation's name until the
+      // realm job has applied the one in Admin → Organisation (ADR 0042). ORG_LOGO_URL is optional: without it
+      // the page shows the logo kept in Admin → Organisation, or none.
       environmentVariables: [
         { name: 'ORG_NAME', default: 'Organisation' },
         { name: 'ORG_LOGO_URL', default: '' },

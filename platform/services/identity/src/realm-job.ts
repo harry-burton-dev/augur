@@ -3,7 +3,7 @@ import { KeycloakAppClients, parseClientSecrets, retrying } from './clients.ts';
 import { KeycloakDirectory } from './directory.ts';
 import { applyRealm, productNameFromEnv, realmEntraFromEnv, realmLookFromEnv, realmMailFromEnv, realmSettingsFromEnv } from './realm.ts';
 import { IDLE_DEFAULTS } from './organisation.ts';
-import { realmIdleFromDb, realmSenderFromDb } from './realm-sender.ts';
+import { realmIdleFromDb, realmOrganisationFromDb, realmSenderFromDb } from './realm-sender.ts';
 
 const log = startupLog('keycloak-config');
 
@@ -38,7 +38,7 @@ loadConfigOrExit('realm job', [
   { name: 'ENTRA_TENANT_ID', about: 'the organisation’s Entra tenant id, for signing in with the organisation’s account (all three ENTRA_* or none; docs/deploy.md, Entra).' },
   { name: 'ENTRA_CLIENT_ID', about: 'the AUGUR app registration’s client id in that tenant.' },
   { name: 'ENTRA_CLIENT_SECRET', about: 'that app registration’s client secret.', secret: true },
-  { name: 'DATABASE_URL', about: 'identity’s database, read for the organisation’s email sender and idle-account days (Admin → Organisation); without it Keycloak’s email comes from SMTP_FROM under the product’s name, and the idle-account Workflow is left as it is.', secret: true },
+  { name: 'DATABASE_URL', about: 'identity’s database, read for the organisation’s settings in Admin → Organisation (email sender, idle-account days, sign-in notice, languages, two steps for everyone); without it Keycloak’s email comes from SMTP_FROM under the product’s name, and the idle-account Workflow is left as it is.', secret: true },
 ]);
 
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER, KEYCLOAK_ADMIN_PASSWORD, IDENTITY_CLIENT_SECRET, PLATFORM_ADMIN_USER } = process.env;
@@ -51,6 +51,8 @@ if (!mail) log.info('No SMTP relay is set (SMTP_HOST): the realm keeps any relay
 const sender = mail && process.env.DATABASE_URL ? await realmSenderFromDb(process.env.DATABASE_URL, warn) : undefined;
 // The idle-account days (Admin → Organisation), read on every run, so a change applies at the next up or upgrade.
 const idle = process.env.DATABASE_URL ? await realmIdleFromDb(process.env.DATABASE_URL, IDLE_DEFAULTS, warn) : undefined;
+// The sign-in notice, languages and two steps for everyone (Admin → Organisation), read on every run too.
+const organisation = process.env.DATABASE_URL ? await realmOrganisationFromDb(process.env.DATABASE_URL, warn) : undefined;
 // The organisation's Entra; its button is named for the organisation (Admin → Organisation).
 const entra = realmEntraFromEnv(process.env, warn);
 const orgName = entra && process.env.DATABASE_URL ? (await realmSenderFromDb(process.env.DATABASE_URL, warn))?.name : undefined;
@@ -73,6 +75,7 @@ try {
         mail,
         sender,
         idle,
+        organisation,
         entra,
         orgName,
       }).catch((err: Error) => {

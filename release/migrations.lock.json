@@ -25,7 +25,8 @@
     "reconcile_001_since": "59faf30f88ae961e",
     "organisation_002_idle": "e5fe9bcfc68d9629",
     "lifecycle_003_locked_leaving": "f5cf91898e46e7ab",
-    "lifecycle_004_federated": "d76252f0a2c47b37"
+    "lifecycle_004_federated": "d76252f0a2c47b37",
+    "organisation_003_logo_notice_languages_security": "88eeebf20abb75c5"
   },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"
