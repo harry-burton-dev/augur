@@ -1016,6 +1016,16 @@
       ],
       "x-docs": "docs/inbox.md#how-long-items-are-kept"
     },
+    "INBOX_DONE_DAYS": {
+      "type": "string",
+      "description": "How many days back the Inbox's Done tab looks for closed items. Keep it at most INBOX_KEEP_DAYS, since older items are gone.",
+      "pattern": "^[1-9][0-9]*$",
+      "default": "30",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/inbox.md#how-long-items-are-kept"
+    },
     "CALLER_SIGNING_KEY": {
       "type": "string",
       "writeOnly": true,

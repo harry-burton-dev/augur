@@ -7,6 +7,7 @@ export * from './events.js';
 export * from './inbox.js';
 export * from './version.js';
 export * from './logging.js';
+export * from './startup-log.js';
 export * from './apps.js';
 export * from './grants.js';
 export * from './floors.js';

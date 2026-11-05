@@ -100,4 +100,4 @@ The shell's notification stream (`/v1/notifications/stream`) also carries events
 
 ## How long items are kept
 
-Closed items are kept for 90 days (`INBOX_KEEP_DAYS` in `.env` changes it), then removed with their history by the events service's hourly prune. The audit log keeps every step. The Done tab shows the last 30 days.
+Closed items are kept for 90 days (`INBOX_KEEP_DAYS` in `.env` changes it), then removed with their history by the events service's hourly prune. The audit log keeps every step. The Done tab shows items closed in the last 30 days (`INBOX_DONE_DAYS` changes it; keep it at most `INBOX_KEEP_DAYS`). `GET /v1/inbox/counts` says the window as `doneDays`, and the shell's empty Done tab reads the number from there.

@@ -43,6 +43,9 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   const [leaving, setLeaving] = useState<LeaveRequest[]>([]);
   const [heir, setHeir] = useState(NO_ONE);
   const [leaverNote, setLeaverNote] = useState('');
+  /** Whether invites can be emailed here; until known, the one-time password is offered. */
+  const [canEmail, setCanEmail] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -54,6 +57,7 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
       setRoles(r);
       // Who asked to leave is a hint for the leaver flow: People still works if it can't be read.
       setLeaving(await api.leaveRequests().catch(() => []));
+      setCanEmail((await api.lifecycle().catch(() => ({ email: false }))).email);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -94,6 +98,22 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
       <TextField name="lastName" label="Last name" required defaultValue={p?.lastName ?? ''} />
       <TextField name="email" type="email" label="Email" required defaultValue={p?.email ?? ''} validate={emailCheck} />
       {p ? null : <TextField name="username" label="Username" optional hint="What they sign in with. Leave it empty to use the part of their email before the @." />}
+      {p ? null : (
+        <Select
+          name="start"
+          label="How they start"
+          options={[
+            {
+              value: 'email',
+              label: 'Email them an invite',
+              detail: canEmail ? 'A link that lasts 72 hours to choose a password' : 'Email isn’t set up on this deployment. Whoever runs the server adds it to .env.',
+              disabled: !canEmail,
+            },
+            { value: 'temporary-password', label: 'Give them a one-time password', detail: 'Read it to them; they choose their own at first sign-in' },
+          ]}
+          defaultValue={canEmail ? 'email' : 'temporary-password'}
+        />
+      )}
       <Select name="department" label="Department" placeholder="No department" options={departmentOptions} defaultValue={p?.departments[0] ?? NO_DEPARTMENT} />
       <CheckboxGroup label="Roles" optional value={chosenRoles} onChange={setChosenRoles}>
         {roles.map((r) => (
@@ -106,7 +126,10 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
   );
 
   const addPerson = async (values: Record<string, string>) => {
-    const { person: added, temporaryPassword } = await api.addPerson({
+    setNotice('');
+    const start = values.start === 'email' || values.start === 'temporary-password' ? values.start : canEmail ? 'email' : 'temporary-password';
+    const { person: added, invite, temporaryPassword } = await api.addPerson({
+      start,
       firstName: values.firstName ?? '',
       lastName: values.lastName ?? '',
       email: values.email ?? '',
@@ -116,7 +139,18 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
     });
     setPeople((all) => [...all, added]);
     setDepartments((all) => all.map((d) => (added.departments.includes(d.id) ? { ...d, members: [...d.members, added.id] } : d)));
-    setPassword({ name: fullName(added), value: temporaryPassword, reset: false });
+    if (temporaryPassword) setPassword({ name: fullName(added), value: temporaryPassword, reset: false });
+    else if (invite?.error) setNotice(`${fullName(added)} was added, but the invite email couldn’t be sent: ${invite.error} Send it again from their details, or give them a one-time password.`);
+    else if (invite?.method === 'email') setNotice(`Invite sent to ${invite.sentTo ?? added.email ?? fullName(added)}. The link works until ${invite.expiresAt ? new Date(invite.expiresAt).toLocaleString() : 'it runs out'}.`);
+  };
+
+  /** A new invite email, at once; the old link stops working. */
+  const resendInvite = async (p: Person) => {
+    setLiveResult('');
+    setLiveError('');
+    const { invite } = await api.resendInvite(p.id);
+    replace({ ...p, invite: { method: 'email', sentAt: new Date().toISOString(), ...(invite.expiresAt ? { expiresAt: invite.expiresAt } : {}), expired: false, count: (p.invite?.count ?? 0) + 1 } });
+    setLiveResult(`New invite sent to ${invite.sentTo ?? p.email ?? fullName(p)}. The old link no longer works.`);
   };
 
   const saveEdit = async (values: Record<string, string>) => {
@@ -205,13 +239,18 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
           </Button>
         }
       />
+      {notice ? (
+        <p role="status" className="admin-muted" data-notice>
+          {notice}
+        </p>
+      ) : null}
       {adding && !unready ? (
         <Dialog
         open
         size="glance"
         eyebrow="People"
         heading="Add a person"
-        summary="They get a one-time password to sign in with, then choose their own."
+        summary="They get an invite email, or a one-time password you give them. Either way they choose their own password."
         actionLabel="Add"
         busyLabel="Adding…"
         onSubmit={addPerson}
@@ -274,6 +313,18 @@ export function People({ api, me, adding: addingAtFirst }: { api: AdminApi; me: 
                   Turn their sign-in on
                 </Button>
               )}
+              {person.state === 'invited' ? (
+                <Button
+                  kind="secondary"
+                  size="sm"
+                  busyLabel="Sending…"
+                  disabled={!canEmail}
+                  reason="Email isn’t set up on this deployment. Whoever runs the server adds it to .env."
+                  onPress={() => resendInvite(person).catch((err: Error) => setLiveError(err.message))}
+                >
+                  Send a new invite
+                </Button>
+              ) : null}
               <AskTwice size="sm" confirm="Press again: their current password stops working" busyLabel="Making one…" onPress={() => resetPassword(person).catch((err: Error) => setLiveError(err.message))}>
                 Give them a new one-time password
               </AskTwice>

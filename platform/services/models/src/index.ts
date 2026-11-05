@@ -1,7 +1,9 @@
-import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryRequiredRole, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryRequiredRole, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { providerFromEnv } from './config.ts';
 import { PgModelStore } from './store.ts';
+
+const log = startupLog('models');
 
 // Every setting the model gateway reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('models', [
@@ -29,12 +31,12 @@ if (!process.env.DATABASE_URL) {
 const store = await PgModelStore.connect(process.env.DATABASE_URL);
 
 const provider = providerFromEnv();
-if (!provider) console.warn('MODEL_API_URL is not set: there is no model, so models can’t be turned on.');
+if (!provider) log.warn('MODEL_API_URL is not set: there is no model, so models can’t be turned on.');
 
 // The gateway signs in as itself (platform-models) to check apps' grants and write the audit log.
 const { REGISTRY_URL = 'http://localhost:8082', EVENTS_URL = 'http://localhost:8084' } = process.env;
 const credentials = platformCredentialsFromEnv('models');
-if (!credentials) console.warn('SERVICE_CLIENT_SECRET is not set: calls can’t be recorded, so none are made.');
+if (!credentials) log.warn('SERVICE_CLIENT_SECRET is not set: calls can’t be recorded, so none are made.');
 const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 const requiredRole = credentials ? registryRequiredRole({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 const audit = credentials ? auditTo(EVENTS_URL, credentials) : undefined;

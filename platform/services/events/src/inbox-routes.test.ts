@@ -125,8 +125,8 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
     expect(hidden.subject).toBeUndefined();
     expect((await list(leadNora, 'teams'))[0]).toMatchObject({ title: 'Review the budget', subject: { label: 'Office move' } });
     expect((await act(id, 'take', sam)).json().message).toContain('leads');
-    expect((await app.inject({ method: 'GET', url: '/v1/inbox/counts', headers: sam })).json()).toEqual({ you: 0, teams: 0, overdue: 0 });
-    expect((await app.inject({ method: 'GET', url: '/v1/inbox/counts', headers: leadNora })).json()).toEqual({ you: 0, teams: 1, overdue: 0 });
+    expect((await app.inject({ method: 'GET', url: '/v1/inbox/counts', headers: sam })).json()).toEqual({ you: 0, teams: 0, overdue: 0, doneDays: 30 });
+    expect((await app.inject({ method: 'GET', url: '/v1/inbox/counts', headers: leadNora })).json()).toEqual({ you: 0, teams: 1, overdue: 0, doneDays: 30 });
     expect((await act(id, 'take', leadNora)).json().takenBy).toBe('u-nora');
   });
 
@@ -134,7 +134,7 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
     const { store, put, act, list, app } = await setUp();
     const { id } = (await put('h', { ...assignment, due: '2000-01-01' })).json();
     expect((await list(nora))[0]).toMatchObject({ overdue: true, due: '2000-01-01T00:00:00.000Z' });
-    expect((await app.inject({ method: 'GET', url: '/v1/inbox/counts', headers: nora })).json()).toEqual({ you: 1, teams: 0, overdue: 1 });
+    expect((await app.inject({ method: 'GET', url: '/v1/inbox/counts', headers: nora })).json()).toEqual({ you: 1, teams: 0, overdue: 1, doneDays: 30 });
     expect((await act(id, 'hand-on', nora, { to: 'person:u-gone' })).statusCode).toBe(400);
     expect((await act(id, 'hand-on', nora, { to: 'person:u-nora' })).statusCode).toBe(400);
     expect((await act(id, 'hand-on', sam, { to: 'person:u-sam' })).statusCode).toBe(404);

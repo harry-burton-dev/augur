@@ -50,8 +50,8 @@ export type StepResult = { item: InboxItem; step: string } | { missing: true } |
 
 export type PutResult = { item: InboxItem; step: string; created: boolean } | { closed: InboxItem };
 
-/** How long Done keeps showing a closed item. */
-export const DONE_DAYS = 30;
+/** How many days Done keeps showing a closed item, unless the deployment sets INBOX_DONE_DAYS. */
+export const DEFAULT_DONE_DAYS = 30;
 
 const DEFAULT_ALLOW: Required<InboxAllow> = { decline: true, handOn: true, selfComplete: false };
 
@@ -75,6 +75,8 @@ export interface InboxStore {
   list(q: InboxQuery): Promise<InboxItem[]>;
   /** `leadTeams`: the teams whose leads-only items count, those the person stands on as a lead. */
   counts(person: string, teams: string[], leadTeams: string[]): Promise<InboxCounts>;
+  /** How many days back the Done tab looks. */
+  readonly doneDays: number;
   /** Forgets items closed more than this many days ago, with their history; returns how many went. */
   prune(keepDays: number): Promise<number>;
   /** Hears each change on any instance, for open streams. */
@@ -217,7 +219,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export class PgInboxStore implements InboxStore {
   private emitter = new EventEmitter().setMaxListeners(0);
 
-  constructor(private readonly pool: pg.Pool) {}
+  readonly doneDays: number;
+
+  constructor(
+    private readonly pool: pg.Pool,
+    doneDays = DEFAULT_DONE_DAYS,
+  ) {
+    // Written into the Done tab's query, so only a whole number of days of at least one is taken.
+    if (!Number.isInteger(doneDays) || doneDays < 1) throw new Error(`The inbox's Done window must be a whole number of days, at least 1 (got ${doneDays}).`);
+    this.doneDays = doneDays;
+  }
 
   /** What the events store's listening connection hears on INBOX_CHANNEL. */
   heard(payload: string) {
@@ -379,7 +390,7 @@ export class PgInboxStore implements InboxStore {
     const where = {
       you: `state = 'open' and ((owner_kind = 'person' and owner_id = $1) or taken_by = $1)`,
       teams: `state = 'open' and owner_kind = 'team' and owner_id = any($2::text[]) and taken_by is null`,
-      done: `state <> 'open' and closed_at >= now() - make_interval(days => ${DONE_DAYS})
+      done: `state <> 'open' and closed_at >= now() - make_interval(days => ${this.doneDays})
              and ((owner_kind = 'person' and owner_id = $1) or taken_by = $1 or closed_by = $1
                   or exists (select 1 from events.inbox_history h where h.item_id = i.id and h.by = $1 and h.action <> 'created'))`,
     }[tab];

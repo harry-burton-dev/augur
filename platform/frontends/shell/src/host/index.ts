@@ -41,4 +41,5 @@ export {
   withInbox,
   type InboxTab,
   type InboxVerb,
+  type ShellInboxCounts,
 } from './inbox.js';

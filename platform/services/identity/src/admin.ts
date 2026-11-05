@@ -4,7 +4,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type Person as DirectoryPerson } from './directory.ts';
-import { Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, ref, refused, Role, TeamLevels } from './schemas.ts';
+import { choice, Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, ref, refused, Role, TeamLevels } from './schemas.ts';
 import { withLifecycle, type LifecycleStore } from './lifecycle.ts';
 import type { PreferenceStore } from './store.ts';
 import { DEFAULT_LEVELS, MAX_TEAM_DEPTH, type WorkspaceStore } from './workspaces.ts';
@@ -131,18 +131,61 @@ export const adminRoutes =
       async (req) => one(await dir().person(req.params.id)),
     );
 
+    /** How long an invite's link works: 72 hours (PER-194 spec). */
+    const INVITE_HOURS = 72;
+    const NO_EMAIL = 'Email isn’t set up on this deployment, so an invite can’t be sent. Whoever runs the server adds the SMTP_* settings to .env (docs/deploy.md, Email). Give them a one-time password instead.';
+    const InviteResult = Type.Object(
+      {
+        method: choice(['email', 'temporary-password']),
+        sentTo: Type.Optional(Type.String()),
+        expiresAt: Type.Optional(Type.String({ format: 'date-time' })),
+        error: Type.Optional(Type.String({ description: 'The account was made but the email couldn’t be sent: resend it, or give a one-time password' })),
+      },
+      { description: 'How they start' },
+    );
+    /** Emails an invite and keeps when it runs out; a failure is said, not thrown, because the account is already made. */
+    const invite = async (id: string, email: string | undefined) => {
+      const at = new Date();
+      const expiresAt = new Date(at.getTime() + INVITE_HOURS * 3_600_000).toISOString();
+      try {
+        await dir().sendInvite(id, INVITE_HOURS * 3600);
+      } catch (err) {
+        await lifecycle?.invited(id, 'email');
+        return { method: 'email' as const, error: (err as Error).message };
+      }
+      await lifecycle?.invited(id, 'email', { at: at.toISOString(), expiresAt });
+      return { method: 'email' as const, ...(email ? { sentTo: email } : {}), expiresAt };
+    };
+
+    app.get(
+      '/lifecycle',
+      {
+        schema: {
+          summary: 'What the account lifecycle can do on this deployment',
+          description: 'For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites.',
+          response: { 200: Type.Object({ email: Type.Boolean() }, { description: 'What works' }), ...guarded },
+        },
+      },
+      async () => ({ email: await dir().canEmail() }),
+    );
+
     app.post(
       '/people',
       {
         schema: {
-          summary: 'Add someone, with a one-time password they replace at first sign-in',
+          summary: 'Add someone: an invite email, or a one-time password they replace at first sign-in',
+          description: [
+            '`start` is `email` by default when the sign-in service can send email, else `temporary-password`.',
+            'An invite emails a link that works for 72 hours to confirm their email and choose a password.',
+            'If the account is made but the email can’t be sent, the answer is still 201, with `invite.error`.',
+          ].join(' '),
           body: ref(NewPersonSchema),
           response: {
             201: Type.Object(
-              { person: ref(Person), temporaryPassword: Type.String() },
-              { description: 'Added. The password is returned once and kept nowhere it can be read again.' },
+              { person: ref(Person), invite: InviteResult, temporaryPassword: Type.Optional(Type.String()) },
+              { description: 'Added. A one-time password is returned once and kept nowhere it can be read again.' },
             ),
-            400: refused("A field is missing or wrong, or a role or department doesn't exist"),
+            400: refused("A field is missing or wrong, a role or department doesn't exist, or an invite was asked for and email isn't set up"),
             ...guarded,
             403: deploymentAdmins,
             409: refused('The username or email is taken'),
@@ -160,11 +203,50 @@ export const adminRoutes =
           departments: body.departments ?? [],
         };
         if (person.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
-        const password = temporaryPassword();
+        const canEmail = await dir().canEmail();
+        const method = body.start ?? (canEmail ? 'email' : 'temporary-password');
+        if (method === 'email' && !canEmail) return reply.code(400).send({ error: 'bad_request', message: NO_EMAIL });
+        const password = method === 'temporary-password' ? temporaryPassword() : undefined;
         const created = await dir().createPerson(person, password);
-        await record(req, 'person.added', created.id, { username: created.username, roles: created.roles, departments: created.departments });
+        await record(req, 'person.added', created.id, { username: created.username, roles: created.roles, departments: created.departments, method });
         await joined(req, created.id, [], created.departments);
-        return reply.code(201).send({ person: await one(created), temporaryPassword: password });
+        let started;
+        if (method === 'email') started = await invite(created.id, created.email);
+        else {
+          await lifecycle?.invited(created.id, 'temporary-password');
+          started = { method };
+        }
+        return reply.code(201).send({ person: await one(created), invite: started, ...(password ? { temporaryPassword: password } : {}) });
+      },
+    );
+
+    app.post(
+      '/people/:id/invite',
+      {
+        schema: {
+          summary: 'Send someone a new invite email',
+          description: 'A new link that works for 72 hours; the old one stops working. Recorded as `person.invite-resent`.',
+          params: IdParams,
+          response: {
+            200: Type.Object({ invite: InviteResult }, { description: 'Sent' }),
+            ...guarded,
+            403: deploymentAdmins,
+            404: refused('No such person'),
+            409: refused('They have already set up, or they have left'),
+            503: refused("Email isn't set up, or the sign-in service couldn't send it"),
+          },
+        },
+      },
+      async (req, reply) => {
+        const p = await one(await dir().person(req.params.id));
+        if (p.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
+        if (p.state === 'left') return reply.code(409).send({ error: 'conflict', message: 'They’ve left, so there’s nothing to invite them to.' });
+        if (p.state !== 'invited') return reply.code(409).send({ error: 'conflict', message: 'They’ve already set up their account.' });
+        if (!(await dir().canEmail())) return reply.code(503).send({ error: 'unavailable', message: NO_EMAIL });
+        const sent = await invite(p.id, p.email);
+        if (sent.error) return reply.code(503).send({ error: 'unavailable', message: sent.error });
+        await record(req, 'person.invite-resent', p.id, { username: p.username });
+        return { invite: sent };
       },
     );
 
