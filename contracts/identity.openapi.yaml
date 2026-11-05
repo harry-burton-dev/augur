@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.18.0
+  version: 1.19.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
 components:
   schemas:
@@ -1175,7 +1175,7 @@ paths:
                       - app-notes
                 description: The app's client
         "400":
-          description: Not an app id, or not 64 hex characters
+          description: Not an app id, one AUGUR keeps for itself, or not 64 hex characters
           content:
             application/problem+json:
               schema:
@@ -1227,7 +1227,7 @@ paths:
                     type: string
                 description: The app's client and its secret
         "400":
-          description: Not an app id
+          description: Not an app id, or one AUGUR keeps for itself
           content:
             application/problem+json:
               schema:
@@ -1533,6 +1533,99 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/leave:
+    get:
+      summary: Whether the caller has asked to leave
+      responses:
+        "200":
+          description: Their open request to leave; empty when they have none
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestedAt:
+                    type: string
+                    format: date-time
+                  note:
+                    type: string
+                description: Their open request to leave; empty when they have none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Ask to leave
+      description: "People don’t delete their own account (ADR 0040): they ask, and an admin’s leaver flow turns the account off, ends their sessions and hands on what they own. Admins are told, and it is recorded in Activity. Asking again keeps the first time and replaces the note."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 500
+                  description: Anything the admin should know
+              additionalProperties: false
+      responses:
+        "201":
+          description: Their open request to leave; empty when they have none
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestedAt:
+                    type: string
+                    format: date-time
+                  note:
+                    type: string
+                description: Their open request to leave; empty when they have none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take back a request to leave
+      responses:
+        "204":
+          description: Taken back, or there was none
+          content:
+            application/json:
+              schema:
+                description: Taken back, or there was none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/data:
+    get:
+      summary: A copy of everything AUGUR keeps about the caller
+      description: "One JSON document (ADR 0040): who they are, how and where they sign in (never a secret), what they have chosen, whether they asked to leave, and what each other service keeps about them. A part that can’t be read is named in `missing`, with why. Recorded in Activity."
+      responses:
+        "200":
+          description: Their data, as a download
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+                description: Their data, as a download
+        "401":
+          description: No signed-in caller
           content:
             application/problem+json:
               schema:

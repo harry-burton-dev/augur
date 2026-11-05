@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { callerHeaders, type FloorPlace, type Scope } from '@augur/service-kit';
+import { callerHeaders, serviceHeaders, type FloorPlace, type Scope } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore } from './store.ts';
 
@@ -181,5 +181,29 @@ describe('the inbox', () => {
     expect(kitStream.text()).not.toContain(id);
     samStream.stop();
     kitStream.stop();
+  });
+
+  it('gives the team work someone took back to the team when they leave it, or can no longer sign in', async () => {
+    const { app, store, put, act, list } = await setUp();
+    const identity = await serviceHeaders({ name: 'identity', getToken: async () => 'platform-identity' });
+    const audit = (entry: object) => app.inject({ method: 'POST', url: '/v1/audit', headers: identity, payload: entry });
+    const budget = (await put('budget', forFinance)).json();
+    const rota = (await put('rota', { ...forFinance, title: 'Draw up the rota' })).json();
+    const own = (await put('own', assignment)).json();
+    await act(budget.id, 'take', nora);
+    await act(rota.id, 'take', sam);
+    // Nora leaves Finance: what she took goes back; her own item stays hers.
+    expect((await audit({ actor: { id: 'u-admin', kind: 'user' }, app: 'identity', action: 'department.member-removed', target: 'w-finance', detail: { person: 'u-nora' } })).statusCode).toBe(201);
+    expect((await store.inbox.get(budget.id))?.takenBy).toBeUndefined();
+    expect((await store.inbox.get(own.id))?.owner).toEqual({ kind: 'person', id: 'u-nora' });
+    expect((await list(sam, 'teams')).map((i: { id: string }) => i.id)).toContain(budget.id);
+    // Sam's sign-in is turned off: his goes back too.
+    await audit({ actor: { id: 'u-admin', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-sam' });
+    expect((await store.inbox.get(rota.id))?.takenBy).toBeUndefined();
+    const events = await store.readEvents({ topics: ['platform.inbox.released'], limit: 10 });
+    expect(events.map((e) => e.payload)).toEqual([
+      expect.objectContaining({ item: budget.id, by: 'u-nora', left: true }),
+      expect.objectContaining({ item: rota.id, by: 'u-sam', left: true }),
+    ]);
   });
 });

@@ -133,12 +133,14 @@ export const INSECURE_DEV_CALLERS = 'AUGUR_INSECURE_DEV_CALLERS';
 /**
  * Checks callers against the gateway's published key: at CALLER_KEYS_URL when set, otherwise at
  * GATEWAY_URL (default `http://gateway:8080`). It fails closed: a service checks callers unless it is
- * told plainly not to, with AUGUR_INSECURE_DEV_CALLERS=1 (as `pnpm dev:app` sets) or under a test
- * runner (NODE_ENV=test, which Vitest sets). Then it returns undefined and `x-user-*` headers are
- * believed as they come. In production (NODE_ENV=production) callers are always checked.
+ * told plainly not to, with AUGUR_INSECURE_DEV_CALLERS=1 (as `pnpm dev:app` sets) or inside Vitest
+ * (NODE_ENV=test and VITEST, both of which it sets; NODE_ENV=test alone is not enough). Then it
+ * returns undefined and `x-user-*` headers are believed as they come. In production
+ * (NODE_ENV=production, which every image, compose service and app container sets) callers are
+ * always checked.
  */
 export const callerCheckFromEnv = (audience: string, env = process.env): CallerCheck | undefined => {
-  const unchecked = env.NODE_ENV !== 'production' && (env[INSECURE_DEV_CALLERS] === '1' || env.NODE_ENV === 'test');
+  const unchecked = env.NODE_ENV !== 'production' && (env[INSECURE_DEV_CALLERS] === '1' || (env.NODE_ENV === 'test' && Boolean(env.VITEST)));
   if (unchecked && !env.CALLER_KEYS_URL) return undefined;
   const url = env.CALLER_KEYS_URL || `${(env.GATEWAY_URL || 'http://gateway:8080').replace(/\/+$/, '')}${CALLER_KEYS_PATH}`;
   // A new gateway key is fetched as soon as a token names it, at most every few seconds.

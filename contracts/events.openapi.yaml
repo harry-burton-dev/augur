@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.10.0
+  version: 1.11.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -1615,6 +1615,57 @@ paths:
                 description: Audit entries
         "403":
           description: Not an admin, nor a lead asking for their own floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /people/{id}/data:
+    get:
+      summary: What the events service keeps about one person (identity only)
+      description: "Their notifications, read or not; the inbox items waiting on them and those they finished; and the audit entries naming them as the actor: at most `limit` of each, newest first. Only identity asks, to build the copy of someone's data they download from Account (ADR 0040)."
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 1000
+          in: query
+          name: limit
+          required: false
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Their data here
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - notifications
+                  - inbox
+                  - audit
+                properties:
+                  notifications:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+                  inbox:
+                    type: array
+                    items: {}
+                    description: InboxItem, as the Inbox gives it to them
+                  audit:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEntry"
+                description: Their data here
+        "403":
+          description: Not identity
           content:
             application/problem+json:
               schema:

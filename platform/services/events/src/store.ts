@@ -106,6 +106,8 @@ export interface EventStore {
   addNotifications(n: NewNotification, floor?: EventFloor): Promise<Notification[]>;
   /** A person's unread notifications, newest first. */
   unread(recipient: string, limit: number): Promise<Notification[]>;
+  /** Every notification a person has, read or not, newest first: for a copy of their data. */
+  notificationsOf(recipient: string, limit: number): Promise<Notification[]>;
   /** Marks a person's notification read or unread; false when they have no such notification. */
   setRead(recipient: string, id: string, read: boolean): Promise<boolean>;
   appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string): Promise<AuditEntry>;
@@ -166,6 +168,13 @@ export class MemoryEventStore implements EventStore {
   async unread(recipient: string, limit: number) {
     return this.notifications
       .filter((n) => n.recipient === recipient && !n.readAt)
+      .reverse()
+      .slice(0, limit);
+  }
+
+  async notificationsOf(recipient: string, limit: number) {
+    return this.notifications
+      .filter((n) => n.recipient === recipient)
       .reverse()
       .slice(0, limit);
   }
@@ -524,6 +533,11 @@ export class PgEventStore implements EventStore {
       'select * from events.notifications where recipient = $1 and read_at is null order by created_at desc, id limit $2',
       [recipient, limit],
     );
+    return rows.map(fromRow);
+  }
+
+  async notificationsOf(recipient: string, limit: number) {
+    const { rows } = await this.pool.query<NotificationRow>('select * from events.notifications where recipient = $1 order by created_at desc, id limit $2', [recipient, limit]);
     return rows.map(fromRow);
   }
 

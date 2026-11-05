@@ -36,6 +36,9 @@ const answers: Record<string, unknown> = {
   },
   'GET /me/sign-ins': { signIns: [{ time: '2026-11-05T07:59:00Z', kind: 'failed', event: 'LOGIN_ERROR', error: 'invalid_user_credentials' }] },
   'DELETE /me/sessions': { ended: 1 },
+  'GET /me/leave': {},
+  'POST /me/leave': { requestedAt: '2026-11-05T09:00:00Z', note: 'Friday' },
+  'GET /me/data': { you: { id: 'u-1' } },
 };
 
 const fakeApi = () => {
@@ -162,6 +165,24 @@ describe('the Account area', () => {
     act(() => root?.unmount());
     const muted = await open('notifications', { prefs: { muted: ['board'] }, apps: [{ id: 'board', name: 'Board', kinds }] });
     expect(muted.text()).toContain('Every kind from Board is quiet while the whole app is.');
+  });
+
+  it('downloads their data, says who sees what, and asks to leave twice before it does', async () => {
+    const made = vi.fn(() => 'blob:x');
+    Object.assign(URL, { createObjectURL: made, revokeObjectURL: vi.fn() });
+    const { text, button, calls } = await open('privacy');
+    expect(text()).toContain('What others see about you');
+    await act(async () => button('Download my data')!.click());
+    expect(made).toHaveBeenCalled();
+    expect(text()).toContain('Saved my-data.json.');
+    await act(async () => button('Ask to leave')!.click());
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/me/leave')).toBe(false);
+    await act(async () => [...host!.querySelectorAll('button')].find((b) => b.textContent?.includes('Press again'))!.click());
+    expect(calls.some((c) => c.method === 'POST' && c.path === '/me/leave')).toBe(true);
+    expect(text()).toContain('You said: “Friday”');
+    await act(async () => button('Take it back')!.click());
+    expect(calls.some((c) => c.method === 'DELETE' && c.path === '/me/leave')).toBe(true);
+    expect(button('Ask to leave')).toBeTruthy();
   });
 
   it('says once how the last of Keycloak’s screens went', async () => {

@@ -9,10 +9,10 @@
 import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { callerFromHeaders, type Caller } from '@augur/service-kit';
+import { callerFromHeaders, type Caller, type NewAuditEntry, type NewNotification } from '@augur/service-kit';
 import { DirectoryError, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
 import { choice, empty, IdParams, Preferences, ref, refused } from './schemas.ts';
-import type { PreferenceStore, Preferences as Prefs } from './store.ts';
+import type { LeaveRequest, PreferenceStore, Preferences as Prefs } from './store.ts';
 
 // ---------------------------------------------------------------------------------------------------
 // What an account holds
@@ -505,13 +505,31 @@ export interface MeOptions {
   store: PreferenceStore;
   /** Where accounts are kept. Without it everything but preferences answers 503. */
   accounts?: AccountSource;
+  /** Records what a person did to their own account in Activity (the audit log). */
+  audit?: (entry: NewAuditEntry) => Promise<void>;
+  /** Tells people through the events service, as identity: an admin hears when someone asks to leave. */
+  tell?: (n: NewNotification) => Promise<void>;
+  /** What another service keeps about a person, for their download, by the name of the service. */
+  dataFrom?: Record<string, (person: string) => Promise<unknown>>;
 }
+
+/** Who acts on a request to leave: the people who run AUGUR (ADR 0040's leaver flow is theirs). */
+const LEAVE_AUDIENCE = ['role:admin'];
+
+/** One part of a person's download: what a service keeps about them, or why it isn't there. */
+const part = async (name: string, read: () => Promise<unknown>): Promise<[string, unknown] | [string, undefined, string]> => {
+  try {
+    return [name, await read()];
+  } catch (err) {
+    return [name, undefined, `${name}: ${(err as Error).message || 'it couldn’t be read'}`];
+  }
+};
 
 const unavailable = 'Your account can’t be read right now: the sign-in service isn’t connected to AUGUR. A deployment admin can connect it.';
 
 /** The /me/* routes beside /me itself: preferences, and the account. Registered under /v1, behind the signed-in check. */
 export const meRoutes =
-  ({ store, accounts }: MeOptions) =>
+  ({ store, accounts, audit, tell, dataFrom = {} }: MeOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const unauthenticated = refused('No signed-in caller');
@@ -671,5 +689,108 @@ export const meRoutes =
         },
       },
       async (req) => ({ signIns: await acct().signIns(caller(req.headers).id, req.query.max ?? 20) }),
+    );
+
+    // Privacy and data (ADR 0040): a copy of everything AUGUR keeps about them, and asking to leave.
+    const LeaveState = Type.Object(
+      { requestedAt: Type.Optional(Type.String({ format: 'date-time' })), note: Type.Optional(Type.String()) },
+      { description: 'Their open request to leave; empty when they have none' },
+    );
+    const record = async (who: Caller, action: string, detail?: Record<string, unknown>) => {
+      await audit?.({ actor: { id: who.id, kind: 'user' }, app: 'identity', action, target: who.id, ...(detail ? { detail } : {}) });
+    };
+
+    app.get(
+      '/me/leave',
+      { schema: { summary: 'Whether the caller has asked to leave', response: { 200: LeaveState, 401: unauthenticated } } },
+      async (req) => (await store.leaveRequest(caller(req.headers).id)) ?? {},
+    );
+
+    app.post(
+      '/me/leave',
+      {
+        schema: {
+          summary: 'Ask to leave',
+          description: [
+            'People don’t delete their own account (ADR 0040): they ask, and an admin’s leaver',
+            'flow turns the account off, ends their sessions and hands on what they own.',
+            'Admins are told, and it is recorded in Activity. Asking again keeps the first time',
+            'and replaces the note.',
+          ].join(' '),
+          body: Type.Object({ note: Type.Optional(Type.String({ maxLength: 500, description: 'Anything the admin should know' })) }, { additionalProperties: false }),
+          response: { 201: LeaveState, 401: unauthenticated },
+        },
+      },
+      async (req, reply) => {
+        const who = caller(req.headers);
+        const note = req.body.note?.trim() || undefined;
+        const before = await store.leaveRequest(who.id);
+        const request: LeaveRequest = await store.requestLeave(who.id, note);
+        await record(who, 'account.leave-requested', note ? { note } : undefined);
+        if (!before) {
+          await tell?.({
+            app: 'admin',
+            recipients: [],
+            audience: LEAVE_AUDIENCE,
+            key: `leave:${who.id}:${request.requestedAt}`,
+            level: 'needs',
+            title: `${who.name} asked to leave`,
+            detail: note ?? 'They asked from their account. Turn their account off in People when they go.',
+            link: '/people',
+          }).catch((err: Error) => req.log.warn({ err }, 'admins were not told of a request to leave'));
+        }
+        return reply.code(201).send(request);
+      },
+    );
+
+    app.delete(
+      '/me/leave',
+      { schema: { summary: 'Take back a request to leave', response: { 204: { ...empty, description: 'Taken back, or there was none' }, 401: unauthenticated } } },
+      async (req, reply) => {
+        const who = caller(req.headers);
+        if (await store.withdrawLeave(who.id)) await record(who, 'account.leave-withdrawn');
+        return reply.code(204).send(null);
+      },
+    );
+
+    app.get(
+      '/me/data',
+      {
+        schema: {
+          summary: 'A copy of everything AUGUR keeps about the caller',
+          description: [
+            'One JSON document (ADR 0040): who they are, how and where they sign in (never a secret),',
+            'what they have chosen, whether they asked to leave, and what each other service keeps',
+            'about them. A part that can’t be read is named in `missing`, with why. Recorded in Activity.',
+          ].join(' '),
+          response: { 200: Type.Object({}, { additionalProperties: true, description: 'Their data, as a download' }), 401: unauthenticated },
+        },
+      },
+      async (req, reply) => {
+        const who = caller(req.headers);
+        const mine = <T>(read: (a: AccountSource) => Promise<T>) => () => read(acct());
+        const parts = await Promise.all([
+          part('profile', mine((a) => a.profile(who.id))),
+          part('credentials', mine((a) => a.credentials(who.id))),
+          part('linked accounts', mine((a) => a.linked(who.id))),
+          part('sessions', mine((a) => a.sessions(who.id))),
+          part('sign-ins', mine((a) => a.signIns(who.id, 50))),
+          ...Object.entries(dataFrom).map(([name, read]) => part(name, () => read(who.id))),
+        ]);
+        const missing = parts.filter((p) => p.length === 3).map((p) => p[2]);
+        const from = Object.fromEntries(parts.filter((p) => p[1] !== undefined).map(([name, value]) => [name, value]));
+        await record(who, 'account.data-downloaded', missing.length ? { missing: missing.length } : undefined);
+        const day = new Date().toISOString().slice(0, 10);
+        void reply.header('content-disposition', `attachment; filename="my-data-${day}.json"`);
+        return {
+          madeAt: new Date().toISOString(),
+          you: { id: who.id, name: who.name, ...(who.email ? { email: who.email } : {}), roles: who.roles, departments: who.departments },
+          preferences: await store.get(who.id),
+          leaveRequest: (await store.leaveRequest(who.id)) ?? null,
+          ...from,
+          missing,
+          note: 'Apps keep their own content, such as documents, in their own services, and this copy doesn’t include it yet.',
+        };
+      },
     );
   };
