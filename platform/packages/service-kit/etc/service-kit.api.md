@@ -1495,6 +1495,21 @@ export interface StartAppServiceOptions {
 }
 
 // @public
+export interface StartupLog {
+    // (undocumented)
+    error(message: string, fields?: Record<string, unknown>): void;
+    // (undocumented)
+    info(message: string, fields?: Record<string, unknown>): void;
+    // (undocumented)
+    warn(message: string, fields?: Record<string, unknown>): void;
+}
+
+// @public
+export const startupLog: (service: string, env?: Record<string, string | undefined>, to?: {
+    write(line: string): void;
+}) => StartupLog;
+
+// @public
 export const statementTimeoutMs: (env?: Record<string, string | undefined>) => number;
 
 // Warning: (ae-forgotten-export) The symbol "Pool" needs to be exported by the entry point index.d.ts
