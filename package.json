@@ -54,11 +54,11 @@
     "globals": "^17.14.0",
     "knip": "^6.44.1",
     "publint": "^0.3.25",
-    "semver": "^7.8.5",
+    "semver": "catalog:",
     "squawk-cli": "2.70.0",
     "turbo": "^2.5.0",
-    "typescript": "^5.6.0",
+    "typescript": "catalog:",
     "typescript-eslint": "^8.72.1",
-    "yaml": "^2.9.1"
+    "yaml": "catalog:"
   }
 }
