@@ -52,7 +52,7 @@ jobs:
     # The registry's Postgres store is tested against a real database.
     services:
       postgres:
-        image: pgvector/pgvector:0.8.0-pg16
+        image: pgvector/pgvector:0.8.7-pg16-bookworm
         env:
           POSTGRES_USER: platform
           POSTGRES_PASSWORD: platform-ci-only

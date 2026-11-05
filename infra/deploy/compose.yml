@@ -153,7 +153,7 @@ services:
   # point in time").
   postgres:
     logging: *logging
-    image: pgvector/pgvector:0.8.0-pg16
+    image: pgvector/pgvector:0.8.7-pg16-bookworm
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/etc/augur/start.sh"]
     environment:
@@ -713,7 +713,7 @@ services:
   # itself only, at http://127.0.0.1:3001. A deployment with its own collector sets OTEL_LGTM_REPLICAS=0.
   otel-lgtm:
     logging: *logging
-    image: grafana/otel-lgtm:0.37.0
+    image: grafana/otel-lgtm:0.39.0
     restart: unless-stopped
     deploy:
       replicas: ${OTEL_LGTM_REPLICAS:-1}
