@@ -111,3 +111,4 @@ nav:
       - 0068. A deployment chooses how depth is drawn, and scrim blurs nothing: decisions/0068-a-deployment-chooses-how-depth-is-drawn.md
       - 0069. Knip finds dead code, and Vitest's v8 coverage is reported on main: decisions/0069-knip-finds-dead-code-and-vitest-measures-coverage.md
       - 0070. Data Atlas draws military symbols for its kinds with milsymbol: decisions/0070-military-symbols-with-milsymbol.md
+      - 0071. Data Atlas draws maps with MapLibre GL JS from the deployment's own PMTiles file: decisions/0071-data-atlas-maps-with-maplibre-and-pmtiles.md

@@ -414,6 +414,23 @@
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
+    "ATLAS_MAP_TILES": {
+      "type": "string",
+      "description": "The base map Data Atlas draws its maps on: a PMTiles file in ./maps beside the compose file, named as the container sees it (/maps/<file>.pmtiles). Without it, points go on a plain background.",
+      "pattern": "^/maps/[^/]+\\.pmtiles$",
+      "x-services": [
+        "atlas"
+      ],
+      "x-docs": "docs/atlas.md#maps"
+    },
+    "ATLAS_MAP_ATTRIBUTION": {
+      "type": "string",
+      "description": "The credit the base map's data needs, shown on the map (default: OpenStreetMap's).",
+      "x-services": [
+        "atlas"
+      ],
+      "x-docs": "docs/atlas.md#maps"
+    },
     "ATLAS_BUCKET_SECRET": {
       "type": "string",
       "writeOnly": true,

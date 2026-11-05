@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Data Atlas can draw a base map from a file you keep
+
+**From** unreleased
+
+Nothing to do: Data Atlas's maps work without one, drawing points on a plain background and saying why. To add a base map, put a vector PMTiles file in `maps/` beside your compose file and set `ATLAS_MAP_TILES=/maps/<file>.pmtiles` in `.env`, then `pc up -d atlas`. docs/atlas.md, Maps, says how to cut one for your region. No map request leaves the server.
+
 ### The first admin's department is called Administration on new servers
 
 **From** unreleased
