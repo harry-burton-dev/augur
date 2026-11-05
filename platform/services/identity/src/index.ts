@@ -8,6 +8,7 @@ import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
 import { MemoryOrganisationStore, PgOrganisationStore, type OrganisationStore } from './organisation.ts';
+import { MemoryLifecycleStore, PgLifecycleStore, type LifecycleStore } from './lifecycle.ts';
 import { copySignIns, MemorySignInCursorStore, PgSignInCursorStore, type KcEvent, type SignInCursorStore } from './sign-ins.ts';
 
 // Every setting identity reads, checked before it starts (in production, a missing one stops it).
@@ -36,6 +37,7 @@ let store: PreferenceStore;
 let workspaces: WorkspaceStore;
 let organisation: OrganisationStore;
 let signInCursor: SignInCursorStore;
+let lifecycle: LifecycleStore;
 if (process.env.DATABASE_URL) {
   const pool = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL }));
   const prefs = new PgPreferenceStore(pool);
@@ -44,6 +46,7 @@ if (process.env.DATABASE_URL) {
   workspaces = new PgWorkspaceStore(pool, { orgName });
   organisation = new PgOrganisationStore(pool);
   signInCursor = new PgSignInCursorStore(pool);
+  lifecycle = new PgLifecycleStore(pool);
 } else if (production) {
   throw new Error("DATABASE_URL is not set: identity needs Postgres to keep people's preferences and teams.");
 } else {
@@ -52,6 +55,7 @@ if (process.env.DATABASE_URL) {
   workspaces = new MemoryWorkspaceStore({ orgName });
   organisation = new MemoryOrganisationStore();
   signInCursor = new MemorySignInCursorStore();
+  lifecycle = new MemoryLifecycleStore();
 }
 
 // Locally this is the dev stack's Keycloak and its admin/admin console login.
@@ -118,12 +122,12 @@ const dataFrom =
 if (keycloakEvents && audit) {
   const events = keycloakEvents;
   const copy = () =>
-    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry) }).catch((err: Error) =>
+    copySignIns({ events, store: signInCursor, audit: (entry) => audit(entry), signedIn: (person, at) => lifecycle.signedIn(person, at) }).catch((err: Error) =>
       console.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
     );
   setInterval(copy, 60_000).unref();
   void copy();
 }
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages, organisation, lifecycle });
 await app.listen({ port, host: '0.0.0.0' });

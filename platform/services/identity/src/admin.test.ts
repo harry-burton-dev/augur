@@ -3,6 +3,7 @@ import { callerHeaders, type NewAuditEntry } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryDirectory } from './directory.ts';
 import { MemoryPreferenceStore } from './store.ts';
+import { MemoryLifecycleStore } from './lifecycle.ts';
 import { temporaryPassword, usernameFrom } from './admin.ts';
 
 const admin = callerHeaders({ id: 'admin-1', name: 'Alex', departments: [], roles: ['admin'] });
@@ -12,10 +13,11 @@ const setup = async () => {
   const directory = new MemoryDirectory();
   const audit = vi.fn<(e: NewAuditEntry) => Promise<void>>(async () => undefined);
   const store = new MemoryPreferenceStore();
-  const app = await buildApp({ directory, audit, store });
+  const lifecycle = new MemoryLifecycleStore();
+  const app = await buildApp({ directory, audit, store, lifecycle });
   const call = async (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, payload?: object, headers = admin) =>
     app.inject({ method, url: `/v1/admin${url}`, headers, ...(payload ? { payload } : {}) });
-  return { app, directory, audit, store, call };
+  return { app, directory, audit, store, lifecycle, call };
 };
 
 describe('admin: deployment admins', () => {
@@ -76,6 +78,34 @@ describe('admin: turning off and leavers (ADR 0040)', () => {
       ['person.left', jo.id, { username: 'jo', asked: true, handOverTo: sam.id, note: 'Agreed with their lead' }],
     ]);
     expect((await call('GET', '/leave-requests')).json()).toEqual([]);
+  });
+
+  it('shows where each account is in its life: invited, active, off and why, left for good', async () => {
+    const { call, lifecycle } = await setup();
+    const jo = await add(call, 'Jo');
+    const sam = await add(call, 'Sam');
+    const state = async (id: string) => (await call('GET', `/people/${id}`)).json();
+    expect(await state(jo.id)).toMatchObject({ state: 'invited' });
+    expect((await state(jo.id)).lastSignInAt).toBeUndefined();
+
+    await lifecycle.signedIn(jo.id, '2026-11-05T09:00:00.000Z');
+    await lifecycle.signedIn(jo.id, '2026-11-04T09:00:00.000Z');
+    expect(await state(jo.id)).toMatchObject({ state: 'active', joinedAt: '2026-11-05T09:00:00.000Z', lastSignInAt: '2026-11-05T09:00:00.000Z' });
+
+    await call('PATCH', `/people/${jo.id}`, { enabled: false });
+    expect(await state(jo.id)).toMatchObject({ state: 'disabled', disabledCause: 'admin' });
+    await call('PATCH', `/people/${jo.id}`, { enabled: true });
+    expect((await state(jo.id)).disabledCause).toBeUndefined();
+
+    expect((await call('POST', `/people/${jo.id}/leave`, { handOverTo: sam.id })).json()).toMatchObject({ state: 'left', left: { by: 'admin-1', handOverTo: sam.id } });
+    const people = (await call('GET', '/people')).json() as { id: string; state: string }[];
+    expect(people.find((p) => p.id === jo.id)?.state).toBe('left');
+    expect(people.find((p) => p.id === sam.id)?.state).toBe('invited');
+
+    // A leaver doesn't come back, and doesn't leave twice.
+    expect((await call('PATCH', `/people/${jo.id}`, { enabled: true })).json().message).toMatch(/leaver doesn’t come back/);
+    expect((await call('POST', `/people/${jo.id}/leave`, {})).statusCode).toBe(409);
+    expect((await call('PATCH', `/people/${jo.id}`, { firstName: 'Joanne' })).statusCode).toBe(200);
   });
 
   it('runs it for someone already turned off, and without a hand-over', async () => {

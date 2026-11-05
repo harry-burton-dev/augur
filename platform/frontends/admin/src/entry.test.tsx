@@ -222,6 +222,19 @@ describe('People', () => {
     expect(document.querySelector('[data-live-result]')!.textContent).toMatch(/They’ve left: signed out everywhere\. Apps keep what they own/);
   });
 
+  it('shows each account’s state and last sign-in, and keeps a leaver from coming back', async () => {
+    const leaver = { ...sam, state: 'left', left: { at: '2026-11-03T09:00:00Z', by: 'u-1', handOverTo: 'u-1' } };
+    gateway((method, url) => (url === '/api/identity/v1/admin/people' && method === 'GET' ? Response.json([{ ...alex, state: 'active', lastSignInAt: '2026-11-04T09:00:00Z' }, leaver]) : undefined));
+    const el = await open('/people');
+    const rows = rowsOf(el);
+    expect(rows.find((r) => r[0] === 'Alex Rivera')![5]).toBe(new Date('2026-11-04T09:00:00Z').toLocaleDateString());
+    expect(rows.find((r) => r[0] === 'Sam Okafor')![4]).toBe('Left');
+    await openRow(el, 'Sam Okafor');
+    expect(document.querySelector('[data-leaver]')!.textContent).toContain('handing their work to Alex Rivera');
+    expect(shut(button('Turn their sign-in on'))).toBe(true);
+    expect(shut(button('They’re leaving'))).toBe(true);
+  });
+
   it('won’t let an admin run the leaver flow on themselves', async () => {
     gateway();
     const el = await open('/people');

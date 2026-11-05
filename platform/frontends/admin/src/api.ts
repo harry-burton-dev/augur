@@ -12,6 +12,14 @@ export interface Person {
   roles: string[];
   departments: string[];
   createdAt?: string;
+  /** Where their account is in its life (ADR 0040). Older identities don't send it. */
+  state?: 'invited' | 'active' | 'disabled' | 'left';
+  /** Their last sign-in that AUGUR has seen. */
+  lastSignInAt?: string;
+  /** Why their sign-in is off, when AUGUR knows. */
+  disabledCause?: 'admin' | 'idle' | 'leaver' | 'outside';
+  /** When they left, who ran the leaver flow, and who took on their work. */
+  left?: { at: string; by: string; handOverTo?: string };
 }
 
 /** Someone who asked to leave in their account (ADR 0040), until an admin's leaver flow closes it. */
