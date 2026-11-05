@@ -1,4 +1,4 @@
-# Staging and the 48-hour proof: the runbook
+# The staging runbook
 
 The steps that take the workbench to the alpha release, stand up a staging server, and prove a release on it: the break cycle, the 72-hour bake with the 48-hour run inside it, then Promote to stable. It follows [deploy.md](deploy.md) and adds only what staging needs. Each step ends with **Paste back**: the output that shows the step worked, so whoever checks the evidence never has to assume a step on a server went through.
 
