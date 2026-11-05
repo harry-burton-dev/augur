@@ -68,6 +68,8 @@ From this release Postgres archives its changes as it makes them, and the backup
 
 ### SDK 2: the shell stops serving Lit
 
+**From** unreleased
+
 From the release on SDK 2.0 the shell no longer serves `lit` or `@augur/ui-kit`. Nothing to do for the apps that ship with AUGUR: Home, Admin, the Upgrade Centre, Explorer, Artifacts, Mandate and Data Atlas never used them, and their manifests accept SDK 2. An app of your own that imports Lit stops loading: move it to React and Quill first (docs/build-an-app.md). An app of your own that doesn't import Lit keeps working once its manifest's `sdk` range also accepts 2, say `^1.4.0 || ^2.0.0`; until then the shell shows it as made for an older version.
 
 ### The deployment watches itself
