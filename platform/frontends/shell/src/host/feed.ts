@@ -16,9 +16,15 @@ export interface ServerNotification {
   workspace?: { id: string; path: string[] };
   /** Up to two buttons, each an intent the shell raises when pressed. */
   actions?: NotificationAction[];
+  /** One of the app's `notifications.kinds`. */
+  kind?: string;
 }
 
-export const fromServer = (n: ServerNotification): ShellNotification => {
+/** The kinds of notification a person made quiet, as "<app>:<kind>" (their `quietKinds`). */
+export const isQuiet = (n: Pick<ServerNotification, 'app' | 'kind'>, quiet: readonly string[]) => !!n.kind && quiet.includes(`${n.app}:${n.kind}`);
+
+/** A notification for the shell's stream; one of a kind the person made quiet lands without a pulse, uncounted. */
+export const fromServer = (n: ServerNotification, quiet: readonly string[] = []): ShellNotification => {
   const actions = usableActions(n.actions).map(({ label }) => ({ label }));
   return {
     id: n.id,
@@ -29,6 +35,7 @@ export const fromServer = (n: ServerNotification): ShellNotification => {
     time: n.createdAt,
     ...(n.workspace ? { floor: n.workspace.id } : {}),
     ...(actions.length ? { actions } : {}),
+    ...(isQuiet(n, quiet) ? { quiet: true } : {}),
   };
 };
 
