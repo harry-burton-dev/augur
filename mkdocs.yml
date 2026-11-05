@@ -99,4 +99,5 @@ nav:
       - 0059. A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence: decisions/0059-grafana-alerting-and-faro.md
       - 0060. Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names: decisions/0060-off-server-backups-with-restic.md
       - 0063. Accessibility is checked by axe in CI, failing on serious findings: decisions/0063-accessibility-checked-by-axe.md
+      - "0064. The database can be restored to a point in time: Postgres archives its WAL, and restic copies it off the server": decisions/0064-point-in-time-restore-with-postgres-wal-archiving.md
       - 0065. AUGUR's own email is sent by Nodemailer from React Email templates, and Mailpit catches it in dev: decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md

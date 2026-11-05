@@ -12,7 +12,7 @@ Identity serves the account under `/v1/me/*`, behind the gateway, for the signed
 | `GET /me/security` | Password, code apps, passkeys, recovery codes, whether their role needs two-step sign-in, linked organisation sign-ins, and the `kc_action` for each change. |
 | `GET /me/sessions`, `DELETE /me/sessions/{id}`, `DELETE /me/sessions?keep=` | Where they're signed in, and signing out of one, everywhere else, or everywhere. A session that isn't theirs is not found. |
 | `GET /me/sign-ins` | Recent sign-ins, failed sign-ins and changes to how they sign in, from Keycloak's events (kept for `REALM_SIGN_IN_EVENT_DAYS`). |
-| `GET /me/preferences`, `PUT /me/preferences` | Motion, density, away (with a message and an end), time zone, and notification choices. |
+| `GET /me/preferences`, `PUT /me/preferences` | Motion, density, away (with a message and an end), time zone, notification choices, pinned apps and the floor to start on. |
 
 Without a connected Keycloak, everything but preferences answers 503 and says a deployment admin can connect it.
 
@@ -33,8 +33,13 @@ Account on the shell's arc opens the Account area (`platform/frontends/shell/src
 | Notifications | Email for things that need you, a digest, quiet hours, and On Home or Quiet for each app. AUGUR doesn't send email yet, and the section says so. |
 | Appearance | Reduce motion, area titles, toasts and density. |
 | Language and region | Time zone (the browser's unless chosen). English only for now, and it says so. |
+| Home and apps | The floor AUGUR opens on at its front door (`startFloor`; their own unless chosen, and a floor that is no longer theirs says so); pinned apps, first on Home and in the list of apps (`pinned`); recent apps, with a way to clear them; and each app's own settings. |
 | About and help | What's running, and the keys. |
 
-Home and apps, and Privacy and data, are still to come (PER-193). Choosing a kind of notification per app waits for apps to name their kinds in the manifest.
+Privacy and data is still to come (PER-193). Choosing a kind of notification per app waits for apps to name their kinds in the manifest.
 
 Coming back from Keycloak's screen, the shell's sign-in callback adds `kc_action_status` to the address it returns to, and the section says once whether the change was made.
+
+### An app's own settings
+
+An app adds settings for each person with a `settings` surface in its manifest, like a Home card (`{ "floor": "personal", "slot": "settings", "module": "./Settings" }`), and exports that module in its entry's `surfaces`. Home and apps shows one section per app on the floor that has one: the surface for this kind of floor, or else its personal one. The shell mounts it with the same context as the app, so the app keeps the choices in its own service. A surface that fails to mount says so in its section and leaves the others alone.

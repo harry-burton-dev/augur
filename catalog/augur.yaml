@@ -446,7 +446,7 @@ metadata:
   description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz and /caller-keys needs a signed-in caller, however it is spelt. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.7.0
+    augur.dev/contract-version: 1.8.0
 spec:
   type: openapi
   lifecycle: production
@@ -463,7 +463,7 @@ metadata:
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.16.0
+    augur.dev/contract-version: 1.17.0
 spec:
   type: openapi
   lifecycle: production

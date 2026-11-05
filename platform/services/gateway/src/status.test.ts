@@ -130,6 +130,21 @@ describe('backupStatus', () => {
     expect(await problem({ 'restore-test.json': { ...restored, from: 'local' } })).toMatch(/restored from the off-server copy yet/);
   });
 
+  it('can go back to a point in time when Postgres archives, base backups are taken and this week’s replay worked', async () => {
+    const pitr = { at: '2026-10-22T11:00:00Z', ok: true, bases: 7, earliest: '2026-10-16T02:01:00Z', archivedAt: '2026-10-22T10:58:00Z' };
+    const test = { at: '2026-10-19T02:03:00Z', ok: true, base: 'base-2026-10-19', seconds: 12, mark: '2026-10-19T02:02:50Z', reached: '2026-10-19T02:02:51Z' };
+    const fine = await backupStatus(await folder({ ...all, 'pitr.json': pitr, 'pitr-test.json': test }), now);
+    expect(fine).toEqual({ state: 'ok', lastBackup: backup, offsite, pointInTime: { ...pitr, lastTest: test }, lastRestoreTest: restored });
+    const problem = async (files: Record<string, object>) => (await backupStatus(await folder({ ...all, 'pitr-test.json': test, ...files }), now)).problem;
+    expect(await problem({ 'pitr.json': { ...pitr, ok: false, problem: 'Postgres is not archiving its changes yet.' } })).toMatch(/not archiving/);
+    expect(await problem({ 'pitr.json': { ...pitr, at: '2026-10-22T08:00:00Z' } })).toMatch(/over three hours/);
+    expect(await problem({ 'pitr.json': pitr, 'pitr-test.json': { ...test, ok: false, problem: 'Some archived WAL is missing.' } })).toBe(
+      'The last point-in-time restore test failed: Some archived WAL is missing.',
+    );
+    expect(await problem({ 'pitr.json': pitr, 'pitr-test.json': { ...test, at: '2026-10-12T02:00:00Z' } })).toMatch(/over a week/);
+    expect((await backupStatus(await folder({ ...all, 'pitr.json': pitr }), now)).problem).toMatch(/not been tested yet/);
+  });
+
   it('needs a look with no backup, a failed or stale one, or no recent good restore', async () => {
     const problem = async (files: Record<string, object>) => (await backupStatus(await folder(files), now)).problem;
     expect(await problem({})).toBe('No backup has been taken yet.');
