@@ -1,6 +1,6 @@
 # 0012. Every app lives in its own repository, and pillar apps are default-installed apps
 
-- **Status:** Accepted
+- **Status:** Accepted; the amendment of 2026-11-05 is Proposed
 - **Date:** 2026-11-01
 - **Decided by:** Harry
 
@@ -27,6 +27,10 @@ How an app leaves this repository is now set by later records, and this one poin
 - [0049](0049-pillar-apps-shipped-from-their-releases.md): the apps every deployment ships (Artifacts, Explorer, Data Atlas) are pinned releases that AUGUR's release copies and re-signs.
 
 Going back across the move: a shipped app goes back with AUGUR, because its pre-move images are AUGUR's own. An app installed from its own repository can't go back to a release made in this repository (0047 trusts only its new repository), so a backup is taken before its first release from there is installed, and going back means restoring it.
+
+## Amended 2026-11-05 (Proposed)
+
+Mandate now ships with AUGUR like the other pillar apps (PER-275): it is pinned in `release/shipped-apps.json` and run by AUGUR's Compose project, not installed by the app runner from the feed. So the pillar apps, Artifacts, Mandate and Data Atlas, and the platform app Explorer are all shipped as pinned releases under [0049](0049-pillar-apps-shipped-from-their-releases.md), and the bullet above that names [0047](0047-app-repositories-in-augurs-feed.md) "Mandate first" is history. The app runner installs every other app. The sentence at the top that lists Auspex as a pillar app stands corrected by [0032](0032-platform-apps-and-pillar-apps.md).
 
 ## Links
 
