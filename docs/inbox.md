@@ -63,6 +63,16 @@ Calls retry while the events service can't be reached. Because items are kept by
 
 The API is `PUT`, `PATCH` and `GET /v1/inbox/items/{app}/{key}` in [contracts/events.openapi.yaml](../contracts/events.openapi.yaml).
 
+### Trying it with `pnpm dev:app`
+
+The stand-in shell keeps an inbox of its own, so you can see your items as people will without the events service. Put one in from the browser console:
+
+```js
+dispatchEvent(new CustomEvent('augur:dev-inbox-item', { detail: { title: 'Check claim 42', open: { type: 'claim.open', payload: { id: 42 } } } }))
+```
+
+Left out, `app` is your app, `kind` your first declared kind and the owner the stand-in person. Take, give back, decline, hand on and mark done work on it until the page reloads. The contract tests (`platform/contract/tests/inbox.spec.ts`) use it to check that an item shows in the app's words and that Open raises its intent.
+
 ## What people do
 
 The Inbox is a function beside Find; its label carries the count ("Inbox 3", "Inbox 99+") of items on the person and untaken items for their teams. It has three tabs: **For you** (overdue first, then newest), **Your teams** and **Done** (the last 30 days). Home lists up to five open items for its floor above the notifications that need you, then "{n} more in your Inbox". In the shell's Inbox people take a team item (it becomes theirs, and the team sees who took it), give it back, decline it (saying why), hand it on to someone else or another team, mark it done where the app lets them, or open it. Opening raises the item's `open` intent or opens the app at its `path`, exactly as a notification's action does: the work happens in the app, and the app's service closes the item.
