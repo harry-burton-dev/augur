@@ -1,5 +1,16 @@
 # @augur/admin
 
+## 0.16.0
+
+### Minor Changes
+
+- a42841d: Activity in Admin has a Kind filter (Changes, Sign-ins, Everything) and a Download CSV button for what the filters show, and writes sentences for sign-ins, leavers and Activity's own upkeep.
+- 2d1735f: People show where their account stands (invited, active, off, left) and their last sign-in. A leaver's sign-in can't be turned back on, and the leaver flow runs once (docs/people.md).
+
+### Patch Changes
+
+- 3ad5fe2: Admin says dev builds come from every merge into main, not dev. The README, guides and catalog links now match the code: main is the only long-lived branch, the storage and updater services and the clients and app-tools packages are listed, and the shell's Agents are described as not built yet.
+
 ## 0.15.0
 
 ### Minor Changes

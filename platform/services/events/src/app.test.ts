@@ -359,7 +359,7 @@ describe.runIf(DATABASE_URL)('events', () => {
       await publish(as('folio'), [{ topic: 'folio.document.withdrawn', id: 'w1', payload: { document: 'd1' } }]);
 
       const read = (query: string) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers: as('notes') });
-      // An event shows once every older transaction has settled; other suites may share the database.
+      // Followers see an event once every earlier transaction on the database has settled.
       await expect.poll(async () => (await read('topics=folio.*')).json().events.length).toBe(3);
       const first = (await read('topics=folio.document.published&limit=1')).json();
       expect(first.events).toMatchObject([{ topic: 'folio.document.published', id: 'd1', publisher: 'folio', payload: { document: 'd1' }, workspace: { id: 'w-finance', path: ['w-org', 'w-finance'] } }]);
@@ -399,10 +399,8 @@ describe.runIf(DATABASE_URL)('events', () => {
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-8', detail: { username: 'al', asked: false } });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.blocked', target: 'notes' }, 'w-legal');
-      const read = async () => (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=platform.*', headers: as('notes') })).json().events;
-      await expect.poll(async () => (await read()).length).toBe(7);
-      const events = await read();
-      expect(events).toMatchObject([
+      // Followers see an event once every earlier transaction on the database has settled.
+      await expect.poll(async () => (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=platform.*', headers: as('notes') })).json().events).toMatchObject([
         { topic: 'platform.person.disabled', publisher: 'identity', payload: { person: 'u-9' } },
         { topic: 'platform.team.member-added', payload: { team: 'w-legal', person: 'u-2' }, workspace: { id: 'w-legal' } },
         // What changed, never the values: a follower asks identity for those.

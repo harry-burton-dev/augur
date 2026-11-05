@@ -4,13 +4,6 @@ import type { buildApp } from './app.ts';
 import { DATABASE_URL, eventsDb } from './db.testing.ts';
 
 const db = eventsDb();
-type Store = { readEvents: (q: { topics: string[]; limit: number }) => Promise<{ topic: string; publisher: string; payload: unknown; workspace?: { id: string } }[]> };
-// Events show only once every transaction older than them has settled, and other suites may share
-// the database, so wait until the expected number are readable.
-const settled = async (store: Store, topics: string[], count: number) => {
-  await expect.poll(async () => (await store.readEvents({ topics, limit: 10 })).length).toBe(count);
-  return store.readEvents({ topics, limit: 10 });
-};
 
 // Stands in for Keycloak: "Bearer app-<id>" is that app's token.
 const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
@@ -116,8 +109,8 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
     expect((await act(id, 'decline', nora, { note: 'No' })).json().message).toContain('Someone else on the team took this');
     expect((await act(id, 'release', nora)).statusCode).toBe(403);
     expect((await act(id, 'release', sam)).json().takenBy).toBeUndefined();
-    const events = await settled(store, ['platform.inbox.*'], 2);
-    expect(events.map((e) => [e.topic, e.publisher, e.payload, e.workspace?.id])).toEqual([
+    // Read once every earlier transaction on the database has settled, as followers do.
+    await expect.poll(async () => (await store.readEvents({ topics: ['platform.inbox.*'], limit: 10 })).map((e) => [e.topic, e.publisher, e.payload, e.workspace?.id])).toEqual([
       ['platform.inbox.taken', 'events', { item: id, app: 'mandate', key: 't', by: 'u-sam' }, 'w-finance'],
       ['platform.inbox.released', 'events', { item: id, app: 'mandate', key: 't', by: 'u-sam' }, 'w-finance'],
     ]);
@@ -155,8 +148,8 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
     expect((await act(own, 'hand-on', sam, { to: 'team:w-finance' })).json().message).toContain('handed on');
     expect((await act(own, 'done', sam)).json().state).toBe('done');
     expect((await list(sam, 'done')).map((i: { key: string }) => i.key)).toEqual(['own']);
-    const events = await settled(store, ['platform.inbox.*'], 2);
-    expect(events.map((e) => [e.topic, (e.payload as { to?: string }).to])).toEqual([['platform.inbox.handed-on', 'person:u-sam'], ['platform.inbox.done', undefined]]);
+    // Read once every earlier transaction on the database has settled, as followers do.
+    await expect.poll(async () => (await store.readEvents({ topics: ['platform.inbox.*'], limit: 10 })).map((e) => [e.topic, (e.payload as { to?: string }).to])).toEqual([['platform.inbox.handed-on', 'person:u-sam'], ['platform.inbox.done', undefined]]);
     expect((await store.audit({ limit: 10 })).map((e) => e.action).reverse()).toEqual(['inbox.created', 'inbox.handed-on', 'inbox.created', 'inbox.done']);
   });
 
@@ -209,8 +202,8 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
     // Sam's sign-in is turned off: his goes back too.
     await audit({ actor: { id: 'u-admin', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-sam' });
     expect((await store.inbox.get(rota.id))?.takenBy).toBeUndefined();
-    const events = await settled(store, ['platform.inbox.released'], 2);
-    expect(events.map((e) => e.payload)).toEqual([
+    // Read once every earlier transaction on the database has settled, as followers do.
+    await expect.poll(async () => (await store.readEvents({ topics: ['platform.inbox.released'], limit: 10 })).map((e) => e.payload)).toEqual([
       expect.objectContaining({ item: budget.id, by: 'u-nora', left: true }),
       expect.objectContaining({ item: rota.id, by: 'u-sam', left: true }),
     ]);
