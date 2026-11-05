@@ -53,6 +53,9 @@ export const NewNotification = Type.Object(
       Type.String({ pattern: '^[a-z][a-z0-9-]{0,39}$', description: "One of the kinds the app's manifest declares (notifications.kinds), so people can choose how each kind reaches them" }),
     ),
     level: Type.Enum(['needs', 'info', 'done', 'failed'], { description: '"needs" when the person has to act' }),
+    urgent: Type.Optional(
+      Type.Boolean({ description: 'Platform services only (ADR 0044 D3). News that stops work, such as a halted release: the shell may letterbox it' }),
+    ),
     title: Type.String({ minLength: 1, maxLength: 200 }),
     detail: Type.Optional(Type.String({ maxLength: 2000 })),
     link: Type.Optional(Type.String({ pattern: '^/', maxLength: 500, description: 'Path inside the app to open' })),
@@ -76,6 +79,7 @@ export const Notification = Type.Object(
     link: Type.Optional(Type.String()),
     actions: Type.Optional(Type.Array(ref(NotificationAction))),
     kind: Type.Optional(Type.String({ description: "One of the app's notifications.kinds" })),
+    urgent: Type.Optional(Type.Boolean({ description: 'News that stops work, from a platform service: the shell may letterbox it' })),
     createdAt: Type.String({ format: 'date-time' }),
     readAt: Type.Optional(Type.String({ format: 'date-time' })),
     workspace: Type.Optional(ref(EventFloor)),

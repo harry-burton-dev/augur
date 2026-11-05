@@ -86,6 +86,7 @@ import {
 import { AccountApi } from './account/api.js';
 import type { Preferences } from './host/preferences.js';
 import { currentFormats, formatsFrom, languageOf, setFormats } from './host/formats.js';
+import { URGENT_PREVIEW, UrgentNotices, urgentQueue } from './urgent/UrgentNotices.js';
 import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { ACTION_STATUS } from './host/session.js';
@@ -242,6 +243,9 @@ export function Host({
   );
   const findTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => search.stop(), [search]);
+  /** Unread urgent notifications from the events service, letterboxed when their app's preview is on (PER-283). */
+  const [urgent, setUrgent] = useState<ServerNotification[]>([]);
+  const settle = useCallback((ids: readonly string[]) => setUrgent((list) => (list.some((n) => ids.includes(n.id)) ? list.filter((n) => !ids.includes(n.id)) : list)), []);
   /** New notifications said once at the bottom of the screen, for someone who turned toasts on in Settings. */
   const [toasts, setToasts] = useState<ShellToast[]>([]);
   /** Puts a notification on the stream, and says it as a toast too when the person chose that. */
@@ -856,11 +860,13 @@ export function Host({
         });
         const local = shell.notifications.filter((n) => !known.has(n.id));
         shell.notifications = [...list.map((n) => fromServer(n, quietRef.current)), ...local];
+        setUrgent(list.filter((n) => n.urgent));
       },
       onNotification: (n) => {
         known.set(n.id, n);
         actions.current.remember(n.id, n.actions);
         tell(fromServer(n, quietRef.current));
+        if (n.urgent) setUrgent((list) => [...list.filter((x) => x.id !== n.id), n]);
       },
       onState: (state) => shell.setStream(state),
       onInbox: () => {
@@ -936,6 +942,7 @@ export function Host({
       if (server) {
         void feed.current?.setRead(id, true);
         shell.notifications = shell.notifications.filter((n) => n.id !== id);
+        settle([id]);
       }
       const app = appId ? byId(appId) : undefined;
       // One from another floor opens there, with the same move up or down; its app may not be on this floor's catalogue yet.
@@ -950,6 +957,7 @@ export function Host({
       const server = fromEvents.current.get(id);
       if (server) void feed.current?.setRead(id, true);
       shell.notifications = shell.notifications.filter((n) => n.id !== id);
+      settle([id]);
       actions.current.forget(id);
       // One from another floor is done there, like opening it: the intent waits for that floor's apps.
       const there = server?.workspace ? session.floors.find((f) => f.id === server.workspace!.id) : undefined;
@@ -972,10 +980,15 @@ export function Host({
     const onMute = () => prefs.set('muted', [...shell.muted]);
     // Dismissing a notification marks it read, so it stays gone next time; Undo brings it back.
     const onDismiss = (e: Event) => {
-      for (const id of (e as CustomEvent<{ ids: string[] }>).detail.ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, true);
+      const { ids } = (e as CustomEvent<{ ids: string[] }>).detail;
+      for (const id of ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, true);
+      settle(ids);
     };
     const onRestore = (e: Event) => {
-      for (const id of (e as CustomEvent<{ ids: string[] }>).detail.ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, false);
+      const { ids } = (e as CustomEvent<{ ids: string[] }>).detail;
+      for (const id of ids) if (fromEvents.current.has(id)) void feed.current?.setRead(id, false);
+      const back = ids.map((id) => fromEvents.current.get(id)).filter((n): n is ServerNotification => !!n?.urgent);
+      if (back.length) setUrgent((list) => [...list.filter((n) => !ids.includes(n.id)), ...back]);
     };
     const onRetry = (e: Event) => {
       if ((e as CustomEvent<{ what: string }>).detail.what === 'stream') feed.current?.start();
@@ -1065,7 +1078,7 @@ export function Host({
       shell.removeEventListener('ui-nav', onNav);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, showAccount, inboxForHome, openInboxItem]);
+  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, showAccount, inboxForHome, openInboxItem, settle]);
 
   // The open app is a pull request's preview: say so, with the way back.
   const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
@@ -1107,6 +1120,13 @@ export function Host({
       <Toasts
         toasts={toasts.map((t) => ({ id: t.id, text: t.text, ...(t.open ? { action: { label: 'Open', onPress: () => homeAsks.current?.open(t.id) } } : {}) }))}
         onDone={toastDone}
+      />
+      <UrgentNotices
+        queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
+        appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
+        floorName={(id) => session.floors.find((f) => f.id === id)?.name}
+        me={session.user.name}
+        onOpen={(id) => homeAsks.current?.open(id)}
       />
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
       {accountSection ? (

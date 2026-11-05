@@ -54,6 +54,15 @@ describe('events', () => {
     expect((await post(platform, { ...review, link: 'https://elsewhere.example' })).statusCode).toBe(400);
   });
 
+  it('takes urgent news only from AUGUR’s own services, and says it is urgent', async () => {
+    const app = await buildApp({ verifyService, grants: async () => ['notifications:send'] });
+    const urgent = { ...review, urgent: true };
+    expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: { authorization: 'Bearer app-library' }, payload: urgent })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: urgent })).statusCode).toBe(202);
+    const mine = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
+    expect(mine).toMatchObject([{ title: 'Review the budget paper', urgent: true }]);
+  });
+
   it('lets a platform service tell an audience, such as everyone holding a role, worked out as it sends', async () => {
     let holders = ['u-1'];
     const app = await buildApp({ verifyService, audience: async (principals) => (principals.includes('role:deployment-admin') ? holders : []) });

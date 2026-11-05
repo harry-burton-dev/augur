@@ -32,6 +32,11 @@ export interface NewNotification {
   toTeam?: boolean;
   /** "needs" when the person has to do something. */
   level: NotificationLevel;
+  /**
+   * Platform services only (ADR 0044 D3): news that stops work, such as a release its publisher
+   * halted. The shell may letterbox it. An app that sends it is refused.
+   */
+  urgent?: boolean;
   title: string;
   detail?: string;
   /** Path inside the app to open, e.g. "/doc/123". */

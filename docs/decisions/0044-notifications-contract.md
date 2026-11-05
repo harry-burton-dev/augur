@@ -69,7 +69,7 @@ These are global notifications from the Upgrade Centre (`upgrades`), and opening
 | --- | --- | --- | --- |
 | D1 | Who hears how an update ended? | a) deployment admins only · b) deployment admins and admins | **b**: admins run the organisation and field "it looks different" |
 | D2 | Tell people about a release Automatic will install anyway? | a) only when it waits for someone · b) always, as `info` | **b**: you asked to hear when a version is available. Muting the Upgrade Centre makes it quiet |
-| D3 | When does the Letterbox open by itself? | a) never · b) platform news that stops work, such as a halted release or a failed go-back · c) any `needs` | **b**, later. Not built yet; it needs an `urgent` flag that only platform services may send |
+| D3 | When does the Letterbox open by itself? | a) never · b) platform news that stops work, such as a halted release or a failed go-back · c) any `needs` | **b**. Built behind the Upgrade Centre's `urgent-letterbox` preview (PER-283): `urgent` on a notification, refused from an app; the Upgrade Centre sends it for a halted release and a go-back that didn't finish |
 | D4 | Urgency budget per app (opportunities 8)? | a) now · b) when three or more apps send `needs` | **b**: today only Artifacts and Mandate send, and rarely |
 | D5 | How long are notifications kept? | a) forever · b) read ones 90 days, unread ones a year | **b**, as a prune job in a later PR. Today nothing is deleted |
 | D6 | Toasts by default? | a) off for everything (#220) · b) on for `needs` and `failed` from the platform | **a** for now, as #220 has it. Revisit when D3 lands |

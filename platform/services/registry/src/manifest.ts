@@ -401,6 +401,10 @@ export const platformApps: AppEntry[] = [
     sameOnEveryFloor: true,
     // its sections are in its own rail (ADR 0030)
     orbit: false,
+    // The urgent path (PER-283, ADR 0044 D3), off until a person turns it on in Previews.
+    previews: [
+      { id: 'urgent-letterbox', name: 'Urgent news letterboxed', detail: 'A halted release or a go-back that didn’t finish opens in a letterbox over your work, and waits on the edge of the screen once you step back.' },
+    ],
   },
 ];
 

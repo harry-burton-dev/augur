@@ -41,8 +41,15 @@ describe('update notices', () => {
     expect(noticesFrom(overview(result('rolled-back', { message: 'Sign-in stopped working.' })), now)[0]).toMatchObject({ level: 'failed', title: 'AUGUR went back to 0.14.0 by itself', detail: 'Sign-in stopped working.' });
     expect(noticesFrom(overview(result('failed')), now)[0]).toMatchObject({ level: 'failed', title: 'AUGUR 0.15.0 didn’t install' });
     expect(noticesFrom(overview(result('done', { from: '0.16.0' })), now)[0]).toMatchObject({ title: 'AUGUR went back to 0.15.0' });
+    expect(noticesFrom(overview(result('failed', { from: '0.16.0' })), now)[0]).toMatchObject({ level: 'failed', urgent: true, title: 'AUGUR didn’t go back to 0.15.0' });
+    expect(noticesFrom(overview(result('failed')), now)[0].urgent).toBeUndefined();
     expect(noticesFrom(overview(result('cancelled')), now)).toEqual([]);
     expect(noticesFrom(overview(result('done', {}, '2026-10-30T09:00:00Z')), now)).toEqual([]);
+  });
+
+  it('says a halted release is urgent: it stops work', () => {
+    const halted = unit({ unit: 'augur', name: 'AUGUR', running: '0.15.0', halted: { reason: 'Sign-in fails.' } } as never);
+    expect(noticesFrom(overview(halted), now)[0]).toMatchObject({ key: 'halted:augur:0.15.0', level: 'needs', urgent: true, title: 'AUGUR 0.15.0 was halted by its publisher' });
   });
 
   it('sends each piece of news once, and tries a failed send again', async () => {
