@@ -1,5 +1,12 @@
 # @augur/identity
 
+## 1.5.1
+
+### Patch Changes
+
+- Updated dependencies [4cfab7e]
+  - @augur/service-kit@0.17.1
+
 ## 1.5.0
 
 ### Minor Changes

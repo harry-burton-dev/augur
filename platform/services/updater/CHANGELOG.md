@@ -1,5 +1,12 @@
 # @augur/updater
 
+## 0.9.5
+
+### Patch Changes
+
+- Updated dependencies [4cfab7e]
+  - @augur/service-kit@0.17.1
+
 ## 0.9.4
 
 ### Patch Changes

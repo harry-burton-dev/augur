@@ -1,5 +1,5 @@
 {
-  "version": "0.23.0",
+  "version": "0.23.1",
   "name": "Jacana",
   "channel": "beta",
   "released": "2026-11-05",
@@ -13,9 +13,7 @@
     "@augur/models",
     "@augur/registry",
     "@augur/storage",
-    "@augur/updater",
-    "@augur/admin",
-    "@augur/shell"
+    "@augur/updater"
   ],
   "breaking": [],
   "settings": {
@@ -185,11 +183,7 @@
       "GRAFANA_ADMIN_PASSWORD",
       "ALERT_WEBHOOK_TOKEN"
     ],
-    "added": [
-      "INBOX_DONE_DAYS",
-      "ATLAS_MAP_TILES",
-      "ATLAS_MAP_ATTRIBUTION"
-    ],
+    "added": [],
     "removed": []
   },
   "parts": {
@@ -206,7 +200,7 @@
       "version": "0.5.6"
     },
     "@augur/app-tools": {
-      "version": "0.4.2"
+      "version": "0.4.3"
     },
     "@augur/clients": {
       "version": "0.1.0"
@@ -218,28 +212,28 @@
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.17.0"
+      "version": "0.17.1"
     },
     "@augur/events": {
-      "version": "0.10.0"
+      "version": "0.10.1"
     },
     "@augur/gateway": {
-      "version": "0.12.1"
+      "version": "0.12.2"
     },
     "@augur/identity": {
-      "version": "1.5.0"
+      "version": "1.5.1"
     },
     "@augur/models": {
-      "version": "0.3.8"
+      "version": "0.3.9"
     },
     "@augur/registry": {
-      "version": "0.19.1"
+      "version": "0.19.2"
     },
     "@augur/storage": {
-      "version": "0.5.0"
+      "version": "0.5.1"
     },
     "@augur/updater": {
-      "version": "0.9.4"
+      "version": "0.9.5"
     },
     "@augur/admin": {
       "version": "0.18.0"
