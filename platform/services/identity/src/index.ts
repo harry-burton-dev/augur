@@ -9,6 +9,7 @@ import { PgPreferenceStore } from './store.ts';
 import { PgWorkspaceStore } from './workspaces.ts';
 import { PgOrganisationStore } from './organisation.ts';
 import { PgLifecycleStore } from './lifecycle.ts';
+import { reconcile, PgReconcileStore } from './reconcile.ts';
 import { copySignIns, PgSignInCursorStore, type KcEvent } from './sign-ins.ts';
 
 const log = startupLog('identity');
@@ -47,6 +48,7 @@ const workspaces = new PgWorkspaceStore(pool, { orgName });
 const organisation = new PgOrganisationStore(pool);
 const signInCursor = new PgSignInCursorStore(pool);
 const lifecycle = new PgLifecycleStore(pool);
+const reconcileStore = new PgReconcileStore(pool);
 
 // Locally this is the dev stack's Keycloak and its admin/admin console login.
 const { KEYCLOAK_URL = 'http://localhost:8180', KEYCLOAK_REALM = 'platform', KEYCLOAK_ADMIN_USER = production ? undefined : 'admin' } = process.env;
@@ -126,6 +128,18 @@ if (keycloakEvents && audit) {
     );
   setInterval(copy, 60_000).unref();
   void copy();
+}
+
+// A sign-in turned off or on in Keycloak itself (its console, or later its idle Workflow) is noticed within
+// five minutes: sessions end, identity keeps it, and Activity and followers hear it (PER-194).
+if (directory) {
+  const people = directory;
+  const compare = () =>
+    reconcile({ directory: people, lifecycle, store: reconcileStore, audit }).catch((err: Error) =>
+      log.error(`Identity couldn't compare sign-ins with Keycloak this time; it tries again in five minutes (${err.message}).`),
+    );
+  setInterval(compare, 5 * 60_000).unref();
+  void compare();
 }
 
 const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle });

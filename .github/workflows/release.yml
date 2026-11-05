@@ -5,7 +5,6 @@ name: Release
 on:
   push:
     branches: [main, 'release/**']
-concurrency: release-${{ github.ref }}
 permissions:
   contents: write
   pull-requests: write
@@ -22,6 +21,12 @@ jobs:
   release:
     # Builds and pushes images, so only on an x86-64 runner: RELEASE_RUNNER, if CI_RUNNER names an Arm one.
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
+    # One release job per branch at a time, held by this job only: the feed and the deploy test have
+    # their own groups, so a push no longer waits behind a 20-minute deploy test. GitHub keeps one run
+    # waiting per group and a newer push replaces it, which is fine: the newest push sees every change.
+    concurrency:
+      group: release-${{ github.ref }}
+      cancel-in-progress: false
     outputs:
       released: ${{ steps.augur.outputs.new == 'true' || (steps.apps.outputs.pending != '' && steps.apps.outputs.pending != '[]') }}
       augur: ${{ steps.augur.outputs.new == 'true' && steps.augur.outputs.version || '' }}

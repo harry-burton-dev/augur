@@ -406,6 +406,8 @@ describe('Activity', () => {
     expect(signIn('account.two-step-added')).toBe('Sam Okafor added a second step to their sign-in');
     expect(sentence(entry('sign-in.failed-unknown', { actor: { id: 'identity', kind: 'service' }, detail: { kind: 'sign-in', count: 4 } }), names)).toBe('4 times, someone tried to sign in with a name nobody has');
     expect(sentence(entry('person.left', { target: 'u-2', detail: { handOverTo: 'u-1' } }), names)).toBe('Alex Rivera marked Sam Okafor as a leaver, handing their work to Alex Rivera');
+    expect(sentence(entry('person.disabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true } }), names)).toBe('Sam Okafor’s sign-in was turned off in the sign-in service, not in AUGUR');
+    expect(sentence(entry('person.enabled', { actor: { id: 'keycloak', kind: 'service' }, target: 'u-2', detail: { outside: true } }), names)).toBe('Sam Okafor’s sign-in was turned back on in the sign-in service, not in AUGUR');
     expect(sentence(entry('audit.exported', { app: 'events' }), names)).toBe('Alex Rivera downloaded Activity');
     expect(sentence(entry('audit.pruned', { app: 'events', actor: { id: 'events', kind: 'service' }, detail: { removed: 12, keepDays: 365 } }), names)).toBe('12 entries older than 365 days were removed');
   });

@@ -45,6 +45,8 @@ export interface AccountAreaProps {
   /** The shell's own sign-in client, so the list of sessions can name it. */
   shellClient: string;
   product: string;
+  /** The organisation's time zone (Admin → Organisation), which times follow until they choose their own. */
+  orgTimeZone?: string;
   /** What's running, for About. */
   version?: string;
   /** How the last of Keycloak's screens went (kc_action_status), to say once. */
@@ -308,11 +310,29 @@ function SecuritySection({ api, onAction, actionStatus, shellClient, product }: 
               </div>
             ))}
           </Section>
+          {s.emails ? <SecurityEmails emails={s.emails} product={product} /> : null}
         </>
       )}
       <Sessions api={api} shellClient={shellClient} product={product} />
       <RecentSignIns api={api} shellClient={shellClient} product={product} />
     </>
+  );
+}
+
+function SecurityEmails({ emails, product }: { emails: NonNullable<Security['emails']>; product: string }) {
+  const what = 'when your password, code app or passkeys change';
+  return (
+    <Section label="Emails about your security" count={-1} why="Always on when email works, so a change you didn’t make can’t go unnoticed.">
+      <Note>
+        {!emails.on
+          ? `${product} can’t send email on this deployment yet, so changes to how you sign in aren’t emailed. A deployment admin can connect the organisation’s mail.`
+          : !emails.address
+            ? `${product} emails you ${what}, once you add an email address in Profile.`
+            : emails.verified
+              ? `${product} emails you at ${emails.address} ${what}.`
+              : `${product} emails you at ${emails.address} ${what}, once you confirm that address.`}
+      </Note>
+    </Section>
   );
 }
 
@@ -648,8 +668,9 @@ function AppearanceSection({ prefs, onPreference }: AccountAreaProps) {
 }
 
 function RegionSection(props: AccountAreaProps) {
-  const { prefs, onPreference } = props;
+  const { prefs, onPreference, orgTimeZone } = props;
   const browser = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  const following = orgTimeZone ? `your organisation’s (${orgTimeZone.replace(/_/g, ' ')})` : `this browser’s (${browser})`;
   const zones = useMemo(() => timeZones(), []);
   return (
     <>
@@ -659,8 +680,8 @@ function RegionSection(props: AccountAreaProps) {
       <Section label="Time zone" count={-1}>
         <Select
           label="Your time zone"
-          hint={prefs.timeZone ? undefined : `Following this browser: ${browser}`}
-          options={[{ value: '', label: `This browser’s (${browser})` }, ...zones.map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))]}
+          hint={prefs.timeZone ? undefined : `Times follow ${following} until you choose one.`}
+          options={[{ value: '', label: following.charAt(0).toUpperCase() + following.slice(1) }, ...zones.map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))]}
           value={prefs.timeZone ?? ''}
           onChange={(v) => onPreference('timeZone', v || undefined)}
         />

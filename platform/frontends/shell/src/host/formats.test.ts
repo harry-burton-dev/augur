@@ -11,6 +11,9 @@ describe('how dates are written', () => {
     expect(formatsFrom({ dateFormat: 'en-US', timeZone: 'Europe/Berlin', clock: '24' }, 'de')).toEqual({ language: 'de', locale: 'en-US', timeZone: 'Europe/Berlin', hourCycle: 'h23' });
     expect(formatsFrom({}, 'de')).toEqual({ language: 'de', locale: 'de' });
     expect(formatsFrom({})).toEqual({});
+    // Without a time zone of their own, the organisation's (ADR 0042); theirs wins when they chose one.
+    expect(formatsFrom({}, undefined, 'Asia/Tokyo')).toEqual({ timeZone: 'Asia/Tokyo' });
+    expect(formatsFrom({ timeZone: 'Europe/Berlin' }, undefined, 'Asia/Tokyo')).toEqual({ timeZone: 'Europe/Berlin' });
   });
 
   it('writes a moment their way', () => {

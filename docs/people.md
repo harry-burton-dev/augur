@@ -31,6 +31,12 @@ People shows each person's state and their last sign-in. Identity works the stat
 
 Last sign-in starts when identity first runs with this version. Before that, People says "Not seen yet".
 
+### Changes made in Keycloak itself
+
+Someone's sign-in can be turned off or on in Keycloak's admin console, and later by Keycloak's idle-account Workflow; neither ends their sessions or tells AUGUR. Every five minutes identity compares each account's sign-in with what it last knew (one identity copy at a time). For each one that changed it ends their sessions (when turned off), keeps the change, and records `person.disabled` or `person.enabled` in Activity with actor `keycloak` (a service) and `detail.outside: true`, so followers hear `platform.person.disabled` or `platform.person.enabled` as they do for an admin's change. Activity says "Sam's sign-in was turned off in the sign-in service, not in AUGUR".
+
+The first comparison only takes note: accounts already off then are kept as off with no cause, and nothing is announced. A leaver turned back on in the console is left alone; People still shows them as left.
+
 ## For apps
 
 Follow `platform.person.left` (`PLATFORM_TOPICS.personLeft` in the service kit). When `handOverTo` is there, move what the leaver owns to that person, or offer it to them. When it isn't, keep it and show it as the leaver's until an admin or a team lead hands it on. Team inbox items a person had taken go back to their team when their sign-in goes off (docs/inbox.md).
