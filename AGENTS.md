@@ -81,9 +81,12 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - App layout and interaction rules agreed with Harry live in
   docs/app-patterns.md. A live design session writes each agreed rule there
   in the same PR.
-- Design research lives in `design-lab/` (prompts, runs, concepts; see its
-  README). Nothing there ships; an idea moves into the product only through
-  a record or docs/app-patterns.md.
+- Design research lives outside this repository, in the Design lab (Google
+  Drive folder "Design lab",
+  https://drive.google.com/drive/folders/1FL9KAmvd_wEkOfLO5-lxm3t1JI4jyY17).
+  Nothing there ships; an idea moves into the product only through a record
+  or docs/app-patterns.md. The lab's history up to its move is in git (the
+  last commit with `design-lab/` is c1fd921).
 
 ## Working on a change
 - `pnpm install`, then `pnpm build`, `pnpm test`, `pnpm typecheck`, `pnpm lint`. Also run
