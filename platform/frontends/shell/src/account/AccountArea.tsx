@@ -2,7 +2,8 @@ import { AppFrame, AskTwice, Button, Choice, Notice, Note, PageHead, RailLink, R
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Preferences } from '../host/preferences.js';
 import { AccountError, type AccountApi, type AccountSession, type HeldCredential, type ProfileChanges, type Security, type SignIn } from './api.js';
-import { actionWords, ago, clientWords, dayAndTime, signInWords, timeZones } from './words.js';
+import { currentFormats, writeDate, type Formats } from '../host/formats.js';
+import { actionWords, ago, clientWords, DATE_REGIONS, dayAndTime, languageName, regionName, signInWords, timeZones } from './words.js';
 
 /** The Account area's sections (ADR 0036), in the rail's order. Privacy and data comes later. */
 export const ACCOUNT_SECTIONS = [
@@ -26,6 +27,8 @@ export interface AccountAreaProps {
   /** What they've chosen, and how to change one choice: the shell saves it and applies it at once. */
   prefs: Preferences;
   onPreference: <K extends keyof Preferences>(key: K, value: Preferences[K]) => void;
+  /** Their language changed: dates follow it at once. */
+  onLanguage?: (locale: string | undefined) => void;
   /** Opens one of Keycloak's screens and comes back to this section. */
   onAction: (kcAction: string, section: AccountSection) => void;
   onSignOut: () => void;
@@ -643,12 +646,15 @@ function AppearanceSection({ prefs, onPreference }: AccountAreaProps) {
   );
 }
 
-function RegionSection({ prefs, onPreference }: AccountAreaProps) {
+function RegionSection(props: AccountAreaProps) {
+  const { prefs, onPreference } = props;
   const browser = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const zones = useMemo(() => timeZones(), []);
   return (
     <>
-      <PageHead eyebrow="Account" heading="Language and region" summary="Times and dates, as you read them" />
+      <PageHead eyebrow="Account" heading="Language and region" summary="Your language, and how times and dates are written" />
+      <Language {...props} />
+      <DatesAndTimes {...props} />
       <Section label="Time zone" count={-1}>
         <Select
           label="Your time zone"
@@ -658,11 +664,95 @@ function RegionSection({ prefs, onPreference }: AccountAreaProps) {
           onChange={(v) => onPreference('timeZone', v || undefined)}
         />
       </Section>
-      <Section label="Language" count={-1}>
-        <Rows items={[{ label: 'Language', value: 'English' }]} />
-        <Note>AUGUR is in English only for now, so there’s nothing to choose yet.</Note>
-      </Section>
     </>
+  );
+}
+
+/** Their language, kept on their profile so sign-in pages and emails use it too (ADR 0039). */
+function Language({ api, onLanguage }: AccountAreaProps) {
+  const profile = useLoad(() => api.profile());
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const p = profile.value;
+  if (!p) {
+    return (
+      <Section label="Language" count={-1}>
+        <Loading what="language" error={profile.error} onRetry={profile.again} />
+      </Section>
+    );
+  }
+  const offered = p.languages?.length ? p.languages : ['en'];
+  const managed = p.managed.includes('locale');
+  const choose = async (v: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await api.updateProfile({ locale: v });
+      profile.set(next);
+      onLanguage?.(next.locale);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section label="Language" count={-1} why="Sign-in pages and emails use your language, and dates are written its way unless you choose a format below. AUGUR’s own screens are in English for now.">
+      {offered.length > 1 || (p.locale && !offered.includes(p.locale)) ? (
+        <Select
+          label="Your language"
+          options={[
+            { value: '', label: `Your organisation’s (${languageName(offered[0]!)})` },
+            ...offered.map((l) => ({ value: l, label: languageName(l) })),
+            ...(p.locale && !offered.includes(p.locale) ? [{ value: p.locale, label: languageName(p.locale), detail: 'No longer offered', disabled: true }] : []),
+          ]}
+          value={p.locale ?? ''}
+          disabled={managed}
+          reason={managed ? `${p.managedBy ?? 'Your organisation’s sign-in'} sets this.` : undefined}
+          busy={busy}
+          onChange={(v) => void choose(v)}
+        />
+      ) : (
+        <>
+          <Rows items={[{ label: 'Language', value: languageName(offered[0]!) }]} />
+          <Note>Your organisation offers only {languageName(offered[0]!)}. A deployment admin can offer more.</Note>
+        </>
+      )}
+      {error ? <Note live>{error}</Note> : null}
+    </Section>
+  );
+}
+
+/** How dates and times are written: a region's way, and a 12- or 24-hour clock. */
+function DatesAndTimes({ prefs, onPreference }: AccountAreaProps) {
+  const now = useMemo(() => Date.now(), []);
+  const example = (formats: Formats) => writeDate(now, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit' }, formats);
+  const short = (formats: Formats) => writeDate(now, { dateStyle: 'short' }, formats);
+  const yours = currentFormats();
+  const regions = [...new Set([...(prefs.dateFormat && !DATE_REGIONS.includes(prefs.dateFormat) ? [prefs.dateFormat] : []), ...DATE_REGIONS])];
+  return (
+    <Section label="Dates and times" count={-1}>
+      <Select
+        label="Write dates as in"
+        hint={`Now reads: ${example(yours)}`}
+        options={[
+          { value: '', label: 'Your language’s way' },
+          ...regions.map((r) => ({ value: r, label: regionName(r), detail: short({ locale: r }) })),
+        ]}
+        value={prefs.dateFormat ?? ''}
+        onChange={(v) => onPreference('dateFormat', v || undefined)}
+      />
+      <Choice
+        label="Clock"
+        value={prefs.clock ?? ''}
+        onChange={(v) => onPreference('clock', v === '12' || v === '24' ? v : undefined)}
+        options={[
+          { value: '', label: 'As dates are written', detail: writeDate(now, { hour: 'numeric', minute: '2-digit' }, { ...yours, hourCycle: undefined }) },
+          { value: '12', label: '12-hour', detail: writeDate(now, { hour: 'numeric', minute: '2-digit' }, { ...yours, hourCycle: 'h12' }) },
+          { value: '24', label: '24-hour', detail: writeDate(now, { hour: 'numeric', minute: '2-digit' }, { ...yours, hourCycle: 'h23' }) },
+        ]}
+      />
+    </Section>
   );
 }
 

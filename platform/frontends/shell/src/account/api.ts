@@ -19,8 +19,10 @@ export interface Profile {
   locale?: string;
   managed: ProfileField[];
   managedBy?: string;
+  /** The languages this deployment offers, the first its default. */
+  languages?: string[];
 }
-export type ProfileChanges = Partial<Pick<Profile, 'firstName' | 'lastName' | 'jobTitle' | 'phone' | 'pronouns' | 'picture'>>;
+export type ProfileChanges = Partial<Pick<Profile, 'firstName' | 'lastName' | 'jobTitle' | 'phone' | 'pronouns' | 'picture' | 'locale'>>;
 
 export interface HeldCredential {
   id: string;

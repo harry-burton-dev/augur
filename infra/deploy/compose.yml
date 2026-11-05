@@ -417,6 +417,8 @@ services:
       KEYCLOAK_URL: http://keycloak:8080/sso
       # What the top floor, the whole organisation, is called.
       ORG_NAME: ${ORG_NAME:-Organisation}
+      # The languages people may choose in Account, the same ones keycloak-config offers at sign-in.
+      REALM_LANGUAGES: ${REALM_LANGUAGES:-}
       SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
     depends_on:
       <<: *own-login

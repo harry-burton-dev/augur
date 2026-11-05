@@ -1,3 +1,4 @@
+import { writeDate } from './formats.js';
 import { WORKSPACE_HEADER, type AppManifestEntry, type InboxCounts, type InboxItem, type Workspace } from '@augur/mfe-sdk';
 import type { HomeNeed } from './home.js';
 import { incompatibility } from './manifest.js';
@@ -125,7 +126,7 @@ export const dueLine = (item: Pick<InboxItem, 'due' | 'overdue'>, now = Date.now
   const due = Date.parse(item.due);
   const days = Math.round(Math.abs(now - due) / 86_400_000);
   if (item.overdue || due < now) return { text: days < 1 ? 'Overdue' : `Overdue by ${days} day${days === 1 ? '' : 's'}`, late: true };
-  return { text: `Due ${new Date(due).toLocaleDateString(undefined, { weekday: days < 7 ? 'long' : undefined, day: 'numeric', month: 'short' })}`, late: false };
+  return { text: `Due ${writeDate(due, { weekday: days < 7 ? 'long' : undefined, day: 'numeric', month: 'short' })}`, late: false };
 };
 
 /** One entry of an item's menu: what the person can do, and why not when they can't (explain, never hide). */
