@@ -1,3 +1,8 @@
+import { withDeadline } from '@augur/service-kit';
+
+/** Keycloak's admin calls get longer than a service call's few seconds: some write or list a lot. */
+const KEYCLOAK_TIMEOUT_MS = 15_000;
+
 /**
  * The directory of people and departments. Keycloak holds them (departments
  * are its groups, roles its realm roles); admins change them through identity,
@@ -263,7 +268,8 @@ export class KeycloakDirectory implements Directory {
 
   constructor(config: KeycloakConfig) {
     this.config = config;
-    this.fetchImpl = config.fetchImpl ?? fetch;
+    // Keycloak's admin API, with a deadline: a hung sign-in service answers 503 here, not never (PER-213).
+    this.fetchImpl = withDeadline(config.fetchImpl ?? fetch, KEYCLOAK_TIMEOUT_MS);
   }
 
   private get base() {

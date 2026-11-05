@@ -45,9 +45,8 @@ obtuse**: an app offered only on some kinds of floor, a menu entry that needs
 a role, and an empty menu should show as unavailable with the reason, unless
 knowing it exists is itself restricted.
 
-Already held to it: Agents, not built yet, stay among the Shell's functions
-and say why when pressed (until Aerie's functions take `unavailable` as its
-navs do, when they will also look unavailable). An app's Home card stays when
+Already held to it: Agents, not built yet, stay among the Shell's functions,
+look unavailable and say why on hover and focus (Aerie's `unavailable`). An app's Home card stays when
 the shell can't open the app, saying why and who can change it. Nothing a
 person reads calls AUGUR "the platform": `pnpm check:reasons` fails on it
 outside comments, unless the line says `check-reasons: code-only`.

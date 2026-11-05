@@ -1,4 +1,5 @@
 import { serviceHeaders, type ServiceCredentials } from './service.js';
+import { withDeadline } from './deadline.js';
 
 /** Where a floor sits, as identity tells the platform's services. */
 export interface FloorPlace {
@@ -39,7 +40,7 @@ export const floorPlaces = ({ identityUrl, credentials, ttlMs = 30_000, fetchImp
     if (hit && now() - hit.at < ttlMs) return hit.place;
     let res: Response;
     try {
-      res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(id)}`, { headers: await serviceHeaders(credentials) });
+      res = await withDeadline(fetchImpl)(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(id)}`, { headers: await serviceHeaders(credentials) });
     } catch (err) {
       throw new FloorsUnavailable(`Identity could not be reached (${(err as Error).message}).`);
     }
@@ -61,7 +62,7 @@ export type MemberLookup = (team: string) => Promise<string[]>;
 export const floorMembers = ({ identityUrl, credentials, fetchImpl = fetch }: Omit<FloorPlacesOptions, 'ttlMs' | 'now'>): MemberLookup => async (team) => {
   let res: Response;
   try {
-    res = await fetchImpl(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(team)}/people`, { headers: await serviceHeaders(credentials) });
+    res = await withDeadline(fetchImpl)(`${identityUrl.replace(/\/$/, '')}/v1/workspaces/${encodeURIComponent(team)}/people`, { headers: await serviceHeaders(credentials) });
   } catch (err) {
     throw new FloorsUnavailable(`Identity could not be reached (${(err as Error).message}).`);
   }
