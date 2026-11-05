@@ -1,5 +1,14 @@
 # @augur/service-kit
 
+## 0.15.0
+
+### Minor Changes
+
+- 833b4ed: The registry tells AUGUR's services the role an app's manifest says a person needs (`requiredRole` in an app's grants), and the service kit reads it (`registryRequiredRole`), so models can check it for an AI app as the gateway does for the app's own API.
+- 431db38: The service kit's public surface is now an API report, checked in CI. `MailTransport` is the kit's own interface rather than Nodemailer's type, `startAppService` resolves to a plain `FastifyInstance`, and telemetry takes any string record as its settings.
+
+  Not breaking: Nodemailer's transport still fits `MailTransport`, and `process.env` still fits the telemetry settings.
+
 ## 0.14.0
 
 ### Minor Changes
