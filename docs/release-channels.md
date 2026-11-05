@@ -34,7 +34,11 @@ The portal is only on the tailnet, so the workflow joins it to ask (ADR 0045). T
 2. Make an OAuth client (Settings → OAuth clients) with the `auth_keys` write scope and the tag `tag:ci`.
 3. In the repository, add the secrets `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`, and the variable `PORTAL_URL` (the portal's address, such as `https://backstage.<your tailnet>.ts.net`).
 
-Until then, a promotion goes ahead, and both the run and `promotion.json` say that bake time wasn't checked.
+Until then, bake time can't be checked, so a promotion is refused unless you tick **Skip the bake time**. Both the run and `promotion.json` then say that it wasn't checked.
+
+### Deploy test
+
+An AUGUR release goes stable only once its last deploy test passed. Each run on `main` or a `release/*` branch keeps its result on the release as `deploy-test.json`, pass or fail; a run on any other branch tests with that branch's script, so it keeps nothing. There is no override. If the test failed or the release has no result, as releases from before this check don't, fix what failed or run **Actions → Deploy test** on `main` with that version, then promote again. `promotion.json` records the run that passed. Apps have no deploy test of their own.
 
 Units move independently: Mandate can become stable while AUGUR stays where it is, and the other way round.
 

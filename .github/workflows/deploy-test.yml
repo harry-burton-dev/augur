@@ -28,6 +28,10 @@ jobs:
   deploy-test:
     runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
     timeout-minutes: 30
+    # To keep its result on the release.
+    permissions:
+      contents: write
+      packages: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Two releases' images (the Artifacts worker carries its models) outgrow a hosted runner's
@@ -121,3 +125,16 @@ jobs:
         run: infra/deploy-test.sh broken
         env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
+      # Pass or fail, on the release, where Promote to stable reads it (docs/release-channels.md). A run on
+      # another branch tests with that branch's script, so it says nothing about the release.
+      - name: Keep the result on the release
+        if: ${{ !cancelled() && steps.releases.outputs.to != '' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+        run: |
+          jq -n --arg version "$TO" --arg from "$FROM" --arg run "$GITHUB_RUN_ID" --arg at "$(date -u +%FT%TZ)" --argjson passed "$PASSED" \
+            '{schema: "augur.deploy-test/v1", version: $version, from: (if $from == "" then null else $from end), passed: $passed, run: $run, at: $at}' > "$RUNNER_TEMP/deploy-test.json"
+          gh release upload "augur@$TO" "$RUNNER_TEMP/deploy-test.json" --clobber
+        env:
+          TO: ${{ steps.releases.outputs.to }}
+          FROM: ${{ steps.releases.outputs.from }}
+          PASSED: ${{ job.status == 'success' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

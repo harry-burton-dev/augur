@@ -88,8 +88,24 @@ export const promotionTarget = (unit, wanted, releases) => {
   return of.filter((r) => r.isPrerelease).sort((a, b) => semver.rcompare(a.version, b.version))[0];
 };
 
-/** The record a stable release carries: who made it stable, from which release, when, and how long it had baked. */
-export const promotionRecord = ({ unit, version, actor, at, run, bake }) => ({ schema: 'augur.promotion/v2', unit, version, channel: 'stable', from: 'beta', promotedBy: actor, run, at, ...(bake ? { bake } : {}) });
+/** The deploy test's result, which it keeps on the AUGUR release it tested (.github/workflows/deploy-test.yml). */
+export const DEPLOY_TEST_ASSET = 'deploy-test.json';
+
+/**
+ * Whether a release passed its deploy test, from the deploy-test.json on it. Only AUGUR has a deploy
+ * test. A release without a result hasn't passed. Returns the problem when it may not go stable.
+ */
+export const deployTestVerdict = ({ unit, version, result }) => {
+  if (unit !== AUGUR) return {};
+  const rerun = 'Run Deploy test from Actions on main for this release, then promote it again.';
+  if (!result) return { problem: `It has no deploy test result. ${rerun}` };
+  if (result.version !== version) return { problem: `Its deploy test result is for ${result.version}. ${rerun}` };
+  if (result.passed !== true) return { problem: `Its last deploy test failed (run ${result.run}). ${rerun}` };
+  return { record: { run: result.run, at: result.at, upgradedFrom: result.from ?? null } };
+};
+
+/** The record a stable release carries: who made it stable, from which release, when, its deploy test and how long it had baked. */
+export const promotionRecord = ({ unit, version, actor, at, run, bake, deployTest }) => ({ schema: 'augur.promotion/v2', unit, version, channel: 'stable', from: 'beta', promotedBy: actor, run, at, ...(deployTest ? { deployTest } : {}), ...(bake ? { bake } : {}) });
 
 /** ADR 0018: how long a release must have run on a preview deployment, with no going back, before it's made stable. */
 export const BAKE_HOURS = 72;
@@ -98,11 +114,15 @@ export const BAKE_RING = 'preview';
 /**
  * Whether a release has baked (ADR 0018), from the portal's answer (GET /api/augur/bake): each
  * deployment that ran it, its ring, hours and whether it went back. Undefined `evidence` means the
- * workflow can't ask the portal yet, which is said in the record rather than taken for a pass.
+ * workflow can't ask the portal yet, which isn't a pass: it needs the override, and the record says so.
  * `skip` is the owner's override, recorded too. Returns the problem when it may not go stable.
  */
 export const bakeVerdict = ({ evidence, hours = BAKE_HOURS, skip = false, notAsked }) => {
-  if (!evidence) return { record: { checked: false, why: notAsked ?? 'The portal wasn’t asked.' } };
+  if (!evidence) {
+    const why = notAsked ?? 'The portal wasn’t asked.';
+    if (skip) return { record: { checked: false, why, overridden: true } };
+    return { problem: `${why} To make it stable anyway, run again with "Skip the bake time" ticked; that is recorded in promotion.json.`, record: { checked: false, why } };
+  }
   const deployments = evidence.deployments ?? [];
   const back = deployments.filter((d) => d.wentBack);
   const preview = deployments.filter((d) => d.ring === BAKE_RING && !d.wentBack).sort((a, b) => b.hours - a.hours);
@@ -176,6 +196,8 @@ const main = async () => {
     if (!target) throw new Error(wanted ? `${tagOf(unit, wanted)} isn't released.` : `${unit} has no beta release to promote.`);
     const tag = tagOf(unit, target.version);
     if (!target.isPrerelease) return console.log(`${tag} is stable already.`);
+    const deployTest = deployTestVerdict({ unit, version: target.version, result: tryOr(() => JSON.parse(ghAt('release', 'download', tag, '--pattern', DEPLOY_TEST_ASSET, '--output', '-')), undefined) });
+    if (deployTest.problem) throw new Error(`${tag} isn’t made stable: ${deployTest.problem}`);
     const skip = process.env.SKIP_BAKE === 'true';
     const asked = await askPortal(unit, target.version);
     if (asked.unreachable && !skip) throw new Error(`${asked.unreachable} Bake time couldn’t be checked; run again with "Skip the bake time" ticked to make it stable anyway.`);
@@ -186,7 +208,7 @@ const main = async () => {
     else console.log(`${tag} baked ${verdict.record.hours} hours on ${verdict.record.deployment}.`);
     const dir = mkdtempSync(join(tmpdir(), 'promote-'));
     const file = join(dir, 'promotion.json');
-    writeFileSync(file, `${JSON.stringify(promotionRecord({ unit, version: target.version, actor, at: new Date().toISOString(), run: process.env.GITHUB_RUN_ID, bake: verdict.record }), null, 2)}\n`);
+    writeFileSync(file, `${JSON.stringify(promotionRecord({ unit, version: target.version, actor, at: new Date().toISOString(), run: process.env.GITHUB_RUN_ID, bake: verdict.record, deployTest: deployTest.record }), null, 2)}\n`);
     ghAt('release', 'upload', tag, file, '--clobber');
     // AUGUR's newest stable release is the repository's latest; an app's never is.
     const newest = unit === AUGUR && !releases.some((r) => r.tagName.startsWith('augur@') && !r.isPrerelease && semver.valid(r.tagName.slice(6)) && semver.gt(r.tagName.slice(6), target.version));
