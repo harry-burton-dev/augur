@@ -15,7 +15,7 @@ on:
         description: 'The version (by default, the newest beta)'
         required: false
       skip_bake:
-        description: 'Skip the bake time (ADR 0018): make it stable even if it hasn’t run long enough on a preview deployment. Recorded in promotion.json.'
+        description: 'Skip the bake time (ADR 0018): make it stable even if it hasn’t run long enough on a preview deployment, or that couldn’t be checked. Recorded in promotion.json.'
         type: boolean
         default: false
 concurrency: promote-${{ inputs.unit }}

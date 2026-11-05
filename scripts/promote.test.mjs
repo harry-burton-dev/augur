@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { AUGUR, bakeVerdict, prProblems, promotionRecord, promotionSource, promotionTarget, releaseLineOf, tagOf, unitOf, versionsFrom } from './promote.mjs';
+import { AUGUR, bakeVerdict, deployTestVerdict, prProblems, promotionRecord, promotionSource, promotionTarget, releaseLineOf, tagOf, unitOf, versionsFrom } from './promote.mjs';
 
 const apps = ['mandate'];
 
@@ -83,9 +83,35 @@ describe('bake time (ADR 0018)', () => {
     assert.match(bakeVerdict({ evidence: { deployments: [d('augur-preview', 'preview', 90), d('augur-workbench', 'dev', 5, true)] } }).problem, /^augur-workbench went back from it\./);
   });
 
-  it('records an override, and says so when the portal wasn’t asked rather than passing quietly', () => {
+  it('records an override, and refuses when the portal wasn’t asked unless that is overridden too', () => {
     assert.deepEqual(bakeVerdict({ evidence: { deployments: [] }, skip: true }).record, { checked: true, needs: 72, overridden: true, problem: 'No preview deployment has reported running it.' });
-    assert.deepEqual(bakeVerdict({ notAsked: 'PORTAL_URL isn’t set.' }), { record: { checked: false, why: 'PORTAL_URL isn’t set.' } });
+    assert.match(bakeVerdict({ notAsked: 'PORTAL_URL isn’t set.' }).problem, /^PORTAL_URL isn’t set\. .*Skip the bake time/);
+    assert.deepEqual(bakeVerdict({ notAsked: 'PORTAL_URL isn’t set.', skip: true }), { record: { checked: false, why: 'PORTAL_URL isn’t set.', overridden: true } });
+  });
+});
+
+describe('the deploy test', () => {
+  const result = { version: '0.14.0', passed: true, run: '7', at: 't', from: '0.13.0' };
+
+  it('lets an AUGUR release go stable once its last deploy test passed, and records the run', () => {
+    assert.deepEqual(deployTestVerdict({ unit: AUGUR, version: '0.14.0', result }), { record: { run: '7', at: 't', upgradedFrom: '0.13.0' } });
+    assert.deepEqual(deployTestVerdict({ unit: AUGUR, version: '0.14.0', result: { ...result, from: null } }).record.upgradedFrom, null);
+  });
+
+  it('refuses a release with no result, a failed one, or one for another version, saying what to do', () => {
+    assert.match(deployTestVerdict({ unit: AUGUR, version: '0.14.0' }).problem, /^It has no deploy test result\. Run Deploy test/);
+    assert.match(deployTestVerdict({ unit: AUGUR, version: '0.14.0', result: { ...result, passed: false } }).problem, /^Its last deploy test failed \(run 7\)\./);
+    assert.match(deployTestVerdict({ unit: AUGUR, version: '0.14.0', result: { ...result, passed: 'true' } }).problem, /failed/);
+    assert.match(deployTestVerdict({ unit: AUGUR, version: '0.15.0', result }).problem, /^Its deploy test result is for 0\.14\.0\./);
+  });
+
+  it('asks nothing of an app, which has no deploy test', () => {
+    assert.deepEqual(deployTestVerdict({ unit: 'mandate', version: '0.1.6' }), {});
+  });
+
+  it('goes in the promotion record when there is one', () => {
+    const deployTest = { run: '7', at: 't', upgradedFrom: '0.13.0' };
+    assert.deepEqual(promotionRecord({ unit: AUGUR, version: '0.14.0', actor: 'owner', at: 't', run: '1', deployTest }).deployTest, deployTest);
   });
 });
 
