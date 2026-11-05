@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { MemoryEventStore, PgEventStore, type EventStore } from './store.ts';
 
@@ -12,6 +12,7 @@ loadConfigOrExit('events', [
   commonSettings.clientSecret,
   commonSettings.gateway,
   { name: 'DOMAIN_EVENTS_KEEP_DAYS', about: 'how many days apps’ domain events are kept (default 30).' },
+  { name: 'INBOX_KEEP_DAYS', about: 'how many days closed inbox items are kept (default 90).' },
 ]);
 
 const port = Number(process.env.PORT ?? 8084);
@@ -36,15 +37,26 @@ const floors = credentials ? floorPlaces({ identityUrl: IDENTITY_URL, credential
 const members = credentials ? floorMembers({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 // Who an audience such as role:deployment-admin reaches, for the platform's own notifications (ADR 0044).
 const audience = credentials ? identityAudience({ identityUrl: IDENTITY_URL, credentials }) : undefined;
-const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience });
+// An inbox item's owner must be someone who can sign in (the directory lists only them), and a person's teams decide which team items they see.
+const directory = credentials ? identityDirectory({ identityUrl: IDENTITY_URL, credentials }) : undefined;
+const principals = credentials ? identityPrincipals({ identityUrl: IDENTITY_URL, credentials }) : undefined;
+const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals });
 await app.listen({ port, host: '0.0.0.0' });
 
 // Domain events are for followers to catch up on, not a record: they're kept DOMAIN_EVENTS_KEEP_DAYS (30) days.
 const keepDays = Number(process.env.DOMAIN_EVENTS_KEEP_DAYS || 30);
+// Closed inbox items are kept INBOX_KEEP_DAYS (90) days, then go with their history; the audit log keeps every step.
+const inboxDays = Number(process.env.INBOX_KEEP_DAYS || 90);
 const prune = () =>
-  store.pruneEvents(keepDays).then(
-    (n) => n && app.log.info({ removed: n, keepDays }, 'old domain events removed'),
-    (err) => app.log.error({ err: String(err) }, 'removing old domain events failed'),
-  );
+  Promise.all([
+    store.pruneEvents(keepDays).then(
+      (n) => n && app.log.info({ removed: n, keepDays }, 'old domain events removed'),
+      (err) => app.log.error({ err: String(err) }, 'removing old domain events failed'),
+    ),
+    store.inbox.prune(inboxDays).then(
+      (n) => n && app.log.info({ removed: n, keepDays: inboxDays }, 'old closed inbox items removed'),
+      (err) => app.log.error({ err: String(err) }, 'removing old inbox items failed'),
+    ),
+  ]);
 void prune();
 setInterval(prune, 3_600_000).unref();

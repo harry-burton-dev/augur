@@ -283,7 +283,7 @@ export const Reporting = Type.Object(
     last: Type.Optional(
       Type.Object({
         at: dateTime(),
-        reason: Type.Enum(['started', 'changed', 'daily', 'export']),
+        reason: Type.Enum(['started', 'changed', 'heartbeat', 'export']),
         ok: Type.Boolean(),
         problem: Type.Optional(Type.String()),
       }),

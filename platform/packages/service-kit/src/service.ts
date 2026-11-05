@@ -26,10 +26,11 @@ export const identifyService = async (headers: Record<string, string | string[] 
 export class ServiceCallError extends Error {}
 
 export interface CallOptions {
-  method: 'PUT' | 'POST';
+  method: 'PUT' | 'POST' | 'PATCH' | 'GET';
   url: string;
   credentials: ServiceCredentials;
-  body: unknown;
+  /** Sent as JSON; none for a GET. */
+  body?: unknown;
   /** What is being done, for the error message: "register library". */
   what: string;
   /** The floor the call is for, sent as X-Workspace-Id. */
@@ -50,8 +51,8 @@ export async function callService({ method, url, credentials, body, what, worksp
     try {
       const res = await fetchImpl(url, {
         method,
-        headers: { 'content-type': 'application/json', ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
-        body: JSON.stringify(body),
+        headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       const reply = (await res.json().catch(() => ({}))) as { message?: string };
       if (res.ok) return reply;

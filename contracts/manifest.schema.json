@@ -204,11 +204,12 @@
           "models:use",
           "events:publish",
           "events:subscribe",
-          "people:read"
+          "people:read",
+          "inbox:write"
         ]
       },
       "uniqueItems": true,
-      "maxItems": 6,
+      "maxItems": 7,
       "description": "What the app's service asks to do on AUGUR, such as \"notifications:send\". An app may always register itself."
     },
     "floors": {

@@ -164,7 +164,7 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 
 ### Logs, memory and health
 
-- **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES` in `.env`), so they can't fill the disk. `pc logs` reads them as before. For anything longer, turn on the observability profile ([Traces, metrics and logs](#traces-metrics-and-logs)).
+- **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES` in `.env`), so they can't fill the disk. `pc logs` reads them as before. For anything longer, look in the deployment's Grafana, which keeps 72 hours ([Traces, metrics and logs](#traces-metrics-and-logs)).
 - **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its Java heap from it), Artifacts' rendition worker (`FOLIO_WORKER_MEM_LIMIT`, 4g; reading a large upload is what needs it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g). A container that goes over is stopped and started again by Docker, and `pc ps` shows it restarting. Raise the limit in `.env` and `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
 - **Health**: every AUGUR service, the front door, Postgres, Keycloak and Garage have a healthcheck, and `pc ps` shows each as `healthy`. Keycloak's is its own readiness check on its management port, which isn't reachable from outside the container. The front door, identity and the realm job wait for Keycloak to be healthy, and the storage job for Garage. Keycloak's first start after an upgrade can take a few minutes while it migrates its database; Compose waits up to five.
 
@@ -210,7 +210,7 @@ The policy reaches the machine within a minute, with no restart. `public.sh on` 
 
 ## Traces, metrics and logs
 
-Each service can send OpenTelemetry to a collector: the `observability` profile's Grafana stack on the server, or your organisation's own. It's off until `OTEL_EXPORTER_OTLP_ENDPOINT` is set. See [observability.md](observability.md).
+Each service sends OpenTelemetry to the deployment's own Grafana stack (otel-lgtm), which also runs AUGUR's alert rules, or to your organisation's collector. Set `GRAFANA_ADMIN_PASSWORD` and `ALERT_WEBHOOK_TOKEN` in `.env`. See [observability.md](observability.md).
 
 ## Sample data
 

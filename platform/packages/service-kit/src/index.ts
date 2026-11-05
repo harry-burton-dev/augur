@@ -2,6 +2,7 @@ export * from './caller.js';
 export * from './service.js';
 export * from './registration.js';
 export * from './events.js';
+export * from './inbox.js';
 export * from './version.js';
 export * from './logging.js';
 export * from './apps.js';

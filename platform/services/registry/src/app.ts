@@ -13,6 +13,7 @@ import {
   identifyService,
   packageVersion,
   recordAudit,
+  ruleChain,
   SCOPES,
   ServiceAuthUnavailable,
   problemDetails,
@@ -51,6 +52,7 @@ import { AfterWatch, PlatformUpdates, strings, Upgrade as UpgradeSchema, Upgrade
 import { AUGUR_UNIT, resolvedState } from './desired-state.ts';
 import { overviewBuilder, overviewRoutes } from './overview.ts';
 import { reportRoutes, ReportSender, type Reporting } from './report.ts';
+import { alertRoutes, type AlertRouteOptions } from './alerts.ts';
 import { featurePreviewRoutes, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
 import { awaitingScopes, floorState, usableScopes } from './floors.ts';
@@ -138,6 +140,8 @@ export interface RegistryOptions {
   reportFetch?: typeof fetch;
   /** The workbench's own tailnet, from PLATFORM_URL: Live on the workbench loads only from machines on it. */
   tailnet?: string;
+  /** Grafana's alerts as notices (ADR 0059): its token, and how a notice is sent. Refused without a token. */
+  alerts?: AlertRouteOptions;
   /** The deployment's time zone (DEPLOYMENT_TIME_ZONE), which upgrade windows are in unless a unit names its own. */
   timeZone?: string;
   now?: () => Date;
@@ -226,6 +230,7 @@ export const buildApp = async ({
   reporting = { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).' },
   reportFetch,
   tailnet,
+  alerts = {},
   timeZone = 'UTC',
   now = () => new Date(),
 }: RegistryOptions = {}) => {
@@ -315,7 +320,7 @@ export const buildApp = async ({
             // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code:
             // for a developer trying one of its pull requests, that build's. And the feature previews on for this person (SDK 1.7).
             .map((r) => {
-              const on = previewsOnFor(r, optIns, updates.ring, at);
+              const on = previewsOnFor(r, optIns, updates.ring, at, place ? ruleChain(place) : []);
               const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
@@ -646,7 +651,19 @@ export const buildApp = async ({
       const record = (req: FastifyRequest, entry: NewAuditEntry, workspace?: string) =>
         audit?.(entry, workspace).catch((err: Error) => req.log.error({ err: err.message, action: entry.action }, 'audit entry not recorded'));
 
-      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record }));
+      /** A floor's rule chain for feature previews targeted at floors: undefined for no such floor, null when floors can't be looked up. */
+      const chainOf = floors
+        ? async (workspace: string) => {
+            try {
+              const place = await floors(workspace);
+              return place && ruleChain(place);
+            } catch (err) {
+              if (!(err instanceof FloorsUnavailable)) throw err;
+              return null;
+            }
+          }
+        : undefined;
+      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
       await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
@@ -655,6 +672,8 @@ export const buildApp = async ({
       await app.register(reportRoutes({ reporting, store, sender, overview, now }));
       sender.start();
       app.addHook('onClose', async () => sender.stop());
+      // Grafana's alerts, told to deployment admins (ADR 0059).
+      await app.register(alertRoutes(alerts));
 
       app.put(
         '/apps/:id',

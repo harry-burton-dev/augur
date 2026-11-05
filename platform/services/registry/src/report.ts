@@ -1,5 +1,6 @@
 // What this deployment runs, reported to the company's Backstage (ADR 0019): a record signed with the
-// deployment's own key, sent after each change and once a day, or exported as a file for an air-gapped
+// deployment's own key, sent after each change and at least every 15 minutes (ADR 0059: Backstage raises
+// the alarm when one is late), or exported as a file for an air-gapped
 // deployment. The record's shapes follow OpAMP's AgentToServer status messages (agent description,
 // health, package statuses), so a standard OpAMP server could take over later. It holds no personal data:
 // no names, no ids of people, nothing about what anyone keeps in AUGUR.
@@ -15,14 +16,18 @@ import type { AppStore, DeploymentKey } from './store.ts';
 export const REPORT_FORMAT = 'augur.deployment-report/1';
 /** A deployment's name in Backstage's catalog (org/deployments.yaml), as DEPLOYMENT_ID gives it. */
 const DEPLOYMENT_NAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
-const DAY_MS = 24 * 3600_000;
-/** How often the sender looks for a change to report. */
-const LOOK_MS = 15 * 60_000;
+/**
+ * How often a record goes even when nothing changed (ADR 0059). Backstage raises the alarm when one is
+ * more than 30 minutes late, so one missed send isn't an alarm and two are.
+ */
+export const HEARTBEAT_MS = 15 * 60_000;
+/** How often the sender looks for a change to report: a little more often than the heartbeat, so it's never late. */
+const LOOK_MS = 5 * 60_000;
 /** Time for the registry to settle after it starts, as after an upgrade, before it reports. */
 const FIRST_MS = 2 * 60_000;
 const SEND_TIMEOUT_MS = 15_000;
 
-export type ReportReason = 'started' | 'changed' | 'daily' | 'export';
+export type ReportReason = 'started' | 'changed' | 'heartbeat' | 'export';
 
 /** Whether and where this deployment reports, from .env. */
 export interface Reporting {
@@ -48,7 +53,7 @@ export function reportingFrom(env: { DEPLOYMENT_ID?: string; DEPLOYMENT_REPORTIN
   if (!deployment) return { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).' };
   const portal = env.PORTAL_URL?.replace(/\/+$/, '');
   if (!portal) return { mode: 'file', deployment, why: 'No PORTAL_URL in .env, so nothing is sent: export the record and carry it to Backstage.' };
-  return { mode: 'send', deployment, url: `${portal}/api/augur/reports`, why: `Sent to Backstage after each change and once a day.` };
+  return { mode: 'send', deployment, url: `${portal}/api/augur/reports`, why: `Sent to Backstage after each change and every 15 minutes.` };
 }
 
 /** The deployment's key, made the first time it's needed and kept with its data. */
@@ -144,7 +149,7 @@ export interface LastSend {
   problem?: string;
 }
 
-/** Sends the record when the registry starts (as after an upgrade), when something changes, and once a day. */
+/** Sends the record when the registry starts (as after an upgrade), when something changes, and every 15 minutes. */
 export class ReportSender {
   last?: LastSend;
   private sentPrint?: string;
@@ -178,16 +183,16 @@ export class ReportSender {
     clearTimeout(this.timer);
   }
 
-  /** Sends when it's the first time, something changed, or a day has passed since the last record went. */
+  /** Sends when it's the first time, something changed, or 15 minutes have passed since the last record went. */
   async maybeSend(reason: ReportReason) {
     const { reporting, store, overview, fetchImpl = fetch, now = () => new Date(), log = console } = this.opts;
     if (reporting.mode !== 'send' || !reporting.url || !reporting.deployment) return undefined;
     const at = now();
     const report = reportOf(await overview(), { deployment: reporting.deployment, reason, now: at });
     const print = fingerprint(report);
-    const due = at.getTime() - this.sentAt >= DAY_MS;
+    const due = at.getTime() - this.sentAt >= HEARTBEAT_MS;
     if (this.sentPrint === print && !due) return undefined;
-    if (this.sentPrint === print) report.reason = 'daily';
+    if (this.sentPrint === print) report.reason = 'heartbeat';
     const body = signReport(report, await deploymentKey(store));
     try {
       const res = await fetchImpl(reporting.url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(SEND_TIMEOUT_MS) });
