@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Time limits between services and on database queries
+
+**From** unreleased
+
+One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`), and Postgres cancels any one query from a service after a minute (`DATABASE_STATEMENT_TIMEOUT_SECONDS`, 0 for no limit; migrations are never limited). Nothing to do. On a slow server, if `pc logs` shows a working service giving up ("could not be reached", or "canceling statement due to statement timeout"), raise the value in `.env` and run `pc up -d` ([deploy.md](deploy.md#logs-memory-and-health)).
+
 ### Each service signs in as itself
 
 **From** augur@0.2.0

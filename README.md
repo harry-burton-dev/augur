@@ -45,7 +45,7 @@ infra/
   service.Dockerfile      builds any service; web.Dockerfile builds the frontends
   keycloak/               local sign-in realm and test users
   deploy/                 the server stack: compose, nginx, Tailscale, backups, Postgres init
-scripts/                  repo tooling: create-app, dev-app, register-app, boundary/manifest/version checks
+scripts/                  repo tooling: dev-app, register-app, boundary/manifest/version checks
 docs/                     how-to guides (below)
 .changeset/               pending release notes; one per PR
 .github/workflows/        CI, releases, dev builds, previews and feeds (docs/ci-cd.md)
@@ -110,7 +110,7 @@ pnpm check:boundaries
 
 - One service with live reload: `pnpm --filter @augur/registry dev`. Without `DATABASE_URL`, registry and events keep data in memory.
 - Full local stack: `docker compose -f infra/docker-compose.yml up --build`, then `pnpm --filter @augur/shell dev` and open http://localhost:5173. Sign in as `alex` (admin) or `sam`; see [infra/keycloak](infra/keycloak/README.md).
-- New app: `pnpm create-app <id>`, then `pnpm dev:app <id>` runs it in a stand-in shell.
+- New app: make a repository from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), then `pnpm dev:app ../augur-<id>` runs it in a stand-in shell.
 - Every PR needs a changeset: `pnpm changeset` (or `pnpm changeset --empty`).
 
 ## Guides
@@ -119,7 +119,7 @@ pnpm check:boundaries
 | --- | --- |
 | [Artifacts](docs/folio.md) | Using Artifacts, the document libraries, and running it as an admin |
 | [Data Atlas](docs/atlas.md) | The org's entities and the ontology, and running Data Atlas in a deployment |
-| [Build an app](docs/build-an-app.md) | From `create-app` to an app in the shell |
+| [Build an app](docs/build-an-app.md) | From the app template to an app in the shell |
 | [Ship an app](docs/ship-an-app.md) | From a pull request's preview to servers updating the app by themselves |
 | [App previews](docs/app-previews.md) | Trying a pull request's build of an app on a real server |
 | [Deploy](docs/deploy.md) | Running the stack on a server with Docker Compose and Tailscale |

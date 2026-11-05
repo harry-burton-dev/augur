@@ -49,6 +49,9 @@ export const NewNotification = Type.Object(
       }),
     ),
     key: Type.Optional(Type.String({ minLength: 1, maxLength: 200, description: "The sender's name for this news; each person is told an app's key once" })),
+    kind: Type.Optional(
+      Type.String({ pattern: '^[a-z][a-z0-9-]{0,39}$', description: "One of the kinds the app's manifest declares (notifications.kinds), so people can choose how each kind reaches them" }),
+    ),
     level: Type.Enum(['needs', 'info', 'done', 'failed'], { description: '"needs" when the person has to act' }),
     title: Type.String({ minLength: 1, maxLength: 200 }),
     detail: Type.Optional(Type.String({ maxLength: 2000 })),
@@ -72,6 +75,7 @@ export const Notification = Type.Object(
     detail: Type.Optional(Type.String()),
     link: Type.Optional(Type.String()),
     actions: Type.Optional(Type.Array(ref(NotificationAction))),
+    kind: Type.Optional(Type.String({ description: "One of the app's notifications.kinds" })),
     createdAt: Type.String({ format: 'date-time' }),
     readAt: Type.Optional(Type.String({ format: 'date-time' })),
     workspace: Type.Optional(ref(EventFloor)),

@@ -11,6 +11,8 @@ export interface Preferences {
   recent?: string[];
   /** App ids whose notifications land in the stream silently and never on Home. */
   muted?: string[];
+  /** Kinds of notification, as "<app>:<kind>", that land in the stream silently and never on Home or as a toast. */
+  quietKinds?: string[];
   /** App ids kept first on Home and in the list of apps, in their order. */
   pinned?: string[];
   /** The floor id the shell opens on when an address names none; their own without it. */

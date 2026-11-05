@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { kitDir, readKit } from '@augur/kit-bundle';
 import { isSharedModule, sharedModules } from '@augur/mfe-sdk/build';
 import react from '@vitejs/plugin-react';
-import { defineConfig, normalizePath, type HtmlTagDescriptor, type Plugin, type ProxyOptions } from 'vite';
+import { defineConfig, normalizePath, searchForWorkspaceRoot, type HtmlTagDescriptor, type Plugin, type ProxyOptions } from 'vite';
 
 /**
  * Local stand-in for where apps are hosted: /apps/<id>/* is served from that
@@ -197,7 +197,7 @@ const devApp = (dir: string | undefined) => {
   const previews = ((manifest.previews ?? []) as { id: string }[]).map((p) => p.id);
   const asked = (process.env.DEV_PREVIEWS ?? '').split(',').map((p) => p.trim()).filter(Boolean);
   const previewsOn = asked.includes('all') ? previews : previews.filter((p) => asked.includes(p));
-  // A React app's entry is entry.tsx; entry.ts is still taken for one with no JSX in it.
+  // A React app's entry is entry.tsx (augur-app-template); entry.ts is still taken for one with no JSX in it.
   const source = ['frontend/src/entry.tsx', 'frontend/src/entry.ts'].map((f) => resolve(dir, f)).find((f) => existsSync(f)) ?? resolve(dir, 'frontend/src/entry.tsx');
   const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs/${normalizePath(source).replace(/^\//, '')}`, ...(previewsOn.length ? { previewsOn } : {}) };
   const caller = {
@@ -236,6 +236,8 @@ const devApp = (dir: string | undefined) => {
   });
   return {
     plugin,
+    // An app in its own repository is outside this workspace: let the dev server read it too.
+    allow: [searchForWorkspaceRoot(process.cwd()), resolve(dir)],
     define: { __DEV_APP__: JSON.stringify(app), __DEV_ALSO__: JSON.stringify(devAlso.map((a) => a.manifest)), __DEV_ROLES__: JSON.stringify(roles) },
     proxy: {
       ...proxyTo(manifest.id, process.env.APP_SERVICE_URL ?? 'http://localhost:8090'),
@@ -263,6 +265,7 @@ export default defineConfig({
     ...(process.env.DEV_LIVE_HOST
       ? { cors: { origin: /^https:\/\/[a-z0-9.-]+\.ts\.net$/ }, hmr: { host: process.env.DEV_LIVE_HOST, protocol: 'wss', clientPort: 443 } }
       : {}),
+    ...(dev ? { fs: { allow: dev.allow } } : {}),
     // The app's own service first: the first matching prefix wins.
     proxy: { ...dev?.proxy, '/api': process.env.GATEWAY_URL ?? 'http://localhost:8080' },
   },

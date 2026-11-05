@@ -63,7 +63,7 @@ for (const app of readdirSync(join(root, 'apps'), { withFileTypes: true }).filte
 
 const posix = (rel) => rel.split(sep).join('/');
 
-for (const top of ['platform', 'scripts/templates']) {
+for (const top of ['platform']) {
   walk(join(root, top), (path) => {
     const rel = posix(relative(root, path));
     if (mayUseLit.some((dir) => rel.startsWith(dir))) return;
