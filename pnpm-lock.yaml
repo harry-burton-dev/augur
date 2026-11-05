@@ -198,8 +198,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
       '@augur/shell-kit':
-        specifier: npm:@harry-burton-dev/augur-shell-kit@^0.6.0
-        version: '@harry-burton-dev/augur-shell-kit@0.6.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-shell-kit@^0.7.0
+        version: '@harry-burton-dev/augur-shell-kit@0.7.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@augur/ui-kit':
         specifier: workspace:*
         version: link:../../packages/ui-kit
@@ -1290,8 +1290,8 @@ packages:
       react: ^19.3.1
       react-dom: ^19.3.1
 
-  '@harry-burton-dev/augur-shell-kit@0.6.0':
-    resolution: {integrity: sha512-SpRX+IhxIY8aqRmocNHMs1DIUk7y0L+ZsUA5+dNclxiScgRiFhi+0QpZaU5wQ+y2JmMZ/K83O3wliZR3tQB1RA==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-shell-kit/0.6.0/0824d6933a638b2df5fb728d2d39e5b852d73c41}
+  '@harry-burton-dev/augur-shell-kit@0.7.0':
+    resolution: {integrity: sha512-IdXDEbbiF0AtboeKUnMNdlICPnKcTsCWFwwVhOh20Pf9gml9/3GIX+L6ckOdDe75MwGDDWWn+He9vEMaFeuf3Q==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-shell-kit/0.7.0/08fe4abd436c9b44e2d47e7b88206ed422a2e6cd}
     peerDependencies:
       react: ^19.3.1
       react-dom: ^19.3.1
@@ -5496,7 +5496,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@harry-burton-dev/augur-shell-kit@0.6.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@harry-burton-dev/augur-shell-kit@0.7.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@augur/kit-common': '@harry-burton-dev/augur-kit-common@0.7.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       react: 19.3.1

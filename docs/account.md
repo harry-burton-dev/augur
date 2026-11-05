@@ -30,13 +30,13 @@ Account on the shell's arc opens the Account area (`platform/frontends/shell/src
 | --- | --- |
 | Profile | Name, job title, phone and pronouns, saved as each field is left; the email address, changed on Keycloak's screen; away, with what it says and when it ends; sign out. |
 | Sign-in and security | Password, code apps, passkeys and recovery codes, each changed on Keycloak's screen; the organisation sign-ins to link; where you're signed in, with sign out there or everywhere else (the shell knows its own session by the `sid` claim in its token); recent sign-ins. |
-| Notifications | Email for things that need you, a digest, quiet hours, and On Home or Quiet for each app. AUGUR doesn't send email yet, and the section says so. |
+| Notifications | Email for things that need you, a digest, quiet hours, and On Home or Quiet for each app and each kind of notification it names. AUGUR doesn't send email yet, and the section says so. |
 | Appearance | Reduce motion, area titles, toasts and density. |
 | Language and region | Time zone (the browser's unless chosen). English only for now, and it says so. |
 | Home and apps | The floor AUGUR opens on at its front door (`startFloor`; their own unless chosen, and a floor that is no longer theirs says so); pinned apps, first on Home and in the list of apps (`pinned`); recent apps, with a way to clear them; and each app's own settings. |
 | About and help | What's running, and the keys. |
 
-Privacy and data is still to come (PER-193). Choosing a kind of notification per app waits for apps to name their kinds in the manifest.
+Privacy and data is still to come (PER-193). An app that names its kinds of notification in its manifest (`notifications.kinds`) lists them under it, each On Home or Quiet (`quietKinds`, as `<app>:<kind>`); a quiet kind lands in the stream without a pulse, uncounted, and never on Home or as a toast.
 
 Coming back from Keycloak's screen, the shell's sign-in callback adds `kc_action_status` to the address it returns to, and the section says once whether the change was made.
 

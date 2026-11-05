@@ -7,6 +7,7 @@ describe('toasts', () => {
   it('are off unless the person turned them on, and muted apps stay silent', () => {
     expect(toastFor(note('a'), { on: false, muted: [] })).toBeNull();
     expect(toastFor(note('a'), { on: true, muted: ['folio'] })).toBeNull();
+    expect(toastFor({ ...note('a'), quiet: true }, { on: true, muted: [] })).toBeNull();
     expect(toastFor(note('a'), { on: true, muted: [] })).toEqual({ id: 'a', text: 'Note a', open: true });
     expect(toastFor(note('b', 'platform'), { on: true, muted: [] })?.open).toBe(false);
   });

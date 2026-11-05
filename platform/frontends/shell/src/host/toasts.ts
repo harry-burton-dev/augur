@@ -17,7 +17,7 @@ export interface ShellToast {
  * point. A muted app's notifications stay silent either way.
  */
 export function toastFor(n: ShellNotification, opts: { on: boolean; muted: readonly string[] }): ShellToast | null {
-  if (!opts.on || opts.muted.includes(n.app)) return null;
+  if (!opts.on || n.quiet || opts.muted.includes(n.app)) return null;
   return { id: n.id, text: n.title, open: n.app !== 'platform' };
 }
 
