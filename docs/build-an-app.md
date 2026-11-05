@@ -348,15 +348,17 @@ if (passage) {
 
 ### Binding your things to entities
 
-An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox (ADR 0025, docs/domain-events.md). Publish `<app>.bound` when someone links one of your things to an entity and `<app>.unbound` when they take the link away. The payload is an `EntityBinding` (SDK 1.10): your thing as a `Ref`, plus the `EntityRef`.
+An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox, in the same transaction as the link (ADR 0025, ADR 0066, docs/domain-events.md). The topic is `<app>.<type>.entity-bound` when someone links one of your things to an entity and `<app>.<type>.entity-unbound` when they take the link away; the payload is the thing's id under its type, the entity's id, and a role. The service kit writes both:
 
 ```ts
-import type { EntityBinding, Ref } from '@augur/mfe-sdk';
+import { bindingTopics, outboxBinding } from '@augur/service-kit';
 
-const task: Ref = { kind: 'ref', app: 'intent', type: 'task', id: 't-41', label: 'Brief the desk' };
-const binding: EntityBinding = { subject: task, entity: ship };
-// in the same transaction as the link: outbox.add('intent.bound', binding)
+// inside the transaction that saves the link:
+await outboxBinding(tx, { app: 'expenses', type: 'claim', id: claim.id, entity: ship.id, role: 'about' }, 'bound', floorId);
+// → expenses.claim.entity-bound { claim: 'c-41', entity: 'ent_…', role: 'about' }
 ```
+
+Ask for `events:publish`; `bindingTopics('expenses', 'claim')` names the two topics. Send ids only: a thing another app needs more ids to open can carry them in `more` (Artifacts sends `library` and `level`), never titles. A follower reads any app's binding events with `readBinding(event)`. In the browser, `EntityBinding` (a `Ref` and an `EntityRef`) is how a frontend passes the same link around.
 
 A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`. Data Atlas follows the events to answer "what points at this entity", so binding still works while Atlas is off.
 

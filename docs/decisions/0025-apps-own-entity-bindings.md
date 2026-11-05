@@ -31,3 +31,4 @@ Option 1.
 
 - Foundation gap analysis, 27 October 2026: gap G1, decision D2.
 - PER-144, PER-145.
+- ADR 0066 (Proposed) sets the topic and payload binding events actually use.

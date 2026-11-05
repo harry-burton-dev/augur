@@ -13,6 +13,7 @@ export * from './floors.js';
 export * from './models.js';
 export * from './storage.js';
 export * from './domain-events.js';
+export * from './bindings.js';
 export * from './signed-caller.js';
 export * from './people.js';
 export * from './frontend.js';
