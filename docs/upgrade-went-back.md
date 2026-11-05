@@ -49,6 +49,8 @@ All four hold → write the hand-off (below) and stop.
 
 The code went back, and the data stayed as the new release left it ([upgrade.md, Going back](upgrade.md#going-back), step 2). Only a restore fixes that. **A restore loses everything saved since the backup, in every app and in sign-in, and more each hour people work.** First do check 4: restore only a file that's there and tested.
 
+**A way back that loses less, if it's there.** When Admin → Status shows *Point in time* reaching back before the upgrade started (its start time is in History) and `cat infra/deploy/backups/pitr-test.json` says `"ok":true`, go back to a moment just before that start instead of loading the file: [deploy.md, Restore to a point in time](deploy.md#restore-to-a-point-in-time). It loses only what was saved after that moment, and it keeps the current data first, so it can be undone. The same pause point comes first. It arrives with the release after 0.18 (ADR 0064) and hasn't been tried on a real night yet.
+
 | You see | Do |
 |---|---|
 | Admin → Activity since the backup's time shows nothing, or only a little, done by people, and you can stay up another 20 minutes | Check 4, then the pause point, then the restore (below) |
@@ -72,7 +74,7 @@ The code went back, and the data stayed as the new release left it ([upgrade.md,
 
 | You see | Do | Don't |
 |---|---|---|
-| The file isn't there, its test failed, or the test is of another file | Don't restore anything tonight. Turn the failing app off. Hand off | Restore an older file by its date: it loses every day between |
+| The file isn't there, its test failed, or the test is of another file | Don't restore anything tonight, unless the point-in-time way in Table 3 holds. Otherwise turn the failing app off and hand off | Restore an older file by its date: it loses every day between |
 | Backups taken after the failure are newer | Use the file you wrote down, by name | Restore "the newest" |
 
 ---
