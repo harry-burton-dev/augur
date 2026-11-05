@@ -127,6 +127,18 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
                 label: 'Copy off the server',
                 value: backups.offsite ? (backups.offsite.ok ? `${when(backups.offsite.at)}, ${backups.offsite.keepDays ?? 30} days kept` : 'Failed') : 'Not set up',
               },
+              ...(backups.pointInTime
+                ? [
+                    {
+                      label: 'Point in time',
+                      value: !backups.pointInTime.ok ? 'Needs a look' : backups.pointInTime.earliest ? `Any moment since ${when(backups.pointInTime.earliest)}` : 'Not yet',
+                    },
+                    {
+                      label: 'Last replay test',
+                      value: backups.pointInTime.lastTest ? (backups.pointInTime.lastTest.ok ? when(backups.pointInTime.lastTest.at) : 'Failed') : 'Never',
+                    },
+                  ]
+                : []),
               { label: 'Last restore test', value: backups.lastRestoreTest ? when(backups.lastRestoreTest.at) : 'Never' },
               ...(backups.lastRestoreTest
                 ? [
