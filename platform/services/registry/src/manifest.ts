@@ -360,7 +360,7 @@ export const platformApps: AppEntry[] = [
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
     areas: [
-      { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People and departments' },
+      { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People, departments and its settings' },
       { id: 'system', label: 'System', icon: 'server', detail: 'Apps, status, updates and activity' },
     ],
     menu: [
@@ -381,6 +381,12 @@ export const platformApps: AppEntry[] = [
           { label: 'All departments', icon: 'list', path: '/departments', detail: 'Names and members', keywords: 'groups teams' },
           { label: 'New department', icon: 'plus', path: '/departments/new', keywords: 'create group team' },
         ],
+      },
+      {
+        label: 'Settings',
+        icon: 'settings',
+        area: 'organisation',
+        items: [{ label: 'Name, time zone and email', icon: 'org', path: '/organisation', detail: 'The organisation’s own settings', keywords: 'organisation organization name timezone time zone sender email from' }],
       },
       {
         label: 'Apps',

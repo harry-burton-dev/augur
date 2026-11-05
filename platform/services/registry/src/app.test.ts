@@ -50,7 +50,7 @@ describe('registry', () => {
     const app = await buildApp();
     const forAdmin = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
     expect(ids(forAdmin)).toContain('admin');
-    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Apps', 'AUGUR']);
+    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Settings', 'Apps', 'AUGUR']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).not.toContain('admin');
   });
 
