@@ -4,7 +4,7 @@ import { callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, noti
 import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { KeycloakAccounts, type AccountSource } from './me.ts';
-import { IDENTITY_RIGHTS } from './realm.ts';
+import { IDENTITY_RIGHTS, realmLookFromEnv } from './realm.ts';
 import { MemoryPreferenceStore, PgPreferenceStore, type PreferenceStore } from './store.ts';
 import { MemoryWorkspaceStore, PgWorkspaceStore, type WorkspaceStore } from './workspaces.ts';
 
@@ -104,5 +104,5 @@ const dataFrom =
     ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) }
     : undefined;
 
-const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom });
+const app = await buildApp({ callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => console.warn(m)).languages });
 await app.listen({ port, host: '0.0.0.0' });

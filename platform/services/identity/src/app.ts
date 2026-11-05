@@ -43,6 +43,8 @@ export interface IdentityOptions {
   tell?: MeOptions['tell'];
   /** What other services keep about a person, for the copy of their data they download. */
   dataFrom?: MeOptions['dataFrom'];
+  /** The languages the deployment offers people (REALM_LANGUAGES). */
+  languages?: string[];
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -56,7 +58,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom }: IdentityOptions = {}) => {
+export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces = new MemoryWorkspaceStore(), directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages }: IdentityOptions = {}) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -180,7 +182,7 @@ export const buildApp = async ({ store = new MemoryPreferenceStore(), workspaces
       );
 
       // Preferences and the caller's account: me.ts.
-      await app.register(meRoutes({ store, accounts, audit: audit && ((entry) => audit(entry)), tell, dataFrom }));
+      await app.register(meRoutes({ store, accounts, audit: audit && ((entry) => audit(entry)), tell, dataFrom, languages }));
 
       // Every floor the caller can stand on; their own is made the first time they ask.
       app.get(

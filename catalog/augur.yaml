@@ -445,7 +445,7 @@ metadata:
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.19.0
+    augur.dev/contract-version: 1.20.0
 spec:
   type: openapi
   lifecycle: production

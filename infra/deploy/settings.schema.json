@@ -1641,10 +1641,11 @@
     },
     "REALM_LANGUAGES": {
       "type": "string",
-      "description": "The languages offered at sign-in, comma separated, the first the default (say en,de,fr). Empty offers English only.",
+      "description": "The languages offered at sign-in and in Account, comma separated, the first the default (say en,de,fr). Empty offers English only.",
       "default": "",
       "x-services": [
-        "keycloak-config"
+        "keycloak-config",
+        "identity"
       ],
       "x-docs": "docs/deploy.md#whats-in-it"
     },
