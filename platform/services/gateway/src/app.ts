@@ -76,7 +76,16 @@ const trafficPart = (url: string): TrafficPart => {
   return name && !PLATFORM_SERVICES.includes(decodeURIComponent(name)) ? 'apps' : 'platform';
 };
 
-const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH]);
+/**
+ * The organisation's logo (ADR 0042), for sign-in pages, which are shown before anyone has signed in. The only
+ * path under /api/ that needs no sign-in: one exact path, GET and HEAD only, nothing passed on but the request's
+ * own `If-None-Match`, and only the image and its caching headers passed back.
+ */
+export const PUBLIC_LOGO_PATH = '/api/identity/v1/public/organisation/logo';
+/** The most the logo route passes back; identity takes nothing larger. */
+const PUBLIC_LOGO_BYTES = 512 * 1024;
+
+const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH]);
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -188,6 +197,33 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     // jose types a key loosely; the gateway signs only with its Ed25519 key.
     async () => (await signer.keys()) as Static<typeof CallerKeys>,
   );
+
+  // The organisation's logo, from identity, to anyone: sign-in pages show it before anyone has signed in.
+  app.get(PUBLIC_LOGO_PATH, { schema: { hide: true } }, async (req, reply) => {
+    const identity = upstreams.identity;
+    if (!identity) return reply.code(404).send({ error: 'not_found', message: 'This deployment has no logo.' });
+    const asked = req.headers['if-none-match'];
+    let res: Response;
+    try {
+      res = await fetchImpl(`${identity.replace(/\/$/, '')}/v1/public/organisation/logo`, {
+        headers: { [REQUEST_ID_HEADER]: req.id, ...(typeof asked === 'string' ? { 'if-none-match': asked } : {}) },
+        signal: AbortSignal.timeout(10_000),
+      });
+    } catch (err) {
+      req.log.warn({ err: (err as Error).message }, 'logo not fetched');
+      return reply.code(503).send({ error: 'unavailable', message: 'The logo can’t be fetched right now.' });
+    }
+    const safe = { 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'" };
+    if (res.status === 304) return reply.code(304).headers({ ...safe, ...(res.headers.get('etag') ? { etag: res.headers.get('etag')! } : {}) }).send();
+    const bytes = res.ok ? Buffer.from(await res.arrayBuffer()) : undefined;
+    if (!bytes || res.headers.get('content-type') !== 'image/png' || bytes.length > PUBLIC_LOGO_BYTES) {
+      return reply.code(404).headers(safe).send({ error: 'not_found', message: 'This organisation has no logo.' });
+    }
+    return reply
+      .code(200)
+      .headers({ ...safe, 'content-type': 'image/png', 'cache-control': 'public, max-age=300', ...(res.headers.get('etag') ? { etag: res.headers.get('etag')! } : {}) })
+      .send(bytes);
+  });
 
   const statusMonitor =
     monitor ??

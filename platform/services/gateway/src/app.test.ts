@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type JWTPayload } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { CALLER_KEYS_PATH, callerCheckFor, callerSigner } from '@augur/service-kit';
-import { buildApp, defaultUpstreams, parseUpstreams } from './app.ts';
+import { buildApp, defaultUpstreams, parseUpstreams, PUBLIC_LOGO_PATH } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
 import { Mailer, NO_RELAY } from '@augur/service-kit/mail';
@@ -55,6 +55,50 @@ describe('gateway', () => {
     const app = await buildApp({ upstreams: {}, auth });
     const res = await app.inject({ method: 'GET', url: '/healthz' });
     expect(res.statusCode).toBe(200);
+  });
+
+  it('passes the organisation’s logo to anyone, and nothing else under that path', async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
+    const identity = Fastify();
+    const seen: Record<string, unknown>[] = [];
+    identity.get('/v1/public/organisation/logo', async (req, reply) => {
+      seen.push(req.headers);
+      if (req.headers['if-none-match'] === '"abc"') return reply.code(304).header('etag', '"abc"').send();
+      return reply.header('content-type', 'image/png').header('etag', '"abc"').header('set-cookie', 'x=1').send(png);
+    });
+    const at = await identity.listen({ port: 0, host: '127.0.0.1' });
+    try {
+      const app = await buildApp({ upstreams: { identity: at }, auth, monitor: new HealthMonitor({ probes: [] }) });
+      const res = await app.inject({ method: 'GET', url: `${PUBLIC_LOGO_PATH}?v=1`, headers: { 'x-user-id': 'forged', 'x-user-roles': 'admin' } });
+      expect(res.statusCode).toBe(200);
+      expect(res.rawPayload.equals(png)).toBe(true);
+      expect(res.headers).toMatchObject({ 'content-type': 'image/png', etag: '"abc"', 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'" });
+      expect(res.headers['set-cookie']).toBeUndefined();
+      expect(seen[0]!['x-user-id']).toBeUndefined();
+      expect(seen[0]!['x-user-roles']).toBeUndefined();
+      expect((await app.inject({ method: 'GET', url: PUBLIC_LOGO_PATH, headers: { 'if-none-match': '"abc"' } })).statusCode).toBe(304);
+      expect((await app.inject({ method: 'HEAD', url: PUBLIC_LOGO_PATH })).statusCode).toBe(200);
+      // Only that one path, and only reading it.
+      expect((await app.inject({ method: 'POST', url: PUBLIC_LOGO_PATH })).statusCode).toBe(401);
+      expect((await app.inject({ method: 'GET', url: '/api/identity/v1/public/organisation/logos' })).statusCode).toBe(401);
+      expect((await app.inject({ method: 'GET', url: '/api/identity/v1/organisation' })).statusCode).toBe(401);
+    } finally {
+      await identity.close();
+    }
+  });
+
+  it('says there is no logo when identity has none', async () => {
+    const identity = Fastify();
+    identity.get('/v1/public/organisation/logo', async (_req, reply) => reply.code(404).send({ error: 'not_found' }));
+    const at = await identity.listen({ port: 0, host: '127.0.0.1' });
+    try {
+      const app = await buildApp({ upstreams: { identity: at }, auth, monitor: new HealthMonitor({ probes: [] }) });
+      const res = await app.inject({ method: 'GET', url: PUBLIC_LOGO_PATH });
+      expect(res.statusCode).toBe(404);
+      expect(res.headers['x-content-type-options']).toBe('nosniff');
+    } finally {
+      await identity.close();
+    }
   });
 
   it('turns away a request with no token', async () => {
