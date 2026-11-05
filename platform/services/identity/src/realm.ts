@@ -407,7 +407,7 @@ export const realmMailFromEnv = mailRelayFromEnv;
 /** Where the relay's settings are kept in the realm's attributes, so a changed password is noticed without reading it back. */
 export const MAIL_FINGERPRINT = 'augurSmtpFingerprint';
 
-/** Keycloak's smtpServer for a relay. Its values are all strings; `fromDisplayName` is the product's name, never a literal. */
+/** Keycloak's smtpServer for a relay. Its values are all strings; `fromDisplayName` is the organisation's sender name or the product's name, never a literal. */
 export const smtpServer = (mail: RealmMail, productName?: string): Record<string, string> => ({
   host: mail.host,
   port: String(mail.port),
@@ -419,6 +419,12 @@ export const smtpServer = (mail: RealmMail, productName?: string): Record<string
   auth: String(Boolean(mail.user)),
   ...(mail.user ? { user: mail.user } : {}),
   ...(mail.password ? { password: mail.password } : {}),
+});
+
+/** The relay as Keycloak sends with it: from the organisation's sender where an admin set one, else SMTP_FROM under the product's name. */
+export const withSender = (mail: RealmMail | undefined, sender: { name: string; address?: string } | undefined, productName?: string) => ({
+  mail: mail && sender?.address ? { ...mail, from: sender.address } : mail,
+  fromName: sender?.name ?? productName,
 });
 
 /** A fingerprint of everything the relay is set to, the password included, that never reveals it. */
@@ -469,6 +475,8 @@ export interface ApplyOptions {
   firstAdmin?: string;
   /** The organisation's relay (`realmMailFromEnv`); without it, a relay set in the console is kept. */
   mail?: RealmMail;
+  /** The organisation's sender (`realmSenderFromDb`): its address replaces SMTP_FROM and its name the product's as the sender. */
+  sender?: { name: string; address?: string };
 }
 
 /**
@@ -479,7 +487,8 @@ export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): 
   const changes: Changes = [];
   await applyRealmSettings(kc, options.settings, changes, options.productName);
   if (options.look) await applyLook(kc, options.look, changes, options.warn);
-  await applyMail(kc, options.mail, changes, options.productName);
+  const { mail, fromName } = withSender(options.mail, options.sender, options.productName);
+  await applyMail(kc, mail, changes, fromName);
   await applyRequiredActions(kc, changes);
   await applyRoles(kc, changes);
   await applyUserProfile(kc, changes);

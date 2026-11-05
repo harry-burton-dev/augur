@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { KeycloakDirectory } from './directory.ts';
-import { applyLook, applyMail, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -222,6 +222,23 @@ describe('email through the organisation’s relay (ADR 0035)', () => {
     await applyMail(t.kc, { ...mail, password: 'rotated' }, changes, 'Skein');
     expect(puts()).toBe(2);
     expect(changes.at(-1)).toBe('email: relay relay.example:587');
+  });
+
+  it('sends from the organisation’s sender when an admin set one, and moves the relay when it changes', async () => {
+    const t = realmAt({ verifyEmail: true, resetPasswordAllowed: true });
+    const relay = realmMailFromEnv({ SMTP_HOST: 'relay.example', SMTP_FROM: 'augur@example.org' })!;
+    const set = withSender(relay, { name: 'Finance Group', address: 'notices@finance.example' }, 'Skein');
+    await applyMail(t.kc, set.mail, [], set.fromName);
+    expect(t.realm().smtpServer).toMatchObject({ from: 'notices@finance.example', fromDisplayName: 'Finance Group' });
+    // No address set: SMTP_FROM, under the sender's name; no sender read at all: the product's name.
+    expect(withSender(relay, { name: 'Finance Group' }, 'Skein')).toEqual({ mail: relay, fromName: 'Finance Group' });
+    expect(withSender(relay, undefined, 'Skein')).toEqual({ mail: relay, fromName: 'Skein' });
+    expect(withSender(undefined, { name: 'Finance Group', address: 'n@f.example' }, 'Skein').mail).toBeUndefined();
+    const changes: string[] = [];
+    const back = withSender(relay, { name: 'Finance Group' }, 'Skein');
+    await applyMail(t.kc, back.mail, changes, back.fromName);
+    expect(t.realm().smtpServer).toMatchObject({ from: 'augur@example.org', fromDisplayName: 'Finance Group' });
+    expect(changes).toEqual(['email: relay relay.example:587']);
   });
 
   it('without a relay, keeps one set in the console and offers resets only when there is one', async () => {
