@@ -67,11 +67,17 @@ const ACTION_PAYLOAD_BYTES = 1024;
 /** Each event carries ids and a little context; anything bigger is fetched from the publisher's API. */
 const EVENT_PAYLOAD_BYTES = 16 * 1024;
 
+/** What a person.updated entry says changed, in the words followers use: never the values, which a follower fetches. */
+const PERSON_FIELDS: Record<string, string> = { firstName: 'name', lastName: 'name', email: 'email', roles: 'roles', departments: 'teams' };
+const changedOf = (detail: Record<string, unknown> | undefined) => [...new Set(Object.keys(detail ?? {}).flatMap((k) => (PERSON_FIELDS[k] ? [PERSON_FIELDS[k]] : [])))];
+
 /**
  * The platform's own domain events, published as identity and the registry record
  * the change in the audit log, so the two can't disagree. Keyed by "<service> <action>".
  */
 const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntry) => Record<string, unknown> }> = {
+  'identity person.added': { topic: 'platform.person.joined', payload: (e) => ({ person: e.target }) },
+  'identity person.updated': { topic: 'platform.person.changed', payload: (e) => ({ person: e.target, changed: changedOf(e.detail) }) },
   'identity person.disabled': { topic: 'platform.person.disabled', payload: (e) => ({ person: e.target }) },
   'identity person.enabled': { topic: 'platform.person.enabled', payload: (e) => ({ person: e.target }) },
   'identity department.created': { topic: 'platform.team.created', payload: (e) => ({ team: e.target, name: e.detail?.name }) },
