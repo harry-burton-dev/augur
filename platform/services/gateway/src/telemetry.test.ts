@@ -48,6 +48,29 @@ describe('stamping what a browser sends', () => {
     expect(attrs(record.attributes)).toEqual({ 'url.full': 'https://augur.example/apps/folio/doc', 'exception.message': 'boom' });
   });
 
+  it('takes the same out of attributes nested in a kvlist or an array, as Faro sends them', () => {
+    const list = (values: unknown[]) => ({ kvlistValue: { values } });
+    const url = (key: string) => ({ key, value: s('https://augur.example/apps/folio/doc?q=secret#x') });
+    const plain = 'https://augur.example/apps/folio/doc';
+    const attributes = [
+      { key: 'event.attributes', value: list([url('url.full'), { key: 'user.email', value: s('a@b.c') }, { key: 'kept', value: s('yes') }, { key: 'deeper', value: list([url('page.url'), { key: 'enduser.id', value: s('u-1') }]) }]) },
+      { key: 'items', value: { arrayValue: { values: [list([url('http.url'), { key: 'faro.user.id', value: s('u-1') }]), s('left?as=it-is')] } } },
+      { key: 'url.full', value: { arrayValue: { values: [s('https://augur.example/a?q=secret')] } } },
+      { key: 'odd', value: 'not an OTLP value' },
+    ];
+    const out = stamped({ resourceLogs: [{ resource: { attributes }, scopeLogs: [{ logRecords: [{ attributes }] }] }] }, 'logs')!;
+    const r = (out.resourceLogs as { resource: { attributes: unknown[] }; scopeLogs: { logRecords: { attributes: unknown[] }[] }[] }[])[0];
+    const expected = [
+      { key: 'event.attributes', value: list([{ key: 'url.full', value: s(plain) }, { key: 'kept', value: s('yes') }, { key: 'deeper', value: list([{ key: 'page.url', value: s(plain) }]) }]) },
+      { key: 'items', value: { arrayValue: { values: [list([{ key: 'http.url', value: s(plain) }]), s('left?as=it-is')] } } },
+      { key: 'url.full', value: { arrayValue: { values: [s('https://augur.example/a')] } } },
+      { key: 'odd', value: 'not an OTLP value' },
+    ];
+    expect(r.scopeLogs[0].logRecords[0].attributes).toEqual(expected);
+    expect(r.resource.attributes).toEqual(expect.arrayContaining(expected));
+    expect(JSON.stringify(out)).not.toMatch(/secret|a@b.c|u-1/);
+  });
+
   it('refuses a body that isn’t that signal', () => {
     expect(stamped(body, 'traces')).toBeUndefined();
     expect(stamped({ resourceLogs: [null] }, 'logs')).toBeUndefined();
