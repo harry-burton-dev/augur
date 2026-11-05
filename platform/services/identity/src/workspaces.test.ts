@@ -1,11 +1,11 @@
-import pg from 'pg';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
 import { MemoryDirectory } from './directory.ts';
-import { PgPreferenceStore } from './store.ts';
 import { TeamDirectory } from './teams.ts';
-import { floorsFor, MemoryWorkspaceStore, PgWorkspaceStore, slugify, type WorkspaceStore } from './workspaces.ts';
+import { floorsFor, PgWorkspaceStore, slugify, type WorkspaceStore } from './workspaces.ts';
+
+const db = identityDb({ orgName: 'Acme' });
 
 /** The same behaviour from every store. */
 const behavesLikeAWorkspaceStore = (make: () => WorkspaceStore, reset: () => Promise<void> = async () => {}) => {
@@ -135,26 +135,11 @@ const behavesLikeAWorkspaceStore = (make: () => WorkspaceStore, reset: () => Pro
   });
 };
 
-describe('MemoryWorkspaceStore', () => behavesLikeAWorkspaceStore(() => new MemoryWorkspaceStore({ orgName: 'Acme' })));
-
-// Runs wherever DATABASE_URL points at a Postgres; CI starts one for it.
-describe.runIf(process.env.DATABASE_URL)('PgWorkspaceStore', () => {
-  let pool: pg.Pool;
-
-  beforeAll(async () => {
-    pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-    await pool.query('drop schema if exists identity cascade');
-    await new PgPreferenceStore(pool).migrate();
-  });
-  afterAll(() => pool.end());
-
-  behavesLikeAWorkspaceStore(
-    () => new PgWorkspaceStore(pool, { orgName: 'Acme' }),
-    async () => void (await pool.query('truncate identity.workspace_members, identity.imports, identity.workspaces, identity.team_levels')),
-  );
+describe.runIf(DATABASE_URL)('PgWorkspaceStore', () => {
+  behavesLikeAWorkspaceStore(() => db.workspaces);
 
   it('takes slugs safely when teams are added at once', async () => {
-    const store = new PgWorkspaceStore(pool, { orgName: 'Acme' });
+    const store = new PgWorkspaceStore(db.pool, { orgName: 'Acme' });
     const parent = await store.createTeam('Ops');
     const made = await Promise.all(['A', 'a!', 'A.', 'a?'].map((n) => store.createTeam(n, parent.id)));
     expect(new Set(made.map((t) => t.slug)).size).toBe(4);
@@ -169,13 +154,13 @@ describe('slugify', () => {
   });
 });
 
-describe('departments as teams', () => {
+describe.runIf(DATABASE_URL)('departments as teams', () => {
   const setup = async () => {
     const signIn = new MemoryDirectory();
     const finance = await signIn.createDepartment('Finance');
     const payroll = await signIn.createDepartment('Payroll', finance.id);
     const alex = await signIn.createPerson({ username: 'alex', firstName: 'Alex', lastName: 'R', email: 'a@x.org', roles: [], departments: [payroll.id] }, 'pw');
-    const store = new MemoryWorkspaceStore({ orgName: 'Acme' });
+    const store = db.workspaces;
     return { signIn, store, alex, teams: new TeamDirectory(signIn, store, () => {}) };
   };
 
@@ -208,12 +193,12 @@ describe('departments as teams', () => {
   });
 });
 
-describe('GET /v1/me/workspaces', () => {
+describe.runIf(DATABASE_URL)('GET /v1/me/workspaces', () => {
   it('answers the caller’s floors, with departments copied in first', async () => {
     const signIn = new MemoryDirectory();
     const finance = await signIn.createDepartment('Finance');
     const alex = await signIn.createPerson({ username: 'alex', firstName: 'Alex', lastName: 'R', email: 'a@x.org', roles: [], departments: [finance.id] }, 'pw');
-    const app = await buildApp({ directory: signIn, workspaces: new MemoryWorkspaceStore({ orgName: 'Acme' }) });
+    const app = await db.app({ directory: signIn, workspaces: db.workspaces });
     const res = await app.inject({ method: 'GET', url: '/v1/me/workspaces', headers: callerHeaders({ id: alex.id, name: 'Alex', departments: [], roles: [] }) });
     expect(res.statusCode).toBe(200);
     expect(res.json().workspaces.map((f: { name: string; slug: string }) => `${f.name} @${f.slug}`)).toEqual(['You @me', 'Acme @org', 'Finance @finance']);

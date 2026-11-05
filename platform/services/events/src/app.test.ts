@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { callerHeaders, FloorsUnavailable, GrantsUnavailable, serviceHeaders, type FloorPlace } from '@augur/service-kit';
-import { buildApp } from './app.ts';
+import type { buildApp } from './app.ts';
+import { DATABASE_URL, eventsDb } from './db.testing.ts';
+
+const db = eventsDb();
 
 const alex = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const sam = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
@@ -29,15 +32,15 @@ afterEach(async () => {
   open = undefined;
 });
 
-describe('events', () => {
+describe.runIf(DATABASE_URL)('events', () => {
   it('reports healthy', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     const res = await app.inject({ method: 'GET', url: '/healthz' });
     expect(res.json()).toMatchObject({ status: 'ok', service: 'events', version: expect.stringMatching(/^\d+\.\d+\.\d+/), api: 'v1' });
   });
 
   it('lets a service notify people, who each see only their own', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const sent = await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
     expect([sent.statusCode, sent.json()]).toEqual([202, { sent: 2 }]);
     const mine = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
@@ -46,7 +49,7 @@ describe('events', () => {
   });
 
   it('turns away notifications from anyone but a service, and ones it cannot use', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const post = (headers: Record<string, string>, payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers, payload });
     expect((await post(alex, review)).statusCode).toBe(403);
     expect((await post(platform, { ...review, level: 'urgent' })).statusCode).toBe(400);
@@ -56,7 +59,7 @@ describe('events', () => {
 
   it('lets a platform service tell an audience, such as everyone holding a role, worked out as it sends', async () => {
     let holders = ['u-1'];
-    const app = await buildApp({ verifyService, audience: async (principals) => (principals.includes('role:deployment-admin') ? holders : []) });
+    const app = await db.app({ verifyService, audience: async (principals) => (principals.includes('role:deployment-admin') ? holders : []) });
     const upgraded = { app: 'upgrades', recipients: [], audience: ['role:deployment-admin'], level: 'done', title: 'AUGUR 0.15.0 is installed', link: '/augur' };
     expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: upgraded })).json()).toEqual({ sent: 1 });
     holders = ['u-1', 'u-2'];
@@ -65,16 +68,16 @@ describe('events', () => {
     expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...upgraded, recipients: ['u-2'] } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...upgraded, audience: ['admins'] } })).statusCode).toBe(400);
     const asApp = { authorization: 'Bearer app-upgrades' };
-    const app2 = await buildApp({ verifyService, grants: async () => ['notifications:send'], audience: async () => ['u-1'] });
+    const app2 = await db.app({ verifyService, grants: async () => ['notifications:send'], audience: async () => ['u-1'] });
     expect((await app2.inject({ method: 'POST', url: '/v1/notifications', headers: asApp, payload: upgraded })).statusCode).toBe(403);
     // Identity out of reach: nobody is told, and the sender hears why.
-    const app3 = await buildApp({ verifyService });
+    const app3 = await db.app({ verifyService });
     expect((await app3.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: upgraded })).statusCode).toBe(503);
     await Promise.all([app2.close(), app3.close()]);
   });
 
   it('tells each person a keyed piece of news once, even after they read it', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const available = { ...review, app: 'upgrades', level: 'info', title: 'AUGUR 0.15.0 is ready', key: 'available:augur:0.15.0' };
     const send = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
     expect((await send({ ...available, recipients: ['u-1'] })).json()).toEqual({ sent: 1 });
@@ -88,7 +91,7 @@ describe('events', () => {
 
   it('keeps the kind of a notification, refusing one the app doesn’t declare', async () => {
     const declared: Record<string, string[] | undefined> = { library: ['comment'] };
-    const app = await buildApp({ verifyService, notificationKinds: async (id) => declared[id] });
+    const app = await db.app({ verifyService, notificationKinds: async (id) => declared[id] });
     const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
     expect((await post({ ...review, kind: 'comment' })).statusCode).toBe(202);
     const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
@@ -102,7 +105,7 @@ describe('events', () => {
   });
 
   it('gives identity, and only identity, what it keeps about one person', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
     await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: { actor: { id: 'u-2', kind: 'user' }, app: 'identity', action: 'account.updated' } });
     const res = await app.inject({ method: 'GET', url: '/v1/people/u-2/data', headers: platform });
@@ -118,7 +121,7 @@ describe('events', () => {
   });
 
   it('carries up to two actions, each an intent with a small payload', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
     const approve = { label: 'Approve', intent: { type: 'document.approve', payload: { id: 'd7' } } };
     expect((await post({ ...review, actions: [approve, { label: 'Open', intent: { type: 'document.open' } }] })).statusCode).toBe(202);
@@ -132,7 +135,7 @@ describe('events', () => {
   });
 
   it('marks a notification read, and unread again', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
     const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
     expect((await app.inject({ method: 'POST', url: `/v1/notifications/${n.id}/read`, headers: sam })).statusCode).toBe(204);
@@ -142,7 +145,7 @@ describe('events', () => {
   });
 
   it('never lets someone touch another person’s notification', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: { ...review, recipients: ['u-1'] } });
     const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: alex })).json();
     expect((await app.inject({ method: 'POST', url: `/v1/notifications/${n.id}/read`, headers: sam })).statusCode).toBe(404);
@@ -150,7 +153,7 @@ describe('events', () => {
   });
 
   it('streams each new notification to its recipient as it happens', async () => {
-    const app = (open = await buildApp({ verifyService, heartbeatMs: 50 }));
+    const app = (open = await db.app({ verifyService, heartbeatMs: 50 }));
     const url = await app.listen({ port: 0, host: '127.0.0.1' });
     const controller = new AbortController();
     const res = await fetch(`${url}/v1/notifications/stream`, { headers: sam, signal: controller.signal });
@@ -168,7 +171,7 @@ describe('events', () => {
   });
 
   it('keeps an audit log that services write and only admins read', async () => {
-    const app = await buildApp({ verifyService });
+    const app = await db.app({ verifyService });
     const entry = { actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' };
     expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: entry })).statusCode).toBe(201);
     expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: alex, payload: entry })).statusCode).toBe(403);
@@ -182,7 +185,7 @@ describe('events', () => {
   });
 
   it('filters Activity by target, person and kind', async () => {
-    const app = (open = await buildApp({ verifyService }));
+    const app = (open = await db.app({ verifyService }));
     const write = (payload: object) => app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload });
     await write({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' });
     await write({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-2' });
@@ -197,7 +200,7 @@ describe('events', () => {
   });
 
   it('lets an admin download Activity as CSV or JSON lines, and records the download', async () => {
-    const app = (open = await buildApp({ verifyService }));
+    const app = (open = await db.app({ verifyService }));
     await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: { actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: '=HYPERLINK("x")', detail: { title: 'Q3' } } });
     expect((await app.inject({ method: 'GET', url: '/v1/audit/export', headers: sam })).statusCode).toBe(403);
     const csv = await app.inject({ method: 'GET', url: '/v1/audit/export?app=library&since=2026-01-01T00:00:00Z&until=2026-12-31T00:00:00Z', headers: alex });
@@ -220,7 +223,7 @@ describe('events', () => {
   });
 
   it('lets identity, and only identity, remove a deleted person’s details', async () => {
-    const app = (open = await buildApp({ verifyService }));
+    const app = (open = await db.app({ verifyService }));
     await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
     const write = (payload: object) => app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload });
     await write({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.updated', target: 'u-2', detail: { email: { from: 'sam@old.example', to: 'sam@new.example' }, roles: ['editor'] } });
@@ -250,7 +253,7 @@ describe('events', () => {
     };
 
     it('lets an app notify with the scope, only for itself', async () => {
-      const app = await buildApp({ verifyService, grants, floors });
+      const app = await db.app({ verifyService, grants, floors });
       const post = (headers: Record<string, string>, payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers, payload });
       expect((await post(as('library', 'w-me'), review)).statusCode).toBe(202);
       expect(asked.at(-1)).toEqual(['library', 'w-me']);
@@ -261,7 +264,7 @@ describe('events', () => {
     });
 
     it('checks the scope on the floor the call names', async () => {
-      const app = await buildApp({ verifyService, grants, floors });
+      const app = await db.app({ verifyService, grants, floors });
       const entry = { actor: { id: 'u-1', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' };
       expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-finance'), payload: entry })).statusCode).toBe(201);
       const elsewhere = await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-legal'), payload: entry });
@@ -269,7 +272,7 @@ describe('events', () => {
     });
 
     it('records which service wrote an entry, whoever it names as the actor', async () => {
-      const app = await buildApp({ verifyService, grants, floors });
+      const app = await db.app({ verifyService, grants, floors });
       const entry = { actor: { id: 'admin-1', kind: 'user' }, app: 'library', action: 'document.deleted', target: 'doc-7' };
       const written = await app.inject({ method: 'POST', url: '/v1/audit', headers: as('library', 'w-finance'), payload: entry });
       expect(written.json()).toMatchObject({ actor: { id: 'admin-1' }, recordedBy: 'library' });
@@ -278,9 +281,9 @@ describe('events', () => {
     });
 
     it('refuses for now when what an app may do can’t be checked', async () => {
-      const app = await buildApp({ verifyService, grants: async () => Promise.reject(new GrantsUnavailable('down')) });
+      const app = await db.app({ verifyService, grants: async () => Promise.reject(new GrantsUnavailable('down')) });
       expect((await app.inject({ method: 'POST', url: '/v1/notifications', headers: as('library'), payload: review })).statusCode).toBe(503);
-      const unchecked = await buildApp({ verifyService });
+      const unchecked = await db.app({ verifyService });
       expect((await unchecked.inject({ method: 'POST', url: '/v1/notifications', headers: as('library'), payload: review })).statusCode).toBe(503);
     });
   });
@@ -292,7 +295,7 @@ describe('events', () => {
     const entry = (action: string) => ({ actor: { id: 'u-1', kind: 'user' }, app: 'library', action, target: 'doc-7' });
 
     it('records the floor and its path on notifications and audit entries', async () => {
-      const app = await buildApp({ verifyService, floors });
+      const app = await db.app({ verifyService, floors });
       await app.inject({ method: 'POST', url: '/v1/notifications', headers: onFloor('w-payroll'), payload: review });
       const [n] = (await app.inject({ method: 'GET', url: '/v1/notifications', headers: sam })).json();
       expect(n.workspace).toEqual({ id: 'w-payroll', path: ['w-org', 'w-finance', 'w-payroll'] });
@@ -301,12 +304,12 @@ describe('events', () => {
       expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-gone'), payload: entry('document.published') })).statusCode).toBe(400);
       // A floor id that won't URI-decode is an unknown floor, not a crash.
       expect((await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-%E0%A4%A'), payload: entry('document.published') })).statusCode).toBe(400);
-      const down = await buildApp({ verifyService, floors: async () => Promise.reject(new FloorsUnavailable('down')) });
+      const down = await db.app({ verifyService, floors: async () => Promise.reject(new FloorsUnavailable('down')) });
       expect((await down.inject({ method: 'POST', url: '/v1/audit', headers: onFloor('w-legal'), payload: entry('document.published') })).statusCode).toBe(503);
     });
 
     it('filters the audit log to a floor and the floors below it', async () => {
-      const app = await buildApp({ verifyService, floors });
+      const app = await db.app({ verifyService, floors });
       for (const [w, action] of [['w-finance', 'a.finance'], ['w-payroll', 'a.payroll'], ['w-legal', 'a.legal']]) {
         await app.inject({ method: 'POST', url: '/v1/audit', headers: onFloor(w), payload: entry(action) });
       }
@@ -324,7 +327,7 @@ describe('events', () => {
 
     it('sends team notices only to a team that turned them on, to who is on it now', async () => {
       let team = ['u-1', 'u-2'];
-      const app = await buildApp({ verifyService, floors, members: async () => team });
+      const app = await db.app({ verifyService, floors, members: async () => team });
       const notice = { ...review, recipients: [], toTeam: true };
       const send = (workspace: string) => app.inject({ method: 'POST', url: '/v1/notifications', headers: onFloor(workspace), payload: notice });
       expect((await send('w-finance')).statusCode).toBe(403);
@@ -349,7 +352,7 @@ describe('events', () => {
     const published = (id: string, workspace?: string) => ({ topic: 'folio.document.published', id, payload: { document: id }, ...(workspace ? { workspace } : {}) });
 
     it('lets an app publish on its own topics, once per id, and others follow in order', async () => {
-      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const app = (open = await db.app({ verifyService, grants, floors }));
       const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });
       expect((await publish(as('folio'), [published('d1', 'w-finance'), published('d2')])).json()).toEqual({ added: 2, repeated: 0 });
       expect((await publish(as('folio'), [published('d1', 'w-finance')])).json()).toEqual({ added: 0, repeated: 1 });
@@ -364,7 +367,7 @@ describe('events', () => {
     });
 
     it('keeps each publisher to its own topics and scope', async () => {
-      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const app = (open = await db.app({ verifyService, grants, floors }));
       const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });
       const posing = await publish(as('notes'), [published('d1')]);
       expect([posing.statusCode, posing.json().message]).toEqual([403, 'notes can only send for itself, not for "folio".']);
@@ -381,7 +384,7 @@ describe('events', () => {
     });
 
     it('tells followers what identity and the registry change, as they record it', async () => {
-      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const app = (open = await db.app({ verifyService, grants, floors }));
       const registry = await serviceHeaders({ name: 'registry', getToken: async () => 'platform-registry' });
       const audit = (headers: Record<string, string>, entry: object, workspace?: string) =>
         app.inject({ method: 'POST', url: '/v1/audit', headers: { ...headers, ...(workspace ? { 'x-workspace-id': workspace } : {}) }, payload: entry });
@@ -408,7 +411,7 @@ describe('events', () => {
     });
 
     it('streams the events on the person’s floor and topics to their browser, as they’re published', async () => {
-      const app = (open = await buildApp({ verifyService, grants, floors, heartbeatMs: 50 }));
+      const app = (open = await db.app({ verifyService, grants, floors, heartbeatMs: 50 }));
       const url = await app.listen({ port: 0, host: '127.0.0.1' });
       const onFinance = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
       const controller = new AbortController();
@@ -431,7 +434,7 @@ describe('events', () => {
     });
 
     it('opens a browser stream only for someone signed in, on a floor, following real topics', async () => {
-      const app = (open = await buildApp({ verifyService, grants, floors }));
+      const app = (open = await db.app({ verifyService, grants, floors }));
       const onFinance = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
       const stream = (headers: Record<string, string>, topics: string) => app.inject({ method: 'GET', url: `/v1/domain-events/stream?topics=${encodeURIComponent(topics)}`, headers });
       expect((await stream({}, 'folio.*')).statusCode).toBe(401);

@@ -1,17 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { buildApp } from './app.ts';
 import { ensureClients, KeycloakAppClients, MemoryAppClients, parseClientSecrets } from './clients.ts';
 import type { KeycloakDirectory } from './directory.ts';
+import { DATABASE_URL, identityDb } from './db.testing.ts';
+
+const db = identityDb();
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
 
-describe('apps’ sign-ins', () => {
+describe.runIf(DATABASE_URL)('apps’ sign-ins', () => {
   it('lets an admin issue one, audited without the secret', async () => {
     const entries: unknown[] = [];
     const appClients = new MemoryAppClients();
-    const app = await buildApp({ appClients, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ appClients, audit: async (e) => void entries.push(e) });
     const res = await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: admin });
     expect(res.statusCode).toBe(201);
     expect(res.json()).toEqual({ clientId: 'app-library', secret: appClients.secrets.get('app-library') });
@@ -22,7 +24,7 @@ describe('apps’ sign-ins', () => {
 
   it('refuses an id AUGUR keeps for itself, so no app signs in as a part of AUGUR', async () => {
     const appClients = new MemoryAppClients();
-    const app = await buildApp({ appClients, verifyService: async () => ({ kind: 'platform' as const, name: 'updater' }) });
+    const app = await db.app({ appClients, verifyService: async () => ({ kind: 'platform' as const, name: 'updater' }) });
     for (const id of ['registry', 'augur-notes']) {
       const issued = await app.inject({ method: 'POST', url: `/v1/admin/apps/${id}/credential`, headers: admin });
       expect(issued.statusCode).toBe(400);
@@ -40,7 +42,7 @@ describe('apps’ sign-ins', () => {
       const m = /^Bearer (app|platform)-(\S+)$/.exec(String(h.authorization ?? ''));
       return m ? (m[1] === 'app' ? { kind: 'app' as const, app: m[2] } : { kind: 'platform' as const, name: m[2] }) : undefined;
     };
-    const app = await buildApp({ appClients, verifyService, audit: async (e) => void entries.push(e) });
+    const app = await db.app({ appClients, verifyService, audit: async (e) => void entries.push(e) });
     const put = (authorization: string, secret = 'a'.repeat(64)) =>
       app.inject({ method: 'PUT', url: '/v1/admin/apps/notes/credential', headers: { authorization, ...(authorization ? {} : admin) }, payload: { secret } });
     expect((await put('Bearer platform-updater')).json()).toEqual({ clientId: 'app-notes' });
@@ -51,7 +53,7 @@ describe('apps’ sign-ins', () => {
   });
 
   it('answers 503 without the sign-in service', async () => {
-    const app = await buildApp();
+    const app = await db.app();
     expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: admin })).statusCode).toBe(503);
   });
 

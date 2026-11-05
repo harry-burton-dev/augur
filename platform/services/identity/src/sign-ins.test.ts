@@ -62,6 +62,22 @@ describe('sign-ins in Activity', () => {
     expect(later.written.map((e) => e.target)).toEqual(['u4']);
   });
 
+  it('tells the lifecycle when someone signs in, so their last sign-in is kept', async () => {
+    const store = new MemorySignInCursorStore();
+    await store.save({ time: T0, seen: [] });
+    const seen: [string, string][] = [];
+    const all: KcEvent[] = [
+      { id: 'a', time: T0 + 1000, type: 'LOGIN', userId: 'u1' },
+      { id: 'b', time: T0 + 2000, type: 'LOGIN_ERROR', userId: 'u2' },
+      { id: 'c', time: T0 + 3000, type: 'IDENTITY_PROVIDER_FIRST_LOGIN', userId: 'u3' },
+    ];
+    await copySignIns({ events: keycloak(all).events, store, audit: async () => {}, signedIn: async (p, at) => void seen.push([p, at]) });
+    expect(seen).toEqual([
+      ['u1', new Date(T0 + 1000).toISOString()],
+      ['u3', new Date(T0 + 3000).toISOString()],
+    ]);
+  });
+
   it('reads further pages when a page is full', async () => {
     const store = new MemorySignInCursorStore();
     await store.save({ time: T0, seen: [] });
