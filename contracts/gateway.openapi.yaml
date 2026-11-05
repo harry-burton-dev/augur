@@ -119,6 +119,30 @@ components:
           format: date-time
           description: When it closes by itself
       description: Whether AUGUR is open to the internet through Tailscale Funnel (infra/deploy/public.sh). Absent when the gateway isn't told.
+    EmailStatus:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          enum:
+            - off
+            - ok
+            - attention
+          description: '"off" with no relay set, "attention" when the relay is set but did not answer its last check'
+        problem:
+          type: string
+          description: Why, and who can change it, in words an admin can act on
+        relay:
+          type: string
+          description: The relay as host:port, never its sign-in
+        from:
+          type: string
+          description: The address mail comes from
+        checkedAt:
+          type: string
+          format: date-time
+      description: Whether AUGUR can send email through the organisation's relay (ADR 0035, 0065); checked at most every 5 minutes
     OffsiteCopy:
       type: object
       required:
@@ -308,7 +332,7 @@ paths:
   /status:
     get:
       summary: Whether every part of AUGUR is answering (admins only)
-      description: The gateway checks every service's /healthz and the sign-in service's signing keys every 30 seconds and keeps the last answer, so this never waits on a slow service. A component that failed its last check, or has not answered for 2 minutes, is down. `backups` is present when the gateway is told where the backup container writes (BACKUP_DIR). `seeding` says whether sample data may be added here (SEED_ALLOWED).
+      description: The gateway checks every service's /healthz and the sign-in service's signing keys every 30 seconds and keeps the last answer, so this never waits on a slow service. A component that failed its last check, or has not answered for 2 minutes, is down. `backups` is present when the gateway is told where the backup container writes (BACKUP_DIR). `email` says whether mail can be sent through the relay (SMTP_*), checked at most every 5 minutes. `seeding` says whether sample data may be added here (SEED_ALLOWED).
       responses:
         "200":
           description: Every component, the gateway first
@@ -318,6 +342,7 @@ paths:
                 type: object
                 required:
                   - components
+                  - email
                   - seeding
                 properties:
                   components:
@@ -328,6 +353,8 @@ paths:
                     $ref: "#/components/schemas/BackupStatus"
                   publicAccess:
                     $ref: "#/components/schemas/PublicAccess"
+                  email:
+                    $ref: "#/components/schemas/EmailStatus"
                   seeding:
                     $ref: "#/components/schemas/Seeding"
                 description: Every component, the gateway first

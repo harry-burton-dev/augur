@@ -63,7 +63,7 @@ The preflight (step 3) fills in these 26 secrets, each with 64 random hex charac
 - `PLATFORM_URL` is `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`, with no trailing slash.
 - `PLATFORM_ADMIN_*` is you: the first person who can sign in, as an admin and deployment admin. The password is only for the first sign-in, when Keycloak asks you to choose a new one. `PLATFORM_ADMIN_DEPARTMENT` is your department (`Platform` unless you change it).
 - `SERVER_RING` says what kind of server this is: `production` (the default), `preview` for a staging server, or `dev` for the workbench you build on ([release-channels.md](release-channels.md#server-rings)).
-- `ORG_NAME`, optional: what the organisation's own floor is called (`Organisation` unless you set it).
+- `ORG_NAME`, optional: what the organisation is called at first start (`Organisation` unless you set it). After that an admin changes it in Admin → Organisation, with the organisation's time zone and email sender, and `ORG_NAME` is no longer read by identity (ADR 0042). The sign-in pages still show `ORG_NAME` for now.
 - `ORG_PRODUCT_NAME`, optional: what people see the product called, in the browser tab, on the sign-in pages and in emails (`AUGUR` unless you set it, for example `Example, built on AUGUR`). The realm job makes it the realm's display name, and the web container writes it into the shell's page, so a change takes effect at the next `pc up -d`.
 
 The secrets are made for you in step 3. Each is a long random string, different from every other, and Compose refuses to start without the required ones. The `FOLIO_` ones are for Artifacts (Folio in code), the document libraries every deployment ships with; `AUSPEX_` is Explorer's, `ATLAS_` Data Atlas's and `MANDATE_` Mandate's. To set one yourself instead, `openssl rand -hex 32` makes one.
@@ -205,6 +205,10 @@ Set it in `.env`, then `pc up -d`:
 - `SMTP_REPLY_TO`, optional: where replies go, if not to `SMTP_FROM`.
 
 The realm job (below) points Keycloak at the relay on every `up`, and with a relay it turns on **Forgot password** on the sign-in page and checking a new address by email. `pc logs keycloak-config` says when the relay changed. Without `SMTP_HOST` the job leaves a relay set by hand in Keycloak's console as it is, and offers those two only if there is one. Keycloak's emails use AUGUR's email theme and the realm's languages. To check it works, use **Forgot password** on the sign-in page for your own account.
+
+Admin → Status has an **Email** section: whether email can be sent, the relay and the address mail comes from, and when the relay was last checked (at most every 5 minutes). When the relay is set but doesn't answer, it says what to check: the sign-in, the host and port, or the security setting. The gateway reads the same `SMTP_*` settings for this check and sends nothing.
+
+AUGUR's own services send email through one sender in the service kit (`@augur/service-kit/mail`, [ADR 0065](decisions/0065-mail-through-nodemailer-react-email-and-mailpit.md)): Nodemailer to the relay, from React Email templates. Without a relay it says why instead of failing.
 
 On the local stack (`infra/docker-compose.yml`) every email goes to Mailpit instead, at http://localhost:8025, and never leaves your machine.
 

@@ -21,7 +21,7 @@ Option 1. Every email AUGUR's own services send goes through one sender in the s
 
 ## Consequences
 
-- New dependencies when the sender lands: `nodemailer` and React Email's render and components, in the service kit only. Mailpit (`axllent/mailpit`) runs only in `infra/docker-compose.yml`, never on a server.
+- New dependencies when the sender lands: `nodemailer` and React Email's render (templates are plain elements, so its component package isn't needed), in the service kit only. Mailpit (`axllent/mailpit`) runs only in `infra/docker-compose.yml`, never on a server.
 - One set of relay settings, described once in the settings schema, serves Keycloak and AUGUR's services.
 - Without a relay, the sender says so instead of failing, and screens that would email fall back (ADR 0035).
 - The first step (PER-189) gives Keycloak the relay and adds Mailpit; the service-kit sender follows in its own pull request.

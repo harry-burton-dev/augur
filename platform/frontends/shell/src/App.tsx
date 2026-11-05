@@ -85,7 +85,7 @@ import {
 } from './host/index.js';
 import { AccountApi } from './account/api.js';
 import type { Preferences } from './host/preferences.js';
-import { formatsFrom, languageOf, setFormats } from './host/formats.js';
+import { currentFormats, formatsFrom, languageOf, setFormats } from './host/formats.js';
 import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { ACTION_STATUS } from './host/session.js';
@@ -552,6 +552,10 @@ export function Host({
       intent,
       reply,
       previewOn: (id) => app.previewsOn?.includes(id) ?? false,
+      // Read live, so a change in Account reaches apps already open.
+      get formats() {
+        return currentFormats();
+      },
     }),
     [session, bus, raise, request, floor, home, fetchImpl, tell],
   );

@@ -45,6 +45,17 @@ export const PublicAccess = Type.Object(
   },
 );
 
+export const EmailStatus = Type.Object(
+  {
+    state: Type.Enum(['off', 'ok', 'attention'], { description: '"off" with no relay set, "attention" when the relay is set but did not answer its last check' }),
+    problem: Type.Optional(Type.String({ description: 'Why, and who can change it, in words an admin can act on' })),
+    relay: Type.Optional(Type.String({ description: 'The relay as host:port, never its sign-in' })),
+    from: Type.Optional(Type.String({ description: 'The address mail comes from' })),
+    checkedAt: Type.Optional(Type.String({ format: 'date-time' })),
+  },
+  { $id: 'EmailStatus', description: "Whether AUGUR can send email through the organisation's relay (ADR 0035, 0065); checked at most every 5 minutes" },
+);
+
 export const OffsiteCopy = Type.Object(
   {
     at: Type.String({ format: 'date-time' }),
@@ -132,6 +143,7 @@ export const Status = Type.Object(
     components: Type.Array(ref(ComponentStatus)),
     backups: Type.Optional(ref(BackupStatus)),
     publicAccess: Type.Optional(ref(PublicAccess)),
+    email: ref(EmailStatus),
     seeding: ref(Seeding),
   },
   { description: 'Every component, the gateway first' },
@@ -180,4 +192,4 @@ export const Refusal = Type.Unsafe<{ error: string; message: string; [extension:
 export const refused = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Refusal) } } });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, OffsiteCopy, PointInTime, BackupStatus, Seeding, BrowserTelemetry];
+export const SCHEMAS = [Refusal, ComponentStatus, BackupRun, PublicAccess, EmailStatus, OffsiteCopy, PointInTime, BackupStatus, Seeding, BrowserTelemetry];

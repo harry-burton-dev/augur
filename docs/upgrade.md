@@ -98,6 +98,12 @@ otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72
 
 AUGUR can now send email through the organisation's SMTP relay: password resets and address checks from the sign-in pages. Nothing changes until you add `SMTP_HOST` and `SMTP_FROM` (and `SMTP_USER` and `SMTP_PASSWORD` if the relay wants a sign-in) to `.env` and run `pc up -d`; see [Email](deploy.md#email). `pc logs keycloak-config` then says the relay is set.
 
+### Organisation settings move to Admin
+
+**From** unreleased
+
+Admin → Organisation now holds the organisation's name, time zone and email sender (ADR 0042). Nothing to do: the name your server already shows, which came from `ORG_NAME` at first start, stays as it is, and the time zone starts as UTC. From this release identity ignores a changed `ORG_NAME`: change the name in Admin instead. The sign-in pages still show `ORG_NAME` for now, so keep the two the same.
+
 ### Mandate ships with AUGUR
 
 **From** augur@0.19.0
