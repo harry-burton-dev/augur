@@ -93,7 +93,10 @@ backup() {
     noted false "" "The database could not be dumped. Earlier backups are kept."
     failed=1
   fi
-  find "$BACKUP_DIR" \( -name 'platform-*.sql.gz' -o -name 'objects-*.tar.gz' \) -mtime +"$((BACKUP_KEEP_DAYS - 1))" -print -delete | sed 's/^/backup: removed /'
+  # Only after a good run: when every night fails, the old backups are the only ones there are.
+  if [ -z "${failed:-}" ]; then
+    find "$BACKUP_DIR" \( -name 'platform-*.sql.gz' -o -name 'objects-*.tar.gz' \) -mtime +"$((BACKUP_KEEP_DAYS - 1))" -print -delete | sed 's/^/backup: removed /'
+  fi
   [ -z "${failed:-}" ]
 }
 
