@@ -63,6 +63,11 @@ export interface SignIn {
   error?: string;
 }
 
+export interface LeaveRequest {
+  requestedAt: string;
+  note?: string;
+}
+
 /** A refusal from identity, with the sentence it gave. */
 export class AccountError extends Error {
   constructor(
@@ -152,6 +157,37 @@ export class AccountApi {
 
   async signIns(max = 20) {
     return (await this.call<{ signIns: SignIn[] }>('GET', `/me/sign-ins?max=${max}`)).signIns;
+  }
+
+  /** Whether they've asked to leave, and when. */
+  async leaveRequest() {
+    const said = await this.call<Partial<LeaveRequest>>('GET', '/me/leave');
+    return said.requestedAt ? (said as LeaveRequest) : null;
+  }
+
+  /** Asks an administrator to close their account. Asking again keeps the first time. */
+  async requestLeave(note?: string) {
+    return this.call<LeaveRequest>('POST', '/me/leave', note ? { note } : {});
+  }
+
+  async withdrawLeave() {
+    await this.call('DELETE', '/me/leave');
+  }
+
+  /** A copy of what AUGUR keeps about them, as a JSON file to save. */
+  async myData(): Promise<{ blob: Blob; name: string }> {
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${this.base}/me/data`, { headers: { authorization: `Bearer ${await this.getToken()}` } });
+    } catch {
+      throw new AccountError('AUGUR can’t be reached right now. Check your connection and try again.', 0);
+    }
+    if (!res.ok) {
+      const said = ((await res.json().catch(() => undefined)) as { detail?: string; message?: string } | undefined) ?? {};
+      throw new AccountError(said.detail ?? said.message ?? `AUGUR answered ${res.status}. Try again.`, res.status);
+    }
+    const name = /filename="?([^";]+)"?/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'my-data.json';
+    return { blob: await res.blob(), name };
   }
 
   /** The current token's sign-in session. */

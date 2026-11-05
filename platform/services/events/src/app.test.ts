@@ -101,6 +101,22 @@ describe('events', () => {
     expect((await post({ ...review, kind: 'gossip' })).statusCode).toBe(202);
   });
 
+  it('gives identity, and only identity, what it keeps about one person', async () => {
+    const app = await buildApp({ verifyService });
+    await app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload: review });
+    await app.inject({ method: 'POST', url: '/v1/audit', headers: platform, payload: { actor: { id: 'u-2', kind: 'user' }, app: 'identity', action: 'account.updated' } });
+    const res = await app.inject({ method: 'GET', url: '/v1/people/u-2/data', headers: platform });
+    expect(res.statusCode).toBe(200);
+    const data = res.json();
+    expect(data.notifications).toMatchObject([{ title: 'Review the budget paper' }]);
+    expect(data.notifications[0].recipient).toBeUndefined();
+    expect(data.audit).toMatchObject([{ action: 'account.updated' }]);
+    expect(data.inbox).toEqual([]);
+    const registry = await serviceHeaders({ name: 'registry', getToken: async () => 'platform-registry' });
+    expect((await app.inject({ method: 'GET', url: '/v1/people/u-2/data', headers: registry })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/v1/people/u-2/data', headers: sam })).statusCode).toBe(403);
+  });
+
   it('carries up to two actions, each an intent with a small payload', async () => {
     const app = await buildApp({ verifyService });
     const post = (payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers: platform, payload });
