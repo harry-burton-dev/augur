@@ -114,7 +114,7 @@ export interface AppManifestEntry {
    */
   inbox?: { kinds: InboxKind[] };
   /**
-   * The kinds of notification the app sends (SDK 1.13, ADR 0036), so each person can choose
+   * The kinds of notification the app sends (SDK 2.0, ADR 0036), so each person can choose
    * in Account which kinds reach them out loud and which wait quietly. A notification the
    * app's service sends with a kind not declared here is refused.
    */
@@ -268,7 +268,7 @@ export interface NotificationKind {
 export interface NotifyMessage {
   title: string;
   body?: string;
-  /** One of the app’s `notifications.kinds` ids (SDK 1.13): a kind the person made quiet lands without a sound and stays off Home. */
+  /** One of the app’s `notifications.kinds` ids (SDK 2.0): a kind the person made quiet lands without a sound and stays off Home. */
   kind?: string;
   /** The person has to do something: it's marked, counted in the band, and shown on Home. */
   needsYou?: boolean;
@@ -348,6 +348,25 @@ export interface MountContext {
    * until the shell offers working contexts. Undefined means the whole floor.
    */
   focus?: Focus;
+  /**
+   * How the person wants dates and times written (SDK 2.0, ADR 0039), read
+   * live: it changes when they change it in Account, without a new mount.
+   * Pass it to `Intl.DateTimeFormat`, or use Quill's `writeDate`. Older
+   * shells leave it out; then write dates the browser's way.
+   */
+  formats?: Formats;
+}
+
+/** How one person reads dates and times, from Account's Language and region (SDK 2.0). */
+export interface Formats {
+  /** Their language, as a language tag such as `de`; the words AUGUR shows stay English for now. */
+  language?: string;
+  /** The language tag to write dates, times and numbers in, such as `en-GB`: their date format, else their language. Undefined means the browser's. */
+  locale?: string;
+  /** Their time zone (IANA, such as `Europe/London`). Undefined means the browser's. */
+  timeZone?: string;
+  /** Their clock, as `Intl.DateTimeFormat`'s `hourCycle`. Undefined means as `locale` writes it. */
+  hourCycle?: 'h12' | 'h23';
 }
 
 export interface IntentReply {

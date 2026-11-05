@@ -8,8 +8,8 @@ afterEach(() => setFormats({}));
 
 describe('how dates are written', () => {
   it('takes their date format, else their language, with their time zone and clock', () => {
-    expect(formatsFrom({ dateFormat: 'en-US', timeZone: 'Europe/Berlin', clock: '24' }, 'de')).toEqual({ locale: 'en-US', timeZone: 'Europe/Berlin', hourCycle: 'h23' });
-    expect(formatsFrom({}, 'de')).toEqual({ locale: 'de' });
+    expect(formatsFrom({ dateFormat: 'en-US', timeZone: 'Europe/Berlin', clock: '24' }, 'de')).toEqual({ language: 'de', locale: 'en-US', timeZone: 'Europe/Berlin', hourCycle: 'h23' });
+    expect(formatsFrom({}, 'de')).toEqual({ language: 'de', locale: 'de' });
     expect(formatsFrom({})).toEqual({});
   });
 
