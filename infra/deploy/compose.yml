@@ -513,6 +513,15 @@ services:
       INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
       # How many days back the Inbox's Done tab looks (30 when empty; docs/inbox.md).
       INBOX_DONE_DAYS: ${INBOX_DONE_DAYS:-}
+      # Notices that need someone are emailed through the organisation's relay, linking back here (docs/notifications.md).
+      PLATFORM_URL: ${PLATFORM_URL}
+      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is

@@ -8,11 +8,11 @@ import type { Preferences } from './preferences.js';
  */
 export type { Formats };
 
-/** Their date format, else their language, else the browser's; their time zone; their clock. */
-export const formatsFrom = (prefs: Pick<Preferences, 'dateFormat' | 'timeZone' | 'clock'>, language?: string): Formats => ({
+/** Their date format, else their language, else the browser's; their time zone, else the organisation's (ADR 0042), else the browser's; their clock. */
+export const formatsFrom = (prefs: Pick<Preferences, 'dateFormat' | 'timeZone' | 'clock'>, language?: string, orgTimeZone?: string): Formats => ({
   ...(language ? { language } : {}),
   ...(prefs.dateFormat || language ? { locale: prefs.dateFormat || language } : {}),
-  ...(prefs.timeZone ? { timeZone: prefs.timeZone } : {}),
+  ...(prefs.timeZone || orgTimeZone ? { timeZone: prefs.timeZone || orgTimeZone } : {}),
   ...(prefs.clock ? { hourCycle: prefs.clock === '12' ? 'h12' : 'h23' } : {}),
 });
 
@@ -53,3 +53,15 @@ export const languageOf = (token: string): string | undefined => {
     return undefined;
   }
 };
+
+/** The organisation's time zone from identity (`GET /v1/organisation`, ADR 0042), or undefined when it can't be read. */
+export async function loadOrgTimeZone(fetchImpl: typeof fetch, url: string, token: string): Promise<string | undefined> {
+  try {
+    const res = await fetchImpl(url, { headers: { authorization: `Bearer ${token}`, accept: 'application/json' } });
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as { timeZone?: unknown };
+    return typeof body?.timeZone === 'string' && body.timeZone ? body.timeZone : undefined;
+  } catch {
+    return undefined;
+  }
+}

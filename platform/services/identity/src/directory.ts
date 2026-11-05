@@ -396,7 +396,7 @@ export class KeycloakDirectory implements Directory {
     try {
       res = await this.fetchImpl(url, {
         method,
-        headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        headers: { authorization: `Bearer ${token}`, accept: 'application/json', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch {

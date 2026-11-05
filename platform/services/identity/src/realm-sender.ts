@@ -33,3 +33,43 @@ export const realmSenderFromDb = async (databaseUrl: string, warn: (message: str
     await client.end().catch(() => undefined);
   }
 };
+
+/** The idle-account days an admin set in Admin → Organisation, with the defaults for what they didn't. */
+export interface RealmIdle {
+  on: boolean;
+  warningDays: number;
+  turnOffDays: number;
+}
+
+/**
+ * Reads the idle-account days from identity's own tables, for the realm job (PER-194). The defaults when
+ * nothing is set, or on an identity older than the days; undefined when the database can't be read, and the
+ * job then leaves Keycloak's idle Workflow as it is.
+ */
+export const realmIdleFromDb = async (
+  databaseUrl: string,
+  defaults: RealmIdle,
+  warn: (message: string) => void = () => undefined,
+  schema = 'identity',
+): Promise<RealmIdle | undefined> => {
+  const client = new pg.Client({ connectionString: databaseUrl, connectionTimeoutMillis: 10_000 });
+  try {
+    await client.connect();
+    const { rows } = await client
+      .query<{ idle_on: boolean | null; idle_warning_days: number | null; idle_turn_off_days: number | null }>(
+        `select idle_on, idle_warning_days, idle_turn_off_days from ${schema}.organisation`,
+      )
+      .catch((err: { code?: string }) => {
+        // No table yet (first install), or an identity from before the idle days.
+        if (err.code === '42P01' || err.code === '42703') return { rows: [] };
+        throw err;
+      });
+    const r = rows[0];
+    return { on: r?.idle_on ?? defaults.on, warningDays: r?.idle_warning_days ?? defaults.warningDays, turnOffDays: r?.idle_turn_off_days ?? defaults.turnOffDays };
+  } catch (err) {
+    warn(`The idle-account days couldn’t be read (${(err as Error).message}), so Keycloak’s idle-account Workflow is left as it is.`);
+    return undefined;
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+};

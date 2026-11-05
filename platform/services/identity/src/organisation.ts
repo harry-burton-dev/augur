@@ -19,6 +19,14 @@ export const DEFAULT_TIME_ZONE = 'UTC';
 export const MAX_ORG_NAME = 100;
 export const MAX_SENDER_NAME = 100;
 
+/**
+ * Idle accounts (PER-194): after `warningDays` without a sign-in Keycloak emails the person, and at
+ * `turnOffDays` it turns their sign-in off. Every sign-in starts the count again. These are the defaults
+ * until an admin changes them; the bounds keep a warning at least a week before the turn-off.
+ */
+export const IDLE_DEFAULTS = { on: true, warningDays: 60, turnOffDays: 90 } as const;
+export const IDLE_BOUNDS = { minWarningDays: 7, minNoticeDays: 7, maxTurnOffDays: 730 } as const;
+
 /** The time zones an admin can choose: the IANA names this runtime knows, and UTC. */
 export const TIME_ZONES: readonly string[] = [...new Set(['UTC', ...Intl.supportedValuesOf('timeZone')])];
 const knownZone = (zone: string) => TIME_ZONES.includes(zone);
@@ -34,11 +42,22 @@ export const Sender = Type.Object(
   { additionalProperties: false },
 );
 
+export const Idle = Type.Object(
+  {
+    on: Type.Boolean({ description: 'Whether accounts nobody signs in to are warned and then turned off' }),
+    warningDays: Type.Integer({ minimum: IDLE_BOUNDS.minWarningDays, maximum: IDLE_BOUNDS.maxTurnOffDays - IDLE_BOUNDS.minNoticeDays, description: 'Days without a sign-in before the warning email' }),
+    turnOffDays: Type.Integer({ minimum: IDLE_BOUNDS.minWarningDays + IDLE_BOUNDS.minNoticeDays, maximum: IDLE_BOUNDS.maxTurnOffDays, description: `Days without a sign-in before their sign-in turns off: at least ${IDLE_BOUNDS.minNoticeDays} after the warning` }),
+  },
+  { additionalProperties: false, description: `Idle accounts. ${IDLE_DEFAULTS.warningDays} and ${IDLE_DEFAULTS.turnOffDays} days, on, until an admin changes them` },
+);
+export type Idle = Static<typeof Idle>;
+
 export const Organisation = Type.Object(
   {
     name: Type.String({ description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start" }),
     timeZone: Type.String({ description: `An IANA time zone, e.g. Europe/London. ${DEFAULT_TIME_ZONE} until an admin chooses one` }),
     sender: Sender,
+    idle: Idle,
     updatedAt: Type.Optional(Type.String({ format: 'date-time', description: 'When an admin last changed them' })),
     updatedBy: Type.Optional(Type.String({ description: 'Who last changed them' })),
   },
@@ -59,6 +78,7 @@ export const OrganisationChanges = Type.Object(
         { additionalProperties: false },
       ),
     ),
+    idle: Type.Optional(Type.Partial(Idle, { additionalProperties: false, minProperties: 1, description: 'Only what changes; the warning stays at least a week before the turn-off' })),
   },
   { additionalProperties: false, minProperties: 1, description: 'Only what changes' },
 );
@@ -69,6 +89,7 @@ interface Kept {
   timeZone?: string;
   senderName?: string;
   senderAddress?: string;
+  idle?: Partial<Idle>;
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -94,20 +115,49 @@ export const organisationMigrations: Migration[] = [
   },
 ];
 
+/** Added after identity's released migrations, so it runs after them. */
+export const organisationIdleMigrations: Migration[] = [
+  {
+    id: 'organisation_002_idle',
+    sql: `
+      -- Idle accounts (PER-194): unset means the default.
+      alter table identity.organisation
+        add column idle_on boolean,
+        add column idle_warning_days int,
+        add column idle_turn_off_days int;`,
+  },
+];
+
 /** On Postgres; the preference store runs the migrations. */
 export class PgOrganisationStore implements OrganisationStore {
   constructor(private readonly pool: pg.Pool) {}
 
   async get() {
-    const { rows } = await this.pool.query<{ time_zone: string | null; sender_name: string | null; sender_address: string | null; updated_at: Date | null; updated_by: string | null }>(
-      'select time_zone, sender_name, sender_address, updated_at, updated_by from identity.organisation',
-    );
+    const { rows } = await this.pool.query<{
+      time_zone: string | null;
+      sender_name: string | null;
+      sender_address: string | null;
+      idle_on: boolean | null;
+      idle_warning_days: number | null;
+      idle_turn_off_days: number | null;
+      updated_at: Date | null;
+      updated_by: string | null;
+    }>('select time_zone, sender_name, sender_address, idle_on, idle_warning_days, idle_turn_off_days, updated_at, updated_by from identity.organisation');
     const r = rows[0];
     if (!r) return {};
     return {
       ...(r.time_zone ? { timeZone: r.time_zone } : {}),
       ...(r.sender_name ? { senderName: r.sender_name } : {}),
       ...(r.sender_address ? { senderAddress: r.sender_address } : {}),
+      ...(r.idle_on !== null || r.idle_warning_days !== null || r.idle_turn_off_days !== null
+        ? {
+            idle: {
+              ...(r.idle_on !== null ? { on: r.idle_on } : {}),
+              ...(r.idle_warning_days !== null ? { warningDays: r.idle_warning_days } : {}),
+              ...(r.idle_turn_off_days !== null ? { turnOffDays: r.idle_turn_off_days } : {}),
+            },
+          }
+        : {}),
       ...(r.updated_at ? { updatedAt: r.updated_at.toISOString() } : {}),
       ...(r.updated_by ? { updatedBy: r.updated_by } : {}),
     };
@@ -115,10 +165,12 @@ export class PgOrganisationStore implements OrganisationStore {
 
   async put(k: Kept) {
     await this.pool.query(
-      `insert into identity.organisation (only_row, time_zone, sender_name, sender_address, updated_at, updated_by) values (true, $1, $2, $3, $4, $5)
+      `insert into identity.organisation (only_row, time_zone, sender_name, sender_address, idle_on, idle_warning_days, idle_turn_off_days, updated_at, updated_by)
+       values (true, $1, $2, $3, $4, $5, $6, $7, $8)
        on conflict (only_row) do update set time_zone = excluded.time_zone, sender_name = excluded.sender_name,
-         sender_address = excluded.sender_address, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
-      [k.timeZone ?? null, k.senderName ?? null, k.senderAddress ?? null, k.updatedAt ?? null, k.updatedBy ?? null],
+         sender_address = excluded.sender_address, idle_on = excluded.idle_on, idle_warning_days = excluded.idle_warning_days,
+         idle_turn_off_days = excluded.idle_turn_off_days, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
+      [k.timeZone ?? null, k.senderName ?? null, k.senderAddress ?? null, k.idle?.on ?? null, k.idle?.warningDays ?? null, k.idle?.turnOffDays ?? null, k.updatedAt ?? null, k.updatedBy ?? null],
     );
   }
 }
@@ -130,6 +182,7 @@ export const organisationSettings = async (workspaces: WorkspaceStore, store: Or
     name: org.name,
     timeZone: kept.timeZone && knownZone(kept.timeZone) ? kept.timeZone : DEFAULT_TIME_ZONE,
     sender: { name: kept.senderName ?? org.name, ...(kept.senderAddress ? { address: kept.senderAddress } : {}) },
+    idle: { ...IDLE_DEFAULTS, ...kept.idle },
     ...(kept.updatedAt ? { updatedAt: kept.updatedAt } : {}),
     ...(kept.updatedBy ? { updatedBy: kept.updatedBy } : {}),
   };
@@ -171,7 +224,7 @@ export const organisationRoutes =
       {
         onRequest: readers,
         schema: {
-          summary: "The organisation's name, time zone and email sender",
+          summary: "The organisation's name, time zone, email sender and idle-account days",
           description: 'For anyone signed in, and any service signed in as itself, so every part of AUGUR shows the same name and times (ADR 0042).',
           response: { 200: Organisation, 401: refused('Not signed in, and not a service'), 503: refused("Services' sign-ins can't be checked right now") },
         },
@@ -201,7 +254,7 @@ export const organisationRoutes =
           body: OrganisationChanges,
           response: {
             200: { ...Organisation, description: 'The settings now' },
-            400: refused('A name with a slash or only spaces, an unknown time zone, or a sender that is not one line or not an email address'),
+            400: refused('A name with a slash or only spaces, an unknown time zone, a sender that is not one line or not an email address, or idle days out of bounds or with less than a week between warning and turn-off'),
             401: refused('No signed-in caller'),
             403: refused('Not an admin'),
           },
@@ -213,6 +266,12 @@ export const organisationRoutes =
           return reply.code(400).send({ error: 'bad_request', message: `“${changes.timeZone}” isn’t a time zone AUGUR knows. Choose one from the list.` });
         }
         const before = await organisationSettings(workspaces, store);
+        if (changes.idle) {
+          const idle = { ...before.idle, ...changes.idle };
+          if (idle.turnOffDays - idle.warningDays < IDLE_BOUNDS.minNoticeDays) {
+            return reply.code(400).send({ error: 'bad_request', message: `Turn accounts off at least ${IDLE_BOUNDS.minNoticeDays} days after the warning, so people have time to sign in.` });
+          }
+        }
         const kept = await store.get();
         const actor = callerFromHeaders(req.headers)!.id;
         if (changes.name !== undefined && changes.name.trim() !== before.name) await workspaces.renameOrg(changes.name.trim());
@@ -220,11 +279,12 @@ export const organisationRoutes =
           ...kept,
           ...(changes.timeZone !== undefined ? { timeZone: changes.timeZone } : {}),
           ...(changes.sender ? { senderName: changes.sender.name.trim(), senderAddress: changes.sender.address ?? undefined } : {}),
+          ...(changes.idle ? { idle: { ...kept.idle, ...changes.idle } } : {}),
         };
         const after = await organisationSettings(workspaces, { get: async () => next, put: async () => undefined });
         const from: Record<string, unknown> = {};
         const to: Record<string, unknown> = {};
-        for (const key of ['name', 'timeZone', 'sender'] as const) {
+        for (const key of ['name', 'timeZone', 'sender', 'idle'] as const) {
           if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) {
             from[key] = before[key];
             to[key] = after[key];

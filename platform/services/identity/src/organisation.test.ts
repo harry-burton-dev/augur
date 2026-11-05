@@ -21,7 +21,7 @@ describe.runIf(DATABASE_URL)('organisation settings', () => {
     const { read } = await setup();
     const res = await read();
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ name: 'Seeded Org', timeZone: 'UTC', sender: { name: 'Seeded Org' } });
+    expect(res.json()).toEqual({ name: 'Seeded Org', timeZone: 'UTC', sender: { name: 'Seeded Org' }, idle: { on: true, warningDays: 60, turnOffDays: 90 } });
   });
 
   it('is only read by someone signed in or a service', async () => {
@@ -50,6 +50,25 @@ describe.runIf(DATABASE_URL)('organisation settings', () => {
     expect((await read()).json().sender).toEqual({ name: 'Acme', address: 'no-reply@acme.example' });
     await change({ sender: { name: 'Acme', address: null } });
     expect((await read()).json().sender).toEqual({ name: 'Acme' });
+  });
+
+  it('keeps the idle-account days an admin chooses, and only what they send', async () => {
+    const { change, read, audit } = await setup();
+    expect((await change({ idle: { turnOffDays: 120 } })).statusCode).toBe(200);
+    expect((await read()).json().idle).toEqual({ on: true, warningDays: 60, turnOffDays: 120 });
+    await change({ idle: { on: false } });
+    expect((await read()).json().idle).toEqual({ on: false, warningDays: 60, turnOffDays: 120 });
+    expect(audit.mock.calls[0][0].detail).toEqual({ from: { idle: { on: true, warningDays: 60, turnOffDays: 90 } }, to: { idle: { on: true, warningDays: 60, turnOffDays: 120 } } });
+  });
+
+  it('keeps the warning at least a week before the turn-off', async () => {
+    const { change } = await setup();
+    const res = await change({ idle: { warningDays: 85 } });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toMatch(/at least 7 days after the warning/);
+    expect((await change({ idle: { warningDays: 3 } })).statusCode).toBe(400);
+    expect((await change({ idle: { turnOffDays: 1000 } })).statusCode).toBe(400);
+    expect((await change({ idle: { warningDays: 83 } })).statusCode).toBe(200);
   });
 
   it('records nothing when nothing changes', async () => {

@@ -1,8 +1,9 @@
 import pg from 'pg';
 import { runMigrations, type Migration } from '@augur/service-kit';
-import { organisationMigrations } from './organisation.ts';
+import { organisationIdleMigrations, organisationMigrations } from './organisation.ts';
 import { signInMigrations } from './sign-ins.ts';
 import { lifecycleMigrations } from './lifecycle.ts';
+import { reconcileMigrations } from './reconcile.ts';
 import { workspaceMigrations } from './workspaces.ts';
 
 /** What someone has chosen for the shell. Every field is optional: what's missing takes the shell's default. */
@@ -60,6 +61,8 @@ export interface PreferenceStore {
   get(person: string): Promise<Preferences>;
   /** Replaces a person's preferences. */
   put(person: string, prefs: Preferences): Promise<void>;
+  /** Everyone who chose this digest in Account → Notifications. */
+  withDigest(digest: 'daily' | 'weekly'): Promise<string[]>;
   /** Their request to leave, if they have one open. */
   leaveRequest(person: string): Promise<LeaveRequest | undefined>;
   /** Records a request to leave, keeping the first one's time when they ask again. */
@@ -98,6 +101,8 @@ export const migrations: Migration[] = [
   ...organisationMigrations,
   ...signInMigrations,
   ...lifecycleMigrations,
+  ...reconcileMigrations,
+  ...organisationIdleMigrations,
 ];
 
 export class PgPreferenceStore implements PreferenceStore {
@@ -125,6 +130,11 @@ export class PgPreferenceStore implements PreferenceStore {
        on conflict (person) do update set prefs = excluded.prefs, updated_at = now()`,
       [person, prefs],
     );
+  }
+
+  async withDigest(digest: 'daily' | 'weekly') {
+    const { rows } = await this.pool.query<{ person: string }>("select person from identity.preferences where prefs->'notifications'->>'digest' = $1 order by person", [digest]);
+    return rows.map((r) => r.person);
   }
 
   async leaveRequest(person: string) {

@@ -67,6 +67,8 @@ describe('the notice template', () => {
       expect(text.toLowerCase()).toContain(words.toLowerCase());
     }
     expect(html).toContain('https://x.example/d');
+    expect(html).toContain('lang="en"');
+    expect((await renderNotice({ productName: 'Skein', heading: 'Prêt', lines: [], lang: 'fr' })).html).toContain('lang="fr"');
   });
 
   it('words an unknown relay error without leaking it', () => {

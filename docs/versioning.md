@@ -60,6 +60,8 @@ The apps that ship with AUGUR (Artifacts, Explorer, Data Atlas) release in their
 
 How the AUGUR version moves: a breaking change in any part bumps the major (the minor while in beta), a feature or a new part bumps the minor, and anything else the patch. A release that moves no part and no setting doesn't change it.
 
+Before a new minor or major is released, write its **What's new** for people in `platform/frontends/shell/src/account/whats-new.ts`: a few things they can now do, and where, in plain words, not the changelog. The shell shows it in Account → About and help, with the deployment's name for AUGUR in place of `{product}`. Patches keep their release's.
+
 When the Version packages PR merges, the workflow makes the GitHub release `augur@<version>`, marked as a pre-release while in beta. Its notes gather each changed part's changelog, the breaking changes and the new settings, and `augur-release.json` is attached for anything that checks for updates. This is what a deployment upgrades to ([upgrade.md](upgrade.md)).
 
 The Upgrade Centre reads these releases. The registry knows which release it ships in from `platform/services/registry/src/augur-version.ts`, which the same script writes beside the release file. A pre-release is on the **beta** channel; a release is made **stable** by the Promote to stable workflow ([release-channels.md](release-channels.md#promote-to-stable)), which takes off its pre-release mark. Deployments following stable see it at their next check.

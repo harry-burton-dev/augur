@@ -214,6 +214,8 @@ AUGUR's own services send email through one sender in the service kit (`@augur/s
 
 **Who email is from.** Admin → Organisation sets the sender: a name (the organisation's name until changed) and, optionally, an address. AUGUR's own email uses them within a minute. Keycloak's emails (password resets, address checks) use them from the next run of the realm job, which reads them from identity's database: run `pc up -d` after changing them. Without an address, email comes from `SMTP_FROM`. If the relay refuses the new address, Admin → Status says so.
 
+**Emails about people's security.** With a relay, Keycloak emails each person when their password, code app or passkeys change, from its own email listener, which the realm job turns on. Failed sign-ins aren't emailed. People see this in Account → Sign-in and security, which says where the emails go or why there are none. There is no switch to turn these emails off.
+
 On the local stack (`infra/docker-compose.yml`) every email goes to Mailpit instead, at http://localhost:8025, and never leaves your machine.
 
 ## Backups
