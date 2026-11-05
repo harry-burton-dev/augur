@@ -1,7 +1,9 @@
-import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceVerifierFromEnv } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { policyKeepDays, pruneActivity, untilNight } from './retention.ts';
 import { PgEventStore, type EventStore } from './store.ts';
+
+const log = startupLog('events');
 
 // Every setting events reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('events', [
@@ -31,7 +33,7 @@ const store: EventStore = await PgEventStore.connect(process.env.DATABASE_URL, {
 // Apps sign in as themselves and are held to what the registry grants them; events asks the registry as itself (platform-events).
 const { REGISTRY_URL = 'http://localhost:8082', IDENTITY_URL = 'http://localhost:8081' } = process.env;
 const credentials = platformCredentialsFromEnv('events');
-if (!credentials) console.warn('SERVICE_CLIENT_SECRET is not set: apps’ grants can’t be checked, so only platform services can notify or write the audit log.');
+if (!credentials) log.warn('SERVICE_CLIENT_SECRET is not set: apps’ grants can’t be checked, so only platform services can notify or write the audit log.');
 const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 // The inbox kinds each app's manifest declares; an item of another kind is refused.
 const inboxKinds = credentials ? registryInboxKinds({ registryUrl: REGISTRY_URL, credentials }) : undefined;

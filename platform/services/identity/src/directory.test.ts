@@ -77,3 +77,38 @@ describe('identity’s sign-in to Keycloak', () => {
     expect(admin).toEqual(['POST /users/u-1/logout', 'GET /users/u-1/consents', 'DELETE /users/u-1/consents/platform-shell', 'DELETE /users/u-1/consents/folio']);
   });
 });
+
+describe('invites through Keycloak', () => {
+  const signIn = { client: { id: 'platform-identity', secret: 's' } };
+
+  it('adds someone with no password who must confirm their email and choose one, then emails the link', async () => {
+    const { calls, fetchImpl } = keycloak((method, path) => {
+      if (method === 'GET' && path === '') return { smtpServer: { host: 'smtp.example.org' } };
+      if (method === 'GET' && path === '/users/u-9') return { id: 'u-9', username: 'jo', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', enabled: true, requiredActions: ['VERIFY_EMAIL', 'UPDATE_PASSWORD'] };
+      if (method === 'GET') return [];
+      return undefined;
+    });
+    const located = (async (input: string | URL, init?: RequestInit) => {
+      const res = await fetchImpl(input, init);
+      return init?.method === 'POST' && String(input).endsWith('/users') ? new Response(null, { status: 201, headers: { location: 'http://kc/admin/realms/platform/users/u-9' } }) : res;
+    }) as typeof fetch;
+    const directory = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, invite: { clientId: 'shell', redirectUri: 'https://augur.example.org/' }, fetchImpl: located });
+    expect(await directory.canEmail()).toBe(true);
+    const made = await directory.createPerson({ username: 'jo', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: [], departments: [] });
+    expect(made.invited).toBe(true);
+    const created = JSON.parse(calls.find((c) => c.method === 'POST' && c.url.endsWith('/users'))!.body!);
+    expect(created).toMatchObject({ emailVerified: false, requiredActions: ['VERIFY_EMAIL', 'UPDATE_PASSWORD'] });
+    expect(created.credentials).toBeUndefined();
+
+    await directory.sendInvite('u-9', 72 * 3600);
+    const sent = calls.find((c) => c.url.includes('/execute-actions-email'))!;
+    expect(sent.method).toBe('PUT');
+    expect(Object.fromEntries(new URL(sent.url).searchParams)).toEqual({ lifespan: '259200', client_id: 'shell', redirect_uri: 'https://augur.example.org/' });
+    expect(JSON.parse(sent.body!)).toEqual(['VERIFY_EMAIL', 'UPDATE_PASSWORD']);
+  });
+
+  it('says email can’t be sent when the realm has no relay', async () => {
+    const { fetchImpl } = keycloak(() => ({}));
+    expect(await new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl }).canEmail()).toBe(false);
+  });
+});
