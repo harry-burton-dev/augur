@@ -10,8 +10,8 @@ import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import semver from 'semver';
+import { REPO } from './repo.mjs';
 
-const REPO = process.env.GITHUB_REPOSITORY ?? 'harry-burton-dev/augur';
 const UNIT = /^(augur|[a-z][a-z0-9-]{1,39})$/;
 
 /** The release's tag: augur@<version>, or app/<id>@<version>. */
