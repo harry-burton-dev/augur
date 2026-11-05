@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GrantsUnavailable, registryGrants, registryInboxKinds } from './grants.js';
+import { GrantsUnavailable, registryGrants, registryInboxKinds, registryNotificationKinds } from './grants.js';
 
 describe('registry grants', () => {
   it('asks once per app and floor while the answer is fresh, as a platform service', async () => {
@@ -33,5 +33,7 @@ describe('registry grants', () => {
     expect(await registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer(null, 404) })('nope')).toEqual([]);
     expect(await registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [] }) })('library')).toBeUndefined();
     await expect(registryInboxKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer(null, 502) })('library')).rejects.toBeInstanceOf(GrantsUnavailable);
+    expect(await registryNotificationKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [], inboxKinds: ['review'], notificationKinds: ['comment'] }) })('library')).toEqual(['comment']);
+    expect(await registryNotificationKinds({ registryUrl: 'http://registry', credentials, fetchImpl: answer({ scopes: [], inboxKinds: [] }) })('library')).toBeUndefined();
   });
 });

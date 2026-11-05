@@ -43,7 +43,7 @@ export default defineConfig({
             timeout: 60_000,
             stdout: 'ignore' as const,
             stderr: 'pipe' as const,
-            env: { ...(process.env as Record<string, string>), PORT: String(folioPort), NODE_ENV: 'development' },
+            env: { ...(process.env as Record<string, string>), PORT: String(folioPort), NODE_ENV: 'development', AUGUR_INSECURE_DEV_CALLERS: '1' },
           },
         ]
       : []),
