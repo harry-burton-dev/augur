@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, PLATFORM_ROLES, SIGN_IN_FLOW, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
 import type { AppClients } from './clients.ts';
 
@@ -390,6 +391,102 @@ export const applyServiceAccountRights = async (kc: KeycloakDirectory, clientId:
   }
 };
 
+/** How the realm sends email: the organisation's own SMTP relay (ADR 0035). */
+export interface RealmMail {
+  host: string;
+  port: number;
+  /** STARTTLS after connecting (587), TLS from the start (465), or neither (a relay on the same trusted network). */
+  security: 'starttls' | 'tls' | 'none';
+  from: string;
+  replyTo?: string;
+  user?: string;
+  password?: string;
+}
+
+/** Where the relay's settings are kept in the realm's attributes, so a changed password is noticed without reading it back. */
+export const MAIL_FINGERPRINT = 'augurSmtpFingerprint';
+
+const MAIL_SECURITY = ['starttls', 'tls', 'none'] as const;
+
+/**
+ * The relay from a deployment's environment: SMTP_HOST and SMTP_FROM, with SMTP_PORT, SMTP_SECURITY,
+ * SMTP_USER, SMTP_PASSWORD and SMTP_REPLY_TO. Undefined without a host, so a deployment with no relay
+ * keeps working and its screens say email is off.
+ */
+export const realmMailFromEnv = (env: Record<string, string | undefined>, warn: (message: string) => void = () => undefined): RealmMail | undefined => {
+  const host = env.SMTP_HOST?.trim();
+  if (!host) return undefined;
+  const from = env.SMTP_FROM?.trim();
+  if (!from || !/^[^\s@]+@[^\s@]+$/.test(from)) {
+    warn(`SMTP_HOST is set but SMTP_FROM ${from ? `(${from}) isn't an email address` : 'is empty'}, so the realm sends no email. Set SMTP_FROM to the address mail comes from.`);
+    return undefined;
+  }
+  const askedSecurity = env.SMTP_SECURITY?.trim().toLowerCase();
+  const askedPort = env.SMTP_PORT?.trim();
+  const port = askedPort ? Number(askedPort) : undefined;
+  if (askedPort && (!Number.isInteger(port) || port! < 1 || port! > 65535)) {
+    warn(`SMTP_PORT ${askedPort} isn't a port, so the realm sends no email.`);
+    return undefined;
+  }
+  let security: RealmMail['security'];
+  if (!askedSecurity) security = port === 465 ? 'tls' : 'starttls';
+  else if ((MAIL_SECURITY as readonly string[]).includes(askedSecurity)) security = askedSecurity as RealmMail['security'];
+  else {
+    warn(`SMTP_SECURITY ${askedSecurity} is none of ${MAIL_SECURITY.join(', ')}, so the realm sends no email.`);
+    return undefined;
+  }
+  const user = env.SMTP_USER?.trim() || undefined;
+  const password = env.SMTP_PASSWORD || undefined;
+  if (password && !user) warn('SMTP_PASSWORD is set without SMTP_USER, so the relay is used without signing in.');
+  const replyTo = env.SMTP_REPLY_TO?.trim() || undefined;
+  return { host, port: port ?? (security === 'tls' ? 465 : security === 'starttls' ? 587 : 25), security, from, ...(replyTo ? { replyTo } : {}), ...(user ? { user, ...(password ? { password } : {}) } : {}) };
+};
+
+/** Keycloak's smtpServer for a relay. Its values are all strings; `fromDisplayName` is the product's name, never a literal. */
+export const smtpServer = (mail: RealmMail, productName?: string): Record<string, string> => ({
+  host: mail.host,
+  port: String(mail.port),
+  from: mail.from,
+  ...(productName ? { fromDisplayName: productName } : {}),
+  ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
+  starttls: String(mail.security === 'starttls'),
+  ssl: String(mail.security === 'tls'),
+  auth: String(Boolean(mail.user)),
+  ...(mail.user ? { user: mail.user } : {}),
+  ...(mail.password ? { password: mail.password } : {}),
+});
+
+/** A fingerprint of everything the relay is set to, the password included, that never reveals it. */
+export const mailFingerprint = (server: Record<string, string>) =>
+  createHash('sha256').update(JSON.stringify(Object.entries(server).sort(([a], [b]) => a.localeCompare(b)))).digest('hex').slice(0, 32);
+
+/**
+ * Points the realm at the organisation's relay and, with one, turns on what needs email: verifying an
+ * address and resetting a forgotten password. Without `mail` the relay set in Keycloak's console (if any)
+ * is left as it is, and those two follow whether the realm has one, so a deployment never offers a reset
+ * link it can't send.
+ */
+export const applyMail = async (kc: KeycloakDirectory, mail: RealmMail | undefined, changes: Changes, productName?: string) => {
+  const { data: realm } = await kc.call<Record<string, unknown> & { smtpServer?: Record<string, string>; attributes?: Record<string, string> }>('GET', '');
+  const want: Record<string, unknown> = {};
+  let attributes: Record<string, string> | undefined;
+  if (mail) {
+    const server = smtpServer(mail, productName);
+    const fingerprint = mailFingerprint(server);
+    if (realm.attributes?.[MAIL_FINGERPRINT] !== fingerprint || realm.smtpServer?.host !== mail.host) {
+      want.smtpServer = server;
+      attributes = { ...realm.attributes, [MAIL_FINGERPRINT]: fingerprint };
+    }
+  }
+  const canSend = Boolean(mail ?? realm.smtpServer?.host);
+  if (realm.verifyEmail !== canSend) want.verifyEmail = canSend;
+  if (realm.resetPasswordAllowed !== canSend) want.resetPasswordAllowed = canSend;
+  const differs = Object.keys(want);
+  if (!differs.length) return;
+  await kc.call('PUT', '', { ...want, ...(attributes ? { attributes } : {}) });
+  changes.push(`email: ${differs.map((k) => (k === 'smtpServer' ? `relay ${mail!.host}:${mail!.port}` : `${k} ${want[k] ? 'on' : 'off'}`)).join(', ')}`);
+};
+
 export interface ApplyOptions {
   settings: RealmSettings;
   /** The product's name (`productNameFromEnv`), set as the realm's display name. */
@@ -405,6 +502,8 @@ export interface ApplyOptions {
   clients: AppClients;
   /** Given the deployment-admin role when nobody holds it. */
   firstAdmin?: string;
+  /** The organisation's relay (`realmMailFromEnv`); without it, a relay set in the console is kept. */
+  mail?: RealmMail;
 }
 
 /**
@@ -415,6 +514,7 @@ export const applyRealm = async (kc: KeycloakDirectory, options: ApplyOptions): 
   const changes: Changes = [];
   await applyRealmSettings(kc, options.settings, changes, options.productName);
   if (options.look) await applyLook(kc, options.look, changes, options.warn);
+  await applyMail(kc, options.mail, changes, options.productName);
   await applyRequiredActions(kc, changes);
   await applyRoles(kc, changes);
   await applyUserProfile(kc, changes);
