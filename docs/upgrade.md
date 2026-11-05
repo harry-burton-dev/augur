@@ -58,6 +58,16 @@ Every release has been through the [deploy test](deploy-test.md) in CI: the rele
 
 Admin → Organisation now holds the organisation's name, time zone and email sender (ADR 0042). Nothing to do: the name your server already shows, which came from `ORG_NAME` at first start, stays as it is, and the time zone starts as UTC. From this release identity ignores a changed `ORG_NAME`: change the name in Admin instead. The sign-in pages still show `ORG_NAME` for now, so keep the two the same.
 
+### Mandate ships with AUGUR
+
+Mandate, intent passed down the floors, now ships with every release like Artifacts, Explorer and Data Atlas: a new container, `mandate`, at the release `release/shipped-apps.json` pins. Admin → Apps no longer lists it as something to install, and it's upgraded with AUGUR from now on.
+
+New settings: `MANDATE_CLIENT_SECRET` and `MANDATE_DATABASE_PASSWORD` (required), and `MANDATE_BUCKET_SECRET` (optional). The updater makes them up when you upgrade from the Upgrade Centre; by hand, add them to `.env` (`openssl rand -hex 32`) before `pc up -d`.
+
+**A server whose app runner installed Mandate keeps its data.** AUGUR's container uses the same database login and schema (`app_mandate`) and the same sign-in (`app-mandate`) the runner gave it: the storage job sets the login's password, and the realm job the sign-in's secret, to the new values, and the aims and parts already there stay. Once the new updater starts, it stops the runner's own Mandate containers (`app-mandate-blue` or `-green`, Activity names them) and forgets them, so AUGUR's is the only one. Nothing to do yourself.
+
+Going back to a release before this one: Mandate's data stays in the database, and Admin → Apps lists it as installed again, at the version it had, but nothing runs it. Install that version again there and the runner starts it on the same data.
+
 ### Settings the guides named now reach their services
 
 Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([deploy.md](deploy.md#settings-and-secrets)).
