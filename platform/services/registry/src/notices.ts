@@ -56,12 +56,15 @@ const resultNotice = (u: UnitOverview, now: Date): NewNotification | undefined =
   if (r.state === 'rolled-back') {
     return news(u, { audience: HEARS, key, level: 'failed', title: `${u.name} went back to ${r.from ?? u.running} by itself`, detail: r.message ?? `The upgrade to ${version} didn’t finish.` });
   }
+  // A go-back that didn't finish leaves the server on neither version: it stops work (ADR 0044 D3).
+  const goingBack = r.from && semver.valid(r.from) && semver.valid(version) && semver.lt(version, r.from);
+  if (goingBack) return news(u, { audience: HEARS, key, level: 'failed', urgent: true, title: `${u.name} didn’t go back to ${version}`, detail: r.message ?? 'It stopped partway. The Upgrade Centre has the steps.' });
   return news(u, { audience: HEARS, key, level: 'failed', title: `${u.name} ${version} didn’t install`, detail: r.message ?? 'It stopped partway. The Upgrade Centre has the steps.' });
 };
 
-/** The publisher halted the release a unit runs: once per release. */
+/** The publisher halted the release a unit runs: once per release. It stops work, so it's urgent (ADR 0044 D3). */
 const haltNotice = (u: UnitOverview): NewNotification | undefined =>
-  u.halted ? news(u, { audience: ACTS, key: `halted:${u.unit}:${u.running}`, level: 'needs', title: `${u.name} ${u.running} was halted by its publisher`, detail: u.halted.reason }) : undefined;
+  u.halted ? news(u, { audience: ACTS, key: `halted:${u.unit}:${u.running}`, level: 'needs', urgent: true, title: `${u.name} ${u.running} was halted by its publisher`, detail: u.halted.reason }) : undefined;
 
 /** Everything worth telling from the overview now. Each has a key, so sending it again tells no one twice. Pure, for tests. */
 export const noticesFrom = (overview: Overview, now: Date): NewNotification[] =>

@@ -10,7 +10,8 @@
     "008_notification_kinds": "6eea4513b4123b12",
     "009_audit_by_person": "7d6352a8630b9708",
     "010_notice_emails": "56f06c7c00f0d2c8",
-    "011_digests": "0fdd27773ffaa592"
+    "011_digests": "0fdd27773ffaa592",
+    "012_urgent_notifications": "9929126422bfbecd"
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",

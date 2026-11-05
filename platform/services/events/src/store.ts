@@ -26,6 +26,8 @@ export interface Notification {
   key?: string;
   /** One of the app's `notifications.kinds`. */
   kind?: string;
+  /** Platform news that stops work (ADR 0044 D3): the shell may letterbox it. Only platform services send it. */
+  urgent?: boolean;
   createdAt: string;
   readAt?: string;
   /** The floor it's from; none for one about the platform as a whole. */
@@ -292,6 +294,12 @@ export const migrations: Migration[] = [
   },
   emailMigration,
   digestMigration,
+  {
+    id: '012_urgent_notifications',
+    sql: `
+      -- Platform news that stops work (ADR 0044 D3): the shell may letterbox it.
+      alter table events.notifications add column urgent boolean not null default false;`,
+  },
 ];
 
 const CHANNEL = 'events_notification';
@@ -310,6 +318,7 @@ type NotificationRow = {
   actions: NotificationAction[] | null;
   key: string | null;
   kind: string | null;
+  urgent: boolean | null;
   created_at: Date;
   read_at: Date | null;
   workspace_id: string | null;
@@ -342,6 +351,7 @@ const fromRow = (r: NotificationRow): Notification => ({
   ...(r.actions?.length ? { actions: r.actions } : {}),
   ...(r.key ? { key: r.key } : {}),
   ...(r.kind ? { kind: r.kind } : {}),
+  ...(r.urgent ? { urgent: true } : {}),
   createdAt: r.created_at.toISOString(),
   ...(r.read_at ? { readAt: r.read_at.toISOString() } : {}),
   ...floorFrom(r.workspace_id, r.workspace_path),
@@ -465,11 +475,11 @@ export class PgEventStore implements EventStore {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
         // One that needs someone is due to be emailed at once; the notice-emails job decides whether, and when.
-        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind, email_due)
-         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, case when $3 = 'needs' then now() end from unnest($1::text[]) as r
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind, email_due, urgent)
+         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, case when $3 = 'needs' then now() end, $12 from unnest($1::text[]) as r
          on conflict (recipient, app, key) where key is not null do nothing
          returning *`,
-        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null, n.kind ?? null],
+        [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null, n.kind ?? null, !!n.urgent],
       );
       const added = rows.map(fromRow);
       // Delivered when the transaction commits. Postgres caps a payload at 8000 bytes; a bigger one goes by id.

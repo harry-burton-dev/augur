@@ -1040,6 +1040,7 @@ export interface NewNotification {
     // (undocumented)
     title: string;
     toTeam?: boolean;
+    urgent?: boolean;
 }
 
 // @public (undocumented)

@@ -262,7 +262,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             response: {
               202: Type.Object({ sent: Type.Integer() }, { description: 'Sent, one notification per recipient' }),
               400: refused('Invalid notification, an unknown floor, or toTeam not on a team'),
-              403: refused('Not a signed-in service, not granted this, or team notices are off'),
+              403: refused('Not a signed-in service, not granted this, team notices are off, or urgent or an audience from an app'),
               503: refused("Floors, grants or an audience can't be checked right now"),
             },
           },
@@ -288,6 +288,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             return reply.code(400).send({ error: 'bad_request', message: `${notification.app} doesn’t declare the notification kind "${notification.kind}" in its manifest (notifications.kinds).` });
           }
         }
+        // Urgent is AUGUR's own (ADR 0044 D3): an app can't make its news stop everyone's work.
+        if (notification.urgent && service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send urgent notifications.' });
         if (principals) {
           // Reaching people by role or across the org is AUGUR's own: an app names the people it means.
           if (service.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services send to an audience. Name the recipients.' });

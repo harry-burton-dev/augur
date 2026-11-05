@@ -17,7 +17,7 @@
     "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.11.0",
     "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.9.0",
     "@augur/mfe-sdk": "workspace:*",
-    "@augur/shell-kit": "npm:@harry-burton-dev/augur-shell-kit@^0.7.0",
+    "@augur/shell-kit": "npm:@harry-burton-dev/augur-shell-kit@^0.7.1",
     "@grafana/faro-transport-otlp-http": "^2.13.0",
     "@grafana/faro-web-sdk": "^2.13.0",
     "@grafana/faro-web-tracing": "^2.13.0",

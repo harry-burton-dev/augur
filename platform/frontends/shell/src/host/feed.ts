@@ -18,6 +18,8 @@ export interface ServerNotification {
   actions?: NotificationAction[];
   /** One of the app's `notifications.kinds`. */
   kind?: string;
+  /** News that stops work, from a platform service (ADR 0044 D3): letterboxed when the sender's `urgent-letterbox` preview is on. */
+  urgent?: boolean;
 }
 
 /** The kinds of notification a person made quiet, as "<app>:<kind>" (their `quietKinds`). */
