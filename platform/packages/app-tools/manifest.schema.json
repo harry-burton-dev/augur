@@ -277,6 +277,29 @@
       "additionalProperties": false,
       "description": "The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)"
     },
+    "links": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "boolean",
+          "description": "The app binds its things to entities and publishes the binding events (ADR 0066), so the entity catalogue follows them"
+        }
+      },
+      "additionalProperties": false,
+      "description": "What the app links its things to elsewhere in AUGUR (SDK 2.1)"
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]{0,39}$",
+        "description": "A type of thing the app binds, as it names it in its topics: \"intent\""
+      },
+      "minItems": 1,
+      "maxItems": 10,
+      "uniqueItems": true,
+      "description": "With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound (SDK 2.1)"
+    },
     "scopes": {
       "type": "array",
       "items": {

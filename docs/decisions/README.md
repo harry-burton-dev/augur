@@ -66,10 +66,12 @@ Product, naming and process decisions live in the AUGUR handbook on Google Drive
 | [0058](0058-editor-on-tiptap.md) | Quill's Editor is built on Tiptap, and keeps writing the same small Markdown | Accepted | 2026-11-04 |
 | [0059](0059-grafana-alerting-and-faro.md) | A deployment watches itself with Grafana alerting as files and Faro in the shell, and Backstage watches for silence | Proposed | 2026-11-04 |
 | [0060](0060-off-server-backups-with-restic.md) | Backups are copied off the server with restic, encrypted on the server, to a bucket each deployment names | Proposed | 2026-11-04 |
+| [0062](0062-ontology-checks-with-shacl.md) | Data Atlas checks what it keeps against SHACL shapes, with rdf-validate-shacl | Proposed | 2026-11-05 |
 | [0063](0063-accessibility-checked-by-axe.md) | Accessibility is checked by axe in CI, failing on serious findings | Proposed | 2026-11-04 |
 | [0064](0064-point-in-time-restore-with-postgres-wal-archiving.md) | The database can be restored to a point in time: Postgres archives its WAL, and restic copies it off the server | Proposed | 2026-11-05 |
 | [0065](0065-mail-through-nodemailer-react-email-and-mailpit.md) | AUGUR's own email is sent by Nodemailer from React Email templates, and Mailpit catches it in dev | Accepted | 2026-11-05 |
 | [0066](0066-binding-events-name-the-thing.md) | Binding events name the thing: `<app>.<type>.entity-bound` | Proposed | 2026-11-05 |
 | [0067](0067-update-control-stays-in-the-registry-behind-a-seam.md) | Update control stays in the registry for now, behind a checked seam, and leaves as its own service | Proposed | 2026-11-05 |
+| [0068](0068-a-deployment-chooses-how-depth-is-drawn.md) | A deployment chooses how depth is drawn, and scrim blurs nothing | Proposed | 2026-11-05 |
 
 New record: copy [template.md](template.md), take the next number, add a row here, and add it to the Drive register.
