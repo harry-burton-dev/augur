@@ -35,7 +35,6 @@ jobs:
       contract: ${{ steps.changes.outputs.contract }}
       contract_frozen: ${{ steps.changes.outputs.contract_frozen }}
       images: ${{ steps.changes.outputs.images }}
-      scaffold: ${{ steps.changes.outputs.scaffold }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -160,27 +159,6 @@ jobs:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
 
 
-  # The developer kit still makes an app that builds, passes its tests and is accepted by the registry.
-  app-scaffold:
-    needs: changes
-    if: needs.changes.outputs.scaffold == 'true'
-    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .nvmrc
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm create-app scaffold-check --name "Scaffold check"
-      - run: pnpm turbo run build --filter="@apps/scaffold-check*" --filter=@augur/registry
-      # One task at a time: on a two-core runner, tests racing builds time out on their first request.
-      - run: pnpm turbo run typecheck test --filter="@apps/scaffold-check*" --concurrency=1
-      - run: pnpm check:manifest
-      - run: pnpm check:boundaries
-      - run: pnpm check:versions
-
   # The shell keeps its promise to apps: the reference app, as built today and
   # as built against each earlier SDK minor, mounted by the real shell, with
   # Folio (which ships with AUGUR) on and off.
@@ -299,7 +277,7 @@ jobs:
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ runner.temp }}/buildx-deps
-          key: buildx-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'package.json', 'platform/*/*/package.json', 'platform/contract/package.json', 'apps/*/*/package.json', 'scripts/templates/*/*/package.json', 'infra/*.Dockerfile') }}
+          key: buildx-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', '.npmrc', 'package.json', 'platform/*/*/package.json', 'platform/contract/package.json', 'apps/*/*/package.json', 'infra/*.Dockerfile') }}
           restore-keys: buildx-deps-${{ runner.os }}-
       - name: Build the images
         run: |

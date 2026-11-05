@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { withDeadline } from '@augur/service-kit';
 
 /**
  * The few calls to Garage's admin API (v2) that give each app a bucket and a key
@@ -34,7 +35,7 @@ export class GarageError extends Error {
 
 export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) => {
   const call = async <T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> => {
-    const res = await fetchImpl(`${url.replace(/\/+$/, '')}/v2/${path}`, {
+    const res = await withDeadline(fetchImpl, 15_000)(`${url.replace(/\/+$/, '')}/v2/${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json' } : {}) },
       body: body ? JSON.stringify(body) : undefined,
