@@ -29,6 +29,17 @@ The shell loads the person's unread list, then follows the stream (`GET /api/eve
 
 People choose in the shell's Settings: Away, muted apps, and toasts (off by default). Muting an app quiets its pulses and toasts; its notifications stay in the list.
 
+## Email
+
+A notification that needs someone (`needs`) is also emailed to them (ADR 0044, D7), so they hear of it away from AUGUR. Once a minute the events service's `notice-emails` job (service-kit jobs, one run per tick across instances) takes what is due and asks identity how each person wants their notices (`GET /v1/notice-settings`, which only the events service may call). It reads them at send time, so a choice made after the notification arrived still counts. Then, for each one:
+
+- **Skipped, saying why,** when the person has no confirmed address, turned email off, muted the app, set the notification's kind to Quiet, or read it in AUGUR first. Also when there is no mail relay, so setting one later doesn't send a backlog, and when it is over a day old by the time it could go.
+- **Put off** while it is inside their quiet hours, in their time zone (else the organisation's), and sent when they end.
+- **Sent** through the organisation's relay with `@augur/service-kit/mail`, from the organisation's sender (Admin, Organisation). The subject is the notification's title and the body its detail. Its link opens the notification in AUGUR (`PLATFORM_URL/?notice=<id>`), on its floor. The words around it are in the person's language, falling back to English (`EMAIL_WORDS` in the events service).
+- **Tried again** in 5 minutes when the relay refuses it, and skipped after 5 tries.
+
+Each notification keeps how its email ended (`emailed_at`, or `email_skipped` and why), for anyone looking into one that didn't arrive. The events service needs `PLATFORM_URL` and the `SMTP_*` settings (docs/deploy.md, Email); without a relay it logs that no notice is emailed. Other levels aren't emailed one by one.
+
 ## What AUGUR itself tells people
 
 The registry tells people about updates, from the Upgrade Centre's overview, once a minute:

@@ -1,5 +1,7 @@
-import { callerCheckFromEnv, commonSettings, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, createJobs, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
+import { Mailer, mailRelayFromEnv, organisationSender } from '@augur/service-kit/mail';
 import { buildApp } from './app.ts';
+import { identityNoticeSettings, sendDueEmails } from './notice-emails.ts';
 import { policyKeepDays, pruneActivity, untilNight } from './retention.ts';
 import { PgEventStore, type EventStore } from './store.ts';
 
@@ -17,6 +19,14 @@ loadConfigOrExit('events', [
   { name: 'DOMAIN_EVENTS_KEEP_DAYS', about: 'how many days apps’ domain events are kept (default 30).' },
   { name: 'INBOX_KEEP_DAYS', about: 'how many days closed inbox items are kept (default 90).' },
   { name: 'INBOX_DONE_DAYS', about: 'how many days back the Inbox’s Done tab looks (default 30).' },
+  { name: 'PLATFORM_URL', about: 'AUGUR’s address, for the link back in notice emails.' },
+  { name: 'ORG_PRODUCT_NAME', about: 'what people call the product, in notice emails (default AUGUR).' },
+  { name: 'SMTP_HOST', about: 'the organisation’s mail relay; without one, no notice is emailed and Account says why.' },
+  { name: 'SMTP_PORT', about: 'the relay’s port.' },
+  { name: 'SMTP_SECURITY', about: 'starttls, tls or none.' },
+  { name: 'SMTP_FROM', about: 'the address mail comes from until an admin sets the organisation’s sender.' },
+  { name: 'SMTP_USER', about: 'the relay sign-in, when it needs one.' },
+  { name: 'SMTP_PASSWORD', about: 'the relay password.', secret: true },
 ]);
 
 const port = Number(process.env.PORT ?? 8084);
@@ -83,3 +93,22 @@ setTimeout(() => {
   void pruneOld();
   setInterval(pruneOld, 86_400_000).unref();
 }, untilNight()).unref();
+
+// Notices that need someone are emailed to them (ADR 0044, D7): once a minute, across every instance, the
+// notice-emails job sends what is due, as each person chose in Account → Notifications. From the organisation's sender.
+const mailer = new Mailer({
+  relay: mailRelayFromEnv(process.env, (message) => log.warn(message)),
+  productName: process.env.ORG_PRODUCT_NAME || 'AUGUR',
+  sender: credentials ? organisationSender({ identityUrl: IDENTITY_URL, headers: () => serviceHeaders(credentials), warn: (message) => log.warn(message) }) : undefined,
+});
+if (!mailer.configured) log.warn('SMTP_HOST is not set: no notice is emailed, and Account says why.');
+if (!process.env.PLATFORM_URL) log.warn('PLATFORM_URL is not set: notice emails go without a link back to AUGUR.');
+const jobs = createJobs({ app: 'events', databaseUrl: process.env.DATABASE_URL, log: app.log });
+if (credentials) {
+  const settings = identityNoticeSettings({ identityUrl: IDENTITY_URL, credentials });
+  jobs.schedule('notice-emails', '* * * * *', async () => {
+    const done = await sendDueEmails({ outbox: store.emails, settings, mailer, platformUrl: process.env.PLATFORM_URL, log: app.log });
+    if (done.sent || done.failed) app.log.info(done, 'notice emails');
+  });
+} else log.warn('SERVICE_CLIENT_SECRET is not set: identity can’t be asked how people want notices, so none is emailed.');
+await jobs.launch();

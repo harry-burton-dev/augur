@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
+import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
 import { PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
@@ -141,6 +142,8 @@ export const topicMatches = (topic: string, wanted: string[]) =>
 export interface EventStore {
   /** The Inbox's items (ADR 0026), in the same database. */
   readonly inbox: InboxStore;
+  /** The notifications waiting to be emailed (ADR 0044, D7). */
+  readonly emails: EmailOutbox;
   /**
    * Adds one notification per recipient and tells every listener, on every instance.
    * With a key, skips anyone who already has one from that app with that key.
@@ -282,6 +285,7 @@ export const migrations: Migration[] = [
       create index audit_target on events.audit (target, at desc);
       create index audit_detail_person on events.audit ((detail->>'person'));`,
   },
+  emailMigration,
 ];
 
 const CHANNEL = 'events_notification';
@@ -372,12 +376,14 @@ export class PgEventStore implements EventStore {
   private listening?: pg.PoolClient;
   private closed = false;
   readonly inbox: PgInboxStore;
+  readonly emails: PgEmailOutbox;
 
   constructor(
     private readonly pool: pg.Pool,
     options: { inboxDoneDays?: number } = {},
   ) {
     this.inbox = new PgInboxStore(pool, options.inboxDoneDays);
+    this.emails = new PgEmailOutbox(pool);
   }
 
   static async connect(connectionString: string, options: { inboxDoneDays?: number } = {}) {
@@ -450,8 +456,9 @@ export class PgEventStore implements EventStore {
     try {
       await client.query('begin');
       const { rows } = await client.query<NotificationRow>(
-        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind)
-         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11 from unnest($1::text[]) as r
+        // One that needs someone is due to be emailed at once; the notice-emails job decides whether, and when.
+        `insert into events.notifications (recipient, app, level, title, detail, link, workspace_id, workspace_path, actions, key, kind, email_due)
+         select r, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, case when $3 = 'needs' then now() end from unnest($1::text[]) as r
          on conflict (recipient, app, key) where key is not null do nothing
          returning *`,
         [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null, n.kind ?? null],

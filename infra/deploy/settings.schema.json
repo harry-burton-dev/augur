@@ -96,7 +96,8 @@
       "x-services": [
         "web",
         "keycloak",
-        "registry"
+        "registry",
+        "events"
       ],
       "x-via": {
         "updater": ".env"
@@ -527,7 +528,8 @@
       "default": "AUGUR",
       "x-services": [
         "web",
-        "keycloak-config"
+        "keycloak-config",
+        "events"
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
@@ -537,7 +539,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -547,7 +550,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -557,7 +561,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -567,7 +572,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -586,7 +592,8 @@
       "default": "",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
@@ -596,7 +603,8 @@
       "description": "That sign-in's password.",
       "x-services": [
         "keycloak-config",
-        "gateway"
+        "gateway",
+        "events"
       ],
       "x-docs": "docs/deploy.md#email"
     },
