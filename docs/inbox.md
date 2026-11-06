@@ -96,8 +96,10 @@ Follow `platform.inbox.*` with `events:subscribe` and skip other apps' items by 
 
 ## Live in the shell
 
-The shell's notification stream (`/v1/notifications/stream`) also carries events named `inbox`, `{ id, change }` with `change` being `added`, `changed` or `closed`, to everyone who can see the item, before and after the change. The shell reloads its count, and the list if it's showing. Across instances it rides Postgres `LISTEN/NOTIFY` on `events_inbox`.
+The shell's notification stream (`/v1/notifications/stream`) also carries events named `inbox`, `{ id, change }` with `change` being `added`, `changed` or `closed`, to everyone who can see the item, before and after the change. The shell reloads its count, and the list if it's showing. Across instances it rides Postgres `LISTEN/NOTIFY` on `events_inbox`, which carries only the id of the history line: who may hear is read back from there.
 
 ## How long items are kept
+
+A step, its audit entry and its domain event are one transaction, so a step that failed changed nothing and can be tried again. When someone's account is deleted, the notes they left on items are blanked, and open items that were theirs are withdrawn, so hand them on from `platform.person.left`.
 
 Closed items are kept for 90 days (`INBOX_KEEP_DAYS` in `.env` changes it), then removed with their history by the events service's hourly prune. The audit log keeps every step. The Done tab shows items closed in the last 30 days (`INBOX_DONE_DAYS` changes it; keep it at most `INBOX_KEEP_DAYS`). `GET /v1/inbox/counts` says the window as `doneDays`, and the shell's empty Done tab reads the number from there.
