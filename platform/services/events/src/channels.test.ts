@@ -2,7 +2,8 @@ import { EventEmitter } from 'node:events';
 import type pg from 'pg';
 import { describe, expect, it, vi } from 'vitest';
 import type { InboxSignal } from './inbox.ts';
-import { PgEventStore, type DomainEvent, type Notification } from './store.ts';
+import { buildApp } from './app.ts';
+import { PgEventStore, type DomainEvent, type EventStore, type Notification } from './store.ts';
 
 /** A store on a pretend database: what's heard on the listening connection, and what it then reads back. */
 const listening = async (rows: unknown[] = []) => {
@@ -19,6 +20,33 @@ const listening = async (rows: unknown[] = []) => {
   const hear = (channel: string, payload: string) => client.emit('notification', { channel, payload });
   return { pool, hear, notifications, events, changes };
 };
+
+describe('where a follower reads on from', () => {
+  const read = async (top: string | undefined, seqs: string[], query = '') => {
+    const events = seqs.map((seq) => ({ seq, topic: 'platform.person.deleted', id: seq, publisher: 'identity', at: '2026-11-06T00:00:00.000Z', payload: {} }));
+    const readEvents = vi.fn(async () => events);
+    const store = { inbox: {}, lastSeq: async () => top, readEvents } as unknown as EventStore;
+    const app = await buildApp({ store, verifyService: async () => ({ kind: 'platform', name: 'registry' }) });
+    const res = await app.inject({ method: 'GET', url: `/v1/domain-events?topics=platform.person.deleted${query}`, headers: { authorization: 'Bearer x' } });
+    return { next: res.json().next as string, readEvents };
+  };
+
+  it('is as far as the read went, past events on other topics, and never reads beyond it', async () => {
+    const { next, readEvents } = await read('90', [], '&after=40');
+    expect(next).toBe('90');
+    expect(readEvents).toHaveBeenCalledWith(expect.objectContaining({ after: '40', upTo: '90' }));
+    expect((await read('90', ['50'], '&after=40')).next).toBe('90');
+  });
+
+  it('is the last event of a full page, as more may follow it', async () => {
+    expect((await read('90', ['50', '60'], '&after=40&limit=2')).next).toBe('60');
+  });
+
+  it('never goes back, and stays put with nothing kept', async () => {
+    expect((await read('30', [], '&after=40')).next).toBe('40');
+    expect((await read(undefined, [])).next).toBe('0');
+  });
+});
 
 const CHANNELS = ['events_notification', 'events_domain_event', 'events_inbox'];
 

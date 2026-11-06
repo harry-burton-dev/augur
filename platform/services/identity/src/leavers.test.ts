@@ -82,7 +82,7 @@ describe('a leaver flow whose audit entry fails', () => {
     expect(told).toEqual([expect.objectContaining({ app: 'admin', audience: ['role:admin'], level: 'needs', key: leaveNoticeKey(kim.id, 'nobody-to-hand-over-to') })]);
   });
 
-  it('does the same when they’re gone from the directory, and still runs when admins can’t be told', async () => {
+  it('does the same when they’re gone from the directory, and goes again when admins can’t be told', async () => {
     const { kim, kept, directory } = await setUp();
     const gone: Leaving = { on: '2026-11-05', by: 'admin-1', handOverTo: 'nobody' };
     const lifecycle = {
@@ -91,11 +91,30 @@ describe('a leaver flow whose audit entry fails', () => {
       left: async (person: string, left: NonNullable<Lifecycle['left']>) => void kept.set(person, { left }),
       dueLeavers: async () => [{ person: kim.id, ...gone }],
     };
+    let reachable = false;
     const tell = async () => {
-      throw new Error('events unreachable');
+      if (!reachable) throw new Error('events unreachable');
     };
-    expect(await leaveDueLeavers({ directory, lifecycle, tell }, 'UTC', new Date('2026-11-06T00:10:00Z'))).toEqual([kim.id]);
+    const run = () => leaveDueLeavers({ directory, lifecycle, tell }, 'UTC', new Date('2026-11-06T00:10:00Z'));
+    expect(await run()).toEqual([]);
+    expect(kept.get(kim.id)?.left).toBeUndefined();
+    reachable = true;
+    expect(await run()).toEqual([kim.id]);
     expect(kept.get(kim.id)?.left).not.toHaveProperty('handOverTo');
+  });
+
+  it('names no last day for a flow that stopped part way, and turning off again is a new entry', async () => {
+    const { kim, entries, directory } = await setUp();
+    const lifecycle = {
+      get: async () => new Map<string, Lifecycle>(),
+      disabled: async () => undefined,
+      left: async () => undefined,
+      dueLeavers: async () => [{ person: kim.id, on: '2026-11-05', by: 'admin-1', stopped: true }],
+    };
+    const audit = async (e: NewAuditEntry) => void entries.push(e);
+    await leaveDueLeavers({ directory, lifecycle, audit }, 'UTC', new Date('2026-11-06T00:10:00Z'));
+    expect(entries.find((e) => e.action === 'person.left')!.detail).not.toHaveProperty('lastDay');
+    expect(entries.find((e) => e.action === 'person.disabled')).not.toHaveProperty('key');
   });
 
   it('waits and tries again when it can’t tell whether the person named can take it on', async () => {

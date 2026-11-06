@@ -123,11 +123,17 @@ const dataFrom = credentials
     }
   : undefined;
 
-// A deleted leaver's personal values leave Activity first (ADR 0072): the events service removes them.
+// Set below: copies sign-ins into Activity now.
+let copyNow: (() => Promise<unknown>) | undefined;
+
+// A deleted leaver's personal values leave Activity first (ADR 0072): the events service removes them. Sign-ins
+// are copied first, so one still on its way can't land after the last redaction with their IP address.
 const redact =
   EVENTS_URL && credentials
-    ? (person: string) =>
-        callService({ method: 'POST', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/audit/redact`, credentials, body: { person }, what: 'remove a deleted person’s details from Activity' })
+    ? async (person: string) => {
+        await copyNow?.();
+        return callService({ method: 'POST', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/audit/redact`, credentials, body: { person }, what: 'remove a deleted person’s details from Activity' });
+      }
     : undefined;
 
 // Sign-ins and failed ones reach Activity (ADR 0040): copied from Keycloak each minute.
@@ -139,6 +145,7 @@ if (keycloakEvents && audit) {
     }).catch((err: Error) =>
       log.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
     );
+  copyNow = copy;
   setInterval(copy, 60_000).unref();
   void copy();
 }

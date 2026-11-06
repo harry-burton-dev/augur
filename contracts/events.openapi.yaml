@@ -1466,7 +1466,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
     get:
       summary: Read domain events in order (services only, events:subscribe)
-      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS)."
+      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`, or `next`, which is as far as this read went, past events on other topics: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS)."
       parameters:
         - schema:
             type: string
@@ -1493,7 +1493,7 @@ paths:
           required: false
       responses:
         "200":
-          description: The next events, and the cursor after them
+          description: The next events, and the cursor to read on from
           content:
             application/json:
               schema:
@@ -1508,7 +1508,7 @@ paths:
                       $ref: "#/components/schemas/DomainEvent"
                   next:
                     type: string
-                description: The next events, and the cursor after them
+                description: The next events, and the cursor to read on from
         "400":
           description: A topic that is not a topic, nor a family such as folio.*
           content:

@@ -586,6 +586,12 @@ export const buildApp = async ({
       };
 
       /**
+       * Whether an admin's removal still stands against the app's own sign-in. An install an admin asked for lifts
+       * it: the runner registers the app with that sign-in, and the new container publishes its frontend with it first.
+       */
+      const staysRemoved = async (id: string) => (await store.removed(id)) && !(await store.appJobs(id)).some((j) => j.action === 'install' && (j.state === 'requested' || j.state === 'running'));
+
+      /**
        * What an app may do on a floor, for the platform's services to check its
        * calls against: the scopes it asks for and an admin has granted, where it
        * is on. Nothing where it is off, on a floor that no longer exists, or
@@ -797,7 +803,7 @@ export const buildApp = async ({
           const { refused } = kindOf(entry, await feedApps());
           if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');
           // Its sign-in outlives a removal, and a first registration is granted what it asks for: only an admin or the runner brings it back.
-          if (by.kind === 'service' && by.id === entry.id && (await store.removed(entry.id))) {
+          if (by.kind === 'service' && by.id === entry.id && (await staysRemoved(entry.id))) {
             req.log.warn({ app: entry.id }, 'a removed app tried to register itself; refused');
             return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${entry.name}, so it can’t register itself again. An admin has to register it, or install it again.` });
           }
@@ -873,7 +879,7 @@ export const buildApp = async ({
         if (!by) return reply;
         const { id, version } = req.params;
         // Its sign-in outlives a removal, as for registering itself: only an admin brings it back.
-        if (by.kind === 'service' && (await store.removed(id))) return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${id}, so it can’t publish a frontend. An admin has to register it, or install it again.` });
+        if (by.kind === 'service' && by.id === id && (await staysRemoved(id))) return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${id}, so it can’t publish a frontend. An admin has to register it, or install it again.` });
         if (!frontendFiles) return reply.code(501).send({ error: 'not_implemented', message: 'This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set).' });
         if (platformApps.some((a) => a.id === id)) return reply.code(409).send({ error: 'conflict', message: `"${id}" is one of AUGUR’s own apps.` });
         if (!semver.valid(version)) return reply.code(400).send({ error: 'bad_request', message: `"${version}" is not a semver version such as 1.2.0.` });

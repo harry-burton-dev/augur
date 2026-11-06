@@ -23,6 +23,7 @@ const withFailingAudit = async () => {
     disabled: async (person: string, cause: DisabledCause | undefined, at: string) => void kept.set(person, { ...kept.get(person), disabledAt: at, disabledCause: cause }),
     left: async (person: string, left: NonNullable<Lifecycle['left']>) => void kept.set(person, { ...kept.get(person), left, leaving: undefined }),
     scheduleLeave: async (person: string, leaving: Leaving) => void kept.set(person, { ...kept.get(person), leaving }),
+    deleteAsked: async (person: string, deleteAskedBy: string) => void kept.set(person, { ...kept.get(person), deleteAskedBy }),
     deleting: async (person: string, deletingStep: DeletingStep) => void kept.set(person, { ...kept.get(person), deletingStep }),
     deleted: async (person: string, deletedAt: string) => void kept.set(person, { ...kept.get(person), deletedAt }),
   } as unknown as LifecycleStore;
@@ -47,7 +48,7 @@ describe('admin: Activity down while someone leaves or is deleted', () => {
     expect(res.statusCode).toBe(503);
     expect(res.json().message).toMatch(/tried again within five minutes/);
     expect(kept.get(kim.id)?.left).toBeUndefined();
-    expect(kept.get(kim.id)?.leaving).toMatchObject({ by: 'admin-9', note: 'Agreed' });
+    expect(kept.get(kim.id)?.leaving).toMatchObject({ by: 'admin-9', note: 'Agreed', stopped: true });
     // The sweep picks it up only once its day is over.
     expect(kept.get(kim.id)!.leaving!.on < todayIn('UTC')).toBe(true);
     comeBack();

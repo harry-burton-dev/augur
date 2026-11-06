@@ -40,7 +40,7 @@ When people link one of an app's things to an entity in Data Atlas, the app keep
 
 ## Following
 
-Add `events:subscribe` to `scopes`. Keep your place (the last `seq` you handled) in your own database, and handle each event so that doing it twice does no harm: if your handler throws, the same event comes again on the next poll.
+Add `events:subscribe` to `scopes`. Keep your place (the last `seq` you handled, or `next` from the read, which `followEvents` saves for you so a rare topic doesn't read the same stretch each time) in your own database, and handle each event so that doing it twice does no harm: if your handler throws, the same event comes again on the next poll.
 
 ```ts
 import { followEvents, PLATFORM_TOPICS } from '@augur/service-kit';

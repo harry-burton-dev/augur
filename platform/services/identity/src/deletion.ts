@@ -19,7 +19,7 @@ export const DELETED_NAME = 'Deleted person';
 
 export interface DeletionDeps {
   directory: Pick<Directory, 'deletePerson'>;
-  lifecycle: Pick<LifecycleStore, 'get' | 'deleting' | 'deleted' | 'dueDeletions'>;
+  lifecycle: Pick<LifecycleStore, 'get' | 'deleteAsked' | 'deleting' | 'deleted' | 'dueDeletions'>;
   store?: Pick<PreferenceStore, 'forget'>;
   workspaces?: Pick<WorkspaceStore, 'forgetPerson'>;
   /** Asks the events service to remove their personal values from Activity and delete their notifications. */
@@ -31,10 +31,13 @@ export interface DeletionDeps {
 const after = (done: DeletingStep | undefined, step: DeletingStep) => (done ? DELETING_STEPS.indexOf(done) >= DELETING_STEPS.indexOf(step) : false);
 
 /** Deletes one leaver's account, resuming where an earlier try stopped. `by` is who chose Delete now, if anyone. */
-export const deleteAccount = async (deps: DeletionDeps, person: string, by?: string) => {
+export const deleteAccount = async (deps: DeletionDeps, person: string, chosenBy?: string) => {
   const { directory, lifecycle, store, workspaces, redact, audit, now = () => new Date().toISOString() } = deps;
   const kept = (await lifecycle.get([person])).get(person);
   if (!kept?.left || kept.deletedAt) return false;
+  // Kept before anything can fail, so the sweep carries on a Delete now that stopped at its first step.
+  const by = chosenBy ?? kept.deleteAskedBy;
+  if (chosenBy && !kept.deleteAskedBy) await lifecycle.deleteAsked(person, chosenBy);
   let done = kept.deletingStep;
   const step = async (name: DeletingStep, fn: () => Promise<unknown>) => {
     if (after(done, name)) return;

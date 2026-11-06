@@ -109,11 +109,33 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
   onError?: (err: unknown) => void;
 }) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** Whether the outbox has the refused columns; found out once, as the first thing it does. */
+  let refusable: boolean | undefined;
+  /**
+   * An outbox made before these columns gets them here, on its own and quickly or not at all: an ALTER waits for
+   * every open write and holds up each one behind it. Without them a row set aside is still marked sent and reported.
+   */
+  const checkRefusable = async (client: Queryable) => {
+    const { rows } = await client.query(`select 1 from pg_attribute where attrelid = to_regclass('outbox') and attname = 'refused_why' and not attisdropped`);
+    if (rows.length) return true;
+    try {
+      await client.query('begin');
+      await client.query(`set local lock_timeout = '2s'`);
+      await client.query('alter table outbox add column if not exists refused_at timestamptz, add column if not exists refused_why text');
+      await client.query('commit');
+      return true;
+    } catch (err) {
+      await client.query('rollback').catch(() => {});
+      (onError ?? console.error)(err);
+      return false;
+    }
+  };
   /** Sends one batch; returns how many rows it dealt with, sent or set aside. */
   const flush = async (): Promise<number> => {
     const client = await pool.connect();
     const setAside: { id: unknown; err: ServiceCallError }[] = [];
     try {
+      refusable ??= await checkRefusable(client);
       await client.query('begin');
       const { rows } = await client.query(
         'select id, event_id, topic, workspace_id, payload from outbox where sent_at is null order by id limit $1 for update skip locked',
@@ -131,11 +153,7 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
             });
           }
         });
-        if (setAside.length) {
-          // An outbox made before these columns has them added here, the first time a row needs them.
-          await client.query('alter table outbox add column if not exists refused_at timestamptz, add column if not exists refused_why text');
-          for (const { id, err } of setAside) await client.query('update outbox set refused_at = now(), refused_why = $2 where id = $1', [id, err.message]);
-        }
+        if (refusable) for (const { id, err } of setAside) await client.query('update outbox set refused_at = now(), refused_why = $2 where id = $1', [id, err.message]);
         await client.query('update outbox set sent_at = now() where id = any($1::bigint[])', [rows.map((r) => r.id)]);
       }
       await client.query('commit');
@@ -171,7 +189,8 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
 
 /**
  * Follows topics: reads new events in order and hands each to `handle`, saving the cursor
- * after each one. If `handle` throws, the same event comes again next time, so handle each
+ * after each one, then at where the events service read to, so a rare topic doesn't read the same
+ * stretch every time. If `handle` throws, the same event comes again next time, so handle each
  * one so that doing it twice does no harm. Needs the `events:subscribe` scope.
  */
 export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics, cursor, handle, batch = 100, intervalMs = 2000, onError }: EventsAddress & {
@@ -189,12 +208,13 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
     const after = await cursor.load();
     const query = new URLSearchParams({ topics: topics.join(','), limit: String(batch), ...(after ? { after } : {}) });
     const res = await withDeadline(fetchImpl)(`${eventsUrl.replace(/\/$/, '')}/v1/domain-events?${query}`, { headers: await serviceHeaders(credentials) });
-    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; message?: string };
+    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; next?: string; message?: string };
     if (!res.ok) throw new ServiceCallError(`Couldn't read events (${topics.join(', ')}): it answered ${res.status}${reply.message ? `: ${reply.message}` : ''}.`);
     for (const event of reply.events ?? []) {
       await handle(event);
       await cursor.save(event.seq);
     }
+    if (reply.next && reply.next !== (reply.events?.at(-1)?.seq ?? after ?? '0')) await cursor.save(reply.next);
     return reply.events?.length ?? 0;
   };
   const tick = async () => {

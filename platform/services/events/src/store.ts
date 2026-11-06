@@ -136,6 +136,8 @@ export interface EventsQuery {
   topics: string[];
   /** Only events after this `seq`. */
   after?: string;
+  /** Only events up to this `seq`. */
+  upTo?: string;
   limit: number;
 }
 
@@ -200,6 +202,8 @@ export interface EventStore {
   publish(publisher: string, events: NewDomainEvent[]): Promise<{ added: number; repeated: number }>;
   /** Events on these topics in the order they committed, which is seq order: a later read can't fill a gap. */
   readEvents(query: EventsQuery): Promise<DomainEvent[]>;
+  /** The highest seq committed, of any topic; undefined with no events kept. */
+  lastSeq(): Promise<string | undefined>;
   /** Forgets events older than this many days; returns how many went. */
   pruneEvents(keepDays: number): Promise<number>;
   /** Removes Activity entries older than this many days (the retention period, ADR 0040); returns how many went. */
@@ -673,16 +677,21 @@ export class PgEventStore implements EventStore {
     return this.transaction((client) => insertEvents(client, publisher, events));
   }
 
-  async readEvents({ topics, after, limit }: EventsQuery) {
+  async lastSeq() {
+    const { rows } = await this.pool.query<{ seq: string | null }>('select max(seq) as seq from events.domain_events');
+    return rows[0]?.seq ?? undefined;
+  }
+
+  async readEvents({ topics, after, upTo, limit }: EventsQuery) {
     const exact = topics.filter((t) => !t.endsWith('.*'));
     const families = topics.filter((t) => t.endsWith('.*')).map((t) => `${t.slice(0, -1)}%`);
     // Seq order is commit order (`insertEvents`), so a seq not visible yet can only ever land above these. Waiting
     // on the transactions still running isn't needed, and would let any login on the database stall every follower.
     const { rows } = await this.pool.query<DomainEventRow>(
       `select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events
-       where seq > $1 and (topic = any($2::text[]) or topic like any($3::text[]))
+       where seq > $1 and ($5::bigint is null or seq <= $5) and (topic = any($2::text[]) or topic like any($3::text[]))
        order by seq limit $4`,
-      [after ?? '0', exact, families, limit],
+      [after ?? '0', exact, families, limit, upTo ?? null],
     );
     return rows.map(fromEventRow);
   }

@@ -43,8 +43,7 @@ const canTakeOn = async (directory: LeaverDeps['directory'], heir: string) => {
 
 export const runLeaver = async ({ directory, lifecycle, store, audit, tell, now = () => new Date().toISOString() }: LeaverDeps, id: string, run: LeaverRun) => {
   const actor = { id: run.by, kind: 'user' as const };
-  // Named so a later run saying it again keeps one entry, even when the first answer never came back. A leaver leaves once.
-  const record = (action: string, detail: Record<string, unknown>) => audit?.({ actor, app: 'identity', action, target: id, detail, key: `leaver:${action}:${id}` });
+  const record = (action: string, detail: Record<string, unknown>, key?: string) => audit?.({ actor, app: 'identity', action, target: id, detail, ...(key ? { key } : {}) });
   const before = await directory.person(id);
   const handOverTo = run.handOverTo && (await canTakeOn(directory, run.handOverTo)) ? run.handOverTo : undefined;
   const kept = (await lifecycle?.get([id]))?.get(id);
@@ -57,16 +56,21 @@ export const runLeaver = async ({ directory, lifecycle, store, audit, tell, now 
   }
   await directory.endSessions(id);
   const asked = store ? await store.withdrawLeave(id) : false;
-  await record('person.left', {
-    username: after.username,
-    asked,
-    ...(handOverTo ? { handOverTo } : {}),
-    ...(run.handOverTo && !handOverTo ? { handOverLost: run.handOverTo } : {}),
-    ...(run.note ? { note: run.note } : {}),
-    ...(run.lastDay ? { lastDay: run.lastDay } : {}),
-  });
-  await lifecycle?.left(id, { at: now(), by: run.by, ...(handOverTo ? { handOverTo } : {}) });
-  // Apps keep what the leaver owned for someone to hand on; an admin needs to know it's waiting.
+  // Named so a later run saying it again keeps one entry, even when the first answer never came back. A leaver leaves once.
+  await record(
+    'person.left',
+    {
+      username: after.username,
+      asked,
+      ...(handOverTo ? { handOverTo } : {}),
+      ...(run.handOverTo && !handOverTo ? { handOverLost: run.handOverTo } : {}),
+      ...(run.note ? { note: run.note } : {}),
+      ...(run.lastDay ? { lastDay: run.lastDay } : {}),
+    },
+    `leaver:person.left:${id}`,
+  );
+  // Apps keep what the leaver owned for someone to hand on; an admin needs to know it's waiting. Before the state
+  // that ends the retries, so a failure is tried again; its key tells them once.
   if (run.handOverTo && !handOverTo) {
     await tell?.({
       app: 'admin',
@@ -77,8 +81,9 @@ export const runLeaver = async ({ directory, lifecycle, store, audit, tell, now 
       title: `${after.firstName} ${after.lastName} left, and their work has nobody to go to`,
       detail: 'The person named to take it on can’t sign in any more. Apps keep it until someone hands it on.',
       link: '/people',
-    }).catch(() => undefined);
+    });
   }
+  await lifecycle?.left(id, { at: now(), by: run.by, ...(handOverTo ? { handOverTo } : {}) });
   return after;
 };
 
@@ -96,7 +101,7 @@ export const leaveDueLeavers = async (deps: LeaverDeps & { lifecycle: Pick<Lifec
   const gone: string[] = [];
   for (const due of await deps.lifecycle.dueLeavers(todayIn(timeZone, at))) {
     try {
-      await runLeaver(deps, due.person, { by: due.by, handOverTo: due.handOverTo, note: due.note, lastDay: due.on });
+      await runLeaver(deps, due.person, { by: due.by, handOverTo: due.handOverTo, note: due.note, ...(due.stopped ? {} : { lastDay: due.on }) });
       gone.push(due.person);
     } catch (err) {
       warn(`The leaver flow set for ${due.person} after ${due.on} didn't run; identity tries again in five minutes (${(err as Error).message}).`);

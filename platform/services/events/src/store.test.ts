@@ -456,8 +456,8 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
       await store.inbox.put('mandate', 'quiet', assignment);
       await expect.poll(() => heard.length).toBe(3);
       expect(heard[0]).toBe(`events_notification {"ref":"${n!.id}"}`);
-      expect(heard[1]).toMatch(/^events_domain_event \\{"ref" ?: ?"\\d+"\\}$/);
-      expect(heard[2]).toMatch(/^events_inbox \\{"ref":"\\d+"\\}$/);
+      expect(heard[1]).toMatch(/^events_domain_event \{"ref" ?: ?"\d+"\}$/);
+      expect(heard[2]).toMatch(/^events_inbox \{"ref":"\d+"\}$/);
     } finally {
       for (const channel of ['events_notification', 'events_domain_event', 'events_inbox']) await hearing.query(`unlisten ${channel}`);
       hearing.removeAllListeners('notification');
@@ -521,7 +521,7 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
   });
 
   const published = (id: string) => ({ topic: 'folio.document.published', id, payload: {} });
-  const read = async (after?: string) => store.readEvents({ topics: ['folio.*'], after, limit: 10 });
+  const read = async (after?: string) => store.readEvents({ topics: ['folio.*'], after, limit: 20 });
 
   it('never passes a seq still to commit, when seq and xid orders disagree', async () => {
     const older = await admin.connect();
@@ -551,6 +551,15 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
       older.release();
       newer.release();
     }
+  });
+
+  it('reads only up to where it’s told, and knows the highest seq of any topic', async () => {
+    expect(await store.lastSeq()).toBeUndefined();
+    await store.publish('folio', [published('one'), published('two')]);
+    await store.publish('notes', [{ topic: 'notes.note.added', id: 'other', payload: null }]);
+    const [one, two] = await read();
+    expect((await store.readEvents({ topics: ['folio.*'], upTo: one!.seq, limit: 20 })).map((e) => e.id)).toEqual(['one']);
+    expect(BigInt((await store.lastSeq())!)).toBeGreaterThan(BigInt(two!.seq));
   });
 
   it('keeps a batch together: two publishing at once never interleave', async () => {

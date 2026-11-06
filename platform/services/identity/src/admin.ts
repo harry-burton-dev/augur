@@ -457,11 +457,11 @@ export const adminRoutes =
           after = await runLeaver({ directory: dir(), lifecycle, store, audit, now }, id, { by: me.id, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) });
         } catch (err) {
           if (err instanceof DirectoryError) throw err;
-          // Followers hear of it only from Activity, so it isn't over until that's written. Their last day is
-          // set as yesterday, which is what makes the sweep carry on from here (leaveDueLeavers).
+          // Followers hear of it only from Activity, so it isn't over until that's written. Yesterday makes the
+          // sweep carry on from here (leaveDueLeavers); `stopped` says it isn't a last day.
           req.log.error({ err: (err as Error).message }, 'leaver flow stopped part way');
           const today = todayIn((await org().catch(() => undefined))?.timeZone ?? 'UTC');
-          await lifecycle?.scheduleLeave(id, { on: addDays(today, -1), by: me.id, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) });
+          await lifecycle?.scheduleLeave(id, { on: addDays(today, -1), stopped: true, by: me.id, ...(handOverTo ? { handOverTo } : {}), ...(note ? { note } : {}) });
           return reply.code(503).send({ error: 'unavailable', message: 'Not finished yet, so apps haven’t been told. It’s tried again within five minutes.' });
         }
         return one(after);

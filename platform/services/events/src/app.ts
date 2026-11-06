@@ -551,7 +551,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             summary: 'Read domain events in order (services only, events:subscribe)',
             description: [
               'Events on the topics asked for, in the one order every follower reads',
-              'in. Keep the last `seq` handled and pass it as `after`: delivery is at',
+              'in. Keep the last `seq` handled and pass it as `after`, or `next`, which is',
+              'as far as this read went, past events on other topics: delivery is at',
               'least once, never with a gap. Events are kept 30 days',
               '(DOMAIN_EVENTS_KEEP_DAYS).',
             ].join(' '),
@@ -561,7 +562,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
               limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
             }),
             response: {
-              200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor after them' }),
+              200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor to read on from' }),
               400: refused('A topic that is not a topic, nor a family such as folio.*'),
               403: refused('Not a service, or no events:subscribe scope'),
               503: refused("Grants can't be checked right now"),
@@ -574,8 +575,12 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           const { topics } = list;
           if (!(await fromService(req, reply, undefined, 'events:subscribe'))) return reply;
           const limit = req.query.limit ?? 100;
-          const events = await store.readEvents({ topics, after: req.query.after, limit });
-          return { events, next: events.at(-1)?.seq ?? req.query.after ?? '0' };
+          const after = req.query.after ?? '0';
+          // Read first: anything committed after this is above it, so nothing is skipped by moving the cursor up to it.
+          const top = await store.lastSeq();
+          const events = await store.readEvents({ topics, after, upTo: top, limit });
+          if (events.length === limit) return { events, next: events.at(-1)!.seq };
+          return { events, next: top && BigInt(top) > BigInt(after) ? top : after };
         },
       );
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { NewAuditEntry } from '@augur/service-kit';
 import { MemoryDirectory } from './directory.ts';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
-import { DELETED_NAME, deleteDueLeavers } from './deletion.ts';
+import { DELETED_NAME, deleteAccount, deleteDueLeavers } from './deletion.ts';
 import type { DeletingStep, Lifecycle } from './lifecycle.ts';
 
 describe('a deletion whose audit entry fails', () => {
@@ -10,6 +10,7 @@ describe('a deletion whose audit entry fails', () => {
     const kept: Lifecycle = { left: { at: '2026-07-01T00:00:00.000Z', by: 'admin-1' } };
     const lifecycle = {
       get: async () => new Map([['kim', kept]]),
+      deleteAsked: async (_person: string, by: string) => void (kept.deleteAskedBy = by),
       deleting: async (_person: string, step: DeletingStep) => void (kept.deletingStep = step),
       deleted: async (_person: string, at: string) => void (kept.deletedAt = at),
       dueDeletions: async () => (kept.deletedAt ? [] : ['kim']),
@@ -32,6 +33,34 @@ describe('a deletion whose audit entry fails', () => {
     expect(await deleteDueLeavers(deps, 90)).toEqual(['kim']);
     expect(removed).toEqual(['kim']);
     expect(entries.map((e) => e.action)).toEqual(['person.deleted']);
+  });
+});
+
+describe('a Delete now that stops at its first step', () => {
+  it('stays asked for, and the sweep finishes it as the admin’s', async () => {
+    const kept: Lifecycle = { left: { at: '2026-11-01T00:00:00.000Z', by: 'admin-1' } };
+    const entries: NewAuditEntry[] = [];
+    let reachable = false;
+    const deps = {
+      directory: { deletePerson: async () => undefined },
+      lifecycle: {
+        get: async () => new Map([['kim', kept]]),
+        deleteAsked: async (_person: string, by: string) => void (kept.deleteAskedBy = by),
+        deleting: async (_person: string, step: DeletingStep) => void (kept.deletingStep = step),
+        deleted: async (_person: string, at: string) => void (kept.deletedAt = at),
+        dueDeletions: async () => (kept.deleteAskedBy && !kept.deletedAt ? ['kim'] : []),
+      },
+      redact: async () => {
+        if (!reachable) throw new Error('events unreachable');
+      },
+      audit: async (e: NewAuditEntry) => void entries.push(e),
+    };
+    await expect(deleteAccount(deps, 'kim', 'admin-9')).rejects.toThrow('events unreachable');
+    expect(kept.deletingStep).toBeUndefined();
+    expect(kept.deleteAskedBy).toBe('admin-9');
+    reachable = true;
+    expect(await deleteDueLeavers(deps, 90)).toEqual(['kim']);
+    expect(entries).toMatchObject([{ action: 'person.deleted', actor: { id: 'admin-9', kind: 'user' }, detail: { now: true } }]);
   });
 });
 
@@ -97,7 +126,7 @@ describe.runIf(DATABASE_URL)('deleting leavers after the retention period (ADR 0
     const { sam, deps } = await setup();
     const at = new Date('2026-11-05T00:00:00Z');
     expect(await db.lifecycle.dueDeletions(new Date(at.getTime() - 90 * 86_400_000).toISOString())).not.toContain(sam.id);
-    await db.lifecycle.deleting(sam.id, 'keycloak-deleted');
+    await db.lifecycle.deleteAsked(sam.id, 'admin-9');
     expect(await deleteDueLeavers(deps, 90, at)).toContain(sam.id);
   });
 });

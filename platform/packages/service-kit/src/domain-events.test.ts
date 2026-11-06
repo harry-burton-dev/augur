@@ -163,6 +163,27 @@ describe('outboxRelay', () => {
 });
 
 describe('followEvents', () => {
+  it('moves its place on past events it doesn’t follow, and doesn’t write when nothing moved', async () => {
+    const saved: string[] = [];
+    let answer = { events: [] as DomainEvent[], next: '40' };
+    const fetchImpl = (async () => new Response(JSON.stringify(answer), { status: 200 })) as unknown as typeof fetch;
+    let place: string | undefined;
+    const follower = followEvents({
+      eventsUrl: 'http://events:8084',
+      credentials,
+      fetchImpl,
+      topics: ['platform.person.deleted'],
+      cursor: { load: async () => place, save: async (seq) => void saved.push((place = seq)) },
+      handle: async () => undefined,
+    });
+    await follower.poll();
+    await follower.poll();
+    expect(saved).toEqual(['40']);
+    answer = { events: [{ seq: '41', id: 'a', topic: 'platform.person.deleted', publisher: 'identity', at: '', payload: {} }], next: '45' };
+    await follower.poll();
+    expect(saved).toEqual(['40', '41', '45']);
+  });
+
   it('hands over each event once, in order, keeping its place after each', async () => {
     const events = fakeEvents();
     events.kept.push(...['a', 'b', 'c'].map((id, i) => ({ seq: String(i + 1), id, topic: 'folio.document.published', publisher: 'folio', at: '', payload: { id } })));
@@ -204,6 +225,28 @@ describe.runIf(process.env.DATABASE_URL)('the outbox', () => {
   afterAll(async () => {
     await pool.query(`drop schema ${schema} cascade`);
     await pool.end();
+  });
+
+  it('marks a row refused, in an outbox made before those columns too', async () => {
+    const old = `old_${schema}`;
+    const oldPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${old}` });
+    try {
+      await oldPool.query(`create schema ${old}`);
+      await oldPool.query(`create table outbox (id bigint generated always as identity primary key, event_id text not null unique default gen_random_uuid()::text, topic text not null, workspace_id text, payload jsonb not null, created_at timestamptz not null default now(), sent_at timestamptz)`);
+      for (const db of [oldPool, pool]) {
+        await addToOutbox(db, { topic: 'folio.document.published', payload: {}, id: 'refused' });
+        const events = fakeEvents();
+        events.refusing.set('refused', 400);
+        const relay = outboxRelay({ pool: db, eventsUrl: 'http://events:8084', credentials, fetchImpl: events.fetchImpl, onError: () => undefined });
+        expect(await relay.flush()).toBe(1);
+        const { rows } = await db.query(`select sent_at, refused_at, refused_why from outbox where event_id = 'refused'`);
+        expect(rows[0]).toMatchObject({ sent_at: expect.any(Date), refused_at: expect.any(Date), refused_why: expect.stringContaining('Set aside') });
+        await db.query(`delete from outbox where event_id = 'refused'`);
+      }
+    } finally {
+      await oldPool.query(`drop schema if exists ${old} cascade`);
+      await oldPool.end();
+    }
   });
 
   it('sends what was committed with its change, oldest first, and keeps what wasn’t taken', async () => {

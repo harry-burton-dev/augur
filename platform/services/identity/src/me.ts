@@ -788,22 +788,20 @@ export const meRoutes =
       async (req, reply) => {
         const who = caller(req.headers);
         const note = req.body.note?.trim() || undefined;
-        const before = await store.leaveRequest(who.id);
-        // Recorded first: a request kept with no entry would, on a retry, count as told already and no admin would hear.
+        // Recorded first, so a failure here leaves nothing to explain.
         await record(who, 'account.leave-requested', note ? { note } : undefined);
         const request: LeaveRequest = await store.requestLeave(who.id, note);
-        if (!before) {
-          await tell?.({
-            app: 'admin',
-            recipients: [],
-            audience: ADMINS,
-            key: leaveNoticeKey(who.id, request.requestedAt),
-            level: 'needs',
-            title: `${who.name} asked to leave`,
-            detail: note ?? 'They asked from their account. Turn their account off in People when they go.',
-            link: '/people',
-          }).catch((err: Error) => req.log.warn({ err }, 'admins were not told of a request to leave'));
-        }
+        // Every time: the key tells each admin once, so asking again also makes up for a notice that didn't get through.
+        await tell?.({
+          app: 'admin',
+          recipients: [],
+          audience: ADMINS,
+          key: leaveNoticeKey(who.id, request.requestedAt),
+          level: 'needs',
+          title: `${who.name} asked to leave`,
+          detail: note ?? 'They asked from their account. Turn their account off in People when they go.',
+          link: '/people',
+        }).catch((err: Error) => req.log.warn({ err }, 'admins were not told of a request to leave'));
         return reply.code(201).send(request);
       },
     );
