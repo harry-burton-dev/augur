@@ -310,11 +310,24 @@ export const applyUserProfile = async (kc: KeycloakDirectory, changes: Changes) 
   changes.push(`profile attributes: ${touched.join(', ')}`);
 };
 
+/** Whether the two-step step really asks: it's conditional, on the role, and ends in the code form. A step without these lets holders in on a password alone. */
+const twoStepIsBuilt = (all: Execution[]) => {
+  const at = all.findIndex((e) => e.displayName === TWO_STEP_STEP);
+  const step = all[at];
+  if (step?.requirement !== 'CONDITIONAL') return false;
+  const after = all.slice(at + 1);
+  const end = after.findIndex((e) => e.level <= step.level);
+  const inside = end === -1 ? after : after.slice(0, end);
+  const required = (provider: string) => inside.find((e) => e.providerId === provider && e.requirement === 'REQUIRED');
+  return !!required('conditional-user-role')?.authenticationConfig && !!required('auth-otp-form');
+};
+
 /**
  * The realm's sign-in flow (`SIGN_IN_FLOW`): Keycloak's browser flow, with a step of its own that asks
  * everyone holding `TWO_STEP_ROLE` for a one-time code, setting one up the first time, unless they
  * signed in with a passkey. Everyone else keeps Keycloak's own optional second step. A flow from an
- * older release (one step per role) is rebuilt from Keycloak's current browser flow.
+ * older release (one step per role), or one a failed run left half-built, is rebuilt from Keycloak's
+ * current browser flow.
  */
 export const applySignInFlow = async (kc: KeycloakDirectory, changes: Changes) => {
   const flows = (await kc.call<{ id: string; alias: string }[]>('GET', '/authentication/flows')).data;
@@ -322,7 +335,7 @@ export const applySignInFlow = async (kc: KeycloakDirectory, changes: Changes) =
   const existing = flows.find((f) => f.alias === SIGN_IN_FLOW);
   if (existing) {
     const all = await executionsOf(SIGN_IN_FLOW);
-    if (all.some((e) => e.displayName === TWO_STEP_STEP)) {
+    if (twoStepIsBuilt(all)) {
       const { data: realm } = await kc.call<{ browserFlow?: string }>('GET', '');
       if (realm.browserFlow !== SIGN_IN_FLOW) {
         await kc.call('PUT', '', { browserFlow: SIGN_IN_FLOW });
@@ -330,10 +343,11 @@ export const applySignInFlow = async (kc: KeycloakDirectory, changes: Changes) =
       }
       return;
     }
-    // Built by an older release: hand sign-in back to Keycloak's flow while this one is rebuilt.
+    // Built by an older release or left half-built: hand sign-in back to Keycloak's flow while this one is
+    // rebuilt. Starting again from a fresh copy also means the usual step's condition is never added twice.
     await kc.call('PUT', '', { browserFlow: 'browser' });
     await kc.call('DELETE', `/authentication/flows/${existing.id}`);
-    changes.push(`sign-in flow: older ${SIGN_IN_FLOW} replaced`);
+    changes.push(`sign-in flow: older or unfinished ${SIGN_IN_FLOW} replaced`);
   }
   await kc.call('POST', '/authentication/flows/browser/copy', { newName: SIGN_IN_FLOW });
 

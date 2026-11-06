@@ -11,7 +11,7 @@ import type { PreferenceStore } from './store.ts';
 
 export interface LeaverDeps {
   directory: Pick<Directory, 'person' | 'updatePerson' | 'endSessions'>;
-  lifecycle?: Pick<LifecycleStore, 'disabled' | 'left'>;
+  lifecycle?: Pick<LifecycleStore, 'get' | 'disabled' | 'left'>;
   store?: Pick<PreferenceStore, 'withdrawLeave'>;
   /** Records in Activity; a failed write is the caller's to log. */
   audit?: (entry: NewAuditEntry) => Promise<unknown>;
@@ -31,14 +31,16 @@ export const runLeaver = async ({ directory, lifecycle, store, audit, now = () =
   const actor = { id: run.by, kind: 'user' as const };
   const record = (action: string, detail: Record<string, unknown>) => audit?.({ actor, app: 'identity', action, target: id, detail });
   const before = await directory.person(id);
+  const kept = (await lifecycle?.get([id]))?.get(id);
   const after = before.enabled ? await directory.updatePerson(id, { enabled: false }) : before;
-  if (before.enabled) {
-    await lifecycle?.disabled(id, 'leaver', now());
+  // The audit entries are what followers hear, so each goes before the state that stops the flow running again:
+  // when one fails, the sweep tries again and says it then. Off in Keycloak but not kept as off is that retry.
+  if (before.enabled || (lifecycle && !kept?.disabledAt)) {
     await record('person.disabled', { username: after.username });
+    await lifecycle?.disabled(id, 'leaver', now());
   }
   await directory.endSessions(id);
   const asked = store ? await store.withdrawLeave(id) : false;
-  await lifecycle?.left(id, { at: now(), by: run.by, ...(run.handOverTo ? { handOverTo: run.handOverTo } : {}) });
   await record('person.left', {
     username: after.username,
     asked,
@@ -46,6 +48,7 @@ export const runLeaver = async ({ directory, lifecycle, store, audit, now = () =
     ...(run.note ? { note: run.note } : {}),
     ...(run.lastDay ? { lastDay: run.lastDay } : {}),
   });
+  await lifecycle?.left(id, { at: now(), by: run.by, ...(run.handOverTo ? { handOverTo: run.handOverTo } : {}) });
   return after;
 };
 
@@ -59,7 +62,7 @@ export const addDays = (day: string, days: number) => new Date(Date.parse(`${day
  * Runs every leaver flow whose last day is over in the organisation's time zone. One that fails (the sign-in
  * service out of reach) stays set and is tried again next time; the rest still run. Returns who left.
  */
-export const leaveDueLeavers = async (deps: LeaverDeps & { lifecycle: Pick<LifecycleStore, 'disabled' | 'left' | 'dueLeavers'> }, timeZone: string, at = new Date(), warn: (m: string) => void = () => undefined) => {
+export const leaveDueLeavers = async (deps: LeaverDeps & { lifecycle: Pick<LifecycleStore, 'get' | 'disabled' | 'left' | 'dueLeavers'> }, timeZone: string, at = new Date(), warn: (m: string) => void = () => undefined) => {
   const gone: string[] = [];
   for (const due of await deps.lifecycle.dueLeavers(todayIn(timeZone, at))) {
     try {

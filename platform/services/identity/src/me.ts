@@ -169,7 +169,8 @@ export class KeycloakAccounts implements AccountSource {
       else delete attributes[a];
     }
     const own = Object.fromEntries((['firstName', 'lastName'] as const).filter((k) => changes[k] !== undefined).map((k) => [k, changes[k]!.trim()]));
-    await this.kc.call('PUT', `/users/${encodeURIComponent(person)}`, { ...u, ...own, attributes });
+    // `enabled` is left out, which Keycloak then keeps as it is: a stale copy could turn back on someone turned off meanwhile.
+    await this.kc.call('PUT', `/users/${encodeURIComponent(person)}`, { ...u, ...own, attributes, enabled: undefined });
     return this.profile(person);
   }
 

@@ -213,9 +213,12 @@ describe('accounts in Keycloak', () => {
 
   it('writes attributes back with the rest of the user, dropping emptied ones', async () => {
     const user = { id: 'u-1', username: 'alex', firstName: 'Alex', attributes: { jobTitle: ['Analyst'], locale: ['en'] } };
-    const kc = keycloak({ 'GET /users/u-1': user, 'GET /users/u-1/federated-identity': [], 'GET /identity-provider/instances': [] });
+    const kc = keycloak({ 'GET /users/u-1': { ...user, enabled: true }, 'GET /users/u-1/federated-identity': [], 'GET /identity-provider/instances': [] });
     await new KeycloakAccounts(kc).updateProfile('u-1', { jobTitle: '', pronouns: 'they/them', lastName: ' Rivera ' });
-    expect(kc.sent.find((s) => s.method === 'PUT')).toEqual({ method: 'PUT', path: '/users/u-1', body: { ...user, lastName: 'Rivera', attributes: { locale: ['en'], pronouns: ['they/them'] } } });
+    const put = kc.sent.find((s) => s.method === 'PUT');
+    expect(put).toEqual({ method: 'PUT', path: '/users/u-1', body: { ...user, lastName: 'Rivera', attributes: { locale: ['en'], pronouns: ['they/them'] } } });
+    // Keycloak keeps what's left out, so a stale copy can't turn someone back on.
+    expect(JSON.parse(JSON.stringify(put!.body))).not.toHaveProperty('enabled');
   });
 
   it('ends only a session that is the person’s own', async () => {

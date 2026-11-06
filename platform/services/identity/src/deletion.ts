@@ -47,7 +47,7 @@ export const deleteAccount = async (deps: DeletionDeps, person: string, by?: str
     await workspaces?.forgetPerson(person, DELETED_NAME);
   });
   await step('keycloak-deleted', () => directory.deletePerson(person));
-  await lifecycle.deleted(person, now());
+  // Recorded before they're marked deleted, which ends the retries: followers hear of it only from this entry.
   await audit?.({
     actor: by ? { id: by, kind: 'user' } : { id: 'identity', kind: 'service' },
     app: 'identity',
@@ -55,6 +55,7 @@ export const deleteAccount = async (deps: DeletionDeps, person: string, by?: str
     target: person,
     detail: { ...(by ? { now: true } : {}) },
   });
+  await lifecycle.deleted(person, now());
   return true;
 };
 
