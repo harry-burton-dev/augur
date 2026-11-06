@@ -69,7 +69,8 @@ describe.runIf(DATABASE_URL)('pull requests’ previews', () => {
       const version = url.split('@')[1];
       return json(release(version));
     }) as typeof fetch;
-    const found = await appFeed({ url: 'https://api/releases', fetchImpl })();
+    const read = await appFeed({ url: 'https://api/releases', fetchImpl })();
+    const found = Array.isArray(read) ? read : read.releases;
     expect(found.map((r) => `${r.version} ${r.channel} ${r.pr ?? '-'} ${r.release ? 'file' : 'no file'}`)).toEqual([
       '1.1.0-pr.12.2 preview 12 file',
       '1.1.0-pr.12.1 preview 12 no file', // only each pull request's newest build is read
