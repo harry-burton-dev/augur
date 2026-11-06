@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { NewAuditEntry } from '@augur/service-kit';
-import { MemoryDirectory } from './directory.ts';
+import { leaveNoticeKey, type NewAuditEntry, type NewNotification } from '@augur/service-kit';
+import { DirectoryError, MemoryDirectory } from './directory.ts';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
 import { addDays, leaveDueLeavers, todayIn } from './leavers.ts';
 import { federatedFirstSignIn, idleOf, lockedOf, withLifecycle, type DisabledCause, type Leaving, type Lifecycle } from './lifecycle.ts';
@@ -35,8 +35,9 @@ describe('a leaver flow whose audit entry fails', () => {
   const setUp = async () => {
     const directory = new MemoryDirectory();
     const kim = await directory.createPerson({ username: 'kim', firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org', roles: [], departments: [] });
+    const sam = await directory.createPerson({ username: 'sam', firstName: 'Sam', lastName: 'Ode', email: 'sam@example.org', roles: [], departments: [] });
     const kept = new Map<string, Lifecycle>();
-    const leaving: Leaving = { on: '2026-11-05', by: 'admin-1', handOverTo: 'sam' };
+    const leaving: Leaving = { on: '2026-11-05', by: 'admin-1', handOverTo: sam.id };
     const lifecycle = {
       get: async () => kept,
       disabled: async (person: string, cause: DisabledCause | undefined, at: string) => void kept.set(person, { ...kept.get(person), disabledAt: at, disabledCause: cause }),
@@ -49,12 +50,14 @@ describe('a leaver flow whose audit entry fails', () => {
       if (e.action === failing) throw new Error('events unreachable');
       entries.push(e);
     };
-    const run = (warn?: (m: string) => void) => leaveDueLeavers({ directory, lifecycle, audit }, 'UTC', new Date('2026-11-06T00:10:00Z'), warn);
-    return { kim, kept, entries, run, directory, failOn: (action?: string) => (failing = action) };
+    const told: NewNotification[] = [];
+    const tell = async (n: NewNotification) => void told.push(n);
+    const run = (warn?: (m: string) => void) => leaveDueLeavers({ directory, lifecycle, audit, tell }, 'UTC', new Date('2026-11-06T00:10:00Z'), warn);
+    return { kim, sam, kept, entries, told, run, directory, failOn: (action?: string) => (failing = action) };
   };
 
   it('tries `person.left` again, keeping who the work goes to', async () => {
-    const { kim, kept, entries, run, failOn } = await setUp();
+    const { kim, sam, kept, entries, run, failOn } = await setUp();
     failOn('person.left');
     const warnings: string[] = [];
     expect(await run((m) => warnings.push(m))).toEqual([]);
@@ -64,8 +67,47 @@ describe('a leaver flow whose audit entry fails', () => {
     failOn(undefined);
     expect(await run()).toEqual([kim.id]);
     expect(entries.map((e) => e.action)).toEqual(['person.disabled', 'person.left']);
-    expect(entries[1]!.detail).toMatchObject({ handOverTo: 'sam', lastDay: '2026-11-05' });
+    expect(entries[1]!.detail).toMatchObject({ handOverTo: sam.id, lastDay: '2026-11-05' });
+    expect(entries[1]!.key).toBe(`leaver:person.left:${kim.id}`);
     expect(await run()).toEqual([]);
+  });
+
+  it('hands to nobody, and tells admins, when the person named can’t sign in any more', async () => {
+    const { kim, sam, kept, entries, told, run, directory } = await setUp();
+    await directory.updatePerson(sam.id, { enabled: false });
+    expect(await run()).toEqual([kim.id]);
+    expect(entries.find((e) => e.action === 'person.left')!.detail).toMatchObject({ handOverLost: sam.id });
+    expect(entries.find((e) => e.action === 'person.left')!.detail).not.toHaveProperty('handOverTo');
+    expect(kept.get(kim.id)?.left).not.toHaveProperty('handOverTo');
+    expect(told).toEqual([expect.objectContaining({ app: 'admin', audience: ['role:admin'], level: 'needs', key: leaveNoticeKey(kim.id, 'nobody-to-hand-over-to') })]);
+  });
+
+  it('does the same when they’re gone from the directory, and still runs when admins can’t be told', async () => {
+    const { kim, kept, directory } = await setUp();
+    const gone: Leaving = { on: '2026-11-05', by: 'admin-1', handOverTo: 'nobody' };
+    const lifecycle = {
+      get: async () => kept,
+      disabled: async () => undefined,
+      left: async (person: string, left: NonNullable<Lifecycle['left']>) => void kept.set(person, { left }),
+      dueLeavers: async () => [{ person: kim.id, ...gone }],
+    };
+    const tell = async () => {
+      throw new Error('events unreachable');
+    };
+    expect(await leaveDueLeavers({ directory, lifecycle, tell }, 'UTC', new Date('2026-11-06T00:10:00Z'))).toEqual([kim.id]);
+    expect(kept.get(kim.id)?.left).not.toHaveProperty('handOverTo');
+  });
+
+  it('waits and tries again when it can’t tell whether the person named can take it on', async () => {
+    const { kim, kept, entries, run, directory } = await setUp();
+    const person = directory.person.bind(directory);
+    directory.person = async (id: string) => {
+      if (id !== kim.id) throw new DirectoryError('The sign-in service can’t be reached.', 503);
+      return person(id);
+    };
+    expect(await run()).toEqual([]);
+    expect(entries).toEqual([]);
+    expect(kept.get(kim.id)).toBeUndefined();
   });
 
   it('still says `person.disabled` on the next try, though their sign-in is already off', async () => {

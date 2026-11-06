@@ -621,7 +621,8 @@ export class KeycloakDirectory implements Directory {
     const fields = (['firstName', 'lastName', 'email', 'enabled'] as const).filter((k) => changes[k] !== undefined);
     if (fields.length) {
       const { data: user } = await this.call<KcUser>('GET', `/users/${id}`);
-      await this.call('PUT', `/users/${id}`, { ...user, ...Object.fromEntries(fields.map((k) => [k, changes[k]])) });
+      // `enabled` goes only when this change sets it: what was read may be old by now (see `askEveryone`).
+      await this.call('PUT', `/users/${id}`, { ...user, enabled: undefined, ...Object.fromEntries(fields.map((k) => [k, changes[k]])) });
     }
     if (changes.roles && roles) await this.setRoles(id, roles, changes.roles, current.roles);
     if (changes.departments) await this.setDepartments(id, changes.departments, current.departments);
@@ -698,7 +699,7 @@ export class KeycloakDirectory implements Directory {
     await this.call('PUT', `/users/${encodeURIComponent(id)}/reset-password`, { type: 'password', value: temporaryPassword, temporary: true }, 'That person isn’t in the directory.');
     const { data: user } = await this.call<KcUser>('GET', `/users/${id}`);
     const requiredActions = [...new Set([...(user.requiredActions ?? []), 'UPDATE_PASSWORD'])];
-    await this.call('PUT', `/users/${id}`, { ...user, requiredActions });
+    await this.call('PUT', `/users/${id}`, { ...user, enabled: undefined, requiredActions });
   }
 
   private async sameNameTaken(groups: KcGroup[], name: string, parentId: string | undefined, except?: string) {

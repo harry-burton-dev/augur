@@ -367,7 +367,8 @@ export class PgLifecycleStore implements LifecycleStore {
 
   async dueDeletions(before: string) {
     const { rows } = await this.pool.query<{ person: string }>(
-      'select person from identity.person_lifecycle where left_at is not null and deleted_at is null and left_at < $1 order by left_at, person',
+      // One already under way may be a Delete now that stopped part way, before the retention period is over.
+      'select person from identity.person_lifecycle where left_at is not null and deleted_at is null and (left_at < $1 or deleting_step is not null) order by left_at, person',
       [before],
     );
     return rows.map((r) => r.person);

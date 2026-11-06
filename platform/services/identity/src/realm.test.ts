@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DirectoryError, KeycloakDirectory } from './directory.ts';
-import { applyEntra, ENTRA_FIRST_SIGN_IN, realmEntraFromEnv, applyOrganisation, applyTwoStepForAll, NOTICE_KEYS, applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { applyEntra, ENTRA_FIRST_SIGN_IN, ENTRA_LINK_STEP, ENTRA_REFUSE_STEP, realmEntraFromEnv, applyOrganisation, applyTwoStepForAll, NOTICE_KEYS, applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -511,40 +511,80 @@ describe('Entra as the organisation’s sign-in', () => {
     expect(realmEntraFromEnv({ ENTRA_TENANT_ID: entra.tenantId, ENTRA_CLIENT_ID: 'augur-app', ENTRA_CLIENT_SECRET: 's3cret' })).toEqual(entra);
   });
 
-  it('adds the provider for the tenant, its first sign-in that links by email, and its mappers; then changes nothing', async () => {
-    let provider: Record<string, unknown> | undefined;
-    const flows: { alias: string }[] = [];
-    const executions: { id: string; requirement: string; providerId: string }[] = [];
-    let mappers: { name: string }[] = [];
+  /** Keycloak's providers, flows and executions, as far as the first sign-in needs them. */
+  const entraKeycloak = (start: { provider?: Record<string, unknown>; flows?: { id: string; alias: string }[]; executions?: Record<string, unknown>[]; inUse?: boolean } = {}) => {
+    const state = { provider: start.provider, flows: start.flows ?? [], executions: start.executions ?? [], mappers: [] as { name: string }[] };
     const { calls, kc } = keycloak((method, path, body) => {
-      if (path === '/identity-provider/instances/entra' && method === 'GET') return provider ?? { __status: 404 };
-      if (path === '/identity-provider/instances' && method === 'POST') provider = body as Record<string, unknown>;
-      if (path === '/identity-provider/instances/entra' && method === 'PUT') provider = body as Record<string, unknown>;
-      if (path === '/authentication/flows' && method === 'GET') return flows;
-      if (path === '/authentication/flows' && method === 'POST') flows.push(body as { alias: string });
-      if (path.endsWith('/executions') && method === 'GET') return executions;
-      if (path.endsWith('/mappers') && method === 'GET') return mappers;
-      if (path.endsWith('/mappers') && method === 'POST') mappers = [...mappers, body as { name: string }];
+      if (path === '/identity-provider/instances/entra' && method === 'GET') return state.provider ?? { __status: 404 };
+      if (path === '/identity-provider/instances' && method === 'POST') state.provider = body as Record<string, unknown>;
+      if (path === '/identity-provider/instances/entra' && method === 'PUT') state.provider = body as Record<string, unknown>;
+      if (path === '/authentication/flows' && method === 'GET') return state.flows;
+      if (path === '/authentication/flows' && method === 'POST') state.flows.push({ id: 'flow-new', ...(body as { alias: string }) });
+      if (path.endsWith('/executions') && method === 'GET') return state.executions;
+      if (path.endsWith('/mappers') && method === 'GET') return state.mappers;
+      if (path.endsWith('/mappers') && method === 'POST') state.mappers = [...state.mappers, body as { name: string }];
       return undefined;
     });
     // The fake answers 404 for a missing provider through the directory's own error.
     const call = kc.call.bind(kc);
     let n = 0;
     kc.call = (async (method: string, path: string, body?: unknown) => {
-      if (path === '/authentication/flows/augur%20first%20sign-in/executions/execution') {
+      if (method === 'DELETE' && path.startsWith('/authentication/flows/')) {
+        calls.push({ method, path, body });
+        if (state.provider?.firstBrokerLoginFlowAlias === ENTRA_FIRST_SIGN_IN) throw new DirectoryError('The flow is in use.', 409);
+        state.flows = state.flows.filter((f) => !path.endsWith(f.id));
+        state.executions = [];
+        return { data: undefined };
+      }
+      if (method === 'POST' && path.endsWith('/executions/execution')) {
         const id = `e${++n}`;
-        executions.push({ id, requirement: 'DISABLED', providerId: (body as { provider: string }).provider });
+        state.executions.push({ id, requirement: 'DISABLED', providerId: (body as { provider: string }).provider });
         calls.push({ method, path, body });
         return { data: undefined, location: `http://kc/x/${id}` };
+      }
+      if (method === 'POST' && path.endsWith('/executions/flow')) {
+        state.executions.push({ id: `e${++n}`, requirement: 'DISABLED', displayName: (body as { alias: string }).alias, authenticationFlow: true });
+        calls.push({ method, path, body });
+        return { data: undefined };
+      }
+      if (method === 'POST' && path.endsWith('/config')) {
+        const exec = state.executions.find((e) => path.includes(`/${e.id as string}/`))!;
+        exec.authenticationConfig = 'config-1';
+        calls.push({ method, path, body });
+        return { data: undefined };
+      }
+      if (method === 'PUT' && path.endsWith('/executions')) {
+        const sent = body as { id: string; requirement: string };
+        state.executions.find((e) => e.id === sent.id)!.requirement = sent.requirement;
       }
       const r = await call(method, path, body);
       if ((r.data as { __status?: number } | undefined)?.__status === 404) throw new DirectoryError('missing', 404);
       return r;
     }) as typeof kc.call;
+    return { state, calls, kc };
+  };
+
+  /** What the flow does, step by step. */
+  const steps = (executions: Record<string, unknown>[]) => executions.map((e) => [e.providerId ?? e.displayName, e.requirement]);
+  const WHOLE = [
+    ['idp-create-user-if-unique', 'ALTERNATIVE'],
+    [ENTRA_LINK_STEP, 'ALTERNATIVE'],
+    ['idp-auto-link', 'REQUIRED'],
+    [ENTRA_REFUSE_STEP, 'CONDITIONAL'],
+    ['conditional-user-role', 'REQUIRED'],
+    ['deny-access-authenticator', 'REQUIRED'],
+  ];
+
+  it('adds the provider for the tenant, its first sign-in that links by email, and its mappers; then changes nothing', async () => {
+    const { state, calls, kc } = entraKeycloak();
     const changes: string[] = [];
     await applyEntra(kc, entra, 'Example Org', changes);
+    const { flows, provider, mappers } = { ...state };
     expect(flows).toEqual([expect.objectContaining({ alias: ENTRA_FIRST_SIGN_IN, providerId: 'basic-flow' })]);
-    expect(calls.filter((c) => c.method === 'PUT' && c.path.endsWith('/executions')).map((c) => (c.body as { requirement: string }).requirement)).toEqual(['ALTERNATIVE', 'ALTERNATIVE']);
+    expect(steps(state.executions)).toEqual(WHOLE);
+    // The role check comes after the link names the account, and turns a holder away with a reason.
+    expect(calls).toContainEqual(expect.objectContaining({ body: expect.objectContaining({ config: { condUserRole: 'two-step-sign-in', negate: 'false' } }) }));
+    expect(calls).toContainEqual(expect.objectContaining({ body: expect.objectContaining({ config: { denyErrorMessage: expect.stringContaining('deployment admin') } }) }));
     expect(provider).toMatchObject({
       alias: 'entra',
       providerId: 'oidc',
@@ -562,6 +602,44 @@ describe('Entra as the organisation’s sign-in', () => {
     // A new secret is noticed from the fingerprint, without reading the secret back.
     await applyEntra(kc, { ...entra, clientSecret: 'new' }, 'Example Org', again);
     expect(again).toEqual([`entra: brought up to date for tenant ${entra.tenantId}`]);
+  });
+
+  describe('a first sign-in that isn’t whole', () => {
+    const inUse = { alias: 'entra', enabled: true, firstBrokerLoginFlowAlias: ENTRA_FIRST_SIGN_IN, config: { clientSecret: '**********' } };
+    const flows = () => [{ id: 'flow-old', alias: ENTRA_FIRST_SIGN_IN }];
+
+    it('replaces an older release’s, which links admins, moving Entra off it meanwhile and back', async () => {
+      const old = [
+        { id: 'o1', providerId: 'idp-create-user-if-unique', requirement: 'ALTERNATIVE' },
+        { id: 'o2', providerId: 'idp-auto-link', requirement: 'ALTERNATIVE' },
+      ];
+      const { state, calls, kc } = entraKeycloak({ provider: inUse, flows: flows(), executions: old });
+      const changes: string[] = [];
+      await applyEntra(kc, entra, 'Example Org', changes);
+      expect(steps(state.executions)).toEqual(WHOLE);
+      expect(state.provider).toMatchObject({ firstBrokerLoginFlowAlias: ENTRA_FIRST_SIGN_IN });
+      const moves = calls.filter((c) => c.method === 'PUT' && c.path === '/identity-provider/instances/entra').map((c) => (c.body as { firstBrokerLoginFlowAlias: string }).firstBrokerLoginFlowAlias);
+      expect(moves).toEqual(['first broker login', ENTRA_FIRST_SIGN_IN]);
+      expect(changes).toContain(`entra: older or unfinished ${ENTRA_FIRST_SIGN_IN} replaced`);
+    });
+
+    it('builds again what a failed run left half done, with steps disabled or missing', async () => {
+      for (const executions of [[], [{ id: 'o1', providerId: 'idp-create-user-if-unique', requirement: 'DISABLED' }], WHOLE.slice(0, 5).map(([name, requirement], i) => ({ id: `o${i}`, requirement, ...(name!.startsWith('augur') ? { displayName: name } : { providerId: name }), authenticationConfig: 'c' }))]) {
+        const { state, kc } = entraKeycloak({ provider: inUse, flows: flows(), executions });
+        await applyEntra(kc, entra, 'Example Org', []);
+        expect(steps(state.executions)).toEqual(WHOLE);
+      }
+    });
+
+    it('puts Entra back on the flow when a run stopped after moving it off', async () => {
+      const { state, kc } = entraKeycloak();
+      await applyEntra(kc, entra, 'Example Org', []);
+      state.provider = { ...state.provider, firstBrokerLoginFlowAlias: 'first broker login' };
+      const changes: string[] = [];
+      await applyEntra(kc, entra, 'Example Org', changes);
+      expect(state.provider).toMatchObject({ firstBrokerLoginFlowAlias: ENTRA_FIRST_SIGN_IN });
+      expect(changes).toEqual([`entra: brought up to date for tenant ${entra.tenantId}`]);
+    });
   });
 
   it('turns the provider off without the settings, keeping it and its links', async () => {

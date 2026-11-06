@@ -9,7 +9,8 @@
 import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { callerFromHeaders, type Caller, type NewAuditEntry, type NewNotification } from '@augur/service-kit';
+import { callerFromHeaders, leaveNoticeKey, type Caller, type NewAuditEntry, type NewNotification } from '@augur/service-kit';
+import { ADMINS } from './leavers.ts';
 import { DirectoryError, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
 import { SECURITY_EMAIL_LISTENER, TWO_STEP_ROLES } from './realm.ts';
 import { choice, empty, IdParams, Preferences, ref, refused } from './schemas.ts';
@@ -575,9 +576,6 @@ export interface MeOptions {
   languages?: string[] | (() => Promise<string[]>);
 }
 
-/** Who acts on a request to leave: the people who run AUGUR (ADR 0040's leaver flow is theirs). */
-const LEAVE_AUDIENCE = ['role:admin'];
-
 /** One part of a person's download: what a service keeps about them, or why it isn't there. */
 const part = async (name: string, read: () => Promise<unknown>): Promise<[string, unknown] | [string, undefined, string]> => {
   try {
@@ -791,14 +789,15 @@ export const meRoutes =
         const who = caller(req.headers);
         const note = req.body.note?.trim() || undefined;
         const before = await store.leaveRequest(who.id);
-        const request: LeaveRequest = await store.requestLeave(who.id, note);
+        // Recorded first: a request kept with no entry would, on a retry, count as told already and no admin would hear.
         await record(who, 'account.leave-requested', note ? { note } : undefined);
+        const request: LeaveRequest = await store.requestLeave(who.id, note);
         if (!before) {
           await tell?.({
             app: 'admin',
             recipients: [],
-            audience: LEAVE_AUDIENCE,
-            key: `leave:${who.id}:${request.requestedAt}`,
+            audience: ADMINS,
+            key: leaveNoticeKey(who.id, request.requestedAt),
             level: 'needs',
             title: `${who.name} asked to leave`,
             detail: note ?? 'They asked from their account. Turn their account off in People when they go.',

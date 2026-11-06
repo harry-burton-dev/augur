@@ -70,7 +70,8 @@ describe.runIf(DATABASE_URL)('deleting leavers after the retention period (ADR 0
   it('deletes only leavers past the period, in order, keeping only the id and dates', async () => {
     const { kim, deps, order, entries } = await setup();
     expect(await deleteDueLeavers(deps, 90, new Date('2026-11-05T00:00:00Z'))).toEqual([kim.id]);
-    expect(order).toEqual([`redact ${kim.id}`, `keycloak ${kim.id}`, 'audit person.deleted']);
+    // Again after Keycloak: a sign-in copied into Activity since the first goes too.
+    expect(order).toEqual([`redact ${kim.id}`, `keycloak ${kim.id}`, `redact ${kim.id}`, 'audit person.deleted']);
     expect(entries[0]).toMatchObject({ actor: { id: 'identity', kind: 'service' }, target: kim.id, detail: {} });
     const kept = (await db.lifecycle.get([kim.id])).get(kim.id)!;
     expect(kept).toEqual({ left: { at: '2026-07-01T00:00:00.000Z', by: '' }, deletedAt: expect.any(String) });
@@ -89,6 +90,14 @@ describe.runIf(DATABASE_URL)('deleting leavers after the retention period (ADR 0
     expect(warnings[0]).toContain('events unreachable');
     failRedact(false);
     expect(await deleteDueLeavers(deps, 90, new Date('2026-11-05T00:00:00Z'))).toEqual([kim.id]);
-    expect(order).toEqual([`redact ${kim.id}`, `keycloak ${kim.id}`, 'audit person.deleted']);
+    expect(order).toEqual([`redact ${kim.id}`, `keycloak ${kim.id}`, `redact ${kim.id}`, 'audit person.deleted']);
+  });
+
+  it('carries on a deletion under way before the retention period is over, as a Delete now that stopped', async () => {
+    const { sam, deps } = await setup();
+    const at = new Date('2026-11-05T00:00:00Z');
+    expect(await db.lifecycle.dueDeletions(new Date(at.getTime() - 90 * 86_400_000).toISOString())).not.toContain(sam.id);
+    await db.lifecycle.deleting(sam.id, 'keycloak-deleted');
+    expect(await deleteDueLeavers(deps, 90, at)).toContain(sam.id);
   });
 });
