@@ -143,8 +143,7 @@ export interface SendSummary {
   failed: number;
 }
 
-/** Sends the notice emails that are due. Never throws for one email; identity not answering leaves them all due. */
-export const sendDueEmails = async ({ outbox, settings, mailer, platformUrl, now = () => new Date(), log }: SendOptions): Promise<SendSummary> => {
+const sendDue = async ({ outbox, settings, mailer, platformUrl, now = () => new Date(), log }: SendOptions): Promise<SendSummary> => {
   const summary: SendSummary = { sent: 0, later: 0, skipped: 0, failed: 0 };
   const due = await outbox.due(EMAIL_BATCH, now());
   if (!due.length) return summary;
@@ -193,3 +192,10 @@ export const sendDueEmails = async ({ outbox, settings, mailer, platformUrl, now
   }
   return summary;
 };
+
+/**
+ * Sends the notice emails that are due, one run at a time: a run that finds another at it leaves them to that one.
+ * Never throws for one email; identity not answering leaves them all due.
+ */
+export const sendDueEmails = async (options: SendOptions): Promise<SendSummary> =>
+  (await options.outbox.alone(() => sendDue(options))) ?? { sent: 0, later: 0, skipped: 0, failed: 0 };

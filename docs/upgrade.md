@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Apps can't publish events to a floor they're off on
+
+**From** unreleased
+
+An event naming a floor where its app is off or blocked is now refused. An app using the outbox has that one event set aside and reported through `onError`; its other events carry on.
+
 ### App ids that are now reserved, and previews to remove by hand
 
 **From** unreleased

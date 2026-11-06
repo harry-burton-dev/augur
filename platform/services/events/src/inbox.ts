@@ -45,8 +45,11 @@ export type InboxAction =
   | { action: 'handed-on'; by: string; to: InboxOwner; note?: string }
   | { action: 'done'; by: string };
 
-/** What came of a step: the item now and the history line's id; or why it didn't happen. */
-export type StepResult = { item: InboxItem; step: string } | { missing: true } | { closed: InboxItem } | { takenBy: string };
+/** The item as a person's action was checked against it: who owned it and who had taken it. */
+export type InboxSeen = Pick<InboxItem, 'owner' | 'takenBy'>;
+
+/** What came of a step: the item now and the history line's id; or why it didn't happen. `changed`: it no longer stands as it was seen. */
+export type StepResult = { item: InboxItem; step: string } | { missing: true } | { closed: InboxItem } | { takenBy: string } | { changed: true };
 
 export type PutResult = { item: InboxItem; step: string; created: boolean } | { closed: InboxItem };
 
@@ -70,8 +73,8 @@ export interface InboxStore {
   byKey(app: string, key: string): Promise<InboxItem | undefined>;
   get(id: string): Promise<InboxItem | undefined>;
   history(id: string): Promise<InboxHistory[]>;
-  /** Applies a person's action if the item is still open (and, to take it, untaken). */
-  act(id: string, a: InboxAction): Promise<StepResult>;
+  /** Applies a person's action if the item is still open (and, to take it, untaken) and stands as `seen`, what the action was checked against. */
+  act(id: string, a: InboxAction, seen?: InboxSeen): Promise<StepResult>;
   list(q: InboxQuery): Promise<InboxItem[]>;
   /** `leadTeams`: the teams whose leads-only items count, those the person stands on as a lead. */
   counts(person: string, teams: string[], leadTeams: string[]): Promise<InboxCounts>;
@@ -209,6 +212,14 @@ const fromItemRow = (r: ItemRow): InboxItem =>
 
 type HistoryRow = { id: string; at: Date; by: string | null; action: InboxHistory['action']; from_owner: string | null; to_owner: string | null; note: string | null };
 
+/** Why a row no longer stands as it was seen, or undefined when it still does. */
+const changedSince = (row: ItemRow, seen: InboxSeen | undefined) => {
+  if (!seen) return undefined;
+  if ((row.taken_by ?? undefined) !== seen.takenBy) return row.taken_by ? { takenBy: row.taken_by } : { changed: true as const };
+  const same = row.owner_kind === seen.owner.kind && row.owner_id === seen.owner.id && row.team_role === (seen.owner.role ?? null);
+  return same ? undefined : { changed: true as const };
+};
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -344,25 +355,30 @@ export class PgInboxStore implements InboxStore {
     return rows.map((r) => tidy({ at: r.at.toISOString(), by: r.by, action: r.action, from: r.from_owner, to: r.to_owner, note: r.note } as InboxHistory));
   }
 
-  async act(id: string, a: InboxAction): Promise<StepResult> {
+  async act(id: string, a: InboxAction, seen?: InboxSeen): Promise<StepResult> {
     if (!UUID.test(id)) return { missing: true };
     return this.step(async (c) => {
       if (a.action === 'taken') {
-        // The one statement that decides a race: only an untaken, open item is taken.
+        // The one statement that decides a race: only an untaken, open item is taken, from the owner it was seen with.
         const { rows } = await c.query<ItemRow>(
-          `update events.inbox_items set taken_by = $2, taken_at = now(), updated_at = now() where id = $1 and state = 'open' and taken_by is null returning *`,
-          [id, a.by],
+          `update events.inbox_items set taken_by = $2, taken_at = now(), updated_at = now()
+           where id = $1 and state = 'open' and taken_by is null
+             and ($3::text is null or (owner_kind = $3 and owner_id = $4 and team_role is not distinct from $5))
+           returning *`,
+          [id, a.by, seen?.owner.kind ?? null, seen?.owner.id ?? null, seen?.owner.role ?? null],
         );
         if (rows[0]) return { row: rows[0], before: [`${rows[0].owner_kind}:${rows[0].owner_id}`], line: { action: 'taken', by: a.by }, change: 'changed' };
         const { rows: now } = await c.query<ItemRow>('select * from events.inbox_items where id = $1', [id]);
         if (!now[0]) return { missing: true };
         if (now[0].state !== 'open') return { closed: fromItemRow(now[0]) };
-        return { takenBy: now[0].taken_by! };
+        return now[0].taken_by ? { takenBy: now[0].taken_by } : { changed: true };
       }
       const { rows: found } = await c.query<ItemRow>('select * from events.inbox_items where id = $1 for update', [id]);
       const was = found[0];
       if (!was) return { missing: true };
       if (was.state !== 'open') return { closed: fromItemRow(was) };
+      const stale = changedSince(was, seen);
+      if (stale) return stale;
       const before = principalsOf(fromItemRow(was));
       if (a.action === 'released') {
         const { rows } = await c.query<ItemRow>('update events.inbox_items set taken_by = null, taken_at = null, updated_at = now() where id = $1 returning *', [id]);
