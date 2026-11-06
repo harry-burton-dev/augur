@@ -170,10 +170,12 @@ export class ReportSender {
   start() {
     if (this.opts.reporting.mode !== 'send') return;
     const tick = (reason: ReportReason) => () => {
-      void this.maybeSend(reason).finally(() => {
-        this.timer = setTimeout(tick('changed'), LOOK_MS);
-        this.timer.unref?.();
-      });
+      void this.maybeSend(reason)
+        .catch((err: Error) => (this.opts.log ?? console).warn(`The record for Backstage couldn’t be made: ${err.message}`))
+        .finally(() => {
+          this.timer = setTimeout(tick('changed'), LOOK_MS);
+          this.timer.unref?.();
+        });
     };
     this.timer = setTimeout(tick('started'), FIRST_MS);
     this.timer.unref?.();

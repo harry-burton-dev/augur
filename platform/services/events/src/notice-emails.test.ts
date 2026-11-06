@@ -111,6 +111,34 @@ describe.runIf(DATABASE_URL)('emailing notices', () => {
     expect(await send()).toEqual({ sent: 0, later: 0, skipped: 0, failed: 0 });
   });
 
+  it('sends each email once when runs overlap, as a slow relay makes them', async () => {
+    await needs(['u-1', 'u-2']);
+    const people = new Map([settings('u-1'), settings('u-2')].map((s) => [s.person, s]));
+    const { mailer, sent } = fakeMailer();
+    let sending = () => {};
+    const reached = new Promise<void>((resolve) => (sending = resolve));
+    let letGo = () => {};
+    const gate = new Promise<void>((resolve) => (letGo = resolve));
+    const slow: NoticeMailer = {
+      ...mailer,
+      async sendNotice(to, n) {
+        sending();
+        await gate;
+        return mailer.sendNotice(to, n);
+      },
+    };
+    const send = (relay: NoticeMailer) => sendDueEmails({ outbox: db.store.emails, settings: async () => people, mailer: relay, now: () => new Date(Date.now() + 60_000) });
+    const first = send(slow);
+    await reached;
+    expect(await send(mailer)).toEqual({ sent: 0, later: 0, skipped: 0, failed: 0 });
+    letGo();
+    expect(await first).toEqual({ sent: 2, later: 0, skipped: 0, failed: 0 });
+    expect(sent).toHaveLength(2);
+    // The lock went with the run, whichever connection the next one gets.
+    await needs(['u-1']);
+    expect(await send(mailer)).toMatchObject({ sent: 1 });
+  });
+
   it('waits out quiet hours, then sends', async () => {
     await needs(['u-1']);
     // Quiet from an hour ago until an hour from now, in UTC, so the notification (made now) isn't stale.

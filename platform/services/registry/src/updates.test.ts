@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
 import { type AppRecord } from './store.ts';
 import { feedSigner, repoOfFeed, sameRepository } from './feed-trust.ts';
-import { automaticDevUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { defaultDesiredState } from './desired-state.ts';
+import { automaticDevUpgrade, automaticUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 
 const db = registryDb();
@@ -136,6 +137,43 @@ describe('the server’s ring', () => {
     expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.50', 'dev', { settings: settings(['MODELS_URL'], ['MODELS_URL']) })]), [byHand])).toBeUndefined();
     // One the updater makes up itself doesn't need a person.
     expect(automaticDevUpgrade(await workbench([release('0.4.1-dev.51', 'dev', { settings: settings(['MODELS_CLIENT_SECRET'], ['MODELS_CLIENT_SECRET']) })]), [byHand])).toBe('0.4.1-dev.51');
+    // Nor from a feed it can't rely on any more.
+    const held = await workbench([dev]);
+    expect(automaticDevUpgrade({ ...held, problem: 'The release feed isn’t signed.' }, [byHand])).toBeUndefined();
+    expect(automaticDevUpgrade({ ...held, feedTrust: { state: 'verified', expires: '2026-11-15T00:00:00Z' } }, [byHand], new Date('2026-11-16T00:00:00Z'))).toBeUndefined();
+  });
+
+  it('starts nothing by itself from a refused or expired feed, though it still shows what it held', async () => {
+    const state = defaultDesiredState('augur', 'preview');
+    const byHand = { version: '0.4.0', state: 'done' as const, requestedBy: 'u-1' };
+    let now = new Date('2026-11-10T00:00:00Z');
+    let refused = false;
+    const checker = new UpdateChecker({
+      feed: async () => {
+        if (refused) throw new FeedProblem('The release feed isn’t signed.');
+        return { releases: [release('0.4.1', 'beta')], trust: { state: 'verified', expires: '2026-11-15T00:00:00Z' } };
+      },
+      running: { version: '0.4.0', channel: 'beta' },
+      ring: 'preview',
+      now: () => now,
+    });
+    await checker.check();
+    const view = () => updatesView({ checker, apps: [] });
+    expect(automaticUpgrade(view(), state, [byHand], now)).toBe('0.4.1');
+    expect(automaticUpgrade(view(), state, [byHand], new Date('2026-11-16T00:00:00Z'))).toBeUndefined();
+    refused = true;
+    now = new Date('2026-11-11T00:00:00Z');
+    await checker.check();
+    expect(view()).toMatchObject({ next: '0.4.1', problem: 'The release feed isn’t signed.' });
+    expect(automaticUpgrade(view(), state, [byHand], now)).toBeUndefined();
+  });
+
+  it('asks for a new setting that says what the server trusts in .env, not when upgrading', async () => {
+    const checker = new UpdateChecker({ feed: async () => [release('0.4.1', 'beta', { settings: settings(['IMAGE_SIGNER'], ['IMAGE_SIGNER']) })], running: { version: '0.4.0', channel: 'beta' }, ring: 'preview' });
+    await checker.check();
+    expect(updatesView({ checker, apps: [] }).needsYou).toEqual([
+      { kind: 'setting', key: 'IMAGE_SIGNER', required: true, message: 'Set IMAGE_SIGNER in .env on the server: 0.4.1 won’t start without it. It says what this server trusts, so it can’t be entered when you upgrade.' },
+    ]);
   });
 });
 
@@ -424,6 +462,19 @@ describe.runIf(DATABASE_URL)('upgrading', () => {
     await server.inject({ method: 'POST', url: '/v1/platform/upgrade/progress', headers: updater, payload: { id: target.id, step: 'preflight', state: 'failed', outcome: 'rolled-back' } });
     await ask({});
     expect((await server.inject({ method: 'GET', url: '/v1/platform/upgrade/target', headers: updater })).json().settings).toBeUndefined();
+  });
+
+  it('takes only the settings the upgrade adds, and never one that says what the server trusts', async () => {
+    const offered = { all: ['PLATFORM_URL', 'SERVER_RING', 'IMAGE_SIGNER', 'OBJECT_STORE_URL'], required: ['PLATFORM_URL'], added: ['IMAGE_SIGNER', 'OBJECT_STORE_URL'], removed: [] };
+    const server = await db.app({ verifyService, updates: await checked([release('0.3.0', 'beta', { images, settings: offered }), release('0.2.0')]) });
+    const ask = (s: Record<string, string>) => server.inject({ method: 'PUT', url: '/v1/platform/upgrade', headers: fresh(), payload: { version: '0.3.0', settings: s } });
+    const existing = await ask({ PLATFORM_URL: 'https://elsewhere.example' });
+    expect(existing.statusCode).toBe(400);
+    expect(existing.json().message).toBe('PLATFORM_URL isn’t new in AUGUR 0.3.0, so an upgrade doesn’t change it. Change it in .env on the server.');
+    expect((await ask({ SERVER_RING: 'dev' })).json().message).toBe('SERVER_RING says what this server trusts, so it’s set in .env on the server, not here.');
+    // Even one the release adds.
+    expect((await ask({ IMAGE_SIGNER: '^https://example.org/' })).statusCode).toBe(400);
+    expect((await ask({ OBJECT_STORE_URL: 'https://s3.example.org' })).statusCode).toBe(202);
   });
 
   it('ends an upgrade whose settings were lost in a restart, saying so, before the updater starts it', async () => {

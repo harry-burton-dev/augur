@@ -323,6 +323,17 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
     return ids;
   };
 
+  /**
+   * Puts the registry and the gateway back on the version that was serving before a switch, or, on a
+   * first install, leaves the gateway nowhere to send calls. It holds whichever side of the switch things
+   * stopped on, so nobody needs to know. Throws only when the gateway may still be on the new version.
+   */
+  const goBack = async (app: string, active: RunningApp | undefined, signIn: string) => {
+    if (!active) return void (await calls.setUpstream(app, null).catch(() => undefined));
+    if (active.manifest) await calls.register(active.manifest, signIn).catch(() => undefined);
+    await calls.setUpstream(app, upstreamOf(app, active.slot));
+  };
+
   /** The release to run, .env, and the signature checked: the start of an install and of a preview. */
   const verified = async (job: AppJob, report: JobReporter) => {
     const release = job.release;
@@ -412,14 +423,14 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
     }
     const slot: Slot = current.active?.slot === 'blue' ? 'green' : 'blue';
     const candidate: RunningApp = { slot, version: release.version, image: release.service.image, storage, manifest: release.manifest, repository: release.signer.repository };
-    const withCandidate: RunnerState = { apps: { ...state.apps, [app]: { ...current, retiring: candidate } } };
+    const withCandidate: RunnerState = { ...state, apps: { ...state.apps, [app]: { ...current, retiring: candidate } } };
     // Written as retiring with no end, so a runner that restarts now still knows the container is there.
     await save(withCandidate, env);
     const name = serviceName(app, slot);
     /** Takes the new container away again, leaving the old one serving. */
     const undo = async () => {
       await host.stop([name]).catch(() => undefined);
-      const restored: RunnerState = { apps: { ...state.apps } };
+      const restored: RunnerState = { ...state, apps: { ...state.apps } };
       if (current.active) restored.apps[app] = { active: current.active };
       else delete restored.apps[app];
       await save(restored, env).catch(() => undefined);
@@ -444,18 +455,22 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
     try {
       await calls.register(release.manifest, secrets.signIn);
       await calls.setUpstream(app, upstreamOf(app, slot));
+      await report({ step: 'switch', state: 'done' });
     } catch (err) {
-      if (current.active) await calls.setUpstream(app, upstreamOf(app, current.active.slot)).catch(() => undefined);
+      const refused = `The registry didn’t take ${release.version}: ${reason(err)}`;
+      // The new version may be serving by now, so it stops only once the gateway has left it.
+      await goBack(app, current.active, secrets.signIn).catch((back) => {
+        throw new StepFailed(`${refused} Going back to ${current.active?.version} didn’t work either, so ${name} is still running: ${reason(back)}`);
+      });
       await undo();
-      throw new StepFailed(`The registry didn’t take ${release.version}: ${reason(err)}`);
+      throw new StepFailed(refused);
     }
-    await report({ step: 'switch', state: 'done' });
 
     // An upgrade is watched while the old version still runs; a first install has nothing to go back to.
     if (current.active) {
       const old = current.active;
       // Kept with an end past the watch, so a runner that restarts meanwhile stops it in time, as after any switch.
-      await save({ apps: { ...state.apps, [app]: { active: candidate, retiring: { ...old, until: new Date(now().getTime() + APP_WATCH_MS + RETIRE_MS).toISOString() } } } }, env);
+      await save({ ...state, apps: { ...state.apps, [app]: { active: candidate, retiring: { ...old, until: new Date(now().getTime() + APP_WATCH_MS + RETIRE_MS).toISOString() } } } }, env);
       await report({ step: 'watch', state: 'running', message: `Watching ${release.manifest.name} ${release.version} for ${APP_WATCH_MS / 60_000} minutes; ${old.version} is still running to go back to.` });
       const problem = await stillAnswering(`${upstreamOf(app, slot)}/healthz`, release.version);
       if (problem) {
@@ -470,14 +485,14 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
           throw new StepFailed(`${why} Going back to ${old.version} didn’t work: ${reason(err)}`);
         }
         await host.stop([name]).catch(() => undefined);
-        await save({ apps: { ...state.apps, [app]: { active: old } } }, env);
+        await save({ ...state, apps: { ...state.apps, [app]: { active: old } } }, env);
         throw new StepFailed(`${why} Back on ${old.version} by itself.`);
       }
       await report({ step: 'watch', state: 'done' });
     }
 
     const until = new Date(now().getTime() + RETIRE_MS).toISOString();
-    const next: RunnerState = { apps: { ...state.apps, [app]: { active: candidate, ...(current.active ? { retiring: { ...current.active, until } } : {}) } } };
+    const next: RunnerState = { ...state, apps: { ...state.apps, [app]: { active: candidate, ...(current.active ? { retiring: { ...current.active, until } } : {}) } } };
     await save(next, env);
     await report({
       step: 'retire',
@@ -538,8 +553,9 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
     const id = previewId(job.app, job.pr);
     const state = await host.readState();
     const had = state.previews?.[id];
-    await host.stop([previewService(id)]);
+    // One the state doesn't name isn't in the Compose project either, so Compose would refuse to stop it.
     if (had) {
+      await host.stop([previewService(id)]);
       const { [id]: _, ...others } = state.previews!;
       await save({ ...state, previews: others }, await host.readEnv());
     }
@@ -571,14 +587,17 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
   const run = async (job: AppJob, report: JobReporter): Promise<'done' | 'failed'> => {
     if (job.state === 'running') {
       // Only this runner works on jobs, so one already under way means it stopped partway through.
-      // A new version it had started but not switched to (retiring, with no end) is taken away.
+      // A new version it had started but not finished switching to (retiring, with no end) is taken away.
       const state = await host.readState();
       const started = job.pr === undefined ? state.apps[job.app]?.retiring : undefined;
       if (started && !started.until) {
+        const env = await host.readEnv();
+        // It may have stopped after the switch. If this throws, the job stays running and comes back here.
+        await goBack(job.app, state.apps[job.app].active, appSecrets(env, job.app)!.signIn);
         await host.stop([serviceName(job.app, started.slot)]).catch(() => undefined);
         delete state.apps[job.app].retiring;
         if (!state.apps[job.app].active) delete state.apps[job.app];
-        await save(state, await host.readEnv()).catch(() => undefined);
+        await save(state, env).catch(() => undefined);
       }
       await report({ step: 'start', state: 'failed', outcome: 'failed', message: 'The app runner restarted partway through. Whatever was serving before still is; ask again.' });
       return 'failed';

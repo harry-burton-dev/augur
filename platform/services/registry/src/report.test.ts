@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createPublicKey, verify } from 'node:crypto';
 import { callerHeaders } from '@augur/service-kit';
 import { deploymentKey, publicKeyLine, reportingFrom, ReportSender, signReport, reportOf } from './report.ts';
@@ -30,6 +30,33 @@ const overview = (extra: Partial<Overview> = {}): Overview => ({
   ],
   needsYou: [],
   ...extra,
+});
+
+describe('the record’s timer', () => {
+  it('logs a failure to make the record, and looks again', async () => {
+    vi.useFakeTimers();
+    try {
+      const warnings: string[] = [];
+      let looks = 0;
+      const sender = new ReportSender({
+        reporting: reportingFrom({ DEPLOYMENT_ID: 'augur-workbench', PORTAL_URL: 'https://portal.example' }),
+        store: {} as never,
+        overview: async () => {
+          looks += 1;
+          throw new Error('The database went away.');
+        },
+        log: { info: () => {}, warn: (message) => void warnings.push(message) },
+      });
+      sender.start();
+      await vi.advanceTimersByTimeAsync(2 * 60_000);
+      expect(warnings).toEqual([expect.stringContaining('The database went away.')]);
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+      expect(looks).toBe(2);
+      sender.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe.runIf(DATABASE_URL)('reporting what this deployment runs (ADR 0019)', () => {

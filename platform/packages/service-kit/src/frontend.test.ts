@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { frontendDigest, frontendPathProblem, packFrontend, publishFrontend, readFrontend, unpackFrontend } from './frontend.ts';
 
@@ -48,6 +48,13 @@ describe('frontend tarballs', () => {
     expect(() => unpackFrontend(many, { files: 10, bytes: 20 })).toThrow(/at most/);
     expect(() => unpackFrontend(Buffer.from('not gzip'))).toThrow(/gzipped tarball/);
     expect(() => unpackFrontend(gzipSync(Buffer.alloc(1024)))).toThrow(/no files/);
+  });
+
+  it('refuses a negative size, which would never get to the end of the tarball', () => {
+    const tar = gunzipSync(packFrontend([{ path: 'a.js', data: Buffer.alloc(10) }]));
+    // -1000 in octal is -512, one block back: the header is read again and again.
+    tar.write('-1000\0', 124, 'ascii');
+    expect(() => unpackFrontend(gzipSync(tar))).toThrow(/negative size/);
   });
 });
 
