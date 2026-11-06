@@ -1,7 +1,7 @@
 import semver from 'semver';
 import { isZeroMinor } from './desired-state.ts';
 import type { AppRelease } from './store.ts';
-import { sameRepository } from './feed-trust.ts';
+import { sameRepository, type FeedTrust } from './feed-trust.ts';
 import { FeedProblem, feedReader, feedSource, haltOf, type FeedChecking, type GitHubRelease, type Halt, type ReadKey } from './updates.ts';
 
 /** Which of an app's releases a deployment takes: stable ones only, betas too, or dev builds too (a preview server only). */
@@ -26,7 +26,13 @@ export interface AppFeedRelease {
   halted?: Halt;
 }
 
-export type AppFeed = () => Promise<AppFeedRelease[]>;
+/** What a read of the app feed found: its releases, and whether the feed itself can be trusted. */
+export interface AppFeedRead {
+  releases: AppFeedRelease[];
+  trust?: FeedTrust;
+}
+
+export type AppFeed = () => Promise<AppFeedRelease[] | AppFeedRead>;
 
 /** How many of each app's newest releases have their release files read. */
 const FILES_READ_PER_APP = 4;
@@ -56,17 +62,20 @@ const isAppRelease = (x: unknown): x is AppRelease =>
  * On GitHub a release marked pre-release is beta.
  */
 export const appFeed =
-  ({ url, token, key, fetchImpl, ...checking }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking): AppFeed =>
-  async () => {
+  ({ url, token, key, fetchImpl, ...checking }: { url: string; token?: string; key?: ReadKey; fetchImpl?: typeof fetch } & FeedChecking): AppFeed => {
+  // The same feed as AUGUR's, so it's checked the same way: signed and in date (ADR 0017). One source for
+  // every read, so it remembers the newest feed it accepted.
+  const source = feedSource({ token, key, fetchImpl, ...checking });
+  return async () => {
     const get = feedReader({ token, key, fetchImpl });
-    // The same feed as AUGUR's, so it's checked the same way: signed and in date (ADR 0017).
-    const { body } = await feedSource({ token, key, fetchImpl, ...checking })(url, 'application/vnd.github+json, application/json');
+    const { body, trust } = await source(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { apps?: unknown })?.apps) ? (body as { apps: unknown[] }).apps : [];
     if (items.some(isAppRelease)) {
-      return items.filter(isAppRelease).map((r) => {
+      const releases = items.filter(isAppRelease).map((r) => {
         const halted = haltOf(r);
         return { app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r, ...(halted ? { halted } : {}) };
       });
+      return { releases, trust };
     }
     const releases = (items as GitHubRelease[])
       .filter((r) => typeof r?.tag_name === 'string' && !r.draft)
@@ -74,7 +83,7 @@ export const appFeed =
       .filter((x): x is { r: GitHubRelease; tag: RegExpExecArray } => Boolean(x.tag && semver.valid(x.tag[2])))
       .sort((a, b) => semver.rcompare(a.tag[2], b.tag[2]));
     const read = new Map<string, number>();
-    return Promise.all(
+    const found = await Promise.all(
       releases.map(async ({ r, tag }): Promise<AppFeedRelease> => {
         const [, app, version] = tag;
         const haltAsset = r.assets?.find((a) => a.name === 'halted.json');
@@ -90,7 +99,9 @@ export const appFeed =
         return isAppRelease(file) && file.id === app && file.version === version ? { ...base, release: file } : base;
       }),
     );
+    return { releases: found, trust };
   };
+};
 
 const RECHECK_MS = 30_000;
 
@@ -99,6 +110,8 @@ export interface AppCheckResult {
   checkedAt?: string;
   problem?: string;
   releases: AppFeedRelease[];
+  /** Whether the feed the releases came from can be trusted (ADR 0017). */
+  trust?: FeedTrust;
 }
 
 /** Checks the app feed every 15 minutes and when an admin asks, keeps what it found, and says when it has. */
@@ -133,7 +146,8 @@ export class AppUpdateChecker {
     const feed = this.feed;
     this.inFlight = (async () => {
       try {
-        this.last = { checkedAt: this.now().toISOString(), releases: await feed() };
+        const read = await feed();
+        this.last = Array.isArray(read) ? { checkedAt: this.now().toISOString(), releases: read } : { checkedAt: this.now().toISOString(), releases: read.releases, ...(read.trust ? { trust: read.trust } : {}) };
         for (const listener of this.listeners) await Promise.resolve(listener(this.last)).catch(() => undefined);
       } catch (err) {
         this.last = { ...this.last, checkedAt: this.now().toISOString(), problem: err instanceof FeedProblem ? err.message : 'The app feed couldn’t be read. Try again later.' };

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
+import { DEV_BUILDS_PREVIEW_ONLY, ringProblem } from './app-runner.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
+import { PRODUCTION_ONLY } from './ring.ts';
+import type { AppRelease } from './store.ts';
 
 const db = registryDb();
 
@@ -30,6 +33,29 @@ const setup = async () => {
   const ask = (payload: unknown, headers = fresh()) => server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers, payload: payload as object });
   return { server, entries, ask };
 };
+
+describe('what a server’s ring installs', () => {
+  const at = (version: string, channel = 'stable') => ({ ...release, version, channel }) as AppRelease;
+
+  it('on a production server, takes only what’s promoted, whatever the file says of itself', () => {
+    expect(ringProblem(at('1.2.0'), 'production', 'stable')).toBeUndefined();
+    expect(ringProblem(at('1.2.0'), 'production')).toBeUndefined();
+    expect(ringProblem(at('1.2.0'), 'production', 'beta')).toBe(PRODUCTION_ONLY);
+    expect(ringProblem(at('1.2.0', 'beta'), 'production')).toBe(PRODUCTION_ONLY);
+    expect(ringProblem(at('1.3.0-beta.1'), 'production')).toBe(PRODUCTION_ONLY);
+    expect(ringProblem(at('1.3.0-beta.1'), 'production', 'beta')).toBe(PRODUCTION_ONLY);
+    expect(ringProblem(at('1.2.1-dev.40'), 'production')).toBe(DEV_BUILDS_PREVIEW_ONLY);
+  });
+
+  it('takes a beta promoted as it was: the feed’s label is what changes', () => {
+    expect(ringProblem(at('1.3.0-beta.1', 'beta'), 'production', 'stable')).toBeUndefined();
+  });
+
+  it('leaves a dev or preview server to install them', () => {
+    expect(ringProblem(at('1.3.0-beta.1', 'beta'), 'preview')).toBeUndefined();
+    expect(ringProblem(at('1.2.1-dev.40', 'dev'), 'dev', 'dev')).toBeUndefined();
+  });
+});
 
 describe.runIf(DATABASE_URL)('the app runner', () => {
   it('installs only for a deployment admin who has just entered their password', async () => {

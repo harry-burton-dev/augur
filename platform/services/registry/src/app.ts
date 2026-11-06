@@ -738,7 +738,8 @@ export const buildApp = async ({
               '(the last 5, plus a pinned one); an app an admin has pinned keeps',
               'serving its pinned version. An entry that is a full address must be on',
               'an origin an admin has allowed (see /origins); a path is served by the',
-              'platform itself and always may.',
+              "platform itself and always may. An app an admin removed can't register",
+              'itself again: only an admin or a platform service (the app runner) can.',
             ].join(' '),
             params: params('id'),
             body: ref(AppManifestEntry),
@@ -746,7 +747,7 @@ export const buildApp = async ({
               200: { ...ref(AppManifestEntry), description: 'Updated' },
               201: { ...ref(AppManifestEntry), description: 'Registered' },
               400: refused("The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed"),
-              403: refused('Neither the app itself, a platform service nor an admin'),
+              403: refused('Neither the app itself, a platform service nor an admin, or the app itself after an admin removed it'),
               409: refused('The id belongs to a platform app, or the route is taken'),
               503: refused("The sign-in service can't be reached to check the app's token"),
             },
@@ -768,6 +769,11 @@ export const buildApp = async ({
           // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0032).
           const { refused } = kindOf(entry, await feedApps());
           if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');
+          // Its sign-in outlives a removal, and a first registration is granted what it asks for: only an admin or the runner brings it back.
+          if (by.kind === 'service' && by.id === entry.id && (await store.removed(entry.id))) {
+            req.log.warn({ app: entry.id }, 'a removed app tried to register itself; refused');
+            return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${entry.name}, so it can’t register itself again. An admin has to register it, or install it again.` });
+          }
           try {
             const created = await store.put(entry, by.id);
             // An app that ships with AUGUR may do what its release asks: the admin chose the release.
@@ -1290,7 +1296,7 @@ export const buildApp = async ({
         {
           schema: {
             summary: 'Remove an app (admins only)',
-            description: 'Audited as app.removed.',
+            description: "Audited as app.removed. Its own service can't register it again afterwards: only an admin or the app runner can.",
             params: params('id'),
             response: {
               204: empty('Removed'),
@@ -1305,7 +1311,7 @@ export const buildApp = async ({
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
           const pillar = (await store.records()).find((r) => r.entry.id === req.params.id && isPillar(r.entry.id));
           if (pillar) return reply.code(409).send({ error: 'conflict', message: `${pillar.entry.name} ships with AUGUR and can’t be removed. Turn it off instead.` });
-          if (!(await store.remove(req.params.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          if (!(await store.remove(req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.removed', target: req.params.id });
           return reply.code(204).send();

@@ -8,7 +8,7 @@ import { empty, ref, refused } from './schemas.ts';
 import { AfterWatch, PlatformUpdates, strings, Upgrade as UpgradeSchema, UpgradeStep } from './update-schemas.ts';
 import { AUGUR_UNIT, resolvedState } from './desired-state.ts';
 import { lineView, type PipelineReader } from './pipeline.ts';
-import { automaticDevUpgrade, automaticUpgrade, goBackTargets, historyEntry, type UpdateChecker, updatesView } from './updates.ts';
+import { automaticDevUpgrade, automaticUpgrade, goBackTargets, historyEntry, trustSetting, type UpdateChecker, updatesView } from './updates.ts';
 import { afterLook, lookDue, MIN_CALLS as AFTER_MIN_CALLS, startAfterWatch } from './after-watch.ts';
 import { HALTED_PRODUCTION_ONLY, takesHaltedOnRequest } from './ring.ts';
 import type { AppStore, Upgrade, UpgradeOutcome } from './store.ts';
@@ -148,8 +148,9 @@ export const platformUpgradeRoutes =
             '`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their',
             'password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again.',
             'Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as',
-            'platform.upgrade-requested. `settings` are new settings for `.env`, each one the release',
-            "has: they're kept in memory for the updater until the upgrade ends, never stored, and only",
+            'platform.upgrade-requested. `settings` are new settings for `.env`, each one the upgrade adds,',
+            'never one that says what the server trusts (SERVER_RING and the like: set those in `.env`):',
+            "they're kept in memory for the updater until the upgrade ends, never stored, and only",
             'their names are stored and audited. If the registry restarts before the updater takes them,',
             'the upgrade ends failed and says to ask again. An empty value is left out.',
           ].join(' '),
@@ -171,7 +172,7 @@ export const platformUpgradeRoutes =
           ),
           response: {
             202: { ...ref(PlatformUpdates), description: 'Waiting for the updater' },
-            400: refused("A setting the release doesn't have, or a value over more than one line"),
+            400: refused("A setting the upgrade doesn't add, one that says what the server trusts, or a value over more than one line"),
             401: refused('sign_in_again: enter the password again first'),
             403: refused('Not a deployment admin (the refusal names the requiredRole)'),
             409: refused('Not the next release, its release file names no images, or an upgrade is already waiting or under way'),
@@ -194,6 +195,12 @@ export const platformUpgradeRoutes =
         const settings = Object.fromEntries(Object.entries(req.body.settings ?? {}).filter(([, value]) => value !== ''));
         const unknown = Object.keys(settings).filter((key) => key === 'PLATFORM_VERSION' || !manifest?.settings?.all.includes(key));
         if (unknown.length) return reply.code(400).send({ error: 'bad_request', message: `AUGUR ${view.next} has no setting ${unknown.join(', ')}.` });
+        // The updater overwrites .env, so this takes only what the upgrade adds, as Updates asks for it, and never what the server trusts.
+        const trusted = Object.keys(settings).filter(trustSetting);
+        if (trusted.length) return reply.code(400).send({ error: 'bad_request', message: `${trusted.join(', ')} says what this server trusts, so it’s set in .env on the server, not here.` });
+        const added = view.needsYou.flatMap((n) => (n.kind === 'setting' ? [n.key] : []));
+        const existing = Object.keys(settings).filter((key) => !added.includes(key));
+        if (existing.length) return reply.code(400).send({ error: 'bad_request', message: `${existing.join(', ')} isn’t new in AUGUR ${view.next}, so an upgrade doesn’t change it. Change it in .env on the server.` });
         const id = randomUUID();
         if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id, requestedByName: caller.name, settingNames: Object.keys(settings) }))) {
           return reply.code(409).send({ error: 'conflict', message: 'An upgrade is already waiting or under way.' });
@@ -412,7 +419,7 @@ export const platformUpgradeRoutes =
         // AUGUR's desired state (ADR 0020): Automatic within its reach, pin and window.
         const state = resolvedState(AUGUR_UNIT, (await store.desiredStates()).find((s) => s.unit === AUGUR_UNIT), updates.ring, timeZone, updates.channel);
         // Ask first or Hold stops dev builds too; they ignore windows, as the workbench takes them at any time.
-        const version = state.policy === 'automatic' ? (automaticDevUpgrade(view, history) ?? automaticUpgrade(view, state, history, now())) : undefined;
+        const version = state.policy === 'automatic' ? (automaticDevUpgrade(view, history, now()) ?? automaticUpgrade(view, state, history, now())) : undefined;
         const images = version ? updates.result.releases.find((r) => r.version === version)?.manifest?.images ?? {} : {};
         if (version && Object.keys(images).length && (await store.requestUpgrade({ id: randomUUID(), from: view.running.version, version, images, requestedBy: 'automatic' }))) {
           upgradeSettings = undefined;

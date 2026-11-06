@@ -86,7 +86,7 @@ Each server says what kind it is with `SERVER_RING` in `.env`. It is set there a
 | Pull requests' builds | run for an app's developers | the same | don't run, unless `ALLOW_PR_PREVIEWS=on` |
 | Feature previews nobody chose for | opt-in | opt-in | off |
 
-It is a required setting from the release that brings it: **Upgrade to …** asks for it, and the preflight stops a by-hand upgrade until it's set. Set `SERVER_RING=dev` on the workbench (the server you build on), `preview` on a staging server if you keep one, and `production` everywhere else, the demonstration deployment included. A preview server does everything the workbench does except run AUGUR's own dev builds.
+It is a required setting from the release that brings it: **Upgrade to …** says to set it in `.env` first (Admin never takes it), and the preflight stops a by-hand upgrade until it's set. Set `SERVER_RING=dev` on the workbench (the server you build on), `preview` on a staging server if you keep one, and `production` everywhere else, the demonstration deployment included. A preview server does everything the workbench does except run AUGUR's own dev builds.
 
 ## History and changelogs
 
@@ -111,8 +111,6 @@ Because a dev build has run its migrations on a real server, a migration is froz
 ## AUGUR dev builds
 
 AUGUR itself gets a dev build of every merge into `main` that changes the platform, the apps that ship with it (Folio, Explorer, Data Atlas) or how it's deployed: **AUGUR dev builds** (`.github/workflows/augur-dev.yml`) builds, pushes and signs every image as a release does and makes the pre-release `augur@<next patch>-dev.<run>` (such as `0.12.1-dev.48` after `0.12.0`). Its parts keep the last release's versions, since nothing is versioned until the Version packages PR; what it changes, what's breaking and its notes come from the changesets waiting (`node scripts/augur-release.mjs dev <run>`). AUGUR keeps its three newest dev builds, and the feed its two newest beside its releases.
-
-A dev build waits for CI on the same commit, so a merge that breaks `main` makes no dev build. If CI fails and a re-run passes, run **AUGUR dev builds** by hand.
 
 Only the workbench takes them. With `SERVER_RING=dev`, the registry follows the dev channel by default (`RELEASE_CHANNEL=dev`), which holds dev builds and every release. When a dev build is next and nothing needs a person (no breaking change, and no new required setting the updater can't make up), the registry asks the updater for it by itself, and it runs as any upgrade: backup first, then roll forward, rolling back if it doesn't come up. The history says **By itself**. A dev build that didn't finish, or that an admin took back or went back from, is never asked for again by itself: it waits for an admin, as does a release. A dev build with something that needs you waits on Updates, saying what.
 
@@ -166,5 +164,5 @@ Signed promotion records, and clearing old dev builds' images from the registry.
 
 ## Once, in GitHub (the repository's owner)
 
-1. Rulesets: `main` needs a pull request, the required checks `build-test`, `scan` and `attribution`, and a branch up to date with `main`, with no force-pushes or deletion. `release/**` can be created and changed only by the repository's admin. A public repository has them on any plan; a private one needs a plan that enforces them.
+1. Rulesets, if your plan enforces them on a private repository: `main` and `release/*` need a pull request and passing checks, and no force-pushes. On GitHub Free they aren't enforced, and the checks above still hold.
 2. The workbench takes dev builds from `main` from 0.13.1 on, the first release made there. Until it runs 0.13.1, it refuses them at their signature check; upgrade it and they install by themselves again.

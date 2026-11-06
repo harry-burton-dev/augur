@@ -3006,7 +3006,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
     post:
       summary: Ask the app runner to install a release or remove an app (deployment admins only)
-      description: Installing covers a first install, an upgrade and going back to an older version alike; going back to an older version holds an app on Automatic there. A release its publisher halted is refused (ADR 0018), and so is a pull request's build, or a dev build on a production server. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as app.install-requested or app.uninstall-requested.
+      description: "Installing covers a first install, an upgrade and going back to an older version alike; going back to an older version holds an app on Automatic there. A release its publisher halted is refused (ADR 0018), and so is a pull request's build, or on a production server a dev build or any release not promoted to production: the feed says which, or failing that its version. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as app.install-requested or app.uninstall-requested."
       requestBody:
         required: true
         content:
@@ -3065,7 +3065,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppJob"
         "400":
-          description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's or dev build it can't take, or a bad manifest"
+          description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, or a bad manifest"
           content:
             application/problem+json:
               schema:
@@ -3476,7 +3476,7 @@ paths:
   /apps/{id}:
     put:
       summary: Register an app, or update it
-      description: Called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. AUGUR's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may.
+      description: "Called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. AUGUR's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may. An app an admin removed can't register itself again: only an admin or a platform service (the app runner) can."
       requestBody:
         required: true
         content:
@@ -3509,7 +3509,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Neither the app itself, a platform service nor an admin
+          description: Neither the app itself, a platform service nor an admin, or the app itself after an admin removed it
           content:
             application/problem+json:
               schema:
@@ -3574,7 +3574,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
     delete:
       summary: Remove an app (admins only)
-      description: Audited as app.removed.
+      description: "Audited as app.removed. Its own service can't register it again afterwards: only an admin or the app runner can."
       parameters:
         - schema:
             type: string
@@ -4205,7 +4205,7 @@ paths:
   /platform/upgrade:
     put:
       summary: Ask the deployment's updater to upgrade AUGUR (deployment admins only)
-      description: "`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again. Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as platform.upgrade-requested. `settings` are new settings for `.env`, each one the release has: they're kept in memory for the updater until the upgrade ends, never stored, and only their names are stored and audited. If the registry restarts before the updater takes them, the upgrade ends failed and says to ask again. An empty value is left out."
+      description: "`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again. Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as platform.upgrade-requested. `settings` are new settings for `.env`, each one the upgrade adds, never one that says what the server trusts (SERVER_RING and the like: set those in `.env`): they're kept in memory for the updater until the upgrade ends, never stored, and only their names are stored and audited. If the registry restarts before the updater takes them, the upgrade ends failed and says to ask again. An empty value is left out."
       requestBody:
         required: true
         content:
@@ -4238,7 +4238,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/PlatformUpdates"
         "400":
-          description: A setting the release doesn't have, or a value over more than one line
+          description: A setting the upgrade doesn't add, one that says what the server trusts, or a value over more than one line
           content:
             application/problem+json:
               schema:

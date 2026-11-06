@@ -29,7 +29,7 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect((await store.frontends('library')).map((f) => f.version)).toEqual(['0.1.0']);
     expect(await store.frontends()).toHaveLength(2);
     await store.put(library, 'library');
-    await store.remove('library');
+    await store.remove('library', 'u-1');
     expect((await store.frontends()).map((f) => f.app)).toEqual(['papers']);
   });
 
@@ -199,7 +199,7 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.featureOptIns({ app: 'library' })).toHaveLength(2);
     await store.setFeatureOptIn('u-1', 'library', 'board', false);
     expect(await store.featureOptIns({ person: 'u-1' })).toEqual([]);
-    await store.remove('library');
+    await store.remove('library', 'u-1');
     expect(await store.featureOptIns()).toEqual([]);
   });
 
@@ -216,7 +216,7 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect(await store.clearRule('library', 'w-leg')).toBe(true);
     expect(await store.clearRule('library', 'w-leg')).toBe(false);
     expect(await store.rules('papers')).toEqual([]);
-    await store.remove('library');
+    await store.remove('library', 'u-1');
     expect(await store.rules()).toEqual([]);
   });
 
@@ -279,9 +279,13 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
 
   it('removes apps', async () => {
     await store.put(library, 'service');
-    expect(await store.remove('library')).toBe(true);
-    expect(await store.remove('library')).toBe(false);
+    expect(await store.remove('library', 'u-1')).toBe(true);
+    expect(await store.remove('library', 'u-1')).toBe(false);
     expect(await store.list()).toEqual([]);
+    // Remembered until it's registered again.
+    expect(await store.removed('library')).toBe(true);
+    await store.put(library, 'updater');
+    expect(await store.removed('library')).toBe(false);
   });
 };
 
@@ -311,7 +315,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch', '019_frontend_folders', '020_upgrade_setting_names']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch', '019_frontend_folders', '020_upgrade_setting_names', '021_removed_apps']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

@@ -8,7 +8,8 @@ import { changesIn } from './changes.ts';
 import { LiveOverrides } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { automaticProblem, defaultDesiredState, windowAt } from './desired-state.ts';
-import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds } from './app-updates.ts';
+import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
+import { feedHeld } from './updates.ts';
 import { settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
@@ -31,6 +32,19 @@ const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> =
 
 /** Why a production server doesn't install a dev build. */
 export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a dev or preview server (SERVER_RING=dev or preview) installs dev builds.';
+
+/**
+ * Why a server on `ring` doesn't install a release; undefined when it does. A production server takes only
+ * releases promoted to production. `listed` is the channel the feed gives it: promoting a release changes
+ * only that label, so it's the word that counts. For a release the feed doesn't list, its version says, and
+ * the file's own channel can only narrow what it may do.
+ */
+export const ringProblem = (release: AppRelease, ring: Ring, listed?: AppFeedRelease['channel']): string | undefined => {
+  if (takesPreview(ring)) return undefined;
+  if (isDevBuild(release.version)) return DEV_BUILDS_PREVIEW_ONLY;
+  const promoted = listed ? listed === 'stable' : semver.prerelease(release.version) === null && release.channel === 'stable';
+  return promoted ? undefined : PRODUCTION_ONLY;
+};
 
 /** How many of an app's jobs its history in Admin → Apps lists. */
 const APP_HISTORY_LISTED = 20;
@@ -106,6 +120,8 @@ export const appRunnerRoutes =
      * that asks for nothing new gets an install job, unless that release already failed to install.
      */
     const autoUpdate = async () => {
+      // A refused or expired feed stays on show, but nothing installs by itself from what it held.
+      if (feedHeld(updates.result, now())) return;
       const [installed, follows, states] = await Promise.all([store.installedApps(), store.follows(), store.desiredStates()]);
       for (const { app: id, release: current } of installed) {
         const follow = followOf(follows, id);
@@ -148,6 +164,8 @@ export const appRunnerRoutes =
         else if (!open) await remove(p, 'Its pull request is closed.');
         else if (Date.parse(p.startedAt) + PREVIEW_MS <= at) await remove(p, 'Its last build is a week old.');
       }
+      // As for updates: nothing starts by itself from a refused or expired feed.
+      if (feedHeld(updates.result, now())) return;
       for (const { app: id, release: current } of installed) {
         if (!allowPrPreviews || !developers.some((d) => d.app === id)) continue;
         const jobs = await store.appJobs(id);
@@ -570,15 +588,16 @@ export const appRunnerRoutes =
           description: [
             'Installing covers a first install, an upgrade and going back to an older version alike;',
             'going back to an older version holds an app on Automatic there. A release its publisher',
-            "halted is refused (ADR 0018), and so is a pull request's build, or a dev build on a production",
-            'server. Needs a deployment admin who entered their password in the last 10 minutes, or it',
+            "halted is refused (ADR 0018), and so is a pull request's build, or on a production server a dev",
+            'build or any release not promoted to production: the feed says which, or failing that its',
+            'version. Needs a deployment admin who entered their password in the last 10 minutes, or it',
             'answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as',
             'app.install-requested or app.uninstall-requested.',
           ].join(' '),
           body: JobRequest,
           response: {
             202: { ...ref(AppJobSchema), description: 'Waiting for the runner' },
-            400: refused("The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's or dev build it can't take, or a bad manifest"),
+            400: refused("The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, or a bad manifest"),
             401: signInAgain,
             403: notDeploymentAdmin,
             404: refused('The app feed has no release file for that app and version'),
@@ -603,12 +622,11 @@ export const appRunnerRoutes =
         }
         const target = release ? release.id : (body as { app: string }).app;
         if (release) {
+          const listed = updates.result.releases.find((r) => r.app === release!.id && r.version === release!.version)?.channel;
           const problem =
             previewPr(release.version) !== undefined
               ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.'
-              : isDevBuild(release.version) && !takesPreview(ring)
-                ? DEV_BUILDS_PREVIEW_ONLY
-                : releaseProblem(release, pillars);
+              : (ringProblem(release, ring, listed) ?? releaseProblem(release, pillars));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         } else if (pillars.includes(target)) {
           return reply.code(409).send({ error: 'conflict', message: `${target} ships with AUGUR and can’t be removed. Turn it off instead.` });

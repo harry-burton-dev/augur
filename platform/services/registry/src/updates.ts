@@ -335,6 +335,14 @@ export interface CheckResult {
   trust?: FeedTrust;
 }
 
+/**
+ * Whether what the last check kept can't be acted on by itself: the check had a problem, or the feed it came
+ * from has expired since. It stays on show, and an admin may still ask for what it lists, but nothing starts
+ * automatically from it.
+ */
+export const feedHeld = ({ problem, trust }: { problem?: string; trust?: FeedTrust }, now: Date) =>
+  Boolean(problem) || (trust?.expires !== undefined && Date.parse(trust.expires) <= now.getTime());
+
 /** Checks the feed once a day and when an admin asks, and keeps what it found. Never restarts anything. */
 /** The release this server runs. `build: 'source'` when it was built from a checkout, not pulled. */
 export interface Running {
@@ -429,6 +437,16 @@ export interface ReleaseSummary {
  * string, as infra/deploy/.env.example says of any whose name ends so (platform/services/updater).
  */
 export const madeUpSetting = (key: string) => /_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD';
+
+/**
+ * Settings that say what this server trusts: what kind of server it is, whose signatures it takes, and where
+ * its releases and images come from. They're set in .env on the server, never from the Upgrade Centre, so an
+ * admin's session can't change them (ring.ts).
+ */
+const TRUST_SETTINGS = new Set(['SERVER_RING', 'RELEASE_CHANNEL', 'ALLOW_PR_PREVIEWS', 'IMAGE_SIGNER', 'IMAGE_SIGNER_ISSUER', 'AUGUR_DEV_SIGNER', 'FEED_SIGNER', 'APP_PUBLISHERS', 'CALLER_SIGNING_KEY', 'RELEASE_FEED_URL', 'APP_FEED_URL', 'PIPELINE_FEED_URL', 'PLATFORM_IMAGES']);
+
+/** Whether `key` is a setting only the server's own .env may change. */
+export const trustSetting = (key: string) => TRUST_SETTINGS.has(key);
 
 /** Something a person has to do or know before upgrading. */
 export type NeedsYou =
@@ -613,6 +631,10 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
         needsYou.push({ kind: 'setting', key, required, madeUp: true, message: `${key} is new. Upgrading from here makes one up; upgrading by hand, set it in .env (openssl rand -hex 32).` });
         continue;
       }
+      if (trustSetting(key)) {
+        needsYou.push({ kind: 'setting', key, required, message: `${required ? `Set ${key} in .env on the server: ${next.version} won’t start without it.` : `${key} is a new, optional setting for .env on the server.`} It says what this server trusts, so it can’t be entered when you upgrade.` });
+        continue;
+      }
       needsYou.push({ kind: 'setting', key, required, message: required ? `Set ${key}: ${next.version} won’t start without it. Enter it when you upgrade, or put it in .env.` : `${key} is a new, optional setting.` });
     }
     // Apps that register themselves run in the new shell only if it speaks their SDK.
@@ -648,10 +670,11 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
  * builds"): only on the workbench following dev builds, only a dev build, only when nothing needs a
  * person (a setting the updater can make up, or an optional one, doesn't), and never one asked for before:
  * one that didn't finish, or that an admin went back from, waits for an admin. Nothing starts by itself
- * until an admin has upgraded AUGUR on this server once (firstUpgradeProblem).
+ * until an admin has upgraded AUGUR on this server once (firstUpgradeProblem), or from a feed that's held (feedHeld).
  */
-export const automaticDevUpgrade = (view: UpdatesView, history: Pick<Upgrade, 'version' | 'state' | 'requestedBy'>[]): string | undefined => {
+export const automaticDevUpgrade = (view: UpdatesView, history: Pick<Upgrade, 'version' | 'state' | 'requestedBy'>[], now = new Date()): string | undefined => {
   if (!takesAugurDevBuilds(view.ring) || view.channel !== 'dev' || !view.next || !isDevBuild(view.next)) return undefined;
+  if (feedHeld({ problem: view.problem, trust: view.feedTrust }, now)) return undefined;
   if (firstUpgradeProblem(history)) return undefined;
   if (view.needsYou.some((n) => n.kind !== 'setting' || (n.required && !n.madeUp))) return undefined;
   if (history.some((u) => u.version === view.next)) return undefined;
@@ -662,11 +685,12 @@ export const automaticDevUpgrade = (view: UpdatesView, history: Pick<Upgrade, 'v
  * The release AUGUR should upgrade to by itself under its desired state (ADR 0020), if any: the next
  * release when the policy is Automatic and reaches it, inside the pin, while a window is open, when
  * nothing needs a person, and never one asked for before (one that didn't finish waits for an admin), and not before an admin
- * has upgraded AUGUR on this server once (firstUpgradeProblem).
+ * has upgraded AUGUR on this server once (firstUpgradeProblem), or from a feed that's held (feedHeld).
  * The workbench's dev builds go by automaticDevUpgrade instead.
  */
 export const automaticUpgrade = (view: UpdatesView, state: DesiredState, history: Pick<Upgrade, 'version' | 'state' | 'requestedBy'>[], now: Date): string | undefined => {
   if (!view.next || isDevBuild(view.next)) return undefined;
+  if (feedHeld({ problem: view.problem, trust: view.feedTrust }, now)) return undefined;
   if (firstUpgradeProblem(history)) return undefined;
   if (automaticProblem(state, view.running.version, view.next) || !windowAt(state, now).open) return undefined;
   if (view.needsYou.some((n) => n.kind !== 'setting' || (n.required && !n.madeUp))) return undefined;
