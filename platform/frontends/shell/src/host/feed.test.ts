@@ -71,6 +71,60 @@ describe('NotificationFeed', () => {
     expect(vi.mocked(fetchImpl).mock.calls[0][1]).toMatchObject({ headers: { authorization: 'Bearer tok' } });
   });
 
+  it('connects first, and reads the list only once the stream has answered', async () => {
+    const asked: string[] = [];
+    const states: boolean[] = [];
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      asked.push(url);
+      return url.endsWith('/stream') ? streamOf([': connected\n\n'], init?.signal ?? undefined) : Response.json([]);
+    }) as unknown as typeof fetch;
+    const feed = new NotificationFeed({ getToken: async () => 't', fetchImpl, onList: () => {}, onNotification: () => {}, onState: (s) => states.push(s.loading) });
+    feed.start();
+    await vi.waitFor(() => expect(states).toEqual([true, false]));
+    feed.stop();
+    expect(asked).toEqual(['/api/events/v1/notifications/stream', '/api/events/v1/notifications']);
+  });
+
+  it('passes on what came while the list loaded after the list has landed, and only what the list lacks', async () => {
+    const order: string[] = [];
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) =>
+      url.endsWith('/stream') ? streamOf([sse(n('1')), sse(n('2'))], init?.signal ?? undefined) : Response.json([n('1')]),
+    ) as unknown as typeof fetch;
+    const feed = new NotificationFeed({
+      getToken: async () => 't',
+      fetchImpl,
+      onList: (l) => order.push(`list ${l.map((x) => x.id).join()}`),
+      onNotification: (x) => order.push(`live ${x.id}`),
+      onState: () => {},
+    });
+    feed.start();
+    await vi.waitFor(() => expect(order).toContain('live 2'));
+    feed.stop();
+    expect(order).toEqual(['list 1', 'live 2']);
+  });
+
+  it('closes the stream, says so and tries again when the list can’t be read', async () => {
+    let lists = 0;
+    let closed = 0;
+    const states: { loading: boolean; error: string }[] = [];
+    const fetchImpl = vi.fn(async (url: string, _init?: RequestInit) => {
+      if (url.endsWith('/stream')) {
+        return new Response(new ReadableStream<Uint8Array>({ cancel: () => void closed++ }), { headers: { 'content-type': 'text/event-stream' } });
+      }
+      return ++lists === 1 ? new Response(null, { status: 503 }) : Response.json([]);
+    }) as unknown as typeof fetch;
+    const feed = new NotificationFeed({ getToken: async () => 't', fetchImpl, retryMs: 1, onList: () => {}, onNotification: () => {}, onState: (s) => states.push(s) });
+    feed.start();
+    await vi.waitFor(() => expect(states.at(-1)).toEqual({ loading: false, error: '' }));
+    feed.stop();
+    expect(closed).toBe(1);
+    expect(states).toEqual([
+      { loading: true, error: '' },
+      { loading: false, error: "Notifications aren't arriving right now. Trying again…" },
+      { loading: false, error: '' },
+    ]);
+  });
+
   it('says so and tries again when the stream drops', async () => {
     let calls = 0;
     const states: string[] = [];

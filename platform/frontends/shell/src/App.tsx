@@ -164,6 +164,9 @@ const waterAt = (path: string) => (path === '/' || path === '' ? 'Minimal' : 'no
 
 /** The Orbit category holding the item that opens a path, so going back lands where you came from. */
 
+/** The page's fetch as it is at each call: telemetry patching it reaches every call, without a new function for Host's effects to restart on. */
+const pageFetch: typeof fetch = (...args) => fetch(...args);
+
 /**
  * The platform's frame. It owns the Shell, the catalogue of apps, which app is
  * open and the routing of intents between apps; it knows nothing about what
@@ -177,7 +180,7 @@ export function Host({
   organisationUrl = '/api/identity/v1/organisation',
   previewsUrl = '/api/registry/v1/previews',
   featurePreviewsUrl = '/api/registry/v1/feature-previews',
-  fetchImpl = fetch,
+  fetchImpl = pageFetch,
   importEntry,
 }: HostProps) {
   const [shellModel] = useState(() => new ShellModel());
@@ -808,6 +811,9 @@ export function Host({
 
   useEffect(() => () => void mounter.current?.unmount(), []);
 
+  // A card comes off whatever else is changing: Home says so as it unmounts, which on a floor change is while there's no catalogue.
+  useEffect(() => bus.on<{ el: HTMLElement }>(HOME_CHANNEL.unmountCard, ({ el }) => void cards.current?.unmount(el)), [bus]);
+
   // Home hears from the shell on the bus: what needs you and the cards for this floor; the shell does what Home asks.
   useEffect(() => {
     const shell = shellRef.current;
@@ -837,7 +843,6 @@ export function Host({
         if (!entry) return done?.(false);
         void cards.current!.mount(el, entry, here, contextFor(entry, '/')).then((shown) => done?.(shown));
       }),
-      bus.on<{ el: HTMLElement }>(HOME_CHANNEL.unmountCard, ({ el }) => void cards.current?.unmount(el)),
     ];
     shell.addEventListener('ui-notifications', send);
     send();

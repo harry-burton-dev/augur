@@ -312,7 +312,7 @@ export function Organisation({ api, roles = [] }: { api: AdminApi; roles?: strin
             />
             {deploymentAdmin ? (
               <Notice tone="info" heading="You’ll enter your password again to change these.">
-                Two steps for everyone applies when AUGUR next starts or upgrades; Activity’s retention at the next nightly run. Deleting leavers’ accounts once they’re past their days comes with the leaver sweep (PER-194); until then they are kept.
+                Two steps for everyone applies when AUGUR next starts or upgrades; Activity’s retention at the next nightly run. Leavers already past their days are deleted within minutes of lowering the number, and that can’t be undone.
               </Notice>
             ) : (
               <Notice tone="info" heading="Only a deployment admin can change these.">
