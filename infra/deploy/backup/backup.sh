@@ -231,7 +231,8 @@ offsite() {
 }
 
 # The repository's id, which restic gives it when it's made.
-offsite_id() { restic cat config --json 2>/dev/null | sed -n 's/.*"id": *"\([0-9a-f]*\)".*/\1/p' | head -n 1; }
+# Empty when the repository can't be read, never a failure: set -e would end the script.
+offsite_id() { { restic cat config --json 2>/dev/null || true; } | sed -n 's/.*"id": *"\([0-9a-f]*\)".*/\1/p' | head -n 1; }
 
 # offsite_adopt: notes the repository as this server's own, in offsite-repository beside the backups.
 offsite_adopt() {

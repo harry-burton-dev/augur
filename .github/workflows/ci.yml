@@ -448,6 +448,11 @@ jobs:
           ! BACKUPS=/tmp/new/backups offsite ci --offsite
           grep -q '"ok":false.*didn.t make' /tmp/new/backups/status/offsite.json
           test "$(restic snapshots --tag augur-db --json | grep -o '"id"' | wc -l)" = 1
+          # A server whose copy was failing before this release still backs up when the bucket can't be read.
+          sudo mkdir -p /tmp/legacy/backups && echo '{"ok":false}' | sudo tee /tmp/legacy/backups/offsite.json > /dev/null
+          docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci -e RESTIC_REPOSITORY=/offsite/repo -e RESTIC_PASSWORD=wrong \
+            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/legacy/backups:/backups -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro postgres:16-alpine /bin/sh /backup/backup.sh --once
+          grep -q '"ok":true' /tmp/legacy/backups/status/last-backup.json && grep -q '"ok":false' /tmp/legacy/backups/status/offsite.json && ! sudo test -e /tmp/legacy/backups/offsite-repository
           BACKUPS=/tmp/new/backups offsite ci --adopt-offsite
           grep -q '"ok":true' /tmp/new/backups/status/offsite.json
           # Restored from the copy alone: the local dumps are put aside first.
