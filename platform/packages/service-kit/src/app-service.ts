@@ -4,9 +4,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { appCredentialsFromEnv } from './apps.js';
 import { callerFromHeaders, type Caller, type CallerWorkspace } from './caller.js';
-import { notify, recordAudit, type NotificationAction, type NotificationLevel } from './events.js';
+import { notify, previewOf, recordAudit, type NotificationAction, type NotificationLevel } from './events.js';
 import { publishFrontend } from './frontend.js';
-import { createJobs, type JobLogger, type Jobs } from './jobs.js';
+import { createJobs, jobsSchemaFor, type JobLogger, type Jobs } from './jobs.js';
 import { identityAudience, identityDirectory, identityPrincipals, type AudienceLookup, type DirectorySearch } from './people.js';
 import { Problem, problemDetails } from './problems.js';
 import { registerApp } from './registration.js';
@@ -200,7 +200,9 @@ export async function startAppService({ manifest, buildApp, jobs: defineJobs, po
   const audit = auditFor(manifest.id, (entry) => lazy.info({ audit: entry }, 'audit (no audit log here)'), env);
   const tell = notifyFor(manifest.id, (notice) => lazy.info({ notice }, 'notification (no notifications here)'), env);
   const { databaseUrl } = appStorageFromEnv(env);
-  const jobs = createJobs({ app: manifest.id, databaseUrl, log: lazy, audit: (entry) => audit(entry) });
+  // A preview's login owns only its own storage (<id>-pr<n>), so its jobs are kept there too.
+  const pr = previewOf(env);
+  const jobs = createJobs({ app: manifest.id, databaseUrl, schema: jobsSchemaFor(pr === undefined ? manifest.id : `${manifest.id}-pr${pr}`), log: lazy, audit: (entry) => audit(entry) });
 
   const app = await buildApp({ manifest, jobs, audit, notify: tell, log: lazy });
   log = app.log;

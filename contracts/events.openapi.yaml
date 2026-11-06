@@ -1447,7 +1447,7 @@ paths:
                     type: integer
                 description: Kept
         "400":
-          description: A topic outside the publisher's, an unknown floor, or a payload over 16 KB
+          description: A topic outside the publisher's, an unknown floor, a floor the app isn't on, or a payload over 16 KB
           content:
             application/problem+json:
               schema:
