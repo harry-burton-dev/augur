@@ -163,13 +163,22 @@ offsite() {
   fi
   # A dump of a database AUGUR has never run on (a new server whose Postgres has only just started) would
   # be the newest copy, and a restore of "latest" would bring back nothing.
-  if ! gunzip -c "$1" | grep -qm 1 '^CREATE TABLE registry\.apps '; then
+  # grep stops at the first match and gunzip dies of the closed pipe, so only grep's answer counts.
+  if ! { gunzip -c "$1" 2>/dev/null || true; } | grep -qm 1 '^CREATE TABLE registry\.apps '; then
     echo "backup: $(basename "$1") holds no AUGUR data yet, so it isn't copied off the server" >&2
     offnoted false "" "$(basename "$1") holds no AUGUR data yet (the registry hasn't made its tables), so it wasn't copied off this server, where it would be the newest copy. Earlier copies are kept."
     rm -f "$errors"
     return 1
   fi
-  if ! offsite_ours; then
+  code=0
+  offsite_ours || code=$?
+  if [ "$code" = 2 ]; then
+    echo "backup: off-server copy FAILED: the repository could not be read" >&2
+    offnoted false "" "The off-server copy could not be read just now, so nothing was copied. Earlier copies are kept; it is tried again tomorrow."
+    rm -f "$errors"
+    return 1
+  fi
+  if [ "$code" != 0 ]; then
     echo "backup: the off-server copy holds backups this server didn't make, so nothing was copied" >&2
     offnoted false "" "The off-server copy already holds backups this server didn't make, so nothing was copied, and they stay as they are. If this server is the same deployment set up again, restore from them first (docs/deploy.md, Restore a lost server), then run backup.sh --adopt-offsite. If not, give this server its own OFFSITE_REPOSITORY."
     rm -f "$errors"
@@ -231,13 +240,14 @@ offsite_adopt() {
 }
 
 # offsite_ours: whether this server may copy into the repository. It may once it has copied there before
-# (offsite-repository names it, or, from before that file, its last copy went well), or while the repository
+# (offsite-repository names it, or the script from before that file tried to), or while the repository
 # holds no snapshot of this deployment's yet. One with another server's backups in it waits for --adopt-offsite.
 offsite_ours() {
   id=$(offsite_id)
-  [ -n "$id" ] || return 1
+  [ -n "$id" ] || return 2
   [ "$(cat "$BACKUP_DIR/offsite-repository" 2>/dev/null)" != "$id" ] || return 0
-  if [ ! -e "$BACKUP_DIR/offsite-repository" ] && grep -qs '"ok":true' "$STATUS_DIR/offsite.json"; then
+  # offsite.json beside the backups: written only by the script from before offsite-repository.
+  if [ ! -e "$BACKUP_DIR/offsite-repository" ] && [ -e "$BACKUP_DIR/offsite.json" ]; then
     offsite_adopt
     return 0
   fi
@@ -305,7 +315,12 @@ base() {
 pitr_offsite() {
   pitr_on && offsite_on || return 0
   # Not into a repository that holds another server's backups: offsite.json says why.
-  if ! offsite_ours; then
+  code=0
+  offsite_ours || code=$?
+  if [ "$code" = 2 ]; then
+    echo "The off-server copy could not be read, so the database's latest changes were not copied off this server." > "$BACKUP_DIR/wal-copy.problem"
+    return 1
+  elif [ "$code" != 0 ]; then
     echo "The database's latest changes aren't copied off this server until the off-server copy is its own (see the off-server copy)." > "$BACKUP_DIR/wal-copy.problem"
     return 1
   fi
@@ -399,14 +414,19 @@ if [ "${1:-}" = "--now" ]; then
   backup "$(date -u +%Y-%m-%dT%H%M%SZ)" now
   exit $?
 fi
-# Only the long-running container gets here (and --once). Results from before the status folder move
-# into it; backups from before umask 077 are made readable by root alone; and what a killed run left
-# half-written goes (nothing else writes here while the container starts).
+# Only the long-running container gets here (and --once). A server that copied off with the script from
+# before offsite-repository existed has an offsite.json beside its backups: the repository it names is its
+# own. Results from before the status folder are copied into it (left where they were too, so a release
+# from before can still show them if the server goes back); backups from before umask 077 are made
+# readable by root alone; and what a killed run left half-written goes (nothing else writes here while
+# the container starts).
+if offsite_on && [ -e "$BACKUP_DIR/offsite.json" ] && [ ! -e "$BACKUP_DIR/offsite-repository" ]; then
+  offsite_adopt
+fi
 for result in last-backup offsite restore-test pitr pitr-test; do
-  [ -e "${BACKUP_DIR:?}/$result.json" ] || continue
-  [ -e "$STATUS_DIR/$result.json" ] || mv "${BACKUP_DIR:?}/$result.json" "$STATUS_DIR/$result.json"
-  rm -f "${BACKUP_DIR:?}/${result:?}.json"
-  chmod 644 "$STATUS_DIR/$result.json"
+  [ -e "$BACKUP_DIR/$result.json" ] && [ ! -e "$STATUS_DIR/$result.json" ] || continue
+  cp "$BACKUP_DIR/$result.json" "$STATUS_DIR/$result.json.partial"
+  status_written "$result.json"
 done
 find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'platform-*.sql.gz' -o -name 'objects-*.tar.gz' -o -name 'pgdata-before-restore-*' \) -exec chmod 600 {} +
 find "$BACKUP_DIR" -maxdepth 1 -type d -name 'base-*' -exec chmod 700 {} +
@@ -416,7 +436,15 @@ today="$BACKUP_DIR/platform-$(date -u +%Y-%m-%d).sql.gz"
 [ -e "$today" ] || backup || true
 # Today's copy off the server, unless it was made already (a restart, or the copy was only just set up).
 if offsite_on && [ -e "$today" ] && ! { [ -e "$STATUS_DIR/offsite.json" ] && grep -q "\"at\":\"$(date -u +%Y-%m-%d)T.*\"ok\":true" "$STATUS_DIR/offsite.json"; }; then
-  offsite "$today" || true
+  # Today's was taken before AUGUR had started (a new server): a fresh one, now it has, is what goes.
+  if ! { gunzip -c "$today" 2>/dev/null || true; } | grep -qm 1 '^CREATE TABLE registry\.apps '; then
+    failed=
+    backup "$(date -u +%Y-%m-%dT%H%M%SZ)" now || true
+    latest=$(ls -1 "$BACKUP_DIR"/platform-*.sql.gz 2>/dev/null | sort | tail -n 1 || true)
+    offsite "${latest:-$today}" || true
+  else
+    offsite "$today" || true
+  fi
 fi
 # Today's base backup, if there isn't one: a fresh setup, or archiving was only just turned on.
 ! pitr_on || [ -d "$BACKUP_DIR/base-$(date -u +%Y-%m-%d)" ] || base "$(date -u +%Y-%m-%d)" || true

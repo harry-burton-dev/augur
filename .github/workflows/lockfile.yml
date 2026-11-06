@@ -4,7 +4,9 @@ name: Lockfile
 # With freeze, it also keeps the contract reference app built against the current SDK minor. For a change that adds or bumps a package from
 # GitHub Packages (the kit, ADR 0046) made where no read token is set, such as a cloud session:
 # Actions → Lockfile → Run workflow, with the branch. It pushes with RELEASE_TOKEN, so CI runs on the new
-# commit. Never on main or a release branch.
+# commit. Never on main or a release branch. Two jobs: the first runs the branch's code with no secret but
+# the packages read token, and hands over only a patch of the files above; the second runs none of the
+# branch's code, refuses a patch that touches anything else, and alone has the token it pushes with.
 on:
   workflow_dispatch:
     inputs:
@@ -17,13 +19,18 @@ on:
         default: false
 permissions:
   contents: read
-  packages: read
-env:
-  # Reads AUGUR's kit packages from GitHub Packages (.npmrc): a classic token with read:packages, else this run's own.
-  NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 jobs:
   lock:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    permissions:
+      contents: read
+      packages: read
+    env:
+      # Reads AUGUR's kit packages from GitHub Packages (.npmrc): a classic token with read:packages, else this run's own.
+      NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
+    outputs:
+      changed: ${{ steps.patch.outputs.changed }}
+      sha: ${{ steps.patch.outputs.sha }}
     steps:
       # The branch's own code runs below, so first make sure it is a branch, and one this may push to:
       # never main, a release branch or any other ref (refs/pull/<n>/head, refs/heads/main, a tag).
@@ -37,7 +44,6 @@ jobs:
           git check-ref-format --branch "$BRANCH" > /dev/null 2>&1 || refuse "\"$BRANCH\" isn't a branch name."
         env:
           BRANCH: ${{ inputs.branch }}
-      # No credentials are left in .git/config while the branch's code runs: the push step alone has the token.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: refs/heads/${{ inputs.branch }}
@@ -57,25 +63,80 @@ jobs:
         run: |
           pnpm turbo run build --filter=@augur/contract-tests^...
           pnpm --filter @augur/contract-tests freeze
-      - name: Commit them, if they changed
-        id: commit
+      # Only these paths go in the patch; the push job checks that again, as nothing here is trusted.
+      - name: Make the patch
+        id: patch
         run: |
-          if [ -z "$(git status --porcelain pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md platform/contract/frozen)" ]; then
+          paths=()
+          for path in pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md platform/contract/frozen; do
+            [ -e "$path" ] && paths+=("$path")
+          done
+          git add --intent-to-add -- "${paths[@]}"
+          git diff --binary -- "${paths[@]}" > "$RUNNER_TEMP/lockfile.patch"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ ! -s "$RUNNER_TEMP/lockfile.patch" ]; then
             echo "pnpm-lock.yaml, release/kit.json, THIRD_PARTY_NOTICES.md and the frozen builds are already up to date" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
+      - if: steps.patch.outputs.changed == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lockfile-patch
+          path: ${{ runner.temp }}/lockfile.patch
+          retention-days: 1
+          if-no-files-found: error
+
+  # Runs none of the branch's code: no pnpm, no repository script, no hook. It checks the patch touches
+  # only the files the first job may change, applies it to the commit that job built from, and pushes.
+  push:
+    needs: lock
+    if: needs.lock.outputs.changed == 'true'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    permissions:
+      # Only for the run's own token, when RELEASE_TOKEN isn't set.
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.lock.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: lockfile-patch
+          path: ${{ runner.temp }}/patch
+      - name: Does it touch only what it may?
+        run: |
+          refuse() { echo "::error::$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+          # No renames, copies, symbolic links or submodules: only plain files, changed, added or deleted.
+          if grep -qE '^(rename|copy) (from|to) |^(new file |deleted file |old |new )?mode 1[26]0000' "$PATCH"; then
+            refuse "The patch renames or copies a file, or adds a link or submodule, which the Lockfile workflow never does."
+          fi
+          git -c core.hooksPath=/dev/null apply --check "$PATCH" || refuse "The patch doesn't apply to $SHA."
+          while IFS= read -r -d '' line; do
+            path=${line#*$'\t'}
+            path=${path#*$'\t'}
+            case "/$path/" in */../* | */./* | //*) refuse "The patch names a path outside the repository: $path" ;; esac
+            case "$path" in
+              pnpm-lock.yaml | release/kit.json | THIRD_PARTY_NOTICES.md | platform/contract/frozen/*) ;;
+              *) refuse "The patch changes $path, which the Lockfile workflow never changes." ;;
+            esac
+          done < <(git apply --numstat -z "$PATCH")
+        env:
+          PATCH: ${{ runner.temp }}/patch/lockfile.patch
+          SHA: ${{ needs.lock.outputs.sha }}
+      - name: Commit it
+        run: |
+          git -c core.hooksPath=/dev/null apply --index --binary "$PATCH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pnpm-lock.yaml
-          [ -f release/kit.json ] && git add release/kit.json
-          [ -f THIRD_PARTY_NOTICES.md ] && git add THIRD_PARTY_NOTICES.md
-          [ -d platform/contract/frozen ] && git add platform/contract/frozen
-          git commit --no-verify -m "Update pnpm-lock.yaml, the kit pin, the open-source notices and the frozen builds"
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-      # The token is given to this one git command, as a header, never written to .git/config or echoed,
-      # and no hook runs with it. It pushes to the branch by its full name.
-      - name: Push them
-        if: steps.commit.outputs.changed == 'true'
+          git -c core.hooksPath=/dev/null commit --no-verify -m "Update pnpm-lock.yaml, the kit pin, the open-source notices and the frozen builds"
+        env:
+          PATCH: ${{ runner.temp }}/patch/lockfile.patch
+      # The token is given to this one git command, as a header, never written to .git/config or echoed.
+      # It pushes to the branch by its full name, so a branch that moved since is refused, not overwritten.
+      - name: Push it
         run: |
           auth=$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)
           echo "::add-mask::$auth"

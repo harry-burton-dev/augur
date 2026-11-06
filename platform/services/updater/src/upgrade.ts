@@ -87,6 +87,8 @@ export interface Journal {
   breakingSince?: string;
   /** Whether any part had been restarted on the new release, which may have changed the data. */
   restarted: boolean;
+  /** The step it had got to: in verify or the watch, every part is on the new release. */
+  step?: Step;
   backup?: string;
 }
 
@@ -408,6 +410,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       left,
       ...(target.watch?.breakingSince ? { breakingSince: target.watch.breakingSince } : {}),
       restarted,
+      step,
       ...(backup ? { backup } : {}),
     });
 
@@ -588,6 +591,8 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     });
     // Every part again, now that all of them are on it: one that came up early may have fallen over since.
     step = 'verify';
+    // Not knowing the step only makes a message after a restart less exact: never a reason to stop.
+    await note().catch(() => undefined);
     await report({ step, state: 'running' });
     await ready(server, parts, services, versionOf);
     if (!target.watch) {
@@ -596,6 +601,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     }
     await report({ step, state: 'done', message: `Running AUGUR ${target.version}.` });
     step = 'watch';
+    await note().catch(() => undefined);
     await report({ step, state: 'running', message: `Watching sign-in, every part and AUGUR’s calls for ${WATCH_MS / 60_000} minutes.` });
     const watched = await watch(server, parts, services, versionOf);
     await report({ step, state: 'done', message: watchedSentence(target.version, watched), outcome: 'done', ...(watched.calls !== undefined ? { calls: watched.calls } : {}) });
@@ -626,19 +632,34 @@ const notBack = (version: string, breakingSince: string, all: boolean) =>
  * restarted on the new release and a breaking release lies between; without one, a person has to look.
  */
 export const afterRestart = async (target: Target, server: Server, report: Reporter, { parts = partsFor() }: { parts?: Parts } = {}): Promise<Outcome> => {
-  const journal = await server.readJournal().catch(() => undefined);
-  const restartedSentence = `The updater restarted partway through the upgrade to ${target.version}.`;
-  if (!journal || journal.id !== target.id) {
-    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `${restartedSentence} Check Admin → Status, and docs/upgrade-went-back.md.` });
+  let unreadable: string | undefined;
+  const journal = await server.readJournal().catch((err) => {
+    unreadable = reason(err);
+    return undefined;
+  });
+  if (unreadable !== undefined) {
+    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `The updater restarted partway through the upgrade to ${target.version}, and what it wrote down couldn’t be read (${unreadable}). Check Admin → Status, and docs/upgrade-went-back.md.` });
     return 'failed';
   }
   try {
+    // The journal is written before anything changes, so without this upgrade's it stopped while checking, backing up or pulling.
+    if (!journal || journal.id !== target.id) {
+      await report({ step: 'roll-back', state: 'failed', outcome: 'rolled-back', message: `Nothing was changed. The updater restarted before the upgrade to ${target.version} changed anything (while it checked, backed up or pulled). Ask for it again on the Updates page.` });
+      return 'rolled-back';
+    }
+    const all = journal.step === 'verify' || journal.step === 'watch';
     if (journal.restarted && journal.breakingSince) {
-      await report({ step: 'roll-forward', state: 'failed', outcome: 'failed', message: `${restartedSentence} ${notBack(journal.version, journal.breakingSince, false)}` });
+      await report({ step: journal.step ?? 'roll-forward', state: 'failed', outcome: 'failed', message: `The updater restarted partway through the upgrade to ${journal.version}. ${notBack(journal.version, journal.breakingSince, all)}` });
       return 'failed';
     }
+    const why =
+      journal.step === 'watch'
+        ? `The updater restarted during the watch of ${journal.version}, so the watch couldn’t finish and it went back.`
+        : journal.step === 'verify'
+          ? `The updater restarted before it had checked every part on ${journal.version}, so it went back.`
+          : `The updater restarted partway through the upgrade to ${journal.version}, so it went back.`;
     const oldFiles = Object.fromEntries(Object.entries(journal.oldFiles).map(([path, text]) => [path, text === null ? undefined : Buffer.from(text, 'base64')]));
-    return await rollBack({ ...target, from: journal.from, version: journal.version }, server, report, journal.before, parts, journal.services, `${restartedSentence.slice(0, -1)}, so it went back.`, journal.backup, {
+    return await rollBack({ ...target, from: journal.from, version: journal.version }, server, report, journal.before, parts, journal.services, why, journal.backup, {
       oldFiles,
       fresh: journal.fresh,
       others: journal.others,

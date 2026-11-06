@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, releaseName, titleOf, versionModule } from './augur-release.mjs';
+import { deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, releaseName, titleOf, versionModule } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -121,4 +121,9 @@ test('the kit, taken as packages from augur-kit, is a part at the version instal
     assert.equal(parts[name].external, true, `${name} comes from another repository`);
   }
   assert.equal(parts['@augur/mfe-sdk'].external, undefined);
+});
+
+test('a new release carries a pending deploy test result, which the deploy test replaces; a dev build has none', () => {
+  assert.deepEqual(pendingDeployTest({ version: '0.15.0', channel: 'beta', run: '9', at: '2026-11-06T10:00:00Z' }), { schema: 'augur.deploy-test/v1', version: '0.15.0', from: null, passed: null, run: '9', at: '2026-11-06T10:00:00Z' });
+  assert.equal(pendingDeployTest({ version: '0.15.1-dev.4', channel: 'dev', run: '9', at: 't' }), undefined);
 });

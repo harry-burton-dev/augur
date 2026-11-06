@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { APP_RELEASES_KEPT, appRepos, asListed, AUGUR_RELEASES_KEPT, BUNDLE_MEDIA_TYPE, buildFeed, chooseReleases, DEV_BUILDS_KEPT, FEED_MEDIA_TYPE, FEED_VALID_DAYS, haltedOf, ownReleases, pushCommand } from './publish-feed.mjs';
+import { APP_RELEASES_KEPT, appRepos, asListed, AUGUR_RELEASES_KEPT, BUNDLE_MEDIA_TYPE, buildFeed, chooseReleases, deployTestHaltOf, DEV_BUILDS_KEPT, FEED_MEDIA_TYPE, FEED_VALID_DAYS, haltedOf, ownReleases, pushCommand } from './publish-feed.mjs';
 
 const release = (tag, more = {}) => ({ tag_name: tag, draft: false, prerelease: false, html_url: `https://github.com/o/r/releases/tag/${tag}`, assets: [{ name: tag.startsWith('augur@') ? 'augur-release.json' : 'app-release.json', url: `asset:${tag}` }], ...more });
 
@@ -110,12 +110,29 @@ test('an AUGUR release whose deploy test failed is listed halted, so no deployme
   failed.assets.push({ name: 'halted.json', url: 'halt:augur@0.5.0' });
   const both = await buildFeed([failed], async (url) => files[url]);
   assert.equal(both.releases[0].halted.reason, 'Sign-in fails after the upgrade');
-  // A result for another version says nothing about this one.
-  const stale = await buildFeed([withTest('augur@0.6.0')], async (url) => (url === 'test:augur@0.6.0' ? files['test:augur@0.5.0'] : files[url]));
-  assert.equal(stale.releases[0].halted, undefined);
+  // A result for another version isn't a pass of this one.
+  const stale = await buildFeed([withTest('augur@0.6.0')], async (url) => (url === 'test:augur@0.6.0' ? files['test:augur@0.4.0'] : files[url]));
+  assert.match(stale.releases[0].halted.reason, /hasn’t passed yet/);
   // A stable release passed its deploy test to be promoted: a later failed run doesn't halt it by itself.
   const stable = await buildFeed([{ ...withTest('augur@0.5.0'), prerelease: false }], async (url) => files[url]);
   assert.equal(stable.releases[0].halted, undefined);
+});
+
+test('an AUGUR beta whose deploy test is still running is listed halted until it passes', async () => {
+  const pending = release('augur@0.7.0', { prerelease: true });
+  pending.assets.push({ name: 'deploy-test.json', url: 'test:augur@0.7.0' });
+  const files = {
+    'asset:augur@0.7.0': { version: '0.7.0', channel: 'beta', parts: {} },
+    'test:augur@0.7.0': { schema: 'augur.deploy-test/v1', version: '0.7.0', passed: null, run: '9', at: '2026-11-06T10:00:00Z' },
+  };
+  const feed = await buildFeed([pending], async (url) => files[url]);
+  assert.match(feed.releases[0].halted.reason, /deploy test hasn’t passed yet/);
+  assert.equal(feed.releases[0].halted.at, '2026-11-06T10:00:00Z');
+  // The test's own result replaces the pending one; a pass lists it as usual.
+  files['test:augur@0.7.0'] = { ...files['test:augur@0.7.0'], passed: true };
+  assert.equal((await buildFeed([pending], async (url) => files[url])).releases[0].halted, undefined);
+  assert.equal(deployTestHaltOf(undefined, '0.7.0', { prerelease: true }), undefined);
+  assert.equal(deployTestHaltOf({ version: '0.7.0', passed: null }, '0.7.0', { prerelease: false }), undefined);
 });
 
 test('an app in its own repository is listed only from there, and only as signed there', async () => {

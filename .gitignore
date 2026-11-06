@@ -21,5 +21,7 @@ infra/deploy/tailscale/public-until
 .seed/
 
 # The updater's note of an upgrade under way (it holds the old .env), and a lost server's files fetched back.
-infra/deploy/.updater-upgrade.json
+infra/deploy/.updater-upgrade.json*
+# What the updater writes beside a file before renaming it over.
+infra/deploy/**/*.tmp
 infra/deploy/restore/

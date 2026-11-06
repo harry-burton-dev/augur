@@ -443,7 +443,8 @@ jobs:
           ! BACKUPS=/tmp/new/backups offsite ci --offsite
           grep -q '"ok":false.*holds no AUGUR data' /tmp/new/backups/status/offsite.json
           # Nor does a real one from a server that never copied there, until it is told to take the copy as its own.
-          sudo sh -c 'cp /tmp/backups/platform-*.sql.gz /tmp/new/backups/' && sudo rm -f /tmp/new/backups/platform-2000-01-01.sql.gz
+          # A real dump with megabytes after its registry tables, as a server's has (the check reads only up to them).
+          sudo sh -c '{ zcat "$(ls /tmp/backups/platform-*.sql.gz | sort | tail -n 1)"; yes -- "-- padding" 2>/dev/null | head -c 20000000; } | gzip > /tmp/new/backups/platform-2000-01-02.sql.gz' && sudo rm -f /tmp/new/backups/platform-2000-01-01.sql.gz
           ! BACKUPS=/tmp/new/backups offsite ci --offsite
           grep -q '"ok":false.*didn.t make' /tmp/new/backups/status/offsite.json
           test "$(restic snapshots --tag augur-db --json | grep -o '"id"' | wc -l)" = 1

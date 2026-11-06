@@ -279,7 +279,7 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
    OFFSITE_SECRET_ACCESS_KEY=<the key's secret>
    OFFSITE_REGION=eu-west-2   # if the provider wants one
    ```
-   The backup container makes the repository on first use, copies today's backup straight away, and restores it from the bucket once to prove it. `pc logs backup` shows each step; `infra/deploy/backups/status/offsite.json` and `restore-test.json` hold the results.
+   The backup container makes the repository on first use, copies today's backup straight away (taking a fresh one first if today's is from before AUGUR had started), and restores it from the bucket once to prove it. `pc logs backup` shows each step; `infra/deploy/backups/status/offsite.json` and `restore-test.json` hold the results.
 
    It never copies a dump with no AUGUR in it (a new server's Postgres before the registry has started), and never into a repository that already holds backups another server made, until told this server is that deployment. Either would be the newest copy, and push the real ones out of the days kept.
 
@@ -338,7 +338,7 @@ The first start after this arrived restarts Postgres with archiving on (`pc up -
 
 ### Restore a lost server
 
-When the server and its disk are gone, everything comes back from the off-server copy: `.env` and `secrets/`, the database and apps' files. You need the `OFFSITE_*` settings kept off the server, and a new server ready as in [Before you start](#before-you-start). The backup container must not start until step 7: on a new server it would copy an empty database, or another server's, over the real copies' place. Nothing here uses `pc` until `.env` is back.
+When the server and its disk are gone, everything comes back from the off-server copy (copies made by a release from before `.env` went with them have no `augur-config` snapshot: fill `.env` in by hand, with the old passwords if you have them): `.env` and `secrets/`, the database and apps' files. You need the `OFFSITE_*` settings kept off the server, and a new server ready as in [Before you start](#before-you-start). The backup container must not start until step 7: on a new server it would copy an empty database, or another server's, over the real copies' place. Nothing here uses `pc` until `.env` is back.
 
 1. **Get the release** as in [First start](#1-get-the-release), but don't fill in `.env` or run the preflight.
 2. **Reach the copy.** Put the off-server settings in a file only you can read, under restic's names, and make a short command for restic. It runs restic's own image, as you, so what it fetches is yours:
@@ -365,11 +365,13 @@ When the server and its disk are gone, everything comes back from the off-server
 4. **Put the settings back**, and the release they name:
    ```sh
    install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env
-   cp -R infra/deploy/restore/deploy/secrets infra/deploy/ && chmod -R go-rwx infra/deploy/secrets
+   cp -R infra/deploy/restore/deploy/secrets infra/deploy/
+   # The services that read secrets/ (the registry and the updater) run as user 1000.
+   sudo chown -R 1000 infra/deploy/secrets && sudo chmod -R go-rwx infra/deploy/secrets
    git checkout "augur@$(sed -n 's/^PLATFORM_VERSION=//p' infra/deploy/.env)"
    alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
    ```
-   A read key (`secrets/github-read-key`) is owned by user 1000: `sudo chown 1000 infra/deploy/secrets/github-read-key`. In the Tailscale admin console, remove the lost server's machine, so the new one can take its name. If `TS_AUTHKEY` was a one-off key or has expired, put a new one in `.env`.
+   If the server runs the updater and your account isn't user 1000, give user 1000 the deploy folder again, as when it was set up ([upgrade.md, The updater](upgrade.md#the-updater), step 2). In the Tailscale admin console, remove the lost server's machine, so the new one can take its name. If `TS_AUTHKEY` was a one-off key or has expired, put a new one in `.env`.
 5. **Load the database.** Postgres starts empty with the old `.env`'s passwords, which are the ones in the dump:
    ```sh
    pc up -d postgres
@@ -408,7 +410,7 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 
 - **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES` in `.env`), so they can't fill the disk. `pc logs` reads them as before. For anything longer, look in the deployment's Grafana, which keeps 72 hours ([Traces, metrics and logs](#traces-metrics-and-logs)).
 - **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its Java heap from it), Artifacts' rendition worker (`FOLIO_WORKER_MEM_LIMIT`, 4g; reading a large upload is what needs it, and its in-memory `/tmp`, `FOLIO_WORKER_TMP_SIZE`, 1g, counts towards it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g). A container that goes over is stopped and started again by Docker, and `pc ps` shows it restarting. Raise the limit in `.env` and `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
-- **The rendition worker** reads files anyone on a floor can upload, so it is held tighter than the services: its own files can't change, it may use 2 processors (`FOLIO_WORKER_CPUS`, no more than the server has) and 512 processes, and it reaches only Postgres, Garage and the deployment's own telemetry: not the other services, and not the internet. With your own collector (`OTEL_EXPORTER_OTLP_ENDPOINT` elsewhere), its traces and logs don't leave the server.
+- **The rendition worker** reads files anyone on a floor can upload, so it is held tighter than the services: its own files can't change, it may use 2 processors (`FOLIO_WORKER_CPUS`, no more than the server has) and 512 processes, and it reaches only Postgres, Garage and `otel-lgtm`, over a network of its own: not the services, not the updater, and not the internet. With your own collector (`OTEL_EXPORTER_OTLP_ENDPOINT` elsewhere), its traces and logs don't leave the server.
 - **Telemetry** goes over a network of its own: the platform's services and the apps that ship with AUGUR send to `otel-lgtm` on it, and apps the runner installs aren't on it, so they can't reach `otel-lgtm` at all. Loki, Tempo and Prometheus answer only inside that container, to Grafana, so nothing on the networks can read what the services logged.
 - **Health**: every AUGUR service, the front door, Postgres, Keycloak and Garage have a healthcheck, and `pc ps` shows each as `healthy`. Keycloak's is its own readiness check on its management port, which isn't reachable from outside the container. The front door, identity and the realm job wait for Keycloak to be healthy, and the storage job for Garage. Keycloak's first start after an upgrade can take a few minutes while it migrates its database; Compose waits up to five.
 - **Timeouts between services**: one AUGUR service waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`) before it gives up and answers that the other can't be reached right now, so a hung service slows only what needs it instead of every request through the gateway. Identity waits up to 15 seconds for Keycloak's admin API, and calls to the model gateway up to 3 minutes. Raise it only if `pc logs` shows a slow but working server giving up.

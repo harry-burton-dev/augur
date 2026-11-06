@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appReleasesToMirror, asMirrored, destinations, mirroredAppRelease, withAppReleases, withHalt, withRelease } from './mirror-release.mjs';
+import { appReleasesToMirror, asMirrored, augurHaltOf, destinations, mirroredAppRelease, withAppReleases, withHalt, withRelease } from './mirror-release.mjs';
 
 const manifest = (version, more = {}) => ({ version, channel: 'beta', parts: {}, ...more });
 
@@ -59,4 +59,23 @@ test('a mirrored release keeps its publisher’s halt mark, and mirroring it aga
   const feed = withRelease(undefined, withHalt(manifest('0.3.0'), halted));
   assert.deepEqual(feed.releases[0].halted, halted);
   assert.equal(withRelease(feed, withHalt(manifest('0.3.0'), undefined)).releases[0].halted, undefined);
+});
+
+test('a mirrored AUGUR beta whose deploy test hasn’t passed is halted, as the feed lists it', async () => {
+  const beta = (assets) => ({ prerelease: true, assets: assets.map((name) => ({ name, url: `u:${name}` })) });
+  const read = (files) => async (url) => {
+    if (url in files) return files[url];
+    throw new Error('502');
+  };
+  const failed = await augurHaltOf(beta(['deploy-test.json']), '0.5.0', read({ 'u:deploy-test.json': { version: '0.5.0', passed: false, run: '42' } }));
+  assert.match(failed.reason, /deploy test failed \(run 42\)/);
+  const pending = await augurHaltOf(beta(['deploy-test.json']), '0.5.0', read({ 'u:deploy-test.json': { version: '0.5.0', passed: null } }));
+  assert.match(pending.reason, /hasn’t passed yet/);
+  assert.equal(await augurHaltOf(beta(['deploy-test.json']), '0.5.0', read({ 'u:deploy-test.json': { version: '0.5.0', passed: true } })), undefined);
+  // From before the check: no result at all, so nothing changes.
+  assert.equal(await augurHaltOf(beta([]), '0.5.0', read({})), undefined);
+  // A result that can't be read is no pass; the publisher's halt still wins.
+  assert.match((await augurHaltOf(beta(['deploy-test.json']), '0.5.0', read({}))).reason, /hasn’t passed yet/);
+  assert.equal((await augurHaltOf(beta(['halted.json', 'deploy-test.json']), '0.5.0', read({ 'u:halted.json': { reason: 'Breaks sign-in.' } }))).reason, 'Breaks sign-in.');
+  assert.equal((await augurHaltOf(beta(['halted.json']), '0.5.0', read({}))).reason, 'Halted by the publisher.');
 });

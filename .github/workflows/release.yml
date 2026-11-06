@@ -127,9 +127,9 @@ jobs:
           PENDING: ${{ steps.apps.outputs.pending }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
   # Deployments learn of what was just released from the feed beside the images, read with their read key.
-  # It waits for the deploy test, so a new AUGUR beta reaches preview servers only once that is done: one
-  # that failed is listed halted (its deploy-test.json, scripts/publish-feed.mjs). A run that released only
-  # apps has no deploy test (skipped), and publishes straight away.
+  # A new AUGUR beta is made with a pending deploy-test.json, and any feed lists it halted until the deploy
+  # test replaces that with a pass (scripts/publish-feed.mjs). This feed waits for the test, so it lists the
+  # result. A run that released only apps has no deploy test (skipped), and publishes straight away.
   feed:
     needs: [release, deploy-test]
     if: ${{ !cancelled() && needs.release.result == 'success' && needs.release.outputs.released == 'true' }}

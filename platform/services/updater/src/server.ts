@@ -264,6 +264,21 @@ const writeSynced = async (path: string, text: string, mode: number, more?: (fil
   }
 };
 
+/**
+ * Writes over an existing file in the same inode: its mode, owner and ACL stay as they are, and it's never
+ * chmod-ed or chown-ed, which only its owner may do (the updater may only read and write it through an ACL).
+ */
+const overwrite = async (path: string, text: string) => {
+  const file = await open(path, 'r+');
+  try {
+    await file.truncate(0);
+    await file.writeFile(text);
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+};
+
 /** The folder's own entry for a rename, on the disk too; a file system that can't sync a folder is let be. */
 const syncFolder = async (path: string) => {
   const folder = await open(dirname(path), 'r').catch(() => undefined);
@@ -283,7 +298,7 @@ export interface WriteSettingsOptions {
   chown?: (file: FileHandle, uid: number, gid: number) => Promise<void>;
   /** The updater's own user. */
   uid?: number;
-  /** Writes the file in place, when its owner can't be kept otherwise. */
+  /** Writes the file in place, when its owner can't be kept otherwise; never changes its mode or owner. */
   inPlace?: (path: string, text: string) => Promise<void>;
 }
 
@@ -294,11 +309,9 @@ export interface WriteSettingsOptions {
  * always was, but only once the old text is written whole beside it (ENV_BEFORE_UPGRADE): read back
  * and checked, the new text is let stand; otherwise the old is put back, or left beside it to copy over.
  */
-export const writeSettings = async (path: string, text: string, { chown = (file, uid, gid) => file.chown(uid, gid), uid = process.getuid?.() ?? -1, inPlace }: WriteSettingsOptions = {}) => {
+export const writeSettings = async (path: string, text: string, { chown = (file, uid, gid) => file.chown(uid, gid), uid = process.getuid?.() ?? -1, inPlace = overwrite }: WriteSettingsOptions = {}) => {
   const was = await stat(path).catch(() => undefined);
   const mode = was ? was.mode & 0o777 : 0o600;
-  // In place, the file keeps its owner and mode.
-  const writeInPlace = inPlace ?? ((to: string, t: string) => writeSynced(to, t, mode));
   const tmp = `${path}.tmp`;
   let owned = true;
   try {
@@ -324,7 +337,7 @@ export const writeSettings = async (path: string, text: string, { chown = (file,
   if ((await readFile(copy, 'utf8')) !== old) throw new Error(`${ENV_BEFORE_UPGRADE} didn’t read back as .env has it, so .env wasn’t changed.`);
   const written = async (t: string) => {
     try {
-      await writeInPlace(path, t);
+      await inPlace(path, t);
       return (await readFile(path, 'utf8')) === t ? undefined : 'it read back other than written';
     } catch (err) {
       return (err as Error).message;

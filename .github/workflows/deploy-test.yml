@@ -126,7 +126,8 @@ jobs:
         env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
       # Pass or fail, on the release, where Promote to stable reads it (docs/release-channels.md), and the
-      # feed too: a beta whose test failed is listed halted. A test that fails before it knows which
+      # feed too: it replaces the pending result the release was made with, and only a pass lets the feed
+      # offer a beta. A test that fails before it knows which
       # release it tests still fails the one it was asked for. A run on another branch tests with that
       # branch's script, so it says nothing about the release.
       - name: Keep the result on the release

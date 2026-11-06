@@ -690,7 +690,7 @@ services:
       # Any cache a library keeps goes in /tmp; Docling's models are in the image (HF_HOME).
       XDG_CACHE_HOME: /tmp/cache
       MPLCONFIGDIR: /tmp/matplotlib
-    networks: [renditions, telemetry]
+    networks: [renditions]
     depends_on: [folio]
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
@@ -762,7 +762,8 @@ services:
     ports:
       - 127.0.0.1:3001:3000
     # Not on the compose network, so apps the runner installs can't reach it: only what sends telemetry can.
-    networks: [telemetry, grafana]
+    # The rendition worker reaches it on its own network, so it never shares one with the services.
+    networks: [telemetry, renditions, grafana]
     volumes:
       - otel-lgtm:/data
       - ./observability/lgtm/loki.yaml:/otel-lgtm/loki-config.yaml:ro
@@ -783,7 +784,7 @@ networks:
     internal: true
   # Only so Grafana's port can be published on the server (a port can't be published from an internal network).
   grafana:
-  # The rendition worker's way to Postgres and Garage, and nowhere else.
+  # The rendition worker's way to Postgres, Garage and otel-lgtm, and nowhere else: none of the services is on it.
   renditions:
     internal: true
 

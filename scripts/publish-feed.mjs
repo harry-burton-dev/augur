@@ -12,9 +12,9 @@
 // The feed says when it was issued and when it expires: a deployment refuses one that has expired, so a
 // feed someone keeps from it can't hide a newer release for long. The Release feed workflow runs weekly
 // as well, to issue it again. A release with a halted.json asset (the Halt rollout workflow) is listed
-// with `halted`, and no deployment is offered it. So is an AUGUR release whose deploy test failed (its
-// deploy-test.json, .github/workflows/deploy-test.yml): the Release workflow publishes the feed only once
-// that test is done. A release file that is there but can't be read fails the run, so a halt is never
+// with `halted`, and no deployment is offered it. So is an AUGUR beta whose deploy-test.json doesn't say
+// it passed: the Release workflow puts a pending one on each new release, which the deploy test replaces
+// (.github/workflows/deploy-test.yml), so a feed published by any run while it is tested doesn't offer it. A release file that is there but can't be read fails the run, so a halt is never
 // lost from a signed feed; the feed published before stays good until it expires.
 // The Release workflow runs it after every release, and Promote to stable and Halt rollout after theirs,
 // so a release promoted to stable is stable in the feed too. Anything else changed on a release in GitHub
@@ -103,13 +103,20 @@ export const haltedOf = (record) =>
   record && typeof record.reason === 'string' && record.reason.trim() ? { reason: record.reason.trim(), at: typeof record.at === 'string' ? record.at : undefined, ...(record.by ? { by: record.by } : {}) } : undefined;
 
 /**
- * An AUGUR beta's deploy-test.json as a halt: set when its deploy test of that version failed, else undefined.
- * A stable release passed one to be promoted (scripts/promote.mjs); halting it after is the owner's call (Halt rollout).
+ * An AUGUR beta's deploy-test.json as a halt: set unless it says that version passed. The Release workflow
+ * puts a pending one (passed: null) on each new release, and the deploy test replaces it with its result,
+ * so a beta that is still being tested, failed, or whose test never finished isn't offered. A release
+ * with no deploy-test.json at all is from before the check, and stays as it was. A stable release passed
+ * one to be promoted (scripts/promote.mjs); halting it after is the owner's call (Halt rollout).
  */
-export const failedDeployTestOf = (result, version, release) =>
-  release?.prerelease && result && result.version === version && result.passed === false
-    ? { reason: `Its deploy test failed${result.run ? ` (run ${result.run})` : ''}, so no server is offered it until a deploy test passes.`, ...(typeof result.at === 'string' ? { at: result.at } : {}) }
-    : undefined;
+export const deployTestHaltOf = (result, version, release) => {
+  if (!release?.prerelease || !result || (result.version === version && result.passed === true)) return undefined;
+  const failed = result.version === version && result.passed === false;
+  const reason = failed
+    ? `Its deploy test failed${result.run ? ` (run ${result.run})` : ''}, so no server is offered it until a deploy test passes.`
+    : 'Its deploy test hasn’t passed yet, so no server is offered it until one does.';
+  return { reason, ...(typeof result.at === 'string' ? { at: result.at } : {}) };
+};
 
 /**
  * Builds the feed from the repository's releases, reading each chosen release's file with `download`.
@@ -128,7 +135,7 @@ export const buildFeed = async (releases, download, now = new Date(), own = {}) 
     }
   };
   const withHalt = async (entry, release, version) => {
-    const halted = haltedOf(await fileOf(release, HALTED_ASSET)) ?? (version && release.prerelease ? failedDeployTestOf(await fileOf(release, DEPLOY_TEST_ASSET), version, release) : undefined);
+    const halted = haltedOf(await fileOf(release, HALTED_ASSET)) ?? (version && release.prerelease ? deployTestHaltOf(await fileOf(release, DEPLOY_TEST_ASSET), version, release) : undefined);
     return halted ? { ...entry, halted } : entry;
   };
   const augurFiles = await Promise.all(augur.map(async ({ release, version }) => ({ version, file: await fileOf(release, 'augur-release.json'), release })));

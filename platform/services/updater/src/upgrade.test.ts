@@ -580,18 +580,53 @@ describe('the upgrade’s journal, for a restart partway through', () => {
     expect(again.journal()).toBeUndefined();
   });
 
-  it('says only that it restarted when there is no journal, or it is another upgrade’s', async () => {
+  it('notes each step, so a restart in the watch is known to find every part on the new release', async () => {
+    const fake = fakeServer();
+    expect((await run(files, fake.server)).outcome).toBe('done');
+    expect(fake.journals.map((j) => j.journal.step)).toEqual(['pull', 'roll-forward', 'roll-forward', 'verify', 'watch']);
+  });
+
+  it('says AUGUR is still running when it restarted in the watch past a breaking release', async () => {
+    const { again, journal } = await leftBehind(files, true);
+    again.setJournal({ ...journal, step: 'watch' });
+    const { outcome, last } = await resume(files, again.server);
+    expect(outcome).toBe('failed');
+    expect(last.message).toContain('The updater restarted partway through the upgrade to 0.3.0. AUGUR 0.3.0 is still running: it didn’t go back by itself');
+    expect(again.did).toEqual([]);
+  });
+
+  it('goes back when it restarted in the watch, and says the watch couldn’t finish', async () => {
+    const t = { ...files, watch: {} };
+    const { again, journal } = await leftBehind(t, true);
+    again.setJournal({ ...journal, step: 'watch' });
+    const { outcome, last } = await resume(t, again.server);
+    expect(outcome).toBe('rolled-back');
+    expect(last.message).toContain('Back on 0.2.0: The updater restarted during the watch of 0.3.0, so the watch couldn’t finish and it went back.');
+  });
+
+  it('says nothing was changed when there is no journal, or it is another upgrade’s: it stopped before changing anything', async () => {
     const none = fakeServer();
     const { outcome, last } = await resume(target(), none.server);
-    expect(outcome).toBe('failed');
-    expect(last).toMatchObject({ step: 'roll-back', state: 'failed', outcome: 'failed' });
-    expect(last.message).toBe('The updater restarted partway through the upgrade to 0.3.0. Check Admin → Status, and docs/upgrade-went-back.md.');
+    expect(outcome).toBe('rolled-back');
+    expect(last).toMatchObject({ step: 'roll-back', state: 'failed', outcome: 'rolled-back' });
+    expect(last.message).toBe('Nothing was changed. The updater restarted before the upgrade to 0.3.0 changed anything (while it checked, backed up or pulled). Ask for it again on the Updates page.');
     expect(none.did).toEqual([]);
 
     const { again, journal } = await leftBehind(files, false);
     again.setJournal({ ...journal, id: 'up-0' });
-    expect((await resume(files, again.server)).outcome).toBe('failed');
+    expect((await resume(files, again.server)).outcome).toBe('rolled-back');
     expect(again.did).toEqual([]);
+  });
+
+  it('says a person has to look when the journal can’t be read', async () => {
+    const fake = fakeServer();
+    fake.server.readJournal = async () => {
+      throw new SyntaxError('Unexpected end of JSON input');
+    };
+    const { outcome, last } = await resume(target(), fake.server);
+    expect(outcome).toBe('failed');
+    expect(last.message).toBe('The updater restarted partway through the upgrade to 0.3.0, and what it wrote down couldn’t be read (Unexpected end of JSON input). Check Admin → Status, and docs/upgrade-went-back.md.');
+    expect(fake.did).toEqual([]);
   });
 });
 

@@ -1,7 +1,7 @@
-import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { verifyArgs, writeSettings } from './server.ts';
 
 describe('signature checks', () => {
@@ -56,6 +56,32 @@ describe('writing .env', () => {
     expect(seen).toEqual([['.env', '.env.before-upgrade']]);
     expect(await readFile(env, 'utf8')).toBe('PLATFORM_VERSION=0.3.0\n');
     expect((await stat(env)).ino).toBe(was.ino);
+    expect(await readdir(dir)).toEqual(['.env']);
+  });
+
+  it('writes in place without changing its mode or owner, which only the file’s owner may (the updater reading it through an ACL)', async () => {
+    const was = await stat(env);
+    // A file the updater doesn't own: changing its mode or owner is refused, as the kernel would.
+    const handle = await open(env, 'r');
+    const proto = Object.getPrototypeOf(handle) as { chmod: (mode: number) => Promise<void>; chown: (uid: number, gid: number) => Promise<void>; stat: () => Promise<{ ino: number }> };
+    await handle.close();
+    const eperm = () => Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' });
+    const ownChmod = proto.chmod;
+    const chmods = vi.spyOn(proto, 'chmod').mockImplementation(async function (this: typeof proto, mode: number) {
+      if ((await this.stat()).ino === was.ino) throw eperm();
+      return ownChmod.call(this, mode);
+    });
+    const chowns = vi.spyOn(proto, 'chown').mockRejectedValue(eperm());
+    try {
+      await writeSettings(env, 'PLATFORM_VERSION=0.3.0\n', { uid: was.uid + 1 });
+    } finally {
+      chmods.mockRestore();
+      chowns.mockRestore();
+    }
+    const now = await stat(env);
+    expect(await readFile(env, 'utf8')).toBe('PLATFORM_VERSION=0.3.0\n');
+    expect(now.ino).toBe(was.ino);
+    expect(now.mode & 0o777).toBe(0o640);
     expect(await readdir(dir)).toEqual(['.env']);
   });
 
