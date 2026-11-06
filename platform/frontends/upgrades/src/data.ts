@@ -20,16 +20,19 @@ export interface UpgradesData {
  * timer: every 2 s while a job runs, every 30 s otherwise. A job keeps going on the
  * server whatever this page does, so a reload or another admin sees the same.
  */
+const wordsFor = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
 export const useUpgrades = (api: UpgradesApi) => {
   const [data, setData] = useState<UpgradesData>({ loading: true });
   const alive = useRef(true);
 
   const read = useCallback(async () => {
     try {
-      const [overview, updates, installs] = await Promise.all([api.overview(), api.updates(), api.installs().catch(() => undefined)]);
-      if (alive.current) setData({ overview, updates, installs, loading: false, readAt: new Date() });
+      const [overview, updates, installs] = await Promise.all([api.overview(), api.updates(), api.installs().catch(wordsFor)]);
+      // Installs that can't be read keep the ones last read: an app's page would otherwise say it's up to date.
+      if (alive.current) setData((d) => (typeof installs === 'string' ? { ...d, overview, updates, loading: false, error: installs } : { overview, updates, installs, loading: false, readAt: new Date() }));
     } catch (e) {
-      if (alive.current) setData((d) => ({ ...d, loading: false, error: e instanceof Error ? e.message : String(e) }));
+      if (alive.current) setData((d) => ({ ...d, loading: false, error: wordsFor(e) }));
     }
   }, [api]);
 

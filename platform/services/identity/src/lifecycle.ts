@@ -1,6 +1,6 @@
 import pg from 'pg';
 import type { Migration, NewAuditEntry } from '@augur/service-kit';
-import { DEPLOYMENT_ADMIN_ROLE, type Directory, type Person } from './directory.ts';
+import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type Person } from './directory.ts';
 import { BRUTE_FORCE_POLICY } from './realm.ts';
 
 /**
@@ -414,8 +414,14 @@ export const federatedFirstSignIn = async (
   at: string,
 ) => {
   const before = (await lifecycle.get([person])).get(person);
-  if (!(await lifecycle.federated(person, at))) return;
-  const p = await directory.person(person);
-  const made = !before?.invite && !!p.createdAt && Math.abs(Date.parse(p.createdAt) - Date.parse(at)) <= MADE_BY_SIGN_IN_MS;
-  if (made) await audit?.({ actor: { id: 'keycloak', kind: 'service' }, app: 'identity', action: 'person.added', target: person, detail: { username: p.username, roles: p.roles, departments: p.departments, method: 'federated' } });
+  if (before?.federatedAt) return;
+  // An account gone since is no failure: copying sign-ins stops at a failure, so it would never get past this one.
+  const p = await directory.person(person).catch((err: unknown) => {
+    if (err instanceof DirectoryError && err.status === 404) return undefined;
+    throw err;
+  });
+  const made = !before?.invite && !!p?.createdAt && Math.abs(Date.parse(p.createdAt) - Date.parse(at)) <= MADE_BY_SIGN_IN_MS;
+  if (p && made) await audit?.({ actor: { id: 'keycloak', kind: 'service' }, app: 'identity', action: 'person.added', target: person, detail: { username: p.username, roles: p.roles, departments: p.departments, method: 'federated' } });
+  // Kept last, so a failed entry is tried again with the sign-in it came from.
+  await lifecycle.federated(person, at);
 };

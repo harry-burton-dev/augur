@@ -250,6 +250,23 @@ describe('Upgrade Centre', () => {
     expect(el.querySelector('[role="alert"]')?.textContent).toContain('The registry isn’t answering.');
     expect(el.querySelector('[data-unit="augur"]')).not.toBeNull();
   });
+
+  it('keeps the installs it last read when that read alone fails, and says so', async () => {
+    let fail = false;
+    const { el } = await mount(['deployment-admin'], (path) =>
+      path.endsWith('/platform/updates/check') ? [200, updates()] : fail && path.endsWith('/app-runner/apps') ? [502, { message: 'The app runner isn’t answering.' }] : registry(path),
+    );
+    fail = true;
+    const check = buttonIn(el, 'Check now');
+    await act(async () => {
+      check.click();
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(el.querySelector('[role="alert"]')?.textContent).toContain('The app runner isn’t answering.');
+    const rail = [...el.querySelectorAll('nav button')].find((b) => b.textContent === 'Artifacts') as HTMLButtonElement;
+    await act(async () => rail.click());
+    expect(el.querySelector('[data-release="1.1.0"]')).not.toBeNull();
+  });
 });
 
 describe('marking a result looked at', () => {

@@ -429,7 +429,8 @@ export const adminRoutes =
         if (before.roles.includes(DEPLOYMENT_ADMIN) && !isDeploymentAdmin(req)) return deploymentAdminsOnly(reply);
         if ((await one(before)).state === 'left') return reply.code(409).send({ error: 'conflict', message: 'They’ve already left.' });
         const { handOverTo, lastDay } = req.body;
-        const note = req.body.note?.trim() || undefined;
+        // The form can't show a note already agreed, so one left empty keeps it: moving a last day mustn't lose it.
+        const note = req.body.note?.trim() || (await lifecycle?.get([id]))?.get(id)?.leaving?.note;
         if (handOverTo !== undefined) {
           if (handOverTo === id) return reply.code(400).send({ error: 'bad_request', message: 'Hand their work to someone else, not to the person leaving.' });
           const heir = await dir()

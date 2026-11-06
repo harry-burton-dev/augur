@@ -66,10 +66,26 @@ fi
 
 q() { psql -h "$scratch" -U postgres -d "$1" -tAc "$2"; }
 
-# The dump drops and recreates each database itself; a few errors about things
-# that don't exist yet in an empty server are expected, so it runs to the end.
+# The dump drops and recreates each database itself, so it runs to the end
+# (ON_ERROR_STOP would stop it at the first error, even an expected one) and
+# what went wrong is read from the errors afterwards.
 if ! gunzip -c "$file" | psql -h "$scratch" -U postgres -d postgres -q >/dev/null 2>"$scratch/errors"; then
   result false "$(basename "$file") could not be read back in."
+  exit 1
+fi
+
+# real_errors FILE: the errors that mean something didn't come back. Dropping what isn't there only gives
+# notices (--if-exists), so the one thing let through is pgvector: every database has the extension
+# (the storage service makes it), but this container's Postgres has none to load. A table with a vector
+# column still fails here, since it can't be restored.
+real_errors() {
+  grep -E '(^|: )(ERROR|FATAL|PANIC|error):' "$1" |
+    grep -Ev 'ERROR: +(could not open extension control file ".*/vector\.control"|extension "vector" (does not exist|is not available))' || true
+}
+
+errors=$(real_errors "$scratch/errors")
+if [ -n "$errors" ]; then
+  result false "$(basename "$file") came back with errors ($(printf '%s\n' "$errors" | wc -l | tr -d ' ')), the first: $(printf '%s\n' "$errors" | head -n 1 | tr -d '"\\\t' | cut -c1-200)"
   exit 1
 fi
 

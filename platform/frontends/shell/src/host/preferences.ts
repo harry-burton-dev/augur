@@ -37,10 +37,19 @@ const RECENT = 6;
  * happens, so flicking a switch twice is one request. Saving never gets in
  * the way: a failed save is reported, and the shell carries on with what was
  * chosen.
+ *
+ * Identity's PUT replaces everything it holds, so nothing is saved until a load
+ * has succeeded. Changes made before then stay here, are merged into what the
+ * load brings, and are saved after it. When the load failed, the next save
+ * tries it again first.
  */
 export class PreferenceSync {
   private prefs: Preferences = {};
   private timer: ReturnType<typeof setTimeout> | undefined;
+  private loaded = false;
+  private loading: Promise<void> | undefined;
+  /** There are changes Identity doesn't have yet. */
+  private unsaved = false;
 
   constructor(
     private readonly url: string,
@@ -54,17 +63,30 @@ export class PreferenceSync {
 
   /** Their saved preferences, or none when Identity can't be reached: the defaults are a fine start. */
   async load(): Promise<Preferences> {
+    this.loading ??= this.read().finally(() => {
+      this.loading = undefined;
+    });
+    await this.loading;
+    return this.prefs;
+  }
+
+  private async read() {
     try {
       const res = await (this.opts.fetchImpl ?? fetch)(this.url, { headers: { authorization: `Bearer ${await this.getToken()}`, accept: 'application/json' } });
-      if (res.ok) this.prefs = { ...((await res.json()) as Preferences), ...this.prefs };
+      if (!res.ok) return;
+      const saved = (await res.json()) as Preferences;
+      // What changed here wins, but apps opened before this arrived go in front of the history, not in place of it.
+      const opened = this.prefs.recent?.length ? { recent: [...new Set([...this.prefs.recent, ...(saved.recent ?? [])])].slice(0, RECENT) } : {};
+      this.prefs = { ...saved, ...this.prefs, ...opened };
+      this.loaded = true;
     } catch {
       // keep the defaults
     }
-    return this.prefs;
   }
 
   set<K extends keyof Preferences>(key: K, value: Preferences[K]) {
     this.prefs = { ...this.prefs, [key]: value };
+    this.unsaved = true;
     clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.save(), this.opts.delay ?? 400);
   }
@@ -78,7 +100,11 @@ export class PreferenceSync {
   async save() {
     clearTimeout(this.timer);
     this.timer = undefined;
+    if (this.unsaved && !this.loaded) await this.load();
+    if (!this.unsaved) return;
+    this.unsaved = false;
     try {
+      if (!this.loaded) throw new Error('not loaded');
       const res = await (this.opts.fetchImpl ?? fetch)(this.url, {
         method: 'PUT',
         headers: { authorization: `Bearer ${await this.getToken()}`, 'content-type': 'application/json' },
@@ -86,6 +112,7 @@ export class PreferenceSync {
       });
       if (!res.ok) throw new Error(String(res.status));
     } catch {
+      this.unsaved = true;
       this.opts.onError?.("Your settings weren't saved. They'll apply until you leave, and save with your next change.");
     }
   }

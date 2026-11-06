@@ -81,9 +81,10 @@ export function parseEvents<T = ServerNotification>(buffer: string, name = 'noti
 }
 
 /**
- * The person's notifications from the events service: the unread list, then a
- * live stream that reconnects with growing pauses when it drops. EventSource
- * can't send the sign-in token, so the stream is read with fetch.
+ * The person's notifications from the events service: a live stream that
+ * reconnects with growing pauses when it drops, and the unread list each time
+ * it connects. EventSource can't send the sign-in token, so the stream is read
+ * with fetch.
  */
 export class NotificationFeed {
   private controller?: AbortController;
@@ -101,10 +102,12 @@ export class NotificationFeed {
     return { authorization: `Bearer ${await this.opts.getToken()}`, accept: 'application/json' };
   }
 
-  async load(): Promise<void> {
-    const res = await this.fetchImpl(`${this.baseUrl}/notifications`, { headers: await this.headers() });
+  async load(signal?: AbortSignal): Promise<ServerNotification[]> {
+    const res = await this.fetchImpl(`${this.baseUrl}/notifications`, { headers: await this.headers(), signal });
     if (!res.ok) throw new Error(`answered ${res.status}`);
-    this.opts.onList((await res.json()) as ServerNotification[]);
+    const list = (await res.json()) as ServerNotification[];
+    this.opts.onList(list);
+    return list;
   }
 
   /** One of the person's notifications, read or not (what a notice email links to); undefined when they have no such one. */
@@ -137,13 +140,20 @@ export class NotificationFeed {
     this.opts.onState({ loading: true, error: '' });
     while (!signal.aborted) {
       try {
-        await this.load();
         const res = await this.fetchImpl(`${this.baseUrl}/notifications/stream`, { headers: await this.headers(), signal });
         if (!res.ok || !res.body) throw new Error(`answered ${res.status}`);
+        const { body } = res;
+        // The stream doesn't replay, so it opens first and the list is read after. Nothing is read from the stream
+        // until the list has landed: onList replaces what's shown, which would lose anything already passed on.
+        // Whatever came meanwhile waits in the stream, and what the list already holds isn't said twice.
+        const listed = await this.load(signal).catch((err: unknown) => {
+          void body.cancel().catch(() => undefined);
+          throw err;
+        });
         this.opts.onState({ loading: false, error: '' });
         this.opts.onInbox?.();
         pause = retryMs;
-        const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+        const reader = body.pipeThrough(new TextDecoderStream()).getReader();
         let buffer = '';
         for (;;) {
           const { value, done } = await reader.read();
@@ -151,7 +161,7 @@ export class NotificationFeed {
           const text = buffer + value;
           const parsed = parseEvents(text);
           buffer = parsed.rest;
-          parsed.events.forEach((n) => this.opts.onNotification(n));
+          parsed.events.filter((n) => !listed.some((l) => l.id === n.id)).forEach((n) => this.opts.onNotification(n));
           parseEvents<InboxChange>(text, 'inbox').events.forEach((c) => this.opts.onInbox?.(c));
         }
       } catch {
