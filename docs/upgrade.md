@@ -56,6 +56,14 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Upgrades only take settings they add, and removed apps stay removed
+
+**From** unreleased
+
+**Upgrade to …** now takes only settings the upgrade adds, and never one that says what the server trusts, such as `SERVER_RING`, `IMAGE_SIGNER` or `APP_PUBLISHERS`. Set those in `.env` on the server.
+
+An app an admin removed can no longer register itself back. If you want it again, install it from Admin, or have an admin register it. Automatic upgrades and app updates now wait while a release feed has a problem or has expired, and a production server refuses app releases that haven't been promoted.
+
 ### Leavers' accounts are deleted after the retention period
 
 **From** unreleased

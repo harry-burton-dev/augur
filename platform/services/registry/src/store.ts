@@ -296,7 +296,10 @@ export interface AppStore {
    */
   pin(id: string, version: string | null): Promise<AppRecord | undefined>;
   /** Removes an app, with its versions, frontends and floor rules; false when there was none. */
-  remove(id: string): Promise<boolean>;
+  /** Takes an app out of the catalogue, remembering that `removedBy` did. */
+  remove(id: string, removedBy: string): Promise<boolean>;
+  /** Whether an admin removed the app, and no admin or platform service has registered it since. */
+  removed(id: string): Promise<boolean>;
   /** The frontends kept for one app, or for every app. */
   frontends(app?: string): Promise<StoredFrontend[]>;
   /** Records a version's frontend once its files are in the bucket; a newer build of the same version takes its place. */
@@ -664,6 +667,17 @@ export const migrations: Migration[] = [
       -- took them knows they were lost. Their values stay in memory only.
       alter table registry.upgrades add column setting_names text[];`,
   },
+  {
+    id: '021_removed_apps',
+    sql: `
+      -- Apps an admin removed. Their sign-in outlives them, so this keeps their own service from registering
+      -- them again as if for the first time; an admin or the app runner registering one takes it off.
+      create table registry.removed_apps (
+        app_id text primary key,
+        removed_by text not null,
+        removed_at timestamptz not null default now()
+      );`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -768,6 +782,7 @@ export class PgAppStore implements AppStore {
         .catch((err: { code?: string }) => {
           throw err.code === '23505' ? new RouteTakenError(`Another app already lives at ${entry.route}.`) : err;
         });
+      await client.query('delete from registry.removed_apps where app_id = $1', [entry.id]);
       await client.query(
         `insert into registry.app_versions (app_id, version, manifest, registered_by) values ($1, $2, $3, $4)
          on conflict (app_id, version) do update set manifest = excluded.manifest, registered_by = excluded.registered_by, registered_at = now()`,
@@ -831,10 +846,18 @@ export class PgAppStore implements AppStore {
     }
   }
 
-  async remove(id: string) {
-    const { rowCount } = await this.pool.query('delete from registry.apps where id = $1', [id]);
-    await this.pool.query('delete from registry.app_frontends where app_id = $1', [id]);
-    await this.pool.query('delete from registry.feature_opt_ins where app_id = $1', [id]);
+  async remove(id: string, removedBy: string) {
+    return this.transaction(async (client) => {
+      const { rowCount } = await client.query('delete from registry.apps where id = $1', [id]);
+      await client.query('delete from registry.app_frontends where app_id = $1', [id]);
+      await client.query('delete from registry.feature_opt_ins where app_id = $1', [id]);
+      if (rowCount === 1) await client.query('insert into registry.removed_apps (app_id, removed_by) values ($1, $2) on conflict (app_id) do nothing', [id, removedBy]);
+      return rowCount === 1;
+    });
+  }
+
+  async removed(id: string) {
+    const { rowCount } = await this.pool.query('select 1 from registry.removed_apps where app_id = $1', [id]);
     return rowCount === 1;
   }
 

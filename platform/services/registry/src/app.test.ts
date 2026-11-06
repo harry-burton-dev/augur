@@ -351,6 +351,19 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect([byService.statusCode, byAdmin.statusCode, gone.statusCode]).toEqual([403, 204, 404]);
   });
 
+  it('keeps a removed app from registering itself again, until an admin or the runner does', async () => {
+    const app = await db.app({ verifyService });
+    const register = (headers: Record<string, string>) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers, payload: library });
+    expect((await register(service)).statusCode).toBe(201);
+    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
+    const refused = await register(service);
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().message).toMatch(/An admin removed Library/);
+    expect((await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).body).not.toContain('"library"');
+    expect((await register(as('platform-updater'))).statusCode).toBe(201);
+    expect((await register(service)).statusCode).toBe(200);
+  });
+
   describe('where apps may load from', () => {
     const elsewhere = { ...library, entry: 'https://apps.example.org/library/entry.js' };
     const register = (app: Awaited<ReturnType<typeof buildApp>>, payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });

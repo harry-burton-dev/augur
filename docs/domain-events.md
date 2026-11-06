@@ -26,7 +26,7 @@ await client.query('commit');
 outboxRelay({ pool: db, eventsUrl: EVENTS_URL, credentials: appCredentialsFromEnv('folio')!, onError: (e) => log.error(e) }).start();
 ```
 
-Each outbox row has its own event id, so if a send is repeated the events service keeps one. Without a database change to go with it, `publishEvents({ eventsUrl, credentials, events })` sends at once.
+Each outbox row has its own event id, so if a send is repeated the events service keeps one. A row the events service refuses for what it is (400 or 413) is set aside: marked sent, left in the table, and reported through `onError`, so pass one. The rows behind it carry on. Without a database change to go with it, `publishEvents({ eventsUrl, credentials, events })` sends at once.
 
 ### Entity bindings
 

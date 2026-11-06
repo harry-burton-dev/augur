@@ -91,6 +91,8 @@ export interface EventsOptions {
   notificationKinds?: InboxKindLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
+  /** How long a browser's stream of domain events lasts (STREAM_LIFETIME_MS). */
+  streamLifetimeMs?: number;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
 }
@@ -146,6 +148,13 @@ const workspaceOf = (req: FastifyRequest) => {
 /** Most topics, or families of them, one browser stream may follow. */
 const STREAM_TOPICS = 100;
 
+/**
+ * How long one browser stream of domain events lasts, give or take a tenth so browsers don't all come back
+ * together. The gateway checks the token and the floor only as a stream opens, so ending it sends the
+ * browser back through those checks: someone taken off a team stops hearing its floor within this.
+ */
+export const STREAM_LIFETIME_MS = 5 * 60_000;
+
 /** Whether each of a comma-separated list is a topic or a family such as "folio.*"; the first that isn't, or the list. */
 const topicList = (raw: string): { topics: string[] } | { bad: string } => {
   const topics = [...new Set(raw.split(',').map((t) => t.trim()).filter(Boolean))];
@@ -164,7 +173,7 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, callers }: EventsOptions) => {
+export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers }: EventsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -181,6 +190,20 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         if (!caller) void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
         return caller;
       };
+      /** Whether an app holds the scope on a floor. When it doesn't, or that can't be asked, the reply has been sent. */
+      const granted = async (req: FastifyRequest, reply: FastifyReply, forApp: string, scope: Scope, workspace: string | undefined, refusal: 400 | 403 = 403): Promise<boolean> => {
+        try {
+          if (!grants) throw new GrantsUnavailable('The events service has no registry to check grants with.');
+          if ((await grants(forApp, workspace)).includes(scope)) return true;
+          void reply.code(refusal).send({ error: refusal === 400 ? 'bad_request' : 'forbidden', message: `${forApp} isn’t granted ${scope}${workspace ? ' on that floor' : ''}.` });
+        } catch (err) {
+          if (!(err instanceof GrantsUnavailable)) throw err;
+          req.log.error({ err: err.message, app: forApp }, 'grant check failed');
+          void reply.code(503).send({ error: 'unavailable', message: 'What this app may do can’t be checked right now. Try again in a moment.' });
+        }
+        return false;
+      };
+
       /**
        * The service sending this, when it may: a platform service always; an
        * app only for itself, and only with the scope on the floor it names.
@@ -203,20 +226,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           void reply.code(403).send({ error: 'forbidden', message: `${service.app} can only send for itself, not for "${forApp}".` });
           return undefined;
         }
-        const workspace = workspaceOf(req);
-        try {
-          if (!grants) throw new GrantsUnavailable('The events service has no registry to check grants with.');
-          if (!(await grants(service.app, workspace)).includes(scope)) {
-            void reply.code(403).send({ error: 'forbidden', message: `${service.app} isn’t granted ${scope}${workspace ? ' on that floor' : ''}.` });
-            return undefined;
-          }
-        } catch (err) {
-          if (!(err instanceof GrantsUnavailable)) throw err;
-          req.log.error({ err: err.message, app: service.app }, 'grant check failed');
-          void reply.code(503).send({ error: 'unavailable', message: 'What this app may do can’t be checked right now. Try again in a moment.' });
-          return undefined;
-        }
-        return service;
+        return (await granted(req, reply, service.app, scope, workspaceOf(req))) ? service : undefined;
       };
 
       /**
@@ -502,7 +512,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             body: Type.Object({ events: Type.Array(ref(NewDomainEventSchema), { minItems: 1, maxItems: 100 }) }, { additionalProperties: false }),
             response: {
               202: Type.Object({ added: Type.Integer(), repeated: Type.Integer() }, { description: 'Kept' }),
-              400: refused("A topic outside the publisher's, an unknown floor, or a payload over 16 KB"),
+              400: refused("A topic outside the publisher's, an unknown floor, a floor the app isn't on, or a payload over 16 KB"),
               403: refused("Not a service, not this publisher's topics, or no events:publish scope"),
               503: refused("Floors or grants can't be checked right now"),
             },
@@ -530,6 +540,9 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             if (!(err instanceof FloorsUnavailable)) throw err;
             return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be looked up right now. Try again in a moment.' });
           }
+          // Each event goes on the floor it names, whatever floor the call itself names. A 400, not a 403: this is about the event,
+          // so the outbox relay sets that one row aside rather than holding every event behind it.
+          if (service.kind !== 'platform' && !(await granted(req, reply, service.app, 'events:publish', id, 400))) return reply;
         }
         const events: NewDomainEvent[] = req.body.events.map((e) => ({ topic: e.topic, id: e.id, payload: e.payload, floor: e.workspace ? places.get(e.workspace) : undefined }));
         const result = await store.publish(serviceName(service), events);
@@ -621,10 +634,16 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             if (e.workspace?.id === floor && topicMatches(e.topic, topics)) res.write(`event: domain-event\ndata: ${JSON.stringify(forBrowser(e))}\n\n`);
           });
           const heartbeat = setInterval(() => res.write(': still here\n\n'), heartbeatMs);
-          req.raw.on('close', () => {
+          const finished = () => {
             clearInterval(heartbeat);
+            clearTimeout(lifetime);
             stop();
-          });
+          };
+          const lifetime = setTimeout(() => {
+            finished();
+            res.end();
+          }, streamLifetimeMs * (0.9 + Math.random() * 0.2));
+          req.raw.on('close', finished);
         },
       );
 

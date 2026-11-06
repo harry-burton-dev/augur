@@ -198,6 +198,32 @@ const behavesLikeAnInbox = (make: () => EventStore, reset: () => Promise<void> =
     expect((await store.inbox.history(first.item.id)).map((h) => h.action)).toEqual(['created', 'updated', 'withdrawn', 'reopened']);
   });
 
+  it('refuses an action when the item no longer stands as it was checked', async () => {
+    const put = await store.inbox.put('mandate', 'race', forTeam, place);
+    if (!('item' in put)) throw new Error('expected an item');
+    const { id } = put.item;
+    await store.inbox.act(id, { action: 'taken', by: 'u-2' });
+    // Each of these passed its check before u-2's take committed, and none undoes it.
+    expect(await store.inbox.act(id, { action: 'declined', by: 'u-3', note: 'No' }, put.item)).toEqual({ takenBy: 'u-2' });
+    expect(await store.inbox.act(id, { action: 'handed-on', by: 'u-3', to: { kind: 'person', id: 'u-5' } }, put.item)).toEqual({ takenBy: 'u-2' });
+    expect(await store.inbox.act(id, { action: 'done', by: 'u-3' }, put.item)).toEqual({ takenBy: 'u-2' });
+    const taken = (await store.inbox.get(id))!;
+    expect(taken).toMatchObject({ takenBy: 'u-2', state: 'open', owner: { kind: 'team', id: 't-1' } });
+    // A release sent twice can't give back what someone else took in between.
+    await store.inbox.act(id, { action: 'released', by: 'u-2' }, taken);
+    expect(await store.inbox.act(id, { action: 'released', by: 'u-2' }, taken)).toEqual({ changed: true });
+    await store.inbox.act(id, { action: 'taken', by: 'u-3' }, put.item);
+    expect(await store.inbox.act(id, { action: 'released', by: 'u-2' }, taken)).toEqual({ takenBy: 'u-3' });
+    expect((await store.inbox.get(id))?.takenBy).toBe('u-3');
+    // A take checked against the team doesn't land on an item since handed on.
+    const untaken = await store.inbox.put('mandate', 'race-2', forTeam, place);
+    if (!('item' in untaken)) throw new Error('expected an item');
+    await store.inbox.act(untaken.item.id, { action: 'handed-on', by: 'u-2', to: { kind: 'person', id: 'u-5' } }, untaken.item);
+    expect(await store.inbox.act(untaken.item.id, { action: 'taken', by: 'u-3' }, untaken.item)).toEqual({ changed: true });
+    expect(await store.inbox.get(untaken.item.id)).toMatchObject({ owner: { kind: 'person', id: 'u-5' } });
+    expect((await store.inbox.get(untaken.item.id))?.takenBy).toBeUndefined();
+  });
+
   it('lets one member take a team item; a second taker hears who has it', async () => {
     const put = await store.inbox.put('mandate', 'team', forTeam, place);
     if (!('item' in put)) throw new Error('expected an item');

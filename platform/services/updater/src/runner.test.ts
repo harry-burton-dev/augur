@@ -212,6 +212,46 @@ describe('the app runner', () => {
     expect(t.state().apps.notes.active?.version).toBe('1.0.0');
   });
 
+  it('puts the old manifest back too when the registry takes the new one but the upstream can’t move', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    const set = t.calls.calls.setUpstream;
+    t.calls.calls.setUpstream = async (app, url) => {
+      if (url?.includes('green')) throw new Error('it answered 503');
+      await set(app, url);
+    };
+    t.calls.did.length = 0;
+    expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
+    expect(t.calls.did.slice(-3)).toEqual(['register notes 1.1.0', 'register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
+    expect(t.running.has('app-notes-green')).toBe(false);
+    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
+  });
+
+  it('goes back when the switch can’t be reported, and leaves the new version running if going back fails too', async () => {
+    const failingReport = (t: ReturnType<typeof setup>) => async (r: JobReport) => {
+      if (r.step === 'switch' && r.state === 'done') throw new Error('it couldn’t be reached');
+      t.reports.push(r);
+    };
+    const t = setup();
+    await t.run(install('1.0.0'));
+    expect(await t.runner.run(install('1.1.0', 'b'), failingReport(t))).toBe('failed');
+    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
+    expect(t.running.has('app-notes-green')).toBe(false);
+    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
+
+    // With the registry away the gateway stays on the new version, so stopping it would take the app down.
+    const set = t.calls.calls.setUpstream;
+    t.calls.calls.setUpstream = async (app, url) => {
+      if (url?.includes('blue')) throw new Error('it couldn’t be reached');
+      await set(app, url);
+    };
+    expect(await t.runner.run(install('1.1.0', 'b'), failingReport(t))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/Going back to 1\.0\.0 didn’t work either, so app-notes-green is still running/);
+    expect(t.running.has('app-notes-green')).toBe(true);
+    expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'green' });
+    expect(t.state().apps.notes.retiring?.until).toBeUndefined();
+  });
+
   it('takes a backup before the first release from another repository, and not for the next ones', async () => {
     const own = { signer: { repository: 'o/notes', workflow: '.github/workflows/release.yml' } };
     const t = setup(`${ENV}APP_PUBLISHERS=o/notes/.github/workflows/release.yml\n`);
@@ -307,6 +347,60 @@ describe('the app runner', () => {
     expect(t.running.has('app-notes-green')).toBe(false);
     expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
   });
+
+  describe('restarting around a switch', () => {
+    const candidate = { slot: 'green', version: '1.1.0', image: image('b'), storage: { database: true, bucket: false } } as const;
+    /** As if it had started green, and may or may not have switched to it, before it stopped. */
+    const stopped = async (t: ReturnType<typeof setup>) => {
+      await t.host.writeProject({ apps: { notes: { ...t.state().apps.notes, retiring: candidate } } }, {}, {});
+      t.running.set('app-notes-green', '1.1.0');
+      t.calls.did.length = 0;
+    };
+    const again = { ...install('1.1.0', 'b'), state: 'running' as const };
+
+    it('puts the old version’s manifest and upstream back before it stops the new one', async () => {
+      const t = setup();
+      await t.run(install('1.0.0'));
+      await stopped(t);
+      const set = t.calls.calls.setUpstream;
+      t.calls.calls.setUpstream = async (app, url) => {
+        expect(t.running.has('app-notes-green')).toBe(true);
+        await set(app, url);
+      };
+      expect(await t.run(again)).toBe('failed');
+      expect(t.calls.did).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
+      expect(t.running.has('app-notes-green')).toBe(false);
+      expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
+    });
+
+    it('forgets the upstream of a first install, which has nothing to go back to', async () => {
+      const t = setup();
+      await stopped(t);
+      expect(await t.run(again)).toBe('failed');
+      expect(t.calls.did).toEqual(['upstream notes null']);
+      expect(t.running.has('app-notes-green')).toBe(false);
+      expect(t.state().apps).toEqual({});
+    });
+
+    it('stops nothing while the gateway can’t be moved, and tries again on the next turn', async () => {
+      const t = setup();
+      await t.run(install('1.0.0'));
+      await stopped(t);
+      const set = t.calls.calls.setUpstream;
+      t.calls.calls.setUpstream = async () => {
+        throw new Error('it couldn’t be reached');
+      };
+      await expect(t.run(again)).rejects.toThrow('it couldn’t be reached');
+      expect(t.running.has('app-notes-green')).toBe(true);
+      expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'green' });
+      expect(t.reports.at(-1)?.outcome).toBe('done');
+
+      t.calls.calls.setUpstream = set;
+      expect(await t.run(again)).toBe('failed');
+      expect(t.running.has('app-notes-green')).toBe(false);
+      expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-blue:8080');
+    });
+  });
 });
 
 describe('settings', () => {
@@ -395,5 +489,49 @@ describe('settings', () => {
     expect(t.running.has('app-notes-pr3')).toBe(false);
     expect(t.running.has('app-notes-blue')).toBe(true);
     expect(t.state().previews).toEqual({});
+  });
+
+  it('keeps a preview through the app’s installs, however they end, so it can still be taken away', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.versions.set(image('d'), '1.1.0-pr.12.1');
+    t.versions.set(image('c'), '1.0.9');
+    const signer = { signer: { repository: 'o/r', workflow: '.github/workflows/app-preview.yml' } };
+    await t.run({ id: 'p-1', app: 'notes', action: 'preview', pr: 12, release: release('1.1.0-pr.12.1', 'd', signer), state: 'requested' });
+
+    expect(await t.run(install('1.1.0', 'b'))).toBe('done');
+    expect(t.state().previews).toHaveProperty(['notes-pr12']);
+    expect(t.project()!.services).toHaveProperty(['app-notes-pr12']);
+
+    // A version that doesn't come up, undone.
+    expect(await t.run(install('1.2.0', 'c'))).toBe('failed');
+    expect(t.state().previews).toHaveProperty(['notes-pr12']);
+    expect(t.project()!.services).toHaveProperty(['app-notes-pr12']);
+
+    // A version that falls over after the switch, gone back from.
+    t.versions.set(image('e'), '1.3.0');
+    const wait = t.host.wait;
+    t.host.wait = async (ms) => {
+      await wait(ms);
+      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-blue');
+    };
+    expect(await t.run(install('1.3.0', 'e'))).toBe('failed');
+    expect(t.state().apps.notes.active?.version).toBe('1.1.0');
+    expect(t.state().previews).toHaveProperty(['notes-pr12']);
+    expect(t.project()!.services).toHaveProperty(['app-notes-pr12']);
+
+    t.did.length = 0;
+    expect(await t.run({ id: 'r-1', app: 'notes', action: 'preview-remove', pr: 12, state: 'requested' })).toBe('done');
+    expect(t.did).toEqual(['stop app-notes-pr12', 'drop notes-pr12']);
+  });
+
+  it('finishes taking away a preview the state doesn’t name, without asking Compose to stop it', async () => {
+    const t = setup();
+    t.host.stop = async (services) => {
+      throw new Error(`no such service: ${services.join(' ')}`);
+    };
+    expect(await t.run({ id: 'r-1', app: 'notes', action: 'preview-remove', pr: 3, state: 'requested' })).toBe('done');
+    expect(t.did).toEqual(['drop notes-pr3']);
+    expect(t.reports.at(-1)).toMatchObject({ outcome: 'done', message: 'Nothing of pull request 3 was running.' });
   });
 });
