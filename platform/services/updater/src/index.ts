@@ -16,7 +16,7 @@ import { appReposFrom, appRunner } from './runner.ts';
 import { partsFor, shippedAppsFrom } from './parts.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity, repositoryOfIdentity } from './signers.ts';
-import { checkOnce, lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
+import { afterRestart, checkOnce, lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
 
 // Every setting the updater reads, checked before it starts (in production, a missing one stops it).
 loadConfigOrExit('updater', [
@@ -131,8 +131,13 @@ const once = async () => {
   if (!target) return;
   const report = registry.reporter(target.id);
   if (target.state === 'running') {
-    // Only this updater runs upgrades, so one already under way means it stopped partway through.
-    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `The updater restarted partway through the upgrade to ${target.version}. Check Admin → Status, and docs/upgrade-went-back.md.` });
+    // Only this updater runs upgrades, so one already under way means it stopped partway through: it goes
+    // back from what it wrote down, when it can (upgrade.ts, afterRestart).
+    log('restarted partway through an upgrade', { from: target.from, to: target.version });
+    // Going back may need an image the docker CLI has to sign in for.
+    await signIn().catch(() => undefined);
+    const outcome = await afterRestart(target, server, report, { parts });
+    log('upgrade ended', { outcome, to: target.version });
     return;
   }
   log('upgrading', { from: target.from, to: target.version });

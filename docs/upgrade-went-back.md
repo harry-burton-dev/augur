@@ -1,6 +1,6 @@
 # When an upgrade goes back by itself
 
-A card for the admin who wakes to an upgrade that went back, didn't install, or kept running after its watch saw a problem, often at night. It fits on two printed pages: print it and keep it beside the server, because it's needed most when AUGUR doesn't load, and a restore rewinds AUGUR's own record of the night. It is also linked from the notice and from Needs you.
+A card for the admin who wakes to an upgrade that went back, didn't install, kept running after its watch saw a problem, or stopped partly on the new release because a breaking release lay between, often at night. It fits on two printed pages: print it and keep it beside the server, because it's needed most when AUGUR doesn't load, and a restore rewinds AUGUR's own record of the night. It is also linked from the notice and from Needs you.
 
 **Don't work out why it broke.** Check four things, top to bottom: the first one that fails tells you what to do. Check all four again after anything you do. **Done when** all four hold, or you've made things safe until morning and written down what you saw and did.
 
@@ -24,7 +24,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 | 1 | **Sign-in works** | Open AUGUR in a browser and sign in | The shell loads and you're signed in | Table 1 |
 | 2 | **Every part answers** | `pc ps`, then `pc exec -T updater node dist/index.js check` | All `healthy`, and `"ok":true` | Table 2 |
 | 3 | **Data fits the code** | `pc logs --since 1h <each part not healthy>` | No error about tables, schema or data being newer than it knows, or missing | Table 3 |
-| 4 | **The way back exists** | `ls infra/deploy/backups`, then `cat infra/deploy/backups/restore-test.json` | The file you wrote down is there, and the test's `"file"` is **that file** with `"ok":true` | Table 4 |
+| 4 | **The way back exists** | `ls infra/deploy/backups`, then `cat infra/deploy/backups/status/restore-test.json` | The file you wrote down is there, and the test's `"file"` is **that file** with `"ok":true` | Table 4 |
 
 All four hold → write the hand-off (below) and stop.
 
@@ -49,7 +49,7 @@ All four hold → write the hand-off (below) and stop.
 
 The code went back, and the data stayed as the new release left it ([upgrade.md, Going back](upgrade.md#going-back), step 2). Only a restore fixes that. **A restore loses everything saved since the backup, in every app and in sign-in, and more each hour people work.** First do check 4: restore only a file that's there and tested.
 
-**A way back that loses less, if it's there.** When Admin → Status shows *Point in time* reaching back before the upgrade started (its start time is in History) and `cat infra/deploy/backups/pitr-test.json` says `"ok":true`, go back to a moment just before that start instead of loading the file: [deploy.md, Restore to a point in time](deploy.md#restore-to-a-point-in-time). It loses only what was saved after that moment, and it keeps the current data first, so it can be undone. The same pause point comes first. It arrives with the release after 0.18 (ADR 0064) and hasn't been tried on a real night yet.
+**A way back that loses less, if it's there.** When Admin → Status shows *Point in time* reaching back before the upgrade started (its start time is in History) and `cat infra/deploy/backups/status/pitr-test.json` says `"ok":true`, go back to a moment just before that start instead of loading the file: [deploy.md, Restore to a point in time](deploy.md#restore-to-a-point-in-time). It loses only what was saved after that moment, and it keeps the current data first, so it can be undone. The same pause point comes first. It arrives with the release after 0.18 (ADR 0064) and hasn't been tried on a real night yet.
 
 | You see | Do |
 |---|---|
@@ -63,7 +63,7 @@ The code went back, and the data stayed as the new release left it ([upgrade.md,
 > pc stop
 > pc up -d postgres
 > pc ps postgres            # again until it says healthy
-> gunzip -c infra/deploy/backups/<the file> | pc exec -T postgres psql -U platform -d postgres
+> pc run --rm --no-deps -T --entrypoint gunzip backup -c /backups/<the file> | pc exec -T postgres psql -U platform -d postgres
 > pc up -d
 > ```
 > The dump drops and recreates each database itself. Then all four checks again. **A notice after a restore describes AUGUR's rewound records, not the server: an upgrade you restored past can say again that it didn't install. Trust the checks, not the notices.**

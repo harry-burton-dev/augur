@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { partsFor } from './parts.ts';
-import { checkOnce, lookAfterWatch, runUpgrade, Withdrawn, type Report, type Server, type Target } from './upgrade.ts';
+import { afterRestart, checkOnce, lookAfterWatch, runUpgrade, Withdrawn, type Journal, type Report, type Server, type Target } from './upgrade.ts';
 
 /** The apps a release ships, as release/shipped-apps.json would have them. */
 const parts = partsFor([
@@ -23,7 +23,7 @@ const target = (more: Partial<Target> = {}): Target => ({
 });
 
 /** A server that does what it's told, and remembers it; `breaks` makes one thing go wrong. */
-type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile' | 'errors' | 'signIn' | 'blip' | 'quiet' | 'fallsOver' | 'ownKeycloak';
+type Breaks = 'sign' | 'backup' | 'restore' | 'digest' | 'registry' | 'storage' | 'worker' | 'rollBack' | 'oldUpdater' | 'edited' | 'badFile' | 'errors' | 'signIn' | 'blip' | 'quiet' | 'fallsOver' | 'ownKeycloak' | 'full' | 'envWrite' | 'verify' | 'journal';
 const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
   const did: string[] = [];
   // The deploy folder, as the running release (0.2.0) left it, unless it's been edited; and the next release's.
@@ -37,9 +37,15 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
   const oldVersions = { ...versions };
   let rolledBack = false;
   let looks = 0;
+  const upped = new Set<string>();
+  // The upgrade's journal in the deploy folder, and each one written with how far the server had got.
+  let journal: Journal | undefined;
+  const journals: { at: number; journal: Journal }[] = [];
   const server: Server = {
     readEnv: async () => env,
     writeEnv: async (text) => {
+      // `envWrite`: the disk fills as the new settings are written.
+      if (breaks.envWrite && text.includes('PLATFORM_VERSION=0.3.0')) throw new Error('ENOSPC: no space left on device');
       env = text;
       did.push(`env ${/PLATFORM_VERSION=(\S+)/.exec(text)?.[1]}`);
     },
@@ -84,11 +90,14 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
       if (!onNew && breaks.rollBack) throw new Error('docker: no such image');
       if (!onNew) rolledBack = true;
       for (const s of services) versions[s] = onNew ? newVersions[s] : oldVersions[s];
+      for (const s of services) upped.add(s);
       did.push(`up ${services.join(' ')}`);
     },
     // `fallsOver`: registry stops answering a few minutes into the watch.
     health: async (service) => {
       if (breaks.fallsOver && service === 'registry' && looks >= 4 && env.includes('PLATFORM_VERSION=0.3.0')) throw new Error('connect ECONNREFUSED');
+      // `verify`: registry comes up, then falls over once the front door is on the new release too.
+      if (breaks.verify && service === 'registry' && upped.has('web') && env.includes('PLATFORM_VERSION=0.3.0')) throw new Error('connect ECONNREFUSED');
       return { version: versions[service] };
     },
     exitCode: async (service) => {
@@ -105,8 +114,27 @@ const fakeServer = (breaks: Partial<Record<Breaks, boolean>> = {}) => {
       return undefined;
     },
     wait: async () => {},
+    // `full`: the deploy folder's disk has 1 GiB left.
+    freeBytes: async () => (breaks.full ? 1024 ** 3 : 50 * 1024 ** 3),
+    readJournal: async () => journal && structuredClone(journal),
+    writeJournal: async (next) => {
+      if (breaks.journal) throw new Error('EACCES: permission denied');
+      journal = structuredClone(next);
+      journals.push({ at: did.length, journal: structuredClone(next) });
+    },
+    clearJournal: async () => void (journal = undefined),
   };
-  return { server, did, disk, env: () => env, setEnv: (text: string) => void (env = text), rolledBack: () => rolledBack };
+  return {
+    server,
+    did,
+    disk,
+    env: () => env,
+    setEnv: (text: string) => void (env = text),
+    rolledBack: () => rolledBack,
+    journal: () => journal,
+    journals,
+    setJournal: (next: Journal) => void (journal = structuredClone(next)),
+  };
 };
 
 const run = async (t: Target, server: Server) => {
@@ -223,6 +251,13 @@ describe('an upgrade', () => {
     ['the backup fails', target(), { backup: true }, 'The backup couldn’t be taken: pg_dumpall: connection refused'],
     ['the backup doesn’t restore', target(), { restore: true }, 'didn’t restore in the test'],
     ['a pulled image isn’t the release’s', target(), { digest: true }, 'The registry image pulled for 0.3.0 isn’t the one the release names'],
+    ['the disk is nearly full', target(), { full: true }, 'The deploy folder’s disk has 1.0 GiB free, and an upgrade needs 2.0 GiB'],
+    ['the upgrade asks to set who signs images', target({ settings: { IMAGE_SIGNER: 'https://github.com/someone/else/.github/workflows/release.yml@refs/heads/main' } }), {}, 'The upgrade asks to set IMAGE_SIGNER, which decides what this server trusts'],
+    ['the upgrade asks to set where images come from or which files Compose reads', target({ settings: { PLATFORM_IMAGES: 'evil.example/augur', COMPOSE_FILE: 'other.yml', APPS_NETWORK: 'host' } }), {}, 'The upgrade asks to set PLATFORM_IMAGES, COMPOSE_FILE, APPS_NETWORK, which decide'],
+    ['the upgrade asks to set the app runner’s key', target({ settings: { APP_SECRETS_KEY: 'k' } }), {}, 'APP_SECRETS_KEY'],
+    ['a setting’s name isn’t a plain one', target({ settings: { 'ORG_NAME=x\nIMAGE_SIGNER': 'y' } }), {}, 'which isn’t a setting’s name'],
+    ['the upgrade asks to change a setting the server already has', target({ settings: { PLATFORM_URL: 'https://elsewhere.example.org' } }), {}, 'The upgrade asks to change PLATFORM_URL, which .env already sets. An upgrade only adds settings'],
+    ['the journal can’t be written', target(), { journal: true }, 'The updater couldn’t write down the upgrade in the deploy folder'],
   ] as const)('changes nothing when %s', async (_, t, breaks, message) => {
     const fake = fakeServer(breaks);
     const { outcome, last } = await run(t, fake.server);
@@ -311,6 +346,20 @@ describe('an upgrade', () => {
     expect(last.message).toContain('Back on 0.2.0 didn’t work either: docker: no such image');
   });
 
+  it('takes an entered setting the server already has with that very value as it is', async () => {
+    const fake = fakeServer();
+    expect((await run(target({ settings: { PLATFORM_URL: 'https://augur.example.org' } }), fake.server)).outcome).toBe('done');
+  });
+
+  it('goes back and writes the old settings again when writing the new ones fails', async () => {
+    const fake = fakeServer({ envWrite: true });
+    const { outcome, last } = await run(target(), fake.server);
+    expect(outcome).toBe('rolled-back');
+    expect(last.message).toContain('Back on 0.2.0: ENOSPC: no space left on device');
+    expect(fake.did.filter((d) => !d.startsWith('verify'))).toEqual(['backup', 'restore-test', 'pull storage identity registry web updater 0.3.0', 'env 0.2.0', 'up storage identity registry web']);
+    expect(fake.env()).toContain('PLATFORM_VERSION=0.2.0');
+  });
+
   it('stops when the upgrade is withdrawn before it starts', async () => {
     const fake = fakeServer();
     await expect(
@@ -378,6 +427,171 @@ describe('the watch after an upgrade (ADR 0020)', () => {
     expect(last).toMatchObject({ step: 'watch', state: 'failed', outcome: 'failed' });
     expect(last.message).toContain('it didn’t go back by itself, because 0.2.5 between is breaking');
     expect(rolledBack()).toBe(false);
+  });
+});
+
+describe('a breaking release between (ADR 0020)', () => {
+  const breaking = target({ watch: { breakingSince: '0.2.5' } });
+
+  it('doesn’t go back by itself once a part has restarted on the new release and one doesn’t come back', async () => {
+    const fake = fakeServer({ registry: true });
+    const { outcome, last } = await run(breaking, fake.server);
+    expect(outcome).toBe('failed');
+    expect(last).toMatchObject({ step: 'roll-forward', state: 'failed', outcome: 'failed' });
+    expect(last.message).toContain('registry came back on 0.4.0, not 0.5.0.');
+    expect(last.message).toContain('The server is partly on AUGUR 0.3.0: it didn’t go back by itself, because 0.2.5 between is breaking. See docs/upgrade-went-back.md');
+    expect(fake.rolledBack()).toBe(false);
+    expect(fake.env()).toContain('PLATFORM_VERSION=0.3.0');
+  });
+
+  it('doesn’t go back by itself when a part falls over in the last check', async () => {
+    const fake = fakeServer({ verify: true });
+    const { outcome, last } = await run(breaking, fake.server);
+    expect(outcome).toBe('failed');
+    expect(last).toMatchObject({ step: 'verify', state: 'failed', outcome: 'failed' });
+    expect(last.message).toContain('AUGUR 0.3.0 is still running: it didn’t go back by itself, because 0.2.5 between is breaking');
+    expect(fake.rolledBack()).toBe(false);
+  });
+
+  it('still goes back when nothing had restarted on the new release yet', async () => {
+    const fake = fakeServer({ envWrite: true });
+    const { outcome, last } = await run(breaking, fake.server);
+    expect(outcome).toBe('rolled-back');
+    expect(last).toMatchObject({ step: 'roll-back', outcome: 'rolled-back' });
+    expect(fake.did).toContain('env 0.2.0');
+  });
+});
+
+describe('the upgrade’s journal, for a restart partway through', () => {
+  const files = target({ images: { ...target().images, search: image('search', 's3') }, deploy: { 'compose.yml': hash('c1'), 'search.yml': hash('s1') }, watch: { breakingSince: '0.2.5' } });
+
+  it('is written before anything changes, notes when a part is about to restart, and is gone when the upgrade ends', async () => {
+    const fake = fakeServer();
+    expect((await run(files, fake.server)).outcome).toBe('done');
+    const [first, ...later] = fake.journals;
+    expect(fake.did.slice(0, first!.at).some((d) => /^(up|env|write|remove|recreate)/.test(d))).toBe(false);
+    expect(first!.journal).toMatchObject({
+      id: 'up-1',
+      from: '0.2.0',
+      version: '0.3.0',
+      before: 'PLATFORM_VERSION=0.2.0\nPLATFORM_URL=https://augur.example.org\n',
+      oldFiles: { 'compose.yml': Buffer.from('c0').toString('base64'), 'search.yml': null },
+      services: ['storage', 'identity', 'registry', 'web'],
+      breakingSince: '0.2.5',
+      restarted: false,
+    });
+    const restarting = later.find((j) => j.journal.restarted)!;
+    expect(fake.did.slice(0, restarting.at).some((d) => d.startsWith('up'))).toBe(false);
+    expect(fake.did[restarting.at]).toBe('up postgres keycloak');
+    expect(restarting.journal).toMatchObject({ fresh: ['search'], others: ['postgres', 'keycloak'] });
+    expect(fake.journal()).toBeUndefined();
+  });
+
+  it('is gone when the upgrade goes back, or changes nothing', async () => {
+    const back = fakeServer({ registry: true });
+    expect((await run(target(), back.server)).outcome).toBe('rolled-back');
+    expect(back.journal()).toBeUndefined();
+    const failed = fakeServer({ registry: true });
+    expect((await run(files, failed.server)).outcome).toBe('failed');
+    expect(failed.journal()).toBeUndefined();
+  });
+
+  /** The journal an updater left when it stopped partway through, `restarted` or not. */
+  const leftBehind = async (t: Target, restarted: boolean) => {
+    const fake = fakeServer();
+    // An upgrade as far as the journal goes: the new files and settings written, then the updater stops.
+    const writeJournal = fake.server.writeJournal;
+    let stopped = false;
+    fake.server.writeJournal = async (j) => {
+      await writeJournal(j);
+      if (j.restarted === restarted && (restarted || j.filesWritten)) {
+        stopped = true;
+        throw new Error('the updater stopped');
+      }
+    };
+    const up = fake.server.up;
+    fake.server.up = async (services) => {
+      if (stopped) throw new Error('the updater stopped');
+      return up(services);
+    };
+    const writeEnv = fake.server.writeEnv;
+    fake.server.writeEnv = async (text) => {
+      if (stopped) throw new Error('the updater stopped');
+      return writeEnv(text);
+    };
+    const writeDeployFiles = fake.server.writeDeployFiles;
+    fake.server.writeDeployFiles = async (f) => {
+      if (stopped) throw new Error('the updater stopped');
+      return writeDeployFiles(f);
+    };
+    const remove = fake.server.remove;
+    fake.server.remove = async (s) => {
+      if (stopped) throw new Error('the updater stopped');
+      return remove(s);
+    };
+    const clearJournal = fake.server.clearJournal;
+    fake.server.clearJournal = async () => (stopped ? undefined : clearJournal());
+    await run(t, fake.server).catch(() => undefined);
+    const journal = fake.journal()!;
+    expect(journal).toBeDefined();
+    // The restarted updater: a fresh look at the same server.
+    const again = fakeServer();
+    for (const [path, bytes] of Object.entries(fake.disk)) again.disk[path] = bytes;
+    again.setEnv(fake.env());
+    again.setJournal(journal);
+    return { again, journal };
+  };
+
+  const resume = async (t: Target, server: Server) => {
+    const reports: Report[] = [];
+    const outcome = await afterRestart({ ...t, state: 'running' }, server, async (r) => void reports.push(r), { parts });
+    return { outcome, reports, last: reports.at(-1)! };
+  };
+
+  it('goes back from it when the updater restarts before any part restarted, breaking release or not', async () => {
+    const { again, journal } = await leftBehind(files, false);
+    expect(journal.filesWritten).toBe(true);
+    expect(again.disk['compose.yml']).toBe('c1');
+    const { outcome, last } = await resume(files, again.server);
+    expect(outcome).toBe('rolled-back');
+    expect(last).toMatchObject({ step: 'roll-back', state: 'done', outcome: 'rolled-back' });
+    expect(last.message).toContain('Back on 0.2.0: The updater restarted partway through the upgrade to 0.3.0, so it went back.');
+    expect(again.disk).toMatchObject({ 'compose.yml': 'c0', 'search.yml': undefined });
+    expect(again.env()).toBe('PLATFORM_VERSION=0.2.0\nPLATFORM_URL=https://augur.example.org\n');
+    expect(again.journal()).toBeUndefined();
+  });
+
+  it('goes back from it after parts restarted, when no breaking release lies between', async () => {
+    const t = { ...files, watch: {} };
+    const { again } = await leftBehind(t, true);
+    const { outcome } = await resume(t, again.server);
+    expect(outcome).toBe('rolled-back');
+    expect(again.did).toEqual(expect.arrayContaining(['remove search', 'env 0.2.0', 'up postgres keycloak']));
+    expect(again.env()).toContain('PLATFORM_VERSION=0.2.0');
+  });
+
+  it('leaves the server for a person when parts had restarted and a breaking release lies between', async () => {
+    const { again } = await leftBehind(files, true);
+    const { outcome, last } = await resume(files, again.server);
+    expect(outcome).toBe('failed');
+    expect(last).toMatchObject({ step: 'roll-forward', state: 'failed', outcome: 'failed' });
+    expect(last.message).toContain('The updater restarted partway through the upgrade to 0.3.0. The server is partly on AUGUR 0.3.0: it didn’t go back by itself, because 0.2.5 between is breaking.');
+    expect(again.did).toEqual([]);
+    expect(again.journal()).toBeUndefined();
+  });
+
+  it('says only that it restarted when there is no journal, or it is another upgrade’s', async () => {
+    const none = fakeServer();
+    const { outcome, last } = await resume(target(), none.server);
+    expect(outcome).toBe('failed');
+    expect(last).toMatchObject({ step: 'roll-back', state: 'failed', outcome: 'failed' });
+    expect(last.message).toBe('The updater restarted partway through the upgrade to 0.3.0. Check Admin → Status, and docs/upgrade-went-back.md.');
+    expect(none.did).toEqual([]);
+
+    const { again, journal } = await leftBehind(files, false);
+    again.setJournal({ ...journal, id: 'up-0' });
+    expect((await resume(files, again.server)).outcome).toBe('failed');
+    expect(again.did).toEqual([]);
   });
 });
 

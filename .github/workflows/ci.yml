@@ -400,11 +400,13 @@ jobs:
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
             -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro -v /tmp/wal:/wal-archive \
             postgres:16-alpine /bin/sh /backup/backup.sh --once
-          zcat /tmp/backups/platform-*.sql.gz | grep -q "PostgreSQL database cluster dump complete"
-          grep -q '"ok":true' /tmp/backups/last-backup.json
-          cat /tmp/backups/pitr.json
-          grep -q '"ok":true,"bases":1,"earliest"' /tmp/backups/pitr.json && sudo sh -c 'test -s /tmp/backups/base-*/base.tar.gz'
-          tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
+          # The backups are root's alone; Status's results are anyone's, in a folder of their own.
+          sudo sh -c 'zcat /tmp/backups/platform-*.sql.gz' | grep -q "PostgreSQL database cluster dump complete"
+          test "$(stat -c %a /tmp/backups/platform-*.sql.gz)" = 600 && test "$(stat -c %a /tmp/backups/status/last-backup.json)" = 644
+          grep -q '"ok":true' /tmp/backups/status/last-backup.json
+          cat /tmp/backups/status/pitr.json
+          grep -q '"ok":true,"bases":1,"earliest"' /tmp/backups/status/pitr.json && sudo sh -c 'test -s /tmp/backups/base-*/base.tar.gz'
+          sudo tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
           grep -q '^data/00/block$' /tmp/objects.txt && grep -q '^meta/snapshots/s1$' /tmp/objects.txt && ! grep -q 'db.sqlite' /tmp/objects.txt
       - name: The updater's backup is a fresh one, and the newest
         run: |
@@ -417,37 +419,52 @@ jobs:
         run: |
           docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
             postgres:16-alpine /bin/sh /backup/backup.sh --restore-test
-          cat /tmp/backups/restore-test.json
-          grep -q '"ok":true' /tmp/backups/restore-test.json
+          cat /tmp/backups/status/restore-test.json
+          grep -q '"ok":true' /tmp/backups/status/restore-test.json
       - name: The off-server copy is made with restic, and the restore test restores from it
         run: |
           # restic, as the backup-tools container hands it over; a local folder stands in for the bucket.
           mkdir -p /tmp/tools /tmp/offsite
           docker run --rm -v /tmp/tools:/tools --entrypoint sh "$(sed -n 's/^ *image: \(restic\/restic:.*\)$/\1/p' infra/deploy/compose.yml)" \
             -c 'cp /usr/bin/restic /tools/restic.new && mv /tools/restic.new /tools/restic'
+          # A stand-in deploy folder: its .env and secrets go off the server with the backups.
+          mkdir -p /tmp/deploy/secrets && echo 'POSTGRES_PASSWORD=ci' > /tmp/deploy/.env && echo key > /tmp/deploy/secrets/github-read-key
           offsite() {
-            docker run --rm -e RESTIC_REPOSITORY=/offsite/repo -e RESTIC_PASSWORD="$1" \
-              -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro \
+            docker run --rm -e RESTIC_REPOSITORY="${REPO:-/offsite/repo}" -e RESTIC_PASSWORD="$1" \
+              -v "$PWD/infra/deploy/backup:/backup:ro" -v "${BACKUPS:-/tmp/backups}:/backups" -v /tmp/objects:/objects:ro -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro -v /tmp/deploy:/deploy:ro \
               postgres:16-alpine /bin/sh /backup/backup.sh "${@:2}"
           }
           offsite ci --offsite
-          grep -q '"ok":true' /tmp/backups/offsite.json
+          grep -q '"ok":true' /tmp/backups/status/offsite.json
+          restic() { docker run --rm -e RESTIC_PASSWORD=ci -e RESTIC_REPOSITORY=/offsite/repo -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro --entrypoint /tools/restic postgres:16-alpine "$@"; }
+          restic ls latest --tag augur-config | grep -qx /deploy/.env
+          # A new server's backups (an empty database) never go into the repository, whose copies would age out.
+          sudo mkdir -p /tmp/new/backups && echo 'select 1;' | gzip | sudo tee /tmp/new/backups/platform-2000-01-01.sql.gz > /dev/null
+          ! BACKUPS=/tmp/new/backups offsite ci --offsite
+          grep -q '"ok":false.*holds no AUGUR data' /tmp/new/backups/status/offsite.json
+          # Nor does a real one from a server that never copied there, until it is told to take the copy as its own.
+          sudo sh -c 'cp /tmp/backups/platform-*.sql.gz /tmp/new/backups/' && sudo rm -f /tmp/new/backups/platform-2000-01-01.sql.gz
+          ! BACKUPS=/tmp/new/backups offsite ci --offsite
+          grep -q '"ok":false.*didn.t make' /tmp/new/backups/status/offsite.json
+          test "$(restic snapshots --tag augur-db --json | grep -o '"id"' | wc -l)" = 1
+          BACKUPS=/tmp/new/backups offsite ci --adopt-offsite
+          grep -q '"ok":true' /tmp/new/backups/status/offsite.json
           # Restored from the copy alone: the local dumps are put aside first.
           mkdir -p /tmp/aside && sudo mv /tmp/backups/platform-*.sql.gz /tmp/aside/
           offsite ci --restore-test --offsite
-          cat /tmp/backups/restore-test.json
-          grep -q '"from":"offsite".*"ok":true' /tmp/backups/restore-test.json
+          cat /tmp/backups/status/restore-test.json
+          grep -q '"from":"offsite".*"ok":true' /tmp/backups/status/restore-test.json
           # The wrong password is said in words, and the local backups are left alone.
           sudo mv /tmp/aside/* /tmp/backups/
           ! offsite wrong --offsite
-          grep -q '"ok":false.*wrong password' /tmp/backups/offsite.json
+          grep -q '"ok":false.*wrong password' /tmp/backups/status/offsite.json
       - name: The archived WAL replays onto the base backup, and the database goes back to a moment
         run: |
           pitr() { docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/wal:/wal-archive "$@"; }
           docker exec pg psql -U platform -qc "insert into registry.apps values ('kept')"
           pitr postgres:16-alpine /bin/sh /backup/backup.sh --pitr-test
-          cat /tmp/backups/pitr-test.json
-          grep -q '"ok":true' /tmp/backups/pitr-test.json
+          cat /tmp/backups/status/pitr-test.json
+          grep -q '"ok":true' /tmp/backups/status/pitr-test.json
           # A mistake after the moment: going back to the moment undoes it.
           sleep 1; moment=$(date -u +'%Y-%m-%d %H:%M:%S'); sleep 1
           docker exec pg psql -U platform -qc "delete from registry.apps where id = 'kept'"

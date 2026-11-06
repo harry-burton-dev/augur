@@ -25,7 +25,7 @@ Have these ready. The preflight (step 3) checks what it can of them before anyth
    The server doesn't need Tailscale installed itself. The `tailscale` container joins your tailnet as its own machine, named after `TS_HOSTNAME`.
 3. **Its entry in Backstage**, if it reports there (a staging server must): the deployment's name in Backstage's `org/deployments.yaml`, and Backstage's address on the tailnet. Step 6 joins them up.
 4. **A read key**, only if AUGUR's packages aren't public to you: one GitHub token with only **read:packages**. After step 1, save it as `infra/deploy/secrets/github-read-key` (owned by user 1000), set `GITHUB_READ_USER` in `.env`, and sign Docker in with it once (`docker login ghcr.io`). [upgrade.md](upgrade.md#the-read-key) has the steps, including the read-only GitHub account to make it from. A server that can't reach GitHub runs releases from your own registry instead ([mirror.md](mirror.md)).
-5. **For later, but before anyone real works on it**: the organisation's email relay ([Email](#email)) and a bucket off the server for backups ([Off-server copy](#off-server-copy)).
+5. **For later, but before anyone real works on it**: the organisation's email relay ([Email](#email)) and a bucket off the server for backups ([Off-server copy](#off-server-copy)). The off-server copy holds `.env` and `secrets/` too, encrypted; keep its `OFFSITE_*` settings in your password manager, since they are what gets a lost server back ([Restore a lost server](#restore-a-lost-server)).
 
 ## First start
 
@@ -249,7 +249,7 @@ Taking the three settings out of `.env` turns the sign-in off at the next `pc up
 
 ## Backups
 
-The `backup` container dumps the whole database every night at 02:00 UTC into `infra/deploy/backups/`, as `platform-YYYY-MM-DD.sql.gz`, and keeps the last 14 days. It also takes one when it first starts. Everything lives in that dump: the platform's data, apps' schemas, people's preferences, and Keycloak's users. Apps' files go beside it as `objects-YYYY-MM-DD.tar.gz`. Change the time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `.env`.
+The `backup` container dumps the whole database every night at 02:00 UTC into `infra/deploy/backups/`, as `platform-YYYY-MM-DD.sql.gz`, and keeps the last 14 days. The backups hold everyone's data and every login's password hash, so only root can read them (the commands below read them through a container). What each run found goes in `infra/deploy/backups/status/`, readable by anyone, and that folder alone is what the gateway sees, for Admin → Status. It also takes one when it first starts. Everything lives in that dump: the platform's data, apps' schemas, people's preferences, and Keycloak's users. Apps' files go beside it as `objects-YYYY-MM-DD.tar.gz`. Change the time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `.env`.
 
 Once a week (Sunday, after the backup; `RESTORE_TEST_WEEKDAY` changes the day) it also **tests a restore**: it loads the newest backup into a throwaway database inside the backup container, checks the platform's tables and Keycloak's people came back, then throws it away. The live database is never touched. It runs once on first start too. **Admin → Status** shows the last backup and the last restore test, and its heading says "Backups need a look" when the last backup failed or is over a day old, or the last restore test failed or is over a week old.
 
@@ -259,7 +259,7 @@ The backups sit on the same disk as the database, so a lost server loses them to
 
 ### Off-server copy
 
-Once it's set up, each night's dump and apps' files are also copied to a bucket the deployment names, with [restic](https://restic.net) (ADR 0060). restic encrypts everything on the server before it leaves, keeps 30 days of copies (`OFFSITE_KEEP_DAILY`), and sends only what changed since the night before. The weekly restore test then restores the newest dump **from the bucket**, so it proves the copy, not only the file on this disk. Admin → Status shows the last copy and where the last restore came from, and says "Backups need a look" when a copy failed or is over a day old.
+Once it's set up, each night's dump and apps' files, and the deployment's `.env` and `secrets/`, are also copied to a bucket the deployment names, with [restic](https://restic.net) (ADR 0060). Without `.env` a dump can't be loaded on a new server (the database logins' passwords are in it) and apps' secrets can't be made again (`APP_SECRETS_KEY`), so the copy carries them, encrypted like the rest. restic encrypts everything on the server before it leaves, keeps 30 days of copies (`OFFSITE_KEEP_DAILY`), and sends only what changed since the night before. The weekly restore test then restores the newest dump **from the bucket**, so it proves the copy, not only the file on this disk. Admin → Status shows the last copy and where the last restore came from, and says "Backups need a look" when a copy failed or is over a day old.
 
 Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, MinIO, a second Garage, or the organisation's own object store). Where the bucket lives is this deployment's choice about where its data may be kept: write it down with the deployment's other settings.
 
@@ -270,7 +270,7 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
      { "Effect": "Allow", "Action": ["s3:ListBucket", "s3:GetBucketLocation"], "Resource": "arn:aws:s3:::augur-backups" },
      { "Effect": "Allow", "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"], "Resource": "arn:aws:s3:::augur-backups/*" } ] }
    ```
-3. **Make the encryption password** (`openssl rand -hex 32`) and **keep a copy off the server** (a password manager): without it nobody, you included, can read the copies.
+3. **Make the encryption password** (`openssl rand -hex 32`) and **keep a copy off the server** (a password manager), with the other `OFFSITE_*` settings below: without them nobody, you included, can read the copies, and they are all a lost server needs to come back.
 4. **Set it in `.env`**, then `pc up -d backup`:
    ```sh
    OFFSITE_REPOSITORY=s3:https://s3.eu-west-2.amazonaws.com/augur-backups/<this deployment>
@@ -279,29 +279,23 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
    OFFSITE_SECRET_ACCESS_KEY=<the key's secret>
    OFFSITE_REGION=eu-west-2   # if the provider wants one
    ```
-   The backup container makes the repository on first use, copies today's backup straight away, and restores it from the bucket once to prove it. `pc logs backup` shows each step; `infra/deploy/backups/offsite.json` and `restore-test.json` hold the results.
+   The backup container makes the repository on first use, copies today's backup straight away, and restores it from the bucket once to prove it. `pc logs backup` shows each step; `infra/deploy/backups/status/offsite.json` and `restore-test.json` hold the results.
+
+   It never copies a dump with no AUGUR in it (a new server's Postgres before the registry has started), and never into a repository that already holds backups another server made, until told this server is that deployment. Either would be the newest copy, and push the real ones out of the days kept.
 
 - **Copy now**: `pc exec backup /bin/sh /backup/backup.sh --offsite`.
 - **Test a restore from the bucket now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test --offsite`.
 - **List the copies**: `pc exec backup /tools/restic snapshots`.
-- **Restore from the bucket** (the server's own backups are gone): on the new server, set the same `OFFSITE_*` in `.env`, start Postgres and the backup container, fetch the newest copy into `infra/deploy/backups/`, then restore it as above:
-  ```sh
-  pc up -d postgres backup
-  pc exec backup /tools/restic restore latest --host augur --tag augur-db --target /backups/from-offsite
-  # The dump is in infra/deploy/backups/from-offsite/backups/; load it as in "Restore" above.
-  pc exec backup /tools/restic restore latest --host augur --tag augur-files --target /backups/from-offsite
-  # Apps' files are in .../from-offsite/objects/{data,meta}: copy them into Garage's volumes as in
-  # "Restore apps' files" above, in place of unpacking the archive.
-  ```
+- **Restore from the bucket** when the server is lost: [Restore a lost server](#restore-a-lost-server).
 
 - **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
-- **Test a restore now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test`. The result is in `infra/deploy/backups/restore-test.json`.
+- **Test a restore now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test`. The result is in `infra/deploy/backups/status/restore-test.json`.
 - **Restore**: stop everything but Postgres (the apps that ship with AUGUR and the updater too, so nothing writes while the dump loads), wait for Postgres to say `healthy`, load the dump, then start again. The dump drops and recreates each database itself. Anything saved since that backup is lost, in every app and in sign-in: check Admin → Activity first. `pc stop` stops AUGUR's own Tailscale node too, so reach the server some other way. After an upgrade that went back, follow [upgrade-went-back.md](upgrade-went-back.md) instead: it says which file and when.
   ```sh
   pc stop
   pc up -d postgres
   pc ps postgres            # again until it says healthy
-  gunzip -c infra/deploy/backups/platform-2026-10-18.sql.gz | pc exec -T postgres psql -U platform -d postgres
+  pc run --rm --no-deps -T --entrypoint gunzip backup -c /backups/platform-2026-10-18.sql.gz | pc exec -T postgres psql -U platform -d postgres
   pc up -d
   ```
 - **Restore apps' files**: stop Garage, unpack the archive into its volumes, and make the newest metadata snapshot its database:
@@ -317,9 +311,9 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
 
 Postgres archives every change it makes (its write-ahead log, WAL) into the `wal-archive` volume as it goes, gzipped, at most 15 minutes after it was made (`PITR_ARCHIVE_SECONDS`), and the backup container takes a **base backup** of the whole database each night beside the dump, as `base-YYYY-MM-DD/` (ADR 0064). Replaying the archived changes onto a base backup brings the database back as it was at any moment you choose, from the oldest base backup to the newest archived change: a row deleted by mistake at 10:31 can be had back by going to 10:30. The last 7 base backups are kept (`PITR_KEEP_DAYS`), and archived changes older than the oldest go.
 
-With the off-server copy set up, the newest base backup and the WAL archive are copied to the bucket too, every hour, and the bucket keeps the same 7 days of them. So a lost server loses at most about an hour of changes, not a day.
+With the off-server copy set up, the newest base backup and the WAL archive are copied to the bucket too, every hour, and the bucket keeps the same 7 days of them. So a lost server loses at most about an hour of the database's changes, not a day. Apps' files leave the server only with the nightly copy, so files uploaded since then are lost with it, and their rows come back pointing at nothing. Even from a nightly backup, files can be up to an hour behind the database: Garage's metadata is the newest of its hourly snapshots.
 
-Once a week the restore test also proves this: it marks a moment on the live database, restores the newest base backup into a throwaway Postgres, replays every archived change since, and checks the result reached the mark and that the platform's and Keycloak's tables are there. **Admin → Status** shows "Point in time" with how far back the database can go and the last test, and says "Backups need a look" when Postgres isn't archiving or its archiving fails, a base backup failed, the copy off the server failed, or the test failed or is over a week old. The results are in `infra/deploy/backups/pitr.json` and `pitr-test.json`.
+Once a week the restore test also proves this: it marks a moment on the live database, restores the newest base backup into a throwaway Postgres, replays every archived change since, and checks the result reached the mark and that the platform's and Keycloak's tables are there. **Admin → Status** shows "Point in time" with how far back the database can go and the last test, and says "Backups need a look" when Postgres isn't archiving or its archiving fails, a base backup failed, the copy off the server failed, or the test failed or is over a week old. The results are in `infra/deploy/backups/status/pitr.json` and `pitr-test.json`.
 
 The first start after this arrived restarts Postgres with archiving on (`pc up -d` does it); the backup container then takes the first base backup and runs the first test straight away.
 
@@ -334,13 +328,64 @@ The first start after this arrived restarts Postgres with archiving on (`pc up -
   pc up -d
   ```
   It picks the newest base backup taken before that moment, keeps the current data as `pgdata-before-restore-<now>.tar.gz` (delete it once you are happy with the result; nothing else does), and tells Postgres to replay the archive up to the moment and then open. A moment later than the newest archived change makes Postgres stop with "recovery ended before configured recovery target was reached": run it again with an earlier time. To undo a restore, stop Postgres and unpack that tarball into the volume the same way.
-- **Go back to a moment when the server is lost**: on the new server, set the same `OFFSITE_*` in `.env`, fetch the base backups and the archive from the bucket, then go back as above:
+- **Go back to a moment when the server is lost**: follow [Restore a lost server](#restore-a-lost-server) to step 4, so `.env` is the old one and the backup container hasn't started, then fetch the base backups and the archive from the bucket in place of step 5, and go back as above:
   ```sh
   pc up -d backup-tools && pc run --rm --no-deps --entrypoint /tools/restic backup restore latest --host augur --tag augur-wal --target /
   pc run --rm --no-deps --entrypoint /tools/restic backup restore latest --host augur --tag augur-base --target /
   # For an older base backup: pc run --rm --no-deps --entrypoint /tools/restic backup snapshots --tag augur-base,
   # then restore that snapshot's id in place of latest.
   ```
+
+### Restore a lost server
+
+When the server and its disk are gone, everything comes back from the off-server copy: `.env` and `secrets/`, the database and apps' files. You need the `OFFSITE_*` settings kept off the server, and a new server ready as in [Before you start](#before-you-start). The backup container must not start until step 7: on a new server it would copy an empty database, or another server's, over the real copies' place. Nothing here uses `pc` until `.env` is back.
+
+1. **Get the release** as in [First start](#1-get-the-release), but don't fill in `.env` or run the preflight.
+2. **Reach the copy.** Put the off-server settings in a file only you can read, under restic's names, and make a short command for restic. It runs restic's own image, as you, so what it fetches is yours:
+   ```sh
+   cd augur
+   install -m 600 /dev/null offsite.env   # then fill it in:
+   # RESTIC_REPOSITORY=<OFFSITE_REPOSITORY>
+   # RESTIC_PASSWORD=<OFFSITE_PASSWORD>
+   # AWS_ACCESS_KEY_ID=<OFFSITE_ACCESS_KEY_ID>
+   # AWS_SECRET_ACCESS_KEY=<OFFSITE_SECRET_ACCESS_KEY>
+   # AWS_DEFAULT_REGION=<OFFSITE_REGION, if it has one>
+   mkdir -p infra/deploy/restore
+   restic() { docker run --rm -u "$(id -u):$(id -g)" --env-file offsite.env -e RESTIC_CACHE_DIR=/tmp/cache \
+     -v "$PWD/infra/deploy/restore:/restore" "$(sed -n 's/^ *image: \(restic\/restic:.*\)$/\1/p' infra/deploy/compose.yml)" "$@"; }
+   restic snapshots --host augur
+   ```
+3. **Pick a night** and note the ids of its three snapshots, tagged `augur-config`, `augur-db` and `augur-files`, all from the same night (by name, never `latest`). Fetch them:
+   ```sh
+   restic restore <augur-config id> --target /restore
+   restic restore <augur-db id> --target /restore
+   restic restore <augur-files id> --target /restore
+   ```
+   `infra/deploy/restore/` now has `deploy/.env` and `deploy/secrets/`, `backups/platform-<date>.sql.gz` and `objects/{data,meta}`.
+4. **Put the settings back**, and the release they name:
+   ```sh
+   install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env
+   cp -R infra/deploy/restore/deploy/secrets infra/deploy/ && chmod -R go-rwx infra/deploy/secrets
+   git checkout "augur@$(sed -n 's/^PLATFORM_VERSION=//p' infra/deploy/.env)"
+   alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
+   ```
+   A read key (`secrets/github-read-key`) is owned by user 1000: `sudo chown 1000 infra/deploy/secrets/github-read-key`. In the Tailscale admin console, remove the lost server's machine, so the new one can take its name. If `TS_AUTHKEY` was a one-off key or has expired, put a new one in `.env`.
+5. **Load the database.** Postgres starts empty with the old `.env`'s passwords, which are the ones in the dump:
+   ```sh
+   pc up -d postgres
+   pc ps postgres            # again until it says healthy
+   gunzip -c infra/deploy/restore/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
+   ```
+6. **Put apps' files back** into Garage's volumes, with the newest metadata snapshot as its database:
+   ```sh
+   pc run --rm --no-deps -v platform_garage-meta:/r/meta -v platform_garage-data:/r/data -v "$PWD/infra/deploy/restore/objects:/from:ro" \
+     --entrypoint sh backup -c 'cp -a /from/meta/. /r/meta/ && cp -a /from/data/. /r/data/ && cp "/r/meta/snapshots/$(ls /r/meta/snapshots | sort | tail -n 1)/db.sqlite" /r/meta/db.sqlite && rm -f /r/meta/db.sqlite-wal /r/meta/db.sqlite-shm'
+   ```
+7. **Start AUGUR** with `pc up -d`, sign in and check people, apps and a few documents are there. Then tell the backup container this server is the deployment the copy belongs to, so it copies there again; until then Admin → Status says the copy holds backups this server didn't make:
+   ```sh
+   pc exec backup /bin/sh /backup/backup.sh --adopt-offsite
+   ```
+8. **Tidy up**: `rm -rf infra/deploy/restore offsite.env`. They hold a copy of `.env` and a dump.
 
 ## What's in it
 
@@ -362,7 +407,9 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 ### Logs, memory and health
 
 - **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES` in `.env`), so they can't fill the disk. `pc logs` reads them as before. For anything longer, look in the deployment's Grafana, which keeps 72 hours ([Traces, metrics and logs](#traces-metrics-and-logs)).
-- **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its Java heap from it), Artifacts' rendition worker (`FOLIO_WORKER_MEM_LIMIT`, 4g; reading a large upload is what needs it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g). A container that goes over is stopped and started again by Docker, and `pc ps` shows it restarting. Raise the limit in `.env` and `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
+- **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its Java heap from it), Artifacts' rendition worker (`FOLIO_WORKER_MEM_LIMIT`, 4g; reading a large upload is what needs it, and its in-memory `/tmp`, `FOLIO_WORKER_TMP_SIZE`, 1g, counts towards it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g). A container that goes over is stopped and started again by Docker, and `pc ps` shows it restarting. Raise the limit in `.env` and `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
+- **The rendition worker** reads files anyone on a floor can upload, so it is held tighter than the services: its own files can't change, it may use 2 processors (`FOLIO_WORKER_CPUS`, no more than the server has) and 512 processes, and it reaches only Postgres, Garage and the deployment's own telemetry: not the other services, and not the internet. With your own collector (`OTEL_EXPORTER_OTLP_ENDPOINT` elsewhere), its traces and logs don't leave the server.
+- **Telemetry** goes over a network of its own: the platform's services and the apps that ship with AUGUR send to `otel-lgtm` on it, and apps the runner installs aren't on it, so they can't reach `otel-lgtm` at all. Loki, Tempo and Prometheus answer only inside that container, to Grafana, so nothing on the networks can read what the services logged.
 - **Health**: every AUGUR service, the front door, Postgres, Keycloak and Garage have a healthcheck, and `pc ps` shows each as `healthy`. Keycloak's is its own readiness check on its management port, which isn't reachable from outside the container. The front door, identity and the realm job wait for Keycloak to be healthy, and the storage job for Garage. Keycloak's first start after an upgrade can take a few minutes while it migrates its database; Compose waits up to five.
 - **Timeouts between services**: one AUGUR service waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`) before it gives up and answers that the other can't be reached right now, so a hung service slows only what needs it instead of every request through the gateway. Identity waits up to 15 seconds for Keycloak's admin API, and calls to the model gateway up to 3 minutes. Raise it only if `pc logs` shows a slow but working server giving up.
 - **Query time limits**: Postgres cancels any one query from an AUGUR service after a minute (`DATABASE_STATEMENT_TIMEOUT_SECONDS`; 0 for no limit), so a query stuck on a lock or a bad plan fails its request instead of holding a connection until the service runs out. Migrations are never limited.

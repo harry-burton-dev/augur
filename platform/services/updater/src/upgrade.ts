@@ -9,6 +9,12 @@
  * WATCH_MS with sign-in working and few calls failing at the gateway (ADR 0020); if it falls over in
  * that time, the server goes back by itself, unless a breaking release lies between.
  *
+ * Once any part has restarted on the new release it may have changed the data, so with a breaking
+ * release between, nothing goes back by itself from then on.
+ *
+ * Before anything changes, the updater writes down what it needs to go back (the journal, in the deploy
+ * folder), so an updater that restarts partway through can still go back (afterRestart).
+ *
  * Outcomes: `done` (on the new release), `rolled-back` (on the release it started from, whether
  * or not anything was restarted) and `failed` (it couldn't go back either: someone has to look).
  */
@@ -58,6 +64,32 @@ export type Reporter = (report: Report) => Promise<void>;
 /** The upgrade was cancelled, or ended, before the updater got to it. */
 export class Withdrawn extends Error {}
 
+/**
+ * What the updater writes down before an upgrade changes anything, so that one restarted partway through
+ * can go back: the settings and deploy files as they were, and how far it had got. It holds the old .env.
+ */
+export interface Journal {
+  id: string;
+  from: string;
+  version: string;
+  /** .env as it was. */
+  before: string;
+  /** The deploy files the upgrade writes, as they were (base64), null for one that wasn't there. */
+  oldFiles: Record<string, string | null>;
+  /** Whether the release's deploy files have been written. */
+  filesWritten: boolean;
+  /** The parts the upgrade restarts, in order. */
+  services: string[];
+  /** Parts the release adds, the rest of what the deployment runs, and parts it stopped. */
+  fresh: string[];
+  others: string[];
+  left: string[];
+  breakingSince?: string;
+  /** Whether any part had been restarted on the new release, which may have changed the data. */
+  restarted: boolean;
+  backup?: string;
+}
+
 /** What the updater does to the server. The real one drives Docker Compose (server.ts); tests use a fake. */
 export interface Server {
   readEnv(): Promise<string>;
@@ -106,6 +138,12 @@ export interface Server {
   /** How a one-off job's container ended: its exit code, or undefined while it runs. */
   exitCode(service: string): Promise<number | undefined>;
   wait(ms: number): Promise<void>;
+  /** The bytes free on the deploy folder's disk; undefined when it can't be told. */
+  freeBytes(): Promise<number | undefined>;
+  /** The open upgrade's journal, written whole; undefined when there is none. */
+  readJournal(): Promise<Journal | undefined>;
+  writeJournal(journal: Journal): Promise<void>;
+  clearJournal(): Promise<void>;
 }
 
 /** Itself: pulled with the rest, and replaced only after the upgrade has ended (see index.ts). */
@@ -119,8 +157,12 @@ const DOCKER_PROXY = 'docker-proxy';
  */
 export const madeUp = (key: string) => /_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD';
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
-/** How long a part has to come back on its new version. */
-export const READY_MS = 120_000;
+/**
+ * How long a part has to come back on its new version, and a one-off job to finish. Identity, the
+ * registry and events migrate their databases on their first start of a new release, which can take
+ * minutes on a big one.
+ */
+export const READY_MS = 5 * 60_000;
 const POLL_MS = 2_000;
 
 /** How long a new release is watched before the upgrade is done, and how often it's looked at (ADR 0020). */
@@ -132,6 +174,41 @@ export const ERROR_RATE = 0.05;
 export const MIN_CALLS = 20;
 /** Sign-in failing this many looks in a row means it's down, not a blip. */
 export const SIGN_IN_LOOKS = 2;
+
+/** The least free space the deploy folder's disk needs for an upgrade: the backup and the new images usually land there. */
+export const MIN_FREE_BYTES = 2 * 1024 ** 3;
+const gib = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+
+/**
+ * Settings that decide what the server trusts or where it pulls from. Only .env on the server sets
+ * them: an upgrade that asks to is refused, whatever the registry passed on. The list mirrors the
+ * registry's (registry/src/updates.ts), with what the updater itself reads besides; COMPOSE_* settings
+ * decide which files and project Compose uses.
+ */
+export const TRUST_SETTINGS = new Set([
+  'SERVER_RING',
+  'RELEASE_CHANNEL',
+  'ALLOW_PR_PREVIEWS',
+  'IMAGE_SIGNER',
+  'IMAGE_SIGNER_ISSUER',
+  'AUGUR_DEV_SIGNER',
+  'FEED_SIGNER',
+  'APP_PUBLISHERS',
+  'CALLER_SIGNING_KEY',
+  'RELEASE_FEED_URL',
+  'APP_FEED_URL',
+  'PIPELINE_FEED_URL',
+  'PLATFORM_IMAGES',
+  'PLATFORM_DIR',
+  'APPS_NETWORK',
+  'APP_SECRETS_KEY',
+  'GITHUB_READ_USER',
+  'IMAGE_PULL_USER',
+  'UPDATER_CLIENT_SECRET',
+]);
+const trustSetting = (key: string) => TRUST_SETTINGS.has(key) || key.startsWith('COMPOSE_');
+/** A plain setting's name, as .env.example writes them. */
+const SETTING_NAME = /^[A-Z][A-Z0-9_]*$/;
 
 const digestOf = (ref: string) => ref.slice(ref.lastIndexOf('@') + 1);
 
@@ -310,6 +387,29 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
   const enteredKeys: string[] = [];
   let pulledFirst: string[] = [];
   let switched: string[] = [];
+  // Parts this release adds, the rest of what the deployment runs (the database, sign-in, storage), and parts it stops.
+  let fresh: string[] = [];
+  let others: string[] = [];
+  let left: string[] = [];
+  // Once a part has restarted on the new release, its data may have changed.
+  let restarted = false;
+  let filesWritten = false;
+  const note = () =>
+    server.writeJournal({
+      id: target.id,
+      from: target.from,
+      version: target.version,
+      before,
+      oldFiles: Object.fromEntries(Object.entries(oldFiles).map(([path, bytes]) => [path, bytes ? bytes.toString('base64') : null])),
+      filesWritten,
+      services: [...services],
+      fresh,
+      others,
+      left,
+      ...(target.watch?.breakingSince ? { breakingSince: target.watch.breakingSince } : {}),
+      restarted,
+      ...(backup ? { backup } : {}),
+    });
 
   const run = async (name: Step, work: () => Promise<string | void>) => {
     step = name;
@@ -328,6 +428,10 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         throw new StepFailed(`${target.version} is a dev build of AUGUR, and only the workbench (SERVER_RING=dev in .env) runs those.`);
       }
       if (dev && !devIdentity) throw new StepFailed(`${target.version} is a dev build of AUGUR, and this updater doesn’t know who signs those.`);
+      const free = await server.freeBytes().catch(() => undefined);
+      if (free !== undefined && free < MIN_FREE_BYTES) {
+        throw new StepFailed(`The deploy folder’s disk has ${gib(free)} free, and an upgrade needs ${gib(MIN_FREE_BYTES)}: the backup and the new images go there. Make room (old backups, docker image prune), then ask again.`);
+      }
       if (!target.deploy || !target.parts) throw new StepFailed(`AUGUR ${target.version}’s release file couldn’t be read, or names no deploy files, so whether it fits this server isn’t known. Upgrade by hand (docs/upgrade.md).`);
       // A part the server runs that this updater doesn't know would be restarted with the rest but never
       // checked to come back: refused, so nothing is half upgraded. A part new in the release is started once
@@ -357,8 +461,24 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         changedFiles = Object.fromEntries(changed.map((path) => [path, undefined]));
       }
       // Settings entered on the Updates page go in as entered; a secret the release needs is made up.
+      // Only new plain settings: one that decides trust, or one the server already has, is changed in .env by hand.
+      const asked = Object.keys(target.settings ?? {}).filter((key) => key !== 'PLATFORM_VERSION');
+      const odd = asked.find((key) => !SETTING_NAME.test(key));
+      if (odd !== undefined) throw new StepFailed(`The upgrade asks to set ${JSON.stringify(odd.slice(0, 60))}, which isn’t a setting’s name (capitals, digits and _), so it didn’t go ahead. Ask again from the Updates page.`);
+      const trusted = asked.filter(trustSetting);
+      if (trusted.length) {
+        const them = trusted.length > 1 ? 'them' : 'it';
+        throw new StepFailed(
+          `The upgrade asks to set ${trusted.join(', ')}, which ${trusted.length > 1 ? 'decide' : 'decides'} what this server trusts or where it pulls from. Only .env on the server sets ${them}, so the upgrade didn’t go ahead: set ${them} there yourself if you meant to, then ask again.`,
+        );
+      }
+      const existing = asked.filter((key) => target.settings![key] && envValue(before, key) && envValue(before, key) !== target.settings![key]);
+      if (existing.length) {
+        const them = existing.length > 1 ? 'them' : 'it';
+        throw new StepFailed(`The upgrade asks to change ${existing.join(', ')}, which .env already sets. An upgrade only adds settings: change ${them} in .env on the server if you meant to, then ask again.`);
+      }
       for (const [key, value] of Object.entries(target.settings ?? {})) {
-        if (key === 'PLATFORM_VERSION' || !value) continue;
+        if (key === 'PLATFORM_VERSION' || !value || envValue(before, key) === value) continue;
         const written = envQuoted(value);
         if (written === undefined) throw new StepFailed(`The value entered for ${key} can’t go in .env as it is (it has a quote or a line break). Put it in .env yourself, then ask again.`);
         settings = withEnvValue(settings, key, written);
@@ -413,6 +533,13 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       oldFiles = await server.readDeployFiles(paths);
       return `${paths.join(', ')} to be updated`;
     });
+    // Parts the release doesn't have, such as one added after it when going back: stopped in roll-forward
+    // while the compose.yml that names them is still in place.
+    left = (await server.services()).filter((service) => parts.order.includes(service) && !parts.kept.includes(service) && !target.images[service]);
+    // Written down before anything changes, so an updater that restarts from here on can go back.
+    await note().catch((err) => {
+      throw new StepFailed(`The updater couldn’t write down the upgrade in the deploy folder, which it needs to go back if it restarts partway through: ${reason(err)}`);
+    });
   } catch (err) {
     // Nothing has restarted yet: the server is still on the release it was.
     if (err instanceof Withdrawn) throw err;
@@ -421,18 +548,15 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
     return 'rolled-back';
   }
 
-  // Parts this release adds, and the rest of what the deployment runs (the database, sign-in, storage).
-  let fresh: string[] = [];
-  let others: string[] = [];
-  let left: string[] = [];
   try {
     await run('roll-forward', async () => {
       const paths = Object.keys(changedFiles);
-      // Parts the release doesn't have, such as one added after it when going back: stopped while the
-      // compose.yml that names them is still in place.
-      left = (await server.services()).filter((service) => parts.order.includes(service) && !parts.kept.includes(service) && !target.images[service]);
       if (left.length) await server.remove(left);
-      if (paths.length) await server.writeDeployFiles(changedFiles);
+      if (paths.length) {
+        await server.writeDeployFiles(changedFiles);
+        filesWritten = true;
+        await note();
+      }
       await server.writeEnv(withEnvValue(settings, 'PLATFORM_VERSION', target.version));
       const now = await server.services();
       const rolled = new Set<string>([...services, UPDATER, DOCKER_PROXY]);
@@ -446,6 +570,12 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       // and those that mount a file just written are made again so they read it.
       others = now.filter((service) => !rolled.has(service) && !added.includes(service));
       const remount = paths.length ? (await server.mounting(paths)).filter((service) => others.includes(service)) : [];
+      // From here on parts run on the new release and may migrate their data: noted before the first starts.
+      restarted = true;
+      await note().catch((err) => {
+        restarted = false;
+        throw err;
+      });
       if (others.length) await server.up(others);
       if (remount.length) await server.recreate(remount);
       for (const service of services) {
@@ -473,18 +603,49 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
   } catch (err) {
     if (err instanceof Withdrawn) throw err;
     const why = reason(err);
-    // A breaking release between: going back by itself could leave data the old release can't read.
-    if (step === 'watch' && target.watch?.breakingSince) {
-      await report({
-        step,
-        state: 'failed',
-        message: `${why} AUGUR ${target.version} is still running: it didn’t go back by itself, because ${target.watch.breakingSince} between is breaking. See docs/upgrade-went-back.md before you do anything.`,
-        outcome: 'failed',
-      }).catch(() => undefined);
+    // A breaking release between, and a part restarted on the new one: going back by itself could leave
+    // data the old release can't read.
+    if (restarted && target.watch?.breakingSince) {
+      await report({ step, state: 'failed', message: `${why} ${notBack(target.version, target.watch.breakingSince, step === 'verify' || step === 'watch')}`, outcome: 'failed' }).catch(() => undefined);
       return 'failed';
     }
     await report({ step, state: 'failed', message: why }).catch(() => undefined);
     return rollBack(target, server, report, before, parts, services, why, backup, { oldFiles, fresh, others, left });
+  } finally {
+    await server.clearJournal().catch(() => undefined);
+  }
+};
+
+/** Why the server was left as it is for a person: a breaking release between. `all`: every part had restarted on the new release. */
+const notBack = (version: string, breakingSince: string, all: boolean) =>
+  `${all ? `AUGUR ${version} is still running` : `The server is partly on AUGUR ${version}`}: it didn’t go back by itself, because ${breakingSince} between is breaking. See docs/upgrade-went-back.md before you do anything.`;
+
+/**
+ * An upgrade the registry says is under way when the updater starts: only this updater runs upgrades, so
+ * it stopped partway through (a reboot, say). With the journal it wrote, it goes back, unless a part had
+ * restarted on the new release and a breaking release lies between; without one, a person has to look.
+ */
+export const afterRestart = async (target: Target, server: Server, report: Reporter, { parts = partsFor() }: { parts?: Parts } = {}): Promise<Outcome> => {
+  const journal = await server.readJournal().catch(() => undefined);
+  const restartedSentence = `The updater restarted partway through the upgrade to ${target.version}.`;
+  if (!journal || journal.id !== target.id) {
+    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `${restartedSentence} Check Admin → Status, and docs/upgrade-went-back.md.` });
+    return 'failed';
+  }
+  try {
+    if (journal.restarted && journal.breakingSince) {
+      await report({ step: 'roll-forward', state: 'failed', outcome: 'failed', message: `${restartedSentence} ${notBack(journal.version, journal.breakingSince, false)}` });
+      return 'failed';
+    }
+    const oldFiles = Object.fromEntries(Object.entries(journal.oldFiles).map(([path, text]) => [path, text === null ? undefined : Buffer.from(text, 'base64')]));
+    return await rollBack({ ...target, from: journal.from, version: journal.version }, server, report, journal.before, parts, journal.services, `${restartedSentence.slice(0, -1)}, so it went back.`, journal.backup, {
+      oldFiles,
+      fresh: journal.fresh,
+      others: journal.others,
+      left: journal.left,
+    });
+  } finally {
+    await server.clearJournal().catch(() => undefined);
   }
 };
 

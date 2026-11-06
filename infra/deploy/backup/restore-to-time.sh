@@ -10,6 +10,8 @@
 set -eu
 set -o pipefail
 : "${BACKUP_DIR:=/backups}"
+# The current data it keeps holds every person's data: root alone may read it.
+umask 077
 : "${WAL_DIR:=/wal-archive}"
 : "${PGDATA_DIR:=/pgdata}"
 

@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { APP_RELEASES_KEPT, appRepos, asListed, AUGUR_RELEASES_KEPT, buildFeed, chooseReleases, DEV_BUILDS_KEPT, FEED_VALID_DAYS, haltedOf, ownReleases } from './publish-feed.mjs';
+import { APP_RELEASES_KEPT, appRepos, asListed, AUGUR_RELEASES_KEPT, BUNDLE_MEDIA_TYPE, buildFeed, chooseReleases, DEV_BUILDS_KEPT, FEED_MEDIA_TYPE, FEED_VALID_DAYS, haltedOf, ownReleases, pushCommand } from './publish-feed.mjs';
 
 const release = (tag, more = {}) => ({ tag_name: tag, draft: false, prerelease: false, html_url: `https://github.com/o/r/releases/tag/${tag}`, assets: [{ name: tag.startsWith('augur@') ? 'augur-release.json' : 'app-release.json', url: `asset:${tag}` }], ...more });
 
@@ -61,6 +61,63 @@ test('the feed says when it expires, and lists a halted release with why', async
   assert.equal(haltedOf({ reason: '  ' }), undefined);
 });
 
+test('a release file that is there but can’t be read fails the feed, rather than listing it wrongly', async () => {
+  const files = {
+    'asset:augur@0.4.0': { version: '0.4.0', channel: 'beta', parts: {} },
+    'asset:app/notes@1.2.0': { schema: 'augur.app-release/v1', id: 'notes', version: '1.2.0', channel: 'stable' },
+  };
+  const download = async (url) => {
+    if (url in files) return files[url];
+    throw new Error(`GitHub answered 502 for ${url}.`);
+  };
+  // A halt that can't be read would otherwise publish a halted release as not halted, in a signed feed.
+  const halted = release('augur@0.4.0');
+  halted.assets.push({ name: 'halted.json', url: 'halt:augur@0.4.0' });
+  await assert.rejects(buildFeed([halted], download), /halted\.json.*augur@0\.4\.0.*502/);
+  // A release file that can't be read would otherwise drop the release without a word.
+  await assert.rejects(buildFeed([release('app/notes@1.3.0')], download), /app-release\.json.*app\/notes@1\.3\.0/);
+  // A release without the asset at all is still just left out.
+  const feed = await buildFeed([release('augur@0.4.0'), release('app/notes@1.2.0', { assets: [] })], download);
+  assert.deepEqual(feed.releases.map((m) => m.version), ['0.4.0']);
+  assert.deepEqual(feed.apps, []);
+});
+
+test('an AUGUR release whose deploy test failed is listed halted, so no deployment is offered it', async () => {
+  const files = {
+    'asset:augur@0.4.0': { version: '0.4.0', channel: 'beta', parts: {} },
+    'asset:augur@0.5.0': { version: '0.5.0', channel: 'beta', parts: {} },
+    'asset:augur@0.6.0': { version: '0.6.0', channel: 'beta', parts: {} },
+    'test:augur@0.4.0': { schema: 'augur.deploy-test/v1', version: '0.4.0', passed: true, run: '1', at: '2026-11-01T00:00:00Z' },
+    'test:augur@0.5.0': { schema: 'augur.deploy-test/v1', version: '0.5.0', passed: false, run: '42', at: '2026-11-02T00:00:00Z' },
+    'halt:augur@0.5.0': { reason: 'Sign-in fails after the upgrade', at: '2026-11-03T00:00:00Z', by: 'harry' },
+  };
+  const withTest = (tag) => {
+    const r = release(tag, { prerelease: true });
+    r.assets.push({ name: 'deploy-test.json', url: `test:${tag}` });
+    return r;
+  };
+  const passed = withTest('augur@0.4.0');
+  const failed = withTest('augur@0.5.0');
+  // A release from before the check has no result, and is listed as it was.
+  const feed = await buildFeed([passed, failed, release('augur@0.6.0', { prerelease: true })], async (url) => files[url]);
+  const of = (v) => feed.releases.find((m) => m.version === v);
+  assert.equal(of('0.4.0').halted, undefined);
+  assert.equal(of('0.6.0').halted, undefined);
+  assert.match(of('0.5.0').halted.reason, /deploy test failed/);
+  assert.match(of('0.5.0').halted.reason, /42/);
+  assert.equal(of('0.5.0').halted.at, '2026-11-02T00:00:00Z');
+  // The owner's own halt says more, so it wins.
+  failed.assets.push({ name: 'halted.json', url: 'halt:augur@0.5.0' });
+  const both = await buildFeed([failed], async (url) => files[url]);
+  assert.equal(both.releases[0].halted.reason, 'Sign-in fails after the upgrade');
+  // A result for another version says nothing about this one.
+  const stale = await buildFeed([withTest('augur@0.6.0')], async (url) => (url === 'test:augur@0.6.0' ? files['test:augur@0.5.0'] : files[url]));
+  assert.equal(stale.releases[0].halted, undefined);
+  // A stable release passed its deploy test to be promoted: a later failed run doesn't halt it by itself.
+  const stable = await buildFeed([{ ...withTest('augur@0.5.0'), prerelease: false }], async (url) => files[url]);
+  assert.equal(stable.releases[0].halted, undefined);
+});
+
 test('an app in its own repository is listed only from there, and only as signed there', async () => {
   const signed = (repository) => ({ schema: 'augur.app-release/v1', id: 'notes', version: '1.3.0', channel: 'stable', signer: { repository, workflow: '.github/workflows/release.yml' } });
   const files = { 'asset:app/notes@1.3.0': signed('o/notes'), 'asset:app/other@1.0.0': { id: 'other', version: '1.0.0', signer: { repository: 'o/notes' } } };
@@ -80,4 +137,13 @@ test('an app in its own repository is listed only from there, and only as signed
 test('the app repositories file maps app ids to owner/repo and nothing else', () => {
   assert.deepEqual(appRepos({ apps: { notes: 'o/notes', Bad: 'o/x', odd: 'nope' } }), { notes: 'o/notes' });
   assert.deepEqual(appRepos(undefined), {});
+});
+
+test('a feed already signed and checked is pushed as it is, with its signature, and never without one', () => {
+  const push = pushCommand({ out: '/tmp/run/feed.json', images: 'ghcr.io/o/r', repo: 'o/r', signed: true });
+  assert.equal(push.ref, 'ghcr.io/o/r/feed:latest');
+  assert.equal(push.cwd, '/tmp/run');
+  assert.deepEqual(push.args.slice(-2), [`feed.json:${FEED_MEDIA_TYPE}`, `feed.json.sigstore.json:${BUNDLE_MEDIA_TYPE}`]);
+  assert.ok(push.args.includes('org.opencontainers.image.source=https://github.com/o/r'));
+  assert.throws(() => pushCommand({ out: '/tmp/run/feed.json', images: 'ghcr.io/o/r', repo: 'o/r', signed: false, requireSigned: true }), /sign/);
 });

@@ -29,6 +29,9 @@ env:
   NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 jobs:
   promote:
+    # Only main's own script promotes, and checks who asked: a run started from another branch would run
+    # that branch's copy of it, so it does nothing.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     env:
       # Secrets can't be tested in a step's `if`, so whether one is set is read from here.

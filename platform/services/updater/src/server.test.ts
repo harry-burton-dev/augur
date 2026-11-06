@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { verifyArgs } from './server.ts';
+import { chmod, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { verifyArgs, writeSettings } from './server.ts';
 
 describe('signature checks', () => {
   it('check against Sigstore online, or offline against a mirrored trust root', () => {
@@ -9,5 +12,88 @@ describe('signature checks', () => {
     const offline = verifyArgs('id', 'issuer', 'mirror.example/x@sha256:aa', '/deploy/releases/trusted_root.json');
     expect(offline).toEqual(expect.arrayContaining(['--offline=true', '--trusted-root', '/deploy/releases/trusted_root.json']));
     expect(offline.at(-1)).toBe('mirror.example/x@sha256:aa');
+  });
+});
+
+describe('writing .env', () => {
+  let dir: string;
+  let env: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'updater-env-'));
+    env = join(dir, '.env');
+    await writeFile(env, 'PLATFORM_VERSION=0.2.0\n');
+    await chmod(env, 0o640);
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  it('writes it whole and renames it over the old one, keeping its mode and owner', async () => {
+    const was = await stat(env);
+    const owners: number[][] = [];
+    await writeSettings(env, 'PLATFORM_VERSION=0.3.0\n', { chown: async (_, uid, gid) => void owners.push([uid, gid]), uid: was.uid + 1 });
+    const now = await stat(env);
+    expect(await readFile(env, 'utf8')).toBe('PLATFORM_VERSION=0.3.0\n');
+    expect(now.ino).not.toBe(was.ino);
+    expect(now.mode & 0o777).toBe(0o640);
+    expect(owners).toEqual([[was.uid, was.gid]]);
+    expect(await readdir(dir)).toEqual(['.env']);
+  });
+
+  it('writes it in place when its owner can’t be kept, with the old text kept beside it until the new is in', async () => {
+    const was = await stat(env);
+    const seen: string[][] = [];
+    await writeSettings(env, 'PLATFORM_VERSION=0.3.0\n', {
+      chown: async () => {
+        throw new Error('EPERM: operation not permitted');
+      },
+      uid: was.uid + 1,
+      inPlace: async (path, text) => {
+        seen.push((await readdir(dir)).sort());
+        expect(await readFile(join(dir, '.env.before-upgrade'), 'utf8')).toBe('PLATFORM_VERSION=0.2.0\n');
+        expect((await stat(join(dir, '.env.before-upgrade'))).mode & 0o777).toBe(0o600);
+        await writeFile(path, text);
+      },
+    });
+    expect(seen).toEqual([['.env', '.env.before-upgrade']]);
+    expect(await readFile(env, 'utf8')).toBe('PLATFORM_VERSION=0.3.0\n');
+    expect((await stat(env)).ino).toBe(was.ino);
+    expect(await readdir(dir)).toEqual(['.env']);
+  });
+
+  it('puts the old text back when writing in place is cut short, and says so', async () => {
+    const was = await stat(env);
+    let writes = 0;
+    const write = writeSettings(env, 'PLATFORM_VERSION=0.3.0\nPLATFORM_URL=https://augur.example.org\n', {
+      chown: async () => {
+        throw new Error('EPERM: operation not permitted');
+      },
+      uid: was.uid + 1,
+      inPlace: async (path, text) => {
+        writes += 1;
+        if (writes === 1) {
+          await writeFile(path, text.slice(0, 10));
+          throw new Error('ENOSPC: no space left on device');
+        }
+        await writeFile(path, text);
+      },
+    });
+    await expect(write).rejects.toThrow('.env couldn’t be written (ENOSPC: no space left on device), so it was put back as it was.');
+    expect(await readFile(env, 'utf8')).toBe('PLATFORM_VERSION=0.2.0\n');
+    expect(await readdir(dir)).toEqual(['.env']);
+  });
+
+  it('keeps the old text beside it when it can’t be put back either', async () => {
+    const was = await stat(env);
+    const write = writeSettings(env, 'PLATFORM_VERSION=0.3.0\n', {
+      chown: async () => {
+        throw new Error('EPERM: operation not permitted');
+      },
+      uid: was.uid + 1,
+      inPlace: async (path, text) => {
+        await writeFile(path, text.slice(0, 5));
+        throw new Error('ENOSPC: no space left on device');
+      },
+    });
+    await expect(write).rejects.toThrow(/\.env\.before-upgrade holds it as it was: copy it over \.env/);
+    expect(await readFile(join(dir, '.env.before-upgrade'), 'utf8')).toBe('PLATFORM_VERSION=0.2.0\n');
   });
 });

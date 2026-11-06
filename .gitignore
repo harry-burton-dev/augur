@@ -19,3 +19,7 @@ infra/deploy/tailscale/public-until
 
 # pnpm seed's ledgers: what it made on each deployment, with sample people's one-time passwords.
 .seed/
+
+# The updater's note of an upgrade under way (it holds the old .env), and a lost server's files fetched back.
+infra/deploy/.updater-upgrade.json
+infra/deploy/restore/

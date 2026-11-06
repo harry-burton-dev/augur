@@ -22,7 +22,7 @@ The preview ring follows beta for AUGUR by itself while AUGUR is 0.x. A producti
 
 ## Promote to stable
 
-In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or the id of an app released from this repository or from its own, below) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it: anyone else's run fails before it changes anything.
+In GitHub, **Actions → Promote to stable → Run workflow**, with the unit (`augur`, or the id of an app released from this repository or from its own, below) and, if you like, the version (by default, that unit's newest beta). It attaches `promotion.json` (who made it stable, from which run, when), takes off the pre-release mark and, for AUGUR's newest stable, marks it the repository's latest release. Production servers see it at their next check. Only the repository's owner may run it, and only from `main`: anyone else's run fails before it changes anything, and a run started from another branch does nothing.
 
 ### Bake time
 
@@ -38,7 +38,9 @@ Until then, bake time can't be checked, so a promotion is refused unless you tic
 
 ### Deploy test
 
-An AUGUR release goes stable only once its last deploy test passed. Each run on `main` or a `release/*` branch keeps its result on the release as `deploy-test.json`, pass or fail; a run on any other branch tests with that branch's script, so it keeps nothing. There is no override. If the test failed or the release has no result, as releases from before this check don't, fix what failed or run **Actions → Deploy test** on `main` with that version, then promote again. `promotion.json` records the run that passed. Apps have no deploy test of their own.
+An AUGUR release goes stable only once its last deploy test passed. Each run on `main` or a `release/*` branch keeps its result on the release as `deploy-test.json`, pass or fail; a run on any other branch tests with that branch's script, so it keeps nothing. There is no override.
+
+The Release workflow publishes the feed only once the new release's deploy test is done, and a beta whose deploy test failed is listed halted, with the run that failed: no server is offered it, and the preview ring doesn't take it. Once a later run of the test passes, the next feed lists it as usual (run **Actions → Release feed**, or wait for the weekly run). A run that released only apps has no deploy test, and its feed goes out straight away. If the test failed or the release has no result, as releases from before this check don't, fix what failed or run **Actions → Deploy test** on `main` with that version, then promote again. `promotion.json` records the run that passed. Apps have no deploy test of their own.
 
 Units move independently: Mandate can become stable while AUGUR stays where it is, and the other way round.
 
@@ -50,7 +52,7 @@ A pillar app (`release/shipped-apps.json`) isn't promoted on its own: it ships i
 
 ## Halting a release
 
-When a release turns out to be bad after it's out, stop it reaching more servers: in GitHub, **Actions → Halt rollout → Run workflow**, with `halt`, the unit (`augur` or an app's id), the version and a reason people will read. It attaches `halted.json` (the reason, when, who) to the release and publishes the feed again at once (ADR 0018). Every server sees the mark at its next check: the release stays listed, marked halted with the reason, and is never offered, chosen as the next upgrade or installed. A server running it is told to move on, or to go back. Only the repository's owner may run it.
+When a release turns out to be bad after it's out, stop it reaching more servers: in GitHub, **Actions → Halt rollout → Run workflow**, with `halt`, the unit (`augur` or an app's id), the version and a reason people will read. It attaches `halted.json` (the reason, when, who) to the release and publishes the feed again at once (ADR 0018). Every server sees the mark at its next check: the release stays listed, marked halted with the reason, and is never offered, chosen as the next upgrade or installed. A server running it is told to move on, or to go back. Only the repository's owner may run it, and only from `main`.
 
 Run it again with `resume` to take the mark off once the release turns out fine. A fix is normally a new patch release instead, which servers move to as usual. Mirrors pass a halt on when the release is mirrored again ([mirror.md](mirror.md#halted-releases)).
 

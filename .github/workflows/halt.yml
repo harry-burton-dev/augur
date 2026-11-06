@@ -33,6 +33,9 @@ env:
   NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 jobs:
   halt:
+    # Only main's own script halts or resumes, and checks who asked: a run started from another branch would run
+    # that branch's copy of it, so it does nothing.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       changed: ${{ steps.halt.outputs.changed }}

@@ -5,12 +5,12 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, open, readFile, rename, rm, stat, statfs, writeFile, type FileHandle } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { partsFor } from './parts.ts';
 import type { AppHost, RunnerState } from './runner.ts';
-import type { Server } from './upgrade.ts';
+import type { Journal, Server } from './upgrade.ts';
 
 export interface ServerOptions {
   /** The deploy folder: compose.yml and .env. */
@@ -46,6 +46,11 @@ const readUnder = async (root: string, paths: string[]) => {
 };
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+
+/** The open upgrade's journal in the deploy folder (upgrade.ts, Journal): it holds the old .env, so only the updater reads it. */
+export const JOURNAL_FILE = '.updater-upgrade.json';
+/** Beside .env while it's written in place: .env as it was, to put back should the write be cut short. */
+export const ENV_BEFORE_UPGRADE = '.env.before-upgrade';
 
 /** Long enough for a pull of every image on a slow line. */
 const COMMAND_MS = 20 * 60_000;
@@ -101,8 +106,7 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
 
   return {
     readEnv: () => readFile(envFile, 'utf8'),
-    // Written in place, so it keeps its owner and permissions: the person running `pc` still reads it.
-    writeEnv: (text) => writeFile(envFile, text),
+    writeEnv: (text) => writeSettings(envFile, text),
     async hashDeployFiles(paths) {
       const files = await readUnder(dir, paths);
       return Object.fromEntries(paths.map((path) => [path, files[path] && sha256(files[path])]));
@@ -224,6 +228,16 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
       }
     },
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    async freeBytes() {
+      const disk = await statfs(dir);
+      return Number(disk.bavail) * Number(disk.bsize);
+    },
+    async readJournal() {
+      const text = await readFile(join(dir, JOURNAL_FILE), 'utf8').catch(() => undefined);
+      return text ? (JSON.parse(text) as Journal) : undefined;
+    },
+    writeJournal: (journal) => writeWhole(join(dir, JOURNAL_FILE), JSON.stringify(journal) + '\n'),
+    clearJournal: () => rm(join(dir, JOURNAL_FILE), { force: true }),
     async login(registry, user, token) {
       await command('docker', ['login', registry, '--username', user, '--password-stdin'], env(), token);
     },
@@ -237,11 +251,92 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
   };
 };
 
+/** Writes a file and makes sure it's on the disk before going on. */
+const writeSynced = async (path: string, text: string, mode: number, more?: (file: FileHandle) => Promise<void>) => {
+  const file = await open(path, 'w', mode);
+  try {
+    await file.writeFile(text);
+    await file.chmod(mode);
+    await more?.(file);
+    await file.sync();
+  } finally {
+    await file.close();
+  }
+};
+
+/** The folder's own entry for a rename, on the disk too; a file system that can't sync a folder is let be. */
+const syncFolder = async (path: string) => {
+  const folder = await open(dirname(path), 'r').catch(() => undefined);
+  await folder?.sync().catch(() => undefined);
+  await folder?.close();
+};
+
 /** Writes a file whole or not at all: to a temporary name first, then renamed over the old one. */
 const writeWhole = async (path: string, text: string, mode = 0o600) => {
-  await writeFile(`${path}.tmp`, text, { mode });
-  await chmod(`${path}.tmp`, mode);
+  await writeSynced(`${path}.tmp`, text, mode);
   await rename(`${path}.tmp`, path);
+  await syncFolder(path);
+};
+
+export interface WriteSettingsOptions {
+  /** Gives the new file the old one's owner; throws when it can't (the updater isn't root, say). */
+  chown?: (file: FileHandle, uid: number, gid: number) => Promise<void>;
+  /** The updater's own user. */
+  uid?: number;
+  /** Writes the file in place, when its owner can't be kept otherwise. */
+  inPlace?: (path: string, text: string) => Promise<void>;
+}
+
+/**
+ * Writes .env so a full disk or a crash can't leave it cut short: whole, to a temporary name, with the
+ * old file's mode and owner (the person running `pc` still reads it), then renamed over it. When the
+ * owner can't be kept and the file isn't the updater's own, it's written in place instead, the way it
+ * always was, but only once the old text is written whole beside it (ENV_BEFORE_UPGRADE): read back
+ * and checked, the new text is let stand; otherwise the old is put back, or left beside it to copy over.
+ */
+export const writeSettings = async (path: string, text: string, { chown = (file, uid, gid) => file.chown(uid, gid), uid = process.getuid?.() ?? -1, inPlace }: WriteSettingsOptions = {}) => {
+  const was = await stat(path).catch(() => undefined);
+  const mode = was ? was.mode & 0o777 : 0o600;
+  // In place, the file keeps its owner and mode.
+  const writeInPlace = inPlace ?? ((to: string, t: string) => writeSynced(to, t, mode));
+  const tmp = `${path}.tmp`;
+  let owned = true;
+  try {
+    await writeSynced(tmp, text, mode, async (file) => {
+      if (!was) return;
+      await chown(file, was.uid, was.gid).catch(() => {
+        owned = was.uid === uid;
+      });
+    });
+  } catch (err) {
+    await rm(tmp, { force: true });
+    throw err;
+  }
+  if (owned) {
+    await rename(tmp, path);
+    await syncFolder(path);
+    return;
+  }
+  await rm(tmp, { force: true });
+  const old = await readFile(path, 'utf8');
+  const copy = join(dirname(path), ENV_BEFORE_UPGRADE);
+  await writeWhole(copy, old);
+  if ((await readFile(copy, 'utf8')) !== old) throw new Error(`${ENV_BEFORE_UPGRADE} didn’t read back as .env has it, so .env wasn’t changed.`);
+  const written = async (t: string) => {
+    try {
+      await writeInPlace(path, t);
+      return (await readFile(path, 'utf8')) === t ? undefined : 'it read back other than written';
+    } catch (err) {
+      return (err as Error).message;
+    }
+  };
+  const problem = await written(text);
+  if (!problem) return rm(copy, { force: true });
+  if (await written(old)) {
+    throw new Error(`.env couldn’t be written (${problem}), or put back as it was. ${ENV_BEFORE_UPGRADE} holds it as it was: copy it over .env before anything else.`);
+  }
+  await rm(copy, { force: true });
+  throw new Error(`.env couldn’t be written (${problem}), so it was put back as it was.`);
 };
 
 /**

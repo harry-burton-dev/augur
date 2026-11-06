@@ -4,10 +4,21 @@
 # container, replays every archived change since onto it, and checks it reached that moment and that the
 # platform's and Keycloak's tables are there. The live database is only asked for the mark; it is never
 # written to otherwise.
-# Writes the result to $BACKUP_DIR/pitr-test.json, which Admin's Status reads.
+# Writes the result to $STATUS_DIR/pitr-test.json (backups/status/), which Admin's Status reads.
 set -eu
 set -o pipefail
 : "${BACKUP_DIR:=/backups}"
+umask 077
+# Results for Admin's Status go in a folder of their own, the only part of the backups the gateway sees
+# (compose.yml). The backups themselves are readable by root alone (umask 077); the results by anyone.
+: "${STATUS_DIR:=$BACKUP_DIR/status}"
+export STATUS_DIR
+# status_written NAME: puts NAME.partial in place as the status folder's NAME.
+status_written() {
+  mkdir -p "$STATUS_DIR" && chmod 755 "$STATUS_DIR"
+  chmod 644 "$STATUS_DIR/$1.partial"
+  mv "$STATUS_DIR/$1.partial" "$STATUS_DIR/$1"
+}
 : "${WAL_DIR:=/wal-archive}"
 # How long the replay may take, in seconds.
 : "${PITR_TEST_SECONDS:=1800}"
@@ -16,15 +27,15 @@ started=$(date -u +%s)
 base=""
 scratch=""
 
-# result OK PROBLEM [FACTS]: writes pitr-test.json beside the backups.
+# result OK PROBLEM [FACTS]: writes pitr-test.json for Status.
 result() {
   {
     printf '{"at":"%s","base":"%s","ok":%s,"seconds":%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(basename "${base:-none}")" "$1" "$(($(date -u +%s) - started))"
     [ -n "$2" ] && printf ',"problem":"%s"' "$(printf '%s' "$2" | tr -d '"\\')"
     [ -n "${3:-}" ] && printf ',%s' "$3"
     printf '}\n'
-  } > "$BACKUP_DIR/pitr-test.json.partial"
-  mv "$BACKUP_DIR/pitr-test.json.partial" "$BACKUP_DIR/pitr-test.json"
+  } > "$STATUS_DIR/pitr-test.json.partial"
+  status_written pitr-test.json
   if [ "$1" = true ]; then echo "pitr-test: $(basename "$base") replayed and checked"; else echo "pitr-test: FAILED: $2" >&2; fi
 }
 
@@ -80,6 +91,9 @@ for wal in "$WAL_DIR"/*.gz; do
 done
 # Replays from the archive to its end, then opens. Listens only on a socket in the scratch folder, lets
 # only this container's postgres user in, and archives nothing itself.
+# A restore to a time leaves its target in the live postgresql.auto.conf, and every later base backup
+# carries it: taken out here, or the replay would stop at that old moment.
+sed -i '/^[[:space:]]*recovery_target/d' "$scratch/data/postgresql.auto.conf"
 cat >> "$scratch/data/postgresql.auto.conf" <<CONF
 restore_command = 'test -f $scratch/wal/%f.gz && gunzip -c $scratch/wal/%f.gz > %p'
 recovery_target_action = 'promote'

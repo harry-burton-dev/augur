@@ -4,7 +4,7 @@ name: Lockfile
 # With freeze, it also keeps the contract reference app built against the current SDK minor. For a change that adds or bumps a package from
 # GitHub Packages (the kit, ADR 0046) made where no read token is set, such as a cloud session:
 # Actions → Lockfile → Run workflow, with the branch. It pushes with RELEASE_TOKEN, so CI runs on the new
-# commit. Never on main.
+# commit. Never on main or a release branch.
 on:
   workflow_dispatch:
     inputs:
@@ -23,13 +23,25 @@ env:
   NODE_AUTH_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
 jobs:
   lock:
-    if: inputs.branch != 'main' && !startsWith(inputs.branch, 'release/')
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
+      # The branch's own code runs below, so first make sure it is a branch, and one this may push to:
+      # never main, a release branch or any other ref (refs/pull/<n>/head, refs/heads/main, a tag).
+      - name: Is it a branch this may push to?
+        run: |
+          refuse() { echo "::error::$1"; echo "$1" >> "$GITHUB_STEP_SUMMARY"; exit 1; }
+          case "$BRANCH" in
+            refs/*) refuse "Give the branch's name, not a ref: \"$BRANCH\"." ;;
+            main | release/*) refuse "The Lockfile workflow never pushes to $BRANCH: give a pull request's branch." ;;
+          esac
+          git check-ref-format --branch "$BRANCH" > /dev/null 2>&1 || refuse "\"$BRANCH\" isn't a branch name."
+        env:
+          BRANCH: ${{ inputs.branch }}
+      # No credentials are left in .git/config while the branch's code runs: the push step alone has the token.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.branch }}
-          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          ref: refs/heads/${{ inputs.branch }}
+          persist-credentials: false
       - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -45,7 +57,8 @@ jobs:
         run: |
           pnpm turbo run build --filter=@augur/contract-tests^...
           pnpm --filter @augur/contract-tests freeze
-      - name: Push them, if they changed
+      - name: Commit them, if they changed
+        id: commit
         run: |
           if [ -z "$(git status --porcelain pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md platform/contract/frozen)" ]; then
             echo "pnpm-lock.yaml, release/kit.json, THIRD_PARTY_NOTICES.md and the frozen builds are already up to date" >> "$GITHUB_STEP_SUMMARY"
@@ -57,7 +70,17 @@ jobs:
           [ -f release/kit.json ] && git add release/kit.json
           [ -f THIRD_PARTY_NOTICES.md ] && git add THIRD_PARTY_NOTICES.md
           [ -d platform/contract/frozen ] && git add platform/contract/frozen
-          git commit -m "Update pnpm-lock.yaml, the kit pin, the open-source notices and the frozen builds"
-          git push origin "HEAD:$BRANCH"
+          git commit --no-verify -m "Update pnpm-lock.yaml, the kit pin, the open-source notices and the frozen builds"
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+      # The token is given to this one git command, as a header, never written to .git/config or echoed,
+      # and no hook runs with it. It pushes to the branch by its full name.
+      - name: Push them
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          auth=$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -c core.hooksPath=/dev/null -c "http.$GITHUB_SERVER_URL/.extraheader=AUTHORIZATION: basic $auth" \
+            push "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
         env:
           BRANCH: ${{ inputs.branch }}
+          PUSH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
