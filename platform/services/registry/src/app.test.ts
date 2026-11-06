@@ -246,6 +246,24 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it('refuses a frontend from an app an admin removed, whose sign-in outlives it', async () => {
+    const app = await db.app({ verifyService, frontendFiles: new MemoryFrontendFiles() });
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin })).statusCode).toBe(204);
+    const body = packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]);
+    const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.2.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: body });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().message).toMatch(/An admin removed library/);
+  });
+
+  it('tells only identity what it keeps about a person', async () => {
+    const app = await db.app({ verifyService });
+    await db.store.requestUpgrade({ id: 'up-1', from: '0.2.0', version: '0.3.0', images: {}, requestedBy: 'u-1', requestedByName: 'Alex' });
+    const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/people/u-1/data', headers });
+    expect((await read(as('platform-events'))).statusCode).toBe(403);
+    expect((await read(as('platform-identity'))).json().upgrades).toEqual([expect.objectContaining({ id: 'up-1', requestedByName: 'Alex' })]);
+  });
+
   it('keeps each version’s frontend and points the shell at that version’s own copy', async () => {
     const entries: { action: string }[] = [];
     const frontendFiles = new MemoryFrontendFiles();

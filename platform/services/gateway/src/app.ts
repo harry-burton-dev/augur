@@ -29,7 +29,7 @@ import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.t
 import { Traffic, TRAFFIC_PATH, type TrafficPart } from './traffic.ts';
 import { GatewayMetrics } from './metrics.ts';
 import { browserTelemetryFrom, forward, ForwardFailed, SendLimit, stamped, TELEMETRY_BODY_LIMIT, type BrowserTelemetry as BrowserTelemetrySettings, type Signal } from './telemetry.ts';
-import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess } from './uploads.ts';
+import { AppAccessUnavailable, capped, DEFAULT_UPLOAD_MB, registryAppAccess, TooLarge, type AppAccess, type AppAllowed } from './uploads.ts';
 import { Readable } from 'node:stream';
 import { Mailer, mailRelayFromEnv, organisationSender, type MailStatus } from '@augur/service-kit/mail';
 import { registryUpstreams, UpstreamsUnavailable, type AppUpstreams } from './upstreams.ts';
@@ -382,7 +382,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
     // The platform's services check their callers themselves.
     if (PLATFORM_SERVICES.includes(name) || !req.caller) return;
-    let apps: Map<string, { maxUpload?: number }> | undefined;
+    let apps: Map<string, AppAllowed> | undefined;
     try {
       apps = appAccess ? await appAccess(await checkedOn(req.caller)) : undefined;
     } catch (err) {
@@ -394,12 +394,12 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     const allowed = apps?.get(name);
     if (apps && !allowed) {
       if (req.body instanceof Readable) req.body.resume();
-      return reply.code(403).send({ error: 'forbidden', message: `${name} isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.` });
+      return reply.code(403).send({ error: 'forbidden', message: `That app isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.` });
     }
     // Bodies stream through, never held here.
     if (!(req.body instanceof Readable)) return;
     const mb = allowed?.maxUpload ?? DEFAULT_UPLOAD_MB;
-    const tooLarge = `This is more than ${name} takes at once (${mb} MB).`;
+    const tooLarge = `This is more than ${allowed?.name ?? 'this app'} takes at once (${mb} MB).`;
     const bytes = mb * 1024 * 1024;
     if (Number(req.headers['content-length'] ?? 0) > bytes) {
       req.body.resume();

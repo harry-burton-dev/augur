@@ -322,6 +322,11 @@ export interface AppStore {
   upgrade(): Promise<Upgrade | undefined>;
   /** Every upgrade asked for, newest first, at most `limit`: the Updates page's history. */
   upgrades(limit?: number): Promise<Upgrade[]>;
+  /** Forgets a deleted person's name on the upgrades they asked for; their id stays, as it does in Activity (ADR 0040). */
+  forgetPerson(person: string): Promise<void>;
+  /** How far the registry has followed domain events. */
+  followedTo(): Promise<string | undefined>;
+  setFollowedTo(seq: string): Promise<void>;
   /** Records an upgrade to run; false when one is already waiting or under way. */
   requestUpgrade(upgrade: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName' | 'settingNames'>): Promise<boolean>;
   /**
@@ -678,6 +683,15 @@ export const migrations: Migration[] = [
         removed_at timestamptz not null default now()
       );`,
   },
+  {
+    id: '022_followed_events',
+    sql: `
+      -- How far the registry has read the domain events it follows. One row.
+      create table registry.followed_events (
+        one boolean primary key default true check (one),
+        seq text not null
+      );`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -946,6 +960,19 @@ export class PgAppStore implements AppStore {
   async upgrades(limit = UPGRADES_LISTED) {
     const { rows } = await this.pool.query<UpgradeRow>('select * from registry.upgrades order by requested_at desc limit $1', [limit]);
     return rows.map(fromUpgradeRow);
+  }
+
+  async forgetPerson(person: string) {
+    await this.pool.query('update registry.upgrades set requested_by_name = null where requested_by = $1 and requested_by_name is not null', [person]);
+  }
+
+  async followedTo() {
+    const { rows } = await this.pool.query<{ seq: string }>('select seq from registry.followed_events');
+    return rows[0]?.seq;
+  }
+
+  async setFollowedTo(seq: string) {
+    await this.pool.query('insert into registry.followed_events (seq) values ($1) on conflict (one) do update set seq = excluded.seq', [seq]);
   }
 
   async requestUpgrade(u: Pick<Upgrade, 'id' | 'from' | 'version' | 'images' | 'requestedBy' | 'requestedByName' | 'settingNames'>) {

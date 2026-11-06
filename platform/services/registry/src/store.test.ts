@@ -56,6 +56,16 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect((await store.upgrade())?.state).toBe('cancelled');
     // The history keeps every one, newest first, with who asked.
     expect((await store.upgrades()).map((u) => `${u.id} ${u.state} ${u.requestedByName}`)).toEqual(['up-3 cancelled Alex', 'up-1 done Alex']);
+    await store.forgetPerson('someone-else');
+    expect((await store.upgrades()).map((u) => u.requestedByName)).toEqual(['Alex', 'Alex']);
+    await store.forgetPerson('u-1');
+    expect(await store.upgrades()).toEqual([expect.not.objectContaining({ requestedByName: expect.anything() }), expect.not.objectContaining({ requestedByName: expect.anything() })]);
+    expect((await store.upgrades()).map((u) => u.requestedBy)).toEqual(['u-1', 'u-1']);
+    // The place it has followed domain events to.
+    expect(await store.followedTo()).toBeUndefined();
+    await store.setFollowedTo('12');
+    await store.setFollowedTo('13');
+    expect(await store.followedTo()).toBe('13');
     expect((await store.upgrades(1)).map((u) => u.id)).toEqual(['up-3']);
     // Only the names of settings entered for an upgrade are kept, never their values.
     expect(await store.requestUpgrade({ id: 'up-4', from: '0.3.0', version: '0.4.0', images: {}, requestedBy: 'u-1', settingNames: ['OBJECT_STORE_URL'] })).toBe(true);
