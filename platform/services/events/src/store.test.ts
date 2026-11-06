@@ -1,7 +1,9 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { leaveNoticeKey } from '@augur/service-kit';
 import type { InboxSignal } from './inbox.ts';
 import { PgEventStore, type AuditFilter, type DomainEvent, type EventStore, type Notification } from './store.ts';
+import { insertEvents } from './writes.ts';
 
 const review = { app: 'library', recipients: ['u-1', 'u-2'], level: 'needs' as const, title: 'Review the budget paper', link: '/doc/7' };
 
@@ -118,6 +120,86 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     expect(await store.redactPerson('u-2')).toEqual({ entries: 0, notifications: 0 });
   });
 
+  it('removes a leaver’s note, and the notice to admins that names them', async () => {
+    await store.appendAudit({ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-2', detail: { note: 'Going through a hard time', handOverTo: 'u-3' } });
+    await store.appendAudit({ actor: { id: 'u-2', kind: 'user' }, app: 'identity', action: 'account.leave-requested', detail: { note: 'My own words' } });
+    await store.addNotifications({ app: 'admin', recipients: ['u-1'], level: 'needs', title: 'Sam asked to leave', detail: 'My own words', key: leaveNoticeKey('u-2', '2026-11-01T00:00:00.000Z') });
+    await store.addNotifications({ app: 'admin', recipients: ['u-1'], level: 'needs', title: 'Kim asked to leave', key: leaveNoticeKey('u-22', '2026-11-01T00:00:00.000Z') });
+    expect(await store.redactPerson('u-2')).toEqual({ entries: 2, notifications: 1 });
+    expect((await store.audit({ limit: 10 })).map((e) => e.detail?.note)).toEqual(['[removed]', '[removed]']);
+    expect((await store.audit({ limit: 10 })).at(-1)!.detail?.handOverTo).toBe('u-3');
+    expect((await store.unread('u-1', 10)).map((n) => n.title)).toEqual(['Kim asked to leave']);
+  });
+
+  it('blanks a deleted person’s notes on inbox items and withdraws what was theirs, leaving everyone else’s', async () => {
+    const put = async (key: string, owner: string) => {
+      const r = await store.inbox.put('mandate', key, { kind: 'assignment', owner: { kind: 'person', id: owner }, title: key, subject: { kind: 'ref', app: 'mandate', id: key } });
+      if (!('item' in r)) throw new Error('expected an item');
+      return r.item;
+    };
+    const declined = await put('declined', 'u-2');
+    await store.inbox.act(declined.id, { action: 'declined', by: 'u-2', note: 'Too much on, my health' });
+    const handed = await put('handed', 'u-2');
+    await store.inbox.act(handed.id, { action: 'handed-on', by: 'u-2', to: { kind: 'person', id: 'u-3' }, note: 'Off sick' });
+    const open = await put('open', 'u-2');
+    const other = await put('other', 'u-3');
+    await store.redactPerson('u-2');
+    expect(await store.inbox.get(declined.id)).not.toHaveProperty('closeNote');
+    expect((await store.inbox.history(declined.id)).map((h) => h.note)).toEqual([undefined, undefined]);
+    expect((await store.inbox.history(handed.id)).map((h) => h.note)).toEqual([undefined, undefined]);
+    expect(await store.inbox.get(handed.id)).toMatchObject({ state: 'open', owner: { id: 'u-3' } });
+    expect(await store.inbox.get(open.id)).toMatchObject({ state: 'withdrawn', closedAt: expect.any(String) });
+    expect((await store.inbox.history(open.id)).at(-1)).toMatchObject({ action: 'withdrawn' });
+    expect(await store.inbox.get(other.id)).toMatchObject({ state: 'open' });
+    // Closed now, so its time runs out like any other.
+    expect(await store.inbox.prune(-1)).toBe(2);
+  });
+
+  it('keeps an entry and its event together: one that can’t be written takes the other with it', async () => {
+    const entry = { actor: { id: 'u-1', kind: 'user' as const }, app: 'identity', action: 'person.left', target: 'u-2' };
+    await expect(
+      store.appendAudit(entry, undefined, 'identity', {
+        event: () => {
+          throw new Error('no event');
+        },
+      }),
+    ).rejects.toThrow('no event');
+    expect(await store.audit({ limit: 10 })).toEqual([]);
+    const kept = await store.appendAudit(entry, undefined, 'identity', { event: (e) => ({ publisher: 'identity', event: { topic: 'platform.person.left', id: `audit-${e.id}`, payload: { person: 'u-2' } } }) });
+    expect((await store.readEvents({ topics: ['platform.*'], limit: 10 })).map((e) => e.id)).toEqual([`audit-${kept.id}`]);
+  });
+
+  it('keeps one entry and one event however often a key is sent, per service', async () => {
+    const entry = { actor: { id: 'u-1', kind: 'user' as const }, app: 'identity', action: 'person.left', target: 'u-2' };
+    const also = { key: 'k-1', event: (e: { id: string }) => ({ publisher: 'identity', event: { topic: 'platform.person.left', id: `audit-${e.id}`, payload: { person: 'u-2' } } }), release: { person: 'u-2' } };
+    const first = await store.appendAudit(entry, undefined, 'identity', also);
+    await store.releaseDone({ person: 'u-2' });
+    expect((await store.appendAudit(entry, undefined, 'identity', also)).id).toBe(first.id);
+    expect(await store.audit({ limit: 10 })).toHaveLength(1);
+    expect(await store.readEvents({ topics: ['platform.*'], limit: 10 })).toHaveLength(1);
+    expect(await store.releasesDue()).toEqual([]);
+    await store.appendAudit(entry, undefined, 'registry', { key: 'k-1' });
+    expect(await store.audit({ limit: 10 })).toHaveLength(2);
+  });
+
+  it('records a change to team notices with it, and only a change', async () => {
+    const floor = { id: 'f', path: ['o', 'f'] };
+    await store.setTeamNotices('f', true, 'u-1', floor);
+    await store.setTeamNotices('f', true, 'u-1', floor);
+    await store.setTeamNotices('f', false, 'u-1', floor);
+    await store.setTeamNotices('f', false, 'u-1', floor);
+    expect(await store.audit({ limit: 10 })).toMatchObject([{ action: 'team-notices.off', target: 'f' }, { action: 'team-notices.on', workspace: floor }]);
+  });
+
+  it('keeps the releases still to do until each is done', async () => {
+    const entry = { actor: { id: 'u-1', kind: 'user' as const }, app: 'identity', action: 'person.disabled', target: 'u-2' };
+    await store.appendAudit(entry, undefined, 'identity', { release: { person: 'u-2' } });
+    await store.appendAudit(entry, undefined, 'identity', { release: { person: 'u-3', team: 't-1' } });
+    expect(await store.releasesDue()).toEqual([{ person: 'u-2' }, { person: 'u-3', team: 't-1' }]);
+    await store.releaseDone({ person: 'u-2' });
+    expect(await store.releasesDue()).toEqual([{ person: 'u-3', team: 't-1' }]);
+  });
+
   it('keeps which service wrote each audit entry', async () => {
     await store.appendAudit({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.deleted' }, undefined, 'library');
     await store.appendAudit({ actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.moved' });
@@ -156,8 +238,6 @@ const behavesLikeAStore = (make: () => EventStore, reset: () => Promise<void> = 
     ])).toEqual({ added: 2, repeated: 0 });
     expect(await store.publish('folio', [{ topic: 'folio.document.published', id: 'e1', payload: {} }])).toEqual({ added: 0, repeated: 1 });
     await store.publish('notes', [{ topic: 'notes.note.added', id: 'e1', payload: null }]);
-    // In Postgres an event shows once every transaction older than it has finished, which other tests' may not have yet.
-    await expect.poll(async () => (await store.readEvents({ topics: ['folio.*', 'notes.note.added'], limit: 10 })).length).toBe(3);
     const all = await store.readEvents({ topics: ['folio.*', 'notes.note.added'], limit: 10 });
     expect(all.map((e) => [e.publisher, e.id])).toEqual([['folio', 'e1'], ['folio', 'e2'], ['notes', 'e1']]);
     expect(all[0]).toMatchObject({ topic: 'folio.document.published', payload: { document: 'd1' }, workspace: finance, at: expect.any(String) });
@@ -286,6 +366,23 @@ const behavesLikeAnInbox = (make: () => EventStore, reset: () => Promise<void> =
     stop();
   });
 
+  it('undoes a step whose audit entry or event can’t be written, so it can be tried again', async () => {
+    const put = await store.inbox.put('mandate', 'told', assignment);
+    if (!('item' in put)) throw new Error('expected an item');
+    const id = put.item.id;
+    const said = (_: unknown, step: string) => ({
+      audit: { actor: { id: 'u-1', kind: 'user' as const }, app: 'events', action: 'inbox.done', target: id },
+      event: { topic: 'platform.inbox.done', id: `inbox-${step}`, payload: { item: id } },
+    });
+    await expect(store.inbox.act(id, { action: 'done', by: 'u-1' }, undefined, () => { throw new Error('no audit'); })).rejects.toThrow('no audit');
+    expect(await store.inbox.get(id)).toMatchObject({ state: 'open' });
+    expect(await store.inbox.history(id)).toHaveLength(1);
+    const done = await store.inbox.act(id, { action: 'done', by: 'u-1' }, undefined, said);
+    expect(done).toMatchObject({ item: { state: 'done' } });
+    expect((await store.audit({ limit: 10 })).map((e) => e.action)).toEqual(['inbox.done']);
+    expect((await store.readEvents({ topics: ['platform.inbox.*'], limit: 10 })).map((e) => e.id)).toEqual([`inbox-${(done as { step: string }).step}`]);
+  });
+
   it('forgets items closed longer ago than it keeps them, with their history', async () => {
     const put = await store.inbox.put('mandate', 'old', assignment);
     await store.inbox.put('mandate', 'live', assignment);
@@ -348,6 +445,35 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
     stop();
   });
 
+  it('sends only ids on the channels', async () => {
+    const hearing = await admin.connect();
+    const heard: string[] = [];
+    try {
+      hearing.on('notification', (m) => heard.push(`${m.channel} ${m.payload}`));
+      for (const channel of ['events_notification', 'events_domain_event', 'events_inbox']) await hearing.query(`listen ${channel}`);
+      const [n] = await store.addNotifications({ ...review, recipients: ['u-11'] });
+      await store.publish('folio', [{ topic: 'folio.document.published', id: 'quiet', payload: { document: 'secret' } }]);
+      await store.inbox.put('mandate', 'quiet', assignment);
+      await expect.poll(() => heard.length).toBe(3);
+      expect(heard[0]).toBe(`events_notification {"ref":"${n!.id}"}`);
+      expect(heard[1]).toMatch(/^events_domain_event \\{"ref" ?: ?"\\d+"\\}$/);
+      expect(heard[2]).toMatch(/^events_inbox \\{"ref":"\\d+"\\}$/);
+    } finally {
+      for (const channel of ['events_notification', 'events_domain_event', 'events_inbox']) await hearing.query(`unlisten ${channel}`);
+      hearing.removeAllListeners('notification');
+      hearing.release();
+    }
+  });
+
+  it('stays up when a login on the database sends rubbish on a channel', async () => {
+    for (const channel of ['events_notification', 'events_domain_event', 'events_inbox']) await admin.query('select pg_notify($1, $2)', [channel, 'x']);
+    const heard: Notification[] = [];
+    const stop = store.subscribe((n) => heard.push(n));
+    await store.addNotifications({ ...review, recipients: ['u-12'] });
+    await expect.poll(() => heard.map((n) => n.recipient)).toEqual(['u-12']);
+    stop();
+  });
+
   it('tells another instance about a notification too big to send whole', async () => {
     const heard: Notification[] = [];
     const stop = other.subscribe((n) => heard.push(n));
@@ -394,18 +520,56 @@ describe.runIf(process.env.DATABASE_URL)('PgEventStore', () => {
     stop();
   });
 
-  it('never hands out an event while an earlier one could still commit below it', async () => {
-    const slow = await admin.connect();
+  const published = (id: string) => ({ topic: 'folio.document.published', id, payload: {} });
+  const read = async (after?: string) => store.readEvents({ topics: ['folio.*'], after, limit: 10 });
+
+  it('never passes a seq still to commit, when seq and xid orders disagree', async () => {
+    const older = await admin.connect();
+    const newer = await admin.connect();
     try {
-      // A publisher's transaction takes a seq and stays open, as a slow outbox relay's might.
-      await slow.query('begin');
-      await slow.query(`insert into events.domain_events (topic, id, publisher, payload) values ('folio.document.published', 'slow', 'folio', '{}')`);
-      await store.publish('folio', [{ topic: 'folio.document.published', id: 'fast', payload: {} }]);
-      expect(await store.readEvents({ topics: ['folio.*'], limit: 10 })).toEqual([]);
-      await slow.query('commit');
-      await expect.poll(async () => (await store.readEvents({ topics: ['folio.*'], limit: 10 })).map((e) => e.id)).toEqual(['slow', 'fast']);
+      // The older transaction has the lower xid, but the newer one reaches its event first.
+      await older.query('begin');
+      await older.query('select pg_current_xact_id()');
+      await newer.query('begin');
+      await newer.query('select pg_current_xact_id()');
+      await insertEvents(newer, 'folio', [published('newer')]);
+      let through = false;
+      const waiting = insertEvents(older, 'folio', [published('older')]).then(() => (through = true));
+      await new Promise((r) => setTimeout(r, 100));
+      // It can't take a seq while the newer one holds the turn.
+      expect(through).toBe(false);
+      expect(await read()).toEqual([]);
+      await newer.query('commit');
+      await waiting;
+      const [first] = await read();
+      expect(first!.id).toBe('newer');
+      await older.query('commit');
+      // A follower that read while the older transaction was open misses nothing.
+      expect((await read(first!.seq)).map((e) => e.id)).toEqual(['older']);
+      expect((await read()).map((e) => e.id)).toEqual(['newer', 'older']);
     } finally {
-      slow.release();
+      older.release();
+      newer.release();
+    }
+  });
+
+  it('keeps a batch together: two publishing at once never interleave', async () => {
+    const batch = (who: string) => [1, 2, 3, 4, 5].map((n) => published(`${who}-${n}`));
+    await Promise.all([store.publish('folio', batch('a')), store.publish('folio', batch('b')), store.publish('folio', batch('c'))]);
+    const who = (await read()).map((e) => e.id[0]).join('');
+    expect(who).toMatch(/^(a{5}|b{5}|c{5}){3}$/);
+  });
+
+  it('isn’t held up by a transaction that has nothing to do with it', async () => {
+    const idle = await admin.connect();
+    try {
+      await idle.query('begin');
+      await idle.query('select pg_current_xact_id()');
+      await store.publish('folio', [published('prompt')]);
+      expect((await read()).map((e) => e.id)).toEqual(['prompt']);
+    } finally {
+      await idle.query('rollback');
+      idle.release();
     }
   });
 });

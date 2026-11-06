@@ -3,7 +3,8 @@ import pg from 'pg';
 import { digestMigration, PgDigestStore, type DigestStore } from './digests.ts';
 import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
-import { PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
+import { EVENT_CHANNEL, floorFrom, fromAuditRow, insertAudit, insertEvents, refIn, type AuditRow } from './writes.ts';
+import { leaveNoticeKey, PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
 export interface EventFloor {
@@ -142,6 +143,22 @@ export interface EventsQuery {
 export const topicMatches = (topic: string, wanted: string[]) =>
   wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
 
+/** A leaver's team items still to give back: those of one team, or of every team when `team` is left out. */
+export interface InboxRelease {
+  person: string;
+  team?: string;
+}
+
+/** What goes in the same transaction as an audit entry: all of it is kept, or none. */
+export interface AuditWith {
+  /** The sender's name for this entry: sent again, the first entry is answered and nothing else is written. */
+  key?: string;
+  /** The domain event that says the same thing, once the entry has its id. */
+  event?: (entry: AuditEntry) => { publisher: string; event: NewDomainEvent };
+  /** Team items to give back, kept until `releaseDone` says they went. */
+  release?: InboxRelease;
+}
+
 export interface EventStore {
   /** The Inbox's items (ADR 0026), in the same database. */
   readonly inbox: InboxStore;
@@ -166,7 +183,7 @@ export interface EventStore {
    * Entries are never edited, except redaction of a deleted person's personal values; they're removed only by the
    * retention period. Both are recorded in Activity.
    */
-  appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string): Promise<AuditEntry>;
+  appendAudit(entry: NewAuditEntry, floor?: EventFloor, recordedBy?: string, also?: AuditWith): Promise<AuditEntry>;
   /** Newest first. */
   audit(filter: AuditFilter): Promise<AuditEntry[]>;
   subscribe(listener: Listener): () => void;
@@ -177,10 +194,11 @@ export interface EventStore {
   onEvent(listener: EventListener): () => void;
   /** Whether a team has turned team notices on. */
   teamNotices(workspace: string): Promise<boolean>;
-  setTeamNotices(workspace: string, on: boolean, by: string): Promise<void>;
+  /** Turns them on or off and, when that changed anything, records it in Activity on `floor`, all or none. */
+  setTeamNotices(workspace: string, on: boolean, by: string, floor?: EventFloor): Promise<void>;
   /** Adds events, all or none; one the publisher already sent (same id) is skipped. */
   publish(publisher: string, events: NewDomainEvent[]): Promise<{ added: number; repeated: number }>;
-  /** Events on these topics in publishing order, never leaving a gap a later read would fill. */
+  /** Events on these topics in the order they committed, which is seq order: a later read can't fill a gap. */
   readEvents(query: EventsQuery): Promise<DomainEvent[]>;
   /** Forgets events older than this many days; returns how many went. */
   pruneEvents(keepDays: number): Promise<number>;
@@ -188,9 +206,13 @@ export interface EventStore {
   pruneAudit(keepDays: number): Promise<number>;
   /**
    * Forgets a deleted person (ADR 0040): replaces the personal values in every Activity entry by, about or naming
-   * them, and deletes their notifications. Their id stays, now pseudonymous.
+   * them, deletes their notifications and the notice that they asked to leave, blanks the notes they left on
+   * inbox items and withdraws the open items that were theirs. Their id stays, now pseudonymous.
    */
   redactPerson(person: string): Promise<Redacted>;
+  /** Team items still to give back, oldest first: a release that failed part way is carried on from these. */
+  releasesDue(): Promise<InboxRelease[]>;
+  releaseDone(release: InboxRelease): Promise<void>;
 }
 
 /** Schema changes, applied in order and recorded so each runs once. The events service owns the `events` schema. */
@@ -300,12 +322,42 @@ export const migrations: Migration[] = [
       -- Platform news that stops work (ADR 0044 D3): the shell may letterbox it.
       alter table events.notifications add column urgent boolean not null default false;`,
   },
+  {
+    id: '013_one_write_each',
+    sql: `
+      -- A sender's name for an entry, so sending it again keeps one.
+      alter table events.audit add column idempotency_key text;
+      create unique index audit_once on events.audit (recorded_by, idempotency_key) where idempotency_key is not null;
+      -- Whose turn it is to publish, as a lock on this table: seq order is commit order. It holds no rows.
+      create table events.publish_turn ();
+      -- A leaver's team items still to give back ('' for every team), until every one has gone.
+      create table events.inbox_releases (
+        person text not null,
+        team text not null default '',
+        asked_at timestamptz not null default now(),
+        primary key (person, team)
+      );
+      -- Who hears of each change to an item, so a NOTIFY needs to carry only the history line's id.
+      alter table events.inbox_history add column signal jsonb;`,
+  },
+  {
+    id: '014_forget_notes',
+    sql: `
+      -- A leaver's note is a personal value now. Those already redacted lose it here, as redaction would have done.
+      update events.audit a set detail = jsonb_set(a.detail, '{note}', '"${REMOVED}"')
+      where a.action in ('person.left', 'account.leave-requested') and a.detail ? 'note'
+        and exists (select 1 from events.audit r where r.action = 'audit.redacted' and r.detail->>'person' in (a.target, a.actor_id));
+      -- Only the notices naming someone already deleted, which nothing should show.
+      -- squawk-ignore augur-delete-rows
+      delete from events.notifications n
+      where exists (select 1 from events.audit r where r.action = 'audit.redacted' and starts_with(n.key, 'leave:' || (r.detail->>'person') || ':'));`,
+  },
 ];
 
+/** Each new notification, by id. The channels carry ids only: see `refIn`. */
 const CHANNEL = 'events_notification';
-/** Each new domain event, for the browser stream; one too big for a NOTIFY goes by its seq and is read back. */
-const EVENT_CHANNEL = 'events_domain_event';
-const NOTIFY_BYTES = 7900;
+const NOTIFICATION_ID = /^[0-9a-f-]{36}$/i;
+const SEQ = /^[0-9]{1,19}$/;
 
 type NotificationRow = {
   id: string;
@@ -325,17 +377,14 @@ type NotificationRow = {
   workspace_path: string[] | null;
 };
 
-const floorFrom = (id: string | null, path: string[] | null) => (id ? { workspace: { id, path: path ?? [id] } } : {});
-
-/** A domain event as Postgres hands it back, or as `row_to_json` sends it in a NOTIFY (seq a number, at a string). */
-type DomainEventRow = { seq: string | number; topic: string; id: string; publisher: string; at: Date | string; workspace_id: string | null; workspace_path: string[] | null; payload: unknown };
+type DomainEventRow = { seq: string; topic: string; id: string; publisher: string; at: Date; workspace_id: string | null; workspace_path: string[] | null; payload: unknown };
 
 const fromEventRow = (r: DomainEventRow): DomainEvent => ({
-  seq: String(r.seq),
+  seq: r.seq,
   topic: r.topic,
   id: r.id,
   publisher: r.publisher,
-  at: new Date(r.at).toISOString(),
+  at: r.at.toISOString(),
   ...floorFrom(r.workspace_id, r.workspace_path),
   payload: r.payload,
 });
@@ -355,32 +404,6 @@ const fromRow = (r: NotificationRow): Notification => ({
   createdAt: r.created_at.toISOString(),
   ...(r.read_at ? { readAt: r.read_at.toISOString() } : {}),
   ...floorFrom(r.workspace_id, r.workspace_path),
-});
-
-type AuditRow = {
-  id: string;
-  at: Date;
-  actor_id: string;
-  actor_kind: 'user' | 'service';
-  app: string;
-  action: string;
-  target: string | null;
-  detail: Record<string, unknown> | null;
-  workspace_id: string | null;
-  workspace_path: string[] | null;
-  recorded_by: string | null;
-};
-
-const fromAuditRow = (r: AuditRow): AuditEntry => ({
-  id: String(r.id),
-  at: r.at.toISOString(),
-  actor: { id: r.actor_id, kind: r.actor_kind },
-  app: r.app,
-  action: r.action,
-  ...(r.target ? { target: r.target } : {}),
-  ...(r.detail ? { detail: r.detail } : {}),
-  ...floorFrom(r.workspace_id, r.workspace_path),
-  ...(r.recorded_by ? { recordedBy: r.recorded_by } : {}),
 });
 
 /**
@@ -441,27 +464,45 @@ export class PgEventStore implements EventStore {
     client.on('notification', (msg) => {
       if (msg.channel === EVENT_CHANNEL && msg.payload) return void this.heardEvent(msg.payload);
       if (msg.channel === INBOX_CHANNEL && msg.payload) return void this.inbox.heard(msg.payload);
-      if (msg.channel !== CHANNEL || !msg.payload) return;
-      const sent = JSON.parse(msg.payload) as Notification | { ref: string };
-      if (!('ref' in sent)) return void this.emitter.emit('notification', sent);
-      // Too big to travel whole: read it back.
-      void this.pool
-        .query<NotificationRow>('select * from events.notifications where id = $1', [sent.ref])
-        .then(({ rows }) => rows[0] && this.emitter.emit('notification', fromRow(rows[0])))
-        .catch(() => undefined);
+      if (msg.channel === CHANNEL && msg.payload) return void this.heardNotification(msg.payload);
     });
     await client.query(`listen ${CHANNEL}`);
     await client.query(`listen ${EVENT_CHANNEL}`);
     await client.query(`listen ${INBOX_CHANNEL}`);
   }
 
-  private heardEvent(payload: string) {
-    const sent = JSON.parse(payload) as DomainEventRow | { ref: string };
-    if (!('ref' in sent)) return void this.emitter.emit('domain-event', fromEventRow(sent));
+  private heardNotification(payload: string) {
+    const ref = refIn(payload, NOTIFICATION_ID);
+    if (!ref || !this.emitter.listenerCount('notification')) return;
     void this.pool
-      .query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events where seq = $1', [sent.ref])
+      .query<NotificationRow>('select * from events.notifications where id = $1', [ref])
+      .then(({ rows }) => rows[0] && this.emitter.emit('notification', fromRow(rows[0])))
+      .catch(() => undefined);
+  }
+
+  private heardEvent(payload: string) {
+    const ref = refIn(payload, SEQ);
+    if (!ref || !this.emitter.listenerCount('domain-event')) return;
+    void this.pool
+      .query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events where seq = $1', [ref])
       .then(({ rows }) => rows[0] && this.emitter.emit('domain-event', fromEventRow(rows[0])))
       .catch(() => undefined);
+  }
+
+  /** Runs `work` in one transaction on its own connection. */
+  private async transaction<T>(work: (client: pg.PoolClient) => Promise<T>) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const done = await work(client);
+      await client.query('commit');
+      return done;
+    } catch (err) {
+      await client.query('rollback');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   onEvent(listener: EventListener) {
@@ -482,11 +523,8 @@ export class PgEventStore implements EventStore {
         [n.recipients, n.app, n.level, n.title, n.detail ?? null, n.link ?? null, floor?.id ?? null, floor?.path ?? null, n.actions?.length ? JSON.stringify(n.actions) : null, n.key ?? null, n.kind ?? null, !!n.urgent],
       );
       const added = rows.map(fromRow);
-      // Delivered when the transaction commits. Postgres caps a payload at 8000 bytes; a bigger one goes by id.
-      for (const a of added) {
-        const whole = JSON.stringify(a);
-        await client.query('select pg_notify($1, $2)', [CHANNEL, Buffer.byteLength(whole) < NOTIFY_BYTES ? whole : JSON.stringify({ ref: a.id })]);
-      }
+      // Delivered when the transaction commits.
+      for (const a of added) await client.query('select pg_notify($1, $2)', [CHANNEL, JSON.stringify({ ref: a.id })]);
       await client.query('commit');
       return added;
     } catch (err) {
@@ -528,12 +566,19 @@ export class PgEventStore implements EventStore {
     return rowCount === 1;
   }
 
-  async appendAudit(e: NewAuditEntry, floor?: EventFloor, recordedBy?: string) {
-    const { rows } = await this.pool.query<AuditRow>(
-      `insert into events.audit (actor_id, actor_kind, app, action, target, detail, workspace_id, workspace_path, recorded_by) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning *`,
-      [e.actor.id, e.actor.kind, e.app, e.action, e.target ?? null, e.detail ?? null, floor?.id ?? null, floor?.path ?? null, recordedBy ?? null],
-    );
-    return fromAuditRow(rows[0]);
+  async appendAudit(e: NewAuditEntry, floor?: EventFloor, recordedBy?: string, also: AuditWith = {}) {
+    return this.transaction(async (client) => {
+      const { entry, added } = await insertAudit(client, e, floor, recordedBy, also.key);
+      if (!added) return entry;
+      if (also.release) {
+        await client.query('insert into events.inbox_releases (person, team) values ($1, $2) on conflict do nothing', [also.release.person, also.release.team ?? '']);
+      }
+      if (also.event) {
+        const { publisher, event } = also.event(entry);
+        await insertEvents(client, publisher, [event]);
+      }
+      return entry;
+    });
   }
 
   async audit({ app, actor, since, until, before, workspace, target, person, kind, limit }: AuditFilter) {
@@ -573,7 +618,18 @@ export class PgEventStore implements EventStore {
         await client.query('update events.audit set detail = $2 where id = $1', [r.id, detail]);
         entries++;
       }
-      const { rowCount } = await client.query('delete from events.notifications where recipient = $1', [person]);
+      const { rowCount } = await client.query('delete from events.notifications where recipient = $1 or starts_with(key, $2)', [person, leaveNoticeKey(person)]);
+      await client.query('update events.inbox_history set note = null where by = $1 and note is not null', [person]);
+      await client.query('update events.inbox_items set close_note = null where closed_by = $1 and close_note is not null', [person]);
+      // Nobody can act on what was theirs now, and an open item would otherwise be kept for ever.
+      await client.query(
+        `with gone as (
+           update events.inbox_items set state = 'withdrawn', closed_at = now(), updated_at = now()
+           where state = 'open' and owner_kind = 'person' and owner_id = $1 returning id
+         )
+         insert into events.inbox_history (item_id, action) select id, 'withdrawn' from gone`,
+        [person],
+      );
       await client.query('commit');
       return { entries, notifications: rowCount ?? 0 };
     } catch (err) {
@@ -582,6 +638,15 @@ export class PgEventStore implements EventStore {
     } finally {
       client.release();
     }
+  }
+
+  async releasesDue() {
+    const { rows } = await this.pool.query<{ person: string; team: string }>('select person, team from events.inbox_releases order by asked_at');
+    return rows.map((r) => ({ person: r.person, ...(r.team ? { team: r.team } : {}) }));
+  }
+
+  async releaseDone({ person, team }: InboxRelease) {
+    await this.pool.query('delete from events.inbox_releases where person = $1 and team = $2', [person, team ?? '']);
   }
 
   subscribe(listener: Listener) {
@@ -594,42 +659,28 @@ export class PgEventStore implements EventStore {
     return !!rowCount;
   }
 
-  async setTeamNotices(workspace: string, on: boolean, by: string) {
-    await this.pool.query(
-      on ? 'insert into events.team_notices (workspace_id, set_by) values ($1, $2) on conflict do nothing' : 'delete from events.team_notices where workspace_id = $1',
-      on ? [workspace, by] : [workspace],
-    );
+  async setTeamNotices(workspace: string, on: boolean, by: string, floor?: EventFloor) {
+    await this.transaction(async (client) => {
+      const { rowCount } = await client.query(
+        on ? 'insert into events.team_notices (workspace_id, set_by) values ($1, $2) on conflict do nothing' : 'delete from events.team_notices where workspace_id = $1',
+        on ? [workspace, by] : [workspace],
+      );
+      if (rowCount) await insertAudit(client, { actor: { id: by, kind: 'user' }, app: 'events', action: on ? 'team-notices.on' : 'team-notices.off', target: workspace }, floor, 'events');
+    });
   }
 
   async publish(publisher: string, events: NewDomainEvent[]) {
-    // Each event added is announced as the statement commits; one already sent (same id) isn't.
-    const { rows } = await this.pool.query<{ added: number }>(
-      `with added as (
-         insert into events.domain_events (topic, id, publisher, workspace_id, workspace_path, payload)
-         select e.topic, e.id, $1, e.workspace_id, e.workspace_path, coalesce(e.payload, 'null'::jsonb)
-         from jsonb_to_recordset($2::jsonb) as e(topic text, id text, workspace_id text, workspace_path text[], payload jsonb)
-         on conflict (publisher, id) do nothing
-         returning seq, topic, id, publisher, at, workspace_id, workspace_path, payload
-       ), told as (
-         select pg_notify($3, case when octet_length(j) < $4::int then j else json_build_object('ref', seq::text)::text end)
-         from (select seq, row_to_json(added)::text as j from added) as a
-       )
-       select (select count(*) from added)::int as added, (select count(*) from told) as told`,
-      [publisher, JSON.stringify(events.map((e) => ({ topic: e.topic, id: e.id, workspace_id: e.floor?.id ?? null, workspace_path: e.floor?.path ?? null, payload: e.payload ?? null }))), EVENT_CHANNEL, NOTIFY_BYTES],
-    );
-    const added = rows[0]?.added ?? 0;
-    return { added, repeated: events.length - added };
+    return this.transaction((client) => insertEvents(client, publisher, events));
   }
 
   async readEvents({ topics, after, limit }: EventsQuery) {
     const exact = topics.filter((t) => !t.endsWith('.*'));
     const families = topics.filter((t) => t.endsWith('.*')).map((t) => `${t.slice(0, -1)}%`);
-    // Only what every earlier transaction has settled: a seq handed out to a transaction still
-    // running would otherwise commit below the follower's cursor and never be read.
+    // Seq order is commit order (`insertEvents`), so a seq not visible yet can only ever land above these. Waiting
+    // on the transactions still running isn't needed, and would let any login on the database stall every follower.
     const { rows } = await this.pool.query<DomainEventRow>(
       `select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events
        where seq > $1 and (topic = any($2::text[]) or topic like any($3::text[]))
-         and xid < pg_snapshot_xmin(pg_current_snapshot())
        order by seq limit $4`,
       [after ?? '0', exact, families, limit],
     );

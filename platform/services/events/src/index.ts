@@ -1,6 +1,7 @@
 import { callerCheckFromEnv, commonSettings, createJobs, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { Mailer, mailRelayFromEnv, organisationSender } from '@augur/service-kit/mail';
 import { buildApp } from './app.ts';
+import { finishReleases } from './inbox-routes.ts';
 import { identityDigestPeople, sendDigests } from './digests.ts';
 import { identityNoticeSettings, sendDueEmails } from './notice-emails.ts';
 import { policyKeepDays, pruneActivity, untilNight } from './retention.ts';
@@ -79,13 +80,20 @@ const prune = () =>
 void prune();
 setInterval(prune, 3_600_000).unref();
 
-// Activity keeps entries for the organisation's retention period (Admin, Settings), 365 days when identity can't say;
-// once a night the older ones go, and the removal is itself recorded in Activity.
+// A leaver's team items that couldn't all go back as the change was recorded are given back here.
+const giveBack = () =>
+  finishReleases(store, (err) => app.log.error({ err: String(err) }, 'could not give back a leaver’s inbox items yet')).catch((err: unknown) =>
+    app.log.error({ err: String(err) }, 'could not read which inbox items to give back'),
+  );
+setInterval(giveBack, 5 * 60_000).unref();
+
+// Activity keeps entries for the organisation's retention period (Admin, Settings). Once a night the older ones go,
+// and the removal is itself recorded in Activity; on a night identity can't say what the period is, none do.
 const keepActivity = policyKeepDays({ identityUrl: IDENTITY_URL, credentials });
 const pruneOld = () =>
   pruneActivity(store, keepActivity).then(
     ({ removed, days, defaulted }) => {
-      if (defaulted) app.log.warn({ keepDays: days, why: defaulted }, 'Activity retention: using the default');
+      if (defaulted) app.log.warn({ why: defaulted }, 'Activity retention: nothing removed tonight');
       if (removed) app.log.info({ removed, keepDays: days }, 'old Activity entries removed');
     },
     (err) => app.log.error({ err: String(err) }, 'removing old Activity entries failed'),

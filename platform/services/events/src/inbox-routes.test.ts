@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { callerHeaders, serviceHeaders, type FloorPlace, type Scope } from '@augur/service-kit';
 import type { buildApp } from './app.ts';
 import { DATABASE_URL, eventsDb } from './db.testing.ts';
+import { finishReleases } from './inbox-routes.ts';
 
 const db = eventsDb();
 
@@ -214,10 +215,30 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
     // Sam's sign-in is turned off: his goes back too.
     await audit({ actor: { id: 'u-admin', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-sam' });
     expect((await store.inbox.get(rota.id))?.takenBy).toBeUndefined();
-    // Read once every earlier transaction on the database has settled, as followers do.
-    await expect.poll(async () => (await store.readEvents({ topics: ['platform.inbox.released'], limit: 10 })).map((e) => e.payload)).toEqual([
+    expect((await store.readEvents({ topics: ['platform.inbox.released'], limit: 10 })).map((e) => e.payload)).toEqual([
       expect.objectContaining({ item: budget.id, by: 'u-nora', left: true }),
       expect.objectContaining({ item: rota.id, by: 'u-sam', left: true }),
     ]);
+    expect(await store.releasesDue()).toEqual([]);
   });
+
+  it('carries on giving work back when that failed as the change was recorded', async () => {
+    const { app, store, put, act } = await setUp();
+    const identity = await serviceHeaders({ name: 'identity', getToken: async () => 'platform-identity' });
+    const budget = (await put('budget', forFinance)).json();
+    await act(budget.id, 'take', sam);
+    const failing = vi.spyOn(store.inbox, 'act').mockRejectedValueOnce(new Error('the pool is full'));
+    const res = await app.inject({ method: 'POST', url: '/v1/audit', headers: identity, payload: { actor: { id: 'u-admin', kind: 'user' }, app: 'identity', action: 'person.disabled', target: 'u-sam' } });
+    failing.mockRestore();
+    // The change is recorded either way, and the work waits to go back.
+    expect(res.statusCode).toBe(201);
+    expect((await store.inbox.get(budget.id))?.takenBy).toBe('u-sam');
+    expect(await store.releasesDue()).toEqual([{ person: 'u-sam' }]);
+    await finishReleases(store, (err) => {
+      throw err;
+    });
+    expect((await store.inbox.get(budget.id))?.takenBy).toBeUndefined();
+    expect(await store.releasesDue()).toEqual([]);
+  });
+
 });

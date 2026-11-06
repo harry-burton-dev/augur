@@ -14,8 +14,8 @@ import {
   type ServiceIdentity,
 } from '@augur/service-kit';
 import { InboxChange as InboxChangeSchema, InboxCounts, InboxHistory, InboxItem as InboxItemSchema, NewInboxItem as NewInboxItemSchema, refused, ref } from './schemas.ts';
-import { overdue, ownerPrincipal, type InboxAction, type InboxStore, type StepResult } from './inbox.ts';
-import type { EventFloor, EventStore } from './store.ts';
+import { overdue, ownerPrincipal, type InboxAction, type InboxStore, type InboxTold, type StepResult } from './inbox.ts';
+import type { EventFloor, EventStore, InboxRelease } from './store.ts';
 
 /** The intent Open raises travels to the browser whole; like a notification action's, it stays small. */
 const OPEN_PAYLOAD_BYTES = 1024;
@@ -45,7 +45,7 @@ export interface InboxDeps {
  * team when their sign-in is turned off, so the work isn't left with someone who can't do it. Each is
  * written to the audit log as the events service's step, and published as `platform.inbox.released`
  * with `left: true`. Items owned by the person themselves stay theirs: handing those over is the
- * leaver flow's (PER-194). Returns how many went back.
+ * leaver flow's (PER-194). Safe to run again: an item already back is passed over. Returns how many went back.
  */
 export const releaseLeaver = async (store: EventStore, person: string, team?: string): Promise<number> => {
   const inbox = store.inbox;
@@ -55,19 +55,26 @@ export const releaseLeaver = async (store: EventStore, person: string, team?: st
     const page = await inbox.list({ person, teams: [], tab: 'you', before, limit: PAGE });
     for (const item of page) {
       if (item.owner.kind !== 'team' || item.takenBy !== person || (team && item.owner.id !== team)) continue;
-      const r = await inbox.act(item.id, { action: 'released', by: person }, item);
-      if (!('item' in r)) continue;
-      released++;
-      await store.appendAudit(
-        { actor: { id: 'events', kind: 'service' }, app: 'events', action: 'inbox.released', target: item.id, detail: { app: item.app, key: item.key, kind: item.kind, person, left: team ? 'team' : 'turned-off' } },
-        item.workspace,
-        'events',
-      );
-      await store.publish('events', [{ topic: 'platform.inbox.released', id: `inbox-${r.step}`, payload: { item: item.id, app: item.app, key: item.key, by: person, left: true }, floor: item.workspace }]);
+      const r = await inbox.act(item.id, { action: 'released', by: person }, item, (_, step) => ({
+        audit: { actor: { id: 'events', kind: 'service' }, app: 'events', action: 'inbox.released', target: item.id, detail: { app: item.app, key: item.key, kind: item.kind, person, left: team ? 'team' : 'turned-off' } },
+        event: { topic: 'platform.inbox.released', id: `inbox-${step}`, payload: { item: item.id, app: item.app, key: item.key, by: person, left: true }, floor: item.workspace },
+      }));
+      if ('item' in r) released++;
     }
     if (page.length < PAGE) return released;
     before = page.at(-1)!.id;
   }
+};
+
+/** Gives back what one release asked for, and only then forgets it, so one that fails part way is carried on. */
+export const finishRelease = async (store: EventStore, release: InboxRelease) => {
+  await releaseLeaver(store, release.person, release.team);
+  await store.releaseDone(release);
+};
+
+/** Carries on every release still waiting; one that fails stays for next time, and the rest still run. */
+export const finishReleases = async (store: EventStore, warn: (err: unknown) => void) => {
+  for (const release of await store.releasesDue()) await finishRelease(store, release).catch(warn);
 };
 
 /** The teams a person is on, from identity. Without identity (local dev), the team they stand on. */
@@ -94,7 +101,7 @@ const PERSON_ACTIONS = { take: 'taken', release: 'released', decline: 'declined'
  */
 export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
   const app = plain.withTypeProvider<TypeBoxTypeProvider>();
-  const { inbox, store, floors, directory, principals, kinds, signedIn, fromService, floorOf } = deps;
+  const { inbox, floors, directory, principals, kinds, signedIn, fromService, floorOf } = deps;
 
   /** Undefined when a reply has been sent. */
   const myTeams = async (caller: Caller, reply: FastifyReply) => {
@@ -135,16 +142,13 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
     }
   };
 
-  /** Writes each step to the audit log, and a person's step as a domain event the app follows. */
-  const told = async (item: InboxItem, step: string, action: string, by: string | undefined, extra: Record<string, unknown> = {}) => {
-    const floor = item.workspace;
-    await store.appendAudit(
-      { actor: by ? { id: by, kind: 'user' } : { id: item.app, kind: 'service' }, app: 'events', action: `inbox.${action}`, target: item.id, detail: { app: item.app, key: item.key, kind: item.kind } },
-      floor,
-      'events',
-    );
-    if (by) await store.publish('events', [{ topic: `platform.inbox.${action}`, id: `inbox-${step}`, payload: { item: item.id, app: item.app, key: item.key, by, ...extra }, floor }]);
-  };
+  /** Each step goes in the audit log, and a person's step out as a domain event the app follows. */
+  const told =
+    (action: string, by: string | undefined, extra: Record<string, unknown> = {}): InboxTold =>
+    (item, step) => ({
+      audit: { actor: by ? { id: by, kind: 'user' } : { id: item.app, kind: 'service' }, app: 'events', action: `inbox.${action}`, target: item.id, detail: { app: item.app, key: item.key, kind: item.kind } },
+      ...(by ? { event: { topic: `platform.inbox.${action}`, id: `inbox-${step}`, payload: { item: item.id, app: item.app, key: item.key, by, ...extra }, floor: item.workspace } } : {}),
+    });
 
   const notThere = (reply: FastifyReply, r: Exclude<StepResult, { item: InboxItem }>) => {
     if ('missing' in r) return reply.code(404).send({ error: 'not_found', message: 'There is no such item.' });
@@ -199,9 +203,9 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
         return reply.code(400).send({ error: 'bad_request', message: `${forApp} doesn’t declare the inbox kind "${item.kind}" in its manifest (inbox.kinds).` });
       }
       if (await refuseOwner(item.owner, reply)) return reply;
-      const put = await inbox.put(forApp, key, { ...item, ...(item.due ? { due: new Date(item.due).toISOString() } : {}) }, floor ? { id: floor.id, path: floor.path } : undefined);
+      const said = told('created', undefined);
+      const put = await inbox.put(forApp, key, { ...item, ...(item.due ? { due: new Date(item.due).toISOString() } : {}) }, floor ? { id: floor.id, path: floor.path } : undefined, (added, step, created) => (created ? said(added, step, created) : undefined));
       if ('closed' in put) return reply.code(409).send({ error: 'conflict', message: `This item is closed (${put.closed.state}). Send reopen to open it again.` });
-      if (put.created) await told(put.item, put.step, 'created', undefined);
       req.log.info({ app: forApp, key, created: put.created, owner: ownerPrincipal(put.item.owner) }, 'inbox item put');
       return reply.code(put.created ? 201 : 200).send(shown(put.item));
     },
@@ -226,9 +230,8 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
       const { app: forApp, key } = req.params;
       if (!(await fromService(req, reply, forApp, 'inbox:write'))) return reply;
       if (req.body.due && Number.isNaN(Date.parse(req.body.due))) return reply.code(400).send({ error: 'bad_request', message: `"${req.body.due}" isn’t a date.` });
-      const r = await inbox.patch(forApp, key, { ...req.body, ...(req.body.due ? { due: new Date(req.body.due).toISOString() } : {}) });
+      const r = await inbox.patch(forApp, key, { ...req.body, ...(req.body.due ? { due: new Date(req.body.due).toISOString() } : {}) }, req.body.state ? told(req.body.state, undefined) : undefined);
       if (!('item' in r)) return notThere(reply, r);
-      if (req.body.state) await told(r.item, r.step, req.body.state, undefined);
       return shown(r.item);
     },
   );
@@ -433,9 +436,8 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
             step = { action: 'done', by: caller.id };
           }
         }
-        const r = await inbox.act(item.id, step, item);
+        const r = await inbox.act(item.id, step, item, told(action, caller.id, step.action === 'handed-on' ? { to: ownerPrincipal(step.to) } : {}));
         if (!('item' in r)) return notThere(reply, r);
-        await told(r.item, r.step, action, caller.id, step.action === 'handed-on' ? { to: ownerPrincipal(step.to) } : {});
         return shown(r.item);
       },
     );

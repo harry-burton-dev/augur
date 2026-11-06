@@ -1,10 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ACTIVITY_KEEP_DAYS, policyKeepDays, pruneActivity, untilNight } from './retention.ts';
 import { DATABASE_URL, eventsDb } from './db.testing.ts';
+import type { EventStore } from './store.ts';
 
 const db = eventsDb();
 
 const credentials = { name: 'events', getToken: async () => 't' };
+
+describe('Activity retention without a policy', () => {
+  it('removes nothing when the period is only the default, and says why', async () => {
+    const pruneAudit = vi.fn(async () => 5);
+    const appendAudit = vi.fn();
+    const store = { pruneAudit, appendAudit } as unknown as EventStore;
+    const answer = await pruneActivity(store, async () => ({ days: ACTIVITY_KEEP_DAYS, defaulted: 'identity answered 503' }));
+    expect(answer).toEqual({ removed: 0, days: ACTIVITY_KEEP_DAYS, defaulted: 'identity answered 503' });
+    expect(pruneAudit).not.toHaveBeenCalled();
+    expect(appendAudit).not.toHaveBeenCalled();
+    await pruneActivity(store, async () => ({ days: 3650 }));
+    expect(pruneAudit).toHaveBeenCalledWith(3650);
+  });
+});
 
 describe.runIf(DATABASE_URL)('Activity retention', () => {
   it('removes entries older than the period, and records that it did', async () => {
