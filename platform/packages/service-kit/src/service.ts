@@ -36,6 +36,8 @@ export interface CallOptions {
   what: string;
   /** The floor the call is for, sent as X-Workspace-Id. */
   workspace?: string;
+  /** More headers, the same on every attempt. */
+  headers?: Record<string, string>;
   attempts?: number;
   /** Delay before the first retry; doubles after each. */
   retryMs?: number;
@@ -48,13 +50,13 @@ export interface CallOptions {
  * Calls another service, retrying while it is unreachable or failing. A refusal
  * (4xx: bad input, wrong token, a conflict) is not retried.
  */
-export async function callService({ method, url, credentials, body, what, workspace, attempts = 1, retryMs = 500, fetchImpl = fetch, timeoutMs = serviceTimeoutMs() }: CallOptions): Promise<unknown> {
+export async function callService({ method, url, credentials, body, what, workspace, headers, attempts = 1, retryMs = 500, fetchImpl = fetch, timeoutMs = serviceTimeoutMs() }: CallOptions): Promise<unknown> {
   let lastError = '';
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const res = await withDeadline(fetchImpl, timeoutMs)(url, {
         method,
-        headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
+        headers: { ...headers, ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(workspace ? { [WORKSPACE_HEADERS.id]: encodeURIComponent(workspace) } : {}), ...(await serviceHeaders(credentials)) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       const reply = (await res.json().catch(() => ({}))) as { message?: string };

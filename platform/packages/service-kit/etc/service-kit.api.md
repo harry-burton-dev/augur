@@ -302,6 +302,7 @@ export interface CallOptions {
     credentials: ServiceCredentials;
     // (undocumented)
     fetchImpl?: typeof fetch;
+    headers?: Record<string, string>;
     // (undocumented)
     method: 'PUT' | 'POST' | 'PATCH' | 'GET';
     retryMs?: number;
@@ -493,6 +494,15 @@ export interface EmbedTextsOptions {
 }
 
 // @public
+export const EVENT_CURSOR_TABLE_SQL = "\n  create table if not exists event_followers (\n    follower text primary key,\n    seq text not null\n  );";
+
+// @public
+export const eventCursor: (db: Queryable, follower?: string) => {
+    load: () => Promise<string | undefined>;
+    save: (seq: string) => Promise<void>;
+};
+
+// @public
 export const floorCaller: (manifest: Pick<AppManifest, "name">) => (req: Pick<FastifyRequest, "headers">) => OnFloor;
 
 // @public
@@ -553,6 +563,16 @@ export const followEvents: (input: EventsAddress & {
     batch?: number;
     intervalMs?: number;
     onError?: (err: unknown) => void;
+}) => {
+    poll: () => Promise<number>;
+    start(): void;
+    stop(): void;
+};
+
+// @public
+export const followLeavers: (input: Omit<Parameters<typeof followEvents>[0], "topics" | "handle"> & {
+    left?: (leaver: PersonLeft, event: DomainEvent) => Promise<void>;
+    deleted?: (person: PersonDeleted, event: DomainEvent) => Promise<void>;
 }) => {
     poll: () => Promise<number>;
     start(): void;
@@ -884,6 +904,9 @@ export interface JobStatus {
 }
 
 // @public
+export const leaveNoticeKey: (person: string, requestedAt?: string) => string;
+
+// @public
 export const loadConfig: (service: string, settings: Setting[], env?: NodeJS.ProcessEnv) => SettingState[];
 
 // @public
@@ -992,6 +1015,7 @@ export interface NewAuditEntry {
     app: string;
     // (undocumented)
     detail?: Record<string, unknown>;
+    key?: string;
     target?: string;
 }
 
@@ -1074,7 +1098,7 @@ export type OnFloor = Caller & {
 };
 
 // @public
-export const OUTBOX_TABLE_SQL = "\n  create table if not exists outbox (\n    id bigint generated always as identity primary key,\n    event_id text not null unique default gen_random_uuid()::text,\n    topic text not null,\n    workspace_id text,\n    payload jsonb not null,\n    created_at timestamptz not null default now(),\n    sent_at timestamptz\n  );\n  create index if not exists outbox_unsent on outbox (id) where sent_at is null;";
+export const OUTBOX_TABLE_SQL = "\n  create table if not exists outbox (\n    id bigint generated always as identity primary key,\n    event_id text not null unique default gen_random_uuid()::text,\n    topic text not null,\n    workspace_id text,\n    payload jsonb not null,\n    created_at timestamptz not null default now(),\n    sent_at timestamptz,\n    refused_at timestamptz,\n    refused_why text\n  );\n  create index if not exists outbox_unsent on outbox (id) where sent_at is null;";
 
 // @public
 export const outboxBinding: (db: Queryable, binding: Binding, change: BindingChange, workspace?: string) => Promise<void>;
@@ -1120,7 +1144,21 @@ export class PeopleUnavailable extends Error {
 }
 
 // @public
-export const PERSONAL_DETAIL_KEYS: readonly ["username", "email", "firstName", "lastName", "name", "ip", "ips", "message"];
+export const PERSONAL_DETAIL_KEYS: readonly ["username", "email", "firstName", "lastName", "name", "ip", "ips", "message", "note"];
+
+// @public
+export interface PersonDeleted {
+    // (undocumented)
+    person: string;
+}
+
+// @public
+export interface PersonLeft {
+    // (undocumented)
+    handOverTo?: string;
+    // (undocumented)
+    person: string;
+}
 
 // @public
 export const PLATFORM_TOPICS: {
@@ -1257,6 +1295,12 @@ export const readFrontend: (dir: string) => FrontendFile[];
 
 // @public
 export const readManifest: (moduleUrl: string, env?: Record<string, string | undefined>) => AppManifest;
+
+// @public
+export const readPersonDeleted: (event: Pick<DomainEvent, "topic" | "payload">) => PersonDeleted | undefined;
+
+// @public
+export const readPersonLeft: (event: Pick<DomainEvent, "topic" | "payload">) => PersonLeft | undefined;
 
 // @public
 export function recordAudit(input: EventsOptions & {

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { callService, type ServiceCredentials } from './service.js';
 
 export type NotificationLevel = 'needs' | 'info' | 'done' | 'failed';
@@ -66,6 +67,12 @@ export interface NewAuditEntry {
   /** What it happened to, e.g. a document id. */
   target?: string;
   detail?: Record<string, unknown>;
+  /**
+   * Your own name for this entry, for when a later run may say it again: the events service keeps one entry per
+   * key from each service. Not kept in the entry. Without it `recordAudit` makes one for the call, so its own
+   * retries never write a second entry.
+   */
+  key?: string;
 }
 
 interface EventsOptions {
@@ -101,7 +108,7 @@ export async function notify({ eventsUrl, credentials, workspace, fetchImpl, not
 }
 
 /** Adds an entry to the platform's audit log. A preview's entries say which pull request they're from. */
-export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl, entry, env }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
+export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl, entry: { key = randomUUID(), ...entry }, env }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
   const pr = previewOf(env);
   await callService({
     method: 'POST',
@@ -110,6 +117,7 @@ export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl
     body: pr === undefined ? entry : { ...entry, detail: { ...entry.detail, preview: pr } },
     what: `record ${entry.action} in the audit log`,
     workspace,
+    headers: { 'idempotency-key': key },
     attempts: 3,
     fetchImpl,
   });
