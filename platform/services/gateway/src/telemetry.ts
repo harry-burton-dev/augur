@@ -68,11 +68,23 @@ const plainUrl = (value: unknown) => {
   return value.replace(/[?#].*$/, '');
 };
 
+/** A value as it may go on: plain if it's a URL (`url`), and the attributes a kvlist or array holds scrubbed too. Faro nests its own in `event.attributes`. */
+const scrubValue = (value: unknown, url: boolean): unknown => {
+  if (!value || typeof value !== 'object') return value;
+  const v = value as { stringValue?: unknown; kvlistValue?: { values?: unknown }; arrayValue?: { values?: unknown } };
+  return {
+    ...v,
+    ...(url && 'stringValue' in v ? str(String(plainUrl(v.stringValue))) : {}),
+    ...(v.kvlistValue ? { kvlistValue: { ...v.kvlistValue, values: scrub(v.kvlistValue.values) ?? [] } } : {}),
+    ...(Array.isArray(v.arrayValue?.values) ? { arrayValue: { ...v.arrayValue, values: v.arrayValue.values.map((item) => scrubValue(item, url)) } } : {}),
+  };
+};
+
 const scrub = (attributes: unknown): KeyValue[] | undefined => {
   if (!Array.isArray(attributes)) return undefined;
   return (attributes as KeyValue[])
     .filter((a) => a && typeof a.key === 'string' && !PERSONAL.test(a.key))
-    .map((a) => (URL_KEYS.has(a.key) && a.value && 'stringValue' in a.value ? { key: a.key, value: str(String(plainUrl(a.value.stringValue))) } : a));
+    .map((a) => (a.value === undefined ? a : { ...a, value: scrubValue(a.value, URL_KEYS.has(a.key)) as KeyValue['value'] }));
 };
 
 /** Every record's attributes scrubbed, at any depth the OTLP shape puts them (records, spans, events). */
