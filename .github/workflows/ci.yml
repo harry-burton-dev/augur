@@ -376,10 +376,13 @@ jobs:
           docker rm -f web-dev2
       - name: The nightly backup writes a restorable dump, and a base backup for the archived WAL
         run: |
+          # The images compose.yml runs the database and the backup on, for every step after this one.
+          image() { sed -n "/^  $1:/,/^  [a-z]/s/^    image: //p" infra/deploy/compose.yml | head -n 1; }
+          echo "BACKUP_IMAGE=$(image backup)" >> "$GITHUB_ENV" && BACKUP_IMAGE=$(image backup) && test -n "$BACKUP_IMAGE"
           # Started as compose.yml starts it, archiving its WAL (ADR 0064), with its data in a volume to restore into later.
           mkdir -p /tmp/wal
           docker run -d --name pg -e POSTGRES_USER=platform -e POSTGRES_PASSWORD=ci -e PITR_ARCHIVE_SECONDS=60 -v pgci:/var/lib/postgresql/data -v /tmp/wal:/wal-archive \
-            -v "$PWD/infra/deploy/postgres:/etc/augur:ro" --entrypoint /bin/sh postgres:16-alpine /etc/augur/start.sh
+            -v "$PWD/infra/deploy/postgres:/etc/augur:ro" --entrypoint /bin/sh "$(image postgres)" /etc/augur/start.sh
           # Over TCP: during first start Postgres answers on its socket before its real start.
           until docker exec pg pg_isready -h 127.0.0.1 -U platform; do sleep 1; done
           # Just enough of the platform's and Keycloak's tables for the restore test to look for.
@@ -389,6 +392,8 @@ jobs:
           create schema registry; create table registry.apps (id text);
           create schema events; create table events.audit (id int); create table events.notifications (id int);
           create schema identity; create table identity.preferences (id text);
+          -- An app's vector column, as Data Atlas has: the restore test must bring it back.
+          create extension vector; create schema atlas; create table atlas.entity_vectors (embedding vector(3));
           \c keycloak
           create table realm (id text, name text); insert into realm values ('r1', 'platform');
           create table user_entity (id text, realm_id text); insert into user_entity values ('u1', 'r1');
@@ -399,7 +404,7 @@ jobs:
           echo block > /tmp/objects/data/00/block; echo snap > /tmp/objects/meta/snapshots/s1; echo live > /tmp/objects/meta/db.sqlite
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
             -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro -v /tmp/wal:/wal-archive \
-            postgres:16-alpine /bin/sh /backup/backup.sh --once
+            "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --once
           # The backups are root's alone; Status's results are anyone's, in a folder of their own.
           sudo sh -c 'zcat /tmp/backups/platform-*.sql.gz' | grep -q "PostgreSQL database cluster dump complete"
           test "$(stat -c %a /tmp/backups/platform-*.sql.gz)" = 600 && test "$(stat -c %a /tmp/backups/status/last-backup.json)" = 644
@@ -412,13 +417,13 @@ jobs:
         run: |
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
             -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
-            postgres:16-alpine /bin/sh /backup/backup.sh --now | tee /tmp/now.log
+            "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --now | tee /tmp/now.log
           grep -E "backup: wrote /backups/platform-[0-9-]+T[0-9]+Z\.sql\.gz" /tmp/now.log
           test "$(ls /tmp/backups/platform-*.sql.gz | sort | tail -n 1)" = "$(grep -oE '/backups/platform-[^ ]+' /tmp/now.log | sed 's#^#/tmp#')"
       - name: The weekly restore test restores the newest backup and checks it
         run: |
           docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
-            postgres:16-alpine /bin/sh /backup/backup.sh --restore-test
+            "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --restore-test
           cat /tmp/backups/status/restore-test.json
           grep -q '"ok":true' /tmp/backups/status/restore-test.json
       - name: The off-server copy is made with restic, and the restore test restores from it
@@ -432,11 +437,11 @@ jobs:
           offsite() {
             docker run --rm -e RESTIC_REPOSITORY="${REPO:-/offsite/repo}" -e RESTIC_PASSWORD="$1" \
               -v "$PWD/infra/deploy/backup:/backup:ro" -v "${BACKUPS:-/tmp/backups}:/backups" -v /tmp/objects:/objects:ro -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro -v /tmp/deploy:/deploy:ro \
-              postgres:16-alpine /bin/sh /backup/backup.sh "${@:2}"
+              "$BACKUP_IMAGE" /bin/sh /backup/backup.sh "${@:2}"
           }
           offsite ci --offsite
           grep -q '"ok":true' /tmp/backups/status/offsite.json
-          restic() { docker run --rm -e RESTIC_PASSWORD=ci -e RESTIC_REPOSITORY=/offsite/repo -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro --entrypoint /tools/restic postgres:16-alpine "$@"; }
+          restic() { docker run --rm -e RESTIC_PASSWORD=ci -e RESTIC_REPOSITORY=/offsite/repo -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro --entrypoint /tools/restic "$BACKUP_IMAGE" "$@"; }
           restic ls latest --tag augur-config | grep -qx /deploy/.env
           # A new server's backups (an empty database) never go into the repository, whose copies would age out.
           sudo mkdir -p /tmp/new/backups && echo 'select 1;' | gzip | sudo tee /tmp/new/backups/platform-2000-01-01.sql.gz > /dev/null
@@ -451,7 +456,7 @@ jobs:
           # A server whose copy was failing before this release still backs up when the bucket can't be read.
           sudo mkdir -p /tmp/legacy/backups && echo '{"ok":false}' | sudo tee /tmp/legacy/backups/offsite.json > /dev/null
           docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci -e RESTIC_REPOSITORY=/offsite/repo -e RESTIC_PASSWORD=wrong \
-            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/legacy/backups:/backups -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro postgres:16-alpine /bin/sh /backup/backup.sh --once
+            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/legacy/backups:/backups -v /tmp/offsite:/offsite -v /tmp/tools:/tools:ro "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --once
           grep -q '"ok":true' /tmp/legacy/backups/status/last-backup.json && grep -q '"ok":false' /tmp/legacy/backups/status/offsite.json && ! sudo test -e /tmp/legacy/backups/offsite-repository
           BACKUPS=/tmp/new/backups offsite ci --adopt-offsite
           grep -q '"ok":true' /tmp/new/backups/status/offsite.json
@@ -468,7 +473,7 @@ jobs:
         run: |
           pitr() { docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/wal:/wal-archive "$@"; }
           docker exec pg psql -U platform -qc "insert into registry.apps values ('kept')"
-          pitr postgres:16-alpine /bin/sh /backup/backup.sh --pitr-test
+          pitr "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --pitr-test
           cat /tmp/backups/status/pitr-test.json
           grep -q '"ok":true' /tmp/backups/status/pitr-test.json
           # A mistake after the moment: going back to the moment undoes it.
@@ -479,7 +484,7 @@ jobs:
           timeout 120 sh -c "until sudo test -e /tmp/wal/$segment.gz; do sleep 1; done"
           docker stop pg
           docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/wal:/wal-archive -v pgci:/pgdata \
-            --entrypoint /bin/sh postgres:16-alpine /backup/restore-to-time.sh "$moment"
+            --entrypoint /bin/sh "$BACKUP_IMAGE" /backup/restore-to-time.sh "$moment"
           docker start pg
           timeout 120 sh -c 'until docker exec pg psql -U platform -tAc "select pg_is_in_recovery()" 2>/dev/null | grep -qx f; do sleep 1; done'
           test "$(docker exec pg psql -U platform -tAc "select count(*) from registry.apps where id = 'kept'")" = 1

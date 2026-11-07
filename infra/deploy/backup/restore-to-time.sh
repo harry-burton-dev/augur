@@ -8,6 +8,8 @@
 # Postgres to replay the archived WAL up to the moment, then open. Starting Postgres (pc up -d postgres)
 # does the replay; its log says "archive recovery complete" when it is done.
 set -eu
+# The database's image runs Debian's sh (dash), which has no pipefail, so the script runs itself in bash.
+(set -o pipefail) 2>/dev/null || exec bash "$0" "$@"
 set -o pipefail
 : "${BACKUP_DIR:=/backups}"
 # The current data it keeps holds every person's data: root alone may read it.
