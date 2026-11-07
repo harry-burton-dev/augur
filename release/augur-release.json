@@ -1,11 +1,16 @@
 {
-  "version": "0.23.1",
-  "name": "Jacana",
+  "version": "0.24.0",
+  "name": "Kestrel",
   "channel": "beta",
-  "released": "2026-11-05",
+  "released": "2026-11-07",
   "upgradeFrom": ">=0.19.0",
   "changed": [
+    "@augur/app-kit",
+    "@augur/kit-common",
+    "@augur/shell-kit",
+    "@augur/kit-bundle",
     "@augur/app-tools",
+    "@augur/clients",
     "@augur/service-kit",
     "@augur/events",
     "@augur/gateway",
@@ -13,7 +18,12 @@
     "@augur/models",
     "@augur/registry",
     "@augur/storage",
-    "@augur/updater"
+    "@augur/updater",
+    "@augur/admin",
+    "@augur/home",
+    "@augur/shell",
+    "@augur/sign-in-theme",
+    "@augur/upgrades"
   ],
   "breaking": [],
   "settings": {
@@ -74,6 +84,9 @@
       "SMTP_REPLY_TO",
       "SMTP_USER",
       "SMTP_PASSWORD",
+      "ENTRA_TENANT_ID",
+      "ENTRA_CLIENT_ID",
+      "ENTRA_CLIENT_SECRET",
       "BACKUP_HOUR_UTC",
       "BACKUP_KEEP_DAYS",
       "RESTORE_TEST_WEEKDAY",
@@ -103,6 +116,8 @@
       "LOG_MAX_FILES",
       "KEYCLOAK_MEM_LIMIT",
       "FOLIO_WORKER_MEM_LIMIT",
+      "FOLIO_WORKER_CPUS",
+      "FOLIO_WORKER_TMP_SIZE",
       "OTEL_LGTM_MEM_LIMIT",
       "APP_ORIGINS",
       "KIT_URL",
@@ -183,27 +198,33 @@
       "GRAFANA_ADMIN_PASSWORD",
       "ALERT_WEBHOOK_TOKEN"
     ],
-    "added": [],
+    "added": [
+      "ENTRA_TENANT_ID",
+      "ENTRA_CLIENT_ID",
+      "ENTRA_CLIENT_SECRET",
+      "FOLIO_WORKER_CPUS",
+      "FOLIO_WORKER_TMP_SIZE"
+    ],
     "removed": []
   },
   "parts": {
     "@augur/app-kit": {
-      "version": "0.11.0"
+      "version": "0.13.0"
     },
     "@augur/kit-common": {
-      "version": "0.9.0"
+      "version": "0.11.0"
     },
     "@augur/shell-kit": {
-      "version": "0.7.0"
+      "version": "0.8.1"
     },
     "@augur/kit-bundle": {
-      "version": "0.5.6"
+      "version": "0.5.8"
     },
     "@augur/app-tools": {
-      "version": "0.4.3"
+      "version": "0.4.4"
     },
     "@augur/clients": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     "@augur/mfe-sdk": {
       "version": "2.1.0"
@@ -212,43 +233,43 @@
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.17.1"
-    },
-    "@augur/events": {
-      "version": "0.10.1"
-    },
-    "@augur/gateway": {
-      "version": "0.12.2"
-    },
-    "@augur/identity": {
-      "version": "1.5.1"
-    },
-    "@augur/models": {
-      "version": "0.3.9"
-    },
-    "@augur/registry": {
-      "version": "0.19.2"
-    },
-    "@augur/storage": {
-      "version": "0.5.1"
-    },
-    "@augur/updater": {
-      "version": "0.9.5"
-    },
-    "@augur/admin": {
       "version": "0.18.0"
     },
-    "@augur/home": {
-      "version": "0.4.1"
+    "@augur/events": {
+      "version": "0.11.0"
     },
-    "@augur/shell": {
+    "@augur/gateway": {
+      "version": "0.13.0"
+    },
+    "@augur/identity": {
+      "version": "1.6.0"
+    },
+    "@augur/models": {
+      "version": "0.3.10"
+    },
+    "@augur/registry": {
+      "version": "0.20.0"
+    },
+    "@augur/storage": {
+      "version": "0.5.2"
+    },
+    "@augur/updater": {
+      "version": "0.9.6"
+    },
+    "@augur/admin": {
       "version": "0.19.0"
     },
+    "@augur/home": {
+      "version": "0.4.2"
+    },
+    "@augur/shell": {
+      "version": "0.20.0"
+    },
     "@augur/sign-in-theme": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     "@augur/upgrades": {
-      "version": "0.1.6"
+      "version": "0.1.7"
     },
     "@apps/folio-frontend": {
       "version": "0.8.0"
