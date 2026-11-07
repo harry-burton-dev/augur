@@ -19,7 +19,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import semver from 'semver';
-import { HALTED_ASSET, haltedOf } from './publish-feed.mjs';
+import { DEPLOY_TEST_ASSET, deployTestHaltOf, HALTED_ASSET, haltedOf } from './publish-feed.mjs';
 import { REPO } from './repo.mjs';
 
 /** Who signs AUGUR's images: this repository's Release workflow (infra/release-images.sh). */
@@ -44,6 +44,17 @@ export const asMirrored = (manifest, release) => ({ ...manifest, channel: /-dev\
 const haltOfRelease = async (release) => {
   const asset = release.assets?.find((a) => a.name === HALTED_ASSET);
   return asset ? haltedOf(await github(asset.url, 'application/octet-stream').catch(() => ({ reason: 'Halted by the publisher.' }))) : undefined;
+};
+
+/**
+ * An AUGUR release's halt as the feed lists it: the publisher's halted.json, else its deploy test's if that
+ * hasn't passed (publish-feed.mjs, deployTestHaltOf). Either one that can't be read counts against it.
+ */
+export const augurHaltOf = async (release, version, download = (url) => github(url, 'application/octet-stream')) => {
+  const of = (name) => release.assets?.find((a) => a.name === name);
+  const halted = of(HALTED_ASSET) ? haltedOf(await download(of(HALTED_ASSET).url).catch(() => ({ reason: 'Halted by the publisher.' }))) : undefined;
+  if (halted || !of(DEPLOY_TEST_ASSET)) return halted;
+  return deployTestHaltOf(await download(of(DEPLOY_TEST_ASSET).url).catch(() => ({ version: undefined, passed: null })), version, release);
 };
 
 /** A feed entry with its halt mark, if it has one; mirroring a release again picks up a halt or a resume. */
@@ -182,8 +193,8 @@ const main = async () => {
   const release = await github(`/releases/tags/augur@${version}`);
   const asset = release.assets?.find((a) => a.name === 'augur-release.json');
   if (!asset) throw new Error(`augur@${version} has no augur-release.json: it was released before images were, so it can't be mirrored.`);
-  const halted = await haltOfRelease(release);
-  if (halted) console.warn(`augur@${version} was halted by its publisher: ${halted.reason} Servers are told, and aren't offered it.`);
+  const halted = await augurHaltOf(release, version);
+  if (halted) console.warn(`augur@${version} is halted: ${halted.reason} Servers are told, and aren't offered it.`);
   const manifest = withHalt(asMirrored(await github(asset.url, 'application/octet-stream'), release), halted);
   if (!manifest.images || !Object.keys(manifest.images).length) throw new Error(`augur@${version}'s release file names no images.`);
 

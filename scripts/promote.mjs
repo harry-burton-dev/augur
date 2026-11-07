@@ -101,6 +101,8 @@ export const deployTestVerdict = ({ unit, version, result }) => {
   const rerun = 'Run Deploy test from Actions on main for this release, then promote it again.';
   if (!result) return { problem: `It has no deploy test result. ${rerun}` };
   if (result.version !== version) return { problem: `Its deploy test result is for ${result.version}. ${rerun}` };
+  // The pending result the Release workflow puts on a new release, until the deploy test replaces it.
+  if (result.passed === null) return { problem: `Its deploy test hasn’t finished (run ${result.run}). Wait for it to pass; if it never finished, ${rerun.charAt(0).toLowerCase()}${rerun.slice(1)}` };
   if (result.passed !== true) return { problem: `Its last deploy test failed (run ${result.run}). ${rerun}` };
   return { record: { run: result.run, at: result.at, upgradedFrom: result.from ?? null } };
 };

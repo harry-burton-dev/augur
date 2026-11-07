@@ -222,6 +222,15 @@ export const devBuild = (previous, parts, settings, changesets, run, today) => {
   };
 };
 
+/**
+ * The deploy-test.json a new AUGUR release is made with: pending (passed: null) until the deploy test
+ * replaces it with its result (.github/workflows/deploy-test.yml, --clobber). The feed doesn't offer a
+ * beta whose result isn't a pass (scripts/publish-feed.mjs), so no feed published meanwhile offers it.
+ * A dev build has no deploy test, so none.
+ */
+export const pendingDeployTest = ({ version, channel, run, at }) =>
+  channel === 'dev' ? undefined : { schema: 'augur.deploy-test/v1', version, from: null, passed: null, run: run ?? null, at };
+
 /** Which of AUGUR's dev build tags to delete: all but the newest `kept` and those in `keep`. */
 export const oldDevBuilds = (tags, keep = [], kept = DEV_BUILDS_KEPT) =>
   tags
@@ -371,13 +380,16 @@ const main = () => {
     // Each changed part's changelog for its new version, which Admin → Upgrade Centre shows (registry's changes.ts).
     const changelogs = previous.channel === 'dev' ? previous.changelogs ?? {} : Object.fromEntries(previous.changed.map((name) => [name, changelogFor(parts[name]?.path ?? '', previous.parts[name].version)]).filter(([, text]) => text));
     writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy, changelogs }, null, 2)}\n`);
+    const pending = pendingDeployTest({ version: previous.version, channel: previous.channel, run: process.env.GITHUB_RUN_ID, at: new Date().toISOString() });
+    const testFile = join(dir, 'deploy-test.json');
+    if (pending) writeFileSync(testFile, `${JSON.stringify(pending, null, 2)}\n`);
     const notesFile = join(dir, 'notes.md');
     writeFileSync(notesFile, notes(previous, parts));
     // Every release starts as a pre-release, the beta channel, until the Promote workflow makes it stable
     // (scripts/promote.mjs); only then may it be the latest. A dev build always is one.
     execFileSync(
       'gh',
-      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${titleOf(previous)}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, '--prerelease', asset],
+      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${titleOf(previous)}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, '--prerelease', asset, ...(pending ? [testFile] : [])],
       { cwd: root, stdio: 'inherit' },
     );
     console.log(`Released ${tag}.`);

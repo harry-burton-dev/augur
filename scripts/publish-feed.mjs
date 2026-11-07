@@ -6,18 +6,25 @@
 //     --out   where to write the feed (default: feed.json)
 //     --sign  sign it with cosign keyless, writing <file>.sigstore.json beside it (ADR 0017)
 //     --push  push it with ORAS (signed in to ghcr.io) as ghcr.io/<repo>/feed:latest, with its signature
+//   node scripts/publish-feed.mjs push <file>
+//     pushes a feed already built, signed and checked, as it is, with <file>.sigstore.json; it refuses
+//     one with no signature. The Release feed workflow checks the signature between the two.
 // The feed says when it was issued and when it expires: a deployment refuses one that has expired, so a
 // feed someone keeps from it can't hide a newer release for long. The Release feed workflow runs weekly
 // as well, to issue it again. A release with a halted.json asset (the Halt rollout workflow) is listed
-// with `halted`, and no deployment is offered it.
-// The Release workflow runs it after every release, and again whenever a release is edited, so a
-// release promoted to stable on GitHub (pre-release unticked) is stable in the feed too.
+// with `halted`, and no deployment is offered it. So is an AUGUR beta whose deploy-test.json doesn't say
+// it passed: the Release workflow puts a pending one on each new release, which the deploy test replaces
+// (.github/workflows/deploy-test.yml), so a feed published by any run while it is tested doesn't offer it. A release file that is there but can't be read fails the run, so a halt is never
+// lost from a signed feed; the feed published before stays good until it expires.
+// The Release workflow runs it after every release, and Promote to stable and Halt rollout after theirs,
+// so a release promoted to stable is stable in the feed too. Anything else changed on a release in GitHub
+// reaches the feed at the next run: run Release feed by hand, or wait for the weekly one.
 // Apps that live in their own repositories (release/app-repos.json, ADR 0047) are listed too: each
 // repository's releases of its own app, and nothing else from it.
 // Needs GITHUB_TOKEN (or GH_TOKEN) that can read the repository's releases, and APP_RELEASES_TOKEN that
 // can read the app repositories' releases once release/app-repos.json lists any.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import semver from 'semver';
@@ -41,6 +48,8 @@ export const DEV_BUILDS_KEPT = 2;
 export const FEED_VALID_DAYS = 14;
 /** The asset the Halt rollout workflow puts on a release it halts. */
 export const HALTED_ASSET = 'halted.json';
+/** The deploy test's result, which it keeps on the AUGUR release it tested (scripts/promote.mjs, DEPLOY_TEST_ASSET). */
+export const DEPLOY_TEST_ASSET = 'deploy-test.json';
 /** The cosign bundle written beside the feed, and pushed with it. */
 export const BUNDLE_SUFFIX = '.sigstore.json';
 export const BUNDLE_MEDIA_TYPE = 'application/vnd.dev.sigstore.bundle.v0.3+json';
@@ -93,15 +102,40 @@ export const asListed = (file, release) => ({
 export const haltedOf = (record) =>
   record && typeof record.reason === 'string' && record.reason.trim() ? { reason: record.reason.trim(), at: typeof record.at === 'string' ? record.at : undefined, ...(record.by ? { by: record.by } : {}) } : undefined;
 
-/** Builds the feed from the repository's releases, reading each chosen release's file with `download`. */
+/**
+ * An AUGUR beta's deploy-test.json as a halt: set unless it says that version passed. The Release workflow
+ * puts a pending one (passed: null) on each new release, and the deploy test replaces it with its result,
+ * so a beta that is still being tested, failed, or whose test never finished isn't offered. A release
+ * with no deploy-test.json at all is from before the check, and stays as it was. A stable release passed
+ * one to be promoted (scripts/promote.mjs); halting it after is the owner's call (Halt rollout).
+ */
+export const deployTestHaltOf = (result, version, release) => {
+  if (!release?.prerelease || !result || (result.version === version && result.passed === true)) return undefined;
+  const failed = result.version === version && result.passed === false;
+  const reason = failed
+    ? `Its deploy test failed${result.run ? ` (run ${result.run})` : ''}, so no server is offered it until a deploy test passes.`
+    : 'Its deploy test hasn’t passed yet, so no server is offered it until one does.';
+  return { reason, ...(typeof result.at === 'string' ? { at: result.at } : {}) };
+};
+
+/**
+ * Builds the feed from the repository's releases, reading each chosen release's file with `download`.
+ * An asset that is there but can't be read fails the build: listing the release without it could
+ * leave out a halt, or drop the release, in a feed that is still validly signed.
+ */
 export const buildFeed = async (releases, download, now = new Date(), own = {}) => {
   const { augur, apps } = chooseReleases(releases);
   const fileOf = async (release, name) => {
     const asset = release.assets?.find((a) => a.name === name);
-    return asset ? download(asset.url).catch(() => undefined) : undefined;
+    if (!asset) return undefined;
+    try {
+      return await download(asset.url);
+    } catch (err) {
+      throw new Error(`Couldn’t read ${name} of ${release.tag_name}, so the feed isn’t published (the one before stays good until it expires): ${err.message}`, { cause: err });
+    }
   };
-  const withHalt = async (entry, release) => {
-    const halted = haltedOf(await fileOf(release, HALTED_ASSET));
+  const withHalt = async (entry, release, version) => {
+    const halted = haltedOf(await fileOf(release, HALTED_ASSET)) ?? (version && release.prerelease ? deployTestHaltOf(await fileOf(release, DEPLOY_TEST_ASSET), version, release) : undefined);
     return halted ? { ...entry, halted } : entry;
   };
   const augurFiles = await Promise.all(augur.map(async ({ release, version }) => ({ version, file: await fileOf(release, 'augur-release.json'), release })));
@@ -110,7 +144,7 @@ export const buildFeed = async (releases, download, now = new Date(), own = {}) 
     schema: 'augur.feed/v1',
     issued: now.toISOString(),
     expires: new Date(now.getTime() + FEED_VALID_DAYS * 86_400_000).toISOString(),
-    releases: await Promise.all(augurFiles.filter((x) => x.file?.version === x.version).map((x) => withHalt(asMirrored(x.file, x.release), x.release))),
+    releases: await Promise.all(augurFiles.filter((x) => x.file?.version === x.version).map((x) => withHalt(asMirrored(x.file, x.release), x.release, x.version))),
     apps: await Promise.all(
       appFiles
         .filter((x) => x.file?.id === x.app && x.file?.version === x.version)
@@ -132,6 +166,20 @@ export const ownReleases = (releases, app, repository) =>
 export const appRepos = (json) =>
   Object.fromEntries(Object.entries(json?.apps ?? {}).filter(([id, repo]) => /^[a-z][a-z0-9-]{1,39}$/.test(id) && /^[\w.-]+\/[\w.-]+$/.test(String(repo))));
 
+/** The ORAS push of the feed at `out` (and its signature, when signed) to <images>/feed:latest. */
+export const pushCommand = ({ out, images, repo, signed, requireSigned = false }) => {
+  if (requireSigned && !signed) throw new Error(`${out} has no signature (${basename(out)}${BUNDLE_SUFFIX}): sign it and check it before it is pushed.`);
+  const ref = `${images}/feed:latest`;
+  const files = [`${basename(out)}:${FEED_MEDIA_TYPE}`, ...(signed ? [`${basename(out)}${BUNDLE_SUFFIX}:${BUNDLE_MEDIA_TYPE}`] : [])];
+  // ORAS takes a file by its path relative to where it runs, which also names the layer.
+  return { ref, cwd: dirname(resolve(out)), args: ['push', ref, '--artifact-type', FEED_MEDIA_TYPE, '--annotation', `org.opencontainers.image.source=https://github.com/${repo}`, ...files] };
+};
+
+const push = (command) => {
+  execFileSync('oras', command.args, { stdio: 'inherit', cwd: command.cwd });
+  console.log(`Pushed ${command.ref}.`);
+};
+
 const github = async (path, accept = 'application/vnd.github+json', token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN) => {
   const res = await fetch(path.startsWith('https:') ? path : `https://api.github.com/repos/${REPO}${path}`, {
     headers: { accept, 'user-agent': 'augur-feed', ...(token ? { authorization: `Bearer ${token}` } : {}) },
@@ -141,6 +189,11 @@ const github = async (path, accept = 'application/vnd.github+json', token = proc
 };
 
 const main = async (args) => {
+  if (args[0] === 'push') {
+    const file = args[1];
+    if (!file) throw new Error('usage: node scripts/publish-feed.mjs push <file>');
+    return push(pushCommand({ out: file, images: IMAGES, repo: REPO, signed: existsSync(`${file}${BUNDLE_SUFFIX}`), requireSigned: true }));
+  }
   const out = args.includes('--out') ? args[args.indexOf('--out') + 1] : 'feed.json';
   const releasesOf = async (repo, token) => {
     const all = [];
@@ -168,17 +221,7 @@ const main = async (args) => {
     // Keyless, as this workflow: deployments check the feed came from the Release feed workflow (ADR 0017).
     execFileSync('cosign', ['sign-blob', '--yes', '--bundle', bundle, out], { stdio: 'inherit' });
   }
-  if (args.includes('--push')) {
-    const ref = `${IMAGES}/feed:latest`;
-    const files = [`${basename(out)}:${FEED_MEDIA_TYPE}`, ...(args.includes('--sign') ? [`${basename(bundle)}:${BUNDLE_MEDIA_TYPE}`] : [])];
-    // ORAS takes a file by its path relative to where it runs, which also names the layer.
-    execFileSync(
-      'oras',
-      ['push', ref, '--artifact-type', FEED_MEDIA_TYPE, '--annotation', `org.opencontainers.image.source=https://github.com/${REPO}`, ...files],
-      { stdio: 'inherit', cwd: dirname(resolve(out)) },
-    );
-    console.log(`Pushed ${ref}.`);
-  }
+  if (args.includes('--push')) push(pushCommand({ out, images: IMAGES, repo: REPO, signed: args.includes('--sign') }));
 };
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {

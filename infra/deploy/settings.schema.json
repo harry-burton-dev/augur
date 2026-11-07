@@ -1774,6 +1774,24 @@
       ],
       "x-docs": "docs/deploy.md#logs-memory-and-health"
     },
+    "FOLIO_WORKER_CPUS": {
+      "type": "string",
+      "description": "How many processors Artifacts' rendition worker may use at once (no more than the server has).",
+      "default": "2",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "FOLIO_WORKER_TMP_SIZE": {
+      "type": "string",
+      "description": "The size of the rendition worker's in-memory /tmp, where the file being read goes. It counts towards its memory limit.",
+      "default": "1g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
     "OTEL_LGTM_MEM_LIMIT": {
       "type": "string",
       "description": "The memory limit of the observability stack.",
