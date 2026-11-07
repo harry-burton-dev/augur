@@ -56,6 +56,13 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The app bar replaces Title and Orbit
+
+**From** unreleased
+
+- **Nothing to run.** People see the new navigation after the upgrade: a bar of tiles across the desktop, one per group of apps (Platform, Pillars, Apps), which docks beside an app as the rail with that app's pages.
+- **Tell people Esc no longer leaves an app.** Home in the rail is the way back to the desktop. Where someone moves the bar to is kept with their other preferences.
+
 ### Two-step accounts aren't linked to Entra, and leavers' events can't be lost
 
 **From** unreleased

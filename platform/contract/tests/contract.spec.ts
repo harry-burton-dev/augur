@@ -120,7 +120,8 @@ test('a domain event the person may see reaches the app on the bus, and it reloa
 test('leaving the app unmounts it', async ({ page }) => {
   await page.goto('/reference');
   await expect(check(page, 'token')).toHaveText('ok');
-  await page.keyboard.press('Escape');
+  // Home in the rail is the way out (PDR-020 D6)
+  await page.getByRole('navigation', { name: 'App bar: Reference' }).getByRole('button', { name: 'Home', exact: true }).click();
   await expect.poll(() => page.evaluate(() => window.referenceUnmounts ?? 0)).toBe(1);
   await expect(app(page)).toHaveCount(0);
 });
@@ -154,22 +155,22 @@ test('mounts on the person’s own floor unless the address names another', asyn
   await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
 });
 
-test('an app sits on the still ground, and moving floors inside it never shows the water', async ({ page }) => {
+test('an app sits on flat ground with the rail beside it, and moving floors inside it never shows the desktop', async ({ page }) => {
   since('1.1'); // the app says which floor it's on from SDK 1.1
   await page.goto('/@me/reference');
   await expect(check(page, 'floor')).toHaveText('You (me, personal, lead) dev-me');
   const shell = page.locator('.aerie-shell');
-  await expect(shell).toHaveAttribute('data-background', 'none');
+  await expect(shell).toHaveAttribute('data-bar', 'app');
   await shell.evaluate((el) => {
     const seen: string[] = [];
     (window as unknown as { grounds: string[] }).grounds = seen;
-    new MutationObserver(() => seen.push(el.getAttribute('data-background') ?? '')).observe(el, { attributes: true, attributeFilter: ['data-background'] });
+    new MutationObserver(() => seen.push(el.getAttribute('data-bar') ?? '')).observe(el, { attributes: true, attributeFilter: ['data-bar'] });
     (el as unknown as { shell: EventTarget }).shell.dispatchEvent(new CustomEvent('ui-floor', { detail: { id: 'dev-org', direction: 'up' } }));
   });
   await expect(page).toHaveURL(/\/@org\/reference$/);
   await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
-  expect(await page.evaluate(() => (window as unknown as { grounds: string[] }).grounds.filter((g) => g !== 'none'))).toEqual([]);
-  await expect(shell).toHaveAttribute('data-background', 'none');
+  expect(await page.evaluate(() => (window as unknown as { grounds: string[] }).grounds.filter((g) => g !== 'app'))).toEqual([]);
+  await expect(shell).toHaveAttribute('data-bar', 'app');
 });
 
 test('fetch sends the token and the floor the app is on', async ({ page }) => {

@@ -1,22 +1,15 @@
 import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import {
   Button,
-  CentreMenu,
-  CentreMenuModel,
   defaultFunctions,
   Dialog,
   finishMotion,
   Heading,
-  liftGhost,
   moving,
   Shell,
   ShellModel,
   Toasts,
   type FloorDirection,
-  type Ghost,
-  type MenuCategory,
-  type MenuItem,
-  type ShellApp,
   type ShellFindResult,
   type ShellNotification,
 } from '@augur/shell-kit';
@@ -25,11 +18,10 @@ import {
   AppMounter,
   applyPreferences,
   areaOf,
-  backFrom,
-  navsFor,
-  navTarget,
+  groupsFor,
+  pageAt,
+  toShellApp,
   titleFor,
-  escapeIsFree,
   findPages,
   floorBySlug,
   floorFromPath,
@@ -62,8 +54,6 @@ import {
   loadPreviews,
   NotificationActions,
   NotificationFeed,
-  orbitIndexOf,
-  orbitMenu,
   ownFloor,
   PreferenceSync,
   previewLine,
@@ -71,8 +61,6 @@ import {
   RequestBroker,
   routeIntent,
   screenFor,
-  titleMenu,
-  titleTarget,
   toShellNotification,
   toastFor,
   withToast,
@@ -80,7 +68,6 @@ import {
   type ImportEntry,
   type OpenRequest,
   type PreviewApp,
-  type Screen,
   type ServerNotification,
   type Session,
 } from './host/index.js';
@@ -116,8 +103,6 @@ export interface HostProps {
 
 type Problem = { title: string; summary: string; retry: () => void; action?: string };
 
-const toShellApp = (a: AppManifestEntry): ShellApp => ({ id: a.id, name: a.name, line: a.description, icon: a.icon ?? 'apps', ai: a.ai, sameOnEveryFloor: a.sameOnEveryFloor });
-
 /**
  * Agents aren't built yet: they are still being designed and have nothing
  * behind them. Rather than hiding them (Nothing is obtuse, Shell principles in the AUGUR handbook, 02 Principles),
@@ -148,22 +133,13 @@ const requieted = (list: ShellNotification[], known: ReadonlyMap<string, ServerN
     return q === !!n.quiet ? n : { ...n, quiet: q };
   });
 /** Pinned apps first, in their order, then the few opened most recently. */
+/** What the Shell draws from someone's preferences, the app bar's place among them (PDR-020 D4). */
+const shellSettings = (p: Preferences) => ({ reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts, barStop: p.barStop ?? 1 }) as const;
 const keptClose = (pinned: string[] = [], recent: string[] = []) => [...new Set([...pinned, ...recent.slice(0, 6)])];
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
 /** How long an app may take to mount before its place says it's opening. */
 const SLOW_APP_MS = 400;
-/**
- * The ground for each screen: Title on Minimal water, Orbit on Deep Ocean, and
- * every app on the same still ground, the slate Artifacts sits on, so no app
- * floats on water and none differs from another.
- */
-const waterFor = (screen: Screen) => (screen.kind === 'title' ? 'Minimal' : screen.kind === 'orbit' ? 'Deep Ocean' : 'none');
-/** Before the catalogue says what's at an address: Title's water at the root, the still ground anywhere else. */
-const waterAt = (path: string) => (path === '/' || path === '' ? 'Minimal' : 'none');
-
-/** The Orbit category holding the item that opens a path, so going back lands where you came from. */
-
 /** The page's fetch as it is at each call: telemetry patching it reaches every call, without a new function for Host's effects to restart on. */
 const pageFetch: typeof fetch = (...args) => fetch(...args);
 
@@ -186,14 +162,6 @@ export function Host({
   const [shellModel] = useState(() => new ShellModel());
   const shellRef = useRef<ShellModel>(shellModel);
   const stageRef = useRef<HTMLDivElement>(null);
-  const menuRef = useRef<CentreMenuModel>(null);
-  /** Where the next menu starts: Title on the app you came from, Orbit on the category you chose or came from. */
-  const lastApp = useRef<string | undefined>(undefined);
-  const orbitStart = useRef(0);
-  /** What was chosen, lifted from the screen being left, to land on the next one (see "The choice carries you"). */
-  const carried = useRef<Ghost | null>(null);
-  /** A move away is under way: a second choice waits for it rather than starting another. */
-  const leaving = useRef(false);
   const mounter = useRef<AppMounter | null>(null);
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
@@ -309,7 +277,7 @@ export function Host({
       setFormats(formatsFrom(now, language.current, orgZone.current));
       const shell = shellRef.current;
       if (!shell) return;
-      shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
+      shell.settings = shellSettings(now);
       shell.away = !!now.away;
       shell.muted = now.muted ?? [];
       if (key === 'recent' || key === 'pinned') shell.recent = keptClose(now.pinned, key === 'recent' ? [] : shell.recent);
@@ -488,7 +456,7 @@ export function Host({
 
   // Raising an intent counts up, so the app is mounted to answer it even when the location doesn't change.
   const [raised, setRaised] = useState(0);
-  const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path, Boolean(pendingIntent.current)) : undefined), [manifest, floor, where, raised]);
+  const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path) : undefined), [manifest, floor, where, raised]);
 
   const raise = useCallback(
     async (intent: Intent) => {
@@ -612,7 +580,7 @@ export function Host({
     };
   }, [answering, requestStage, importEntry]);
 
-  // Mount whichever app the location points at; Title and Orbit are the shell's own.
+  // Mount whichever app the location points at; the desktop is the shell's own.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -644,16 +612,10 @@ export function Host({
       shellRef.current?.settleStage();
       setOpening(false);
       setProblem(null);
-      if (screen.kind === 'orbit') {
-        shellRef.current?.setCurrent(screen.app.id);
-        prefs.opened(screen.app.id);
-      } else if (shellRef.current) shellRef.current.current = '';
+      if (shellRef.current) shellRef.current.current = '';
       return;
     }
     const { app, path } = screen;
-    // whatever move brought you here has ended: the way out mustn't think one is still under way
-    leaving.current = false;
-    lastApp.current = app.id;
     const intent = pendingIntent.current;
     pendingIntent.current = undefined;
     const ctx = contextFor(app, path, intent);
@@ -665,16 +627,8 @@ export function Host({
     const slow = setTimeout(() => setOpening(true), SLOW_APP_MS);
     mounter.current
       .mount(app, ctx)
-      .then(() => {
-        const shell = shellRef.current;
-        void shell?.arrive();
-        const ghost = carried.current;
-        carried.current = null;
-        void shell?.updateComplete.then(() => ghost?.land(shell.placeTitle?.getBoundingClientRect()));
-      })
+      .then(() => void shellRef.current?.arrive())
       .catch((err: Error) => {
-        carried.current?.drop();
-        carried.current = null;
         setProblem({ title: `${app.name} didn't open`, summary: err.message, retry: () => setAttempt((n) => n + 1) });
       })
       .finally(() => {
@@ -683,80 +637,6 @@ export function Host({
       });
     return () => clearTimeout(slow);
   }, [manifest, floor, home, where, screen, attempt, contextFor, importEntry, navigate, prefs]);
-
-  // Title and Orbit: what they hold, where they start, and where choosing leads.
-  useEffect(() => {
-    const menu = menuRef.current;
-    if (!menu || !manifest || !screen || screen.kind === 'app') return;
-    let categories: MenuCategory[];
-    if (screen.kind === 'title') {
-      categories = titleMenu(manifest);
-      menu.startCategory = Math.max(0, manifest.findIndex((a) => a.id === lastApp.current));
-    } else {
-      categories = orbitMenu(screen.app);
-      menu.startCategory = orbitStart.current;
-      orbitStart.current = 0;
-      lastApp.current = screen.app.id;
-    }
-    menu.categories = categories;
-    menu.background = shellRef.current?.waves ?? null;
-    leaving.current = false;
-    void menu.updateComplete.then(async () => {
-      menu.focus();
-      // what was carried here lands on what's now in focus, once the menu has measured itself and drawn
-      await new Promise((r) => requestAnimationFrame(r));
-      await menu.updateComplete;
-      const ghost = carried.current;
-      carried.current = null;
-      void ghost?.land(menu.focusedRect());
-    });
-    /** Step away, carrying what's in focus, then go. */
-    const go = async (to: string, way: 'deeper' | 'back') => {
-      if (leaving.current) return;
-      leaving.current = true;
-      carried.current?.drop();
-      carried.current = liftGhost(menu.focusedIcon());
-      await menu.leave(way);
-      navigate(to);
-    };
-    const onSelect = (e: Event) => {
-      const { item } = (e as CustomEvent<{ item: MenuItem }>).detail;
-      if (screen.kind === 'orbit') return void go(hrefFor(screen.app, item.id), 'deeper');
-      const target = titleTarget(manifest, item);
-      if (!target) return;
-      lastApp.current = target.app.id;
-      orbitStart.current = target.category;
-      void go(hrefFor(target.app, target.path), 'deeper');
-    };
-    const onBack = () => screen.kind === 'orbit' && void go('/', 'back');
-    const onChange = (e: Event) => {
-      const shell = shellRef.current;
-      if (shell && screen.kind === 'orbit') shell.area = (e as CustomEvent<{ category: MenuCategory | null }>).detail.category?.section ?? '';
-    };
-    menu.addEventListener('ui-select', onSelect);
-    menu.addEventListener('ui-back', onBack);
-    menu.addEventListener('ui-change', onChange);
-    return () => {
-      menu.removeEventListener('ui-select', onSelect);
-      menu.removeEventListener('ui-back', onBack);
-      menu.removeEventListener('ui-change', onChange);
-    };
-  }, [manifest, screen, navigate]);
-
-  /** Leave the open app on the way up: its name is carried back to its icon as the app sinks. */
-  const leaveApp = useCallback(
-    async (to: string) => {
-      if (leaving.current) return;
-      leaving.current = true;
-      const shell = shellRef.current;
-      carried.current?.drop();
-      carried.current = liftGhost(shell?.placeTitle);
-      await shell?.sink();
-      leaving.current = false;
-      navigate(to);
-    },
-    [navigate],
-  );
 
   // A key or a press during a move jumps it to its end: moves never keep anyone waiting.
   useEffect(() => {
@@ -769,45 +649,22 @@ export function Host({
     };
   }, []);
 
-  // Esc that nothing else used goes back a step: from inside an app to its Orbit, then to Title. An app that keeps its own menu keeps Esc.
-  useEffect(() => {
-    if (screen?.kind !== 'app') return;
-    const back = backFrom(screen);
-    if (!back) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (shellRef.current?.isOpen || broker.current.current || !escapeIsFree(e)) return;
-      e.preventDefault();
-      orbitStart.current = orbitIndexOf(screen.app, screen.path);
-      void leaveApp(back);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [screen, leaveApp]);
+  // Esc no longer leaves an app (PDR-020 D6): it closes start menus and the app's own things, and Home in the rail is the way out.
 
-  // Between screens (on the way to another floor, while its catalogue loads) the ground stays as it was,
-  // so an app's still ground never gives way to water partway through a move.
-  useEffect(() => {
-    if (shellRef.current && !screen) shellRef.current.background = waterAt(where.path);
-    // once, for the first address, before anything has loaded
-  }, []);
+  // The app bar follows where you are: the app in front is all that runs, since one app is mounted at a time (D3), and the rail marks its page.
   useEffect(() => {
     const shell = shellRef.current;
-    if (!shell || !screen) return;
-    shell.background = waterFor(screen);
-    // coming up from an app the water is new: Title and Orbit swell this one
-    void shell.updateComplete.then(() => menuRef.current && (menuRef.current.background = shell.waves));
+    if (!shell) return;
+    shell.running = screen?.kind === 'app' ? [screen.app.id] : [];
+    shell.page = screen?.kind === 'app' ? pageAt(screen.app, screen.path) : '';
   }, [screen]);
 
-  // The band follows where you are: Home and Title mark the one you're on, and the tab says the page, app and floor.
+  // The band names the area the open page is in, and the tab says the page, app and floor.
   useEffect(() => {
     const shell = shellRef.current;
-    if (shell) {
-      shell.navs = navsFor(screen, manifest ?? []);
-      // inside an app, the area its page is in; Orbit names the area of the group in focus as it moves
-      if (screen?.kind !== 'orbit') shell.area = screen?.kind === 'app' ? (areaOf(screen.app, screen.path)?.label ?? '') : '';
-    }
+    if (shell) shell.area = screen?.kind === 'app' ? (areaOf(screen.app, screen.path)?.label ?? '') : '';
     if (screen) document.title = titleFor(screen, floor?.name);
-  }, [screen, floor, manifest]);
+  }, [screen, floor]);
 
   useEffect(() => () => void mounter.current?.unmount(), []);
 
@@ -901,6 +758,7 @@ export function Host({
     const shell = shellRef.current;
     if (!shell) return;
     shell.apps = (catalogue?.apps ?? []).map(toShellApp);
+    shell.groups = groupsFor(catalogue?.apps ?? []);
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
@@ -925,7 +783,7 @@ export function Host({
       applyPreferences(now);
       setFormats(formatsFrom(now, language.current, orgZone.current));
       setChosen(now);
-      shell.settings = { reduceMotion: !!now.reduceMotion, density: now.density ?? 'comfortable', areaTitles: now.areaTitles !== false, toasts: !!now.toasts };
+      shell.settings = shellSettings(now);
       shell.away = !!now.away;
       shell.muted = p.muted ?? [];
       shell.recent = keptClose(now.pinned, [...shell.recent, ...(p.recent ?? [])]);
@@ -1024,16 +882,19 @@ export function Host({
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
       if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts') prefs.set(key, !!value);
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
+      else if (key === 'barStop' && (value === 0 || value === 1 || value === 2 || value === 3)) prefs.set('barStop', value);
       applyPreferences(prefs.current);
       setChosen(prefs.current);
     };
-    // Home and Title in the band: straight there, from whatever screen you're on.
-    const onNav = (e: Event) => {
-      const to = navTarget((e as CustomEvent<{ id: string }>).detail.id, manifest ?? []);
-      if (!to) return;
-      if (screen?.kind === 'app') return void leaveApp(to);
-      // Title or Orbit steps aside first, as it does for Back
-      void (menuRef.current?.leave('back') ?? Promise.resolve()).then(() => navigate(to));
+    // The app bar: Home in the rail goes back to the desktop, a page in the rail opens it, and closing the app in front does too.
+    const onHome = () => navigate('/');
+    const onPage = (e: Event) => {
+      const { app, id } = (e as CustomEvent<{ app: string; id: string }>).detail;
+      const entry = byId(app);
+      if (entry) navigate(hrefFor(entry, id));
+    };
+    const onCloseApp = (e: Event) => {
+      if (screen?.kind === 'app' && screen.app.id === (e as CustomEvent<{ id: string }>).detail.id) navigate('/');
     };
     // Going to another floor keeps you in the same app, at its start; its menu or Title stay as they were.
     // What you're looking at leaves the way you're going first, so nothing goes blank partway through.
@@ -1042,7 +903,7 @@ export function Host({
       const to = session.floors.find((f) => f.id === id);
       if (!to) return;
       await shell.leaveFloor(direction);
-      navigate(screen && screen.kind !== 'title' ? hrefFor(screen.app) : '/', to);
+      navigate(screen?.kind === 'app' ? hrefFor(screen.app) : '/', to);
     };
     // Find: the shell's own pages at once, then each app's content as it answers.
     const onFind = (e: Event) => {
@@ -1073,7 +934,9 @@ export function Host({
     shell.addEventListener('ui-setting', onSetting);
     shell.addEventListener('ui-find', onFind);
     shell.addEventListener('ui-floor', onFloor);
-    shell.addEventListener('ui-nav', onNav);
+    shell.addEventListener('ui-home', onHome);
+    shell.addEventListener('ui-page', onPage);
+    shell.addEventListener('ui-close-app', onCloseApp);
     shell.addEventListener('ui-pick', onPick);
     shell.addEventListener('ui-notification-action', onAction);
     shell.addEventListener('ui-mute', onMute);
@@ -1092,10 +955,12 @@ export function Host({
       shell.removeEventListener('ui-setting', onSetting);
       shell.removeEventListener('ui-find', onFind);
       shell.removeEventListener('ui-floor', onFloor);
-      shell.removeEventListener('ui-nav', onNav);
+      shell.removeEventListener('ui-home', onHome);
+      shell.removeEventListener('ui-page', onPage);
+      shell.removeEventListener('ui-close-app', onCloseApp);
       shell.removeEventListener('ui-pick', onPick);
     };
-  }, [manifest, navigate, session, prefs, screen, raise, search, leaveApp, showAccount, inboxForHome, openInboxItem, settle]);
+  }, [manifest, navigate, session, prefs, screen, raise, search, showAccount, inboxForHome, openInboxItem, settle]);
 
   // A notice email's link: once the apps on this floor are known, open the notification it names, read or not, on its own floor.
   const noticeAsked = useRef(new URLSearchParams(window.location.search).get(NOTICE_PARAM));
@@ -1119,7 +984,7 @@ export function Host({
   }, [manifest, tell]);
 
   // The open app is a pull request's preview: say so, with the way back.
-  const openApp = screen && screen.kind !== 'title' ? screen.app : undefined;
+  const openApp = screen?.kind === 'app' ? screen.app : undefined;
   const previewOf = previewPr(openApp?.version);
   const previewing = previewOf !== undefined ? previewApps.find((a) => a.app === openApp?.id) : undefined;
   // The open app has feature previews on for this person: say which, with the way to change them.
@@ -1189,14 +1054,6 @@ export function Host({
           product={productName()}
           version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
           actionStatus={actionStatus}
-        />
-      ) : null}
-      {screen && screen.kind !== 'app' && manifest?.length ? (
-        <CentreMenu
-          key={screen.kind === 'orbit' ? `orbit:${screen.app.id}` : 'title'}
-          ref={menuRef}
-          variant={screen.kind}
-          label={screen.kind === 'orbit' ? `${screen.app.name} menu` : 'Apps'}
         />
       ) : null}
       {problem && (

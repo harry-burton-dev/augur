@@ -5,7 +5,7 @@ export { routeIntent, IntentError, RequestBroker, type OpenRequest } from './int
 export { toShellNotification, NotificationActions } from './notifications.js';
 export { startSession, CALLBACK_PATH, type Session } from './session.js';
 export { NotificationFeed, fromServer, isQuiet, type ServerNotification } from './feed.js';
-export { screenFor, titleMenu, titleTarget, orbitMenu, orbitIndexOf, areaOf, backFrom, upFrom, navsFor, navTarget, titleFor, productName, escapeIsFree, findPages, type Screen } from './menus.js';
+export { screenFor, groupsFor, groupOf, pagesOf, pageAt, toShellApp, areaOf, titleFor, productName, findPages } from './menus.js';
 export { PreferenceSync, applyPreferences } from './preferences.js';
 export { floorFromPath, floorHref, floorBySlug, ownFloor } from './floors.js';
 export { HOME_CHANNEL, needsFor, cardsFor, settingsOf, SurfaceMounter, type HomeState } from './home.js';

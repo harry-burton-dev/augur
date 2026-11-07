@@ -39,39 +39,22 @@ test.describe('with Folio on', () => {
     await expect(artifacts(page)).toHaveCount(1);
   });
 
-  test('Folio (Artifacts) opens straight in with its own menu, keeps Esc, and the band goes to Title or Home', async ({ page }) => {
+  test('Folio (Artifacts) opens straight in, keeps Esc, and Home in the rail goes back to the desktop', async ({ page }) => {
     await page.goto('/@me/folio');
     await expect(artifacts(page)).toHaveCount(1);
-    await expect(page.locator('.aerie-centre')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page).toHaveURL(/\/@me\/folio$/);
-    const band = page.locator('.aerie-shell');
-    await band.getByRole('button', { name: 'All apps', exact: true }).click();
-    await expect(page).toHaveURL(/\/@me$/);
-    const title = page.locator('.aerie-centre[data-variant="title"]');
-    await expect(title).toBeVisible();
-    // into an app from Title, then straight out to Home: the way out works after any way in
-    await title.evaluate((el: HTMLElement & { menu: { categories: { id?: string }[]; setCategory(i: number): void } }) =>
-      el.menu.setCategory(el.menu.categories.findIndex((c) => c.id === 'folio')),
-    );
-    await page.keyboard.press('Enter');
     await expect(artifacts(page)).toHaveCount(1);
-    await band.getByRole('button', { name: 'Home', exact: true }).click();
-    await expect(page).toHaveURL(/\/@me\/home$/);
-    await expect(band.getByRole('button', { name: 'Home, you’re here' })).toBeVisible();
+    await page.getByRole('navigation', { name: /^App bar: / }).getByRole('button', { name: 'Home', exact: true }).click();
+    await expect(page).toHaveURL(/\/@me$/);
+    await expect(page.getByRole('navigation', { name: 'App bar', exact: true })).toBeVisible();
   });
 
-  test('Title shows Folio (Artifacts), which has no areas, as itself, and choosing it opens it', async ({ page }) => {
+  test('the desktop’s app bar puts Folio (Artifacts) under Pillars, and choosing it opens it', async ({ page }) => {
     await page.goto('/');
-    const title = page.locator('.aerie-centre[data-variant="title"]');
-    await expect(title).toBeVisible();
-    await title.evaluate((el: HTMLElement & { menu: { categories: { id?: string }[]; setCategory(i: number): void } }) =>
-      el.menu.setCategory(el.menu.categories.findIndex((c) => c.id === 'folio')),
-    );
-    await expect(title.locator('.catlabel')).toContainText('Artifacts');
-    await expect(title.locator('.item')).toHaveCount(0);
-    await expect(title.locator('.caption .title')).toHaveText('Artifacts');
-    await page.keyboard.press('Enter');
+    const bar = page.getByRole('navigation', { name: 'App bar', exact: true });
+    await bar.getByRole('button', { name: 'Pillars', exact: true }).click();
+    await page.getByRole('menu').getByRole('menuitem', { name: /Artifacts/ }).click();
     await expect(page).toHaveURL(/\/@me\/folio$/);
     await expect(artifacts(page)).toHaveCount(1);
   });
