@@ -6,6 +6,8 @@ export interface Preferences {
   areaTitles?: boolean;
   /** Whether each new notification is also said once as a toast at the bottom of the screen; off unless true. */
   toasts?: boolean;
+  /** Where the app bar rests on the desktop: under the band (0), upper (1, the default), lower (2) or at the bottom (3). */
+  barStop?: 0 | 1 | 2 | 3;
   away?: boolean;
   /** App ids, most recent first. */
   recent?: string[];
