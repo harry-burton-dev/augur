@@ -3,7 +3,11 @@
 auth_enabled: false
 
 server:
+  # Inside the container only: Grafana, beside it, reads Loki at 127.0.0.1. Nothing else may query the logs
+  # (compose.yml, the telemetry network).
+  http_listen_address: 127.0.0.1
   http_listen_port: 3100
+  grpc_listen_address: 127.0.0.1
 
 common:
   instance_addr: 127.0.0.1

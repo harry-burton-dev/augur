@@ -102,6 +102,8 @@ describe('the deploy test', () => {
     assert.match(deployTestVerdict({ unit: AUGUR, version: '0.14.0' }).problem, /^It has no deploy test result\. Run Deploy test/);
     assert.match(deployTestVerdict({ unit: AUGUR, version: '0.14.0', result: { ...result, passed: false } }).problem, /^Its last deploy test failed \(run 7\)\./);
     assert.match(deployTestVerdict({ unit: AUGUR, version: '0.14.0', result: { ...result, passed: 'true' } }).problem, /failed/);
+    // The Release workflow's pending result, before the deploy test has replaced it.
+    assert.match(deployTestVerdict({ unit: AUGUR, version: '0.14.0', result: { ...result, passed: null } }).problem, /^Its deploy test hasn’t finished \(run 7\)\./);
     assert.match(deployTestVerdict({ unit: AUGUR, version: '0.15.0', result }).problem, /^Its deploy test result is for 0\.14\.0\./);
   });
 

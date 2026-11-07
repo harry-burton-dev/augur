@@ -2,7 +2,11 @@
 # compare with the image's /otel-lgtm/tempo-config.yaml and carry its changes over, and check the keys
 # below still exist in its Tempo (an unknown key stops Tempo, and with it otel-lgtm).
 server:
+  # Inside the container only: Grafana, beside it, reads Tempo at 127.0.0.1. Nothing else may query the traces
+  # (compose.yml, the telemetry network).
+  http_listen_address: 127.0.0.1
   http_listen_port: 3200
+  grpc_listen_address: 127.0.0.1
   grpc_listen_port: 9096
 
 distributor:

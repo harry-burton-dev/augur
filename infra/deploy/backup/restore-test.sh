@@ -5,10 +5,21 @@
 #   restore-test.sh             the newest backup on this server
 #   restore-test.sh --offsite   the newest one in the off-server copy (ADR 0060), fetched with restic
 #                               into the scratch folder first: proves the copy, not only the local file
-# Writes the result to $BACKUP_DIR/restore-test.json, which Admin's Status reads; `from` says which.
+# Writes the result to $STATUS_DIR/restore-test.json (backups/status/), which Admin's Status reads; `from` says which.
 set -eu
 set -o pipefail
 : "${BACKUP_DIR:=/backups}"
+umask 077
+# Results for Admin's Status go in a folder of their own, the only part of the backups the gateway sees
+# (compose.yml). The backups themselves are readable by root alone (umask 077); the results by anyone.
+: "${STATUS_DIR:=$BACKUP_DIR/status}"
+export STATUS_DIR
+# status_written NAME: puts NAME.partial in place as the status folder's NAME.
+status_written() {
+  mkdir -p "$STATUS_DIR" && chmod 755 "$STATUS_DIR"
+  chmod 644 "$STATUS_DIR/$1.partial"
+  mv "$STATUS_DIR/$1.partial" "$STATUS_DIR/$1"
+}
 : "${OFFSITE_HOST:=augur}"
 
 started=$(date -u +%s)
@@ -17,7 +28,7 @@ from=local
 file=""
 scratch=""
 
-# result OK PROBLEM [FACTS]: writes restore-test.json beside the backups.
+# result OK PROBLEM [FACTS]: writes restore-test.json for Status.
 result() {
   ended=$(date -u +%s)
   {
@@ -25,8 +36,8 @@ result() {
     [ -n "$2" ] && printf ',"problem":"%s"' "$2"
     [ -n "${3:-}" ] && printf ',%s' "$3"
     printf '}\n'
-  } > "$BACKUP_DIR/restore-test.json.partial"
-  mv "$BACKUP_DIR/restore-test.json.partial" "$BACKUP_DIR/restore-test.json"
+  } > "$STATUS_DIR/restore-test.json.partial"
+  status_written restore-test.json
   if [ "$1" = true ]; then echo "restore-test: $(basename "$file") ($from) restored and checked"; else echo "restore-test: FAILED: $2" >&2; fi
 }
 

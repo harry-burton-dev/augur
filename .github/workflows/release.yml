@@ -127,9 +127,12 @@ jobs:
           PENDING: ${{ steps.apps.outputs.pending }}
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
   # Deployments learn of what was just released from the feed beside the images, read with their read key.
+  # A new AUGUR beta is made with a pending deploy-test.json, and any feed lists it halted until the deploy
+  # test replaces that with a pass (scripts/publish-feed.mjs). This feed waits for the test, so it lists the
+  # result. A run that released only apps has no deploy test (skipped), and publishes straight away.
   feed:
-    needs: release
-    if: needs.release.outputs.released == 'true'
+    needs: [release, deploy-test]
+    if: ${{ !cancelled() && needs.release.result == 'success' && needs.release.outputs.released == 'true' }}
     uses: ./.github/workflows/feed.yml
     # A called workflow gets no secrets unless passed: the feed reads the app repositories with APP_RELEASES_TOKEN.
     secrets: inherit

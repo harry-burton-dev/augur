@@ -28,6 +28,9 @@ env:
   IMAGE_REPO: ${{ vars.IMAGE_REPO || format('ghcr.io/{0}/im-platform', github.repository_owner) }}
 jobs:
   feed:
+    # Only main's own scripts publish the feed, and a hotfix's release branch's when its Release run calls
+    # this: a run started from any other branch does nothing (deployments would refuse its signature anyway).
+    if: ${{ github.ref == 'refs/heads/main' || (github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')) }}
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -42,13 +45,15 @@ jobs:
       - run: echo "$ORAS_TOKEN" | oras login ghcr.io --username "${{ github.actor }}" --password-stdin
         env:
           ORAS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Publish the feed
-        run: node scripts/publish-feed.mjs --out "$RUNNER_TEMP/feed.json" --sign --push
+      - name: Build and sign the feed
+        run: node scripts/publish-feed.mjs --out "$RUNNER_TEMP/feed.json" --sign
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Reads the releases of apps in their own repositories (release/app-repos.json, ADR 0047).
           APP_RELEASES_TOKEN: ${{ secrets.APP_RELEASES_TOKEN }}
-      # The signature as deployments check it, with the registry's own code: a mismatch would make every
-      # deployment refuse the feed, so it shows here first.
+      # The signature as deployments check it, with the registry's own code, before it is pushed: a
+      # mismatch would make every deployment refuse the feed, so a failure here leaves the last one in place.
       - name: Check the signature as deployments do
         run: node --experimental-strip-types scripts/check-feed-signature.mjs "$RUNNER_TEMP/feed.json" "$GITHUB_REPOSITORY"
+      - name: Push the feed
+        run: node scripts/publish-feed.mjs push "$RUNNER_TEMP/feed.json"

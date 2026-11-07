@@ -48,6 +48,8 @@ x-telemetry: &telemetry
 x-service: &service
   <<: *hardened
   restart: unless-stopped
+  # The compose network, and the telemetry network its traces, metrics and logs go out on (networks, below).
+  networks: [default, telemetry]
   environment: &env
     <<: *telemetry
     NODE_ENV: production
@@ -167,6 +169,8 @@ services:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres:/etc/augur:ro
       - wal-archive:/wal-archive
+    # And the rendition worker's network, which reaches only Postgres and Garage.
+    networks: [default, renditions]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform"]
       interval: 5s
@@ -209,6 +213,8 @@ services:
       - backup-tools:/tools:ro
       # Postgres's archived WAL: pruned to the oldest base backup, copied off the server, replayed in tests.
       - wal-archive:/wal-archive
+      # The deploy folder, read only: .env and secrets/ go into the off-server copy with the backups, encrypted.
+      - ./:/deploy:ro
     depends_on:
       postgres: { condition: service_healthy }
       backup-tools: { condition: service_completed_successfully }
@@ -244,6 +250,7 @@ services:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
+    networks: [default, renditions]
 
   # Gives each platform service and Keycloak a database login of their own, and each app in
   # APP_STORAGE its own database login and schema, and its own bucket and key, from the secrets
@@ -411,8 +418,10 @@ services:
       # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
       CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
     volumes:
-      - ./backups:/backups:ro
+      # Only the results the backup container writes for Status, never the backups themselves.
+      - ./backups/status:/backups:ro
       - ./tailscale:/run/augur/tailscale:ro
+    networks: [default, telemetry]
     depends_on: [identity, registry, events, models]
 
   identity:
@@ -605,6 +614,7 @@ services:
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
       SERVICE_CLIENT_SECRET: ${AUSPEX_CLIENT_SECRET}
+    networks: [default, telemetry]
     # Like the other shipped apps, it starts once its sign-in exists.
     depends_on:
       identity: { condition: service_started }
@@ -658,6 +668,9 @@ services:
 
   # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
   # It works on the tables Folio's service makes, so it waits for the service to start.
+  # It reads files anyone on a floor can upload, so it is held tighter than the services: its own files
+  # can't change (only /tmp, in memory, can be written), it has a share of the processors and a cap on
+  # processes, and its networks reach Postgres, Garage and otel-lgtm and nothing else, the internet included.
   folio-worker:
     logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
@@ -665,9 +678,19 @@ services:
     restart: unless-stopped
     # Reading an uploaded file (Docling, torch) can take as much memory as it finds: this keeps it to its share.
     mem_limit: ${FOLIO_WORKER_MEM_LIMIT:-4g}
+    cpus: ${FOLIO_WORKER_CPUS:-2}
+    pids_limit: 512
+    read_only: true
+    # The file being read and what's made from it. In memory, so it counts towards mem_limit.
+    tmpfs:
+      - /tmp:size=${FOLIO_WORKER_TMP_SIZE:-1g},mode=1777
     environment:
       # Its traces and logs go where the services' do (OTEL_SDK_DISABLED=true turns them off).
       <<: [*folio-storage, *otel]
+      # Any cache a library keeps goes in /tmp; Docling's models are in the image (HF_HOME).
+      XDG_CACHE_HOME: /tmp/cache
+      MPLCONFIGDIR: /tmp/matplotlib
+    networks: [renditions]
     depends_on: [folio]
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
@@ -702,7 +725,7 @@ services:
     volumes:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro
-    networks: [default, docker]
+    networks: [default, docker, telemetry]
     depends_on: [docker-proxy, registry]
 
   # The Docker API, for the updater only, without the parts it doesn't need (swarm, secrets, builds, plugins).
@@ -732,9 +755,15 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
       # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
-      PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h
+      # Prometheus and Pyroscope answer inside the container only, as Loki and Tempo do (lgtm/*.yaml): Grafana
+      # reads them at 127.0.0.1, and nothing on the networks can query what the services logged.
+      PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h --web.listen-address=127.0.0.1:9090
+      PYROSCOPE_EXTRA_ARGS: -server.http-listen-address=127.0.0.1
     ports:
       - 127.0.0.1:3001:3000
+    # Not on the compose network, so apps the runner installs can't reach it: only what sends telemetry can.
+    # The rendition worker reaches it on its own network, so it never shares one with the services.
+    networks: [telemetry, renditions, grafana]
     volumes:
       - otel-lgtm:/data
       - ./observability/lgtm/loki.yaml:/otel-lgtm/loki-config.yaml:ro
@@ -747,6 +776,16 @@ networks:
   default:
   # Nothing on it reaches anywhere else.
   docker:
+    internal: true
+  # Traces, metrics and logs: the platform's services, the apps that ship with AUGUR and otel-lgtm. Apps the
+  # runner installs join only the compose network, so they can't reach otel-lgtm at all. otel-lgtm sends
+  # its alerts to the registry over it.
+  telemetry:
+    internal: true
+  # Only so Grafana's port can be published on the server (a port can't be published from an internal network).
+  grafana:
+  # The rendition worker's way to Postgres, Garage and otel-lgtm, and nowhere else: none of the services is on it.
+  renditions:
     internal: true
 
 volumes:

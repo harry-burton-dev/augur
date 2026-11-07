@@ -56,6 +56,23 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Artifacts asks for two more scopes
+
+**From** unreleased
+
+- **Scopes**: Artifacts now asks for `events:subscribe` and `inbox:write`. It's still served without them, but gets them only once an admin allows them in Admin, Apps: allow them after upgrading.
+- **Deleted people**: people deleted more than 30 days before the upgrade keep their names in Artifacts.
+
+### Backups are root's alone, and the off-server copy carries .env
+
+**From** unreleased
+
+- **Backups**: dumps and archives in `infra/deploy/backups/` are now readable by root alone, and Status's results move to `infra/deploy/backups/status/`, the only part the gateway sees. Read a dump through the backup container, as the guides now do (`pc run --rm --no-deps -T --entrypoint gunzip backup -c /backups/<file>`).
+- **Off-server copy**: `.env` and `secrets/` now go into it each night, encrypted with `OFFSITE_PASSWORD`. Keep every `OFFSITE_*` setting off the server: they're what a lost server needs ([deploy.md, Restore a lost server](deploy.md#restore-a-lost-server), which replaces the old steps; those copied an empty database over the real copies). The copy also refuses a dump with no AUGUR in it, and a repository another server filled, until `backup.sh --adopt-offsite`.
+- **Networks**: telemetry has a network of its own, which apps the runner installs aren't on, and Artifacts' rendition worker reaches only Postgres, Garage and `otel-lgtm`, with read-only files, 2 processors (`FOLIO_WORKER_CPUS`) and an in-memory `/tmp` of 1g (`FOLIO_WORKER_TMP_SIZE`). On a server with fewer than 2 processors, set `FOLIO_WORKER_CPUS=1` before upgrading, or Docker won't start the worker.
+- **The updater** writes `.env` whole, refuses an upgrade with less than 2 GiB free, keeps a note of an upgrade under way (`infra/deploy/.updater-upgrade.json`) so it goes back after a restart partway through, and, with a breaking release between, never goes back by itself once a part has restarted on the new one. It waits up to 5 minutes for each part.
+- After upgrading, check Admin → Status still shows the last backup and the off-server copy. If Status says the copy holds backups this server didn't make, and they are this server's, run `pc exec backup /bin/sh /backup/backup.sh --adopt-offsite` once.
+
 ### Upgrades only take settings they add, and removed apps stay removed
 
 **From** unreleased
@@ -231,7 +248,7 @@ What changes for people:
 pc stop
 pc up -d postgres
 pc ps postgres            # again until it says healthy
-gunzip -c infra/deploy/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
+pc run --rm --no-deps -T --entrypoint gunzip backup -c /backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
 pc up -d --remove-orphans
 ```
 
@@ -449,7 +466,9 @@ Optional, in `.env`: `RELEASE_CHANNEL=stable` or `beta` (by default, the channel
 
 **From** augur@0.3.0
 
-An optional container that runs an upgrade asked for with **Upgrade to …** in the Upgrade Centre. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the settings it needs are set, takes a backup and test-restores it, pulls, then restarts AUGUR's Keycloak (waiting up to five minutes, as its first start on a new Keycloak minor migrates its database), reruns storage’s set-up and restarts identity, registry, events, models, the apps that ship with AUGUR (in the order `release/shipped-apps.json` lists them, which its image carries), gateway and web in turn, waiting for each to answer on its new version. A release with an image for something the server runs that this updater doesn't know is refused before anything changes, so no part is restarted without being checked; the page says which, and that release is upgraded by hand. Going back to a release from before AUGUR's own Keycloak image leaves Keycloak running; it takes Keycloak's own image the next time it's recreated. If one doesn't answer, it puts every part back on the release you were on, and the page says why and which backup was taken. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
+An optional container that runs an upgrade asked for with **Upgrade to …** in the Upgrade Centre. It checks every image is signed by this repository's Release workflow and is the one the release names, checks the settings it needs are set, takes a backup and test-restores it, pulls, then restarts AUGUR's Keycloak (waiting up to five minutes, as its first start on a new Keycloak minor migrates its database), reruns storage’s set-up and restarts identity, registry, events, models, the apps that ship with AUGUR (in the order `release/shipped-apps.json` lists them, which its image carries), gateway and web in turn, waiting for each to answer on its new version. A release with an image for something the server runs that this updater doesn't know is refused before anything changes, so no part is restarted without being checked; the page says which, and that release is upgraded by hand. Going back to a release from before AUGUR's own Keycloak image leaves Keycloak running; it takes Keycloak's own image the next time it's recreated. If one doesn't answer, it puts every part back on the release you were on, and the page says why and which backup was taken. With a breaking release between, it doesn't once any part has restarted on the new release, since the old one may not read what was migrated: the page says the server is partly on the new release, for you to decide ([upgrade-went-back.md](upgrade-went-back.md)). Each part gets up to 5 minutes, as services migrate their databases on their first start.
+
+**What it holds to.** Before it changes anything it checks there are at least 2 GiB free in `infra/deploy` (the backup and the images land on that disk). Settings entered on the page only add: one that says what the server trusts (`SERVER_RING`, `IMAGE_SIGNER`, `PLATFORM_IMAGES`, `APP_SECRETS_KEY`, any `COMPOSE_*` and the like), one `.env` already has, or one that isn't a plain setting name is refused, even if the registry let it through. `.env` is written whole and renamed into place; where the updater can't keep the file's owner it writes it in place instead, keeping `.env.before-upgrade` beside it until the write checks out (if a message says that file holds the old settings, copy it over `.env` first). While an upgrade runs it keeps a note of it in `infra/deploy/.updater-upgrade.json` (the old `.env` among it, readable by the updater alone): if the updater or the server restarts partway, it goes back using it, with the same breaking-release rule. Don't delete it during an upgrade; it goes when the upgrade ends. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
 
 **Deploy files and new settings.** Each release's updater image carries that release's deploy files (`infra/deploy`, as `augur@<version>` has them). When the release you upgrade to changes some, the updater takes them from the new release's updater image, checks each against the release file (which the Release workflow signs with the images), writes them into `infra/deploy`, then starts anything they add and makes again anything that mounts a changed file (Keycloak's realm, say). Going back puts the old files back and takes new parts away. Two things stop it, and the page says which:
 - A file the release changes has been **edited on the server** since the release you run. The updater never overwrites your edits: put the file back as `augur@<your version>` has it (`git checkout augur@<version> -- infra/deploy/<file>`), and keep your change in `.env` or a `compose.override.yml` of your own instead.

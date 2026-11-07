@@ -125,16 +125,19 @@ jobs:
         run: infra/deploy-test.sh broken
         env:
           LOCAL_TAG: ${{ steps.releases.outputs.to }}
-      # Pass or fail, on the release, where Promote to stable reads it (docs/release-channels.md). A run on
-      # another branch tests with that branch's script, so it says nothing about the release.
+      # Pass or fail, on the release, where Promote to stable reads it (docs/release-channels.md), and the
+      # feed too: it replaces the pending result the release was made with, and only a pass lets the feed
+      # offer a beta. A test that fails before it knows which
+      # release it tests still fails the one it was asked for. A run on another branch tests with that
+      # branch's script, so it says nothing about the release.
       - name: Keep the result on the release
-        if: ${{ !cancelled() && steps.releases.outputs.to != '' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+        if: ${{ !cancelled() && (steps.releases.outputs.to != '' || inputs.to != '') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
         run: |
           jq -n --arg version "$TO" --arg from "$FROM" --arg run "$GITHUB_RUN_ID" --arg at "$(date -u +%FT%TZ)" --argjson passed "$PASSED" \
             '{schema: "augur.deploy-test/v1", version: $version, from: (if $from == "" then null else $from end), passed: $passed, run: $run, at: $at}' > "$RUNNER_TEMP/deploy-test.json"
           gh release upload "augur@$TO" "$RUNNER_TEMP/deploy-test.json" --clobber
         env:
-          TO: ${{ steps.releases.outputs.to }}
+          TO: ${{ steps.releases.outputs.to || inputs.to }}
           FROM: ${{ steps.releases.outputs.from }}
           PASSED: ${{ job.status == 'success' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
