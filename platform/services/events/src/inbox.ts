@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import type pg from 'pg';
 import type { InboxAllow, InboxChange, InboxHistory, InboxItem, InboxOwner, InboxRef, NewAuditEntry, NewInboxItem } from '@augur/service-kit';
 import type { EventFloor, NewDomainEvent } from './store.ts';
-import { insertAudit, insertEvents, refIn } from './writes.ts';
+import { insertAudit, insertEvents, oneAtATime, refIn } from './writes.ts';
 
 /**
  * The Inbox's items (ADR 0026): work that waits on a person or a team. Apps put and close
@@ -236,6 +236,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  */
 export class PgInboxStore implements InboxStore {
   private emitter = new EventEmitter().setMaxListeners(0);
+  private readBack = oneAtATime();
 
   readonly doneDays: number;
 
@@ -252,10 +253,10 @@ export class PgInboxStore implements InboxStore {
   heard(payload: string) {
     const ref = refIn(payload, /^[0-9]{1,19}$/);
     if (!ref || !this.emitter.listenerCount('change')) return;
-    void this.pool
-      .query<{ item_id: string; signal: Omit<InboxSignal, 'id'> | null }>('select item_id, signal from events.inbox_history where id = $1', [ref])
-      .then(({ rows }) => rows[0]?.signal && this.emitter.emit('change', { id: rows[0].item_id, ...rows[0].signal }))
-      .catch(() => undefined);
+    this.readBack(async () => {
+      const { rows } = await this.pool.query<{ item_id: string; signal: Omit<InboxSignal, 'id'> | null }>('select item_id, signal from events.inbox_history where id = $1', [ref]);
+      if (rows[0]?.signal) this.emitter.emit('change', { id: rows[0].item_id, ...rows[0].signal });
+    });
   }
 
   onChange(listener: InboxListener) {

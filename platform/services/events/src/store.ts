@@ -3,7 +3,7 @@ import pg from 'pg';
 import { digestMigration, PgDigestStore, type DigestStore } from './digests.ts';
 import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
-import { EVENT_CHANNEL, floorFrom, fromAuditRow, insertAudit, insertEvents, refIn, type AuditRow } from './writes.ts';
+import { EVENT_CHANNEL, floorFrom, fromAuditRow, insertAudit, insertEvents, oneAtATime, refIn, type AuditRow } from './writes.ts';
 import { leaveNoticeKey, PERSONAL_DETAIL_KEYS, REMOVED, runMigrations, steadyPool, type Migration, type NewAuditEntry, type NewNotification, type NotificationAction, type NotificationLevel } from '@augur/service-kit';
 
 /** The floor something happened on, with its path from the root as it stood then, so it stays right after a team moves. */
@@ -416,6 +416,7 @@ const fromRow = (r: NotificationRow): Notification => ({
  */
 export class PgEventStore implements EventStore {
   private emitter = new EventEmitter().setMaxListeners(0);
+  private readBack = oneAtATime();
   private listening?: pg.PoolClient;
   private closed = false;
   readonly inbox: PgInboxStore;
@@ -478,19 +479,19 @@ export class PgEventStore implements EventStore {
   private heardNotification(payload: string) {
     const ref = refIn(payload, NOTIFICATION_ID);
     if (!ref || !this.emitter.listenerCount('notification')) return;
-    void this.pool
-      .query<NotificationRow>('select * from events.notifications where id = $1', [ref])
-      .then(({ rows }) => rows[0] && this.emitter.emit('notification', fromRow(rows[0])))
-      .catch(() => undefined);
+    this.readBack(async () => {
+      const { rows } = await this.pool.query<NotificationRow>('select * from events.notifications where id = $1', [ref]);
+      if (rows[0]) this.emitter.emit('notification', fromRow(rows[0]));
+    });
   }
 
   private heardEvent(payload: string) {
     const ref = refIn(payload, SEQ);
     if (!ref || !this.emitter.listenerCount('domain-event')) return;
-    void this.pool
-      .query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events where seq = $1', [ref])
-      .then(({ rows }) => rows[0] && this.emitter.emit('domain-event', fromEventRow(rows[0])))
-      .catch(() => undefined);
+    this.readBack(async () => {
+      const { rows } = await this.pool.query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events where seq = $1', [ref]);
+      if (rows[0]) this.emitter.emit('domain-event', fromEventRow(rows[0]));
+    });
   }
 
   /** Runs `work` in one transaction on its own connection. */

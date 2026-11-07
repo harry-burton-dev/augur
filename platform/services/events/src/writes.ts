@@ -26,6 +26,23 @@ export const refIn = (payload: string, shape: RegExp) => {
   }
 };
 
+/** Most reads waiting: what's heard is a hint to refresh, so past this it's dropped, whoever is sending. */
+const WAITING = 1000;
+
+/**
+ * Reads back what's heard one at a time. Each read may get a different connection, and a new one is slower than an
+ * idle one, so reads run side by side would tell listeners of a later change before an earlier one.
+ */
+export const oneAtATime = () => {
+  let last: Promise<unknown> = Promise.resolve();
+  let waiting = 0;
+  return (read: () => Promise<unknown>) => {
+    if (waiting >= WAITING) return;
+    waiting++;
+    last = last.then(read).catch(() => undefined).finally(() => waiting--);
+  };
+};
+
 export type AuditRow = {
   id: string;
   at: Date;

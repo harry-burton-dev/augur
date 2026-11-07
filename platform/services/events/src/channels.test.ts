@@ -86,6 +86,27 @@ describe('what any database login can send on the channels', () => {
     expect([forged.notifications, forged.events, forged.changes]).toEqual([[], [], []]);
   });
 
+  it('tells listeners in the order it heard, however long each read takes', async () => {
+    const { pool, hear, changes } = await listening();
+    const slow: ((answer: { rows: unknown[] }) => void)[] = [];
+    pool.query.mockImplementationOnce(() => new Promise((resolve) => slow.push(resolve)));
+    pool.query.mockResolvedValueOnce({ rows: [{ item_id: 'item-1', signal: { change: 'changed', principals: [] } }] });
+    hear('events_inbox', JSON.stringify({ ref: '1' }));
+    hear('events_inbox', JSON.stringify({ ref: '2' }));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(changes).toEqual([]);
+    slow[0]!({ rows: [{ item_id: 'item-1', signal: { change: 'added', principals: [] } }] });
+    await expect.poll(() => changes.map((c) => c.change)).toEqual(['added', 'changed']);
+  });
+
+  it('carries on after a read that fails', async () => {
+    const { pool, hear, changes } = await listening([{ item_id: 'item-1', signal: { change: 'changed', principals: [] } }]);
+    pool.query.mockRejectedValueOnce(new Error('the pool is full'));
+    hear('events_inbox', JSON.stringify({ ref: '1' }));
+    hear('events_inbox', JSON.stringify({ ref: '2' }));
+    await expect.poll(() => changes).toHaveLength(1);
+  });
+
   it('takes who may hear of an inbox change from its history line', async () => {
     const { hear, changes } = await listening([{ item_id: 'item-1', signal: { change: 'changed', principals: ['team:t-1'] } }]);
     hear('events_inbox', JSON.stringify({ ref: '12' }));
