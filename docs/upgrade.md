@@ -62,9 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 - **If an upgrade was turned back with "didn't restore in the test" and `type public.vector does not exist`, run this once on the server before you upgrade again.** The test runs in the backup container your server already has, which before this release lacked pgvector, so the release that fixes it can't get past it on its own. From the folder AUGUR is in:
   ```sh
-  sed -i 's#^    image: postgres:16-alpine$#    image: pgvector/pgvector:0.8.7-pg16-bookworm#' infra/deploy/compose.yml && pc up -d backup
+  sed -i 's#^    image: postgres:16-alpine$#    image: pgvector/pgvector:0.8.7-pg16-bookworm#' infra/deploy/compose.yml
+  # That image's sh has no pipefail, so the backup scripts must run themselves in bash, as this release's do.
+  sed -i 's#^set -o pipefail$#(set -o pipefail) 2>/dev/null || exec bash "$0" "$@"\nset -o pipefail#' infra/deploy/backup/*.sh
+  pc up -d backup && pc exec -T backup /bin/sh /backup/backup.sh --restore-test
   ```
-  Then ask for the upgrade again on the Updates page. The release puts the same image in its own compose.yml, so nothing else changes.
+  The last line should say the backup was restored and checked. Then ask for the upgrade again on the Updates page. The release brings the same image and scripts, so nothing else changes.
 - **Nothing to do otherwise.** The updater's log now says why an upgrade didn't go ahead, beside `rolled-back`.
 
 ### The app bar replaces Title and Orbit
