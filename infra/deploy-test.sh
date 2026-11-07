@@ -273,6 +273,22 @@ counted_apart() {
   echo "The gateway counted $calls calls to /api/$app under apps, not platform." >&2
 }
 
+# The updater's safety backup before an upgrade, and the restore test it must pass, on this release's data:
+# a release whose own backup doesn't restore would turn back every upgrade after it. An app's data that
+# doesn't come back is reported, not failed, as on a server (ADR 0073).
+backup_restores() {
+  pc exec -T backup /bin/sh /backup/backup.sh --now >&2
+  if ! pc exec -T backup /bin/sh /backup/backup.sh --restore-test >&2; then
+    echo "$1: the backup didn't pass the restore test: $(pc exec -T backup cat /backups/status/restore-test.json 2>/dev/null)" >&2
+    return 1
+  fi
+  said=$(pc exec -T backup cat /backups/status/restore-test.json)
+  if [ "$(jq -r '.appsNotRestored // [] | length' <<< "$said")" != 0 ]; then
+    echo "::warning::$1: these apps' data didn't all come back in the restore test: $(jq -c .appsNotRestored <<< "$said")" >&2
+  fi
+  echo "$1: the backup restored and checked." >&2
+}
+
 if [ "${BUILD:-}" = 1 ]; then
   pc build $(services | grep -vx -e postgres -e backup -e backup-tools -e garage -e docker-proxy) >&2
   # The build cache isn't needed again, and on a CI runner its space is.
@@ -289,6 +305,7 @@ case "$mode" in
     wait_ready "Fresh install of this checkout"
     no_restarts
     on_version "$local_tag"
+    backup_restores "Fresh install of this checkout"
     browser_check
     # THEN runs once the install is ready, before it is removed, with its address and the first admin's
     # sign-in (whose password must be changed at first sign-in). Its exit status is the test's.
@@ -325,6 +342,7 @@ case "$mode" in
     tables > "$work/after"
     kept "$work/before" "$work/after"
     on_version "$local_tag"
+    backup_restores "Upgrade from augur@$from to this checkout"
     echo "Versions before: $old" >&2
     echo "Versions after:  $new" >&2
 

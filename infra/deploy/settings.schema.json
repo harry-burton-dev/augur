@@ -21,14 +21,6 @@
     "IDENTITY_CLIENT_SECRET",
     "REGISTRY_CLIENT_SECRET",
     "EVENTS_CLIENT_SECRET",
-    "FOLIO_CLIENT_SECRET",
-    "FOLIO_DATABASE_PASSWORD",
-    "FOLIO_BUCKET_SECRET",
-    "AUSPEX_CLIENT_SECRET",
-    "ATLAS_CLIENT_SECRET",
-    "ATLAS_DATABASE_PASSWORD",
-    "MANDATE_CLIENT_SECRET",
-    "MANDATE_DATABASE_PASSWORD",
     "PLATFORM_ADMIN_USER",
     "PLATFORM_ADMIN_PASSWORD",
     "PLATFORM_ADMIN_EMAIL",
@@ -807,6 +799,25 @@
         "storage"
       ],
       "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
+    },
+    "APP_DATABASE_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[0-9]*$",
+      "default": "30",
+      "description": "The most database connections each app's login may hold at once, so one app can't take the ones AUGUR's services need (ADR 0073).",
+      "x-services": [
+        "storage"
+      ],
+      "x-docs": "docs/app-storage.md#what-an-app-gets"
+    },
+    "APP_MEM_LIMIT": {
+      "type": "string",
+      "default": "1g",
+      "description": "The memory each app that ships with AUGUR may use (Docker's mem_limit), so a runaway app can't push AUGUR out (ADR 0073).",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
     },
     "API_RATE_PER_SECOND": {
       "type": "string",

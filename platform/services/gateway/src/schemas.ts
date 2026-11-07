@@ -111,6 +111,16 @@ export const BackupStatus = Type.Object(
           people: Type.Optional(Type.Integer({ description: 'People in the restored sign-in realm' })),
           apps: Type.Optional(Type.Integer()),
           auditEntries: Type.Optional(Type.Integer()),
+          appsNotRestored: Type.Optional(
+            Type.Array(
+              Type.Object({
+                app: Type.String({ description: 'The app whose schema it was' }),
+                errors: Type.Integer(),
+                problem: Type.String({ description: 'The first error' }),
+              }),
+              { description: "Apps whose data didn't all come back. AUGUR's own did, so the test passed (ADR 0073)" },
+            ),
+          ),
         }),
       ]),
     ),

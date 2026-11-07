@@ -26,6 +26,10 @@ const s3 = new S3Client({ endpoint: bucket!.endpoint, region: bucket!.region, fo
 
 The app creates its own tables, in its own migrations, when its service starts, as the platform's services do.
 
+The login may hold at most 30 connections at once (`APP_DATABASE_CONNECTIONS` in `.env`), so an app that leaks them runs out alone, and AUGUR's services keep theirs (ADR 0073). Keep the app's pools well under it, counting its workers and its jobs.
+
+An app's storage that can't be made (a missing or short password, a bad id, a bucket Garage refuses) never stops AUGUR: the storage job sets up the platform's own first, skips that app, says why in `pc logs storage`, and the app alone doesn't start until it's fixed.
+
 Say what the app keeps in its manifest, so admins can see it:
 
 ```json

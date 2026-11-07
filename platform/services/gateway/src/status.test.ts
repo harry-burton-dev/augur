@@ -156,6 +156,14 @@ describe('backupStatus', () => {
     );
     expect(await problem({ 'last-backup.json': backup, 'restore-test.json': { ...restored, at: '2026-10-12T02:00:00Z' } })).toMatch(/over a week/);
   });
+
+  it('needs a look when an app’s data didn’t all come back, though AUGUR’s did (ADR 0073)', async () => {
+    const appsNotRestored = [{ app: 'atlas', errors: 5, problem: 'ERROR:  type public.vector does not exist' }];
+    const status = await backupStatus(await folder({ ...all, 'restore-test.json': { ...restored, appsNotRestored } }), now);
+    expect(status.state).toBe('attention');
+    expect(status.problem).toBe('The last restore test brought AUGUR back, but not all of atlas’s data: ERROR:  type public.vector does not exist The app’s logs and its database tables say more.');
+    expect(status.lastRestoreTest?.appsNotRestored).toEqual(appsNotRestored);
+  });
 });
 
 describe('publicAccess', () => {
