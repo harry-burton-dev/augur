@@ -56,6 +56,13 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Artifacts asks for two more scopes
+
+**From** unreleased
+
+- **Scopes**: Artifacts now asks for `events:subscribe` and `inbox:write`. It's still served without them, but gets them only once an admin allows them in Admin, Apps: allow them after upgrading.
+- **Deleted people**: people deleted more than 30 days before the upgrade keep their names in Artifacts.
+
 ### Backups are root's alone, and the off-server copy carries .env
 
 **From** unreleased
