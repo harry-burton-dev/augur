@@ -1,5 +1,15 @@
 # @augur/storage
 
+## 0.5.2
+
+### Patch Changes
+
+- Updated dependencies [656f2d1]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [1ce4194]
+  - @augur/service-kit@0.18.0
+
 ## 0.5.1
 
 ### Patch Changes

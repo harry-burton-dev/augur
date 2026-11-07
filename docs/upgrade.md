@@ -58,14 +58,14 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### The app bar replaces Title and Orbit
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Nothing to run.** People see the new navigation after the upgrade: a bar of tiles across the desktop, one per group of apps (Platform, Pillars, Apps), which docks beside an app as the rail with that app's pages.
 - **Tell people Esc no longer leaves an app.** Home in the rail is the way back to the desktop. Where someone moves the bar to is kept with their other preferences.
 
 ### Two-step accounts aren't linked to Entra, and leavers' events can't be lost
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Entra:** an account holding a two-step role is no longer linked automatically at its first sign-in through Entra; that sign-in is refused and says why. If two steps for everyone is on, that's every account that already exists, and only people with no account yet get one through Entra. Accounts already linked aren't touched. The realm job rebuilds the first sign-in flow on the next `pc up -d`, and for those few seconds a first sign-in gets Keycloak's own flow, which asks for the old password.
 - **Nothing to run for old entries.** The events service's migrations take the notes out of Activity for people already deleted, and delete the notices that they asked to leave.
@@ -73,14 +73,14 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 - A night identity can't say how long Activity is kept now removes nothing, where it used to remove what was older than 365 days. If `pc logs events` says `Activity retention: nothing removed tonight` every night, fix what it names.
 ### Artifacts asks for two more scopes
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Scopes**: Artifacts now asks for `events:subscribe` and `inbox:write`. It's still served without them, but gets them only once an admin allows them in Admin, Apps: allow them after upgrading.
 - **Deleted people**: people deleted more than 30 days before the upgrade keep their names in Artifacts.
 
 ### Backups are root's alone, and the off-server copy carries .env
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Backups**: dumps and archives in `infra/deploy/backups/` are now readable by root alone, and Status's results move to `infra/deploy/backups/status/`, the only part the gateway sees. Read a dump through the backup container, as the guides now do (`pc run --rm --no-deps -T --entrypoint gunzip backup -c /backups/<file>`).
 - **Off-server copy**: `.env` and `secrets/` now go into it each night, encrypted with `OFFSITE_PASSWORD`. Keep every `OFFSITE_*` setting off the server: they're what a lost server needs ([deploy.md, Restore a lost server](deploy.md#restore-a-lost-server), which replaces the old steps; those copied an empty database over the real copies). The copy also refuses a dump with no AUGUR in it, and a repository another server filled, until `backup.sh --adopt-offsite`.
@@ -90,7 +90,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### Upgrades only take settings they add, and removed apps stay removed
 
-**From** unreleased
+**From** augur@0.24.0
 
 **Upgrade to …** now takes only settings the upgrade adds, and never one that says what the server trusts, such as `SERVER_RING`, `IMAGE_SIGNER` or `APP_PUBLISHERS`. Set those in `.env` on the server.
 
@@ -98,19 +98,19 @@ An app an admin removed can no longer register itself back. If you want it again
 
 ### Leavers' accounts are deleted after the retention period
 
-**From** unreleased
+**From** augur@0.24.0
 
 Identity now deletes a leaver's account once the organisation's leaver retention has passed (Admin → Organisation, Security and retention; 90 days unless a deployment admin changed it; ADR 0072). It can't be undone: Activity loses their personal values and Keycloak deletes the account. Anyone who left more than that many days before you upgrade is deleted within five minutes of identity starting. If you want to keep someone longer, raise the retention before upgrading. Apps that follow `platform.person.deleted` should delete or anonymise what they keep about that person.
 
 ### The organisation's logo, sign-in notice, languages and security move into Admin
 
-**From** unreleased
+**From** augur@0.24.0
 
 Admin → Organisation now also keeps the organisation's logo, a sign-in notice, the languages offered and, for a deployment admin, two steps for everyone and how long leavers and Activity are kept (docs/deploy.md, "Organisation settings"). Nothing to do. If you set `ORG_LOGO_URL`, it still wins; take it out of `.env` to use the logo kept in Admin. Languages chosen in Admin replace `REALM_LANGUAGES`. The sign-in pages pick up the notice, languages and the organisation's name at the next `pc up -d`.
 
 ### An app's updates are in the Upgrade Centre only
 
-**From** unreleased
+**From** augur@0.24.0
 
 Admin → Apps no longer has an installed app's **New releases**, **When one is out**, waiting version, history or **Go back**, nor a **Needs you** list of app updates: they were a second copy of what the Upgrade Centre (`/upgrades`) does, and they now live only there. Admin → Apps keeps installing new apps from their releases, each job's steps, developers and previews, and **Remove from the server**, and links to the Upgrade Centre from each installed app. Nothing changes on the server; each app keeps the channel and policy it had.
 

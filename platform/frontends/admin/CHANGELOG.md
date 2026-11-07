@@ -1,5 +1,25 @@
 # @augur/admin
 
+## 0.19.0
+
+### Minor Changes
+
+- cd05e3b: Admin → Apps no longer keeps its own copy of an installed app's update controls (channel, policy, the version waiting, history, go back, Needs you): they are in the Upgrade Centre, and each installed app links there. Installing new apps, job steps, developers, previews and Remove stay in Admin.
+- 656f2d1: Leavers' accounts are deleted once the organisation's leaver retention has passed (ADR 0072). Identity checks every five minutes and, in an order it can resume, has Activity remove their personal values, forgets their preferences and teams, and deletes the Keycloak account; then it records `person.deleted`, which followers hear as `platform.person.deleted` (`PLATFORM_TOPICS.personDeleted`). A deployment admin who just entered their password can delete a leaver's account at once (`DELETE /v1/admin/people/{id}`). People shows when a leaver's account goes (contract 1.30.0, migration `lifecycle_005_deletion`).
+- 69bad0d: People can sign in with the organisation's Entra account. With `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` in `.env`, the realm job adds the organisation's single-tenant Entra as a sign-in, whose first sign-in links to the account with the same email, or makes one when nobody has it, with no password asked for. Taking the settings out turns it off and keeps the links. An account made this way is recorded as joined (`person.added` with `method: 'federated'`, so `platform.person.joined`), and a person shows `source: 'federated'` (contract 1.28.0, migration `lifecycle_004_federated`). Admin says how each person signs in.
+- f3fa13d: People shows who is **Locked** after repeated wrong passwords (and an admin can unlock them), who is **Leaving** on a last day an admin set (the leaver flow then runs on its own once that day is over, and can be cancelled until then), and who is **Idle**. A person's dialog lists their account's facts: state, last sign-in, invite, lockout, when an idle sign-in is warned and turned off or why it never is, and their last day. Identity: `POST /admin/people/{id}/unlock`, `lastDay` on the leaver flow and `DELETE /admin/people/{id}/leave`, `locked`, `leaving` and `idle` on a person (contract 1.27.0), migration `lifecycle_003_locked_leaving`.
+- 7723745: Admin → Organisation's settings grow (ADR 0042): the organisation's logo (a PNG, served to sign-in pages without a sign-in), a sign-in notice shown as Keycloak's Terms and Conditions step with "ask everyone again", the languages offered and the default, and, for a deployment admin who just entered their password, two steps for everyone and how long leavers and Activity are kept. AUGUR's own services read the retention at `GET /v1/organisation/policy`. The realm job applies the notice, languages, two steps for everyone and the organisation's name to Keycloak; the sign-in pages show the name and logo kept in Admin.
+
+  Admin → Organisation shows and changes them: a Logo section (drop a PNG), Sign-in notice, Languages, and Security and retention, which says who can change it and asks for the password again when it's needed. Activity says what changed in words.
+
+### Patch Changes
+
+- 57ebab2: The app bar replaces Title and Orbit (PDR-020), on kit 0.5.8 (Common 0.11, Quill 0.13, Aerie 0.8.1). On the desktop the bar runs across the still horizon with a tile per group of apps, from each app's manifest category: Platform, Pillars, then Apps. With an app open it docks as the rail beside it, with Home, Apps, the app and its pages, one per item of its manifest menu; an app with one page or none shows no page list. Esc no longer leaves an app: it closes a start menu, and Home in the rail goes back to the desktop. The groups' names are the shell's words, not the kit's. Where the bar rests is kept in the person's preferences: Identity takes `barStop` (0 to 3) in `PUT /v1/me/preferences` (contract 1.31.0). The manifest's `areas` and `orbit` are still read but no longer drawn. The contract tests check the desktop bar, a start menu, the rail, Esc, Home and an address with no app.
+
+  The kit is the Horizon look Harry picked on 6 Nov 2026, for the shell's own pages and every app that takes the kit from `KIT_URL`: square corners, buttons as keys, fields, checks, toggles and selects as wells with one focus ring, solid sheets for dialogs, notices, toasts, menus and tips, and the needs-you colour and the typefaces (Instrument Sans, IBM Plex Mono) as tokens. Nothing an app uses is removed.
+
+- 024e635: Preferences are never saved over before they have loaded, and telemetry starting no longer remounts the open app. Notifications aren't lost on reconnect, Home's cards unmount on a floor change, the leaver form keeps the agreed handover, Organisation says plainly that leavers are deleted, and failed reads no longer stop job tracking or hide installed apps.
+
 ## 0.18.0
 
 ### Minor Changes

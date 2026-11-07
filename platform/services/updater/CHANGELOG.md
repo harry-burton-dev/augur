@@ -1,5 +1,18 @@
 # @augur/updater
 
+## 0.9.6
+
+### Patch Changes
+
+- dfc36c1: The app runner keeps its record of previews through installs and undoes a failed switch fully. A tarball with a negative size is refused, ids that collide with platform secrets or jobs schemas are reserved, previews use their own jobs schema, and one refused outbox row no longer holds up the rest.
+- 683062a: Upgrades and backups hold up when things go wrong. The updater writes .env whole, refuses an upgrade on a nearly full disk or one whose settings would change what the server trusts, never goes back by itself past a breaking release once a part has restarted, and goes back after a restart partway through. Backups are readable by root alone and the gateway sees only their results; the off-server copy carries .env and secrets, encrypted, and refuses an empty or another server's dump; and the lost-server guide restores before anything is copied. Telemetry and Artifacts' rendition worker get networks of their own. Feed, promote, halt and Lockfile workflows refuse to run outside main or to leak their token, and a beta that fails its deploy test is listed halted.
+- 57b8fee: The updater no longer rolls back a release that moves a running part onto AUGUR's own image (Keycloak in 0.19.0). It used to pull that part before writing the new compose.yml, so it fetched the old image (Keycloak's own) and stopped with "The keycloak image pulled for … isn't the one the release names". Such a part is now pulled once the new compose.yml names AUGUR's image, and going back puts it on the old image again.
+- Updated dependencies [656f2d1]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [1ce4194]
+  - @augur/service-kit@0.18.0
+
 ## 0.9.5
 
 ### Patch Changes
