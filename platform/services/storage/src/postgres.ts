@@ -33,14 +33,15 @@ export async function prepareDatabase(sql: Sql): Promise<void> {
  * password is set every time, so changing it in .env and starting again changes it.
  * The login can't read any other schema: the platform's belong to the admin login.
  */
-export async function provisionDatabase(sql: Sql, { app, password }: { app: string; password: string }): Promise<void> {
+export async function provisionDatabase(sql: Sql, { app, password, connections = 30 }: { app: string; password: string; connections?: number }): Promise<void> {
   // A schema named for a part of AUGUR (identity, registry, public…) would sit among the platform's own.
   const reserved = reservedIdProblem(app);
   if (reserved) throw new Error(`No schema was made for it: ${reserved}`);
   const role = pg.escapeIdentifier(roleFor(app));
   const schema = pg.escapeIdentifier(schemaFor(app));
   const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
-  const options = `login nosuperuser nocreatedb nocreaterole noinherit password ${pg.escapeLiteral(password)}`;
+  // At most `connections` at once, so an app that leaks them can't take the ones AUGUR's services need (ADR 0073).
+  const options = `login nosuperuser nocreatedb nocreaterole noinherit connection limit ${Math.trunc(connections)} password ${pg.escapeLiteral(password)}`;
   await sql.query(exists.rowCount ? `alter role ${role} with ${options}` : `create role ${role} with ${options}`);
   const { rows } = await sql.query<{ db: string }>('select current_database() as db');
   await sql.query(`grant connect on database ${pg.escapeIdentifier(rows[0].db)} to ${role}`);

@@ -24,17 +24,38 @@ describe('configFromEnv', () => {
         { app: 'folio', databasePassword: 'p'.repeat(32), bucketSecret: secret },
         { app: 'team-notes', databasePassword: 'q'.repeat(32), bucketSecret: secret },
       ],
+      skipped: [],
+      appConnections: 30,
       services: [],
     });
   });
 
-  it('says everything that is wrong at once', () => {
-    const config = configFromEnv({ GARAGE_ADMIN_TOKEN: 't', APP_STORAGE: 'Folio folio', FOLIO_DATABASE_PASSWORD: 'short', FOLIO_BUCKET_SECRET: 'nothex' });
+  it('says everything that is wrong with the platform’s own settings at once', () => {
+    const config = configFromEnv({ GARAGE_ADMIN_TOKEN: 't', APP_STORAGE_DROP: 'Folio', APP_DATABASE_CONNECTIONS: '1' });
     expect('problems' in config && config.problems).toEqual([
       expect.stringContaining('DATABASE_URL is not set'),
-      expect.stringContaining('"Folio" in APP_STORAGE is not an app id'),
-      expect.stringContaining('FOLIO_DATABASE_PASSWORD must be at least 16'),
-      expect.stringContaining('FOLIO_BUCKET_SECRET must be 64'),
+      expect.stringContaining('APP_DATABASE_CONNECTIONS must be a whole number'),
+      expect.stringContaining('"Folio" in APP_STORAGE_DROP isn’t a preview’s storage'),
+    ]);
+  });
+
+  it('skips an app it can’t set up, saying why, and sets up the rest (ADR 0073)', () => {
+    const config = configFromEnv({
+      DATABASE_URL: 'postgres://a:b@db/platform',
+      GARAGE_ADMIN_TOKEN: 't',
+      APP_STORAGE: 'Folio folio atlas mandate',
+      FOLIO_DATABASE_PASSWORD: 'short',
+      ATLAS_DATABASE_PASSWORD: 'p'.repeat(20),
+      ATLAS_BUCKET_SECRET: 'nothex',
+      MANDATE_DATABASE_PASSWORD: 'm'.repeat(20),
+      MANDATE_BUCKET_SECRET: secret,
+      APP_DATABASE_CONNECTIONS: '12',
+    });
+    expect(config).toMatchObject({ apps: [{ app: 'mandate' }], appConnections: 12 });
+    expect('skipped' in config && config.skipped).toEqual([
+      { app: 'Folio', problem: expect.stringContaining('"Folio" in APP_STORAGE is not an app id') },
+      { app: 'folio', problem: expect.stringContaining('FOLIO_DATABASE_PASSWORD must be at least 16') },
+      { app: 'atlas', problem: expect.stringContaining('ATLAS_BUCKET_SECRET must be 64') },
     ]);
   });
 
@@ -47,13 +68,14 @@ describe('configFromEnv', () => {
     const base = { DATABASE_URL: 'postgres://a:b@db/platform', GARAGE_ADMIN_TOKEN: 't' };
     expect(configFromEnv({ ...base, FRONTENDS_BUCKET_SECRET: secret })).toMatchObject({ frontendsSecret: secret });
     expect(configFromEnv(base)).not.toHaveProperty('frontendsSecret');
-    const bad = configFromEnv({ ...base, FRONTENDS_BUCKET_SECRET: 'short', APP_STORAGE: 'augur-frontends', AUGUR_FRONTENDS_DATABASE_PASSWORD: 'p'.repeat(20) });
-    expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('starts with augur-'), expect.stringContaining('FRONTENDS_BUCKET_SECRET must be 64')]);
+    expect(configFromEnv({ ...base, FRONTENDS_BUCKET_SECRET: 'short' })).toEqual({ problems: [expect.stringContaining('FRONTENDS_BUCKET_SECRET must be 64')] });
+    const augur = configFromEnv({ ...base, APP_STORAGE: 'augur-frontends', AUGUR_FRONTENDS_DATABASE_PASSWORD: 'p'.repeat(20) });
+    expect('skipped' in augur && augur.skipped).toEqual([{ app: 'augur-frontends', problem: expect.stringContaining('starts with augur-') }]);
   });
 
   it('gives no app storage under an id a part of AUGUR answers to', () => {
     const bad = configFromEnv({ DATABASE_URL: 'postgres://a:b@db/platform', APP_STORAGE: 'identity public', IDENTITY_DATABASE_PASSWORD: 'p'.repeat(20), PUBLIC_DATABASE_PASSWORD: 'p'.repeat(20) });
-    expect('problems' in bad && bad.problems).toEqual([
+    expect('skipped' in bad && bad.skipped.map(({ problem }) => problem)).toEqual([
       'APP_STORAGE: "identity" is kept for the identity service, a part of AUGUR. Choose another id for the app.',
       expect.stringContaining('"public" is kept for the database’s shared schema'),
     ]);

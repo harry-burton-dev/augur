@@ -38,17 +38,37 @@ if (config.drop) {
   process.exit(0);
 }
 
+// The platform's own logins come first, and an app's trouble never stops them (ADR 0073): an app that
+// can't be set up is skipped with its reason in this log, and fails alone. Only the platform's own set-up
+// failing stops this job, which everything else in AUGUR waits for.
+const appsFailed: string[] = [];
+for (const { app, problem } of config.skipped) {
+  log.error(`${app} gets no storage this time: ${problem}`);
+  appsFailed.push(app);
+}
+// An app's step: logged and skipped on failure, so the next app and the platform's set-up carry on.
+const forApp = async (app: string, work: () => Promise<void>) => {
+  try {
+    await work();
+  } catch (err) {
+    log.error(`${app}’s storage couldn’t be set up, so it won’t start until it is: ${(err as Error).message}`);
+    if (!appsFailed.includes(app)) appsFailed.push(app);
+  }
+};
+
 const client = new pg.Client({ connectionString: config.databaseUrl });
 await client.connect();
 try {
   await prepareDatabase(client);
-  for (const { app, databasePassword } of config.apps) {
-    await provisionDatabase(client, { app, password: databasePassword });
-    log.info(`${app} has database login ${roleFor(app)}, owning schema ${schemaFor(app)}`);
-  }
   for (const { service, databasePassword } of config.services) {
     const handed = await provisionServiceDatabase(client, { service, password: databasePassword });
     log.info(`${service} has database login ${serviceRoleFor(service)}, owning schema ${service}${handed ? ` (handed it ${handed} things the admin login made)` : ''}`);
+  }
+  for (const { app, databasePassword } of config.apps) {
+    await forApp(app, async () => {
+      await provisionDatabase(client, { app, password: databasePassword, connections: config.appConnections });
+      log.info(`${app} has database login ${roleFor(app)}, owning schema ${schemaFor(app)}, at most ${config.appConnections} connections`);
+    });
   }
 } finally {
   await client.end();
@@ -72,11 +92,6 @@ if (config.garage) {
   const garage = garageAdmin(config.garage);
   await garage.ready();
   if ((await garage.ensureLayout()) === 'applied') log.info('object storage is ready for the first time');
-  for (const { app, bucketSecret } of config.apps) {
-    const bucket = await garage.ensureBucket(app);
-    await garage.ensureKey(app, bucketSecret, bucket);
-    log.info(`${app} has bucket ${app}, opened by key ${keyIdFor(bucketSecret)}`);
-  }
   // Apps' frontends, kept by version: the registry writes them, the front door serves them.
   if (config.frontendsSecret) {
     const bucket = await garage.ensureBucket(FRONTENDS_BUCKET);
@@ -86,6 +101,15 @@ if (config.garage) {
   } else {
     log.warn('FRONTENDS_BUCKET_SECRET is not set, so apps’ frontends aren’t kept by version.');
   }
+  for (const { app, bucketSecret } of config.apps) {
+    await forApp(app, async () => {
+      const bucket = await garage.ensureBucket(app);
+      await garage.ensureKey(app, bucketSecret, bucket);
+      log.info(`${app} has bucket ${app}, opened by key ${keyIdFor(bucketSecret)}`);
+    });
+  }
 } else if (config.apps.length) {
   log.warn('GARAGE_ADMIN_TOKEN is not set, so apps get no bucket.');
 }
+
+if (appsFailed.length) log.warn(`AUGUR’s own storage is ready; ${appsFailed.join(', ')} ${appsFailed.length > 1 ? 'aren’t' : 'isn’t'}, and won’t start until ${appsFailed.length > 1 ? 'they are' : 'it is'} (see above).`);

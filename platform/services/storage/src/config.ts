@@ -18,6 +18,13 @@ export interface StorageConfig {
   garage?: { url: string; token: string; s3Url: string };
   apps: AppStorage[];
   /**
+   * Apps in APP_STORAGE that get nothing this run, each with why. An app's mistake never stops the
+   * platform's own set-up (ADR 0073): the app is skipped, said so in the log, and fails alone.
+   */
+  skipped: { app: string; problem: string }[];
+  /** The most connections each app's database login may hold at once (APP_DATABASE_CONNECTIONS). */
+  appConnections: number;
+  /**
    * A pull request's preview whose scratch storage is taken away instead (APP_STORAGE_DROP): its
    * database login and schema, and its bucket with everything in it. Only ever a preview's.
    */
@@ -55,6 +62,7 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
   if (!databaseUrl) problems.push('DATABASE_URL is not set: it is the admin login used to make each app’s database login.');
   const ids = (env.APP_STORAGE ?? '').split(/[\s,]+/).filter(Boolean);
   const apps: AppStorage[] = [];
+  const skipped: StorageConfig['skipped'] = [];
   // A secret in .env wins; otherwise it's worked out from APP_SECRETS_KEY, as the app runner does.
   const key = env.APP_SECRETS_KEY || undefined;
   const secretsOf = (app: string) => {
@@ -65,26 +73,26 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
       bucketSecret: env[`${prefix}_BUCKET_SECRET`] || (key ? appSecretFor(key, app, 'bucket') : ''),
     };
   };
-  for (const app of ids) {
-    if (!APP_ID.test(app) && !PREVIEW_ID.test(app)) {
-      problems.push(`"${app}" in APP_STORAGE is not an app id (2 to 40 lowercase letters, digits and dashes).`);
-      continue;
-    }
-    if (app.startsWith('augur-')) {
-      problems.push(`"${app}" in APP_STORAGE starts with augur-, which is kept for AUGUR's own buckets.`);
-      continue;
-    }
+  const appProblem = (app: string) => {
+    if (!APP_ID.test(app) && !PREVIEW_ID.test(app)) return `"${app}" in APP_STORAGE is not an app id (2 to 40 lowercase letters, digits and dashes).`;
+    if (app.startsWith('augur-')) return `"${app}" in APP_STORAGE starts with augur-, which is kept for AUGUR's own buckets.`;
     const reserved = reservedIdProblem(app);
-    if (reserved) {
-      problems.push(`APP_STORAGE: ${reserved}`);
-      continue;
-    }
+    if (reserved) return `APP_STORAGE: ${reserved}`;
     const { prefix, databasePassword, bucketSecret } = secretsOf(app);
-    if (databasePassword.length < 16) problems.push(`${prefix}_DATABASE_PASSWORD must be at least 16 characters (or set APP_SECRETS_KEY); \`openssl rand -hex 32\` makes one.`);
-    if (env.GARAGE_ADMIN_TOKEN && !/^[0-9a-f]{64}$/.test(bucketSecret)) problems.push(`${prefix}_BUCKET_SECRET must be 64 lowercase hex characters; \`openssl rand -hex 32\` makes one.`);
-    apps.push({ app, databasePassword, bucketSecret });
+    if (databasePassword.length < 16) return `${prefix}_DATABASE_PASSWORD must be at least 16 characters (or set APP_SECRETS_KEY); \`openssl rand -hex 32\` makes one.`;
+    if (env.GARAGE_ADMIN_TOKEN && !/^[0-9a-f]{64}$/.test(bucketSecret)) return `${prefix}_BUCKET_SECRET must be 64 lowercase hex characters; \`openssl rand -hex 32\` makes one.`;
+    return undefined;
+  };
+  for (const app of ids) {
+    const problem = appProblem(app);
+    if (problem) skipped.push({ app, problem });
+    else apps.push({ app, ...(({ databasePassword, bucketSecret }) => ({ databasePassword, bucketSecret }))(secretsOf(app)) });
   }
+  const appConnections = env.APP_DATABASE_CONNECTIONS ? Number(env.APP_DATABASE_CONNECTIONS) : 30;
+  if (!Number.isInteger(appConnections) || appConnections < 2 || appConnections > 1000) problems.push('APP_DATABASE_CONNECTIONS must be a whole number from 2 to 1000 (30 when empty).');
   const dropping = env.APP_STORAGE_DROP || undefined;
+  // Taking a preview's storage away is that preview's job alone, so it stops at any problem.
+  if (dropping) problems.push(...skipped.map(({ problem }) => problem));
   if (dropping && !PREVIEW_ID.test(dropping)) problems.push(`"${dropping}" in APP_STORAGE_DROP isn’t a preview’s storage (such as notes-pr12); an app’s own is never dropped this way.`);
   if (dropping && ids.length) problems.push('APP_STORAGE_DROP takes a preview’s storage away on its own: leave APP_STORAGE empty beside it.');
   if (env.APP_SECRETS_KEY && env.APP_SECRETS_KEY.length < 32) problems.push('APP_SECRETS_KEY must be at least 32 characters; `openssl rand -hex 32` makes one.');
@@ -109,6 +117,8 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     databaseHost: env.APP_DATABASE_HOST ?? `${url.hostname}:${url.port || 5432}`,
     garage: env.GARAGE_ADMIN_TOKEN ? { url: env.GARAGE_ADMIN_URL ?? 'http://garage:3903', token: env.GARAGE_ADMIN_TOKEN, s3Url: env.GARAGE_S3_URL ?? 'http://garage:3900' } : undefined,
     apps,
+    skipped,
+    appConnections,
     ...(dropping ? { drop: { app: dropping, ...(({ databasePassword, bucketSecret }) => ({ databasePassword, bucketSecret }))(secretsOf(dropping)) } } : {}),
     ...(frontendsSecret ? { frontendsSecret } : {}),
     services,

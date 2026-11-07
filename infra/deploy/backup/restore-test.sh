@@ -94,10 +94,83 @@ real_errors() {
   grep -E '(^|: )(ERROR|FATAL|PANIC|error):' "$1" || true
 }
 
+# AUGUR's own schemas in its database. Any other schema there is an app's: <id>, and <id>_jobs for its jobs.
+: "${PLATFORM_SCHEMAS:=public identity registry events models pg_catalog}"
+
+# whose DUMP ERRORS: each of ERRORS (psql's, one a line) as "<whose><tab><error>": the app whose schema
+# the failing statement was in, or "augur" for AUGUR's own (its schemas, Keycloak's database, logins,
+# and anything it can't tell). psql names the dump's line each error was at; the statement there, or
+# the COPY it was in, names the schema.
+whose() {
+  printf '%s\n' "$2" > "$scratch/real-errors"
+  gunzip -c "$1" | awk -v errs="$scratch/real-errors" -v platform=" $PLATFORM_SCHEMAS " '
+    function owner() {
+      if (db != "platform" || schema == "" || index(platform, " " schema " ")) return "augur"
+      app = schema
+      sub(/_jobs$/, "", app)
+      gsub(/_/, "-", app)
+      return app
+    }
+    function say(line) {
+      if (!(line in want)) return
+      n = split(want[line], each, "\n")
+      for (i = 1; i <= n; i++) print owner() "\t" each[i]
+      delete want[line]
+    }
+    BEGIN {
+      while ((getline e < errs) > 0) {
+        if (e == "") continue
+        if (match(e, /^psql:[^:]*:[0-9]+:/)) {
+          at = substr(e, 1, RLENGTH - 1)
+          sub(/^.*:/, "", at)
+          at += 0
+          # Tested before it is set: setting it first would make it look there already.
+          if (at in want) want[at] = want[at] "\n" e
+          else want[at] = e
+        } else print "augur\t" e
+      }
+    }
+    copying {
+      if ($0 == "\\.") copying = 0
+      say(NR)
+      next
+    }
+    /^\\connect / {
+      db = $2
+      gsub(/"/, "", db)
+      schema = ""
+    }
+    /^[A-Z]/ {
+      schema = ""
+      if (match($0, /SCHEMA [a-z_][a-z0-9_]*/)) schema = substr($0, RSTART + 7, RLENGTH - 7)
+      else if (match($0, /[a-z_][a-z0-9_]*\.[a-z_"]/)) schema = substr($0, RSTART, RLENGTH - 2)
+      if ($0 ~ /^COPY / && $0 ~ /FROM stdin;$/) copying = 1
+    }
+    { say(NR) }
+    END { for (line in want) { n = split(want[line], each, "\n"); for (i = 1; i <= n; i++) print "augur\t" each[i] } }
+  '
+}
+
+# first_error ERRORS: the first of them, safe inside JSON.
+first_error() { printf '%s\n' "$1" | head -n 1 | sed 's/^psql:[^:]*:[0-9]*: //' | tr -d '"\\\t' | cut -c1-200; }
+
 errors=$(real_errors "$scratch/errors")
+# An app's data that doesn't come back is that app's to fix, and never stops AUGUR's upgrade (ADR 0073):
+# it's reported for the app, and only AUGUR's own errors fail the test.
+not_restored=""
 if [ -n "$errors" ]; then
-  result false "$(basename "$file") came back with errors ($(printf '%s\n' "$errors" | wc -l | tr -d ' ')), the first: $(printf '%s\n' "$errors" | head -n 1 | tr -d '"\\\t' | cut -c1-200)"
-  exit 1
+  owned=$(whose "$file" "$errors")
+  ours=$(printf '%s\n' "$owned" | awk -F '\t' '$1 == "augur" { sub(/^[^\t]*\t/, ""); print }')
+  if [ -n "$ours" ]; then
+    result false "$(basename "$file") came back with errors ($(printf '%s\n' "$ours" | wc -l | tr -d ' ')), the first: $(first_error "$ours")"
+    exit 1
+  fi
+  for app in $(printf '%s\n' "$owned" | cut -f1 | sort -u); do
+    theirs=$(printf '%s\n' "$owned" | awk -F '\t' -v app="$app" '$1 == app { sub(/^[^\t]*\t/, ""); print }')
+    entry=$(printf '{"app":"%s","errors":%s,"problem":"%s"}' "$app" "$(printf '%s\n' "$theirs" | wc -l | tr -d ' ')" "$(first_error "$theirs")")
+    not_restored="${not_restored:+$not_restored,}$entry"
+    echo "restore-test: $app's data didn't all come back: $(first_error "$theirs")" >&2
+  done
 fi
 
 missing=""
@@ -117,4 +190,4 @@ if [ "$people" -lt 1 ]; then
   result false "Sign-in came back with nobody in it." "\"people\":$people,\"apps\":$apps,\"auditEntries\":$audit"
   exit 1
 fi
-result true "" "\"people\":$people,\"apps\":$apps,\"auditEntries\":$audit"
+result true "" "\"people\":$people,\"apps\":$apps,\"auditEntries\":$audit${not_restored:+,\"appsNotRestored\":[$not_restored]}"

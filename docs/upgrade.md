@@ -56,6 +56,15 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+
+### An app can't stop AUGUR starting, or its backup check
+
+**From** unreleased
+
+- **Nothing to run.** An app's missing secret, bad id or storage that can't be made no longer stops the storage job, or Compose from reading `compose.yml`: the platform starts, that app alone doesn't, and `pc logs storage` says why. The shipped apps' secrets stay in `.env` as before.
+- **Each app's database login may hold at most 30 connections** (`APP_DATABASE_CONNECTIONS`), and **each app that ships with AUGUR at most 1g of memory** (`APP_MEM_LIMIT`). Raise either in `.env` if `pc logs <app>` shows an app running out.
+- **The restore test passes on AUGUR's own data.** An app's data that doesn't come back is shown on Admin → Status for that app instead of turning back the upgrade (ADR 0073).
+
 ### Upgrades no longer stop at the restore test
 
 **From** unreleased

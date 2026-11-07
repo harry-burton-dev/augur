@@ -67,6 +67,11 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
     }
   });
 
+  it('holds at most its share of connections, so it can’t take AUGUR’s (ADR 0073)', async () => {
+    await provisionDatabase(admin, { app, password: 'first-password-123', connections: 7 });
+    expect((await admin.query('select rolconnlimit from pg_roles where rolname = $1', [roleFor(app)])).rows).toEqual([{ rolconnlimit: 7 }]);
+  });
+
   it('takes a new password when .env changes, and is otherwise unchanged', async () => {
     await provisionDatabase(admin, { app, password: 'second-password-456' });
     await provisionDatabase(admin, { app, password: 'second-password-456' });

@@ -190,6 +190,11 @@ export interface RestoreTest extends BackupRun {
   people?: number;
   apps?: number;
   auditEntries?: number;
+  /**
+   * Apps whose data didn't all come back, each with how many errors and the first. AUGUR's own came back,
+   * so the test passed: an app's data never stops AUGUR's upgrade (ADR 0073), but it's shown for that app.
+   */
+  appsNotRestored?: { app: string; errors: number; problem: string }[];
 }
 
 /** Restoring the database to a point in time (ADR 0064), as the backup container noted it hourly in pitr.json. */
@@ -272,7 +277,9 @@ export const backupStatus = async (dir: string, now = Date.now()): Promise<Backu
             ? `The last restore test failed: ${lastRestoreTest.problem ?? 'it didn’t say why.'}`
             : age(lastRestoreTest) > 8 * DAY
               ? 'No restore test has run for over a week. Check the backup container is running.'
-              : !offsite
+              : lastRestoreTest.appsNotRestored?.length
+                ? `The last restore test brought AUGUR back, but not all of ${lastRestoreTest.appsNotRestored.map(({ app }) => app).join(', ')}’s data: ${lastRestoreTest.appsNotRestored[0].problem} The app${lastRestoreTest.appsNotRestored.length > 1 ? 's’ logs and their' : '’s logs and its'} database tables say more.`
+                : !offsite
                 ? `Backups are kept on this server only, so losing the server would lose them too. ${OFFSITE_HOW}`
                 : !offsite.ok
                   ? (offsite.problem ?? `The last copy off the server failed. ${OFFSITE_HOW}`)
