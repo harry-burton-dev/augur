@@ -126,10 +126,21 @@ const signIn = async () => {
   if (token && IMAGE_PULL_USER) await server.login(host, IMAGE_PULL_USER, token);
 };
 
+/** The registry's reporter for an upgrade, which also keeps the last failure it was told, so the log can say why. */
+const reporterFor = (id: string) => {
+  const send = registry.reporter(id);
+  let why: string | undefined;
+  const report: typeof send = async (r) => {
+    if (r.state === 'failed' && r.message) why = r.message;
+    return send(r);
+  };
+  return { report, why: () => why };
+};
+
 const once = async () => {
   const target = await registry.target();
   if (!target) return;
-  const report = registry.reporter(target.id);
+  const { report, why } = reporterFor(target.id);
   if (target.state === 'running') {
     // Only this updater runs upgrades, so one already under way means it stopped partway through: it goes
     // back from what it wrote down, when it can (upgrade.ts, afterRestart).
@@ -137,13 +148,13 @@ const once = async () => {
     // Going back may need an image the docker CLI has to sign in for.
     await signIn().catch(() => undefined);
     const outcome = await afterRestart(target, server, report, { parts });
-    log('upgrade ended', { outcome, to: target.version });
+    log('upgrade ended', { outcome, to: target.version, ...(outcome === 'done' ? {} : { why: why() }) });
     return;
   }
   log('upgrading', { from: target.from, to: target.version });
   await signIn();
   const outcome = await runUpgrade(target, server, report, { devIdentity: AUGUR_DEV_SIGNER, parts });
-  log('upgrade ended', { outcome, to: target.version });
+  log('upgrade ended', { outcome, to: target.version, ...(outcome === 'done' ? {} : { why: why() }) });
   if (outcome === 'done' && target.images[UPDATER]) await server.replaceSelf();
 };
 

@@ -34,6 +34,8 @@
 #   backup.sh --pitr-test      restores the newest base backup and replays every archived change since
 set -eu
 # Without it a failed pg_dumpall would look like success, since gzip ends the pipe.
+# The database's image runs Debian's sh (dash), which has no pipefail, so the script runs itself in bash.
+(set -o pipefail) 2>/dev/null || exec bash "$0" "$@"
 set -o pipefail
 # Dumps hold every person's data and every login's password hash: root alone may read what this writes.
 umask 077

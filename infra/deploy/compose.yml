@@ -182,9 +182,11 @@ services:
   # test restore of the newest of each into a throwaway database. Once OFFSITE_REPOSITORY is
   # set, each night's dump and apps' files are also copied off the server with restic, encrypted before
   # they leave, and the weekly restore test restores from that copy (ADR 0060; docs/deploy.md, "Backups").
+  # The same image as postgres: the test restores into a Postgres of its own, which needs pgvector to bring
+  # back apps' vector columns. The updater runs the test before every upgrade, so without it upgrades stop.
   backup:
     logging: *logging
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.7-pg16-bookworm
     restart: unless-stopped
     entrypoint: ["/bin/sh", "/backup/backup.sh"]
     environment:
