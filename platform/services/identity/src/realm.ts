@@ -646,15 +646,24 @@ export const applyTwoStepForAll = async (kc: KeycloakDirectory, on: boolean | un
  * gets one OpenID Connect identity provider, `entra`, for the organisation's own tenant, and the sign-in pages
  * offer it beside the password. The first time someone signs in through it, Keycloak links them to the account
  * with the same email, or makes one if nobody has it (`ENTRA_FIRST_SIGN_IN`), with no Keycloak password asked
- * for. That is safe because the app registration is single-tenant: only the organisation's people can sign in,
- * and their emails are the organisation's (`trustEmail`). Names and email follow Entra at every sign-in.
- * Their second step is Entra's own, under the organisation's Conditional Access.
+ * for. The app registration is single-tenant, so only the organisation's people can sign in, and their emails are
+ * the organisation's (`trustEmail`). An account holding `TWO_STEP_ROLE` is never linked this way, though: whoever
+ * holds that address in Entra would take over an admin's account without its second step, so the sign-in is
+ * refused. Names and email follow Entra at every sign-in. Their second step is Entra's own, under the
+ * organisation's Conditional Access.
  *
  * Without the settings an `entra` provider that is there is turned off, never deleted, so the links survive a
  * mistake in `.env`.
  */
 export const ENTRA_ALIAS = 'entra';
 export const ENTRA_FIRST_SIGN_IN = 'augur first sign-in';
+/** Inside it: link to the account with the same email, unless `ENTRA_REFUSE_STEP` turns them away. */
+export const ENTRA_LINK_STEP = 'augur link by email';
+export const ENTRA_REFUSE_STEP = 'augur refuse two-step accounts';
+/** Keycloak's own first sign-in, which asks for the old password. Entra uses it while `ENTRA_FIRST_SIGN_IN` is rebuilt. */
+const KEYCLOAK_FIRST_SIGN_IN = 'first broker login';
+/** What someone refused a link is told. */
+export const ENTRA_REFUSED_MESSAGE = 'This account has to sign in with its password and second step, so it can’t be linked to the organisation’s sign-in automatically. Ask a deployment admin.';
 /** Where the provider keeps a fingerprint of what it was set to, the secret included, so a new secret is noticed without reading it back. */
 export const ENTRA_FINGERPRINT = 'augurFingerprint';
 
@@ -724,31 +733,64 @@ export const ENTRA_MAPPERS = [
 interface KcProvider {
   alias: string;
   enabled?: boolean;
+  firstBrokerLoginFlowAlias?: string;
   config?: Record<string, string>;
 }
 
+/** Whether the flow does all it should: anything less is an older release's, which links admins, or one a failed run left half-built. */
+const firstSignInIsBuilt = (all: Execution[]) => {
+  const at = (provider: string, requirement: string) => all.findIndex((e) => e.providerId === provider && e.requirement === requirement);
+  const step = (name: string, requirement: string) => all.findIndex((e) => e.displayName === name && e.requirement === requirement);
+  const inOrder = [at('idp-create-user-if-unique', 'ALTERNATIVE'), step(ENTRA_LINK_STEP, 'ALTERNATIVE'), at('idp-auto-link', 'REQUIRED'), step(ENTRA_REFUSE_STEP, 'CONDITIONAL'), at('conditional-user-role', 'REQUIRED'), at('deny-access-authenticator', 'REQUIRED')];
+  return inOrder.every((n, i) => n !== -1 && (i === 0 || n > inOrder[i - 1]!)) && !!all[inOrder[4]!]!.authenticationConfig;
+};
+
 /**
- * The first sign-in through Entra: link to the account with the same email, else make one. Two alternatives,
- * as Keycloak's guide to linking automatically has it, in place of its default that asks for the old password.
+ * The first sign-in through Entra: make an account if nobody has the email, else link to the one that has it, in
+ * place of Keycloak's default that asks for the old password. The link is made only once the flow has finished,
+ * so `idp-auto-link` can name the account for the role check after it, and a holder of the role is turned away
+ * unlinked. Rebuilt whenever it isn't whole, with Entra on Keycloak's own flow meanwhile, as Keycloak won't delete
+ * a flow in use. Says whether it built one, so the provider goes back to it.
  */
-const applyFirstSignInFlow = async (kc: KeycloakDirectory, changes: Changes) => {
-  const flows = (await kc.call<{ alias: string }[]>('GET', '/authentication/flows')).data;
-  if (flows.some((f) => f.alias === ENTRA_FIRST_SIGN_IN)) return;
+const applyFirstSignInFlow = async (kc: KeycloakDirectory, provider: KcProvider | undefined, changes: Changes) => {
+  const flows = (await kc.call<{ id: string; alias: string }[]>('GET', '/authentication/flows')).data;
+  const path = `/authentication/flows/${encodeURIComponent(ENTRA_FIRST_SIGN_IN)}/executions`;
+  const executions = async () => (await kc.call<Execution[]>('GET', path)).data;
+  const existing = flows.find((f) => f.alias === ENTRA_FIRST_SIGN_IN);
+  if (existing) {
+    if (firstSignInIsBuilt(await executions())) return false;
+    if (provider?.firstBrokerLoginFlowAlias === ENTRA_FIRST_SIGN_IN) await kc.call('PUT', `/identity-provider/instances/${ENTRA_ALIAS}`, { ...provider, firstBrokerLoginFlowAlias: KEYCLOAK_FIRST_SIGN_IN });
+    await kc.call('DELETE', `/authentication/flows/${existing.id}`);
+    changes.push(`entra: older or unfinished ${ENTRA_FIRST_SIGN_IN} replaced`);
+  }
   await kc.call('POST', '/authentication/flows', {
     alias: ENTRA_FIRST_SIGN_IN,
-    description: "The first sign-in through the organisation's Entra: linked to the account with the same email, or a new one.",
+    description: "The first sign-in through the organisation's Entra: a new account, or linked to the one with the same email unless it holds a two-step role.",
     providerId: 'basic-flow',
     topLevel: true,
     builtIn: false,
   });
-  const path = `/authentication/flows/${encodeURIComponent(ENTRA_FIRST_SIGN_IN)}/executions`;
-  for (const provider of ['idp-create-user-if-unique', 'idp-auto-link']) {
-    const { location } = await kc.call('POST', `${path}/execution`, { provider });
-    const exec = (await kc.call<Execution[]>('GET', path)).data.find((e) => e.id === location?.split('/').pop());
+  const addExecution = async (flow: string, provider: string, requirement: string, config?: { alias: string; config: Record<string, string> }) => {
+    const { location } = await kc.call('POST', `/authentication/flows/${encodeURIComponent(flow)}/executions/execution`, { provider });
+    const exec = (await executions()).find((e) => e.id === location?.split('/').pop());
     if (!exec) throw new DirectoryError(`The sign-in service didn't add ${provider} to the first sign-in through Entra.`, 503);
-    await kc.call('PUT', path, { ...exec, requirement: 'ALTERNATIVE' });
-  }
-  changes.push(`entra: first sign-in links by email (${ENTRA_FIRST_SIGN_IN})`);
+    await kc.call('PUT', path, { ...exec, requirement });
+    if (config) await kc.call('POST', `/authentication/executions/${exec.id}/config`, config);
+  };
+  const addStep = async (flow: string, name: string, requirement: string, description: string) => {
+    await kc.call('POST', `/authentication/flows/${encodeURIComponent(flow)}/executions/flow`, { alias: name, type: 'basic-flow', provider: 'registration-page-form', description });
+    const exec = (await executions()).find((e) => e.displayName === name);
+    if (!exec) throw new DirectoryError(`The sign-in service didn't add ${name} to the first sign-in through Entra.`, 503);
+    await kc.call('PUT', path, { ...exec, requirement });
+  };
+  await addExecution(ENTRA_FIRST_SIGN_IN, 'idp-create-user-if-unique', 'ALTERNATIVE');
+  await addStep(ENTRA_FIRST_SIGN_IN, ENTRA_LINK_STEP, 'ALTERNATIVE', 'Link to the account with the same email.');
+  await addExecution(ENTRA_LINK_STEP, 'idp-auto-link', 'REQUIRED');
+  await addStep(ENTRA_LINK_STEP, ENTRA_REFUSE_STEP, 'CONDITIONAL', `Never link an account holding ${TWO_STEP_ROLE.name}.`);
+  await addExecution(ENTRA_REFUSE_STEP, 'conditional-user-role', 'REQUIRED', { alias: `entra link ${TWO_STEP_ROLE.name}`, config: { condUserRole: TWO_STEP_ROLE.name, negate: 'false' } });
+  await addExecution(ENTRA_REFUSE_STEP, 'deny-access-authenticator', 'REQUIRED', { alias: 'entra link refused', config: { denyErrorMessage: ENTRA_REFUSED_MESSAGE } });
+  changes.push(`entra: first sign-in links by email, never to a two-step account (${ENTRA_FIRST_SIGN_IN})`);
+  return true;
 };
 
 /** Keeps the `entra` provider, its first sign-in and its mappers as the settings say, or turns it off without them. */
@@ -768,12 +810,12 @@ export const applyEntra = async (kc: KeycloakDirectory, entra: RealmEntra | unde
     }
     return;
   }
-  await applyFirstSignInFlow(kc, changes);
+  const built = await applyFirstSignInFlow(kc, existing, changes);
   const want = entraProvider(entra, orgName);
   if (!existing) {
     await kc.call('POST', '/identity-provider/instances', want);
     changes.push(`entra: the organisation's sign-in for tenant ${entra.tenantId}`);
-  } else if (!existing.enabled || existing.config?.[ENTRA_FINGERPRINT] !== want.config[ENTRA_FINGERPRINT]) {
+  } else if (built || !existing.enabled || existing.firstBrokerLoginFlowAlias !== ENTRA_FIRST_SIGN_IN || existing.config?.[ENTRA_FINGERPRINT] !== want.config[ENTRA_FINGERPRINT]) {
     await kc.call('PUT', at, want);
     changes.push(`entra: brought up to date for tenant ${entra.tenantId}`);
   }

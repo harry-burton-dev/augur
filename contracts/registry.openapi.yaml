@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.35.0
+  version: 1.36.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -2307,6 +2307,58 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /people/{id}/data:
+    get:
+      summary: What the registry keeps about one person (identity only)
+      description: The upgrades they asked for, with the name kept beside each, newest first. Only identity asks, to build the copy of someone’s data they download from Account.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Their data here
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - upgrades
+                properties:
+                  upgrades:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - version
+                        - requestedAt
+                      properties:
+                        id:
+                          type: string
+                        version:
+                          type: string
+                        requestedAt:
+                          type: string
+                        requestedByName:
+                          type: string
+                description: Their data here
+        "403":
+          description: Not identity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service that checks the caller's token can't be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /apps/{id}/grants:
     get:
       summary: What an app may do on a floor (platform services only)
@@ -3646,7 +3698,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Another app, or not an admin
+          description: Another app, not an admin, or an app an admin removed
           content:
             application/problem+json:
               schema:

@@ -242,7 +242,7 @@ describe('gateway', () => {
 
   describe('uploads', () => {
     const MB = 1024 * 1024;
-    const limits = async () => new Map<string, { maxUpload?: number }>([['folio', { maxUpload: 2 }], ['other', {}]]);
+    const limits = async () => new Map<string, { name?: string; maxUpload?: number }>([['folio', { name: 'Artifacts', maxUpload: 2 }], ['other', {}]]);
     const upload = async (app: FastifyInstance, to: string, payload: Buffer | Readable) =>
       app.inject({ method: 'POST', url: `/api/${to}/upload`, headers: { authorization: `Bearer ${await sign(ada)}`, 'content-type': 'application/octet-stream' }, payload });
     const gateway = (access = limits) => buildApp({ upstreams: { folio: url, other: url, registry: url }, auth, access, monitor: new HealthMonitor({ probes: [] }) });
@@ -255,7 +255,7 @@ describe('gateway', () => {
     it('refuses a body past the app’s limit before sending it on', async () => {
       const res = await upload(await gateway(), 'folio', Buffer.alloc(2 * MB + 1));
       expect(res.statusCode).toBe(413);
-      expect(res.json()).toMatchObject({ error: 'too_large', message: 'This is more than folio takes at once (2 MB).' });
+      expect(res.json()).toMatchObject({ error: 'too_large', message: 'This is more than Artifacts takes at once (2 MB).' });
     });
 
     it('cuts off a streamed body once it passes the limit', async () => {
@@ -328,11 +328,11 @@ describe('gateway', () => {
         expect(caller.id).toBe('u-1');
         expect(caller.workspace?.id).toBe('w-finance');
         expect(String(input)).toBe('http://registry/v1/manifest?workspace=w-finance');
-        return Response.json([{ id: 'folio', maxUpload: 200 }, { id: 'home' }]);
+        return Response.json([{ id: 'folio', name: 'Artifacts', maxUpload: 200 }, { id: 'home' }]);
       });
       const lookup = registryAppAccess({ registryUrl: 'http://registry', signer, fetchImpl: fetchImpl as typeof fetch });
       const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [], workspace: finance };
-      expect(await lookup(alex)).toEqual(new Map([['folio', { maxUpload: 200 }], ['home', {}]]));
+      expect(await lookup(alex)).toEqual(new Map([['folio', { name: 'Artifacts', maxUpload: 200 }], ['home', {}]]));
       await lookup(alex);
       expect(fetchImpl).toHaveBeenCalledTimes(1);
     });

@@ -56,6 +56,16 @@ const behavesLikeAStore = (make: () => AppStore, reset: () => Promise<void> = as
     expect((await store.upgrade())?.state).toBe('cancelled');
     // The history keeps every one, newest first, with who asked.
     expect((await store.upgrades()).map((u) => `${u.id} ${u.state} ${u.requestedByName}`)).toEqual(['up-3 cancelled Alex', 'up-1 done Alex']);
+    await store.forgetPerson('someone-else');
+    expect((await store.upgrades()).map((u) => u.requestedByName)).toEqual(['Alex', 'Alex']);
+    await store.forgetPerson('u-1');
+    expect(await store.upgrades()).toEqual([expect.not.objectContaining({ requestedByName: expect.anything() }), expect.not.objectContaining({ requestedByName: expect.anything() })]);
+    expect((await store.upgrades()).map((u) => u.requestedBy)).toEqual(['u-1', 'u-1']);
+    // The place it has followed domain events to.
+    expect(await store.followedTo()).toBeUndefined();
+    await store.setFollowedTo('12');
+    await store.setFollowedTo('13');
+    expect(await store.followedTo()).toBe('13');
     expect((await store.upgrades(1)).map((u) => u.id)).toEqual(['up-3']);
     // Only the names of settings entered for an upgrade are kept, never their values.
     expect(await store.requestUpgrade({ id: 'up-4', from: '0.3.0', version: '0.4.0', images: {}, requestedBy: 'u-1', settingNames: ['OBJECT_STORE_URL'] })).toBe(true);
@@ -315,7 +325,7 @@ describe.runIf(process.env.DATABASE_URL)('PgAppStore', () => {
   it('migrates once, however often it starts', async () => {
     await Promise.all([store.migrate(), store.migrate()]);
     const { rows } = await admin.query('select id from registry.migrations');
-    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch', '019_frontend_folders', '020_upgrade_setting_names', '021_removed_apps']);
+    expect(rows.map((r) => r.id).sort()).toEqual(['001_apps', '002_enabled', '003_versions', '004_origins', '005_floors', '006_upgrades', '007_upload_limit', '008_settings', '009_frontends', '010_upstream', '011_app_jobs', '012_app_follows', '013_previews', '014_upgrade_names', '015_feature_previews', '016_desired_state', '017_deployment_key', '018_after_watch', '019_frontend_folders', '020_upgrade_setting_names', '021_removed_apps', '022_followed_events']);
   });
 
   it('lets the database refuse a second app on a taken route, so racing registrations cannot both win', async () => {

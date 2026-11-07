@@ -116,16 +116,24 @@ if (!grants) log.warn('REGISTRY_URL or SERVICE_CLIENT_SECRET is not set: apps ca
 
 // Admins hear when someone asks to leave; a person's download carries what the events service keeps about them.
 const tell = EVENTS_URL && credentials ? (notification: Parameters<typeof notify>[0]['notification']) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) : undefined;
-const dataFrom =
-  EVENTS_URL && credentials
-    ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) }
-    : undefined;
+const dataFrom = credentials
+  ? {
+      ...(EVENTS_URL ? { events: (person: string) => callService({ method: 'GET', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read their notifications, inbox and activity' }) } : {}),
+      ...(REGISTRY_URL ? { registry: (person: string) => callService({ method: 'GET', url: `${REGISTRY_URL.replace(/\/$/, '')}/v1/people/${encodeURIComponent(person)}/data`, credentials, what: 'read the upgrades they asked for' }) } : {}),
+    }
+  : undefined;
 
-// A deleted leaver's personal values leave Activity first (ADR 0072): the events service removes them.
+// Set below: copies sign-ins into Activity now.
+let copyNow: (() => Promise<unknown>) | undefined;
+
+// A deleted leaver's personal values leave Activity first (ADR 0072): the events service removes them. Sign-ins
+// are copied first, so one still on its way can't land after the last redaction with their IP address.
 const redact =
   EVENTS_URL && credentials
-    ? (person: string) =>
-        callService({ method: 'POST', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/audit/redact`, credentials, body: { person }, what: 'remove a deleted person’s details from Activity' })
+    ? async (person: string) => {
+        await copyNow?.();
+        return callService({ method: 'POST', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/audit/redact`, credentials, body: { person }, what: 'remove a deleted person’s details from Activity' });
+      }
     : undefined;
 
 // Sign-ins and failed ones reach Activity (ADR 0040): copied from Keycloak each minute.
@@ -137,6 +145,7 @@ if (keycloakEvents && audit) {
     }).catch((err: Error) =>
       log.error(`Sign-ins couldn't be copied into Activity this time; identity tries again in a minute (${err.message}).`),
     );
+  copyNow = copy;
   setInterval(copy, 60_000).unref();
   void copy();
 }
@@ -155,7 +164,7 @@ if (directory) {
   // A leaver flow an admin set for after someone's last day runs once that day is over where the organisation is.
   const leavers = async () => {
     const { timeZone } = await organisationSettings(workspaces, organisation);
-    const gone = await leaveDueLeavers({ directory: people, lifecycle, store, audit }, timeZone, new Date(), (m) => log.warn(m));
+    const gone = await leaveDueLeavers({ directory: people, lifecycle, store, audit, tell }, timeZone, new Date(), (m) => log.warn(m));
     if (gone.length) log.info(`${gone.length} leaver flow${gone.length === 1 ? '' : 's'} ran after a last day.`);
   };
   // A leaver's account is deleted once the organisation's leaver retention has passed (ADR 0072); without a

@@ -147,7 +147,7 @@ describe.runIf(DATABASE_URL)('the caller’s account', () => {
 describe.runIf(DATABASE_URL)('privacy and data', () => {
   it('records a request to leave, tells admins once, and lets them take it back', async () => {
     const audited: { action: string }[] = [];
-    const told: { title: string; audience?: string[] }[] = [];
+    const told: { title: string; audience?: string[]; key?: string }[] = [];
     const app = await db.app({ accounts: accountsWithAlex(), audit: async (e) => void audited.push(e), tell: async (n) => void told.push(n) });
     const me = callerHeaders(alex);
     expect((await app.inject({ method: 'GET', url: '/v1/me/leave', headers: me })).json()).toEqual({});
@@ -156,7 +156,9 @@ describe.runIf(DATABASE_URL)('privacy and data', () => {
     const first = asked.json().requestedAt;
     const again = await app.inject({ method: 'POST', url: '/v1/me/leave', headers: me, payload: {} });
     expect(again.json()).toEqual({ requestedAt: first });
-    expect(told).toEqual([expect.objectContaining({ title: 'Alex Rivera asked to leave', audience: ['role:admin'] })]);
+    // Sent again, under the one key, which the events service tells each admin once.
+    expect(told).toEqual([1, 2].map(() => expect.objectContaining({ title: 'Alex Rivera asked to leave', audience: ['role:admin'] })));
+    expect(new Set(told.map((n) => n.key)).size).toBe(1);
     expect((await app.inject({ method: 'DELETE', url: '/v1/me/leave', headers: me })).statusCode).toBe(204);
     expect((await app.inject({ method: 'GET', url: '/v1/me/leave', headers: me })).json()).toEqual({});
     expect(audited.map((e) => e.action)).toEqual(['account.leave-requested', 'account.leave-requested', 'account.leave-withdrawn']);

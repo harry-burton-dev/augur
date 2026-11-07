@@ -151,6 +151,26 @@ describe('asking everyone to take an action', () => {
     { id: 'u-4', username: 'off', enabled: false },
   ];
 
+  it('leaves out whether someone is on when renaming them or resetting their password, unless that’s the change', async () => {
+    const { calls, fetchImpl } = keycloak((method, path) => {
+      if (method !== 'GET') return undefined;
+      if (path === '/users/u-1') return { id: 'u-1', username: 'jo', enabled: true };
+      if (path.startsWith('/users/u-1/')) return [];
+      return undefined;
+    });
+    const directory = new KeycloakDirectory({ url: 'http://kc', realm: 'platform', signIn, fetchImpl });
+    const sent = () => calls.filter((c) => c.method === 'PUT' && c.url.endsWith('/users/u-1')).map((c) => JSON.parse(c.body!));
+    await directory.updatePerson('u-1', { firstName: 'Joanne' });
+    await directory.resetPassword('u-1', 'one-time');
+    await directory.updatePerson('u-1', { enabled: false });
+    const [renamed, reset, off] = sent();
+    expect(renamed).toMatchObject({ firstName: 'Joanne' });
+    expect(renamed).not.toHaveProperty('enabled');
+    expect(reset).toMatchObject({ requiredActions: ['UPDATE_PASSWORD'] });
+    expect(reset).not.toHaveProperty('enabled');
+    expect(off).toMatchObject({ enabled: false });
+  });
+
   it('reads each person again, leaves out whether they’re on, and skips anyone turned off since the list', async () => {
     const { calls, fetchImpl } = keycloak((method, path) => {
       if (method !== 'GET') return undefined;

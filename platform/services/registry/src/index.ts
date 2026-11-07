@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, floorPlaces, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
 import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
@@ -113,6 +113,17 @@ if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fronte
 // this deployment ships with, which register themselves like any other.
 const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
 await app.listen({ port, host: '0.0.0.0' });
+
+// A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.
+if (EVENTS_URL && credentials) {
+  followLeavers({
+    eventsUrl: EVENTS_URL,
+    credentials,
+    cursor: { load: () => store.followedTo(), save: (seq) => store.setFollowedTo(seq) },
+    deleted: ({ person }) => store.forgetPerson(person),
+    onError: (err) => log.error(`A deleted person’s name couldn’t be forgotten yet; the registry tries again (${(err as Error).message}).`),
+  }).start();
+} else log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: a deleted person’s name stays on the upgrades they asked for.');
 
 // Deployment admins hear when a release is available and how each update ended, in the shell (ADR 0044).
 if (EVENTS_URL && credentials) {

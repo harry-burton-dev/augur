@@ -30,7 +30,7 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
-import { inboxRoutes, releaseLeaver, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
+import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
@@ -378,16 +378,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           const caller = signedIn(req, reply);
           if (!caller) return reply;
           if (!leadsOrAdmin(caller, req.params.workspace)) return reply.code(403).send({ error: 'forbidden', message: 'Only the team’s leads or an admin can turn team notices on or off.' });
-          const before = await store.teamNotices(req.params.workspace);
-          await store.setTeamNotices(req.params.workspace, req.body.on, caller.id);
-          if (before !== req.body.on) {
-            const floor = floors ? await floors(req.params.workspace).catch(() => undefined) : undefined;
-            await store.appendAudit(
-              { actor: { id: caller.id, kind: 'user' }, app: 'events', action: req.body.on ? 'team-notices.on' : 'team-notices.off', target: req.params.workspace },
-              floor ? { id: floor.id, path: floor.path } : { id: req.params.workspace, path: [req.params.workspace] },
-              'events',
-            );
-          }
+          const floor = floors ? await floors(req.params.workspace).catch(() => undefined) : undefined;
+          await store.setTeamNotices(req.params.workspace, req.body.on, caller.id, floor ? { id: floor.id, path: floor.path } : { id: req.params.workspace, path: [req.params.workspace] });
           return { workspace: req.params.workspace, on: req.body.on };
         },
       );
@@ -559,7 +551,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             summary: 'Read domain events in order (services only, events:subscribe)',
             description: [
               'Events on the topics asked for, in the one order every follower reads',
-              'in. Keep the last `seq` handled and pass it as `after`: delivery is at',
+              'in. Keep the last `seq` handled and pass it as `after`, or `next`, which is',
+              'as far as this read went, past events on other topics: delivery is at',
               'least once, never with a gap. Events are kept 30 days',
               '(DOMAIN_EVENTS_KEEP_DAYS).',
             ].join(' '),
@@ -569,7 +562,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
               limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
             }),
             response: {
-              200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor after them' }),
+              200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor to read on from' }),
               400: refused('A topic that is not a topic, nor a family such as folio.*'),
               403: refused('Not a service, or no events:subscribe scope'),
               503: refused("Grants can't be checked right now"),
@@ -582,8 +575,12 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           const { topics } = list;
           if (!(await fromService(req, reply, undefined, 'events:subscribe'))) return reply;
           const limit = req.query.limit ?? 100;
-          const events = await store.readEvents({ topics, after: req.query.after, limit });
-          return { events, next: events.at(-1)?.seq ?? req.query.after ?? '0' };
+          const after = req.query.after ?? '0';
+          // Read first: anything committed after this is above it, so nothing is skipped by moving the cursor up to it.
+          const top = await store.lastSeq();
+          const events = await store.readEvents({ topics, after, upTo: top, limit });
+          if (events.length === limit) return { events, next: events.at(-1)!.seq };
+          return { events, next: top && BigInt(top) > BigInt(after) ? top : after };
         },
       );
 
@@ -654,10 +651,15 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         {
           schema: {
             summary: 'Record an audit entry (services only). Entries are never changed, except to remove a deleted person’s details, and go only after the retention period.',
+            description: [
+              'With an Idempotency-Key header (at most 200 characters), sending the same key again answers the',
+              'entry the service already recorded under it and records nothing more, so a retry keeps one. A platform',
+              'entry and the domain event it stands for are kept together, or neither is.',
+            ].join(' '),
             body: ref(NewAuditEntrySchema),
             response: {
               201: { ...ref(AuditEntry), description: 'Recorded' },
-              400: refused('Invalid entry, or an unknown floor'),
+              400: refused('Invalid entry, an unknown floor, or a bad Idempotency-Key'),
               403: refused('Not a signed-in service, or not granted this'),
               503: refused("Floors or grants can't be checked right now"),
             },
@@ -669,16 +671,20 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         const floor = await floorOf(req, reply);
         if (floor === undefined) return reply;
         const place = floor ? { id: floor.id, path: floor.path } : undefined;
-        // `actor` is the service's own claim; the signed token says which service made it.
-        const entry = await store.appendAudit(req.body, place, serviceName(service));
+        const key = req.headers['idempotency-key'];
+        if (key !== undefined && (typeof key !== 'string' || !key || key.length > 200)) return reply.code(400).send({ error: 'bad_request', message: 'An Idempotency-Key is one value of at most 200 characters.' });
         const platformEvent = service.kind === 'platform' ? PLATFORM_EVENTS[`${req.body.app} ${req.body.action}`] : undefined;
-        if (platformEvent) {
-          await store.publish(req.body.app, [{ topic: platformEvent.topic, id: `audit-${entry.id}`, payload: platformEvent.payload(req.body), floor: place }]);
-          // Someone who leaves a team, or can no longer sign in, gives back the team work they'd taken.
-          const leaver = platformEvent.topic === 'platform.person.disabled' ? { person: req.body.target } : platformEvent.topic === 'platform.team.member-removed' ? { person: req.body.detail?.person, team: req.body.target } : undefined;
-          if (typeof leaver?.person === 'string' && leaver.person)
-            await releaseLeaver(store, leaver.person, typeof leaver.team === 'string' ? leaver.team : undefined).catch((err: unknown) => req.log.error({ err }, 'could not give back a leaver’s inbox items'));
-        }
+        // Someone who leaves a team, or can no longer sign in, gives back the team work they'd taken.
+        const leaver = platformEvent?.topic === 'platform.person.disabled' ? { person: req.body.target } : platformEvent?.topic === 'platform.team.member-removed' ? { person: req.body.detail?.person, team: req.body.target } : undefined;
+        const release = typeof leaver?.person === 'string' && leaver.person ? { person: leaver.person, ...(typeof leaver.team === 'string' ? { team: leaver.team } : {}) } : undefined;
+        // `actor` is the service's own claim; the signed token says which service made it.
+        const entry = await store.appendAudit(req.body, place, serviceName(service), {
+          ...(key ? { key } : {}),
+          ...(platformEvent ? { event: (e) => ({ publisher: req.body.app, event: { topic: platformEvent.topic, id: `audit-${e.id}`, payload: platformEvent.payload(req.body), floor: place } }) } : {}),
+          ...(release ? { release } : {}),
+        });
+        // Kept with the entry, so one that fails here is carried on by the sweep (index.ts).
+        if (release) await finishRelease(store, release).catch((err: unknown) => req.log.error({ err }, 'could not give back a leaver’s inbox items yet'));
         return reply.code(201).send(entry);
         },
       );
@@ -781,8 +787,10 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             description: [
               'In every entry by, about or naming them, each personal value (the keys in',
               "service-kit's PERSONAL_DETAIL_KEYS, also inside from/to pairs) becomes",
-              '"[removed]"; their id stays, now pseudonymous. Their notifications are',
-              'deleted. Recorded in Activity as `audit.redacted`.',
+              '"[removed]"; their id stays, now pseudonymous. Their notifications and the',
+              'notice that they asked to leave are deleted, the notes they left on inbox items',
+              'are blanked, and the open items that were theirs are withdrawn. Recorded in',
+              'Activity as `audit.redacted`.',
             ].join(' '),
             body: Type.Object({ person: Type.String({ minLength: 1, maxLength: 100 }) }, { additionalProperties: false }),
             response: {

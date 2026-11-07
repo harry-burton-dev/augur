@@ -37,6 +37,8 @@ export interface Lifecycle {
   leaving?: Leaving;
   /** When they first signed in through the organisation's sign-in (Entra), which they sign in with since. */
   federatedAt?: string;
+  /** Who chose Delete now, until it's done. */
+  deleteAskedBy?: string;
   /** How far their deletion got (ADR 0072), while it is under way. */
   deletingStep?: DeletingStep;
   /** When their account was deleted; only their id and the dates are kept. */
@@ -49,6 +51,8 @@ export type DeletingStep = (typeof DELETING_STEPS)[number];
 
 /** A leaver flow an admin set for later: it runs once `on`, their last day, is over. */
 export interface Leaving {
+  /** A flow run at once that stopped part way: `on` only makes the sweep carry it on, and is nobody's last day. */
+  stopped?: boolean;
   on: string;
   by: string;
   handOverTo?: string;
@@ -82,6 +86,8 @@ export interface LifecycleStore {
   federated(person: string, at: string): Promise<boolean>;
   /** Leavers who left before `before` and aren't deleted yet, oldest first. */
   dueDeletions(before: string): Promise<string[]>;
+  /** A deployment admin chose Delete now: it's carried on until it's done, whatever the retention period says. */
+  deleteAsked(person: string, by: string): Promise<void>;
   /** Their deletion got as far as `step`. */
   deleting(person: string, step: DeletingStep): Promise<void>;
   /** Deleted: everything but their id, when they left and when they were deleted, is forgotten. */
@@ -148,7 +154,7 @@ export const withLifecycle = <P extends Person>(p: P, l: Lifecycle = {}, now = n
   ...(l.left ? { left: { ...l.left, ...(policy?.leaverDeleteAfterDays ? { deleteAfter: new Date(Date.parse(l.left.at) + policy.leaverDeleteAfterDays * DAY).toISOString() } : {}) } } : {}),
   ...(l.deletingStep ? { deleting: l.deletingStep } : {}),
   ...(stateOf(p, l) === 'active' && lockedOf(l, now) ? { locked: true } : {}),
-  ...(!l.left && l.leaving ? { leaving: { on: l.leaving.on, ...(l.leaving.handOverTo ? { handOverTo: l.leaving.handOverTo } : {}) } } : {}),
+  ...(!l.left && l.leaving && !l.leaving.stopped ? { leaving: { on: l.leaving.on, ...(l.leaving.handOverTo ? { handOverTo: l.leaving.handOverTo } : {}) } } : {}),
   ...(policy && stateOf(p, l) === 'active' ? { idle: idleOf(p, l, policy, now) } : {}),
   source: l.federatedAt ? ('federated' as const) : ('local' as const),
 });
@@ -215,6 +221,14 @@ export const lifecycleDeletionMigrations: Migration[] = [
         add column deleted_at timestamptz;
       create index person_lifecycle_to_delete on identity.person_lifecycle (left_at) where left_at is not null and deleted_at is null;`,
   },
+  {
+    id: 'lifecycle_006_carry_on',
+    sql: `
+      -- Who chose Delete now, kept until it's done, so one that stops is carried on before the retention period is over.
+      alter table identity.person_lifecycle add column delete_asked_by text;
+      -- A leaver flow run at once that stopped part way: its leave_on isn't a last day.
+      alter table identity.person_lifecycle add column leave_stopped boolean not null default false;`,
+  },
 ];
 
 interface Row {
@@ -237,11 +251,14 @@ interface Row {
   leave_note: string | null;
   federated_at: Date | null;
   deleting_step: DeletingStep | null;
+  delete_asked_by: string | null;
+  leave_stopped: boolean;
   deleted_at: Date | null;
 }
 
 const iso = (d: Date | null) => (d ? d.toISOString() : undefined);
-const leavingOf = (r: Pick<Row, 'leave_day' | 'leave_by' | 'leave_handover_to' | 'leave_note'>): Leaving => ({
+const leavingOf = (r: Pick<Row, 'leave_day' | 'leave_by' | 'leave_handover_to' | 'leave_note' | 'leave_stopped'>): Leaving => ({
+  ...(r.leave_stopped ? { stopped: true } : {}),
   on: r.leave_day!,
   by: r.leave_by ?? '',
   ...(r.leave_handover_to ? { handOverTo: r.leave_handover_to } : {}),
@@ -274,6 +291,7 @@ export class PgLifecycleStore implements LifecycleStore {
           ...(r.leave_day ? { leaving: leavingOf(r) } : {}),
           ...(r.federated_at ? { federatedAt: iso(r.federated_at) } : {}),
           ...(r.deleting_step ? { deletingStep: r.deleting_step } : {}),
+          ...(r.delete_asked_by ? { deleteAskedBy: r.delete_asked_by } : {}),
           ...(r.deleted_at ? { deletedAt: iso(r.deleted_at) } : {}),
         },
       ]),
@@ -338,12 +356,12 @@ export class PgLifecycleStore implements LifecycleStore {
     await this.pool.query('update identity.person_lifecycle set locked_at = null, updated_at = now() where person = $1', [person]);
   }
 
-  async scheduleLeave(person: string, { on, by, handOverTo, note }: Leaving) {
+  async scheduleLeave(person: string, { on, by, handOverTo, note, stopped }: Leaving) {
     await this.pool.query(
-      `insert into identity.person_lifecycle (person, leave_on, leave_by, leave_handover_to, leave_note) values ($1, $2, $3, $4, $5)
+      `insert into identity.person_lifecycle (person, leave_on, leave_by, leave_handover_to, leave_note, leave_stopped) values ($1, $2, $3, $4, $5, $6)
        on conflict (person) do update set leave_on = excluded.leave_on, leave_by = excluded.leave_by,
-         leave_handover_to = excluded.leave_handover_to, leave_note = excluded.leave_note, updated_at = now()`,
-      [person, on, by, handOverTo ?? null, note ?? null],
+         leave_handover_to = excluded.leave_handover_to, leave_note = excluded.leave_note, leave_stopped = excluded.leave_stopped, updated_at = now()`,
+      [person, on, by, handOverTo ?? null, note ?? null, !!stopped],
     );
   }
 
@@ -367,10 +385,15 @@ export class PgLifecycleStore implements LifecycleStore {
 
   async dueDeletions(before: string) {
     const { rows } = await this.pool.query<{ person: string }>(
-      'select person from identity.person_lifecycle where left_at is not null and deleted_at is null and left_at < $1 order by left_at, person',
+      // A Delete now that stopped is carried on before the retention period is over.
+      'select person from identity.person_lifecycle where left_at is not null and deleted_at is null and (left_at < $1 or delete_asked_by is not null) order by left_at, person',
       [before],
     );
     return rows.map((r) => r.person);
+  }
+
+  async deleteAsked(person: string, by: string) {
+    await this.pool.query('update identity.person_lifecycle set delete_asked_by = $2, updated_at = now() where person = $1', [person, by]);
   }
 
   async deleting(person: string, step: DeletingStep) {
@@ -380,7 +403,7 @@ export class PgLifecycleStore implements LifecycleStore {
   async deleted(person: string, at: string) {
     // Only the id (now pseudonymous), when they left and when they were deleted are kept (ADR 0072).
     await this.pool.query(
-      `update identity.person_lifecycle set deleted_at = $2, deleting_step = null, left_by = null, handover_to = null, joined_at = null,
+      `update identity.person_lifecycle set deleted_at = $2, deleting_step = null, delete_asked_by = null, left_by = null, handover_to = null, joined_at = null,
          last_sign_in_at = null, disabled_at = null, disabled_cause = null, invite_method = null, invite_sent_at = null, invite_expires_at = null,
          invite_count = 0, locked_at = null, leave_on = null, leave_by = null, leave_handover_to = null, leave_note = null, federated_at = null,
          updated_at = now()
@@ -391,7 +414,7 @@ export class PgLifecycleStore implements LifecycleStore {
 
   async dueLeavers(today: string) {
     const { rows } = await this.pool.query<Row>(
-      `select person, ${LEAVE_ON}, leave_by, leave_handover_to, leave_note from identity.person_lifecycle
+      `select person, ${LEAVE_ON}, leave_by, leave_handover_to, leave_note, leave_stopped from identity.person_lifecycle
        where leave_on is not null and left_at is null and leave_on < $1::date order by leave_on, person`,
       [today],
     );

@@ -1,7 +1,8 @@
 import { EventEmitter } from 'node:events';
 import type pg from 'pg';
-import type { InboxAllow, InboxChange, InboxHistory, InboxItem, InboxOwner, InboxRef, NewInboxItem } from '@augur/service-kit';
-import type { EventFloor } from './store.ts';
+import type { InboxAllow, InboxChange, InboxHistory, InboxItem, InboxOwner, InboxRef, NewAuditEntry, NewInboxItem } from '@augur/service-kit';
+import type { EventFloor, NewDomainEvent } from './store.ts';
+import { insertAudit, insertEvents, oneAtATime, refIn } from './writes.ts';
 
 /**
  * The Inbox's items (ADR 0026): work that waits on a person or a team. Apps put and close
@@ -53,6 +54,12 @@ export type StepResult = { item: InboxItem; step: string } | { missing: true } |
 
 export type PutResult = { item: InboxItem; step: string; created: boolean } | { closed: InboxItem };
 
+/**
+ * What a step says about itself: its audit entry and, for a person's step, the domain event the app follows. Both
+ * commit with the step, so a step that happened is always told, and one that failed can be tried again whole.
+ */
+export type InboxTold = (item: InboxItem, step: string, created: boolean) => { audit: NewAuditEntry; event?: NewDomainEvent } | undefined;
+
 /** How many days Done keeps showing a closed item, unless the deployment sets INBOX_DONE_DAYS. */
 export const DEFAULT_DONE_DAYS = 30;
 
@@ -67,14 +74,14 @@ const closedState = { declined: 'declined', done: 'done' } as const;
 
 export interface InboxStore {
   /** Adds an item, or changes the open one with the same app and key. A closed one is reopened only with `reopen`. */
-  put(app: string, key: string, input: NewInboxItem, floor?: EventFloor): Promise<PutResult>;
+  put(app: string, key: string, input: NewInboxItem, floor?: EventFloor, told?: InboxTold): Promise<PutResult>;
   /** The app's change to its own item. */
-  patch(app: string, key: string, change: InboxChange): Promise<StepResult>;
+  patch(app: string, key: string, change: InboxChange, told?: InboxTold): Promise<StepResult>;
   byKey(app: string, key: string): Promise<InboxItem | undefined>;
   get(id: string): Promise<InboxItem | undefined>;
   history(id: string): Promise<InboxHistory[]>;
   /** Applies a person's action if the item is still open (and, to take it, untaken) and stands as `seen`, what the action was checked against. */
-  act(id: string, a: InboxAction, seen?: InboxSeen): Promise<StepResult>;
+  act(id: string, a: InboxAction, seen?: InboxSeen, told?: InboxTold): Promise<StepResult>;
   list(q: InboxQuery): Promise<InboxItem[]>;
   /** `leadTeams`: the teams whose leads-only items count, those the person stands on as a lead. */
   counts(person: string, teams: string[], leadTeams: string[]): Promise<InboxCounts>;
@@ -151,7 +158,7 @@ export const inboxMigration = {
     create index inbox_history_by on events.inbox_history (by) where by is not null;`,
 };
 
-/** Changes to items, announced as each commits so every instance's open streams hear them. */
+/** Changes to items, announced as each commits so every instance's open streams hear them: by history line, read back (`refIn`). */
 export const INBOX_CHANNEL = 'events_inbox';
 
 type ItemRow = {
@@ -223,12 +230,13 @@ const changedSince = (row: ItemRow, seen: InboxSeen | undefined) => {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Items in Postgres. Each step is one transaction: the change, its history line and its
- * NOTIFY commit together. Taking a team item is a single conditional update, so of two
+ * Items in Postgres. Each step is one transaction: the change, its history line, its audit
+ * entry, its domain event and its NOTIFY commit together. Taking a team item is a single conditional update, so of two
  * people taking it at once one wins and the other is told who.
  */
 export class PgInboxStore implements InboxStore {
   private emitter = new EventEmitter().setMaxListeners(0);
+  private readBack = oneAtATime();
 
   readonly doneDays: number;
 
@@ -243,11 +251,12 @@ export class PgInboxStore implements InboxStore {
 
   /** What the events store's listening connection hears on INBOX_CHANNEL. */
   heard(payload: string) {
-    try {
-      this.emitter.emit('change', JSON.parse(payload) as InboxSignal);
-    } catch {
-      // Not ours to read.
-    }
+    const ref = refIn(payload, /^[0-9]{1,19}$/);
+    if (!ref || !this.emitter.listenerCount('change')) return;
+    this.readBack(async () => {
+      const { rows } = await this.pool.query<{ item_id: string; signal: Omit<InboxSignal, 'id'> | null }>('select item_id, signal from events.inbox_history where id = $1', [ref]);
+      if (rows[0]?.signal) this.emitter.emit('change', { id: rows[0].item_id, ...rows[0].signal });
+    });
   }
 
   onChange(listener: InboxListener) {
@@ -258,6 +267,7 @@ export class PgInboxStore implements InboxStore {
   /** Runs one step in a transaction; `apply` returns the row changed (or a reason it wasn't) and the history line. */
   private async step(
     apply: (c: pg.PoolClient) => Promise<{ row: ItemRow; before: string[]; line: Omit<InboxHistory, 'at'>; change: InboxSignal['change']; created?: boolean } | Exclude<StepResult, { item: InboxItem }>>,
+    told?: InboxTold,
   ): Promise<(StepResult & { created?: boolean })> {
     const client = await this.pool.connect();
     try {
@@ -267,15 +277,19 @@ export class PgInboxStore implements InboxStore {
         await client.query('rollback');
         return done;
       }
-      const { rows } = await client.query<{ id: string }>(
-        'insert into events.inbox_history (item_id, by, action, from_owner, to_owner, note) values ($1, $2, $3, $4, $5, $6) returning id',
-        [done.row.id, done.line.by ?? null, done.line.action, done.line.from ?? null, done.line.to ?? null, done.line.note ?? null],
-      );
       const item = fromItemRow(done.row);
-      const signal: InboxSignal = { id: item.id, change: done.change, principals: [...new Set([...done.before, ...principalsOf(item)])] };
-      await client.query('select pg_notify($1, $2)', [INBOX_CHANNEL, JSON.stringify(signal)]);
+      const signal: Omit<InboxSignal, 'id'> = { change: done.change, principals: [...new Set([...done.before, ...principalsOf(item)])] };
+      const { rows } = await client.query<{ id: string }>(
+        'insert into events.inbox_history (item_id, by, action, from_owner, to_owner, note, signal) values ($1, $2, $3, $4, $5, $6, $7) returning id',
+        [done.row.id, done.line.by ?? null, done.line.action, done.line.from ?? null, done.line.to ?? null, done.line.note ?? null, JSON.stringify(signal)],
+      );
+      const step = String(rows[0].id);
+      const said = told?.(item, step, !!done.created);
+      if (said) await insertAudit(client, said.audit, item.workspace, 'events');
+      if (said?.event) await insertEvents(client, 'events', [said.event]);
+      await client.query('select pg_notify($1, $2)', [INBOX_CHANNEL, JSON.stringify({ ref: step })]);
       await client.query('commit');
-      return { item, step: String(rows[0].id), ...(done.created !== undefined ? { created: done.created } : {}) };
+      return { item, step, ...(done.created !== undefined ? { created: done.created } : {}) };
     } catch (err) {
       await client.query('rollback');
       throw err;
@@ -284,7 +298,7 @@ export class PgInboxStore implements InboxStore {
     }
   }
 
-  async put(app: string, key: string, input: NewInboxItem, floor?: EventFloor): Promise<PutResult> {
+  async put(app: string, key: string, input: NewInboxItem, floor?: EventFloor, told?: InboxTold): Promise<PutResult> {
     const allow = JSON.stringify({ ...DEFAULT_ALLOW, ...input.allow });
     const values = [
       app, key, input.kind, input.owner.kind, input.owner.id, input.owner.role ?? null, input.title, input.detail ?? null,
@@ -316,13 +330,13 @@ export class PgInboxStore implements InboxStore {
         [...values, moved || reopened],
       );
       return { row: rows[0], before, line: { action: reopened ? 'reopened' : 'updated', ...(moved ? { from: before[0], to: ownerPrincipal(input.owner) } : {}) }, change: reopened ? 'added' : 'changed', created: false };
-    });
+    }, told);
     if ('closed' in result) return result;
     if (!('item' in result)) throw new Error('An inbox put ended without an item.');
     return { item: result.item, step: result.step, created: !!result.created };
   }
 
-  async patch(app: string, key: string, change: InboxChange): Promise<StepResult> {
+  async patch(app: string, key: string, change: InboxChange, told?: InboxTold): Promise<StepResult> {
     return this.step(async (c) => {
       const { rows: found } = await c.query<ItemRow>('select * from events.inbox_items where app = $1 and key = $2 for update', [app, key]);
       const was = found[0];
@@ -335,7 +349,7 @@ export class PgInboxStore implements InboxStore {
         [was.id, change.title ?? null, change.detail ?? null, change.due ?? null, change.refs ? JSON.stringify(change.refs) : null, change.state ?? null, change.state ? (change.note ?? null) : null],
       );
       return { row: rows[0], before: principalsOf(fromItemRow(was)), line: { action: change.state ?? 'updated', ...(change.note ? { note: change.note } : {}) }, change: change.state ? 'closed' : 'changed' };
-    });
+    }, told);
   }
 
   async byKey(app: string, key: string) {
@@ -355,7 +369,7 @@ export class PgInboxStore implements InboxStore {
     return rows.map((r) => tidy({ at: r.at.toISOString(), by: r.by, action: r.action, from: r.from_owner, to: r.to_owner, note: r.note } as InboxHistory));
   }
 
-  async act(id: string, a: InboxAction, seen?: InboxSeen): Promise<StepResult> {
+  async act(id: string, a: InboxAction, seen?: InboxSeen, told?: InboxTold): Promise<StepResult> {
     if (!UUID.test(id)) return { missing: true };
     return this.step(async (c) => {
       if (a.action === 'taken') {
@@ -397,7 +411,7 @@ export class PgInboxStore implements InboxStore {
         [id, closedState[a.action], a.by, note],
       );
       return { row: rows[0], before, line: { action: a.action, by: a.by, ...(note ? { note } : {}) }, change: 'closed' };
-    });
+    }, told);
   }
 
   async list({ person, teams, tab, floor, before, limit }: InboxQuery) {

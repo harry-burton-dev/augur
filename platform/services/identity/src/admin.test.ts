@@ -1,13 +1,74 @@
 import { describe, expect, it, vi } from 'vitest';
 import { callerHeaders, type NewAuditEntry } from '@augur/service-kit';
+import Fastify from 'fastify';
 import { MemoryDirectory } from './directory.ts';
-import { temporaryPassword, usernameFrom } from './admin.ts';
+import { adminRoutes, temporaryPassword, usernameFrom } from './admin.ts';
+import { describeApi } from './contract.ts';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
+import { todayIn } from './leavers.ts';
+import type { DeletingStep, DisabledCause, Leaving, Lifecycle, LifecycleStore } from './lifecycle.ts';
 
 const db = identityDb();
 
 const admin = callerHeaders({ id: 'admin-1', name: 'Alex', departments: [], roles: ['admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
+
+/** Identity's admin routes on stand-ins, for what needs no database: Activity failing as the leaver flow runs. */
+const withFailingAudit = async () => {
+  const directory = new MemoryDirectory();
+  const kim = await directory.createPerson({ username: 'kim', firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org', roles: [], departments: [] });
+  const kept = new Map<string, Lifecycle>();
+  const lifecycle = {
+    get: async () => kept,
+    disabled: async (person: string, cause: DisabledCause | undefined, at: string) => void kept.set(person, { ...kept.get(person), disabledAt: at, disabledCause: cause }),
+    left: async (person: string, left: NonNullable<Lifecycle['left']>) => void kept.set(person, { ...kept.get(person), left, leaving: undefined }),
+    scheduleLeave: async (person: string, leaving: Leaving) => void kept.set(person, { ...kept.get(person), leaving }),
+    deleteAsked: async (person: string, deleteAskedBy: string) => void kept.set(person, { ...kept.get(person), deleteAskedBy }),
+    deleting: async (person: string, deletingStep: DeletingStep) => void kept.set(person, { ...kept.get(person), deletingStep }),
+    deleted: async (person: string, deletedAt: string) => void kept.set(person, { ...kept.get(person), deletedAt }),
+  } as unknown as LifecycleStore;
+  const entries: NewAuditEntry[] = [];
+  let down = true;
+  const audit = async (entry: NewAuditEntry) => {
+    if (down && ['person.left', 'person.deleted'].includes(entry.action)) throw new Error('Could not record it: events could not be reached.');
+    entries.push(entry);
+  };
+  const app = Fastify();
+  await describeApi(app, '/v1');
+  await app.register(adminRoutes({ directory, audit, lifecycle, redact: async () => undefined }), { prefix: '/v1/admin' });
+  const deployer = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date().toISOString() });
+  const call = (method: 'POST' | 'DELETE', url: string, payload?: object) => app.inject({ method, url: `/v1/admin${url}`, headers: deployer, ...(payload ? { payload } : {}) });
+  return { kim, kept, entries, call, comeBack: () => (down = false) };
+};
+
+describe('admin: Activity down while someone leaves or is deleted', () => {
+  it('answers 503 and leaves the flow to carry on, with `person.left` still to be said', async () => {
+    const { kim, kept, entries, call, comeBack } = await withFailingAudit();
+    const res = await call('POST', `/people/${kim.id}/leave`, { note: 'Agreed' });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().message).toMatch(/tried again within five minutes/);
+    expect(kept.get(kim.id)?.left).toBeUndefined();
+    expect(kept.get(kim.id)?.leaving).toMatchObject({ by: 'admin-9', note: 'Agreed', stopped: true });
+    // The sweep picks it up only once its day is over.
+    expect(kept.get(kim.id)!.leaving!.on < todayIn('UTC')).toBe(true);
+    comeBack();
+    expect((await call('POST', `/people/${kim.id}/leave`, {})).statusCode).toBe(200);
+    expect(kept.get(kim.id)?.left).toMatchObject({ by: 'admin-9' });
+    expect(entries.map((e) => e.action)).toEqual(['person.disabled', 'person.left']);
+  });
+
+  it('answers 503 to Delete now, and says `person.deleted` when tried again', async () => {
+    const { kim, kept, entries, call, comeBack } = await withFailingAudit();
+    kept.set(kim.id, { left: { at: '2026-11-01T00:00:00.000Z', by: 'admin-1' } });
+    expect((await call('DELETE', `/people/${kim.id}`)).statusCode).toBe(503);
+    expect(kept.get(kim.id)?.deletedAt).toBeUndefined();
+    expect(kept.get(kim.id)?.deletingStep).toBe('keycloak-deleted');
+    comeBack();
+    expect((await call('DELETE', `/people/${kim.id}`)).statusCode).toBe(200);
+    expect(kept.get(kim.id)?.deletedAt).toBeDefined();
+    expect(entries.map((e) => e.action)).toEqual(['person.deleted']);
+  });
+});
 
 const setup = async () => {
   const directory = new MemoryDirectory();

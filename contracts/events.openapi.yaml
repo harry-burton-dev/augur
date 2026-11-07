@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.14.0
+  version: 1.15.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -1466,7 +1466,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
     get:
       summary: Read domain events in order (services only, events:subscribe)
-      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS)."
+      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`, or `next`, which is as far as this read went, past events on other topics: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS)."
       parameters:
         - schema:
             type: string
@@ -1493,7 +1493,7 @@ paths:
           required: false
       responses:
         "200":
-          description: The next events, and the cursor after them
+          description: The next events, and the cursor to read on from
           content:
             application/json:
               schema:
@@ -1508,7 +1508,7 @@ paths:
                       $ref: "#/components/schemas/DomainEvent"
                   next:
                     type: string
-                description: The next events, and the cursor after them
+                description: The next events, and the cursor to read on from
         "400":
           description: A topic that is not a topic, nor a family such as folio.*
           content:
@@ -1561,6 +1561,7 @@ paths:
   /audit:
     post:
       summary: Record an audit entry (services only). Entries are never changed, except to remove a deleted person’s details, and go only after the retention period.
+      description: With an Idempotency-Key header (at most 200 characters), sending the same key again answers the entry the service already recorded under it and records nothing more, so a retry keeps one. A platform entry and the domain event it stands for are kept together, or neither is.
       requestBody:
         required: true
         content:
@@ -1575,7 +1576,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuditEntry"
         "400":
-          description: Invalid entry, or an unknown floor
+          description: Invalid entry, an unknown floor, or a bad Idempotency-Key
           content:
             application/problem+json:
               schema:
@@ -1769,7 +1770,7 @@ paths:
   /audit/redact:
     post:
       summary: Remove a deleted person's personal values from Activity, and their notifications (identity only)
-      description: In every entry by, about or naming them, each personal value (the keys in service-kit's PERSONAL_DETAIL_KEYS, also inside from/to pairs) becomes "[removed]"; their id stays, now pseudonymous. Their notifications are deleted. Recorded in Activity as `audit.redacted`.
+      description: In every entry by, about or naming them, each personal value (the keys in service-kit's PERSONAL_DETAIL_KEYS, also inside from/to pairs) becomes "[removed]"; their id stays, now pseudonymous. Their notifications and the notice that they asked to leave are deleted, the notes they left on inbox items are blanked, and the open items that were theirs are withdrawn. Recorded in Activity as `audit.redacted`.
       requestBody:
         required: true
         content:

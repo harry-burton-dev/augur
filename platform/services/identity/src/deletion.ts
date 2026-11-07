@@ -10,7 +10,8 @@ import type { WorkspaceStore } from './workspaces.ts';
  * it stopped: Activity loses their personal values (the events service's redaction), identity forgets their
  * preferences, request to leave and teams, then Keycloak deletes the account. Only then are they marked deleted
  * and `person.deleted` recorded, which followers hear as `platform.person.deleted`. Their id stays in Activity,
- * now pseudonymous: nothing that maps it back to them is kept.
+ * now pseudonymous: nothing AUGUR keeps maps it back to them. Keycloak's own event stores do until they expire
+ * (REALM_SIGN_IN_EVENT_DAYS, REALM_ADMIN_EVENT_DAYS): it has no way to remove one person's (docs/people.md).
  */
 
 /** What a deleted person's own floor is called from then on. */
@@ -18,7 +19,7 @@ export const DELETED_NAME = 'Deleted person';
 
 export interface DeletionDeps {
   directory: Pick<Directory, 'deletePerson'>;
-  lifecycle: Pick<LifecycleStore, 'get' | 'deleting' | 'deleted' | 'dueDeletions'>;
+  lifecycle: Pick<LifecycleStore, 'get' | 'deleteAsked' | 'deleting' | 'deleted' | 'dueDeletions'>;
   store?: Pick<PreferenceStore, 'forget'>;
   workspaces?: Pick<WorkspaceStore, 'forgetPerson'>;
   /** Asks the events service to remove their personal values from Activity and delete their notifications. */
@@ -30,10 +31,13 @@ export interface DeletionDeps {
 const after = (done: DeletingStep | undefined, step: DeletingStep) => (done ? DELETING_STEPS.indexOf(done) >= DELETING_STEPS.indexOf(step) : false);
 
 /** Deletes one leaver's account, resuming where an earlier try stopped. `by` is who chose Delete now, if anyone. */
-export const deleteAccount = async (deps: DeletionDeps, person: string, by?: string) => {
+export const deleteAccount = async (deps: DeletionDeps, person: string, chosenBy?: string) => {
   const { directory, lifecycle, store, workspaces, redact, audit, now = () => new Date().toISOString() } = deps;
   const kept = (await lifecycle.get([person])).get(person);
   if (!kept?.left || kept.deletedAt) return false;
+  // Kept before anything can fail, so the sweep carries on a Delete now that stopped at its first step.
+  const by = chosenBy ?? kept.deleteAskedBy;
+  if (chosenBy && !kept.deleteAskedBy) await lifecycle.deleteAsked(person, chosenBy);
   let done = kept.deletingStep;
   const step = async (name: DeletingStep, fn: () => Promise<unknown>) => {
     if (after(done, name)) return;
@@ -47,6 +51,8 @@ export const deleteAccount = async (deps: DeletionDeps, person: string, by?: str
     await workspaces?.forgetPerson(person, DELETED_NAME);
   });
   await step('keycloak-deleted', () => directory.deletePerson(person));
+  // Sign-ins are copied into Activity a minute behind, so one may have landed since the first redaction.
+  await redact(person);
   // Recorded before they're marked deleted, which ends the retries: followers hear of it only from this entry.
   await audit?.({
     actor: by ? { id: by, kind: 'user' } : { id: 'identity', kind: 'service' },
@@ -54,6 +60,7 @@ export const deleteAccount = async (deps: DeletionDeps, person: string, by?: str
     action: 'person.deleted',
     target: person,
     detail: { ...(by ? { now: true } : {}) },
+    key: `leaver:person.deleted:${person}`,
   });
   await lifecycle.deleted(person, now());
   return true;

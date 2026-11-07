@@ -70,7 +70,9 @@ export const OUTBOX_TABLE_SQL = `
     workspace_id text,
     payload jsonb not null,
     created_at timestamptz not null default now(),
-    sent_at timestamptz
+    sent_at timestamptz,
+    refused_at timestamptz,
+    refused_why text
   );
   create index if not exists outbox_unsent on outbox (id) where sent_at is null;`;
 
@@ -96,7 +98,9 @@ const refusedEvents = (err: unknown) => err instanceof ServiceCallError && /it a
  * sent. Several instances can run at once: each takes rows the others haven't locked.
  * Until the events service takes them, rows stay and are tried again. A batch it refuses goes
  * again one row at a time, so one bad row doesn't hold up the rest: a row refused alone is set
- * aside, marked sent and left in the table, and goes to `onError` (else the console).
+ * aside, left in the table marked sent, with `refused_at` and `refused_why` so it can be told from one
+ * delivered, and goes to `onError` (else the console). To send one again, clear `sent_at` and `refused_at`.
+ * What fails in the relay itself goes the same way.
  */
 export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 100, intervalMs = 1000, onError }: EventsAddress & {
   pool: ConnectionPool;
@@ -105,31 +109,55 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
   onError?: (err: unknown) => void;
 }) => {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  /** Whether the outbox has the refused columns; found out once, as the first thing it does. */
+  let refusable: boolean | undefined;
+  /**
+   * An outbox made before these columns gets them here, on its own and quickly or not at all: an ALTER waits for
+   * every open write and holds up each one behind it. Without them a row set aside is still marked sent and reported.
+   */
+  const checkRefusable = async (client: Queryable) => {
+    const { rows } = await client.query(`select 1 from pg_attribute where attrelid = to_regclass('outbox') and attname = 'refused_why' and not attisdropped`);
+    if (rows.length) return true;
+    try {
+      await client.query('begin');
+      await client.query(`set local lock_timeout = '2s'`);
+      await client.query('alter table outbox add column if not exists refused_at timestamptz, add column if not exists refused_why text');
+      await client.query('commit');
+      return true;
+    } catch (err) {
+      await client.query('rollback').catch(() => {});
+      (onError ?? console.error)(err);
+      return false;
+    }
+  };
   /** Sends one batch; returns how many rows it dealt with, sent or set aside. */
   const flush = async (): Promise<number> => {
     const client = await pool.connect();
-    const setAside: unknown[] = [];
+    const setAside: { id: unknown; err: ServiceCallError }[] = [];
     try {
+      refusable ??= await checkRefusable(client);
       await client.query('begin');
       const { rows } = await client.query(
         'select id, event_id, topic, workspace_id, payload from outbox where sent_at is null order by id limit $1 for update skip locked',
         [batch],
       );
       if (rows.length) {
-        const events: NewDomainEvent[] = rows.map((r) => ({ topic: r.topic, id: r.event_id, payload: r.payload, ...(r.workspace_id ? { workspace: r.workspace_id } : {}) }));
-        await publishEvents({ eventsUrl, credentials, fetchImpl, events }).catch(async (err) => {
+        const events: (NewDomainEvent & { row: unknown })[] = rows.map((r) => ({ row: r.id, topic: r.topic, id: r.event_id, payload: r.payload, ...(r.workspace_id ? { workspace: r.workspace_id } : {}) }));
+        const bare = (list: typeof events) => list.map(({ row: _, ...event }) => event);
+        await publishEvents({ eventsUrl, credentials, fetchImpl, events: bare(events) }).catch(async (err) => {
           if (!refusedEvents(err)) throw err;
           for (const event of events) {
-            await publishEvents({ eventsUrl, credentials, fetchImpl, events: [event] }).catch((one) => {
+            await publishEvents({ eventsUrl, credentials, fetchImpl, events: bare([event]) }).catch((one) => {
               if (!refusedEvents(one)) throw one;
-              setAside.push(new ServiceCallError(`Set aside outbox event ${event.id} (${event.topic}): ${(one as Error).message}`));
+              setAside.push({ id: event.row, err: new ServiceCallError(`Set aside outbox event ${event.id} (${event.topic}): ${(one as Error).message}`) });
             });
           }
         });
+        if (refusable) for (const { id, err } of setAside) await client.query('update outbox set refused_at = now(), refused_why = $2 where id = $1', [id, err.message]);
         await client.query('update outbox set sent_at = now() where id = any($1::bigint[])', [rows.map((r) => r.id)]);
       }
       await client.query('commit');
-      for (const err of setAside) (onError ?? console.error)(err);
+      for (const { err } of setAside) (onError ?? console.error)(err);
       return rows.length;
     } catch (err) {
       await client.query('rollback').catch(() => {});
@@ -143,7 +171,7 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
       // A full batch means there may be more: go again at once.
       while ((await flush()) === batch);
     } catch (err) {
-      onError?.(err);
+      (onError ?? console.error)(err);
     }
     if (timer !== undefined) timer = setTimeout(tick, intervalMs);
   };
@@ -161,7 +189,8 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
 
 /**
  * Follows topics: reads new events in order and hands each to `handle`, saving the cursor
- * after each one. If `handle` throws, the same event comes again next time, so handle each
+ * after each one, then at where the events service read to, so a rare topic doesn't read the same
+ * stretch every time. If `handle` throws, the same event comes again next time, so handle each
  * one so that doing it twice does no harm. Needs the `events:subscribe` scope.
  */
 export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics, cursor, handle, batch = 100, intervalMs = 2000, onError }: EventsAddress & {
@@ -179,12 +208,13 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
     const after = await cursor.load();
     const query = new URLSearchParams({ topics: topics.join(','), limit: String(batch), ...(after ? { after } : {}) });
     const res = await withDeadline(fetchImpl)(`${eventsUrl.replace(/\/$/, '')}/v1/domain-events?${query}`, { headers: await serviceHeaders(credentials) });
-    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; message?: string };
+    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; next?: string; message?: string };
     if (!res.ok) throw new ServiceCallError(`Couldn't read events (${topics.join(', ')}): it answered ${res.status}${reply.message ? `: ${reply.message}` : ''}.`);
     for (const event of reply.events ?? []) {
       await handle(event);
       await cursor.save(event.seq);
     }
+    if (reply.next && reply.next !== (reply.events?.at(-1)?.seq ?? after ?? '0')) await cursor.save(reply.next);
     return reply.events?.length ?? 0;
   };
   const tick = async () => {
@@ -206,6 +236,66 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
     },
   };
 };
+
+/** Where a follower keeps its place, for an app's own migrations. One row per follower. */
+export const EVENT_CURSOR_TABLE_SQL = `
+  create table if not exists event_followers (
+    follower text primary key,
+    seq text not null
+  );`;
+
+/** A cursor for `followEvents` in the table `EVENT_CURSOR_TABLE_SQL` makes. `follower` tells apart several in one service. */
+export const eventCursor = (db: Queryable, follower = 'default') => ({
+  load: async (): Promise<string | undefined> => (await db.query('select seq from event_followers where follower = $1', [follower])).rows[0]?.seq,
+  save: async (seq: string): Promise<void> => {
+    await db.query('insert into event_followers (follower, seq) values ($1, $2) on conflict (follower) do update set seq = excluded.seq', [follower, seq]);
+  },
+});
+
+/** The payload of `platform.person.left`. Hand on what they own to `handOverTo`; without one, keep it for an admin or a lead to hand on. */
+export interface PersonLeft {
+  person: string;
+  handOverTo?: string;
+}
+
+/** The payload of `platform.person.deleted`: remove their names and personal details, keeping only this id. It's the last event about them. */
+export interface PersonDeleted {
+  person: string;
+}
+
+/** A `platform.person.left` event's payload, or undefined for any other event. */
+export const readPersonLeft = (event: Pick<DomainEvent, 'topic' | 'payload'>): PersonLeft | undefined => {
+  if (event.topic !== PLATFORM_TOPICS.personLeft) return undefined;
+  const { person, handOverTo } = (event.payload ?? {}) as { person?: unknown; handOverTo?: unknown };
+  return typeof person === 'string' ? { person, ...(typeof handOverTo === 'string' ? { handOverTo } : {}) } : undefined;
+};
+
+/** A `platform.person.deleted` event's payload, or undefined for any other event. */
+export const readPersonDeleted = (event: Pick<DomainEvent, 'topic' | 'payload'>): PersonDeleted | undefined => {
+  if (event.topic !== PLATFORM_TOPICS.personDeleted) return undefined;
+  const { person } = (event.payload ?? {}) as { person?: unknown };
+  return typeof person === 'string' ? { person } : undefined;
+};
+
+/**
+ * Follows people leaving and being deleted, as `followEvents` does: each handler may run twice for one event, so
+ * doing it twice must do no harm. Give `left` to hand on what a leaver owns, `deleted` to forget them. Needs the
+ * `events:subscribe` scope.
+ */
+export const followLeavers = ({ left, deleted, ...follow }: Omit<Parameters<typeof followEvents>[0], 'topics' | 'handle'> & {
+  left?: (leaver: PersonLeft, event: DomainEvent) => Promise<void>;
+  deleted?: (person: PersonDeleted, event: DomainEvent) => Promise<void>;
+}) =>
+  followEvents({
+    ...follow,
+    topics: [...(left ? [PLATFORM_TOPICS.personLeft] : []), ...(deleted ? [PLATFORM_TOPICS.personDeleted] : [])],
+    handle: async (event) => {
+      const leaver = readPersonLeft(event);
+      if (leaver) await left?.(leaver, event);
+      const gone = readPersonDeleted(event);
+      if (gone) await deleted?.(gone, event);
+    },
+  });
 
 /**
  * The platform's own topics, which any follower may read. The events service publishes

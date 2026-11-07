@@ -1,6 +1,6 @@
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { addToOutbox, followEvents, OUTBOX_TABLE_SQL, outboxRelay, type DomainEvent } from './domain-events.js';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { addToOutbox, eventCursor, followEvents, followLeavers, OUTBOX_TABLE_SQL, outboxRelay, PLATFORM_TOPICS, readPersonDeleted, readPersonLeft, type DomainEvent } from './domain-events.js';
 
 const credentials = { name: 'folio', getToken: async () => 'app-folio' };
 
@@ -38,19 +38,86 @@ const fakeEvents = () => {
 const fakeOutbox = (ids: string[]) => {
   const rows = ids.map((id, i) => ({ id: i + 1, event_id: id, topic: 'folio.document.published', workspace_id: null, payload: { id }, sent: false }));
   let marking: number[] = [];
+  const refused = new Map<unknown, string>();
   const query = async (text: string, values?: unknown[]) => {
     if (text.startsWith('select')) return { rows: rows.filter((r) => !r.sent) };
+    if (text.includes('refused_why = $2')) refused.set(values?.[0], String(values?.[1]));
     if (text.startsWith('update')) marking = values?.[0] as number[];
     if (text === 'commit') for (const r of rows) r.sent ||= marking.includes(r.id);
     if (text === 'begin' || text === 'commit' || text === 'rollback') marking = [];
     return { rows: [] };
   };
-  return { pool: { connect: async () => ({ query, release() {} }) }, waiting: () => rows.filter((r) => !r.sent).map((r) => r.event_id) };
+  return { pool: { connect: async () => ({ query, release() {} }) }, refused, waiting: () => rows.filter((r) => !r.sent).map((r) => r.event_id) };
 };
+
+describe('following people who leave', () => {
+  const left = { topic: PLATFORM_TOPICS.personLeft, payload: { person: 'kim', handOverTo: 'sam' } };
+  const deleted = { topic: PLATFORM_TOPICS.personDeleted, payload: { person: 'kim' } };
+
+  it('reads each payload, and nothing else', () => {
+    expect(readPersonLeft(left)).toEqual({ person: 'kim', handOverTo: 'sam' });
+    expect(readPersonLeft({ ...left, payload: { person: 'kim', handOverTo: 7 } })).toEqual({ person: 'kim' });
+    expect(readPersonLeft(deleted)).toBeUndefined();
+    expect(readPersonLeft({ ...left, payload: null })).toBeUndefined();
+    expect(readPersonDeleted(deleted)).toEqual({ person: 'kim' });
+    expect(readPersonDeleted(left)).toBeUndefined();
+  });
+
+  it('hands each to its handler, follows only what has one, and keeps its place in the table', async () => {
+    const kept = [{ seq: '1', id: 'a', publisher: 'identity', at: '', ...left }, { seq: '2', id: 'b', publisher: 'identity', at: '', ...deleted }];
+    const asked: string[] = [];
+    const fetchImpl = (async (input: string) => {
+      asked.push(new URL(input).searchParams.get('topics')!);
+      return new Response(JSON.stringify({ events: kept, next: '2' }), { status: 200 });
+    }) as typeof fetch;
+    const seqs = new Map<string, string>();
+    const db = {
+      query: async (text: string, values?: unknown[]) => {
+        if (text.startsWith('insert')) seqs.set(String(values?.[0]), String(values?.[1]));
+        return { rows: seqs.has(String(values?.[0])) ? [{ seq: seqs.get(String(values?.[0])) }] : [] };
+      },
+    };
+    const heard: unknown[] = [];
+    const follow = followLeavers({
+      eventsUrl: 'http://events:8084',
+      credentials,
+      fetchImpl,
+      cursor: eventCursor(db, 'people'),
+      left: async (leaver) => void heard.push(['left', leaver]),
+      deleted: async (gone) => void heard.push(['deleted', gone]),
+    });
+    await follow.poll();
+    expect(heard).toEqual([['left', { person: 'kim', handOverTo: 'sam' }], ['deleted', { person: 'kim' }]]);
+    expect(asked).toEqual([`${PLATFORM_TOPICS.personLeft},${PLATFORM_TOPICS.personDeleted}`]);
+    expect(await eventCursor(db, 'people').load()).toBe('2');
+    await followLeavers({ eventsUrl: 'http://events:8084', credentials, fetchImpl, cursor: eventCursor(db, 'gone'), deleted: async () => undefined }).poll();
+    expect(asked.at(-1)).toBe(PLATFORM_TOPICS.personDeleted);
+  });
+});
 
 describe('outboxRelay', () => {
   const relayOf = (outbox: ReturnType<typeof fakeOutbox>, events: ReturnType<typeof fakeEvents>, onError?: (err: unknown) => void) =>
     outboxRelay({ pool: outbox.pool, eventsUrl: 'http://events:8084', credentials, fetchImpl: events.fetchImpl, onError });
+
+  it('marks a row set aside as refused, saying why, so it can be told from one delivered', async () => {
+    const events = fakeEvents();
+    const outbox = fakeOutbox(['a', 'b']);
+    events.refusing.set('b', 400);
+    await relayOf(outbox, events, () => undefined).flush();
+    expect(outbox.waiting()).toEqual([]);
+    expect([...outbox.refused.keys()]).toEqual([2]);
+    expect(outbox.refused.get(2)).toMatch(/Set aside outbox event b/);
+    expect(events.kept.map((e) => Object.keys(e))).not.toContainEqual(expect.arrayContaining(['row']));
+  });
+
+  it('tells the console of a failure in the relay when nobody asked to hear', async () => {
+    const said = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const relay = outboxRelay({ pool: { connect: async () => Promise.reject(new Error('no database')) }, eventsUrl: 'http://events:8084', credentials, intervalMs: 10_000 });
+    relay.start();
+    await vi.waitFor(() => expect(said).toHaveBeenCalledWith(expect.objectContaining({ message: 'no database' })));
+    relay.stop();
+    said.mockRestore();
+  });
 
   it('sends the rest of a refused batch, and sets aside only the row refused alone, saying so', async () => {
     const events = fakeEvents();
@@ -96,6 +163,27 @@ describe('outboxRelay', () => {
 });
 
 describe('followEvents', () => {
+  it('moves its place on past events it doesn’t follow, and doesn’t write when nothing moved', async () => {
+    const saved: string[] = [];
+    let answer = { events: [] as DomainEvent[], next: '40' };
+    const fetchImpl = (async () => new Response(JSON.stringify(answer), { status: 200 })) as unknown as typeof fetch;
+    let place: string | undefined;
+    const follower = followEvents({
+      eventsUrl: 'http://events:8084',
+      credentials,
+      fetchImpl,
+      topics: ['platform.person.deleted'],
+      cursor: { load: async () => place, save: async (seq) => void saved.push((place = seq)) },
+      handle: async () => undefined,
+    });
+    await follower.poll();
+    await follower.poll();
+    expect(saved).toEqual(['40']);
+    answer = { events: [{ seq: '41', id: 'a', topic: 'platform.person.deleted', publisher: 'identity', at: '', payload: {} }], next: '45' };
+    await follower.poll();
+    expect(saved).toEqual(['40', '41', '45']);
+  });
+
   it('hands over each event once, in order, keeping its place after each', async () => {
     const events = fakeEvents();
     events.kept.push(...['a', 'b', 'c'].map((id, i) => ({ seq: String(i + 1), id, topic: 'folio.document.published', publisher: 'folio', at: '', payload: { id } })));
@@ -137,6 +225,28 @@ describe.runIf(process.env.DATABASE_URL)('the outbox', () => {
   afterAll(async () => {
     await pool.query(`drop schema ${schema} cascade`);
     await pool.end();
+  });
+
+  it('marks a row refused, in an outbox made before those columns too', async () => {
+    const old = `old_${schema}`;
+    const oldPool = new pg.Pool({ connectionString: process.env.DATABASE_URL, options: `-c search_path=${old}` });
+    try {
+      await oldPool.query(`create schema ${old}`);
+      await oldPool.query(`create table outbox (id bigint generated always as identity primary key, event_id text not null unique default gen_random_uuid()::text, topic text not null, workspace_id text, payload jsonb not null, created_at timestamptz not null default now(), sent_at timestamptz)`);
+      for (const db of [oldPool, pool]) {
+        await addToOutbox(db, { topic: 'folio.document.published', payload: {}, id: 'refused' });
+        const events = fakeEvents();
+        events.refusing.set('refused', 400);
+        const relay = outboxRelay({ pool: db, eventsUrl: 'http://events:8084', credentials, fetchImpl: events.fetchImpl, onError: () => undefined });
+        expect(await relay.flush()).toBe(1);
+        const { rows } = await db.query(`select sent_at, refused_at, refused_why from outbox where event_id = 'refused'`);
+        expect(rows[0]).toMatchObject({ sent_at: expect.any(Date), refused_at: expect.any(Date), refused_why: expect.stringContaining('Set aside') });
+        await db.query(`delete from outbox where event_id = 'refused'`);
+      }
+    } finally {
+      await oldPool.query(`drop schema if exists ${old} cascade`);
+      await oldPool.end();
+    }
   });
 
   it('sends what was committed with its change, oldest first, and keeps what wasn’t taken', async () => {

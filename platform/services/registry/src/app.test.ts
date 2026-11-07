@@ -246,6 +246,39 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it('refuses a frontend from an app an admin removed, whose sign-in outlives it', async () => {
+    const app = await db.app({ verifyService, frontendFiles: new MemoryFrontendFiles() });
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin })).statusCode).toBe(204);
+    const body = packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]);
+    const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.2.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: body });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().message).toMatch(/An admin removed library/);
+  });
+
+  it('lets a reinstall an admin asked for register the app and publish its frontend, with its own sign-in', async () => {
+    const app = await db.app({ verifyService, frontendFiles: new MemoryFrontendFiles() });
+    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
+    const release = { id: 'library', version: '0.1.0', image: 'ghcr.io/x/library@sha256:aa', manifest: library };
+    expect(await db.store.requestAppJob({ id: 'j1', app: 'library', action: 'install', release: release as never, requestedBy: 'u-1' })).toBe(true);
+    // The container comes up and publishes first; the runner registers once it's healthy.
+    const body = packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.1.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: body })).statusCode).toBe(201);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
+    const served = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library');
+    expect(served.entry).not.toBe(library.entry);
+    expect(await db.store.removed('library')).toBe(false);
+  });
+
+  it('tells only identity what it keeps about a person', async () => {
+    const app = await db.app({ verifyService });
+    await db.store.requestUpgrade({ id: 'up-1', from: '0.2.0', version: '0.3.0', images: {}, requestedBy: 'u-1', requestedByName: 'Alex' });
+    const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/people/u-1/data', headers });
+    expect((await read(as('platform-events'))).statusCode).toBe(403);
+    expect((await read(as('platform-identity'))).json().upgrades).toEqual([expect.objectContaining({ id: 'up-1', requestedByName: 'Alex' })]);
+  });
+
   it('keeps each version’s frontend and points the shell at that version’s own copy', async () => {
     const entries: { action: string }[] = [];
     const frontendFiles = new MemoryFrontendFiles();

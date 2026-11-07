@@ -91,6 +91,9 @@ import {
 /** How identity names the organisation's floor, for a call that names none. */
 const ORG_FLOOR = 'org';
 
+/** How far back a person's copy of their data looks for the upgrades they asked for. */
+const PERSON_UPGRADES = 1000;
+
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
@@ -583,6 +586,12 @@ export const buildApp = async ({
       };
 
       /**
+       * Whether an admin's removal still stands against the app's own sign-in. An install an admin asked for lifts
+       * it: the runner registers the app with that sign-in, and the new container publishes its frontend with it first.
+       */
+      const staysRemoved = async (id: string) => (await store.removed(id)) && !(await store.appJobs(id)).some((j) => j.action === 'install' && j.requestedBy !== 'automatic' && (j.state === 'requested' || j.state === 'running'));
+
+      /**
        * What an app may do on a floor, for the platform's services to check its
        * calls against: the scopes it asks for and an admin has granted, where it
        * is on. Nothing where it is off, on a floor that no longer exists, or
@@ -590,6 +599,30 @@ export const buildApp = async ({
        * on the organisation's, as the gateway does, so an app that is off for
        * the organisation can't act everywhere by naming none (ADR 0007).
        */
+      // A copy of what the registry keeps about one person (ADR 0040), for identity to put in their download.
+      app.get(
+        '/people/:id/data',
+        {
+          schema: {
+            summary: 'What the registry keeps about one person (identity only)',
+            description: 'The upgrades they asked for, with the name kept beside each, newest first. Only identity asks, to build the copy of someone’s data they download from Account.',
+            params: Type.Object({ id: Type.String({ minLength: 1, maxLength: 100 }) }),
+            response: {
+              200: Type.Object({ upgrades: Type.Array(Type.Object({ id: Type.String(), version: Type.String(), requestedAt: Type.String(), requestedByName: Type.Optional(Type.String()) })) }, { description: 'Their data here' }),
+              403: refused('Not identity'),
+              503: refused("The sign-in service that checks the caller's token can't be reached right now"),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          if (service?.kind !== 'platform' || service.name !== 'identity') return reply.code(403).send({ error: 'forbidden', message: 'Only identity reads a person’s data, for their own download.' });
+          const theirs = (await store.upgrades(PERSON_UPGRADES)).filter((u) => u.requestedBy === req.params.id);
+          return { upgrades: theirs.map(({ id, version, requestedAt, requestedByName }) => ({ id, version, requestedAt, ...(requestedByName ? { requestedByName } : {}) })) };
+        },
+      );
+
       app.get(
         '/apps/:id/grants',
         {
@@ -770,7 +803,7 @@ export const buildApp = async ({
           const { refused } = kindOf(entry, await feedApps());
           if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');
           // Its sign-in outlives a removal, and a first registration is granted what it asks for: only an admin or the runner brings it back.
-          if (by.kind === 'service' && by.id === entry.id && (await store.removed(entry.id))) {
+          if (by.kind === 'service' && by.id === entry.id && (await staysRemoved(entry.id))) {
             req.log.warn({ app: entry.id }, 'a removed app tried to register itself; refused');
             return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${entry.name}, so it can’t register itself again. An admin has to register it, or install it again.` });
           }
@@ -833,7 +866,7 @@ export const buildApp = async ({
               200: { ...ref(StoredFrontendSchema), description: 'This version already had exactly this frontend' },
               201: { ...ref(StoredFrontendSchema), description: 'Kept' },
               400: refused('Not a semver version, or not a usable tarball (links, odd paths, too big)'),
-              403: refused('Another app, or not an admin'),
+              403: refused('Another app, not an admin, or an app an admin removed'),
               409: refused("One of AUGUR's own apps"),
               415: refused('Not sent as application/gzip'),
               501: refused("This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set)"),
@@ -845,6 +878,8 @@ export const buildApp = async ({
         const by = await changedBy(req, reply, req.params.id);
         if (!by) return reply;
         const { id, version } = req.params;
+        // Its sign-in outlives a removal, as for registering itself: only an admin brings it back.
+        if (by.kind === 'service' && by.id === id && (await staysRemoved(id))) return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${id}, so it can’t publish a frontend. An admin has to register it, or install it again.` });
         if (!frontendFiles) return reply.code(501).send({ error: 'not_implemented', message: 'This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set).' });
         if (platformApps.some((a) => a.id === id)) return reply.code(409).send({ error: 'conflict', message: `"${id}" is one of AUGUR’s own apps.` });
         if (!semver.valid(version)) return reply.code(400).send({ error: 'bad_request', message: `"${version}" is not a semver version such as 1.2.0.` });

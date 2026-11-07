@@ -4,11 +4,14 @@ import { callerHeaders, signedCallerHeaders, withDeadline, type Caller, type Cal
 /** What an app may be sent in one request when the registry doesn't say: the registry's own default. */
 export const DEFAULT_UPLOAD_MB = 10;
 
+/** What the gateway knows of an app someone may use: what it's called, for what they read, and its limit. */
+export type AppAllowed = { name?: string; maxUpload?: number };
+
 /**
  * The apps one person may use on one floor (the caller's `workspace`, or none), by app id, with what
  * each may be sent in one request, in MB, where it says. Throws when that can't be found out.
  */
-export type AppAccess = (caller: Caller) => Promise<Map<string, { maxUpload?: number }>>;
+export type AppAccess = (caller: Caller) => Promise<Map<string, AppAllowed>>;
 
 export class AppAccessUnavailable extends Error {}
 
@@ -32,7 +35,7 @@ const MAX_REMEMBERED = 5000;
  * app off reaches the gateway within `ttlMs`.
  */
 export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: RegistryAppAccessOptions): AppAccess => {
-  const remembered = new Map<string, { apps: Promise<Map<string, { maxUpload?: number }>>; until: number }>();
+  const remembered = new Map<string, { apps: Promise<Map<string, AppAllowed>>; until: number }>();
   return (caller) => {
     const floor = caller.workspace?.id;
     const key = `${caller.id} ${floor ?? ''}`;
@@ -47,8 +50,8 @@ export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
         throw new AppAccessUnavailable(`the registry could not be reached (${(err as Error).message})`);
       }
       if (!res.ok) throw new AppAccessUnavailable(`the registry answered ${res.status}`);
-      const list = (await res.json()) as { id: string; maxUpload?: number }[];
-      return new Map(list.map((a) => [a.id, typeof a.maxUpload === 'number' ? { maxUpload: a.maxUpload } : {}]));
+      const list = (await res.json()) as { id: string; name?: string; maxUpload?: number }[];
+      return new Map(list.map((a) => [a.id, { ...(a.name ? { name: a.name } : {}), ...(typeof a.maxUpload === 'number' ? { maxUpload: a.maxUpload } : {}) }]));
     })();
     remembered.delete(key);
     remembered.set(key, { apps, until: now() + ttlMs });

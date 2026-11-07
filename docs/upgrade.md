@@ -56,6 +56,14 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Two-step accounts aren't linked to Entra, and leavers' events can't be lost
+
+**From** unreleased
+
+- **Entra:** an account holding a two-step role is no longer linked automatically at its first sign-in through Entra; that sign-in is refused and says why. If two steps for everyone is on, that's every account that already exists, and only people with no account yet get one through Entra. Accounts already linked aren't touched. The realm job rebuilds the first sign-in flow on the next `pc up -d`, and for those few seconds a first sign-in gets Keycloak's own flow, which asks for the old password.
+- **Nothing to run for old entries.** The events service's migrations take the notes out of Activity for people already deleted, and delete the notices that they asked to leave.
+- A name on an upgrade someone asked for goes when the registry hears `platform.person.deleted`. It reads back the 30 days of events the events service keeps, so someone deleted before that keeps their name on the upgrades they asked for. Only the Upgrade Centre's history shows it.
+- A night identity can't say how long Activity is kept now removes nothing, where it used to remove what was older than 365 days. If `pc logs events` says `Activity retention: nothing removed tonight` every night, fix what it names.
 ### Artifacts asks for two more scopes
 
 **From** unreleased

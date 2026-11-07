@@ -1,10 +1,10 @@
 import { serviceHeaders, type ServiceCredentials } from '@augur/service-kit';
 import type { EventStore } from './store.ts';
 
-/** How long Activity keeps entries when the organisation's policy can't be read (PER-196 sets it in Admin). */
+/** The days reported when the organisation's policy can't be read; nothing is removed by them (`pruneActivity`). */
 export const ACTIVITY_KEEP_DAYS = 365;
 
-/** The days Activity keeps entries: the organisation's policy from identity, or the default and why. */
+/** The days Activity keeps entries: the organisation's policy from identity, or the default and why it couldn't be read. */
 export type KeepDays = () => Promise<{ days: number; defaulted?: string }>;
 
 /** Reads `activityRetentionDays` from identity's organisation policy; any failure falls back to the default, saying why. */
@@ -22,9 +22,14 @@ export const policyKeepDays =
     }
   };
 
-/** Removes Activity entries older than the retention period, and records the removal in Activity when there was one. */
+/**
+ * Removes Activity entries older than the retention period, and records the removal in Activity when there was
+ * one. With no policy to go by nothing goes, and it's tried again next night: the organisation's period can be
+ * far longer than the default, and what's removed can't be brought back.
+ */
 export const pruneActivity = async (store: EventStore, keepDays: KeepDays, now = Date.now) => {
   const { days, defaulted } = await keepDays();
+  if (defaulted) return { removed: 0, days, defaulted };
   const removed = await store.pruneAudit(days);
   if (removed) {
     const before = new Date(now() - days * 86_400_000).toISOString();

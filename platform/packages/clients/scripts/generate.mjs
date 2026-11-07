@@ -4,11 +4,11 @@
 // first, so a client is always the contract it was built from. Change the service, not the client.
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import openapiTS, { astToString } from 'openapi-typescript';
 import { parse } from 'yaml';
 
-const here = new URL('..', import.meta.url).pathname;
+const here = fileURLToPath(new URL('..', import.meta.url));
 const contracts = join(here, '../../../contracts');
 const out = join(here, 'src/generated');
 const SUFFIX = '.openapi.yaml';

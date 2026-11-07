@@ -21,6 +21,22 @@ describe('events helpers', () => {
     expect(ok.mock.calls.map(([url]) => url)).toEqual(['http://events:8084/v1/notifications', 'http://events:8084/v1/audit']);
   });
 
+  it('sends one key for all a call’s tries, so a retry keeps one entry, and keeps the key out of the entry', async () => {
+    const sent = vi.fn<typeof fetch>(async () => new Response('{}', { status: sent.mock.calls.length < 3 ? 500 : 201 }));
+    const entry = { actor: { id: 'u-1', kind: 'user' as const }, app: 'library', action: 'document.published' };
+    await recordAudit({ eventsUrl: 'http://events:8084', credentials, fetchImpl: sent, entry });
+    const keys = sent.mock.calls.map(([, init]) => new Headers(init?.headers).get('idempotency-key'));
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toBeTruthy();
+
+    sent.mockClear();
+    await recordAudit({ eventsUrl: 'http://events:8084', credentials, fetchImpl: sent, entry: { ...entry, key: 'person.left:kim' } });
+    const [, init] = sent.mock.calls.at(-1)!;
+    expect(new Headers(init?.headers).get('idempotency-key')).toBe('person.left:kim');
+    expect(JSON.parse(String(init?.body))).toEqual(entry);
+  });
+
   it('says a preview’s notifications and audit entries come from it', async () => {
     const sent = vi.fn(async () => new Response('{}', { status: 202 }));
     const env = { APP_PREVIEW: 'pr-12' };
