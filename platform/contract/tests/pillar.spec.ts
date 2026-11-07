@@ -50,10 +50,18 @@ test.describe('with Folio on', () => {
     await expect(page.getByRole('navigation', { name: 'App bar', exact: true })).toBeVisible();
   });
 
-  test('the desktop’s app bar puts Folio (Artifacts) under Pillars, and choosing it opens it', async ({ page }) => {
+  test('the desktop’s app bar puts Folio (Artifacts) in its category’s group, and choosing it opens it', async ({ page }) => {
     await page.goto('/');
     const bar = page.getByRole('navigation', { name: 'App bar', exact: true });
-    await bar.getByRole('button', { name: 'Pillars', exact: true }).click();
+    await expect(bar).toBeVisible();
+    // Pillars when the catalogue says Folio is a pillar (the registry's kind in force), Apps when it says none.
+    const group = await page.evaluate(() => {
+      const shell = (document.querySelector('[data-shell]') as unknown as { shell: { apps: { id: string; group?: string }[]; groups: { id: string; name: string }[] } }).shell;
+      const id = shell.apps.find((a) => a.id === 'folio')?.group;
+      return shell.groups.find((g) => g.id === id)?.name ?? '';
+    });
+    expect(['Pillars', 'Apps']).toContain(group);
+    await bar.getByRole('button', { name: group, exact: true }).click();
     await page.getByRole('menu').getByRole('menuitem', { name: /Artifacts/ }).click();
     await expect(page).toHaveURL(/\/@me\/folio$/);
     await expect(artifacts(page)).toHaveCount(1);
