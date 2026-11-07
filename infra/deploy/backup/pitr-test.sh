@@ -6,6 +6,8 @@
 # written to otherwise.
 # Writes the result to $STATUS_DIR/pitr-test.json (backups/status/), which Admin's Status reads.
 set -eu
+# The database's image runs Debian's sh (dash), which has no pipefail, so the script runs itself in bash.
+(set -o pipefail) 2>/dev/null || exec bash "$0" "$@"
 set -o pipefail
 : "${BACKUP_DIR:=/backups}"
 umask 077

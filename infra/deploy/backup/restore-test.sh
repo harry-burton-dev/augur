@@ -7,6 +7,8 @@
 #                               into the scratch folder first: proves the copy, not only the local file
 # Writes the result to $STATUS_DIR/restore-test.json (backups/status/), which Admin's Status reads; `from` says which.
 set -eu
+# The database's image runs Debian's sh (dash), which has no pipefail, so the script runs itself in bash.
+(set -o pipefail) 2>/dev/null || exec bash "$0" "$@"
 set -o pipefail
 : "${BACKUP_DIR:=/backups}"
 umask 077
