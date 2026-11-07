@@ -86,12 +86,10 @@ if ! gunzip -c "$file" | psql -h "$scratch" -U postgres -d postgres -q >/dev/nul
 fi
 
 # real_errors FILE: the errors that mean something didn't come back. Dropping what isn't there only gives
-# notices (--if-exists), so the one thing let through is pgvector: every database has the extension
-# (the storage service makes it), but this container's Postgres has none to load. A table with a vector
-# column still fails here, since it can't be restored.
+# notices (--if-exists). This container runs the database's own image, pgvector included, so apps'
+# vector columns come back like any other.
 real_errors() {
-  grep -E '(^|: )(ERROR|FATAL|PANIC|error):' "$1" |
-    grep -Ev 'ERROR: +(could not open extension control file ".*/vector\.control"|extension "vector" (does not exist|is not available))' || true
+  grep -E '(^|: )(ERROR|FATAL|PANIC|error):' "$1" || true
 }
 
 errors=$(real_errors "$scratch/errors")

@@ -56,6 +56,17 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Upgrades no longer stop at the restore test
+
+**From** unreleased
+
+- **If an upgrade was turned back with "didn't restore in the test" and `type public.vector does not exist`, run this once on the server before you upgrade again.** The test runs in the backup container your server already has, which before this release lacked pgvector, so the release that fixes it can't get past it on its own. From the folder AUGUR is in:
+  ```sh
+  sed -i 's#^    image: postgres:16-alpine$#    image: pgvector/pgvector:0.8.7-pg16-bookworm#' infra/deploy/compose.yml && pc up -d backup
+  ```
+  Then ask for the upgrade again on the Updates page. The release puts the same image in its own compose.yml, so nothing else changes.
+- **Nothing to do otherwise.** The updater's log now says why an upgrade didn't go ahead, beside `rolled-back`.
+
 ### The app bar replaces Title and Orbit
 
 **From** unreleased

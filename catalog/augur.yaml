@@ -550,7 +550,7 @@ metadata:
   name: backup
   description: Postgres backups the updater takes before every upgrade
   annotations:
-    augur.dev/image: postgres:16-alpine
+    augur.dev/image: pgvector/pgvector:0.8.7-pg16-bookworm
 spec:
   type: job
   owner: group:default/augur-core
