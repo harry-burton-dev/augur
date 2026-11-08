@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { registryClient } from './registry.ts';
+import { appRunnerClient, registryClient } from './registry.ts';
 import { Withdrawn } from './upgrade.ts';
 
 const credentials = { name: 'updater', getToken: async () => 'tok' };
@@ -29,5 +29,17 @@ describe('the registry client', () => {
     expect(bodies).toHaveLength(3);
     expect(bodies[0]).toEqual({ id: 'up-1', step: 'roll-forward', state: 'running' });
     await expect(report({ step: 'verify', state: 'done' })).rejects.toBeInstanceOf(Withdrawn);
+  });
+
+  it('tells the registry the deployment’s own networks, as the updater', async () => {
+    const seen: { url: string; method?: string; body: unknown; auth?: string }[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      seen.push({ url, method: init?.method, body: JSON.parse(String(init?.body)), auth: (init?.headers as Record<string, string>).authorization });
+      return new Response('{}', { status: seen.length === 1 ? 200 : 400 });
+    }) as typeof fetch;
+    const apps = appRunnerClient({ registryUrl: 'http://registry:8082/', identityUrl: 'http://identity:8081', credentials, oidc: { tokenUrl: 'http://k/token' }, fetchImpl });
+    await apps.setOwnNetworks(['172.18.0.0/16']);
+    expect(seen).toEqual([{ url: 'http://registry:8082/v1/runner/networks', method: 'PUT', body: { networks: ['172.18.0.0/16'] }, auth: 'Bearer tok' }]);
+    await expect(apps.setOwnNetworks(['x'])).rejects.toThrow('The registry didn’t take the deployment’s own networks: it answered 400.');
   });
 });

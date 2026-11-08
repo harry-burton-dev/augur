@@ -63,6 +63,14 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 This release is SDK 3: apps installed from the feed run only on the app contract, each in a worker of its own. An app still installed from before that names an SDK 2 range stays in the app bar and on Home, and opening it says it was made for an older version of AUGUR; intents and Find pass it by. Nothing of its data is touched. There is nothing to do unless Admin, Apps lists one: ask its team for a release on the app contract, or remove it there. Home, Admin and the Upgrade Centre are AUGUR's own and keep working.
 
+### The app runner runs an app's Score parts, and trusts only APP_PUBLISHERS
+
+**From** unreleased
+
+The app runner installs app contract 3 releases: each part in the release's Score files runs as a container of its own, `app-<id>-<part>-<slot>`, with only what its resources give it, held to its memory and CPU limits, on a read-only filesystem, and refused if its image runs as root. Job parts (a migration) run to the end before the switch; every service part must answer `/healthz` on the new version. A part's secrets reach it as files, mounted as Compose secrets from `infra/deploy/apps/files/`, never in its settings ([app-storage.md](app-storage.md)).
+
+Before you install an app, list its repository in `APP_PUBLISHERS` in `.env`, the app template's (`harry-burton-dev/augur-app-template`, or your fork of it) among them: the runner now trusts only that list, and no longer this repository's Release workflow or `release/app-repos.json`. The new ceilings (`APP_PART_MEMORY_CEILING`, `APP_PART_CPU_CEILING`, `APP_MEMORY_CEILING`, `APP_CPU_CEILING`, `APP_SCRATCH_CEILING`) and `APP_READY_SECONDS` have defaults; set them only to change them ([app-storage.md](app-storage.md#limits-and-ceilings)). At start the runner tells the registry the deployment's own networks, which then stand in place of Docker's default range for the address rule.
+
 ### The registry takes only app contract 3 releases
 
 **From** unreleased
@@ -555,7 +563,7 @@ To see what the watch after an upgrade would see right now, after an upgrade by 
 
 **From** augur@0.6.0
 
-The updater can also install, upgrade and remove apps that don't ship with AUGUR, from their own signed releases ([Versioning](versioning.md#app-releases)), with no change to `compose.yml` or `.env` per app. It runs them in a Compose project of its own, `augur-apps`, which it writes in `infra/deploy/apps/` (`compose.yml`, a settings file per container and `state.json`). Don't edit those: they're rewritten on every install.
+The updater can also install, upgrade and remove apps, from their own signed releases ([Versioning](versioning.md#app-releases)), with no change to `compose.yml` or `.env` per app. It runs them in a Compose project of its own, `augur-apps`, which it writes in `infra/deploy/apps/` (`compose.yml`, `state.json` and `files/`, the files each part reads, its secrets among them). Don't edit those: they're rewritten on every install.
 
 To turn it on, with the updater already set up, add one setting to `.env` and `pc up -d`:
 
@@ -567,13 +575,13 @@ Every app's database password, bucket secret and sign-in are worked out from it 
 
 An install (a first install, an upgrade or going back to an older version alike) goes:
 
-1. **verify**: the release's signer must be trusted (this repository's Release workflow always is; `APP_PUBLISHERS` in `.env` adds others, as `owner/repo` or `owner/repo/.github/workflows/<file>`), and its service image must carry that workflow's signature.
-2. **storage**: when the app asks for a database or a bucket, the storage container makes them for that app alone.
+1. **verify**: the release must be on app contract 3 and its signer listed in `APP_PUBLISHERS` in `.env`, as `owner/repo` or `owner/repo/.github/workflows/<file>` (nobody else is trusted), and every part's image must carry that workflow's signature.
+2. **storage**: the provisioners work out what each part gets from the resources its Score file asks for ([app-storage.md](app-storage.md)), and the asks are held to the deployment's ceilings: a part that asks for more memory or CPU than they allow stops the install here, naming the ceiling. When a part asks for a database or a bucket, the storage container makes them for that app alone.
 3. **sign-in**: identity sets the app's sign-in to its worked-out secret.
-4. **start**: the new version starts in the slot (blue or green) the app isn't using, beside the old one, on the platform's network. It can't add powers, gets no host folders and isn't privileged.
-5. **health**: it must answer `/healthz` on its new version within 3 minutes. If it doesn't, it's removed and the old version carries on as if nothing happened.
-6. **switch**: the runner registers the new version and points the gateway at it, in that order.
-7. **watch**: when an older version was serving, the new one must keep answering `/healthz` on its version for 5 minutes, checked every half minute. If it misses twice in a row, the runner registers the old version again, points the gateway back at it and stops the new one, and Admin → Apps says why. A version installed before the runner kept its manifest can't be gone back to by itself: the result says so, and you install it again by hand. A first install has nothing to go back to, so it isn't watched.
+4. **start**: each image is pulled and refused if it runs as root. Job parts (a migration, say) run to the end, in the release's order; one that fails or runs out of time stops the install with its last log lines. Then the service and worker parts start in the slot (blue or green) the app isn't using, beside the old ones, on the platform's network. They can't add powers, get no host folders, write only to their scratch folders and `/tmp`, and aren't privileged.
+5. **health**: every service part must answer `/healthz` on its new version within its time (`augur.dev/ready-seconds`, else `APP_READY_SECONDS`, 3 minutes; never more than 10). If one doesn't, the new parts are removed and the old version carries on as if nothing happened.
+6. **switch**: the runner registers the new version and points the gateway at its inbound part, in that order.
+7. **watch**: when an older version was serving, every service part must keep answering `/healthz` on its version for 5 minutes, checked every half minute. If one misses twice in a row, the runner registers the old version again, points the gateway back at it and stops the new one, and Admin → Apps says why. A version installed before the runner kept its manifest can't be gone back to by itself: the result says so, and you install it again by hand. A first install has nothing to go back to, so it isn't watched.
 8. **retire**: the old version keeps running 10 more minutes for shells still holding the old manifest, then stops.
 
 Admin → Apps lists, under the catalogue, the apps this repository has released that aren't installed, with **Install**; it says what each one asks for, and asks for your password again before anything is installed or removed. The registry reads the releases every 15 minutes, or at once with **Check for releases**: the same GitHub releases Updates reads, with the same token (`APP_FEED_URL` points it elsewhere, and `off` turns it off; it's off by itself when `RELEASE_FEED_URL` is a mirror).
@@ -594,7 +602,7 @@ curl -X POST https://<platform>/api/registry/v1/app-runner/jobs -H "authorizatio
 
 Pull requests that change an app can run as previews beside it, for the app's developers alone, each with scratch storage of its own: see [app-previews.md](app-previews.md).
 
-Apps join the platform's network: the one the updater itself is on, usually `platform_default` (`APPS_NETWORK` in `.env` names another). So `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
+Apps' parts join the platform's network: the one the updater itself is on, usually `platform_default` (`APPS_NETWORK` in `.env` names another). So `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
 
 ### Images from releases (the first `augur@` release)
 

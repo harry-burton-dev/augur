@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, platformCredentialsFromEnv, serviceAuthFromEnv, startupLog } from '@augur/service-kit';
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
-import { appReposFrom, appRunner } from './runner.ts';
+import { appRunner } from './runner.ts';
 import { partsFor } from './parts.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity, repositoryOfIdentity } from './signers.ts';
@@ -95,17 +95,9 @@ const credentials = platformCredentialsFromEnv('updater');
 if (!credentials) throw new Error('SERVICE_CLIENT_SECRET is not set: the updater signs in to the registry as platform-updater (UPDATER_CLIENT_SECRET in .env).');
 const registry = registryClient({ registryUrl: REGISTRY_URL, credentials });
 const apps = appRunnerClient({ registryUrl: REGISTRY_URL, identityUrl: IDENTITY_URL, credentials, oidc: serviceAuthFromEnv() });
-// The workflow that signs AUGUR's own images is trusted to sign apps too, and each app that lives in its
-// own repository (release/app-repos.json, shipped in this image) is trusted from there; APP_PUBLISHERS in
-// .env adds others.
-const appReposFile = '/augur/app-repos.json';
-const appRepos = existsSync(appReposFile) ? appReposFrom(JSON.parse(readFileSync(appReposFile, 'utf8'))) : {};
-const runner = appRunner({
-  host: composeAppHost({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer }),
-  calls: apps.calls,
-  publishers: IMAGE_SIGNER === RELEASE_SIGNER ? RELEASE_WORKFLOWS : [IMAGE_SIGNER.replace(/^https:\/\/github\.com\//, '').replace(/@.*$/, '')],
-  appRepos,
-});
+// Only the repositories APP_PUBLISHERS in .env lists may publish apps (spec 3.4); the runner reads it on every job.
+const appHost = composeAppHost({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer });
+const runner = appRunner({ host: appHost, calls: apps.calls });
 
 const readFile = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8').trim() : '');
 
@@ -162,9 +154,22 @@ const afterWatchOnce = async () => {
   await registry.afterLook(await lookAfterWatch(look, server));
 };
 
+/**
+ * Tells the registry the deployment's own networks, once it has heard them: no app's address may be on
+ * one (the registry's address rule; until it hears them, Docker's default range stands in).
+ */
+let networksSaid = false;
+const sayNetworks = async () => {
+  if (networksSaid) return;
+  await apps.setOwnNetworks(await appHost.ownNetworks());
+  networksSaid = true;
+  log('told the registry the deployment’s own networks');
+};
+
 /** One turn of the app runner: stops old versions whose time is up, then does the next job, if any. Off without APP_SECRETS_KEY. */
 const appsOnce = async () => {
   if (!envValue(await server.readEnv(), 'APP_SECRETS_KEY')) return;
+  await sayNetworks().catch((err) => log('couldn’t tell the registry the deployment’s own networks', { error: (err as Error).message }));
   await runner.retireDue();
   const job = await apps.next();
   if (!job) return;

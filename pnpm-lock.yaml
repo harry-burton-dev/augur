@@ -761,6 +761,9 @@ importers:
 
   platform/services/updater:
     dependencies:
+      '@augur/app-tools':
+        specifier: workspace:*
+        version: link:../../packages/app-tools
       '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
