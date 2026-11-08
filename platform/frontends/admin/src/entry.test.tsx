@@ -633,7 +633,7 @@ describe('Apps', () => {
       runnerSeenAt: '2026-10-27T12:00:00Z',
       sdkVersion: '1.3.0',
       installed: [{ app: 'notes', name: 'Notes', version: '1.0.0', installedAt: '', channel: 'stable', policy: 'automatic', update: { version: '2.0.0', channel: 'stable', needs: ['2.0.0 is a major version: it may change how Notes works.'] } }],
-      available: [{ app: 'tasks', name: 'Tasks', description: 'Things to do', version: '1.2.0', channel: 'stable', signer: { repository: 'o/r', workflow: 'w' }, asks: { scopes: ['notifications:send'], storage: { database: true }, maxUpload: 10 } }],
+      available: [{ app: 'tasks', name: 'Tasks', description: 'Things to do', version: '1.2.0', channel: 'stable', signer: { repository: 'o/r', workflow: 'w' }, asks: { scopes: ['notifications:send'], resources: [{ part: 'web', type: 'augur-database' }], limits: { web: { memory: '256Mi', cpu: '500m' } }, floors: ['team'], maxUpload: 10, settings: [], canvas: false } }],
     };
     const runner: Answer = (method, url) => (url.startsWith('/api/registry/v1/app-runner/') && method === 'GET' ? Response.json(installs) : undefined);
 
@@ -643,7 +643,7 @@ describe('Apps', () => {
       expect(el.querySelector('[data-available]')?.textContent).toContain('Tasks 1.2.0');
       expect(el.querySelector('[data-waiting]')).toBeNull();
       await press(button('Install', el.querySelector('[data-available]')!));
-      expect(document.querySelector('.augur-dialog')!.textContent).toContain('Keeps a database on the server');
+      expect(document.querySelector('.augur-dialog')!.textContent).toContain('Its web part (256Mi of memory, 500m CPU) keeps a database');
       await press(button('Install', document.querySelector('.augur-dialog')!));
       expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', app: 'tasks', version: '1.2.0' } });
     });

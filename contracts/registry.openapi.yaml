@@ -242,15 +242,57 @@ components:
                     type: string
               asks:
                 type: object
+                required:
+                  - scopes
+                  - resources
+                  - limits
+                  - floors
+                  - maxUpload
+                  - settings
+                  - canvas
                 properties:
                   scopes:
                     type: array
                     items:
                       type: string
-                  storage:
+                  resources:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - part
+                        - type
+                      properties:
+                        part:
+                          type: string
+                        type:
+                          type: string
+                        params:
+                          type: object
+                    description: Each resource a part asks for, with its params
+                  limits:
                     type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        memory:
+                          type: string
+                        cpu:
+                          type: string
+                    description: By part name
+                  floors:
+                    type: array
+                    items:
+                      type: string
                   maxUpload:
                     type: integer
+                  settings:
+                    type: array
+                    items:
+                      type: string
+                  canvas:
+                    type: boolean
+                description: The release's asks, as its file carries them (spec 9.4)
               problem:
                 type: string
                 description: Why it can't open in this AUGUR
@@ -260,111 +302,11 @@ components:
       type: object
       required:
         - schema
-        - id
-        - version
-        - channel
-        - manifest
-        - service
-        - frontend
-        - signer
       properties:
         schema:
           type: string
-          enum:
-            - augur.app-release/v1
-        id:
-          type: string
-          pattern: ^[a-z][a-z0-9-]{1,39}$
-        version:
-          type: string
-          minLength: 1
-          maxLength: 40
-        channel:
-          enum:
-            - stable
-            - beta
-            - dev
-            - preview
-        releasedAt:
-          type: string
-          maxLength: 40
-        sdk:
-          type: string
-          maxLength: 100
-        manifest:
-          $ref: "#/components/schemas/AppManifestEntry"
-        service:
-          anyOf:
-            - type: "null"
-            - type: object
-              required:
-                - image
-              properties:
-                image:
-                  type: string
-                  pattern: ^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$
-                  maxLength: 300
-                  description: The service image by digest, <repo>@sha256:<hex>
-              additionalProperties: false
-        frontend:
-          anyOf:
-            - type: "null"
-            - type: object
-              required:
-                - artifact
-                - digest
-                - mediaType
-              properties:
-                artifact:
-                  type: string
-                  pattern: ^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$
-                  maxLength: 300
-                  description: The frontend's OCI artifact by digest
-                digest:
-                  type: string
-                  pattern: ^sha256:[0-9a-f]{64}$
-                  description: sha256 of the frontend's tarball
-                mediaType:
-                  type: string
-                  maxLength: 100
-              additionalProperties: false
-        signer:
-          type: object
-          required:
-            - repository
-            - workflow
-          properties:
-            repository:
-              type: string
-              pattern: ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$
-            workflow:
-              type: string
-              pattern: ^\.github/workflows/[A-Za-z0-9_.-]+\.ya?ml$
-          additionalProperties: false
-        asks:
-          type: object
-          description: "What the version asks an admin for: scopes, storage, floors, maxUpload, settings"
-        notes:
-          type: string
-          maxLength: 20000
-        preview:
-          type: object
-          required:
-            - pr
-          properties:
-            pr:
-              type: integer
-              minimum: 1
-            title:
-              type: string
-              maxLength: 300
-            url:
-              type: string
-              maxLength: 300
-          additionalProperties: false
-          description: For a pull request's build (channel preview, version <x.y.z>-pr.<number>.<run>)
-      additionalProperties: false
-      description: An app's release file, app-release.json, as scripts/app-release.mjs writes it (docs/versioning.md, App releases)
+          description: augur.app-release/v2
+      description: An app's release file, app-release.json, as @augur/app-tools writes it (urn:augur:app-release:2; docs/ship-an-app.md)
     Preview:
       type: object
       required:
@@ -1997,6 +1939,26 @@ components:
           description: Where in the app it opens, below the app's route
       additionalProperties: false
 paths:
+  /contract:
+    get:
+      summary: The app contract majors this registry serves
+      description: Any caller. A release on another major is refused, saying which it speaks and which this AUGUR serves (spec 11.5).
+      responses:
+        "200":
+          description: The majors served
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - majors
+                properties:
+                  majors:
+                    type: array
+                    items:
+                      type: integer
+                    description: Contract majors, oldest first
+                description: The majors served
   /manifest:
     get:
       summary: Apps the caller may open
@@ -3034,6 +2996,64 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: "This is a production server: it follows stable releases only (error production_server)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /runner/networks:
+    put:
+      summary: Say the deployment's own networks (the deployment's app runner only)
+      description: CIDRs such as 172.18.0.0/16 or fd00:a::/64, replacing those said before. No app's address may be on one of them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - networks
+              properties:
+                networks:
+                  type: array
+                  items:
+                    type: string
+                    pattern: ^(?:\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}|[0-9a-fA-F:]+/\d{1,3})$
+                    maxLength: 50
+                  maxItems: 512
+              additionalProperties: false
+      responses:
+        "200":
+          description: As kept
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - networks
+                  - setAt
+                properties:
+                  networks:
+                    type: array
+                    items:
+                      type: string
+                  setAt:
+                    type: string
+                    format: date-time
+                description: As kept
+        "400":
+          description: One isn't a network that parses
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
           content:
             application/problem+json:
               schema:

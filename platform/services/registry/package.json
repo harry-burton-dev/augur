@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@augur/app-tools": "workspace:*",
     "@augur/mfe-sdk": "workspace:*",
     "@augur/service-kit": "workspace:*",
     "@aws-sdk/client-s3": "catalog:",
@@ -27,6 +28,7 @@
     "@types/pg": "catalog:",
     "@types/semver": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   }
 }
