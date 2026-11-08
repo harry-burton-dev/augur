@@ -50,6 +50,9 @@
       ]
     },
     "platform/contract": {
+      "entry": [
+        "reference-app-3/frontend/src/entry.ts"
+      ],
       "project": [
         "**/*.{ts,mjs}"
       ]

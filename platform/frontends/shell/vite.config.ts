@@ -133,7 +133,9 @@ const sharedModulesMap = (): Plugin => {
       return dev
         ? // Aerie and the kit stay out of Vite's pre-bundled deps, so their imports of React resolve
           // to the kit's own files (resolveId, below), not to a second copy of React bundled in.
-          { optimizeDeps: { exclude: ['@augur/shell-kit', '@augur/kit-common', '@augur/app-kit'] } }
+          // remote-dom is bundled ahead, once: the SDK's worker runtime and Quill's remote elements must share
+          // one copy of it, and finding it only when the first app's worker starts would reload the page.
+          { optimizeDeps: { exclude: ['@augur/shell-kit', '@augur/kit-common', '@augur/app-kit'], include: ['@remote-dom/core/elements', '@remote-dom/core/polyfill'] } }
         : { build: { rollupOptions: { external: isSharedModule } } };
     },
     configResolved: (config) => {
@@ -204,7 +206,12 @@ const devApp = (dir: string | undefined) => {
   const previewsOn = asked.includes('all') ? previews : previews.filter((p) => asked.includes(p));
   // A React app's entry is entry.tsx (augur-app-template); entry.ts is still taken for one with no JSX in it.
   const source = ['frontend/src/entry.tsx', 'frontend/src/entry.ts'].map((f) => resolve(dir, f)).find((f) => existsSync(f)) ?? resolve(dir, 'frontend/src/entry.tsx');
-  const app = { ...manifest, entry: process.env.DEV_APP_ENTRY ?? `/@fs/${normalizePath(source).replace(/^\//, '')}`, ...(previewsOn.length ? { previewsOn } : {}) };
+  const served = process.env.DEV_APP_ENTRY ?? `/@fs/${normalizePath(source).replace(/^\//, '')}`;
+  // An app on the app contract (contract 3) names its entry inside its bundle; the stand-in serves it from source instead.
+  const app =
+    manifest.contract === 3
+      ? { ...manifest, frontend: { ...(manifest.frontend as object), url: served }, ...(previewsOn.length ? { previewsOn } : {}) }
+      : { ...manifest, entry: served, ...(previewsOn.length ? { previewsOn } : {}) };
   const caller = {
     'x-user-id': 'dev-person',
     'x-user-name': encodeURIComponent('Dev Person'),
@@ -251,12 +258,31 @@ const devApp = (dir: string | undefined) => {
   };
 };
 
+/**
+ * Every app's worker runs under its own policy (spec 6.5, ADR 0076): it may load scripts from this
+ * origin (the bootstrap, the app's entry under /apps/) and reach nothing at all, so the bridge is its
+ * only way out. A worker takes its policy from the response that served its script, so the dev server
+ * sends it here and nginx.conf sends the same with the built bootstrap under /sandbox/.
+ */
+export const WORKER_CSP = "default-src 'none'; script-src 'self'; worker-src 'none'; child-src 'none'";
+const workerPolicy = (): Plugin => ({
+  name: 'worker-policy',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      if (req.url?.includes('worker_file')) res.setHeader('Content-Security-Policy', WORKER_CSP);
+      next();
+    });
+  },
+});
+
 /** The shell's release, from its package.json, shown in Settings. */
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 const dev = devApp(process.env.DEV_APP);
 
 export default defineConfig({
-  plugins: [sharedModulesMap(), react(), serveApps(), dev?.plugin],
+  plugins: [sharedModulesMap(), react(), serveApps(), workerPolicy(), dev?.plugin],
+  // Apps' worker bootstrap (src/sandbox/worker.ts) is bundled whole, under sandbox/, where nginx gives it the worker's policy.
+  worker: { format: 'es', rollupOptions: { output: { entryFileNames: 'sandbox/[name]-[hash].js', chunkFileNames: 'sandbox/[name]-[hash].js', assetFileNames: 'sandbox/[name]-[hash][extname]' } } },
   define: { __SHELL_VERSION__: JSON.stringify(version), ...dev?.define },
   server: {
     port: 5173,
