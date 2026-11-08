@@ -2,7 +2,47 @@
 
 An app can keep its own data on the platform: a **database schema** in the platform's Postgres, and a **bucket** in its object store. Both belong to the app alone. The app's database login owns its schema and can't read anyone else's, and its bucket key opens only its bucket. The platform never reads either.
 
-## What an app gets
+## What a part asks for
+
+On app contract 3 each part of an app says what it needs in its Score file's `resources`, and reads what it gets as `${resources.<name>.<output>}` in its `variables`, `command`, `args` and `files`. The app runner's provisioners give it this, and nothing it didn't ask for:
+
+| Type | Params | What the part reads |
+| --- | --- | --- |
+| `augur-gateway` | `inbound` (true for the one part the gateway sends `/api/<id>/*` to) | `url`, `public_url`, `client_id`, `client_secret` (secret), `token_url`, `caller_keys_url`, `inbound` |
+| `augur-database` | `connections` (1 to 100) | `host`, `port`, `name`, `user` (`app_<id>`), `schema` (`<id>`), `password` (secret), `connections` |
+| `augur-bucket` | none | `endpoint`, `region`, `bucket` (`<id>`), `access_key_id`, `secret_access_key` (secret) |
+| `augur-scratch` | `size` (`<n>Mi` or `<n>Gi`) | the folder itself, as a volume's `source: ${resources.<name>}`, writable |
+| `augur-files` | `label`, `detail` | the folder itself, read-only, which an admin fills |
+| `augur-telemetry` | none | `otlp_endpoint` (where AUGUR's own services send telemetry; empty without a collector), `service_name` |
+| `augur-floor-graphs` | none | `url`, the floor graphs API through the gateway |
+| `augur-outbound` | `hosts`, `why` | nothing; Admin shows the ask |
+| `augur-settings` | `ids` | one output per setting: the admin's value, else the manifest's default, else empty (secret for a `secret` setting); a required setting with neither stops the install |
+
+A secret output may be read only in `files`: the runner refuses a part that reads one in a variable, its command or its arguments. Each file a part names is written in `infra/deploy/apps/files/` and mounted into its container as a Compose secret; the Compose project and `state.json` hold no secret. Score's `$${` is a literal `${`.
+
+The login, schema and bucket are the same for every part of an app, and both slots of an upgrade share them. A scratch or files folder is a Docker volume of its own for each part and resource, `app-<id>-<part>-<resource>`, kept across upgrades. Docker doesn't cap a volume's size, so `size` is held to the deployment's ceiling when the app installs, not enforced on the disk. Until Admin can fill an `augur-files` folder, put files in it from the server: `docker run --rm -v app-<id>-<part>-<resource>:/f -v "$PWD":/from:ro alpine cp -r /from/. /f/`.
+
+A part that asks for nothing gets nothing: no store, no sign-in, no secrets, no folders, and no addresses of AUGUR's services. Until each app has a network of its own, parts share the platform's network.
+
+## Limits and ceilings
+
+Each part's Score file sets `resources.limits.memory` and `resources.limits.cpu`, and the runner applies them to its container. A deployment holds those asks to its ceilings, set in `.env`:
+
+| Setting | Default | What it caps |
+| --- | --- | --- |
+| `APP_PART_MEMORY_CEILING` | `2Gi` | memory, one part |
+| `APP_PART_CPU_CEILING` | `2` | CPU, one part |
+| `APP_MEMORY_CEILING` | `4Gi` | memory, an app's parts together |
+| `APP_CPU_CEILING` | `4` | CPU, an app's parts together |
+| `APP_SCRATCH_CEILING` | `1Gi` | scratch space, an app's parts together |
+| `APP_DATABASE_CONNECTIONS` | `30` | the app's database login, every part and both slots together; parts that ask for `connections` may not ask for more between them |
+| `APP_READY_SECONDS` | `180` | how long a part has to answer `/healthz`, or a job to finish, when its file sets no `augur.dev/ready-seconds` (never more than 600) |
+
+A release that asks above a ceiling stops at the install's storage step, before anything starts, with the ceiling and the ask named. To let it in, raise the setting and ask again.
+
+## How the storage container makes them
+
+### What an app gets
 
 | | What it is | The app's service reads |
 | --- | --- | --- |
@@ -36,7 +76,7 @@ Say what the app keeps in its manifest, so admins can see it:
 "storage": { "database": true, "bucket": true }
 ```
 
-## Giving an app its storage (admins)
+### Giving an app its storage (admins)
 
 The `storage` service makes each app's login, schema, bucket and key from `.env` on every `up`, then stops. For an app with id `notes`:
 

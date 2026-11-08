@@ -510,6 +510,16 @@ await registerApp({ registryUrl, credentials, manifest });
 
 Each build of a version's frontend is kept in a folder of its own, `/apps/expenses/<version>_<digest>/`, which never changes, so browsers keep it for good. The same files again change nothing (every restart gives them). Different files for the same version are a new build of it, such as a dev build: they take the old build's place, and browsers load them from their new folder. Change the version for anything you release. The manifest's `entry` must be a file under `/apps/expenses/`, such as `/apps/expenses/entry.js`, and keep its other files beside it with relative imports, as Vite's library build does. Otherwise `infra/web.Dockerfile` can build it and copy its `dist` to `/site/apps/expenses` beside Home and Admin, served from the manifest's entry as it is. An admin can turn the app off in Admin without removing it, or choose where it's on: in Admin, Apps, open the app and set each floor to on, off or blocked. On and off carry on to the teams below; blocked means no team below can turn it back on. Everyone's own floor follows the org. The shell asks the registry for the apps on the floor the person is on, and the platform holds the app's service to its scopes only where it's on.
 
+### How the app runner runs your parts
+
+On app contract 3 a deployment's app runner runs each part of your release (one Score file per part, `score/<part>.score.yaml`) as a container of its own, `app-<id>-<part>-<slot>`:
+
+- **Kind.** `augur.dev/part: service` answers on its one `service.ports` entry and `GET /healthz` with `{"version": "<release version>"}`; `worker` runs in the background; `job` runs once per install, to exit 0, before the switch (a migration). A job that fails stops the install with its last log lines, and the old version keeps serving.
+- **Time.** `augur.dev/ready-seconds` is how long a service part has to answer on its version, or a job to finish; without it the deployment's `APP_READY_SECONDS` (3 minutes), never more than 10. A `readinessProbe` must name `/healthz` on the part's port.
+- **What it gets.** Only what its `resources` give it ([app-storage.md](app-storage.md#what-a-part-asks-for)): no addresses of AUGUR's services, and no `.env`. It reaches AUGUR through `${resources.gateway.url}`, signing in at `${resources.gateway.token_url}` as `${resources.gateway.client_id}` with the secret in its file. Read every secret from a file (`files`); a secret in a variable, the command or the arguments is refused.
+- **Limits.** `resources.limits.memory` and `cpu` are applied to the container, within the deployment's ceilings.
+- **Hardening.** The image must set a user other than root. The container's filesystem is read-only except its `augur-scratch` folders and `/tmp`; it gets no added capabilities, no new privileges, no host folders and no published ports.
+
 ### Releasing it
 
 [Ship an app](ship-an-app.md) walks the whole loop, from a pull request's preview to servers taking the release by themselves.

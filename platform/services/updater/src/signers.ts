@@ -40,3 +40,13 @@ export const repositoryOfIdentity = (identity: string): string | undefined =>
 /** An AUGUR or app version that's a dev build: <next patch>-dev.<run>. */
 export const isDevBuild = (version: string) => /-dev\.\d+$/.test(version);
 export const releaseIdentity = (workflow: string | readonly string[]) => `^${anyOf(workflow)}@refs/heads/(${[...RELEASE_BRANCHES, HOTFIX_BRANCH].join('|')})$`;
+
+/**
+ * APP_PUBLISHERS in .env, the only list of who may publish apps on a deployment (spec 3.4):
+ * `owner/repo` (its release.yml) or `owner/repo/.github/workflows/<file>`, space or comma separated.
+ */
+export const publishersFrom = (setting = '') =>
+  setting
+    .split(/[\s,]+/)
+    .filter(Boolean)
+    .map((p) => (p.split('/').length === 2 ? `${p}/.github/workflows/release.yml` : p));
