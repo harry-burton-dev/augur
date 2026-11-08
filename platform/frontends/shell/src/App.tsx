@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StageMounter,
+  incompatibility,
   workerCards,
   applyPreferences,
   areaOf,
@@ -83,6 +84,9 @@ import { productName } from './host/menus.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { InboxView } from './inbox/InboxView.js';
+
+/** The apps this shell can open: an intent goes to one of them, and Find asks only them. One it can't open still says why where it is listed. */
+const openable = (apps: AppManifestEntry[]) => apps.filter((a) => !incompatibility(a));
 
 export interface HostProps {
   session: Session;
@@ -463,7 +467,7 @@ export function Host({
     async (intent: Intent) => {
       if (!manifest) return;
       try {
-        routeIntent(manifest, intent, (app) => {
+        routeIntent(openable(manifest), intent, (app) => {
           pendingIntent.current = intent;
           setRaised((n) => n + 1);
           navigate(hrefFor(app));
@@ -509,7 +513,7 @@ export function Host({
       if (!manifest) return Promise.reject(new IntentError('Apps are still loading. Try again in a moment.'));
       let started: ReturnType<RequestBroker['begin']>;
       try {
-        started = broker.current.begin(manifest, intent);
+        started = broker.current.begin(openable(manifest), intent);
       } catch (err) {
         if (err instanceof IntentError) tell(toShellNotification('platform', { title: err.message }));
         return Promise.reject(err);
@@ -916,7 +920,7 @@ export function Host({
       search.stop();
       clearTimeout(findTimer.current);
       findTimer.current = setTimeout(() => {
-        void search.run(manifest ?? [], q, floorRef.current.id, ({ results, groups }) => {
+        void search.run(openable(manifest ?? []), q, floorRef.current.id, ({ results, groups }) => {
           shell.findResults = [...pages, ...results];
           shell.findGroups = groups;
         });

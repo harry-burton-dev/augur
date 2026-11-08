@@ -95,6 +95,7 @@ export function runWorker(scope: Port & Record<string, unknown> = globalThis as 
       person: Object.freeze({ ...init.person }),
       workspace: Object.freeze({ ...init.workspace }),
       path: init.path,
+      surface: init.surface === 'card' ? 'card' : 'screen',
       onNavigate(fn) {
         navigated.add(fn);
         return () => void navigated.delete(fn);

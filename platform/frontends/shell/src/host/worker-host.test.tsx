@@ -392,6 +392,45 @@ describe('an app’s card on Home', () => {
     expect(el.textContent).toBe('');
   });
 
+  it('says so in the card when the app stops after drawing it, never leaving it blank', async () => {
+    const stub = stubApp((self, method) => method === 'start' && self.mutate('card', [notice('c1', 'Three to check')]));
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctxFor(), { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    act(() => void stub.worker.dispatchEvent(Object.assign(new Event('error'), { message: 'boom' })));
+    expect(el.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('failed');
+    expect(el.textContent).toContain('Notes stopped');
+    act(() => void card.unmount!(el));
+    expect(stub.worker.terminated).toBe(true);
+  });
+
+  it('moves the person or opens another app only just after a press in the card', async () => {
+    let self!: Channel;
+    const stub = stubApp((app, method, args) => {
+      self = app;
+      if (method === 'start') {
+        expect((args[0] as { surface?: string }).surface).toBe('card');
+        app.mutate('card', [notice('c1', 'Three to check')]);
+      }
+    });
+    const ctx = ctxFor();
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctx, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    self.post('navigate', '/notebooks');
+    await expect(self.call('raise', { type: 'note.share' })).rejects.toThrow(/only when someone presses something/);
+    expect(ctx.navigate).not.toHaveBeenCalled();
+    el.firstElementChild!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    self.post('navigate', '/notebooks');
+    await flush();
+    expect(ctx.navigate).toHaveBeenCalledWith('/notebooks');
+    act(() => void card.unmount!(el));
+  });
+
   it('isn’t shown when the app fails before drawing it', async () => {
     const stub = stubApp();
     const el = document.createElement('div');

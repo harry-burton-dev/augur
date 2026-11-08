@@ -61,7 +61,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 **From** unreleased
 
-This release is SDK 3: apps installed from the feed run only on the app contract, each in a worker of its own. An app still installed from before that names an SDK 2 range stays in the app bar, greyed, and says it was made for an older version of AUGUR. Nothing of its data is touched. There is nothing to do unless Admin, Apps lists one: ask its team for a release on the app contract, or remove it there. Home, Admin and the Upgrade Centre are AUGUR's own and keep working.
+This release is SDK 3: apps installed from the feed run only on the app contract, each in a worker of its own. An app still installed from before that names an SDK 2 range stays in the app bar and on Home, and opening it says it was made for an older version of AUGUR; intents and Find pass it by. Nothing of its data is touched. There is nothing to do unless Admin, Apps lists one: ask its team for a release on the app contract, or remove it there. Home, Admin and the Upgrade Centre are AUGUR's own and keep working.
 
 ### The registry takes only app contract 3 releases
 

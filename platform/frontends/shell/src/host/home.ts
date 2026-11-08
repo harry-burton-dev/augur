@@ -161,13 +161,27 @@ export class SurfaceMounter {
     if (!which || incompatibility(app)) return false;
     if (isWorkerApp(app)) {
       if (which.slot !== 'card' || !this.workerCard || !el.isConnected) return false;
-      await this.unmount(el);
+      // The card takes the tile at once, so an unmount or a new mount meanwhile finds it and ends its worker.
+      const was = this.mounted.get(el);
       const card = this.workerCard(app, ctx);
       this.mounted.set(el, card);
-      await card.mount(el, ctx);
+      if (was) {
+        await this.end(el, was);
+        if (this.mounted.get(el) === card) el.replaceChildren();
+      }
+      if (this.mounted.get(el) !== card || !el.isConnected) {
+        if (this.mounted.get(el) === card) await this.unmount(el);
+        return false;
+      }
+      try {
+        await card.mount(el, ctx);
+      } catch {
+        if (this.mounted.get(el) === card) await this.unmount(el);
+        return false;
+      }
       const shown = await card.shown;
       if (!shown && this.mounted.get(el) === card) await this.unmount(el);
-      return shown;
+      return shown && this.mounted.get(el) === card;
     }
     const surface = (await this.entryOf(app))?.surfaces?.[which.module];
     if (!isSurface(surface) || !el.isConnected) return false;
@@ -186,12 +200,16 @@ export class SurfaceMounter {
     const surface = this.mounted.get(el);
     if (!surface) return;
     this.mounted.delete(el);
+    await this.end(el, surface);
+    el.replaceChildren();
+  }
+
+  private async end(el: HTMLElement, surface: Surface) {
     try {
       await surface.unmount?.(el);
     } catch {
       // A card that fails to tidy up is still gone from Home.
     }
-    el.replaceChildren();
   }
 
   async unmountAll() {
