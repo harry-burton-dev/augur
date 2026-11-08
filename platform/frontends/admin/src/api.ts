@@ -536,6 +536,20 @@ export interface AppPreview {
   endsAt: string;
 }
 
+/** What a contract 3 release asks an admin to agree to. */
+interface AppAsks {
+  scopes: string[];
+  /** Each resource a part asks for, with its params. */
+  resources: { part: string; type: string; params?: Record<string, unknown> }[];
+  /** Each part's limits, by part name. */
+  limits: Record<string, { memory: string; cpu: string }>;
+  floors: string[];
+  maxUpload: number;
+  /** The ids of the settings it offers. */
+  settings: string[];
+  canvas: boolean;
+}
+
 /** An app the feed offers that isn't installed. */
 export interface AvailableApp {
   app: string;
@@ -545,7 +559,8 @@ export interface AvailableApp {
   channel: AppChannel;
   notesUrl?: string;
   signer: { repository: string; workflow: string };
-  asks: { scopes: string[]; storage: { database?: boolean; bucket?: boolean }; maxUpload: number };
+  /** What its release asks for, as the file carries it (contract 3, spec 9.4). */
+  asks: AppAsks;
   /** Why it can't open in this AUGUR. */
   problem?: string;
   job?: AppJob;

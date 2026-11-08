@@ -78,6 +78,7 @@ import type { PipelineReader } from './pipeline.ts';
 import { UpdateChecker } from './updates.ts';
 import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
+import { SERVED_CONTRACTS } from './release-check.ts';
 import semver from 'semver';
 import {
   RouteTakenError,
@@ -219,6 +220,18 @@ export const buildApp = async ({
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', { schema: { hide: true } }, async () => health('registry', version, API_VERSION));
+  /** The app contract majors this registry installs releases on (spec 11.1); the gateway's status names them. */
+  app.get(
+    `/${API_VERSION}/contract`,
+    {
+      schema: {
+        summary: 'The app contract majors this registry serves',
+        description: 'Any caller. A release on another major is refused, saying which it speaks and which this AUGUR serves (spec 11.5).',
+        response: { 200: Type.Object({ majors: Type.Array(Type.Integer(), { description: 'Contract majors, oldest first' }) }, { description: 'The majors served' }) },
+      },
+    },
+    async () => ({ majors: [...SERVED_CONTRACTS] }),
+  );
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(
@@ -282,17 +295,18 @@ export const buildApp = async ({
           const allowed = await allowedOrigins();
           const rules = place ? await store.rules() : [];
           const kept = await store.frontends();
-          const previews = await previewsChosenBy(caller?.id);
           const optIns = caller ? await store.featureOptIns({ person: caller.id }) : [];
+          const previews = await previewsChosenBy(caller?.id);
           const feed = await feedApps();
           const at = new Date();
           const registered = (await store.records())
             .filter((r) => r.enabled && !entryOriginProblem(r.entry, allowed) && (!place || floorState(r, place, rules).on))
             // The limit the gateway holds requests to the app's service to (SDK 1.3), and the version's own copy of its code:
             // for a developer trying one of its pull requests, that build's. And the feature previews on for this person (SDK 1.7).
+            // A build is a contract 3 release: until the shell draws contract 3 frames (PER-350), only its version is served.
             .map((r) => {
               const on = previewsOnFor(r, optIns, updates.ring, at, place ? ruleChain(place) : []);
-              const served = servedEntry(previews.get(r.entry.id)?.release.manifest ?? r.entry, kept);
+              const served = servedEntry(previews.has(r.entry.id) ? { ...r.entry, version: previews.get(r.entry.id)!.release.version } : r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
               // Only the kind in force (ADR 0032): a claim the registry doesn't honour never reaches the shell.
@@ -311,6 +325,8 @@ export const buildApp = async ({
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
         },
       );
+
+      const previewsChosenBy = async (person?: string) => new Map(person ? (await chosenPreviews(person)).map(({ preview }) => [preview.app, preview]) : []);
 
       /**
        * Every app and whether the caller can use it on the floor they're on, with the reason and who set the rule
@@ -416,7 +432,6 @@ export const buildApp = async ({
           return preview ? [{ person: c.person, preview }] : [];
         });
       };
-      const previewsChosenBy = async (person?: string) => new Map(person ? (await chosenPreviews(person)).map(({ preview }) => [preview.app, preview]) : []);
 
       /** The whole catalogue for admins: every app, on or off, with who registered it and when. */
       app.get(
@@ -611,9 +626,9 @@ export const buildApp = async ({
         '/apps/:id/grants',
         {
           schema: {
-            summary: 'What an app may do on a floor (platform services only)',
+            summary: 'What an app may do on a floor (platform services and the gateway)',
             description: [
-              "AUGUR's services check an app's calls against this, and keep",
+              "AUGUR's services and the gateway check an app's calls against this, and keep",
               'each answer for up to 30 seconds. An app is granted the scopes it asks',
               'for that an admin has granted, on floors where it is on (see',
               "/manifest); nothing where it is off, on a floor that doesn't exist, or",
@@ -628,7 +643,10 @@ export const buildApp = async ({
               200: Type.Object(
                 {
                   app: Type.String(),
+                  name: Type.String({ description: "What the app is called, for the gateway's refusals" }),
                   workspace: Type.Optional(Type.String()),
+                  on: Type.Boolean({ description: 'Whether the app is on where the call is for: enabled, for that kind of floor, and not blocked or turned off there (contract 3, spec 8.2)' }),
+                  floorKind: Type.Optional(Type.String({ description: 'The kind of the floor the call is for (personal, team or org), when it exists, so the gateway can name the floor to the service' })),
                   scopes: Type.Array(ref(ScopeSchema)),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
                   notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
@@ -638,7 +656,7 @@ export const buildApp = async ({
                 },
                 { description: "The app's grants" },
               ),
-              403: refused('Not a platform service'),
+              403: refused('Not a platform service or the gateway'),
               404: refused('No such app is registered'),
               503: refused("Floors, or the sign-in service that checks the caller's token, can't be reached right now"),
             },
@@ -647,7 +665,8 @@ export const buildApp = async ({
         async (req, reply) => {
           const service = await serviceOf(req, reply);
           if (service === undefined) return reply;
-          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can read what an app is granted.' });
+          // The gateway asks as itself (its signed caller), to admit an app's own token and hold it to its grant (spec 8.2, 8.3).
+          if (service?.kind !== 'platform' && !isGatewayCaller(callerFromHeaders(req.headers) ?? undefined)) return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can read what an app is granted.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const { workspace } = req.query;
@@ -662,7 +681,10 @@ export const buildApp = async ({
           const on = place ? floorState(found, place, await store.rules(found.entry.id)).on : false;
           return {
             app: found.entry.id,
+            name: found.entry.name,
             workspace: workspace ?? place?.id,
+            on,
+            ...(place ? { floorKind: place.kind } : {}),
             scopes: on ? usableScopes(found) : [],
             inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
@@ -962,7 +984,7 @@ export const buildApp = async ({
             service?.kind === 'platform' ? { id: service.name, kind: 'service' } : !service && caller?.roles.includes('admin') ? { id: caller.id, kind: 'user' } : undefined;
           if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the AUGUR service that runs an app can say where it is.' });
           if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: `"${req.params.id}" is one of AUGUR’s own apps.` });
-          const problem = req.body.url === null ? undefined : upstreamProblem(req.body.url);
+          const problem = req.body.url === null ? undefined : upstreamProblem(req.body.url, await store.ownNetworks());
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
           const url = req.body.url === null ? null : req.body.url.replace(/\/+$/, '');
           const changed = await store.setUpstream(req.params.id, url);

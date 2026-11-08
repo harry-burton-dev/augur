@@ -5,8 +5,8 @@
 openapi: 3.1.0
 info:
   title: Gateway
-  version: 1.9.0
-  description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz and /caller-keys needs a signed-in caller, however it is spelt. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
+  version: 1.9.1
+  description: The gateway's own API, beside the services it forwards to. Reached at /api/gateway/v1 by a signed-in caller. Everything else under /api/<service> is forwarded to that service with the caller in x-user-* headers and in x-augur-caller, a token the gateway signs (EdDSA, one minute) for that service alone (its `aud` is the service's name), and without the caller's Authorization header. Services that check callers believe only the signed one. Every path but /healthz, /caller-keys and POST /api/identity/v1/token (where an app's part gets its own token, contract 3) needs a signed-in caller, however it is spelt. An app's own token (audience platform-services, client app-<id>) is admitted for an app the registry knows and has on, held to its grant. x-user-signed-in-at (and the token's `signedInAt`) carries when the caller last entered their password (the token's auth_time, ISO 8601), for a service that wants a fresh sign-in for something drastic; the shell's /auth/again?return=<path> asks for the password and comes back.
 components:
   schemas:
     Refusal:

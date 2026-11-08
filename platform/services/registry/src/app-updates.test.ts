@@ -4,20 +4,13 @@ import { appFeed, AppUpdateChecker, newestOn, updateNeeds, type AppFeedRead, typ
 import { PgAppStore, type AppRelease } from './store.ts';
 import { FeedProblem, UpdateChecker } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
+import { releaseOf } from './release3.testing.ts';
 
 const db = registryDb();
 
-const digest = (c: string) => `sha256:${c.repeat(64)}`;
-const release = (version: string, more: Partial<AppRelease['manifest']> = {}, channel = 'stable'): AppRelease => ({
-  schema: 'augur.app-release/v1',
-  id: 'notes',
-  version,
-  channel,
-  manifest: { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', version, sdk: '^1.0.0 || ^2.0.0', ...more },
-  service: { image: `ghcr.io/o/r/apps/notes@${digest('a')}` },
-  frontend: null,
-  signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' },
-});
+/** The spec's example as notes `version`, asking for no scopes unless `more` says. */
+const release = (version: string, more: Partial<AppRelease['manifest']> = {}, channel?: AppRelease['channel']): AppRelease =>
+  releaseOf('notes', version, { scopes: [], ...more }, channel ? { channel } : {});
 const feedOf = (...releases: AppRelease[]): AppFeedRelease[] =>
   releases.map((r) => ({ app: r.id, version: r.version, channel: r.channel === 'stable' ? 'stable' : r.channel === 'dev' ? 'dev' : 'beta', release: r }));
 const listOf = (read: AppFeedRelease[] | AppFeedRead) => (Array.isArray(read) ? read : read.releases);
@@ -90,22 +83,16 @@ describe('the app feed', () => {
 
 describe('what an update needs', () => {
   it('needs nothing for a minor version that asks for nothing new', () => {
-    expect(updateNeeds(release('1.0.0', { scopes: ['audit:write'] }), release('1.1.0', { scopes: ['audit:write'] }), '1.3.0')).toEqual([]);
+    expect(updateNeeds(release('1.0.0', { scopes: ['audit:write'] }), release('1.1.0', { scopes: ['audit:write'] }))).toEqual([]);
   });
 
-  it('waits for an admin when it asks for more, is a major, or won’t open', () => {
-    const needs = updateNeeds(release('1.0.0'), release('2.0.0', { scopes: ['people:read'], storage: { bucket: true }, floors: ['org'], maxUpload: 50, sdk: '^2.0.0' }), '1.3.0');
-    expect(needs).toEqual([
-      '2.0.0 is a major version: it may change how Notes works.',
-      'It asks for more: people:read.',
-      'It asks for storage it didn’t have.',
-      'It asks for uploads up to 50 MB.',
-      'It needs SDK ^2.0.0, and this AUGUR has 1.3.0.',
-    ]);
-    expect(updateNeeds(release('1.0.0', { floors: ['org'] }), release('1.0.1'), '1.3.0')).toEqual(['It asks to work on more kinds of floor.']);
+  it('waits for an admin when it asks for more or is a major', () => {
+    const needs = updateNeeds(release('1.0.0'), release('2.0.0', { scopes: ['people:read'], floors: ['org'], maxUpload: 50 }));
+    expect(needs).toEqual(['2.0.0 is a major version: it may change how Notes works.', 'It asks for more: people:read.', 'It asks for uploads up to 50 MB.']);
+    expect(updateNeeds(release('1.0.0', { floors: ['org'] }), release('1.0.1'))).toEqual(['It asks to work on more kinds of floor.']);
     // A 0.x minor may break things, so it waits like a major (ADR 0020, amended 2 Nov); a 0.x patch doesn't.
-    expect(updateNeeds(release('0.3.2'), release('0.4.0'), '1.3.0')).toEqual(['0.4.0 is a 0.x minor version, which may change how Notes works like a major.']);
-    expect(updateNeeds(release('0.3.2'), release('0.3.3'), '1.3.0')).toEqual([]);
+    expect(updateNeeds(release('0.3.2'), release('0.4.0'))).toEqual(['0.4.0 is a 0.x minor version, which may change how Notes works like a major.']);
+    expect(updateNeeds(release('0.3.2'), release('0.3.3'))).toEqual([]);
   });
 });
 
@@ -148,7 +135,7 @@ describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
   it('offers what the feed has, and installs it by version', async () => {
     const t = await setup(feedOf(release('1.0.0', { description: 'Jot things down', scopes: ['audit:write'] })));
     expect((await t.view()).available).toEqual([
-      expect.objectContaining({ app: 'notes', name: 'Notes', description: 'Jot things down', version: '1.0.0', asks: { scopes: ['audit:write'], storage: {}, maxUpload: 10 } }),
+      expect.objectContaining({ app: 'notes', name: 'Notes', description: 'Jot things down', version: '1.0.0', asks: expect.objectContaining({ scopes: ['audit:write'], maxUpload: 25 }) }),
     ]);
     const missing = await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '9.9.9' } });
     expect(missing.statusCode).toBe(404);

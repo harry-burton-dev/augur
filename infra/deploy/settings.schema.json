@@ -1200,7 +1200,8 @@
         "registry",
         "events",
         "models",
-        "updater"
+        "updater",
+        "gateway"
       ]
     },
     "OIDC_JWKS_URL": {
@@ -1219,10 +1220,21 @@
         "gateway"
       ]
     },
+    "OIDC_SERVICE_AUDIENCE": {
+      "type": "string",
+      "description": "The audience apps' and platform services' own tokens are issued for (contract 3).",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
     "OIDC_TOKEN_URL": {
       "type": "string",
       "description": "Where a service fetches its own tokens (default: from OIDC_INTERNAL_URL).",
-      "x-internal": "default"
+      "x-internal": "default",
+      "x-via": {
+        "gateway": "default"
+      }
     },
     "APP_MANIFEST": {
       "type": "string",
@@ -1295,6 +1307,42 @@
       "x-services": [
         "gateway"
       ]
+    },
+    "APP_DELEGATION_SECONDS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long a delegated caller lasts, in seconds: the signed caller the gateway hands an app's part when it acts for a person (default 300).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/signed-caller.md#acting-for-a-person-the-delegated-caller"
+    },
+    "APP_CONNECT_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long the gateway waits to connect to an app's part before answering 502, in milliseconds (default 5000).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/deploy.md#limits-at-the-front-door"
+    },
+    "APP_RESPONSE_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long an app's part may take to start answering, and between one piece of its answer and the next, before the gateway answers 504, in milliseconds (default 60000).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/deploy.md#limits-at-the-front-door"
+    },
+    "APP_CONCURRENT_CALLS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many calls one app may have in flight at the gateway before the next answers 503 (default 64).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/deploy.md#limits-at-the-front-door"
     },
     "FRONTENDS_S3_URL": {
       "type": "string",
