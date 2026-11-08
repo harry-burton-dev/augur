@@ -83,13 +83,15 @@ describe('a call made for an app', () => {
     expect(malformed.statusCode).toBe(400);
   });
 
-  it('ignores an x-augur-app a plain call brings: without it, the part is reached as before (8.5)', async () => {
+  it('drops every x-augur-*, x-user-* and x-workspace-* header a call brings, and without x-augur-app reaches the part as before', async () => {
     const app = await gateway();
-    const res = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, 'x-augur-acting-app': 'forged', 'x-augur-acting-scopes': 'audit:write' } });
+    const res = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, 'x-augur-acting-app': 'forged', 'x-augur-acting-scopes': 'audit:write', 'x-augur-anything': 'x', 'x-user-roles': 'admin', 'x-workspace-kind': 'org' } });
     expect(res.statusCode).toBe(200);
     const caller = await callerIn(res, 'notes');
     expect(caller.app).toBeUndefined();
-    expect(res.json().headers['x-augur-acting-app']).toBeUndefined();
+    const sent = res.json().headers;
+    expect(Object.keys(sent).filter((k) => /^x-(augur|user|workspace)-/.test(k)).sort()).toEqual(['x-augur-caller', 'x-user-departments', 'x-user-id', 'x-user-name', 'x-user-roles']);
+    expect(sent['x-user-roles']).toBe('editor');
   });
 
   it('turns a part’s onward call with a valid delegation into a fresh one-minute caller for the target (8.5)', async () => {

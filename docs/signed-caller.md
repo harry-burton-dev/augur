@@ -27,10 +27,10 @@ New apps made from augur-app-template have the hook already (the service kit's `
 
 ## Acting for a person: the delegated caller
 
-Under the app contract (contract 3, ADR 0075) the shell's host makes an app's calls for the person, with the person's token and `x-augur-app: <id>` (set by the host; a header the sandbox sends is dropped). The gateway checks the app is on for the person on that floor and, for a call to one of AUGUR's APIs, that the call is within the app's grant, refusing one outside it with the scope it lacks ("Notes isn’t allowed to send notifications (notifications:send)"). It then signs the caller with two more claims, `app` (the app acting) and `scopes` (what it is granted on that floor):
+Under the app contract (contract 3, ADR 0075) the shell's host makes an app's calls for the person, with the person's token and `x-augur-app: <id>`. The host sets it; the sandbox an app runs in has no network of its own, so nothing it says reaches the gateway except through the host. The gateway checks the app is on for the person on that floor and, for a call to one of AUGUR's APIs, that the call is within the app's grant, refusing one outside it with the scope it lacks ("Notes isn’t allowed to send notifications (notifications:send)"). It then signs the caller with two more claims, `app` (the app acting) and `scopes` (what it is granted on that floor):
 
 - to the app's own part (`/api/<id>/*`), a **delegated caller**: signed for the app's own client `app-<id>` and lasting `APP_DELEGATION_SECONDS` (default 300) rather than a minute, because the part carries it on its own later calls for the person;
-- to one of AUGUR's services, the usual one-minute caller for that service, with `app` and `scopes` beside the person, so the service applies the smaller of the person's access and the app's scopes.
+- to one of AUGUR's services, the usual one-minute caller for that service, with `app` and `scopes` beside the person. A service is to apply the smaller of the person's access and the app's scopes; today's services still tell an app by its own token, so they learn to read `app` from the caller in the pull request that follows this one.
 
 A part checks its callers with the hook above, naming its client:
 
@@ -38,7 +38,7 @@ A part checks its callers with the hook above, naming its client:
 app.addHook('onRequest', signedCallers(callerCheckFromEnv('app-expenses')));
 ```
 
-`callerFromHeaders` then gives the person with `app` and `scopes` beside them (`isDelegated`, `delegationAllows(caller, 'people:read')`). When the part calls AUGUR for that person it sends its own app token (a client-credentials grant at `POST /api/identity/v1/token`, the only grant the gateway passes on to the sign-in service) and the delegated caller it received in `x-augur-delegation`; the gateway checks the delegation is for that app and still valid (`delegationCheck`), holds the call to the scopes the delegation carries as well as the app's grant, then signs a fresh one-minute caller for the target. No token for the person reaches a part.
+`callerFromHeaders` then gives the person with `app` and `scopes` beside them (`isDelegated`, `delegationAllows(caller, 'people:read')`), and a part applies the smaller of the two. When the part calls AUGUR for that person it sends its own app token (a client-credentials grant at `POST /api/identity/v1/token`, the only grant the gateway passes on to the sign-in service) and the delegated caller it received in `x-augur-delegation`; the gateway checks the delegation is for that app and still valid (`delegationCheck`), holds the call to the scopes the delegation carries as well as the app's grant, then signs a fresh one-minute caller for the target. No token for the person reaches a part.
 
 An app's own token, with no delegation, is admitted only for an app the registry knows and has on ("Notes isn’t installed here", "Notes is turned off"), and only for the routes its grant covers, its own routes and its own registry entry; the caller the gateway signs then names the app (`app:<id>`, with `app` and `scopes`) and the app's own token goes on with the call, so a service still reads which app is calling the way it did before.
 

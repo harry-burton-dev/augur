@@ -103,9 +103,15 @@ const PUBLIC_LOGO_BYTES = 512 * 1024;
 export const TOKEN_PATH = '/api/identity/v1/token';
 
 const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH, TOKEN_PATH]);
+/** The public routes that aren't counted as traffic; a storm at the token route is one the watch should see. */
+const UNCOUNTED_ROUTES = new Set([...PUBLIC_ROUTES].filter((r) => r !== TOKEN_PATH));
 
 /** The shape of an app's id in `x-augur-app` and in a client `app-<id>`, as the manifest schema has it. */
 const APP_ID = /^[a-z][a-z0-9-]{1,39}$/;
+/** The shape of a floor's id a part may name: the registry is asked about nothing else. */
+const FLOOR_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
+/** Every header the gateway itself speaks: a request may bring none of them in. */
+const isGatewayHeader = (name: string) => /^x-(augur|user|workspace)-/i.test(name);
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -215,9 +221,16 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   app.get('/healthz', { schema: { hide: true } }, async () => health('gateway', version, API_VERSION));
   // How calls through the gateway have answered lately, for the updater's watch after an upgrade.
   // Only the deployment's own network reaches it: nginx forwards only /api/.
+  // A slot is given back once, whether the call was answered or the caller went away first (abort fires no onResponse).
+  const releaseSlot = (req: FastifyRequest) => {
+    if (!req.appCall) return;
+    inFlight.release(req.appCall);
+    req.appCall = undefined;
+  };
+  app.addHook('onRequestAbort', async (req) => releaseSlot(req));
   app.addHook('onResponse', async (req, reply) => {
-    if (req.appCall) inFlight.release(req.appCall);
-    if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
+    releaseSlot(req);
+    if (req.routeOptions.url && UNCOUNTED_ROUTES.has(req.routeOptions.url)) return;
     const part = trafficPart(req.url);
     traffic.record(reply.statusCode, part);
     metrics.request(reply.statusCode, part);
@@ -304,6 +317,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     // An app's own token (spec 8.2): only for an app the registry knows and has on where the call is for.
     if (req.identity.kind === 'app') {
       const { app: id } = req.identity;
+      if (asked !== undefined && !FLOOR_ID.test(asked)) return reply.code(400).send({ error: 'bad_request', message: `${WORKSPACE_HEADERS.id} must be a floor’s id.` });
       if (!grantsOf) return reply.code(503).send({ error: 'unavailable', message: 'What apps may do can’t be checked right now.' });
       let grant: AppGrant | undefined;
       try {
@@ -319,6 +333,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       }
       if (!grant.on) return reply.code(403).send({ error: 'forbidden', message: `${appName(id, grant)} is turned off${asked ? ' on that floor' : ''}.` });
       req.grant = grant;
+      // The floor the call is for, as the registry checked it, so the services see the same floor the grant was read on.
+      const workspace = asked && grant.floorKind ? { id: asked, kind: grant.floorKind, role: 'member' as const } : undefined;
       const sentBack = req.headers[DELEGATION_HEADER];
       const delegation = Array.isArray(sentBack) ? sentBack[0] : sentBack;
       if (delegation) {
@@ -335,7 +351,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         }
       } else {
         // The app itself: a caller named after it, so every service it reaches sees the app and its scopes.
-        req.caller = { id: `app:${id}`, name: appName(id, grant), departments: [], roles: [], app: id, scopes: [...grant.scopes] };
+        req.caller = { id: `app:${id}`, name: appName(id, grant), departments: [], roles: [], app: id, scopes: [...grant.scopes], ...(workspace ? { workspace } : {}) };
       }
       return;
     }
@@ -548,6 +564,15 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       if (!grant) return refuse(403, 'forbidden', `${id} isn’t installed here.`);
       if (!grant.on) return refuse(403, 'forbidden', `${appName(id, grant)} is turned off${req.caller.workspace ? ' on this floor' : ''}.`);
       if (toPlatform) {
+        // The app must be on for this person here, as for a call to its own routes: blocked or needing a role they lack is not on.
+        try {
+          const apps = appAccess ? await appAccess(await checkedOn(req.caller)) : undefined;
+          if (apps && !apps.has(id)) return refuse(403, 'forbidden', `That app isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.`);
+        } catch (err) {
+          if (!(err instanceof AppAccessUnavailable) && !(err instanceof FloorLookupError)) throw err;
+          req.log.error({ err: err.message }, 'app access check failed');
+          return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
+        }
         const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
         if (scope === undefined || (scope !== null && !grant.scopes.includes(scope))) return refuse(403, 'forbidden', notAllowed(appName(id, grant), scope, req.url));
         // The service sees the person with the app and its scopes beside them, and applies the smaller access.
@@ -618,7 +643,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       // so no service, an app's least of all, is handed it. An app's own token goes on with its call, because the services
       // still read which app is calling from it (their second line, spec 8.3) and it reaches only AUGUR and the app's own part.
       // Every incoming x-augur-* and x-user-* header is dropped; the plain caller headers stay for apps that don't check the signed one yet.
-      const { authorization, [CALLER_TOKEN_HEADER]: __, ...clean } = withoutCallerHeaders(headers);
+      const { authorization, [CALLER_TOKEN_HEADER]: __, ...named } = withoutCallerHeaders(headers);
+      const clean = Object.fromEntries(Object.entries(named).filter(([k]) => !isGatewayHeader(k)));
       const keepToken = request.identity?.kind === 'app' && authorization ? { authorization } : {};
       return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...callerHeaders(request.caller), ...request.signedCaller } : {}) };
     },

@@ -2407,6 +2407,9 @@ paths:
                   on:
                     type: boolean
                     description: "Whether the app is on where the call is for: enabled, for that kind of floor, and not blocked or turned off there (contract 3, spec 8.2)"
+                  floorKind:
+                    type: string
+                    description: The kind of the floor the call is for (personal, team or org), when it exists, so the gateway can name the floor to the service
                   scopes:
                     type: array
                     items:

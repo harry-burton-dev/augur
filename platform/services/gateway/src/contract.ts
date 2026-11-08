@@ -9,7 +9,7 @@ import { SCHEMAS } from './schemas.ts';
 
 export const info = {
   title: 'Gateway',
-  version: '1.9.0',
+  version: '1.9.1',
   description: [
     "The gateway's own API, beside the services it forwards to. Reached at",
     '/api/gateway/v1 by a signed-in caller. Everything else under /api/<service>',

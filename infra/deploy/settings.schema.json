@@ -1329,7 +1329,7 @@
     "APP_RESPONSE_TIMEOUT_MS": {
       "type": "string",
       "pattern": "^[1-9][0-9]*$",
-      "description": "How long an app's part may take to answer before the gateway answers 504, in milliseconds (default 60000).",
+      "description": "How long an app's part may take to start answering, and between one piece of its answer and the next, before the gateway answers 504, in milliseconds (default 60000).",
       "x-services": [
         "gateway"
       ],

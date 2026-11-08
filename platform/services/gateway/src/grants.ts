@@ -12,6 +12,8 @@ export interface AppGrant {
   name?: string;
   on: boolean;
   scopes: readonly string[];
+  /** The kind of the floor the grant was read on, when the registry knows it, so the call carries that floor to the service. */
+  floorKind?: 'personal' | 'team' | 'org';
 }
 
 /** An app's grant on a floor (or on the organisation's, with none); `undefined` for an app the registry doesn't know. */
@@ -51,9 +53,9 @@ export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
     let grant: AppGrant | undefined;
     if (res.status === 404) grant = undefined;
     else if (res.ok) {
-      const body = (await res.json()) as { name?: string; on?: boolean; scopes?: string[] };
+      const body = (await res.json()) as { name?: string; on?: boolean; scopes?: string[]; floorKind?: AppGrant['floorKind'] };
       // A registry from before contract 3 doesn't say whether the app is on; it isn't said off, and its scopes still bound the call.
-      grant = { ...(body.name ? { name: body.name } : {}), on: body.on ?? true, scopes: body.scopes ?? [] };
+      grant = { ...(body.name ? { name: body.name } : {}), on: body.on ?? true, scopes: body.scopes ?? [], ...(body.floorKind ? { floorKind: body.floorKind } : {}) };
     } else throw new AppGrantsUnavailable(`the registry answered ${res.status}`);
     cache.delete(key);
     cache.set(key, { grant, at: now() });
@@ -72,10 +74,11 @@ const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
   { method: /^POST$/, path: /^\/api\/events\/v1\/notifications\/?$/, scope: 'notifications:send' },
   { method: /^POST$/, path: /^\/api\/events\/v1\/audit\/?$/, scope: 'audit:write' },
   { method: /^POST$/, path: /^\/api\/events\/v1\/domain-events\/?$/, scope: 'events:publish' },
-  { method: /^GET$/, path: /^\/api\/events\/v1\/domain-events(\/stream)?\/?$/, scope: 'events:subscribe' },
-  { method: /^(PUT|PATCH|DELETE)$/, path: /^\/api\/events\/v1\/inbox\/items\//, scope: 'inbox:write' },
+  // The browser stream (/domain-events/stream) is the shell's; an app reads events page by page.
+  { method: /^GET$/, path: /^\/api\/events\/v1\/domain-events\/?$/, scope: 'events:subscribe' },
+  { method: /^(GET|PUT|PATCH)$/, path: /^\/api\/events\/v1\/inbox\/items\//, scope: 'inbox:write' },
   { method: /^GET$/, path: /^\/api\/identity\/v1\/(people\/[^/]+\/principals|directory|members)\/?$/, scope: 'people:read' },
-  { method: /^(GET|POST)$/, path: /^\/api\/models\/v1\/(status|chat|embeddings)\/?$/, scope: 'models:use' },
+  { method: /^POST$/, path: /^\/api\/models\/v1\/(chat|embeddings)\/?$/, scope: 'models:use' },
 ];
 
 /** What a scope lets an app do, in words for a refusal: "send notifications (notifications:send)". */

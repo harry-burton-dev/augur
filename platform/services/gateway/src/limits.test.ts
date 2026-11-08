@@ -51,7 +51,11 @@ describe('an app route at the gateway', () => {
     part.get('/v1/held', () => new Promise<{ held: true }>((resolve) => release.push(() => resolve({ held: true }))));
     url = await part.listen({ port: 0, host: '127.0.0.1' });
   });
-  afterAll(() => part.close());
+  afterAll(async () => {
+    // A connection the gateway kept open to the part would hold close() until it idled out.
+    part.server.closeAllConnections();
+    await part.close();
+  });
 
   const access = async () => new Map([['notes', { name: 'Notes', maxUpload: 10 }]]);
   const gateway = (limits: Partial<typeof DEFAULT_APP_LIMITS> = {}) =>
@@ -74,6 +78,27 @@ describe('an app route at the gateway', () => {
     const res = await get(app, '/api/notes/v1/quick');
     expect(res.statusCode).toBe(502);
     expect(res.json()).toMatchObject({ error: 'bad_gateway', message: 'Notes isn’t answering right now.' });
+  });
+
+  it('gives a slot back when the caller goes away before the part answers', async () => {
+    const app = await gateway({ concurrentCalls: 1, responseTimeoutMs: 5_000 });
+    release = [];
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    try {
+      const token = await sign();
+      const aborter = new AbortController();
+      const gone = fetch(`${address}/api/notes/v1/held`, { headers: { authorization: `Bearer ${token}` }, signal: aborter.signal }).catch((err: Error) => err.name);
+      while (release.length === 0) await new Promise((r) => setTimeout(r, 10));
+      aborter.abort();
+      expect(await gone).toBe('AbortError');
+      // The slot comes back once the gateway sees the caller go, not when the part finally answers.
+      await new Promise((r) => setTimeout(r, 100));
+      const next = await fetch(`${address}/api/notes/v1/quick`, { headers: { authorization: `Bearer ${token}` } });
+      expect(next.status).toBe(200);
+      release.forEach((r) => r());
+    } finally {
+      await app.close();
+    }
   });
 
   it('answers 503 in words past the app’s cap on calls in flight, and takes calls again once one finishes', async () => {
