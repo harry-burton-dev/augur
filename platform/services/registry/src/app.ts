@@ -611,9 +611,9 @@ export const buildApp = async ({
         '/apps/:id/grants',
         {
           schema: {
-            summary: 'What an app may do on a floor (platform services only)',
+            summary: 'What an app may do on a floor (platform services and the gateway)',
             description: [
-              "AUGUR's services check an app's calls against this, and keep",
+              "AUGUR's services and the gateway check an app's calls against this, and keep",
               'each answer for up to 30 seconds. An app is granted the scopes it asks',
               'for that an admin has granted, on floors where it is on (see',
               "/manifest); nothing where it is off, on a floor that doesn't exist, or",
@@ -628,7 +628,9 @@ export const buildApp = async ({
               200: Type.Object(
                 {
                   app: Type.String(),
+                  name: Type.String({ description: "What the app is called, for the gateway's refusals" }),
                   workspace: Type.Optional(Type.String()),
+                  on: Type.Boolean({ description: 'Whether the app is on where the call is for: enabled, for that kind of floor, and not blocked or turned off there (contract 3, spec 8.2)' }),
                   scopes: Type.Array(ref(ScopeSchema)),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
                   notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
@@ -638,7 +640,7 @@ export const buildApp = async ({
                 },
                 { description: "The app's grants" },
               ),
-              403: refused('Not a platform service'),
+              403: refused('Not a platform service or the gateway'),
               404: refused('No such app is registered'),
               503: refused("Floors, or the sign-in service that checks the caller's token, can't be reached right now"),
             },
@@ -647,7 +649,8 @@ export const buildApp = async ({
         async (req, reply) => {
           const service = await serviceOf(req, reply);
           if (service === undefined) return reply;
-          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can read what an app is granted.' });
+          // The gateway asks as itself (its signed caller), to admit an app's own token and hold it to its grant (spec 8.2, 8.3).
+          if (service?.kind !== 'platform' && !isGatewayCaller(callerFromHeaders(req.headers) ?? undefined)) return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can read what an app is granted.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const { workspace } = req.query;
@@ -662,7 +665,9 @@ export const buildApp = async ({
           const on = place ? floorState(found, place, await store.rules(found.entry.id)).on : false;
           return {
             app: found.entry.id,
+            name: found.entry.name,
             workspace: workspace ?? place?.id,
+            on,
             scopes: on ? usableScopes(found) : [],
             inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),

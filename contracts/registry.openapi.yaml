@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.36.1
+  version: 1.37.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -2366,8 +2366,8 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/grants:
     get:
-      summary: What an app may do on a floor (platform services only)
-      description: AUGUR's services check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007). With them, the inbox and notification kinds its manifest declares, which the events service checks against, and the role its manifest says a person needs, which models checks for an AI app.
+      summary: What an app may do on a floor (platform services and the gateway)
+      description: AUGUR's services and the gateway check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007). With them, the inbox and notification kinds its manifest declares, which the events service checks against, and the role its manifest says a person needs, which models checks for an AI app.
       parameters:
         - schema:
             type: string
@@ -2390,6 +2390,8 @@ paths:
                 type: object
                 required:
                   - app
+                  - name
+                  - on
                   - scopes
                   - inboxKinds
                   - notificationKinds
@@ -2397,8 +2399,14 @@ paths:
                 properties:
                   app:
                     type: string
+                  name:
+                    type: string
+                    description: What the app is called, for the gateway's refusals
                   workspace:
                     type: string
+                  on:
+                    type: boolean
+                    description: "Whether the app is on where the call is for: enabled, for that kind of floor, and not blocked or turned off there (contract 3, spec 8.2)"
                   scopes:
                     type: array
                     items:
@@ -2420,7 +2428,7 @@ paths:
                     description: The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.
                 description: The app's grants
         "403":
-          description: Not a platform service
+          description: Not a platform service or the gateway
           content:
             application/problem+json:
               schema:

@@ -405,6 +405,7 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 - **Keycloak's own console is closed.** `/sso/admin` and the `master` realm (which holds Keycloak's own admin) answer 404, so nobody on the network can try its admin password. To change realm settings by hand, set `KEYCLOAK_CONSOLE=open`, `pc up -d`, make the change, then remove it and `pc up -d` again.
 - **Requests a second from one address.** The API takes `API_RATE_PER_SECOND` (30), with `API_RATE_BURST` (200) let through at once, since a page fires many calls together; sign-in takes `SSO_RATE_PER_SECOND` (10) with `SSO_RATE_BURST` (50). Past them the answer is 429, *Too Many Requests*. The address is the one the proxy in front saw (Tailscale, or a load balancer), passed on in `X-Forwarded-For` and only believed from private addresses.
 - **The largest upload**, `MAX_UPLOAD_MB` (2048). Each app has its own lower limit under it.
+- **Calls to apps' parts.** The gateway waits `APP_CONNECT_TIMEOUT_MS` (5000) to reach an app's part and answers 502 when it can't; a part gets `APP_RESPONSE_TIMEOUT_MS` (60000) to answer, after which the gateway answers 504 and lets the connection go; and one app may have `APP_CONCURRENT_CALLS` (64) calls in flight, the next answering 503 until one finishes. Each refusal names the app. AUGUR's own routes are never held by an app's brakes.
 
 ### Logs, memory and health
 
