@@ -57,6 +57,12 @@ Each note starts with the release it came in (**From**). If your server already 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
 
+### The registry takes only app contract 3 releases
+
+**From** unreleased
+
+The registry installs only releases on the app contract (contract 3, `augur.app-release/v2`). A contract 2 release file is refused with "This release is on contract 2; this AUGUR serves 3", in Admin → Apps and when a job is asked for. No app is installed on a deployment after the release that took today's apps out, so nothing that runs changes. An app's address may now be on any network except loopback, link-local and the deployment's own networks, which the app runner says at start: the fixed 172.16.0.0/12 rule is gone. Nothing to do.
+
 ### Artifacts, Explorer, Data Atlas and Mandate are taken out, with their data
 
 **From** unreleased

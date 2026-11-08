@@ -1,3 +1,4 @@
+import type { AppRelease2 } from '@augur/app-tools/release2';
 import pg from 'pg';
 import { runMigrations, steadyPool, type Migration, type Scope } from '@augur/service-kit';
 import type { AppEntry } from './manifest.ts';
@@ -158,25 +159,12 @@ export interface Upgrade {
 
 export type UpgradeOutcome = 'done' | 'rolled-back' | 'failed';
 
-/** What an app release file says (scripts/app-release.mjs): the bundle a deployment's app runner installs. */
-export interface AppRelease {
-  schema: 'augur.app-release/v1';
-  id: string;
-  version: string;
-  channel: string;
-  releasedAt?: string;
-  sdk?: string;
-  manifest: AppEntry;
-  /** The service image, by digest; null for an app with no service. */
-  service: { image: string } | null;
-  frontend: { artifact: string; digest: string; mediaType: string } | null;
-  /** The repository and workflow that built and signed both parts. */
-  signer: { repository: string; workflow: string };
-  asks?: Record<string, unknown>;
-  notes?: string;
-  /** For a pull request's build: which one, and where to read it. */
-  preview?: { pr: number; title?: string; url?: string };
-}
+/**
+ * What an app release file says (contract 3, `augur.app-release/v2`, written by @augur/app-tools): the
+ * manifest, the frontend bundle by digest, one Score workload per part and what it asks an admin for.
+ * A v1 file (contract 2) is refused before it is stored (spec 11.6).
+ */
+export type AppRelease = AppRelease2;
 
 /** The steps the app runner takes, in order: `remove` only for a removal. */
 export const APP_JOB_STEPS = ['verify', 'storage', 'sign-in', 'start', 'health', 'switch', 'watch', 'retire', 'remove'] as const;
@@ -366,6 +354,10 @@ export interface AppStore {
   deploymentKey(): Promise<DeploymentKey | undefined>;
   /** Keeps a new key unless one is already kept, and returns the one kept. */
   keepDeploymentKey(key: DeploymentKey): Promise<DeploymentKey>;
+  /** The deployment's own networks (CIDRs) the app runner last said, and when; none before it has. */
+  ownNetworks(): Promise<{ networks: string[]; setAt?: string }>;
+  /** Keeps the deployment's own networks, as the app runner says them. */
+  setOwnNetworks(networks: string[]): Promise<{ networks: string[]; setAt: string }>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
   markSeen(kind: 'upgrade' | 'app-job', id: string, by: string): Promise<boolean>;
   /** The previews running now: each pull request's last finished preview job, unless it was a removal. */
@@ -715,6 +707,16 @@ export const migrations: Migration[] = [
       -- Their versions, installs and guardrails go with them (on delete cascade).
       -- squawk-ignore augur-delete-rows
       delete from registry.apps where id in ('folio', 'auspex', 'atlas', 'mandate');`,
+  },
+  {
+    id: '024_runner_networks',
+    sql: `
+      -- The deployment's own networks, as the app runner says at start (spec 9.8): no app's address may be on one. One row.
+      create table registry.runner_networks (
+        one boolean primary key default true check (one),
+        networks text[] not null,
+        set_at timestamptz not null default now()
+      );`,
   },
 ];
 
@@ -1191,6 +1193,21 @@ export class PgAppStore implements AppStore {
   async desiredStateHistory(unit: string) {
     const { rows } = await this.pool.query<{ record: StoredDesiredState }>('select record from registry.desired_state_history where unit = $1 order by id desc limit $2', [unit, DESIRED_HISTORY_LISTED]);
     return rows.map((r) => r.record);
+  }
+
+  async ownNetworks() {
+    const { rows } = await this.pool.query<{ networks: string[]; set_at: Date }>('select networks, set_at from registry.runner_networks');
+    return rows[0] ? { networks: rows[0].networks, setAt: rows[0].set_at.toISOString() } : { networks: [] };
+  }
+
+  async setOwnNetworks(networks: string[]) {
+    const { rows } = await this.pool.query<{ networks: string[]; set_at: Date }>(
+      `insert into registry.runner_networks (networks) values ($1)
+       on conflict (one) do update set networks = excluded.networks, set_at = now()
+       returning networks, set_at`,
+      [networks],
+    );
+    return { networks: rows[0]!.networks, setAt: rows[0]!.set_at.toISOString() };
   }
 
   async markSeen(kind: 'upgrade' | 'app-job', id: string, by: string) {

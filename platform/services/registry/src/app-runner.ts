@@ -3,14 +3,14 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import semver from 'semver';
-import { callerFromHeaders, reservedIdProblem, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
+import { callerFromHeaders, signedInRecently, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
 import { changesIn } from './changes.ts';
 import { LiveOverrides } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { automaticProblem, defaultDesiredState, windowAt } from './desired-state.ts';
 import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
 import { feedHeld } from './updates.ts';
-import { settingsProblem, surfaceProblem, versionProblem } from './manifest.ts';
+import { checkRelease } from './release-check.ts';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
 import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
@@ -52,15 +52,21 @@ const APP_HISTORY_LISTED = 20;
 export const MAX_PREVIEWS = 3;
 /** How long a preview runs after its pull request's last build. */
 export const PREVIEW_MS = 7 * 24 * 60 * 60 * 1000;
+/** A network as the runner says it: an IPv4 or IPv6 address and a prefix length. */
+const CIDR = '^(?:\\d{1,3}(?:\\.\\d{1,3}){3}/\\d{1,2}|[0-9a-fA-F:]+/\\d{1,3})$';
+/** How many networks the runner may say: one per app and a few of AUGUR's own. */
+const MAX_OWN_NETWORKS = 512;
+
 /** The most developers one app has. */
 const MAX_DEVELOPERS = 50;
 
-/** Why a release can't be installed, beyond its shape; undefined when it can. */
-export const releaseProblem = (release: AppRelease): string | undefined => {
-  if (release.id !== release.manifest.id || release.version !== release.manifest.version) return 'The release file’s id and version must be its manifest’s.';
-  if (!semver.valid(release.version)) return `"${release.version}" is not a version such as 1.2.0.`;
-  if (!release.service) return 'The app runner installs apps with a service. A frontend-only app isn’t supported yet.';
-  return reservedIdProblem(release.id) ?? versionProblem(release.manifest) ?? surfaceProblem(release.manifest) ?? settingsProblem(release.manifest);
+/** Why a release can't be installed (spec 9.1, 9.2), in plain words; undefined when it can. */
+export const releaseProblem = (release: unknown): string | undefined => {
+  const { refusals } = checkRelease(release);
+  if (refusals.length) return refusals.join(' ');
+  const { version } = release as AppRelease;
+  if (!semver.valid(version)) return `"${version}" is not a version such as 1.2.0.`;
+  return undefined;
 };
 
 /** Why a pull request's build can't be previewed beside the installed release; undefined when it can. */
@@ -131,7 +137,7 @@ export const appRunnerRoutes =
         // The newest release Automatic reaches: inside the pin, and no bigger a step than it takes.
         const reached = updates.result.releases.filter((r) => r.app === id && semver.gt(r.version, current.version) && !automaticProblem(state, current.version, r.version));
         const newest = newestOn(reached, id, follow.channel);
-        if (!newest?.release || updateNeeds(current, newest.release, sdkVersion).length) continue;
+        if (!newest?.release || updateNeeds(current, newest.release).length) continue;
         if (releaseProblem(newest.release)) continue;
         const jobs = await store.appJobs(id);
         if (jobs.some((j) => j.pr === undefined && j.release?.version === newest.version && j.state === 'failed')) continue;
@@ -213,13 +219,13 @@ export const appRunnerRoutes =
             installedAt,
             ...follow,
             ...(newest?.release && semver.gt(newest.version, release.version)
-              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release, sdkVersion), changes: changesIn(newest.release.notes ?? '', id) } }
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release), changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
             changes: changesIn(release.notes ?? '', id),
             // Earlier versions to go back to, newest first.
             older: releases
-              .filter((r) => r.app === id && r.release?.service && onChannel(takesPreview(ring) ? 'beta' : 'stable', r.channel) && semver.lt(r.version, release.version))
+              .filter((r) => r.app === id && r.release && onChannel(takesPreview(ring) ? 'beta' : 'stable', r.channel) && semver.lt(r.version, release.version))
               .sort((a, b) => semver.rcompare(a.version, b.version))
               .slice(0, 3)
               .map((r) => ({ version: r.version, channel: r.channel as 'stable' | 'beta' })),
@@ -231,18 +237,18 @@ export const appRunnerRoutes =
         available: [...new Set(releases.map((r) => r.app))]
           .filter((id) => !installedIds.has(id))
           .map((id) => newestOn(releases, id, 'stable') ?? (takesPreview(ring) ? newestOn(releases, id, 'beta') : undefined))
-          .filter((r): r is NonNullable<typeof r> => Boolean(r?.release?.service))
+          .filter((r): r is NonNullable<typeof r> => Boolean(r?.release))
           .map((r) => ({
             app: r.app,
             name: r.release!.manifest.name,
-            ...(r.release!.manifest.description ? { description: r.release!.manifest.description } : {}),
+            ...(typeof r.release!.manifest.description === 'string' ? { description: r.release!.manifest.description } : {}),
             version: r.version,
             // Only stable or beta: newestOn and onChannel above never offer dev or preview here.
             channel: r.channel as 'stable' | 'beta',
             ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
             signer: r.release!.signer,
-            asks: { scopes: r.release!.manifest.scopes ?? [], storage: r.release!.manifest.storage ?? {}, maxUpload: r.release!.manifest.maxUpload ?? 10 },
-            ...(semver.satisfies(sdkVersion, r.release!.manifest.sdk, { includePrerelease: true }) ? {} : { problem: `It needs SDK ${r.release!.manifest.sdk}, and this AUGUR has ${sdkVersion}.` }),
+            asks: r.release!.asks,
+            ...(releaseProblem(r.release) ? { problem: releaseProblem(r.release)! } : {}),
             ...(latestJob(r.app) ? { job: latestJob(r.app) } : {}),
           })),
       };
@@ -548,6 +554,35 @@ export const appRunnerRoutes =
       return false;
     };
 
+    /**
+     * The deployment's own networks, from the runner at start (spec 9.8): the registry refuses an app's address
+     * on one of them, since that is where AUGUR's own parts run.
+     */
+    app.put(
+      '/runner/networks',
+      {
+        schema: {
+          summary: "Say the deployment's own networks (the deployment's app runner only)",
+          description: "CIDRs such as 172.18.0.0/16 or fd00:a::/64, replacing those said before. No app's address may be on one of them.",
+          body: Type.Object(
+            { networks: Type.Array(Type.String({ pattern: CIDR, maxLength: 50 }), { maxItems: MAX_OWN_NETWORKS }) },
+            { additionalProperties: false },
+          ),
+          response: {
+            200: Type.Object({ networks: Type.Array(Type.String()), setAt: Type.String({ format: 'date-time' }) }, { description: 'As kept' }),
+            403: refused('Not the app runner'),
+            503: runnerUnreachable,
+          },
+        },
+      },
+      async (req, reply) => {
+        if (!(await isRunner(req, reply))) return reply;
+        const kept = await store.setOwnNetworks([...new Set(req.body.networks)]);
+        req.log.info({ networks: kept.networks }, 'the deployment’s own networks set');
+        return kept;
+      },
+    );
+
     /** The runner's recent jobs, and when it last asked for work (none means it isn't running). */
     app.get(
       '/app-runner/jobs',
@@ -618,10 +653,10 @@ export const appRunnerRoutes =
         const target = release ? release.id : (body as { app: string }).app;
         if (release) {
           const listed = updates.result.releases.find((r) => r.app === release!.id && r.version === release!.version)?.channel;
+          // What the file is comes first: one on contract 2 is refused for that alone (spec 11.6).
           const problem =
-            previewPr(release.version) !== undefined
-              ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.'
-              : (ringProblem(release, ring, listed) ?? releaseProblem(release));
+            releaseProblem(release) ??
+            (previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : ringProblem(release, ring, listed));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         }
         const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: caller.id };
@@ -740,7 +775,7 @@ export const appRunnerRoutes =
       async (req, reply) => {
         if (!(await isRunner(req, reply))) return reply;
         const { outcome, message, upstream, ...step } = req.body;
-        const problem = upstream === undefined ? undefined : upstreamProblem(upstream);
+        const problem = upstream === undefined ? undefined : upstreamProblem(upstream, await store.ownNetworks());
         if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         const job = await store.progressAppJob(
           req.params.id,

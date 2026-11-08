@@ -3,19 +3,26 @@
  * the schemas, each with a plain reason, and what it only warns about.
  */
 import { describe, expect, it } from 'vitest';
-import { checkRelease, SERVED_CONTRACTS } from './manifest.ts';
-import { exampleRelease, examplePart } from './release3.testing.ts';
+import { checkRelease, SERVED_CONTRACTS } from './release-check.ts';
+import { exampleRelease, examplePart, releaseOf } from './release3.testing.ts';
 
-type Release = Awaited<ReturnType<typeof exampleRelease>>;
+const withoutFrontend = (over: Record<string, unknown> = {}, manifest: Record<string, unknown> = {}) => {
+  const r = { ...exampleRelease({ frontend: null }), ...over } as Release;
+  const { frontend: _f, ...m } = { ...r.manifest, ...manifest };
+  return { ...r, manifest: JSON.parse(JSON.stringify(m)) };
+};
+
+type Release = ReturnType<typeof exampleRelease>;
 const copy = <T>(v: T): T => structuredClone(v);
 const withManifest = async (change: (m: Release['manifest']) => void) => {
   const r = copy(await exampleRelease());
   change(r.manifest);
   return r;
 };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- a test reaches into the workload's YAML shape to break one rule.
 const withPart = async (name: string, change: (p: Record<string, any>) => void) => {
   const r = copy(await exampleRelease());
-  change(r.parts.find((p: any) => p.metadata.name === name));
+  change(r.parts.find((p) => p.metadata.name === name)!);
   return r;
 };
 const refused = async (r: Release) => checkRelease(r).refusals;
@@ -38,7 +45,7 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
   });
 
   it('refuses each rule of 9.2 with a plain reason', async () => {
-    expect(await refused(await exampleRelease({ id: 'events' }).then((r) => ({ ...r, manifest: { ...r.manifest, id: 'events' } })))).toEqual([
+    expect(await refused(releaseOf('events'))).toEqual([
       expect.stringMatching(/"events" is kept for the events service/),
     ]);
     expect(await refused(await withManifest((m) => m.scopes.push('maps:draw')))).toEqual([expect.stringMatching(/maps:draw/)]);
@@ -56,7 +63,7 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
     expect(await refused(await withManifest((m) => m.contributes.commands.push({ ...m.contributes.commands[0] })))).toEqual([expect.stringMatching(/note\.new/)]);
     expect(await refused(await withManifest((m) => m.contributes.about.push({ ...m.contributes.about[0] })))).toEqual([expect.stringMatching(/details/)]);
     expect(await refused(await withManifest((m) => m.contributes.settings.push({ ...m.contributes.settings[0] })))).toEqual([expect.stringMatching(/retentionDays/)]);
-    expect((await refused(await exampleRelease({ frontend: null, parts: [] }).then((r) => ({ ...r, manifest: { ...r.manifest, frontend: undefined, api: undefined } })))).join()).toMatch(/neither|frontend.*part/i);
+    expect((await refused(withoutFrontend({ parts: [] }, { api: undefined }))).join()).toMatch(/neither|frontend.*part/i);
     expect((await refused(await withManifest((m) => (m.contract = 2)))).join()).toMatch(/contract 2.*serves 3/);
   });
 
@@ -72,7 +79,7 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
     const { refusals, warnings } = checkRelease(r);
     expect(refusals).toEqual([]);
     expect(warnings).toEqual(expect.arrayContaining([expect.stringMatching(/Recent|Notes/), expect.stringMatching(/note\.print/)]));
-    const noFrontend = await exampleRelease({ frontend: null }).then((x) => ({ ...x, manifest: { ...x.manifest, frontend: undefined } }));
+    const noFrontend = withoutFrontend();
     expect(checkRelease(noFrontend).warnings.join()).toMatch(/fills/);
   });
 

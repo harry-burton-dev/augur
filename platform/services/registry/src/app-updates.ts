@@ -1,4 +1,5 @@
 import semver from 'semver';
+import { isRelease2 } from '@augur/app-tools/release2';
 import { isZeroMinor } from './desired-state.ts';
 import type { AppRelease } from './store.ts';
 import { sameRepository, type FeedTrust } from './feed-trust.ts';
@@ -53,8 +54,7 @@ const channelOf = (version: string, prerelease: boolean): Pick<AppFeedRelease, '
   return pr !== undefined ? { channel: 'preview', pr } : { channel: isDevBuild(version) ? 'dev' : prerelease ? 'beta' : 'stable' };
 };
 
-const isAppRelease = (x: unknown): x is AppRelease =>
-  typeof x === 'object' && x !== null && (x as AppRelease).schema === 'augur.app-release/v1' && typeof (x as AppRelease).id === 'string' && semver.valid((x as AppRelease).version) !== null;
+const isAppRelease = (x: unknown): x is AppRelease => isRelease2(x) && semver.valid(x.version) !== null;
 
 /**
  * Reads app releases from `url`: GitHub's releases API (the `app/<id>@<version>` ones, with their
@@ -191,24 +191,58 @@ export const previewsIn = (releases: AppFeedRelease[], app: string) => {
   return [...newest.values()].sort((a, b) => b.pr! - a.pr!);
 };
 
+/** A Score memory or CPU amount in one unit, to compare: bytes, or thousandths of a CPU. */
+const amount = (v: string | undefined): number => {
+  if (!v) return 0;
+  const m = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|m)?$/.exec(v.trim());
+  if (!m) return Number.NaN;
+  const n = Number(m[1]);
+  const unit = { Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, Ti: 2 ** 40, m: 1 }[m[2] ?? ''] ?? (/\./.test(m[1]!) || !m[2] ? 1000 : 1);
+  return n * unit;
+};
+
+/** JSON with object keys in order, so the same params compare equal however they were stored (jsonb reorders keys). */
+const stable = (v: unknown): string =>
+  Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`).join(',')}}` : JSON.stringify(v);
+
+/** The ids of one of a manifest's contribution lists. */
+const idsOf = (release: AppRelease, key: string): Map<string, string> => {
+  const list = (release.manifest.contributes as Record<string, unknown> | undefined)?.[key];
+  return new Map((Array.isArray(list) ? (list as { id?: unknown; label?: unknown }[]) : []).map((x) => [String(x.id), String(x.label ?? x.id)]));
+};
+
 /**
- * Why an update from `from` to `to` waits for an admin even under the Automatic policy: a major
- * version, more than the installed version was allowed (scopes, storage, floor kinds, upload size),
- * or an SDK range this shell can't open. Empty when it can install by itself.
+ * What a later version asks for that the installed one didn't (spec 3.7, 9.4), each in words: a new
+ * scope, resource, setting, place, command or About section, a raised limit, more kinds of floor, bigger
+ * uploads, the canvas, a major version, another signer. Nothing when it only takes things away: such a
+ * version may install by itself under the app's policy.
  */
-export const updateNeeds = (from: AppRelease, to: AppRelease, sdkVersion: string): string[] => {
+export const updateNeeds = (from: AppRelease, to: AppRelease): string[] => {
   const needs: string[] = [];
-  const a = from.manifest;
-  const b = to.manifest;
-  if (semver.major(to.version) > semver.major(from.version)) needs.push(`${to.version} is a major version: it may change how ${b.name} works.`);
-  else if (isZeroMinor(from.version, to.version)) needs.push(`${to.version} is a 0.x minor version, which may change how ${b.name} works like a major.`);
-  const newScopes = (b.scopes ?? []).filter((s) => !(a.scopes ?? []).includes(s));
+  const name = to.manifest.name;
+  const a = from.asks;
+  const b = to.asks;
+  if (semver.major(to.version) > semver.major(from.version)) needs.push(`${to.version} is a major version: it may change how ${name} works.`);
+  else if (isZeroMinor(from.version, to.version)) needs.push(`${to.version} is a 0.x minor version, which may change how ${name} works like a major.`);
+  const newScopes = b.scopes.filter((s) => !a.scopes.includes(s));
   if (newScopes.length) needs.push(`It asks for more: ${newScopes.join(', ')}.`);
-  if ((b.storage?.database && !a.storage?.database) || (b.storage?.bucket && !a.storage?.bucket)) needs.push('It asks for storage it didn’t have.');
-  const floors = (e: typeof a) => e.floors ?? ['personal', 'team', 'org'];
-  if (floors(b).some((f) => !floors(a).includes(f))) needs.push('It asks to work on more kinds of floor.');
-  if ((b.maxUpload ?? 10) > (a.maxUpload ?? 10)) needs.push(`It asks for uploads up to ${b.maxUpload} MB.`);
-  if (!semver.satisfies(sdkVersion, b.sdk, { includePrerelease: true })) needs.push(`It needs SDK ${b.sdk}, and this AUGUR has ${sdkVersion}.`);
+  const key = (r: AppRelease['asks']['resources'][number]) => `${r.part} ${r.type} ${stable(r.params ?? {})}`;
+  const had = new Set(a.resources.map(key));
+  for (const r of b.resources.filter((r) => !had.has(key(r)))) needs.push(`Its ${r.part} part asks for ${r.type}${r.params && Object.keys(r.params).length ? ` (${JSON.stringify(r.params)})` : ''}.`);
+  for (const [part, limit] of Object.entries(b.limits)) {
+    const was = a.limits[part];
+    if (!was) continue; // A new part is listed with its resources; its limits are in the review.
+    if (!(amount(limit.memory) <= amount(was.memory))) needs.push(`Its ${part} part asks for ${limit.memory} of memory, up from ${was.memory}.`);
+    if (!(amount(limit.cpu) <= amount(was.cpu))) needs.push(`Its ${part} part asks for ${limit.cpu} CPU, up from ${was.cpu}.`);
+  }
+  for (const part of Object.keys(b.limits).filter((p) => !(p in a.limits))) needs.push(`It adds a part, ${part}, with ${b.limits[part]!.memory} of memory and ${b.limits[part]!.cpu} CPU.`);
+  if (b.floors.some((f) => !a.floors.includes(f))) needs.push('It asks to work on more kinds of floor.');
+  if (b.maxUpload > a.maxUpload) needs.push(`It asks for uploads up to ${b.maxUpload} MB.`);
+  if (b.canvas && !a.canvas) needs.push('It asks to draw in a canvas frame.');
+  for (const [what, keyName] of [['setting', 'settings'], ['place', 'places'], ['command', 'commands'], ['About section', 'about']] as const) {
+    const before = idsOf(from, keyName);
+    for (const [id, label] of idsOf(to, keyName)) if (!before.has(id)) needs.push(`It adds the ${what} "${label}".`);
+  }
   if (!sameRepository(to.signer.repository, from.signer.repository) || to.signer.workflow !== from.signer.workflow) needs.push(`It’s signed by ${to.signer.repository}, not ${from.signer.repository}.`);
   return needs;
 };

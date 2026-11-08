@@ -5,21 +5,12 @@ import { appFeed, AppUpdateChecker, newestOn, previewsIn, type AppFeedRelease } 
 import { type AppRelease } from './store.ts';
 import { UpdateChecker } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
+import { releaseOf } from './release3.testing.ts';
 
 const db = registryDb();
 
-const digest = (c: string) => `sha256:${c.repeat(64)}`;
-const release = (version: string, more: Partial<AppRelease> = {}): AppRelease => ({
-  schema: 'augur.app-release/v1',
-  id: 'notes',
-  version,
-  channel: version.includes('-pr.') ? 'preview' : 'stable',
-  manifest: { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', version, sdk: '^1.0.0' },
-  service: { image: `ghcr.io/o/r/apps/notes@${digest('a')}` },
-  frontend: null,
-  signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' },
-  ...more,
-});
+/** The spec's example as notes `version`; `more` replaces top-level fields. */
+const release = (version: string, more: Partial<AppRelease> = {}): AppRelease => releaseOf('notes', version, {}, more);
 const feedOf = (...releases: AppRelease[]): AppFeedRelease[] =>
   releases.map((r) => {
     const pr = /-pr\.(\d+)\./.exec(r.version)?.[1];
@@ -56,7 +47,8 @@ const setup = async (ring?: 'dev' | 'preview', tailnet: string | null = 'tail123
   // Notes 1.0.0 installed by the runner, registered and reachable.
   await server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: admin(), payload: { action: 'install', app: 'notes', version: '1.0.0' } });
   await runNext();
-  await store.put(release('1.0.0').manifest, 'notes');
+  // The catalogue still holds contract 2 entries until the shell draws contract 3 frames (PER-350).
+  await store.put({ id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', version: '1.0.0', sdk: '^2.0.0' }, 'notes');
   await store.setUpstream('notes', 'http://app-notes-blue:8080');
   return { server, store, entries, next, runNext, check, developers };
 };

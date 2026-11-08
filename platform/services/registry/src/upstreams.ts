@@ -12,13 +12,58 @@ export const PLATFORM_HOSTS = ['gateway', 'identity', 'registry', 'events', 'mod
  */
 export const APP_CONTAINER = /^app-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-/** Addresses that are never another machine's service: this host, "any", link-local, and Docker's default range, where AUGUR's own containers sit. */
+/**
+ * Addresses that are never another machine's service: this host, "any" and link-local. The deployment's
+ * own networks (where AUGUR's parts sit) come from the runner, which tells the registry at start (spec 9.8).
+ */
 const v4Refused: [number, number][] = [
   [0x00000000, 8], // 0.0.0.0/8, "this network"
   [0x7f000000, 8], // 127.0.0.0/8, loopback
   [0xa9fe0000, 16], // 169.254.0.0/16, link-local (and cloud metadata)
-  [0xac100000, 12], // 172.16.0.0/12, Docker's default address pool
 ];
+
+/** The deployment's own networks, as CIDRs (`172.18.0.0/16`, `fd00:a::/64`), which the runner says at start. */
+export interface OwnNetworks {
+  networks: readonly string[];
+}
+
+/** An IPv6 address as eight 16-bit groups, or undefined when it isn't one. */
+const v6 = (ip: string): number[] | undefined => {
+  if (!/^[0-9a-f:]+$/i.test(ip) || (ip.match(/::/g) ?? []).length > 1) return undefined;
+  const [head = '', tail] = ip.split('::');
+  const a = head ? head.split(':') : [];
+  const b = tail === undefined ? [] : tail ? tail.split(':') : [];
+  const missing = 8 - a.length - b.length;
+  if ((tail === undefined && missing !== 0) || missing < 0) return undefined;
+  const groups = [...a, ...Array<string>(tail === undefined ? 0 : missing).fill('0'), ...b];
+  if (groups.some((g) => !/^[0-9a-f]{1,4}$/i.test(g))) return undefined;
+  return groups.map((g) => parseInt(g, 16));
+};
+
+/** Whether `bits` leading bits of two addresses, as lists of `width`-bit groups, agree. */
+const samePrefix = (x: number[], y: number[], bits: number, width: number) => {
+  for (let i = 0; bits > 0; i++, bits -= width) {
+    const take = Math.min(bits, width);
+    if (Math.floor(x[i]! / 2 ** (width - take)) !== Math.floor(y[i]! / 2 ** (width - take))) return false;
+  }
+  return true;
+};
+
+/** The own network `host` (an IP literal as URL writes it) sits on, or undefined. A CIDR that isn't one is skipped. */
+const ownNetworkOf = (host: string, own: readonly string[]): string | undefined => {
+  const ip4 = v4(host);
+  const ip6 = host.startsWith('[') ? v6(host.slice(1, -1)) : undefined;
+  for (const cidr of own) {
+    const [base = '', len] = cidr.split('/');
+    const bits = Number(len);
+    if (ip4 !== undefined && v4(base) !== undefined && Number.isInteger(bits) && bits >= 0 && bits <= 32) {
+      if (bits === 0 || inV4(ip4, [v4(base)!, bits])) return cidr;
+    }
+    const b6 = v6(base);
+    if (ip6 && b6 && Number.isInteger(bits) && bits >= 0 && bits <= 128 && samePrefix(ip6, b6, bits, 16)) return cidr;
+  }
+  return undefined;
+};
 
 const v4 = (host: string): number | undefined => {
   const parts = host.split('.');
@@ -33,7 +78,7 @@ const inV4 = (n: number, [base, bits]: [number, number]) => Math.floor(n / 2 ** 
  * service, or undefined when it can. URL parsing has already turned 127.1, 0x7f.1 and 2130706433 into 127.0.0.1.
  */
 const ipProblem = (host: string): string | undefined => {
-  const why = `${host} is this machine, a link-local address or Docker's own range, where AUGUR's parts run. Give the app's host name instead.`;
+  const why = `${host} is this machine or a link-local address, never another machine's service. Give the app's host name instead.`;
   if (host.startsWith('[')) {
     const ip = host.slice(1, -1);
     // ::, ::1, fe80::/10, and IPv4-mapped (::ffff:a.b.c.d, which URL writes as ::ffff:7f00:1).
@@ -50,8 +95,11 @@ const ipProblem = (host: string): string | undefined => {
   return undefined;
 };
 
-/** Why `url` can't be where an app's service is: plain http(s) to a host and port, nothing else. Undefined when it can. */
-export const upstreamProblem = (url: string): string | undefined => {
+/**
+ * Why `url` can't be where an app's service is: plain http(s) to a host and port, nothing else, and not
+ * on one of the deployment's own networks (`own`, from the runner). Undefined when it can.
+ */
+export const upstreamProblem = (url: string, own: OwnNetworks = { networks: [] }): string | undefined => {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -66,6 +114,8 @@ export const upstreamProblem = (url: string): string | undefined => {
   if (PLATFORM_HOSTS.includes(host) || host.endsWith('.localhost')) return `${host} is part of AUGUR, not an app’s service.`;
   const ip = ipProblem(host);
   if (ip) return ip;
+  const network = ownNetworkOf(host, own.networks);
+  if (network) return `${host} is on ${network}, one of this deployment's own networks, where AUGUR's parts run. Give the app's host name, or an address outside it.`;
   if (!host.includes('.') && !host.startsWith('[') && !APP_CONTAINER.test(host)) {
     return `${host} isn’t an app’s container: on AUGUR’s own network only app-<id> names are apps (such as app-expenses). An app elsewhere needs its full host name.`;
   }

@@ -47,7 +47,7 @@ Add a changeset to the pull request (`pnpm changeset`) saying what changed in `@
 
 Each server reads the app releases every 15 minutes. What happens next is up to that server's choice for the app, in its settings in the Upgrade Centre:
 
-- **Automatic** (the default) installs a patch or minor version straight away when it asks for nothing new: no new scopes, storage, kinds of floor or bigger uploads, an SDK range the server's AUGUR opens, and the same signer.
+- **Automatic** (the default) installs a patch or minor version straight away when it asks for nothing new: no new scope, resource, setting, place, command or About section, no raised limit, no more kinds of floor, no bigger uploads or canvas, and the same signer. The registry compares the two versions' `asks` and manifests; taking something away asks for nothing.
 - Anything else (a major version, or a version that asks for more) waits under **Needs you**, with the reason, until an admin installs it.
 - **Ask first** makes every version wait, and **Hold** stays where it is.
 
@@ -60,6 +60,10 @@ To go back, use **Go back** on the app's page in the Upgrade Centre, or hold the
 Apps are moving out of this repository into their own (ADR 0012). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
 
 An app on the app contract (contract 3, ADR 0075) also keeps `score/<part>.score.yaml` for each of its parts, and `augur-app validate` checks the manifest and those files against the contract's schemas, which `@augur/app-tools` ships (`manifest-3.schema.json`, `score-part-1.schema.json`, `app-release-2.schema.json`); its release file is `augur.app-release/v2`, which `@augur/app-tools/release2` writes with every part's image pinned by digest (`augur-app publish` writes it once the template moves to contract 3; today it writes v1).
+
+A deployment installs only contract 3 releases. The registry checks a release against those schemas and Score's own, and answers with the first three problems and their paths; then it refuses, each with a plain reason: an id kept for AUGUR, a scope it doesn't offer, more than one part taking the gateway's calls or one that isn't a service, a secret output read in a variable instead of a file, a resource type it doesn't offer, a service part without a port, `api` without an inbound part or an inbound part without `api`, a radial action naming an unknown command, a place, command, About or setting id used twice, `bindings` without `links.entities`, and an app with neither frontend nor parts. It warns, and still installs, when a place or command repeats the app's own label or icon, a command shown for a selection is never named by a place or radial action, or a place the app fills has no frontend. A v1 file is refused as "on contract 2"; `GET /api/registry/v1/contract` answers the majors this AUGUR serves.
+
+An app's address may be any host name or IP except loopback, link-local and the deployment's own networks, which the app runner tells the registry at start.
 
 The release steps come from `@augur/app-tools`, published beside the SDK. Its `augur-app` command runs in the app repository's root (`manifest.json`, `frontend/`, `service/` and a `Dockerfile` for the service) and does what `scripts/app-release.mjs` and `infra/release-app.sh` do here: `augur-app pending`, `dev <run>`, `preview <pr> <run>`, `bundle <channel>` (build, push and sign), `publish <bundle.json>`, `clean-devs` and `clean-previews <pr>`. The app template's workflows call it.
 
