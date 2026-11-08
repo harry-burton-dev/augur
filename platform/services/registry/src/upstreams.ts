@@ -25,7 +25,21 @@ const v4Refused: [number, number][] = [
 /** The deployment's own networks, as CIDRs (`172.18.0.0/16`, `fd00:a::/64`), which the runner says at start. */
 export interface OwnNetworks {
   networks: readonly string[];
+  /** When the runner said them. Until it has, Docker's default range (172.16.0.0/12) stands in for them. */
+  setAt?: string;
 }
+
+/** Docker's default address pool, where AUGUR's parts sit until the runner says its own networks. */
+const DOCKER_DEFAULT = '172.16.0.0/12';
+
+/** Whether `cidr` is a network as the runner may say it: an IPv4 or IPv6 address and a prefix length that fits. */
+export const isCidr = (cidr: string): boolean => {
+  const [base = '', len, extra] = cidr.split('/');
+  if (extra !== undefined || len === undefined || !/^\d{1,3}$/.test(len)) return false;
+  const bits = Number(len);
+  if (v4(base) !== undefined) return bits <= 32;
+  return v6(base) !== undefined && bits <= 128;
+};
 
 /** An IPv6 address as eight 16-bit groups, or undefined when it isn't one. */
 const v6 = (ip: string): number[] | undefined => {
@@ -51,10 +65,13 @@ const samePrefix = (x: number[], y: number[], bits: number, width: number) => {
 
 /** The own network `host` (an IP literal as URL writes it) sits on, or undefined. A CIDR that isn't one is skipped. */
 const ownNetworkOf = (host: string, own: readonly string[]): string | undefined => {
-  const ip4 = v4(host);
   const ip6 = host.startsWith('[') ? v6(host.slice(1, -1)) : undefined;
+  // An IPv4-mapped IPv6 address (::ffff:a.b.c.d) is that IPv4 address.
+  const mapped = ip6 && ip6.slice(0, 5).every((g) => g === 0) && ip6[5] === 0xffff ? ip6[6]! * 65536 + ip6[7]! : undefined;
+  const ip4 = mapped ?? v4(host);
   for (const cidr of own) {
     const [base = '', len] = cidr.split('/');
+    if (!isCidr(cidr)) continue;
     const bits = Number(len);
     if (ip4 !== undefined && v4(base) !== undefined && Number.isInteger(bits) && bits >= 0 && bits <= 32) {
       if (bits === 0 || inV4(ip4, [v4(base)!, bits])) return cidr;
@@ -100,6 +117,7 @@ const ipProblem = (host: string): string | undefined => {
  * on one of the deployment's own networks (`own`, from the runner). Undefined when it can.
  */
 export const upstreamProblem = (url: string, own: OwnNetworks = { networks: [] }): string | undefined => {
+  // Until the runner says them, Docker's default range is taken as the deployment's own.
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -114,7 +132,7 @@ export const upstreamProblem = (url: string, own: OwnNetworks = { networks: [] }
   if (PLATFORM_HOSTS.includes(host) || host.endsWith('.localhost')) return `${host} is part of AUGUR, not an app’s service.`;
   const ip = ipProblem(host);
   if (ip) return ip;
-  const network = ownNetworkOf(host, own.networks);
+  const network = ownNetworkOf(host, own.setAt ? own.networks : [...own.networks, DOCKER_DEFAULT]);
   if (network) return `${host} is on ${network}, one of this deployment's own networks, where AUGUR's parts run. Give the app's host name, or an address outside it.`;
   if (!host.includes('.') && !host.startsWith('[') && !APP_CONTAINER.test(host)) {
     return `${host} isn’t an app’s container: on AUGUR’s own network only app-<id> names are apps (such as app-expenses). An app elsewhere needs its full host name.`;

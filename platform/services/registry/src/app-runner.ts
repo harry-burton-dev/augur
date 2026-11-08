@@ -10,11 +10,12 @@ import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { automaticProblem, defaultDesiredState, windowAt } from './desired-state.ts';
 import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
 import { feedHeld } from './updates.ts';
-import { checkRelease } from './release-check.ts';
+import { checkRelease, contractMessage } from './release-check.ts';
+import { isRelease2 } from '@augur/app-tools/release2';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
 import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
-import { upstreamProblem } from './upstreams.ts';
+import { isCidr, upstreamProblem } from './upstreams.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
 
@@ -137,7 +138,8 @@ export const appRunnerRoutes =
         // The newest release Automatic reaches: inside the pin, and no bigger a step than it takes.
         const reached = updates.result.releases.filter((r) => r.app === id && semver.gt(r.version, current.version) && !automaticProblem(state, current.version, r.version));
         const newest = newestOn(reached, id, follow.channel);
-        if (!newest?.release || updateNeeds(current, newest.release).length) continue;
+        // An app still on a contract 2 release takes nothing by itself: it needs a contract 3 one installed (spec 11.6).
+        if (!isRelease2(current) || !newest?.release || updateNeeds(current, newest.release).length) continue;
         if (releaseProblem(newest.release)) continue;
         const jobs = await store.appJobs(id);
         if (jobs.some((j) => j.pr === undefined && j.release?.version === newest.version && j.state === 'failed')) continue;
@@ -219,7 +221,7 @@ export const appRunnerRoutes =
             installedAt,
             ...follow,
             ...(newest?.release && semver.gt(newest.version, release.version)
-              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: updateNeeds(release, newest.release), changes: changesIn(newest.release.notes ?? '', id) } }
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2)], changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
             changes: changesIn(release.notes ?? '', id),
@@ -570,6 +572,7 @@ export const appRunnerRoutes =
           ),
           response: {
             200: Type.Object({ networks: Type.Array(Type.String()), setAt: Type.String({ format: 'date-time' }) }, { description: 'As kept' }),
+            400: refused("One isn't a network that parses"),
             403: refused('Not the app runner'),
             503: runnerUnreachable,
           },
@@ -577,6 +580,8 @@ export const appRunnerRoutes =
       },
       async (req, reply) => {
         if (!(await isRunner(req, reply))) return reply;
+        const bad = req.body.networks.filter((n) => !isCidr(n));
+        if (bad.length) return reply.code(400).send({ error: 'bad_request', message: `${bad.join(', ')} ${bad.length === 1 ? 'isn’t a network' : 'aren’t networks'} such as 172.18.0.0/16 or fd00:a::/64.` });
         const kept = await store.setOwnNetworks([...new Set(req.body.networks)]);
         req.log.info({ networks: kept.networks }, 'the deployment’s own networks set');
         return kept;

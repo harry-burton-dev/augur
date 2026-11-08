@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { upstreamProblem } from './upstreams.ts';
+import { isCidr, upstreamProblem } from './upstreams.ts';
 
 describe('upstreamProblem', () => {
   it('takes the containers that run apps and hosts elsewhere', () => {
@@ -28,6 +28,7 @@ describe('upstreamProblem', () => {
       'http://0x7f.1:80',
       'http://0.0.0.0:80',
       'http://169.254.169.254',
+      'http://172.18.0.5:8080',
       'http://[::1]:80',
       'http://[::]:80',
       'http://[::ffff:127.0.0.1]:80',
@@ -39,21 +40,33 @@ describe('upstreamProblem', () => {
 
 // Contract 3 (spec 9.8): the rule is the deployment's own networks, which the runner tells the
 // registry, not a fixed range. An app hosted on another machine installs without a code change.
+describe('isCidr', () => {
+  it('takes networks that parse, and nothing else', () => {
+    for (const ok of ['10.0.0.0/8', '0.0.0.0/0', 'fd00:a::/64', '::/0']) expect(isCidr(ok), ok).toBe(true);
+    for (const bad of ['10.0.0.0/99', '999.1.1.1/8', ':::/999', 'fd00::/129', '10.0.0.0', '10.0.0.0/8/1', 'x/8']) expect(isCidr(bad), bad).toBe(false);
+  });
+});
+
 describe('upstreamProblem on contract 3 (9.8)', () => {
-  const own = { networks: ['172.18.0.0/16', '10.20.0.0/16', 'fd00:a::/64'] };
+  const own = { networks: ['172.18.0.0/16', '10.20.0.0/16', 'fd00:a::/64'], setAt: '2026-11-08T22:00:00Z' };
 
   it('takes any address outside the deployment’s own networks', () => {
     for (const ok of ['http://10.30.30.40:8080', 'http://172.20.0.5:8080', 'http://[fd00:b::5]:8080', 'https://notes.apps.example.org'])
       expect(upstreamProblem(ok, own), ok).toBeUndefined();
-    // With no networks told yet, only loopback and link-local are refused.
+    // Told none: only loopback and link-local are refused.
+    expect(upstreamProblem('http://172.18.0.5:8080', { networks: [], setAt: own.setAt })).toBeUndefined();
+    // Not told yet: Docker's default range stands in for the deployment's own.
     expect(upstreamProblem('http://10.20.30.40:8080', { networks: [] })).toBeUndefined();
-    expect(upstreamProblem('http://172.18.0.5:8080', { networks: [] })).toBeUndefined();
+    expect(upstreamProblem('http://172.18.0.5:8080', { networks: [] })).toMatch(/172\.16\.0\.0\/12/);
   });
 
   it('refuses an address on one of the deployment’s own networks, naming it', () => {
     expect(upstreamProblem('http://10.20.30.40:8080', own)).toMatch(/10\.20\.0\.0\/16/);
     expect(upstreamProblem('http://172.18.0.5:8080', own)).toMatch(/172\.18\.0\.0\/16/);
     expect(upstreamProblem('http://[fd00:a::9]:8080', own)).toMatch(/fd00:a::\/64/);
+    // The same address written as IPv4-mapped IPv6.
+    expect(upstreamProblem('http://[::ffff:172.18.0.5]:80', own)).toMatch(/172\.18\.0\.0\/16/);
+    expect(upstreamProblem('http://[0:0:0:0:0:ffff:ac12:5]:80', own)).toMatch(/172\.18\.0\.0\/16/);
   });
 
   it('still refuses loopback, link-local and AUGUR’s own names', () => {

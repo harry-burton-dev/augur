@@ -127,8 +127,13 @@ describe('a contract 3 release in the app runner', async () => {
     };
     expect(updateNeeds(from, later(() => undefined))).toEqual([]);
     expect(updateNeeds(from, later((r) => r.manifest.scopes.push('models:use'))).join()).toMatch(/models:use/);
-    expect(updateNeeds(from, later((r) => r.asks.resources.push({ part: 'web', type: 'augur-outbound', params: { hosts: ['x.example.org'] } }))).join()).toMatch(/augur-outbound|internet/);
-    expect(updateNeeds(from, later((r) => (r.asks.limits.web.memory = '1Gi'))).join()).toMatch(/web.*1Gi|1Gi/);
+    expect(updateNeeds(from, later((r) => (r.parts[0]!.resources!.internet = { type: 'augur-outbound', params: { hosts: ['x.example.org'], why: 'Fetches things' } }))).join()).toMatch(/web part asks for augur-outbound/);
+    expect(updateNeeds(from, later((r) => (r.parts[0]!.containers.web!.resources.limits.memory = '1Gi'))).join()).toMatch(/web part asks for 1Gi of memory, up from 512Mi/);
+    // Units Score allows compare as amounts: the same memory in other words asks nothing; less never does.
+    expect(updateNeeds(from, later((r) => (r.parts[0]!.containers.web!.resources.limits.memory = '536870912')))).toEqual([]);
+    expect(updateNeeds(from, later((r) => (r.parts[0]!.containers.web!.resources.limits.memory = '125M')))).toEqual([]);
+    expect(updateNeeds(from, later((r) => (r.parts[0]!.containers.web!.resources.limits.cpu = '1000m')))).toEqual([]);
+    expect(updateNeeds(from, later((r) => (r.parts[0]!.containers.web!.resources.limits.cpu = '1.5'))).join()).toMatch(/1\.5 CPU, up from 1/);
     expect(updateNeeds(from, later((r) => r.manifest.contributes.settings.push({ id: 'colour', label: 'Colour', type: 'string', default: 'red' }))).join()).toMatch(/Colour|colour/);
     expect(updateNeeds(from, later((r) => r.manifest.contributes.places.push({ id: 'tags', label: 'Tags', icon: 'tag', path: '/tags' }))).join()).toMatch(/Tags/);
     // Taking something away asks for nothing.
@@ -150,6 +155,7 @@ describe.runIf(DATABASE_URL)('the deployment’s own networks and contract (9.8,
     const say = (networks: string[], headers: Record<string, string> = runner) => server.inject({ method: 'PUT', url: '/v1/runner/networks', headers, payload: { networks } });
     expect((await say(['10.20.0.0/16'], { authorization: 'Bearer platform-gateway' })).statusCode).toBe(403);
     expect((await say(['not a network'])).statusCode).toBe(400);
+    expect((await say(['10.0.0.0/99'])).json().message).toMatch(/10\.0\.0\.0\/99 isn’t a network/);
     expect((await say(['10.20.0.0/16', 'fd00:a::/64'])).json()).toMatchObject({ networks: ['10.20.0.0/16', 'fd00:a::/64'] });
     const job = (await ask({ action: 'install', release })).json();
     const report = (upstream: string) =>

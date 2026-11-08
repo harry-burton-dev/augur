@@ -5,7 +5,7 @@
  */
 import { contractValidators, partProblems } from '@augur/app-tools/validate';
 import type { AppManifest3, ScorePart } from '@augur/app-tools/validate';
-import { APP_RELEASE_2_SCHEMA, type AppRelease2 } from '@augur/app-tools/release2';
+import { APP_RELEASE_2_SCHEMA, asksOf2, type AppRelease2 } from '@augur/app-tools/release2';
 import { isOfferedScope, reservedIdProblem } from '@augur/service-kit';
 import { platformApps } from './manifest.ts';
 
@@ -65,6 +65,18 @@ const kind = (part: ScorePart) => part.metadata.annotations?.['augur.dev/part'];
 const resources = (part: ScorePart) => Object.entries(part.resources ?? {});
 const isInbound = (part: ScorePart) => resources(part).some(([, r]) => r.type === 'augur-gateway' && r.params?.inbound === true);
 
+/** JSON with object keys in order, so two values compare equal however their keys were stored (jsonb reorders them). */
+export const stable = (v: unknown): string =>
+  Array.isArray(v)
+    ? `[${v.map(stable).join(',')}]`
+    : v && typeof v === 'object'
+      ? `{${Object.keys(v)
+          .sort()
+          .filter((k) => (v as Record<string, unknown>)[k] !== undefined)
+          .map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`)
+          .join(',')}}`
+      : JSON.stringify(v);
+
 /** The ids used more than once in a list. */
 const repeated = (ids: (string | undefined)[]) => [...new Set(ids.filter((id, i) => id !== undefined && ids.indexOf(id) !== i))] as string[];
 
@@ -82,6 +94,9 @@ const ruleRefusals = (release: AppRelease2, offered: Required<Offered>): string[
   if (notOffered.length) out.push(`${m.name} asks for ${notOffered.join(', ')}, which this AUGUR doesn’t offer.`);
 
   const parts = release.parts;
+  for (const name of repeated(parts.map((p) => p.metadata.name))) out.push(`Two parts are named ${name}: each part's name is its own (spec 4.3).`);
+  // The asks an admin agrees to must be what the manifest and parts say, or a part could ask for more unseen.
+  if (stable(asksOf2(m, parts)) !== stable(release.asks)) out.push('The release’s asks aren’t what its manifest and parts ask for. Build the release file again with @augur/app-tools.');
   const inbound = parts.filter(isInbound);
   if (inbound.length > 1) out.push(`Only one part may take the gateway’s calls (inbound), and ${inbound.map((p) => p.metadata.name).join(' and ')} both do.`);
   for (const p of inbound) if (kind(p) !== 'service') out.push(`${p.metadata.name} takes the gateway’s calls (inbound) but is a ${kind(p) ?? 'part of no kind'}: only a service part can.`);
@@ -94,11 +109,17 @@ const ruleRefusals = (release: AppRelease2, offered: Required<Offered>): string[
     const types = new Map(resources(p).map(([name, r]) => [name, r.type]));
     for (const [name, type] of types) if (!offered.resources.includes(type)) out.push(`${p.metadata.name} asks for ${type} (resource ${name}), a resource type not offered by this AUGUR.`);
     for (const [container, spec] of Object.entries(p.containers ?? {})) {
-      for (const [variable, value] of Object.entries(spec.variables ?? {})) {
-        for (const [, res, output] of String(value).matchAll(/\$\{resources\.([a-z0-9-]+)\.([A-Za-z0-9_]+)\}/g)) {
+      // Anywhere but `files`: a variable, the command or its arguments (spec 4.6). `$${...}` is Score's escape, not a reference.
+      const places: [string, unknown][] = [
+        ...Object.entries(spec.variables ?? {}).map(([name, value]): [string, unknown] => [`the variable ${name}`, value]),
+        ...(spec.command ?? []).map((value): [string, unknown] => ['its command', value]),
+        ...(spec.args ?? []).map((value): [string, unknown] => ['its arguments', value]),
+      ];
+      for (const [where, value] of places) {
+        for (const [, res, output] of String(value).matchAll(/(?<!\$)\$\{resources\.([a-z0-9-]+)\.([A-Za-z0-9_]+)\}/g)) {
           const type = types.get(res!);
           const secret = (type && SECRET_OUTPUTS[type]?.includes(output!)) || (type === 'augur-settings' && secretSettings.has(output!));
-          if (secret) out.push(`${p.metadata.name}’s ${container} reads the secret ${res}.${output} in the variable ${variable}: a secret arrives only as a file (files), never a variable.`);
+          if (secret) out.push(`${p.metadata.name}’s ${container} reads the secret ${res}.${output} in ${where}: a secret arrives only as a file (files), never anywhere else.`);
         }
       }
     }

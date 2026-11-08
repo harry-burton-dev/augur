@@ -3,13 +3,15 @@
  * the schemas, each with a plain reason, and what it only warns about.
  */
 import { describe, expect, it } from 'vitest';
+import { asksOf2 } from '@augur/app-tools/release2';
 import { checkRelease, SERVED_CONTRACTS } from './release-check.ts';
 import { exampleRelease, examplePart, releaseOf } from './release3.testing.ts';
 
 const withoutFrontend = (over: Record<string, unknown> = {}, manifest: Record<string, unknown> = {}) => {
   const r = { ...exampleRelease({ frontend: null }), ...over } as Release;
   const { frontend: _f, ...m } = { ...r.manifest, ...manifest };
-  return { ...r, manifest: JSON.parse(JSON.stringify(m)) };
+  const clean = JSON.parse(JSON.stringify(m));
+  return { ...r, manifest: clean, asks: asksOf2(clean, r.parts) };
 };
 
 type Release = ReturnType<typeof exampleRelease>;
@@ -17,13 +19,13 @@ const copy = <T>(v: T): T => structuredClone(v);
 const withManifest = async (change: (m: Release['manifest']) => void) => {
   const r = copy(await exampleRelease());
   change(r.manifest);
-  return r;
+  return { ...r, asks: asksOf2(r.manifest, r.parts) };
 };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- a test reaches into the workload's YAML shape to break one rule.
 const withPart = async (name: string, change: (p: Record<string, any>) => void) => {
   const r = copy(await exampleRelease());
   change(r.parts.find((p) => p.metadata.name === name)!);
-  return r;
+  return { ...r, asks: asksOf2(r.manifest, r.parts) };
 };
 const refused = async (r: Release) => checkRelease(r).refusals;
 
@@ -67,6 +69,16 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
     expect((await refused(await withManifest((m) => (m.contract = 2)))).join()).toMatch(/contract 2.*serves 3/);
   });
 
+  it('refuses asks that aren’t what the parts ask for, a secret in the arguments and two parts of one name', async () => {
+    const unseen = copy(exampleRelease());
+    unseen.parts[0]!.resources!.internet = { type: 'augur-outbound', params: { hosts: ['x.example.org'], why: 'Fetches things' } };
+    expect(checkRelease(unseen).refusals).toEqual([expect.stringMatching(/asks aren’t what/)]);
+    expect(await refused(await withPart('migrate', (p) => (p.containers.migrate.args = ['--pw', '${resources.db.password}'])))).toEqual([expect.stringMatching(/db\.password in its arguments/)]);
+    // Score's escape is not a reference.
+    expect(await refused(await withPart('migrate', (p) => (p.containers.migrate.args = ['--pw', '$${resources.db.password}'])))).toEqual([]);
+    expect(await refused(await withPart('worker', (p) => (p.metadata.name = 'web')))).toEqual(expect.arrayContaining([expect.stringMatching(/Two parts are named web/)]));
+  });
+
   it('serves contract 3, and only 3, at its first release (11.5, 11.6)', () => {
     expect(SERVED_CONTRACTS).toEqual([3]);
   });
@@ -78,7 +90,7 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
     });
     const { refusals, warnings } = checkRelease(r);
     expect(refusals).toEqual([]);
-    expect(warnings).toEqual(expect.arrayContaining([expect.stringMatching(/Recent|Notes/), expect.stringMatching(/note\.print/)]));
+    expect(warnings).toEqual(expect.arrayContaining([expect.stringMatching(/app’s own label/), expect.stringMatching(/note\.print/)]));
     const noFrontend = withoutFrontend();
     expect(checkRelease(noFrontend).warnings.join()).toMatch(/fills/);
   });

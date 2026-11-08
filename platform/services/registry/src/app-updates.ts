@@ -1,5 +1,6 @@
 import semver from 'semver';
-import { isRelease2 } from '@augur/app-tools/release2';
+import { asksOf2, isRelease2 } from '@augur/app-tools/release2';
+import { stable } from './release-check.ts';
 import { isZeroMinor } from './desired-state.ts';
 import type { AppRelease } from './store.ts';
 import { sameRepository, type FeedTrust } from './feed-trust.ts';
@@ -191,19 +192,25 @@ export const previewsIn = (releases: AppFeedRelease[], app: string) => {
   return [...newest.values()].sort((a, b) => b.pr! - a.pr!);
 };
 
-/** A Score memory or CPU amount in one unit, to compare: bytes, or thousandths of a CPU. */
-const amount = (v: string | undefined): number => {
-  if (!v) return 0;
-  const m = /^(\d+(?:\.\d+)?)(Ki|Mi|Gi|Ti|m)?$/.exec(v.trim());
-  if (!m) return Number.NaN;
-  const n = Number(m[1]);
-  const unit = { Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, Ti: 2 ** 40, m: 1 }[m[2] ?? ''] ?? (/\./.test(m[1]!) || !m[2] ? 1000 : 1);
-  return n * unit;
+const MEMORY_UNITS: Record<string, number> = { '': 1, K: 1e3, M: 1e6, G: 1e9, T: 1e12, P: 1e15, E: 1e18, Ki: 2 ** 10, Mi: 2 ** 20, Gi: 2 ** 30, Ti: 2 ** 40, Pi: 2 ** 50, Ei: 2 ** 60 };
+
+/** A Score (Kubernetes-style) memory amount in bytes: `512Mi`, `125M`, `1073741824`. NaN when it isn't one. */
+const bytes = (v: string): number => {
+  const m = /^(\d+(?:\.\d+)?)([KMGTPE]i?)?$/.exec(v.trim());
+  return m ? Number(m[1]) * (MEMORY_UNITS[m[2] ?? ''] ?? Number.NaN) : Number.NaN;
 };
 
-/** JSON with object keys in order, so the same params compare equal however they were stored (jsonb reorders keys). */
-const stable = (v: unknown): string =>
-  Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object' ? `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`).join(',')}}` : JSON.stringify(v);
+/** A Score CPU amount in thousandths of a CPU: `500m`, `1`, `0.5`. NaN when it isn't one. */
+const millicpu = (v: string): number => {
+  const m = /^(\d+(?:\.\d+)?)(m)?$/.exec(v.trim());
+  return m ? Number(m[1]) * (m[2] ? 1 : 1000) : Number.NaN;
+};
+
+/** Whether `to` is more than `from`: a raise, or (when either can't be read) any change. */
+const raised = (from: string, to: string, read: (v: string) => number) => {
+  const [a, b] = [read(from), read(to)];
+  return Number.isNaN(a) || Number.isNaN(b) ? from.trim() !== to.trim() : b > a;
+};
 
 /** The ids of one of a manifest's contribution lists. */
 const idsOf = (release: AppRelease, key: string): Map<string, string> => {
@@ -220,8 +227,9 @@ const idsOf = (release: AppRelease, key: string): Map<string, string> => {
 export const updateNeeds = (from: AppRelease, to: AppRelease): string[] => {
   const needs: string[] = [];
   const name = to.manifest.name;
-  const a = from.asks;
-  const b = to.asks;
+  // Computed from the manifest and parts, not taken from the file (which the registry checks agree).
+  const a = asksOf2(from.manifest, from.parts);
+  const b = asksOf2(to.manifest, to.parts);
   if (semver.major(to.version) > semver.major(from.version)) needs.push(`${to.version} is a major version: it may change how ${name} works.`);
   else if (isZeroMinor(from.version, to.version)) needs.push(`${to.version} is a 0.x minor version, which may change how ${name} works like a major.`);
   const newScopes = b.scopes.filter((s) => !a.scopes.includes(s));
@@ -232,8 +240,8 @@ export const updateNeeds = (from: AppRelease, to: AppRelease): string[] => {
   for (const [part, limit] of Object.entries(b.limits)) {
     const was = a.limits[part];
     if (!was) continue; // A new part is listed with its resources; its limits are in the review.
-    if (!(amount(limit.memory) <= amount(was.memory))) needs.push(`Its ${part} part asks for ${limit.memory} of memory, up from ${was.memory}.`);
-    if (!(amount(limit.cpu) <= amount(was.cpu))) needs.push(`Its ${part} part asks for ${limit.cpu} CPU, up from ${was.cpu}.`);
+    if (raised(was.memory, limit.memory, bytes)) needs.push(`Its ${part} part asks for ${limit.memory} of memory, up from ${was.memory}.`);
+    if (raised(was.cpu, limit.cpu, millicpu)) needs.push(`Its ${part} part asks for ${limit.cpu} CPU, up from ${was.cpu}.`);
   }
   for (const part of Object.keys(b.limits).filter((p) => !(p in a.limits))) needs.push(`It adds a part, ${part}, with ${b.limits[part]!.memory} of memory and ${b.limits[part]!.cpu} CPU.`);
   if (b.floors.some((f) => !a.floors.includes(f))) needs.push('It asks to work on more kinds of floor.');

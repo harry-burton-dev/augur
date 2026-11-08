@@ -3029,6 +3029,12 @@ paths:
                     type: string
                     format: date-time
                 description: As kept
+        "400":
+          description: One isn't a network that parses
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
         "403":
           description: Not the app runner
           content:
