@@ -202,6 +202,13 @@ describe('AppMounter', () => {
     expect(incompatibility(app('a', '/a', { sdk: '^1.0.0' }), '2.0.0')).toMatch(/older/);
   });
 
+  it('opens the shell’s own frontends on SDK 3 and refuses an installed app made for SDK 2', async () => {
+    const { devHome } = await import('../dev-app/standin.js');
+    expect(incompatibility(devHome, '3.0.0')).toBeUndefined();
+    expect(incompatibility(app('home', '/home', { sdk: '^2.0.0 || ^3.0.0' }), '3.0.0')).toBeUndefined();
+    expect(incompatibility(app('notes', '/notes', { sdk: '^2.0.0' }), '3.0.0')).toMatch(/older/);
+  });
+
   it('refuses a module that is not an app', async () => {
     const m = new AppMounter(document.createElement('div'), async () => ({ default: { hello: true } }));
     await expect(m.mount(manifest[1], ctx())).rejects.toThrow(/didn't load as an app/);

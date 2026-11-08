@@ -1,7 +1,7 @@
 name: Lockfile
 # Brings pnpm-lock.yaml up to date on a pull request's branch, and release/kit.json with it once the kit
 # bundle is pinned there (scripts/kit.mjs), and THIRD_PARTY_NOTICES.md (scripts/licences.mjs), and pushes them.
-# With freeze, it also keeps the contract reference app built against the current SDK minor. For a change that adds or bumps a package from
+# For a change that adds or bumps a package from
 # GitHub Packages (the kit, ADR 0046) made where no read token is set, such as a cloud session:
 # Actions → Lockfile → Run workflow, with the branch. It pushes with RELEASE_TOKEN, so CI runs on the new
 # commit. Never on main or a release branch. Two jobs: the first runs the branch's code with no secret but
@@ -13,10 +13,6 @@ on:
       branch:
         description: The pull request's branch
         required: true
-      freeze:
-        description: Also keep the contract reference app built against this SDK minor (platform/contract/freeze.mjs)
-        type: boolean
-        default: false
 permissions:
   contents: read
 jobs:
@@ -57,25 +53,19 @@ jobs:
         run: if [ -f scripts/kit.mjs ]; then node scripts/kit.mjs pin; fi
       - name: Write the open-source notices from what is installed
         run: if [ -f scripts/licences.mjs ]; then node scripts/licences.mjs notices; fi
-      # After a release that moves the SDK's minor, where no package token can build it (a cloud session).
-      - name: Keep the frozen contract build
-        if: inputs.freeze
-        run: |
-          pnpm turbo run build --filter=@augur/contract-tests^...
-          pnpm --filter @augur/contract-tests freeze
       # Only these paths go in the patch; the push job checks that again, as nothing here is trusted.
       - name: Make the patch
         id: patch
         run: |
           paths=()
-          for path in pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md platform/contract/frozen; do
+          for path in pnpm-lock.yaml release/kit.json THIRD_PARTY_NOTICES.md; do
             [ -e "$path" ] && paths+=("$path")
           done
           git add --intent-to-add -- "${paths[@]}"
           git diff --binary -- "${paths[@]}" > "$RUNNER_TEMP/lockfile.patch"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           if [ ! -s "$RUNNER_TEMP/lockfile.patch" ]; then
-            echo "pnpm-lock.yaml, release/kit.json, THIRD_PARTY_NOTICES.md and the frozen builds are already up to date" >> "$GITHUB_STEP_SUMMARY"
+            echo "pnpm-lock.yaml, release/kit.json and THIRD_PARTY_NOTICES.md are already up to date" >> "$GITHUB_STEP_SUMMARY"
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
@@ -119,7 +109,7 @@ jobs:
             path=${path#*$'\t'}
             case "/$path/" in */../* | */./* | //*) refuse "The patch names a path outside the repository: $path" ;; esac
             case "$path" in
-              pnpm-lock.yaml | release/kit.json | THIRD_PARTY_NOTICES.md | platform/contract/frozen/*) ;;
+              pnpm-lock.yaml | release/kit.json | THIRD_PARTY_NOTICES.md) ;;
               *) refuse "The patch changes $path, which the Lockfile workflow never changes." ;;
             esac
           done < <(git apply --numstat -z "$PATCH")
@@ -131,7 +121,7 @@ jobs:
           git -c core.hooksPath=/dev/null apply --index --binary "$PATCH"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -c core.hooksPath=/dev/null commit --no-verify -m "Update pnpm-lock.yaml, the kit pin, the open-source notices and the frozen builds"
+          git -c core.hooksPath=/dev/null commit --no-verify -m "Update pnpm-lock.yaml, the kit pin and the open-source notices"
         env:
           PATCH: ${{ runner.temp }}/patch/lockfile.patch
       # The token is given to this one git command, as a header, never written to .git/config or echoed.

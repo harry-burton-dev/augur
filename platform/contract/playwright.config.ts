@@ -1,15 +1,19 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@playwright/test';
 
 /**
  * The real shell's dev server in its dev-app mode (signed in as a stand-in
  * person, the platform's endpoints answered in the browser) with the reference
- * app as its one app. run.mjs runs this once per build of the reference app,
- * side by side, each on its own port and with its own results folder.
+ * app as its one app, served from source. The manifest's feature preview
+ * `turned-on` is on for the stand-in person and `left-off` off. Each can be
+ * set from outside (DEV_APP, DEV_PREVIEWS, CONTRACT_PORT), as for another app.
  */
+process.env.DEV_APP ??= fileURLToPath(new URL('reference-app', import.meta.url));
+process.env.DEV_PREVIEWS ??= 'turned-on';
 const port = Number(process.env.CONTRACT_PORT ?? 5180);
 export default defineConfig({
   testDir: 'tests',
-  outputDir: `test-results/${process.env.CONTRACT_TARGET ?? 'source'}`,
+  outputDir: 'test-results',
   timeout: 30_000,
   // Each check waits for a state; on a busy runner the shell can take longer than Playwright's 5 seconds to get there (PER-322).
   expect: { timeout: process.env.CI ? 10_000 : 5_000 },

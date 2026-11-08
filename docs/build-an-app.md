@@ -83,6 +83,24 @@ Everything you need from outside your app comes through `ctx`:
 
 Build screens from Quill's parts (`@augur/app-kit`, which also carries all of Common; see them in the `augur-kit` repository's Storybook) and AUGUR's tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of React or the kit: the shell serves one copy to every app, and `vite.config.ts` keeps them out of your bundle (`isSharedModule`). Anything else you import, you bundle. Lit and the Lit kit (`@augur/ui-kit`) went with SDK 2: an app that still imports them doesn't load.
 
+### On the app contract (contract 3)
+
+An app whose manifest says `"contract": 3` (ADR 0075, 0076) runs differently, and the shell runs both today. Its frontend is one ES module, `frontend.entry` inside its bundle, which the shell serves from `/apps/<id>/<version>/` and loads into a web worker of its own: no DOM, no network, no token, nothing of the shell's page. It default-exports `start(ctx)`:
+
+```ts
+import { defineApp } from '@augur/mfe-sdk/sdk3';
+
+export default defineApp((ctx) => {
+  ctx.frame.set({ title: 'Notes', actions: [{ command: 'note.new' }] });
+  ctx.frame.onCommand('note.new', () => ctx.navigate('/new'));
+  ctx.frame.screen.render({ type: 'quill-list', props: { label: 'Notes', items: [{ id: 'n1', title: 'First' }], onOpen: (id) => ctx.navigate(`/notes/${id}`) } });
+});
+```
+
+What it draws is Quill's remote vocabulary by name (`@augur/app-kit/remote`: `quill-list`, `quill-table`, `quill-page-head` and the rest, with the props each takes); the shell draws it with the real kit and drops anything else with a reason on the console. `render` takes a description (`{ type, props, children }`; a function prop `onOpen` hears the `open` event), or build the tree with `document.createElement('quill-list')` in the worker. Send a long list as `items` or `rows`, not as nodes: the shell draws only the rows in view, and stops an app that inserts more than 2,000 nodes in one go, keeps more than 50,000, sends more than 20,000 changes and messages in a second, or stops answering for 10 seconds after it opened, saying why in its pane. Set a handler prop back to `undefined` and the event is no longer heard. The shell draws the pane's heading from `ctx.frame.set`, and its states: opening, slow after 5 seconds, failed after 30 or when the worker throws, each with Try again; the rest of the shell keeps working.
+
+`ctx.fetch(path)` takes a path under `/api/` (your service is `/api/<id>/…`) and refuses an address; the shell makes the call with the person's token, `X-Workspace-Id` and `x-augur-app: <id>`, and hands back a `Response` built from the bytes. The worker never sees the token, and headers it sets for those (and `Forwarded`, `X-Forwarded-*`) are dropped, and a redirect fails the call rather than being followed. `ctx.person` is the person's `id` and `name`; `ctx.workspace` the floor (`id`, `kind`, `name`), and a new floor starts the worker again. The shell owns the address: `ctx.path` is where your app was opened, `ctx.onNavigate` hears each move, and `ctx.navigate(path)` asks for one, below your app's own address (a path that climbs out of it, such as `/../admin`, is ignored). Functions cross to the shell only as an element's event handlers: one inside an intent, a reply or a notice is left out. `ctx.raise`, `ctx.request` and `ctx.notify` are as above. With `contributes.card: true`, Home runs your app in a worker of its own for its card and shows what `start(ctx)` draws into `ctx.frame.card`; the card shows once the app draws it. With `contributes.search: true`, Find asks your service `GET /api/<id>/v1/search?q=` as your app (`x-augur-app`). The types are `@augur/mfe-sdk/sdk3`; the platform's contract tests run a reference app on it (`platform/contract/reference-app`).
+
 ### The app kit
 
 Apps show more than the shell does, but each thing in them still says little: **show the shape, say one line, open the rest.** The kit's App group in Storybook holds the parts for it, and they keep these rules for you:

@@ -127,6 +127,12 @@ export interface AppContext {
   workspace: Workspace;
   /** The path below `/<id>` the app was opened at; the host owns the URL (spec 6.12). */
   path: string;
+  /**
+   * What the shell runs the app for: `'screen'` in the stage, or `'card'` when Home runs it only for
+   * its card, which needs no screen. From a card, navigate, raise and request work only just after
+   * the person pressed something in it.
+   */
+  surface: 'screen' | 'card';
   /** Called on every move the host makes inside the app, with the new path below `/<id>`. */
   onNavigate(handler: (path: string) => void): () => void;
   /** Asks the host to move to `path`, below `/<id>`. */

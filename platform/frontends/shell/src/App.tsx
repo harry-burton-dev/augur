@@ -15,7 +15,9 @@ import {
 } from '@augur/shell-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AppMounter,
+  StageMounter,
+  incompatibility,
+  workerCards,
   applyPreferences,
   areaOf,
   groupsFor,
@@ -82,6 +84,9 @@ import { productName } from './host/menus.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { InboxView } from './inbox/InboxView.js';
+
+/** The apps this shell can open: an intent goes to one of them, and Find asks only them. One it can't open still says why where it is listed. */
+const openable = (apps: AppManifestEntry[]) => apps.filter((a) => !incompatibility(a));
 
 export interface HostProps {
   session: Session;
@@ -162,14 +167,14 @@ export function Host({
   const [shellModel] = useState(() => new ShellModel());
   const shellRef = useRef<ShellModel>(shellModel);
   const stageRef = useRef<HTMLDivElement>(null);
-  const mounter = useRef<AppMounter | null>(null);
+  const mounter = useRef<StageMounter | null>(null);
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
   const feed = useRef<NotificationFeed | null>(null);
   const broker = useRef(new RequestBroker());
   /** Where the answering app mounts, inside the request dialog while it's open. */
   const [requestStage, setRequestStage] = useState<HTMLDivElement | null>(null);
-  const requestMounter = useRef<AppMounter | null>(null);
+  const requestMounter = useRef<StageMounter | null>(null);
   const [answering, setAnswering] = useState<OpenRequest | null>(null);
   /** The previews this person may try, as a developer of their apps; none for everyone else. */
   const [previewApps, setPreviewApps] = useState<PreviewApp[]>([]);
@@ -462,7 +467,7 @@ export function Host({
     async (intent: Intent) => {
       if (!manifest) return;
       try {
-        routeIntent(manifest, intent, (app) => {
+        routeIntent(openable(manifest), intent, (app) => {
           pendingIntent.current = intent;
           setRaised((n) => n + 1);
           navigate(hrefFor(app));
@@ -508,7 +513,7 @@ export function Host({
       if (!manifest) return Promise.reject(new IntentError('Apps are still loading. Try again in a moment.'));
       let started: ReturnType<RequestBroker['begin']>;
       try {
-        started = broker.current.begin(manifest, intent);
+        started = broker.current.begin(openable(manifest), intent);
       } catch (err) {
         if (err instanceof IntentError) tell(toShellNotification('platform', { title: err.message }));
         return Promise.reject(err);
@@ -552,7 +557,7 @@ export function Host({
     (el: HTMLElement, id: string) => {
       const app = manifest?.find((a) => a.id === id);
       if (!app) return Promise.resolve(false);
-      cards.current ??= new SurfaceMounter(importEntry);
+      cards.current ??= new SurfaceMounter(importEntry, workerCards((app, path) => navigate(hrefFor(app, path))));
       return cards.current.mountSurface(el, app, settingsOf(app, floor ?? home), contextFor(app, '/'));
     },
     [manifest, floor, home, contextFor, importEntry],
@@ -567,7 +572,8 @@ export function Host({
   useEffect(() => {
     const stage = requestStage;
     if (!answering || !stage) return;
-    const mounter = new AppMounter(stage, importEntry);
+    // An app answering in the dialog stays where it is: the page behind it doesn't move.
+    const mounter = new StageMounter(stage, importEntry, { navigate: () => undefined });
     requestMounter.current = mounter;
     const { app, intent } = answering;
     const reply: IntentReply = { respond: (result) => broker.current.respond(result), cancel: () => broker.current.cancel() };
@@ -584,7 +590,7 @@ export function Host({
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    mounter.current ??= new AppMounter(stage, importEntry);
+    mounter.current ??= new StageMounter(stage, importEntry, { navigate: (app, path) => navigate(hrefFor(app, path)) });
     // On the way to another floor: the app comes off until that floor's catalogue says what's there.
     if (!manifest) {
       void mounter.current.unmount();
@@ -676,7 +682,7 @@ export function Host({
     const shell = shellRef.current;
     if (!shell || !manifest) return;
     const here = floor ?? home;
-    cards.current ??= new SurfaceMounter(importEntry);
+    cards.current ??= new SurfaceMounter(importEntry, workerCards((app, path) => navigate(hrefFor(app, path))));
     const send = () =>
       bus.emit<HomeState>(HOME_CHANNEL.state, {
         // Open inbox items on this floor first (at most five, then a row for the rest), above the notifications that need you.
@@ -914,7 +920,7 @@ export function Host({
       search.stop();
       clearTimeout(findTimer.current);
       findTimer.current = setTimeout(() => {
-        void search.run(manifest ?? [], q, floorRef.current.id, ({ results, groups }) => {
+        void search.run(openable(manifest ?? []), q, floorRef.current.id, ({ results, groups }) => {
           shell.findResults = [...pages, ...results];
           shell.findGroups = groups;
         });
