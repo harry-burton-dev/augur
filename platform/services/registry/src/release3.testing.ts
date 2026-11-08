@@ -22,9 +22,11 @@ export const exampleRelease = async (over: Record<string, unknown> = {}) => {
   const release = appRelease2({
     manifest: exampleManifest(),
     parts: [examplePart('web'), examplePart('worker'), examplePart('migrate')],
-    frontend: { artifact: `ghcr.io/example-org/augur-notes-frontend@${digest('b')}`, digest: digest('c'), mediaType: 'application/vnd.augur.frontend.v1.tar+gzip' },
+    bundle: {
+      frontend: { artifact: `ghcr.io/example-org/augur-notes-frontend@${digest('b')}`, digest: digest('c') },
+      channel: 'stable',
+    },
     signer: { repository: 'example-org/augur-notes', workflow: '.github/workflows/release.yml' },
-    channel: 'stable',
     releasedAt: '2026-11-08T12:00:00Z',
   });
   return { ...release, ...over };
