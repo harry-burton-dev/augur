@@ -126,8 +126,6 @@ pnpm check:boundaries
 
 | Guide | Covers |
 | --- | --- |
-| [Artifacts](docs/folio.md) | Using Artifacts, the document libraries, and running it as an admin |
-| [Data Atlas](docs/atlas.md) | The org's entities and the ontology, and running Data Atlas in a deployment |
 | [Build an app](docs/build-an-app.md) | From the app template to an app in the shell |
 | [Ship an app](docs/ship-an-app.md) | From a pull request's preview to servers updating the app by themselves |
 | [App previews](docs/app-previews.md) | Trying a pull request's build of an app on a real server |

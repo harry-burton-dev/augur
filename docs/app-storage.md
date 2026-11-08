@@ -63,6 +63,8 @@ To change a secret, put the new one in `.env`, `pc up -d`, and restart the app. 
 
 A pull request's preview of an app gets scratch storage under its own id, such as `notes-pr12` (login `app_notes_pr12`, schema `notes_pr12`, bucket `notes-pr12`), made and taken away by the app runner ([app-previews.md](app-previews.md)). Taking it away runs the storage container with `APP_STORAGE_DROP=notes-pr12`, which drops that schema and login and empties and deletes that bucket. It only ever takes an id of that shape, so an app's own storage can't be dropped this way. No storage is made or dropped under an id a part of AUGUR answers to (`identity`, `public`, `augur-…`; `RESERVED_APP_IDS` in `@augur/service-kit`), so an app's schema never sits among the platform's own.
 
+An app AUGUR no longer runs can have its data taken away once on each server: its id in `RETIRED_APPS` (set in `compose.yml` by the release that took the app out, ADR 0075) makes the storage job drop its schemas and login and empty and delete its bucket, then note it in `public.storage_retired_apps`, so a new app given the same id later is never touched. An id that's also in `APP_STORAGE` is kept, and noted as kept. If taking one fails, `pc logs storage` says why and the job tries again on the next `up`.
+
 Both stores are inside the compose network only: an app hosted elsewhere can't reach them.
 
 ## Backups

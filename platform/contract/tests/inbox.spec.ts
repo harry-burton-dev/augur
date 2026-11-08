@@ -1,14 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
-import { folioOn, frozenBuild } from './builds';
+import { frozenBuild } from './builds';
 
 /**
  * The Inbox (SDK 1.12, ADR 0026): what the shell promises an app that puts work in people's inboxes.
  * The kind's words come from the app's manifest (`inbox.kinds`), and Open raises the item's intent to
  * the app as a notification's button does. Items come from the stand-in inbox in the dev-app mode
  * (`augur:dev-inbox-item`), as an app's service would put them. They check the shell, not what the app was
- * built with, so they run against today's build once, with Folio off.
+ * built with, so they run against today's build once.
  */
-test.skip(frozenBuild !== undefined || folioOn, 'The Inbox’s checks run against today’s build, once');
+test.skip(frozenBuild !== undefined, 'The Inbox’s checks run against today’s build, once');
 
 const check = (page: Page, name: string) => page.locator('[data-app="reference"]').first().locator(`[data-check="${name}"]`);
 const shell = (page: Page) => page.waitForFunction(() => Boolean((document.querySelector('[data-shell]') as unknown as { shell?: unknown } | null)?.shell));

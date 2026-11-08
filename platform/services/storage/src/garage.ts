@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { withDeadline } from '@augur/service-kit';
 
 /**
@@ -97,7 +97,7 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
      * Takes a bucket away, after `empty` has emptied it (Garage only deletes an empty bucket), with
      * the app's keys. False when there was no such bucket.
      */
-    async removeBucket(alias: string, empty: () => Promise<void>, name = keyNameFor(alias)): Promise<boolean> {
+    async removeBucket(alias: string, empty: (bucketId: string) => Promise<void>, name = keyNameFor(alias)): Promise<boolean> {
       let id: string | undefined;
       try {
         id = (await call<{ id: string }>('GET', `GetBucketInfo?globalAlias=${encodeURIComponent(alias)}`)).id;
@@ -105,12 +105,23 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
         if (!(err instanceof GarageError) || err.status !== 404) throw err;
       }
       if (id) {
-        await empty();
+        await empty(id);
         await call('POST', `DeleteBucket?id=${encodeURIComponent(id)}`);
       }
       const keys = await call<{ id: string; name: string }[]>('GET', 'ListKeys');
       for (const key of keys.filter((k) => k.name === name)) await call('POST', `DeleteKey?id=${encodeURIComponent(key.id)}`);
       return Boolean(id);
+    },
+
+    /**
+     * A new key named `name` that may read and write the bucket, for when the app's own secret isn't known (an app
+     * retired after its secrets left .env). Returns its secret; removeBucket deletes it with the app's other keys.
+     */
+    async temporaryKey(bucketId: string, name: string): Promise<string> {
+      const secret = randomBytes(32).toString('hex');
+      await call('POST', 'ImportKey', { name, accessKeyId: keyIdFor(secret), secretAccessKey: secret });
+      await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: keyIdFor(secret), permissions: { read: true, write: true, owner: false } });
+      return secret;
     },
 
     /**

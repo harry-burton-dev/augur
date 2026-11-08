@@ -9,7 +9,7 @@ From a new app to running on your servers, with no manual update at any step. Ea
 | [Release it](#3-release-it) | CI | Merge, then merge Version packages |
 | [Servers take it](#4-servers-take-it) | Each server | Nothing, unless it asks for something new |
 
-This is for apps the app runner installs: every app in `apps/`, or in its own repository ([below](#an-app-in-its-own-repository)), but those that ship with AUGUR (Artifacts, Explorer, Data Atlas and Mandate), which come with AUGUR's own releases at the version `release/shipped-apps.json` pins ([upgrade.md](upgrade.md)).
+This is for every app: the app runner installs them all, whether the app is in `apps/` or in its own repository ([below](#an-app-in-its-own-repository)). No app ships inside AUGUR's own releases (ADR 0075).
 
 ## Once per server (an admin)
 
@@ -68,4 +68,4 @@ Servers still read one feed, AUGUR's (ADR 0047):
 - The updater trusts that repository to sign that app, and only that app, so a server needs no `APP_PUBLISHERS` line for it. Releases of the app signed anywhere else, this repository included, are refused from then on.
 - The first release a server installs from the new repository takes over the data the old one left, so the updater takes a backup of the database first, and the install's first step names the file. Later releases from that repository install as usual. A version installed before this rule (its record names no repository) gets the same backup at its next update.
 
-An app that ships with AUGUR (a platform or pillar app, ADR 0032) goes in `release/shipped-apps.json` instead, never in both: AUGUR's own release carries it, at the release its pin names, so the feed doesn't offer it apart from AUGUR (ADR 0049, and [Versioning](versioning.md#the-augur-release) for moving a pin). Reading its images takes one more secret in this repository, `PACKAGES_READ_TOKEN`: the same classic token with `read:packages` the app repositories have, because a fine-grained token can't read packages.
+A platform or pillar app (ADR 0032) is listed here like any other: no app ships inside AUGUR's release any more (ADR 0075), so `release/shipped-apps.json` stays empty.

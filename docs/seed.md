@@ -1,6 +1,6 @@
 # Sample data (`pnpm seed`)
 
-A fresh AUGUR starts empty. `pnpm seed` fills a dev, staging or demo deployment with a synthetic cast: people, floors (departments and teams), Artifacts documents and Data Atlas entities. It goes only through the public APIs, as the admin who runs it, so it stays in step with the contracts and every change is audited like any other (ADR 0056).
+A fresh AUGUR starts empty. `pnpm seed` fills a dev, staging or demo deployment with a synthetic cast: people, floors (departments and teams), and documents and entities for the apps that keep them. No app ships with AUGUR (ADR 0075), so on a deployment without an app at `/api/folio` or `/api/atlas` the seed leaves the documents and entities out, saying why. It goes only through the public APIs, as the admin who runs it, so it stays in step with the contracts and every change is audited like any other (ADR 0056).
 
 ## Allowing it
 

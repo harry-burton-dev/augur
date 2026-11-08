@@ -692,6 +692,30 @@ export const migrations: Migration[] = [
         seq text not null
       );`,
   },
+  {
+    id: '023_retire_shipped_apps',
+    sql: `
+      -- The four apps that shipped with AUGUR until ADR 0075 (Artifacts, Explorer, Data Atlas, Mandate) leave its
+      -- catalogue, to be redesigned and installed through the app runner like any other. The storage job takes their
+      -- data away (RETIRED_APPS). Each is kept in removed_apps, so a container of it left running can't register it again.
+      insert into registry.removed_apps (app_id, removed_by)
+        select id, 'augur' from registry.apps where id in ('folio', 'auspex', 'atlas', 'mandate')
+        on conflict (app_id) do nothing;
+      -- These apps no longer ship, so the release before has nothing of them left to read.
+      -- squawk-ignore augur-delete-rows
+      delete from registry.app_frontends where app_id in ('folio', 'auspex', 'atlas', 'mandate');
+      -- squawk-ignore augur-delete-rows
+      delete from registry.feature_opt_ins where app_id in ('folio', 'auspex', 'atlas', 'mandate');
+      -- squawk-ignore augur-delete-rows
+      delete from registry.app_follows where app_id in ('folio', 'auspex', 'atlas', 'mandate');
+      -- squawk-ignore augur-delete-rows
+      delete from registry.app_developers where app_id in ('folio', 'auspex', 'atlas', 'mandate');
+      -- squawk-ignore augur-delete-rows
+      delete from registry.preview_choices where app_id in ('folio', 'auspex', 'atlas', 'mandate');
+      -- Their versions, installs and guardrails go with them (on delete cascade).
+      -- squawk-ignore augur-delete-rows
+      delete from registry.apps where id in ('folio', 'auspex', 'atlas', 'mandate');`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };

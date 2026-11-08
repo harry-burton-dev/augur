@@ -7,7 +7,3 @@ metadata:
 spec:
   targets:
     - ./augur.yaml
-    - https://github.com/harry-burton-dev/augur-atlas/blob/main/catalog-info.yaml
-    - https://github.com/harry-burton-dev/augur-auspex/blob/main/catalog-info.yaml
-    - https://github.com/harry-burton-dev/augur-folio/blob/main/catalog-info.yaml
-    - https://github.com/harry-burton-dev/augur-mandate/blob/main/catalog-info.yaml

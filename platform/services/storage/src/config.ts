@@ -30,6 +30,12 @@ export interface StorageConfig {
    */
   drop?: AppStorage;
   /**
+   * Apps AUGUR no longer runs whose data goes, once (RETIRED_APPS, ADR 0075): their database login and schemas, and
+   * their bucket with everything in it. Each is done once on a server and remembered, so an app installed later
+   * under the same id keeps its own.
+   */
+  retire: string[];
+  /**
    * The secret of the registry's key to the bucket of apps' frontends (FRONTENDS_BUCKET_SECRET),
    * 64 hex characters. Without it apps' frontends aren't kept by version (docs/upgrade.md).
    */
@@ -90,6 +96,12 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
   }
   const appConnections = env.APP_DATABASE_CONNECTIONS ? Number(env.APP_DATABASE_CONNECTIONS) : 30;
   if (!Number.isInteger(appConnections) || appConnections < 2 || appConnections > 1000) problems.push('APP_DATABASE_CONNECTIONS must be a whole number from 2 to 1000 (30 when empty).');
+  const retire = (env.RETIRED_APPS ?? '').split(/[\s,]+/).filter(Boolean);
+  for (const app of retire) {
+    if (!APP_ID.test(app)) problems.push(`"${app}" in RETIRED_APPS is not an app id (2 to 40 lowercase letters, digits and dashes).`);
+    const reserved = reservedIdProblem(app);
+    if (reserved) problems.push(`RETIRED_APPS: ${reserved}`);
+  }
   const dropping = env.APP_STORAGE_DROP || undefined;
   // Taking a preview's storage away is that preview's job alone, so it stops at any problem.
   if (dropping) problems.push(...skipped.map(({ problem }) => problem));
@@ -118,6 +130,7 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     garage: env.GARAGE_ADMIN_TOKEN ? { url: env.GARAGE_ADMIN_URL ?? 'http://garage:3903', token: env.GARAGE_ADMIN_TOKEN, s3Url: env.GARAGE_S3_URL ?? 'http://garage:3900' } : undefined,
     apps,
     skipped,
+    retire,
     appConnections,
     ...(dropping ? { drop: { app: dropping, ...(({ databasePassword, bucketSecret }) => ({ databasePassword, bucketSecret }))(secretsOf(dropping)) } } : {}),
     ...(frontendsSecret ? { frontendsSecret } : {}),

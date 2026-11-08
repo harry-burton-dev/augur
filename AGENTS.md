@@ -47,13 +47,12 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 ## Names
 - The platform is **AUGUR**. Never "IM platform", "Information Platform",
   "Wave" or "platform" in anything a person reads.
-- Folio is shown to people as **Artifacts**. Its id, route, schema, bucket and
-  `FOLIO_*` keys stay `folio`.
-- Auspex is shown to people as **Explorer**, a platform app (ADR 0032). Its
-  id, route, intents, packages, container and `AUSPEX_*` keys stay `auspex`.
-- Apps that ship with AUGUR are **platform apps** (using and managing AUGUR:
-  Home, Admin, Upgrade Centre, Explorer) or **pillar apps** (the foundation of
-  its output: Artifacts, Mandate, Data Atlas). Code names stay out of what people read.
+- No app ships with AUGUR (ADR 0075): every app is installed from the app
+  feed and reaches AUGUR only through the gateway. Apps are **platform apps**
+  (using and managing AUGUR; Home, Admin and the Upgrade Centre come with it)
+  or **pillar apps** (the foundation of its output). Today's apps (Artifacts,
+  code name Folio; Explorer, Auspex; Data Atlas; Mandate) were taken out to be
+  redesigned under the app contract. Code names stay out of what people read.
 - Old ids kept on purpose so live servers keep working: Keycloak realm
   `platform` and clients `platform-*`, Postgres db/user `platform`, Compose
   project `platform`, `PLATFORM_*` env keys, and the image and feed path
@@ -63,8 +62,8 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   upgrade note in docs/upgrade.md.
 
 ## Structure (ADR 0002)
-- `platform/` owns the shell, SDK and services. `apps/` holds apps, which
-  are moving to their own repositories (ADR 0012). Nothing in `platform/`
+- `platform/` owns the shell, SDK and services. Apps live in their own
+  repositories (ADR 0012). Nothing in `platform/`
   imports an app and apps never import each other: `pnpm check:boundaries`.
 - Apps reach AUGUR only through `@augur/*` packages, the gateway, the
   manifest and domain events.
@@ -125,7 +124,9 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   closes an issue when any linked PR merges.
 
 ## Servers
-- Deployments run on Docker Compose behind Tailscale (ADR 0010). Agents
+- Deployments run on Docker Compose (ADR 0010). How people reach one (the
+  internet or an internal network) is that deployment's choice; Tailscale is
+  only how Harry reaches his own workbench, so never design around it. Agents
   can't see Harry's servers: never assume a step there worked; ask, or give a
   command whose output he can paste.
 - Upgrades go through the Upgrade Centre in Admin; docs/upgrade.md has the

@@ -12,6 +12,3 @@ export const since = (minor: string) => {
   const older = frozenBuild !== undefined && frozenBuild.localeCompare(minor, undefined, { numeric: true }) < 0;
   test.skip(older, `the build from sdk-${frozenBuild} predates SDK ${minor}`);
 };
-
-/** Whether Folio, the app that ships with AUGUR, is in the catalogue beside the reference app this run. */
-export const folioOn = process.env.CONTRACT_FOLIO === 'on';

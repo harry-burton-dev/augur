@@ -259,9 +259,8 @@ traffic() {
 # person the gateway answers them itself (401), which is enough to see where they're counted.
 counted_apart() {
   local before after app calls=10
-  # Any app the release ships: the first of the registry's PILLAR_APPS.
-  app=$(pc config --format json | jq -r '.services.registry.environment.PILLAR_APPS // "" | split(" ") | map(select(. != "")) | .[0] // empty')
-  [ -n "$app" ] || { echo "The release ships no app to count calls to." >&2; return 1; }
+  # Any name that isn't one of AUGUR's services is an app's, installed or not (no app ships with AUGUR, ADR 0075).
+  app=deploy-test-app
   before=$(traffic)
   for _ in $(seq "$calls"); do curl -s -o /dev/null "http://localhost:$port/api/$app/healthz" || true; done
   after=$(traffic)

@@ -24,18 +24,6 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/models" } }
   storage:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/storage" } }
-  # The apps that ship with AUGUR aren't built here: they live in their own repositories (ADR 0049). A
-  # build from source runs AUGUR's images of them from the newest beta release, or SHIPPED_APPS_VERSION's.
-  folio:
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${SHIPPED_APPS_VERSION:-beta}
-  folio-worker:
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${SHIPPED_APPS_VERSION:-beta}
-  auspex:
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${SHIPPED_APPS_VERSION:-beta}
-  atlas:
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${SHIPPED_APPS_VERSION:-beta}
-  mandate:
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/mandate:${SHIPPED_APPS_VERSION:-beta}
   keycloak:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], target: keycloak }
   updater:

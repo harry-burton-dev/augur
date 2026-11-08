@@ -20,15 +20,6 @@ x-internal: &internal
   OIDC_ISSUER: http://localhost:8180/realms/platform
   OIDC_INTERNAL_URL: http://keycloak:8080/realms/platform
 
-# Folio's own schema and bucket, for its service and its rendition worker. Local only.
-x-folio-storage: &folio-storage
-  DATABASE_URL: postgres://app_folio:platform-local-only-folio@postgres:5432/platform
-  S3_ENDPOINT: http://garage:3900
-  S3_BUCKET: folio
-  # The storage service derives the key's id from FOLIO_BUCKET_SECRET; it prints it too.
-  S3_ACCESS_KEY_ID: GK999cf764e1807dfcdb6310d6
-  S3_SECRET_ACCESS_KEY: 6c6f63616c2d6f6e6c792d666f6c696f2d6275636b65742d7365637265742d30
-
 services:
   # ---- infrastructure ----
   # Postgres with pgvector, for apps' embeddings.
@@ -58,14 +49,6 @@ services:
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       GARAGE_ADMIN_URL: http://garage:3903
       GARAGE_ADMIN_TOKEN: platform-local-only
-      # Folio's, Data Atlas's and Mandate's own schemas and buckets. Local only.
-      APP_STORAGE: folio atlas mandate
-      FOLIO_DATABASE_PASSWORD: platform-local-only-folio
-      FOLIO_BUCKET_SECRET: 6c6f63616c2d6f6e6c792d666f6c696f2d6275636b65742d7365637265742d30
-      ATLAS_DATABASE_PASSWORD: platform-local-only-atlas
-      ATLAS_BUCKET_SECRET: 6c6f63616c2d6f6e6c792d61746c61732d6275636b65742d7365637265742d30
-      MANDATE_DATABASE_PASSWORD: platform-local-only-mandate
-      MANDATE_BUCKET_SECRET: 6c6f63616c2d6f6e6c792d6d616e646174652d6275636b65742d736563726574
     depends_on: [postgres, garage]
 
   # Sign-in. The platform realm, its shell client and test users are imported from ./keycloak.
@@ -98,8 +81,8 @@ services:
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       IDENTITY_CLIENT_SECRET: platform-local-only-identity
-      # The clients for the platform's services and the sample apps, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,app-folio=platform-local-only-folio,app-auspex=platform-local-only-auspex,app-atlas=platform-local-only-atlas,app-mandate=platform-local-only-mandate
+      # The clients for the platform's services, with their secrets.
+      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models
       PLATFORM_ADMIN_USER: alex
       REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
@@ -139,8 +122,6 @@ services:
       SMTP_PORT: "1025"
       SMTP_SECURITY: none
       SMTP_FROM: augur@localhost
-      # Each app's service, name=url. The platform knows no app by name.
-      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086,mandate=http://mandate:8087
     ports: ["8080:8080"]
 
   identity:
@@ -165,8 +146,6 @@ services:
       PORT: 8082
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-registry
-      # The apps that ship with AUGUR: turned off rather than removed.
-      PILLAR_APPS: folio auspex atlas mandate
       <<: *internal
     depends_on: [postgres]
 
@@ -198,64 +177,6 @@ services:
       MODEL_API_URL: stand-in
       <<: *internal
     depends_on: [postgres]
-
-  # ---- apps ----
-  # The apps that ship with AUGUR live in their own repositories (ADR 0049). Here they run from AUGUR's
-  # images of them: the newest beta release's, or SHIPPED_APPS_VERSION's (docker login ghcr.io first).
-  # To work on one, run it from its own repository instead.
-  # Folio, the document libraries.
-  folio:
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${SHIPPED_APPS_VERSION:-beta}
-    environment:
-      <<: [*internal, *folio-storage]
-      PORT: 8083
-      SERVICE_CLIENT_SECRET: platform-local-only-folio
-    depends_on:
-      storage: { condition: service_completed_successfully }
-
-  # Auspex (Explorer), where you are on AUGUR. It keeps nothing of its own.
-  auspex:
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${SHIPPED_APPS_VERSION:-beta}
-    environment:
-      <<: *internal
-      PORT: 8090
-      SERVICE_CLIENT_SECRET: platform-local-only-auspex
-    depends_on: [identity, registry, events]
-
-  # Data Atlas, the org's entities and how they connect.
-  atlas:
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${SHIPPED_APPS_VERSION:-beta}
-    environment:
-      <<: *internal
-      PORT: 8086
-      DATABASE_URL: postgres://app_atlas:platform-local-only-atlas@postgres:5432/platform
-      SERVICE_CLIENT_SECRET: platform-local-only-atlas
-    depends_on:
-      storage: { condition: service_completed_successfully }
-
-  # Mandate, intent passed down the floors.
-  mandate:
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/mandate:${SHIPPED_APPS_VERSION:-beta}
-    environment:
-      <<: *internal
-      PORT: 8087
-      DATABASE_URL: postgres://app_mandate:platform-local-only-mandate@postgres:5432/platform
-      SERVICE_CLIENT_SECRET: platform-local-only-mandate
-    depends_on:
-      storage: { condition: service_completed_successfully }
-
-  # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
-  # It works on the tables Folio's service makes, so it waits for the service to start.
-  folio-worker:
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${SHIPPED_APPS_VERSION:-beta}
-    environment:
-      <<: *folio-storage
-    depends_on: [folio]
 
 volumes:
   pgdata:
