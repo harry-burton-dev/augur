@@ -109,3 +109,35 @@ describe.runIf(DATABASE_URL)('the app runner', () => {
     expect(listed.runnerSeenAt).toBeDefined();
   });
 });
+
+// P2's acceptance (spec 3.7, 9.4, 11.6): what a later contract 3 version asks for, and the v1 refusal.
+describe('a contract 3 release in the app runner', async () => {
+  const { exampleRelease } = await import('./release3.testing.ts');
+  const { updateNeeds } = await import('./app-updates.ts');
+
+  it('holds a later version that adds a scope, a resource, a setting or a place for review', async () => {
+    const from = await exampleRelease();
+    const later = (change: (r: any) => void) => {
+      const r = structuredClone(from) as any;
+      r.version = r.manifest.version = '1.1.0';
+      change(r);
+      return r;
+    };
+    expect(updateNeeds(from, later(() => undefined), '3.0.0')).toEqual([]);
+    expect(updateNeeds(from, later((r) => r.manifest.scopes.push('models:use')), '3.0.0').join()).toMatch(/models:use/);
+    expect(updateNeeds(from, later((r) => r.asks.resources.push({ part: 'web', type: 'augur-outbound', params: { hosts: ['x.example.org'] } })), '3.0.0').join()).toMatch(/augur-outbound|internet/);
+    expect(updateNeeds(from, later((r) => (r.asks.limits.web.memory = '1Gi')), '3.0.0').join()).toMatch(/web.*1Gi|1Gi/);
+    expect(updateNeeds(from, later((r) => r.manifest.contributes.settings.push({ id: 'colour', label: 'Colour', type: 'string', default: 'red' })), '3.0.0').join()).toMatch(/Colour|colour/);
+    expect(updateNeeds(from, later((r) => r.manifest.contributes.places.push({ id: 'tags', label: 'Tags', icon: 'tag', path: '/tags' })), '3.0.0').join()).toMatch(/Tags/);
+    // Taking something away asks for nothing.
+    expect(updateNeeds(from, later((r) => r.manifest.scopes.pop()), '3.0.0')).toEqual([]);
+  });
+
+  it.runIf(DATABASE_URL)('installs a v2 release and refuses a v1 one with the contract message', async () => {
+    const { ask } = await setup();
+    expect((await ask({ action: 'install', release: await exampleRelease() })).statusCode).toBe(202);
+    const v1 = await ask({ action: 'install', release });
+    expect(v1.statusCode).toBe(400);
+    expect(v1.json().message).toBe('This release is on contract 2; this AUGUR serves 3.');
+  });
+});
