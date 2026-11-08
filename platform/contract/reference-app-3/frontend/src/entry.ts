@@ -55,7 +55,8 @@ export default defineApp((ctx: AppContext) => {
         });
       }),
       button('Load from elsewhere', () => {
-        void import(/* @vite-ignore */ 'https://example.org/module.js').catch(() => undefined);
+        const elsewhere: string = 'https://example.org/module.js';
+        void import(/* @vite-ignore */ elsewhere).catch(() => undefined);
       }),
       button('Go to claims', () => ctx.navigate('/claims/7')),
       button('Throw', () => {
