@@ -13,6 +13,19 @@ import { withDeadline } from './deadline.js';
 export const SCOPES = ['notifications:send', 'audit:write', 'models:use', 'events:publish', 'events:subscribe', 'people:read', 'inbox:write'] as const;
 export type Scope = (typeof SCOPES)[number];
 
+/** Each scope in words, for a refusal a person reads: "Notes isn’t allowed to send notifications (notifications:send)." */
+export const SCOPE_WORDS: Record<Scope, string> = {
+  'notifications:send': 'send notifications',
+  'audit:write': 'write to the audit log',
+  'models:use': 'use the models',
+  'events:publish': 'publish events',
+  'events:subscribe': 'read events',
+  'people:read': 'look people up',
+  'inbox:write': 'write to inboxes',
+};
+/** The words for a scope, or "do that" for one this kit doesn't know. */
+export const scopeWords = (scope: string): string => (SCOPE_WORDS as Record<string, string>)[scope] ?? 'do that';
+
 /** The shape of a scope's name, `<api>:<verb>` (contract 3, spec 3.6); which names AUGUR offers is `SCOPES`. */
 export const SCOPE_PATTERN = /^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/;
 /** Whether a string is shaped like a scope. */

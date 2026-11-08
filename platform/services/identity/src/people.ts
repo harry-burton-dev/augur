@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { GrantsUnavailable, identifyService, ServiceAuthUnavailable, type GrantLookup, type ServiceVerifier } from '@augur/service-kit';
+import { delegationRefusal, GrantsUnavailable, identifyServiceCaller, ServiceAuthUnavailable, type GrantLookup, type ServiceVerifier } from '@augur/service-kit';
 import type { Person } from './directory.ts';
 import { refused } from './schemas.ts';
 import type { TeamDirectory } from './teams.ts';
@@ -143,18 +143,26 @@ export const peopleRoutes =
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const everyone = signedInPeople(teams, now);
 
-    /** Which kind of service is asking, when it may; false once the reply has been sent. */
+    /**
+     * Which kind of service is asking, when it may; false once the reply has been sent. An app acting
+     * for a person (a delegated caller, contract 3) is an app, held also to the scopes the delegation carries.
+     */
     const allowed = async (req: FastifyRequest, reply: FastifyReply): Promise<'platform' | 'app' | false> => {
       try {
-        const service = await identifyService(req.headers, verifyService);
+        const service = await identifyServiceCaller(req.headers, verifyService);
         if (service?.kind === 'platform') return 'platform';
         if (service?.kind === 'app') {
+          const refusal = delegationRefusal(service, PEOPLE_SCOPE);
+          if (refusal) {
+            void reply.code(403).send({ error: 'forbidden', message: refusal });
+            return false;
+          }
           if (!grants) throw new GrantsUnavailable('Identity has no registry to check grants with.');
           if ((await grants(service.app)).includes(PEOPLE_SCOPE)) return 'app';
           void reply.code(403).send({ error: 'forbidden', message: `${service.app} isn’t granted ${PEOPLE_SCOPE}.` });
           return false;
         }
-        void reply.code(403).send({ error: 'forbidden', message: 'Only platform and app services can look people up.' });
+        void reply.code(403).send({ error: 'forbidden', message: 'Only platform and app services, or an app acting for someone, can look people up.' });
       } catch (err) {
         if (!(err instanceof ServiceAuthUnavailable) && !(err instanceof GrantsUnavailable)) throw err;
         req.log.error({ err: (err as Error).message }, 'could not check who is asking');
@@ -164,7 +172,7 @@ export const peopleRoutes =
     };
 
     const notAllowed = {
-      403: refused('Not a platform service, or an app without people:read'),
+      403: refused('Not a platform service, nor an app (or an app acting for a person) with people:read'),
       503: refused("The caller's token or the app's grants can't be checked right now"),
     };
 

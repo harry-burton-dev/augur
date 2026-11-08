@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.15.0
+  version: 1.16.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -658,7 +658,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a signed-in service, not this app's item, or no inbox:write on that floor
+          description: Not a signed-in service nor an app acting for a person, not this app's item, no inbox:write on that floor, or a scope the delegation doesn't carry
           content:
             application/problem+json:
               schema:
@@ -705,7 +705,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/InboxItem"
         "403":
-          description: Not a signed-in service, not this app's item, or no inbox:write on that floor
+          description: Not a signed-in service nor an app acting for a person, not this app's item, no inbox:write on that floor, or a scope the delegation doesn't carry
           content:
             application/problem+json:
               schema:
@@ -762,7 +762,7 @@ paths:
                           $ref: "#/components/schemas/InboxHistory"
                 description: The item and every change to it
         "403":
-          description: Not a signed-in service, not this app's item, or no inbox:write on that floor
+          description: Not a signed-in service nor an app acting for a person, not this app's item, no inbox:write on that floor, or a scope the delegation doesn't carry
           content:
             application/problem+json:
               schema:
@@ -1250,7 +1250,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a signed-in service, not granted this, team notices are off, or urgent or an audience from an app
+          description: Not a signed-in service nor an app acting for a person, not granted this, a scope the delegation doesn’t carry, team notices are off, or urgent or an audience from an app
           content:
             application/problem+json:
               schema:
@@ -1453,7 +1453,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a service, not this publisher's topics, or no events:publish scope
+          description: Not a service nor an app acting for a person, not this publisher's topics, no events:publish scope, or a scope the delegation doesn't carry
           content:
             application/problem+json:
               schema:
@@ -1516,7 +1516,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a service, or no events:subscribe scope
+          description: Not a service nor an app acting for a person, no events:subscribe scope, or a scope the delegation doesn’t carry
           content:
             application/problem+json:
               schema:
@@ -1582,7 +1582,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a signed-in service, or not granted this
+          description: Not a signed-in service nor an app acting for a person, not granted this, or a scope the delegation doesn’t carry
           content:
             application/problem+json:
               schema:

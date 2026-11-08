@@ -1,6 +1,7 @@
 import { errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
-import { appClientId } from './apps.js';
-import type { Caller } from './caller.js';
+import { appClientId, scopeWords, type ServiceIdentity, type ServiceVerifier } from './apps.js';
+import { callerFromHeaders, delegationAllows, isDelegated, type Caller } from './caller.js';
+import { identifyService } from './service.js';
 import { CALLER_ISSUER, callerFromClaims, CallerKeysUnavailable, CallerTokenError, type CallerSigner } from './signed-caller.js';
 
 /**
@@ -69,3 +70,44 @@ export const delegationCheck =
   };
 
 export type DelegationCheck = ReturnType<typeof delegationCheck>;
+
+/**
+ * Who a route open to services is answering (contract 3, spec 8.5): a service by its own token, as
+ * `identifyService` says, or an app acting for a person through the delegated caller the gateway signed
+ * (`app` and `scopes` beside the person, no token of the app's own). `person` is set whenever the call is
+ * made for someone: the delegated caller itself, or the person a part's onward call carries beside its
+ * own token. The service then applies the smaller of the two with `delegationAllows(person, scope)`, its
+ * second line behind the gateway's.
+ */
+export type ServiceCaller = ServiceIdentity & { person?: Caller };
+
+/** The id the gateway gives the caller it signs for an app's own call (no person): the app itself, with `app` and `scopes` set. */
+export const appCallerId = (app: string): string => `app:${app}`;
+/** Whether a caller is an app on its own account rather than a person it acts for. */
+export const isAppItself = (caller: Pick<Caller, 'id' | 'app'> | undefined): boolean => isDelegated(caller) && caller.id === appCallerId(caller.app);
+
+/**
+ * Who is calling a route open to services: see `ServiceCaller`. Throws `ServiceAuthUnavailable` as
+ * `identifyService` does. A token names the service whatever else the call carries; the person beside an
+ * app's token is kept even when the delegation names another app, so `delegationRefusal` can say so.
+ */
+export const identifyServiceCaller = async (headers: Record<string, string | string[] | undefined>, verify: ServiceVerifier | undefined): Promise<ServiceCaller | undefined> => {
+  const caller = callerFromHeaders(headers);
+  const person = isDelegated(caller) && !isAppItself(caller) ? caller : undefined;
+  const service = await identifyService(headers, verify);
+  if (service) return person && service.kind === 'app' ? { ...service, person } : service;
+  if (person) return { kind: 'app', app: person.app, person };
+  return isDelegated(caller) ? { kind: 'app', app: caller.app } : undefined;
+};
+
+/**
+ * Why an app acting for a person may not do what `scope` names on this call, in words a person reads;
+ * undefined when it may, or when nobody is acted for. The delegation carries the scopes the app held where
+ * the call was made for, so this is the smaller of the person's access and the app's; a delegation made
+ * for another app is no good to this one.
+ */
+export const delegationRefusal = (who: ServiceCaller, scope: string): string | undefined => {
+  if (who.kind !== 'app' || !who.person) return undefined;
+  if (who.person.app !== who.app) return `${who.app} can’t act on a delegation made for ${who.person.app}.`;
+  return delegationAllows(who.person, scope) ? undefined : `${who.app} isn’t allowed to ${scopeWords(scope)} (${scope}) when acting for ${who.person.name}.`;
+};

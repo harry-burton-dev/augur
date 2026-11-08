@@ -1,4 +1,4 @@
-import { callerHeaders, GATEWAY_CALLER, signedCallerHeaders, withDeadline, type CallerSigner } from '@augur/service-kit';
+import { callerHeaders, GATEWAY_CALLER, scopeWords, signedCallerHeaders, withDeadline, type CallerSigner } from '@augur/service-kit';
 
 /**
  * What an app may do (contract 3, spec 8.2 and 8.3). The gateway admits an app's own token only for an app the
@@ -82,16 +82,6 @@ const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
 ];
 
 /** What a scope lets an app do, in words for a refusal: "send notifications (notifications:send)". */
-export const SCOPE_WORDS: Record<string, string> = {
-  'notifications:send': 'send notifications',
-  'audit:write': 'write to the audit log',
-  'models:use': 'use the models',
-  'events:publish': 'publish events',
-  'events:subscribe': 'read events',
-  'people:read': 'look people up',
-  'inbox:write': 'write to inboxes',
-};
-
 /**
  * What an app's call to `/api/<service>/…` needs: a scope's name, `null` for a route it may always call (its own
  * routes, its own registry entry), or `undefined` for a route apps don't call.
@@ -108,4 +98,4 @@ export const scopeFor = (method: string, url: string, app: string, platformServi
 
 /** Why an app's call is refused, in the words of spec 8.3. */
 export const notAllowed = (appName: string, scope: string | undefined, path: string): string =>
-  scope ? `${appName} isn’t allowed to ${SCOPE_WORDS[scope] ?? `do that`} (${scope}).` : `${appName} isn’t allowed to call ${path.split('?')[0]}.`;
+  scope ? `${appName} isn’t allowed to ${scopeWords(scope)} (${scope}).` : `${appName} isn’t allowed to call ${path.split('?')[0]}.`;

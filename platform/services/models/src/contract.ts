@@ -11,7 +11,7 @@ const paragraph = (...lines: string[]) => lines.join(' ');
 
 export const info = {
   title: 'Models',
-  version: '1.1.0',
+  version: '1.2.0',
   description: [
     paragraph(
       "The model gateway: the only place AUGUR keeps a model provider's key. It",

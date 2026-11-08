@@ -11,7 +11,7 @@ import {
   type InboxOwner,
   type PrincipalLookup,
   type Scope,
-  type ServiceIdentity,
+  type ServiceCaller,
 } from '@augur/service-kit';
 import { InboxChange as InboxChangeSchema, InboxCounts, InboxHistory, InboxItem as InboxItemSchema, NewInboxItem as NewInboxItemSchema, refused, ref } from './schemas.ts';
 import { overdue, ownerPrincipal, type InboxAction, type InboxStore, type InboxTold, type StepResult } from './inbox.ts';
@@ -36,7 +36,7 @@ export interface InboxDeps {
   principals?: PrincipalLookup;
   kinds?: InboxKindLookup;
   signedIn: (req: FastifyRequest, reply: FastifyReply) => Caller | undefined;
-  fromService: (req: FastifyRequest, reply: FastifyReply, forApp: string | undefined, scope: Scope) => Promise<ServiceIdentity | undefined>;
+  fromService: (req: FastifyRequest, reply: FastifyReply, forApp: string | undefined, scope: Scope) => Promise<ServiceCaller | undefined>;
   floorOf: (req: FastifyRequest, reply: FastifyReply) => Promise<(EventFloor & { kind: string }) | null | undefined>;
 }
 
@@ -142,13 +142,19 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
     }
   };
 
-  /** Each step goes in the audit log, and a person's step out as a domain event the app follows. */
+  /**
+   * Each step goes in the audit log, and a person's own step out as a domain event the app follows. An
+   * app's step made for a person (`service.person`) is recorded as that person's, through the app, with no
+   * event: the app already knows what it did.
+   */
   const told =
-    (action: string, by: string | undefined, extra: Record<string, unknown> = {}): InboxTold =>
+    (action: string, by: string | undefined, extra: Record<string, unknown> = {}, { announce = !!by }: { announce?: boolean } = {}): InboxTold =>
     (item, step) => ({
       audit: { actor: by ? { id: by, kind: 'user' } : { id: item.app, kind: 'service' }, app: 'events', action: `inbox.${action}`, target: item.id, detail: { app: item.app, key: item.key, kind: item.kind } },
-      ...(by ? { event: { topic: `platform.inbox.${action}`, id: `inbox-${step}`, payload: { item: item.id, app: item.app, key: item.key, by, ...extra }, floor: item.workspace } } : {}),
+      ...(announce && by ? { event: { topic: `platform.inbox.${action}`, id: `inbox-${step}`, payload: { item: item.id, app: item.app, key: item.key, by, ...extra }, floor: item.workspace } } : {}),
     });
+  /** What an app's own step is recorded as: the person it acts for, or the app itself. */
+  const byApp = (action: string, service: ServiceCaller) => told(action, service.person?.id, {}, { announce: false });
 
   const notThere = (reply: FastifyReply, r: Exclude<StepResult, { item: InboxItem }>) => {
     if ('missing' in r) return reply.code(404).send({ error: 'not_found', message: 'There is no such item.' });
@@ -161,7 +167,7 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
 
   const ItemParams = Type.Object({ app: Type.String({ pattern: '^[a-z][a-z0-9-]{1,39}$' }), key: Type.String({ minLength: 1, maxLength: 200 }) });
   const serviceRefusals = {
-    403: refused("Not a signed-in service, not this app's item, or no inbox:write on that floor"),
+    403: refused("Not a signed-in service nor an app acting for a person, not this app's item, no inbox:write on that floor, or a scope the delegation doesn't carry"),
     503: refused("Floors, grants or people can't be checked right now"),
   };
 
@@ -189,7 +195,8 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
     },
     async (req, reply) => {
       const { app: forApp, key } = req.params;
-      if (!(await fromService(req, reply, forApp, 'inbox:write'))) return reply;
+      const service = await fromService(req, reply, forApp, 'inbox:write');
+      if (!service) return reply;
       const floor = await floorOf(req, reply);
       if (floor === undefined) return reply;
       const item = req.body;
@@ -203,7 +210,7 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
         return reply.code(400).send({ error: 'bad_request', message: `${forApp} doesn’t declare the inbox kind "${item.kind}" in its manifest (inbox.kinds).` });
       }
       if (await refuseOwner(item.owner, reply)) return reply;
-      const said = told('created', undefined);
+      const said = byApp('created', service);
       const put = await inbox.put(forApp, key, { ...item, ...(item.due ? { due: new Date(item.due).toISOString() } : {}) }, floor ? { id: floor.id, path: floor.path } : undefined, (added, step, created) => (created ? said(added, step, created) : undefined));
       if ('closed' in put) return reply.code(409).send({ error: 'conflict', message: `This item is closed (${put.closed.state}). Send reopen to open it again.` });
       req.log.info({ app: forApp, key, created: put.created, owner: ownerPrincipal(put.item.owner) }, 'inbox item put');
@@ -228,9 +235,10 @@ export const inboxRoutes = (plain: FastifyInstance, deps: InboxDeps) => {
     },
     async (req, reply) => {
       const { app: forApp, key } = req.params;
-      if (!(await fromService(req, reply, forApp, 'inbox:write'))) return reply;
+      const service = await fromService(req, reply, forApp, 'inbox:write');
+      if (!service) return reply;
       if (req.body.due && Number.isNaN(Date.parse(req.body.due))) return reply.code(400).send({ error: 'bad_request', message: `"${req.body.due}" isn’t a date.` });
-      const r = await inbox.patch(forApp, key, { ...req.body, ...(req.body.due ? { due: new Date(req.body.due).toISOString() } : {}) }, req.body.state ? told(req.body.state, undefined) : undefined);
+      const r = await inbox.patch(forApp, key, { ...req.body, ...(req.body.due ? { due: new Date(req.body.due).toISOString() } : {}) }, req.body.state ? byApp(req.body.state, service) : undefined);
       if (!('item' in r)) return notThere(reply, r);
       return shown(r.item);
     },

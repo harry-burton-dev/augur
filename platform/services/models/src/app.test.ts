@@ -66,6 +66,27 @@ describe.runIf(DATABASE_URL)('models', () => {
     expect((await call(await asApp('other'))).statusCode).toBe(403);
   });
 
+  it('lets an app acting for a person talk to its own agent, within the scopes the delegation carries (contract 3)', async () => {
+    const { app, audited } = await start();
+    const forSam = (agent: string, scopes: string[]) =>
+      callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' }, app: agent, scopes });
+    const call = (headers: Record<string, string>, payload: object = hello) => app.inject({ method: 'POST', url: '/v1/chat', headers, payload });
+    expect((await call(forSam('scribe', ['models:use']))).statusCode).toBe(200);
+    // Recorded as the person, through the app.
+    expect(audited[0]).toMatchObject({ entry: { actor: { id: 'u-2', kind: 'user' }, app: 'scribe' }, workspace: 'w-finance' });
+    const other = await call(forSam('scribe', ['models:use']), { agent: 'assistant', ...hello });
+    expect([other.statusCode, other.json().message]).toEqual([403, 'scribe can only talk to its own agent for you, not to "assistant".']);
+    const narrow = await call(forSam('scribe', []));
+    expect([narrow.statusCode, narrow.json().message]).toEqual([403, 'scribe isn’t allowed to use the models (models:use) when acting for Sam.']);
+    // Still only where the app is granted models:use; and embeddings stay the app's own service's.
+    expect((await call(forSam('other', ['models:use']))).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/v1/embeddings', headers: forSam('scribe', ['models:use']), payload: { input: ['x'] } })).statusCode).toBe(403);
+    // The person's side of "the smaller of the two": the role the app needs still binds them.
+    const analysts = await start({ requiredRole: async (id) => (id === 'scribe' ? 'analyst' : null) });
+    const noRole = await analysts.app.inject({ method: 'POST', url: '/v1/chat', headers: forSam('scribe', ['models:use']), payload: hello });
+    expect([noRole.statusCode, noRole.json().message]).toEqual([403, 'scribe needs the analyst role, which an admin can give you.']);
+  });
+
   it('lets a person talk to an AI app’s agent only where that app is granted models:use', async () => {
     const { app } = await start();
     const call = (agent: string) => app.inject({ method: 'POST', url: '/v1/chat', headers: sam, payload: { agent, ...hello } });
