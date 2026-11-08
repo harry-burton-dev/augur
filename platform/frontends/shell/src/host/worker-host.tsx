@@ -10,8 +10,9 @@ import { PageHead, QuillRemote, State, createQuillReceiver, type QuillReceiver }
 import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
 import type { FrameState, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireRequest } from '@augur/mfe-sdk/sdk3/host';
+import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
 import { createRoot, type Root } from 'react-dom/client';
-import { useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { DEFAULT_BUDGETS, NodeBudget, RateBudget, type Budgets, type Overrun } from './budget.js';
 import { APP_HEADER, actionsOf, type WorkerApp } from './apps3.js';
 
@@ -46,6 +47,8 @@ export interface PaneState {
   handled: ReadonlySet<string>;
   /** What sits under each place that fills (spec 6.3), as the app last said. */
   under: ReadonlyMap<string, PlaceItem[]>;
+  /** The roots the app has drawn into, so an About section it hasn't filled says so. */
+  drawn: ReadonlySet<string>;
 }
 
 export interface WorkerHostOptions {
@@ -108,7 +111,7 @@ function frameFrom(was: FrameState, v: unknown): FrameState {
  */
 export class AppSession {
   readonly screen: QuillReceiver = createQuillReceiver();
-  #state: PaneState = { phase: 'opening', frame: {}, handled: new Set(), under: new Map() };
+  #state: PaneState = { phase: 'opening', frame: {}, handled: new Set(), under: new Map(), drawn: new Set() };
   readonly #listeners = new Set<() => void>();
   readonly #budgets: Budgets;
   #worker: Worker | undefined;
@@ -269,6 +272,7 @@ export class AppSession {
     // About sections and the card are kept as the app draws them, for when the shell shows them.
     if (!receiver) this.#receivers.set(root, (receiver = createQuillReceiver()));
     receiver.connection.mutate(records);
+    if (!this.#state.drawn.has(root)) this.#set({ drawn: new Set([...this.#state.drawn, root]) });
     if (root === this.primary && (this.#state.phase === 'opening' || this.#state.phase === 'slow')) {
       for (const t of this.#timers) clearTimeout(t);
       this.#timers = [];
@@ -398,11 +402,57 @@ const overrunReason = (name: string, over: Overrun) => {
   }
 };
 
-/** The pane: the heading the shell draws from what the app set, and the app's screen or why it isn't there. */
+/** The keys that open the command palette: the kit's, and one Firefox leaves free (it keeps Ctrl+Shift+P for a private window). */
+const PALETTE_KEYS = [COMMAND_KEY, 'Alt+Shift+P'];
+
+/**
+ * The frame round the pane (spec 6.4, 6.8): the command palette over the app's commands, the radial
+ * menu on the things it marks, and the About panel with the sections it declares. The shell draws them
+ * all from the manifest; the app only fills them and handles the commands.
+ */
 export function AppPane({ session, onRetry }: { session: AppSession; onRetry: () => void }) {
   const state = useSyncExternalStore(session.subscribe, () => session.state);
   const { app } = session;
+  const contributes = app.manifest.contributes;
   const stopped = state.phase === 'failed' || state.phase === 'unresponsive';
+  const [palette, setPalette] = useState(false);
+  const [about, setAbout] = useState(false);
+  const source = useMemo<CommandSource>(
+    () => ({ app: { id: app.id, name: app.name }, commands: contributes?.commands ?? [], radial: contributes?.radial, handled: stopped ? [] : state.handled, onScreen: true }),
+    [app, contributes, stopped, state.handled],
+  );
+  useEffect(() => {
+    if (!contributes?.commands?.length) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!PALETTE_KEYS.some((k) => isCommandKey(e, k))) return;
+      e.preventDefault();
+      setPalette(true);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [contributes]);
+  const sections = contributes?.about ?? [];
+  const content = Object.fromEntries(
+    sections.flatMap((s) => {
+      const receiver = state.drawn.has(aboutRoot(s.id)) ? session.receiverOf(aboutRoot(s.id)) : undefined;
+      return receiver ? [[s.id, <QuillRemote receiver={receiver} />]] : [];
+    }),
+  );
+  return (
+    <div className="app-frame" data-app={app.id}>
+      <Pane session={session} state={state} stopped={stopped} onRetry={onRetry} source={source} />
+      <AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />
+      <CommandPalette open={palette} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />
+    </div>
+  );
+}
+
+/** A radial command's detail: the thing it was opened on, as the app marked it. */
+const thingDetail = (thing: FrameThing) => ({ thing: { kind: thing.kind, ...(thing.id ? { id: thing.id } : {}), label: thing.label } });
+
+/** The pane: the heading the shell draws from what the app set, and the app's screen or why it isn't there. */
+function Pane({ session, state, stopped, onRetry, source }: { session: AppSession; state: PaneState; stopped: boolean; onRetry: () => void; source: CommandSource }) {
+  const { app } = session;
   const actions = stopped ? [] : actionsOf(app, state.frame.actions, state.handled);
   return (
     <section className="app-pane" data-app={app.id} data-width={state.frame.width ?? 'read'} data-phase={state.phase} aria-busy={state.frame.busy || state.phase === 'opening' || state.phase === 'slow'}>
@@ -415,7 +465,9 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
             <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while to open` : `Opening ${app.name}`} body={state.phase === 'slow' ? 'It’s still starting. The rest of the shell works meanwhile.' : undefined} />
           )}
           <div className="app-pane-screen" hidden={state.phase !== 'open'}>
-            <QuillRemote receiver={session.screen} />
+            <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
+              <QuillRemote receiver={session.screen} />
+            </FrameRadial>
           </div>
         </>
       )}
