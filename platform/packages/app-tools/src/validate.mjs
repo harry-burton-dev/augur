@@ -74,9 +74,17 @@ export const partProblems = (workload) => {
 export const validateApp = ({ manifest, parts }) => {
   const v = contractValidators();
   const problems = [];
-  for (const p of v.manifest(manifest)) problems.push(`manifest.json: ${p}`);
-  for (const [file, workload] of Object.entries(parts)) for (const p of partProblems(workload)) problems.push(`${file}: ${p}`);
-  if (manifest?.contract !== undefined && manifest.contract !== CONTRACT_MAJOR) problems.push(`manifest.json: contract ${manifest.contract} is not the contract this AUGUR builds for (${CONTRACT_MAJOR}).`);
+  for (const p of v.manifest(manifest)) {
+    // The schema says `/contract must be equal to constant`; say which constant, in words.
+    problems.push(p.startsWith('/contract ') ? `manifest.json: contract ${JSON.stringify(manifest?.contract)} is not the contract these tools build for (${CONTRACT_MAJOR}).` : `manifest.json: ${p}`);
+  }
+  for (const [file, workload] of Object.entries(parts)) {
+    for (const p of partProblems(workload)) problems.push(`${file}: ${p}`);
+    // A part's file is named after the part (spec 3.2): score/<part>.score.yaml.
+    const name = workload?.metadata?.name;
+    const stem = file.replace(/^.*\//, '').replace(/\.score\.ya?ml$/, '');
+    if (name && stem !== name) problems.push(`${file}: the file is named ${stem} but the part is ${name}; name the file score/${name}.score.yaml.`);
+  }
   return { ok: problems.length === 0, problems };
 };
 

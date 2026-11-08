@@ -46,6 +46,14 @@ export const CALLER_HEADERS = {
   signedInAt: 'x-user-signed-in-at',
 } as const;
 
+/**
+ * The header the shell's host sets on a call it makes for an app (contract 3, spec 8.5): the app's id,
+ * set by the host and never by the sandbox. The gateway reads it, checks the app is on for the person on
+ * that floor, and signs a delegated caller; it strips it, like every incoming `x-augur-*` header, before
+ * forwarding.
+ */
+export const APP_HEADER = 'x-augur-app';
+
 /** The app acting for the person, and what it may do, when a call is made for an app (contract 3). */
 export const DELEGATION_HEADERS = {
   app: 'x-augur-acting-app',
@@ -59,7 +67,7 @@ export const WORKSPACE_HEADERS = {
   role: 'x-workspace-role',
 } as const;
 
-const HEADER_NAMES: readonly string[] = [...Object.values(CALLER_HEADERS), ...Object.values(WORKSPACE_HEADERS), ...Object.values(DELEGATION_HEADERS)];
+const HEADER_NAMES: readonly string[] = [...Object.values(CALLER_HEADERS), ...Object.values(WORKSPACE_HEADERS), ...Object.values(DELEGATION_HEADERS), APP_HEADER, 'x-augur-delegation'];
 const KINDS: readonly string[] = ['personal', 'team', 'org'];
 
 type Headers = Record<string, string | string[] | undefined>;
@@ -101,7 +109,11 @@ export const callerHeaders = (caller: Caller): Record<string, string> => ({
     : {}),
 });
 
-/** Removes any caller and floor headers, so a client cannot claim to be someone or to be on a floor. The gateway calls this on every request. */
+/**
+ * Removes any caller, floor and delegation headers, so a client cannot claim to be someone, to be on a
+ * floor or to act for an app. The gateway calls this on every request, after reading `x-augur-app` and
+ * `x-augur-delegation` itself.
+ */
 export const withoutCallerHeaders = <H extends Headers>(headers: H): H =>
   Object.fromEntries(Object.entries(headers).filter(([k]) => !HEADER_NAMES.includes(k.toLowerCase()))) as H;
 

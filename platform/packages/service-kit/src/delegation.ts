@@ -13,7 +13,7 @@ import { CALLER_ISSUER, callerFromClaims, CallerKeysUnavailable, CallerTokenErro
  * token for the person ever reaches a part.
  */
 
-/** The header a part sends the gateway with the delegated caller it received, beside its own bearer token. */
+/** The header a part sends the gateway with the delegated caller it received, beside its own bearer token (`withoutCallerHeaders` strips it too). */
 export const DELEGATION_HEADER = 'x-augur-delegation';
 /** How long a delegated caller lasts unless the deployment says (`APP_DELEGATION_SECONDS`). */
 export const DEFAULT_DELEGATION_SECONDS = 300;

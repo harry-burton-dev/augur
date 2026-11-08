@@ -16,6 +16,9 @@ export function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id'> & {
     id?: string;
 }): Promise<void>;
 
+// @public
+export const APP_HEADER = "x-augur-app";
+
 // @public (undocumented)
 export type AppAudit = (entry: AppAuditEntry) => Promise<void>;
 
@@ -417,10 +420,19 @@ export const createJobs: (options: JobsOptions) => Jobs;
 export const DEFAULT_CACHE_ENTRIES = 5000;
 
 // @public
+export const DEFAULT_DELEGATION_SECONDS = 300;
+
+// @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
 
 // @public
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 60000;
+
+// @public
+export const delegatedCaller: (caller: Caller, input: Pick<DelegationOptions, "app" | "scopes">) => Caller;
+
+// @public
+export const DELEGATION_HEADER = "x-augur-delegation";
 
 // @public
 export const DELEGATION_HEADERS: {
@@ -429,7 +441,37 @@ export const DELEGATION_HEADERS: {
 };
 
 // @public
+export const DELEGATION_SECONDS_SETTING = "APP_DELEGATION_SECONDS";
+
+// @public
 export const delegationAllows: (caller: Pick<Caller, "app" | "scopes"> | undefined, scope: string) => boolean;
+
+// @public (undocumented)
+export type DelegationCheck = ReturnType<typeof delegationCheck>;
+
+// @public
+export const delegationCheck: (input: DelegationCheckOptions) => (token: string, app: string) => Promise<Caller>;
+
+// @public (undocumented)
+export interface DelegationCheckOptions {
+    // (undocumented)
+    keys: JWTVerifyGetKey;
+}
+
+// @public
+export class DelegationError extends CallerTokenError {
+}
+
+// @public (undocumented)
+export interface DelegationOptions {
+    app: string;
+    // (undocumented)
+    lifetimeSeconds?: number;
+    scopes: readonly string[];
+}
+
+// @public (undocumented)
+export const delegationSecondsFromEnv: (env?: NodeJS.ProcessEnv) => number;
 
 // @public
 export const describeConfig: (settings: Setting[], env?: NodeJS.ProcessEnv) => SettingState[];
@@ -1542,6 +1584,9 @@ export interface SettingState {
     // (undocumented)
     value?: string;
 }
+
+// @public
+export const signDelegation: (signer: CallerSigner, caller: Caller, input: DelegationOptions) => Promise<string>;
 
 // @public
 export const signedCallerHeaders: (signer: CallerSigner, caller: Caller, audience: string) => Promise<Record<string, string>>;

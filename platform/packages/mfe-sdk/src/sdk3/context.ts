@@ -17,7 +17,7 @@ export interface Person {
 }
 
 /** The floor the app runs on. Changing floor restarts the worker, so an app never shows one floor's data on another (spec 6.14). */
-export interface Floor {
+export interface Workspace {
   id: string;
   kind: WorkspaceKind;
   /** What people see: "You" for their own floor, a team's name, the org's name. */
@@ -124,7 +124,7 @@ export interface Notice {
  */
 export interface AppContext {
   person: Person;
-  workspace: Floor;
+  workspace: Workspace;
   /** The path below `/<id>` the app was opened at; the host owns the URL (spec 6.12). */
   path: string;
   /** Called on every move the host makes inside the app, with the new path below `/<id>`. */

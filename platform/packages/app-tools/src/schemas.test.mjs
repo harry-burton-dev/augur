@@ -71,10 +71,13 @@ test('the release pins each part’s image by digest from what the workflow push
 test('a release is refused when its manifest, a part or the bundle is wrong', () => {
   assert.throws(() => appRelease2({ manifest: { ...manifest, contract: 2 }, parts, bundle: { frontend: { artifact: `x@${digest}`, digest } }, signer }), /manifest.json: \/contract/);
   assert.throws(() => appRelease2({ manifest, parts, signer }), /has a frontend but the bundle has none/);
+  assert.throws(() => pinImages(parts, { nothing: `x@${digest}` }), /names a part nothing that the release has no workload for/);
+  assert.throws(() => pinImages([{ metadata: { name: 'bare' }, containers: { bare: { image: `x@${digest}` } } }]), /no container with resource limits/);
   const noUi = { ...manifest, frontend: undefined, api: undefined, contributes: { settings: manifest.contributes.settings } };
   delete noUi.frontend;
   delete noUi.api;
   assert.equal(appRelease2({ manifest: noUi, parts, signer }).frontend, null);
+  assert.throws(() => appRelease2({ manifest: noUi, parts, bundle: { frontend: { artifact: `x@${digest}`, digest } }, signer }), /no frontend in its manifest/);
   assert.throws(() => appRelease2({ manifest: noUi, parts: [], signer }), /neither a frontend nor a part/);
 });
 
@@ -85,4 +88,13 @@ test('asks default the floors and the upload cap when the manifest leaves them o
   const asks = asksOf2(bare, parts);
   assert.deepEqual(asks.floors, ['personal', 'team', 'org']);
   assert.equal(asks.maxUpload, 10);
+});
+
+test('validateApp says the contract in words and wants a part’s file named after it', () => {
+  const web = parts[partFiles.indexOf('web.score.yaml')];
+  const wrong = validateApp({ manifest: { ...manifest, contract: 2 }, parts: { 'score/frontdoor.score.yaml': web } });
+  assert.equal(wrong.ok, false);
+  assert.ok(wrong.problems.some((p) => p.includes('contract 2 is not the contract these tools build for (3)')), wrong.problems.join('\n'));
+  assert.ok(!wrong.problems.some((p) => p.includes('must be equal to constant')), 'the schema’s own wording is replaced');
+  assert.ok(wrong.problems.some((p) => p.includes(`name the file score/${web.metadata.name}.score.yaml`)), wrong.problems.join('\n'));
 });

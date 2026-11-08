@@ -51,9 +51,23 @@ describe('a delegated caller (contract 3, spec 8.5)', () => {
     // A plain signed caller for the part, with no app, is not a delegation.
     const plain = await gateway.sign(sam, 'app-notes');
     await expect(check(plain, 'notes')).rejects.toThrow(/for no app, not notes/);
+    // A delegation for notes signed for board's audience: the claim, not only the audience, must name the app.
+    const crossed = await gateway.sign(delegatedCaller(sam, { app: 'notes', scopes: [] }), 'app-board');
+    await expect(check(crossed, 'board')).rejects.toThrow(/for notes, not board/);
     // One from another gateway is forged.
     const forged = await signDelegation(callerSigner(), sam, { app: 'notes', scopes: [] });
     await expect(check(forged, 'notes')).rejects.toBeInstanceOf(DelegationError);
+  });
+
+  it('cannot be claimed with headers: a plain caller plus forged acting-app headers arrives with no app', async () => {
+    const gateway = callerSigner();
+    const part = Fastify();
+    part.addHook('onRequest', signedCallers(callerCheckFor(gateway, 'app-notes')));
+    part.get('/who', async (req) => callerFromHeaders(req.headers));
+    const forged = { [CALLER_TOKEN_HEADER]: await gateway.sign(sam, 'app-notes'), [DELEGATION_HEADERS.app]: 'notes', [DELEGATION_HEADERS.scopes]: 'people:read' };
+    const res = await part.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: forged });
+    expect(res.json()).toEqual(sam);
+    expect(res.json().app).toBeUndefined();
   });
 
   it('has expired after its lifetime', async () => {

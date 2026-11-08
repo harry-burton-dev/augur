@@ -16,8 +16,12 @@ const DEFAULT_UPLOAD_MB = 10;
 
 const DIGEST = /@sha256:[0-9a-f]{64}$/;
 
-/** The one container of a part (AUGUR's part schema allows exactly one). */
-const containerOf = (workload) => Object.values(workload.containers ?? {})[0];
+/** The one container of a part (AUGUR's part schema allows exactly one). Throws on a part that hasn't passed the schema. */
+const containerOf = (workload) => {
+  const container = Object.values(workload?.containers ?? {})[0];
+  if (!container?.resources?.limits) throw new Error(`Part ${workload?.metadata?.name ?? '?'} has no container with resource limits: check it with augur-app validate first.`);
+  return container;
+};
 
 /**
  * What a version asks an admin for, from its manifest and parts: scopes, the resources each part asks
@@ -39,13 +43,17 @@ export const asksOf2 = (manifest, parts) => ({
  * the release workflow, having pushed it, hands the digest reference here, by part name. A part whose
  * image isn't in `images` keeps its own reference, which must already be a digest.
  */
-export const pinImages = (parts, images = {}) =>
-  parts.map((p) => {
+export const pinImages = (parts, images = {}) => {
+  const names = new Set(parts.map((p) => p.metadata?.name));
+  for (const key of Object.keys(images)) if (!names.has(key)) throw new Error(`images names a part ${key} that the release has no workload for (${[...names].join(', ') || 'none'}).`);
+  return parts.map((p) => {
+    containerOf(p);
     const [name, container] = Object.entries(p.containers)[0];
     const image = images[p.metadata.name] ?? container.image;
     if (!DIGEST.test(image)) throw new Error(`Part ${p.metadata.name}'s image must be named by digest, not ${image}.`);
     return { ...p, containers: { [name]: { ...container, image } } };
   });
+};
 
 /**
  * The file a deployment installs from, v2. `bundle` is what the release workflow pushed: `frontend`
@@ -58,6 +66,7 @@ export const appRelease2 = ({ manifest, parts, bundle = {}, signer, notes = '', 
   for (const p of parts) for (const q of partProblems(p)) problems.push(`part ${p.metadata?.name ?? '?'}: ${q}`);
   if (problems.length) throw new Error(`The release can't be written:\n${problems.join('\n')}`);
   if (manifest.frontend && !bundle.frontend) throw new Error(`${manifest.id} has a frontend but the bundle has none.`);
+  if (!manifest.frontend && bundle.frontend) throw new Error(`${manifest.id} has no frontend in its manifest, so the bundle's frontend would never be served (spec 3.5).`);
   if (bundle.frontend && !DIGEST.test(bundle.frontend.artifact)) throw new Error(`The frontend must be named by digest, not ${bundle.frontend.artifact}.`);
   if (!manifest.frontend && parts.length === 0) throw new Error(`${manifest.id} has neither a frontend nor a part to release.`);
   const pinned = pinImages(parts, bundle.images);

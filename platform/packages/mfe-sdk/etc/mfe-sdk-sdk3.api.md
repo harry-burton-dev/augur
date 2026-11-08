@@ -28,7 +28,7 @@ export interface AppContext {
     };
     request<T = unknown>(intent: Intent): Promise<T>;
     // (undocumented)
-    workspace: Floor;
+    workspace: Workspace;
 }
 
 // @public
@@ -51,15 +51,6 @@ export interface Files {
     }): Promise<Blob | undefined>;
     onDrop(handler: (files: File[]) => void | Promise<void>): () => void;
     upload(blob: Blob, path: string): Promise<Response>;
-}
-
-// @public
-export interface Floor {
-    // (undocumented)
-    id: string;
-    // (undocumented)
-    kind: WorkspaceKind;
-    name: string;
 }
 
 // @public
@@ -151,6 +142,15 @@ export type RemoteNode = RemoteElement | string | null | undefined | RemoteNode[
 
 // @public
 export type Start = (ctx: AppContext) => void | (() => void) | Promise<void | (() => void)>;
+
+// @public
+export interface Workspace {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    kind: WorkspaceKind;
+    name: string;
+}
 
 // @public (undocumented)
 export type WorkspaceKind = 'personal' | 'team' | 'org';
