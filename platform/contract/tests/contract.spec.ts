@@ -209,6 +209,10 @@ test('an app that draws 2,001 nodes in one flush is stopped as unresponsive, and
 test('Home lists what the app said needs you, and opening it opens the app', async ({ page }) => {
   await page.goto(`/${id}/somewhere`);
   await press(page, 'Notify');
+  // The notice crosses from the worker first: leaving the app at once would stop it before it is sent.
+  await expect
+    .poll(() => page.evaluate(() => (document.querySelector('[data-shell]') as unknown as { shell: { notifications: { title: string }[] } }).shell.notifications.length))
+    .toBeGreaterThan(0);
   await goTo(page, '/@me/home');
   const row = page.locator('[data-app="home"] .quill-list-row', { hasText: 'Reference notification' });
   await expect(row).toBeVisible();
