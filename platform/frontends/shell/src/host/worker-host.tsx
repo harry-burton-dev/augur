@@ -12,7 +12,7 @@ import type { FrameState, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sd
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireRequest } from '@augur/mfe-sdk/sdk3/host';
 import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
 import { createRoot, type Root } from 'react-dom/client';
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { DEFAULT_BUDGETS, NodeBudget, RateBudget, type Budgets, type Overrun } from './budget.js';
 import { APP_HEADER, actionsOf, type WorkerApp } from './apps3.js';
 
@@ -402,8 +402,12 @@ const overrunReason = (name: string, over: Overrun) => {
   }
 };
 
-/** The keys that open the command palette: the kit's, and one Firefox leaves free (it keeps Ctrl+Shift+P for a private window). */
-const PALETTE_KEYS = [COMMAND_KEY, 'Alt+Shift+P'];
+/**
+ * The keys that open the command palette: the kit's (Ctrl or ⌘ with Shift and P), and Alt or Option with
+ * Shift and P, which Firefox leaves free (it keeps the kit's for a private window). The second is matched
+ * by the key's place, since Option changes the letter a Mac types.
+ */
+const isPaletteKey = (e: KeyboardEvent) => isCommandKey(e, COMMAND_KEY) || (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyP');
 
 /**
  * The frame round the pane (spec 6.4, 6.8): the command palette over the app's commands, the radial
@@ -421,16 +425,21 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
     () => ({ app: { id: app.id, name: app.name }, commands: contributes?.commands ?? [], radial: contributes?.radial, handled: stopped ? [] : state.handled, onScreen: true }),
     [app, contributes, stopped, state.handled],
   );
+  const frame = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!contributes?.commands?.length) return;
+    // A stopped app's pane says why and offers Try again; it has no commands to offer.
+    if (!contributes?.commands?.length || stopped) return;
     const onKey = (e: KeyboardEvent) => {
-      if (!PALETTE_KEYS.some((k) => isCommandKey(e, k))) return;
+      if (e.defaultPrevented || !isPaletteKey(e)) return;
+      // Only the pane in front takes the key: not one behind the shell's menu or under an app answering in a dialog.
+      const el = frame.current;
+      if (!el?.isConnected || el.closest('[inert], [aria-hidden="true"]')) return;
       e.preventDefault();
       setPalette(true);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [contributes]);
+  }, [contributes, stopped]);
   const sections = contributes?.about ?? [];
   const content = Object.fromEntries(
     sections.flatMap((s) => {
@@ -439,10 +448,10 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
     }),
   );
   return (
-    <div className="app-frame" data-app={app.id}>
+    <div className="app-frame" data-app={app.id} ref={frame}>
       <Pane session={session} state={state} stopped={stopped} onRetry={onRetry} source={source} />
       <AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />
-      <CommandPalette open={palette} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />
+      <CommandPalette open={palette && !stopped} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />
     </div>
   );
 }

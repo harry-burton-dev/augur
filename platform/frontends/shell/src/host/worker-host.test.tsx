@@ -409,6 +409,32 @@ describe('the frame round an app’s pane', () => {
     expect(option('New note')).toBeUndefined();
   });
 
+  it('takes the palette key only in the pane in front, and the second key by its place, as a Mac’s Option changes the letter', async () => {
+    run();
+    await flush();
+    stage.setAttribute('aria-hidden', 'true');
+    press({ key: 'P', ctrlKey: true, shiftKey: true });
+    await flush();
+    expect(option('New note')).toBeUndefined();
+    stage.removeAttribute('aria-hidden');
+    press({ key: '∏', code: 'KeyP', altKey: true, shiftKey: true });
+    await flush();
+    expect(option('New note')).toBeDefined();
+  });
+
+  it('offers no palette for an app that stopped: its pane says why and offers Try again', async () => {
+    const stub = stubApp((_, method) => {
+      if (method === 'start') throw new Error('Broken.');
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(framed, ctxFor()));
+    await flush();
+    expect(stage.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('failed');
+    press({ key: 'P', ctrlKey: true, shiftKey: true });
+    await flush();
+    expect(option('New note')).toBeUndefined();
+  });
+
   it('opens the radial menu on a thing the app marked, and sends the command with the thing', async () => {
     const ran: [string, unknown][] = [];
     const self = run((id, detail) => ran.push([id, detail]));
