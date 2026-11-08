@@ -49,6 +49,17 @@ describe.runIf(DATABASE_URL)('people for apps', () => {
     expect((await principals(alex.id)).statusCode).toBe(403);
   });
 
+  it('lets an app acting for a person look people up, within the scopes the delegation carries (contract 3)', async () => {
+    const { app, alex } = await setUp();
+    const forAlex = (appId: string, scopes: string[]) => callerHeaders({ id: alex.id, name: 'Alex Rivera', departments: [], roles: [], app: appId, scopes });
+    const find = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/directory?q=riv', headers });
+    expect((await find(forAlex('folio', ['people:read']))).statusCode).toBe(200);
+    const narrow = await find(forAlex('folio', []));
+    expect([narrow.statusCode, narrow.json().message]).toEqual([403, 'folio isn’t allowed to look people up (people:read) when acting for Alex Rivera.']);
+    // Still only an app the registry grants people:read.
+    expect((await find(forAlex('other', ['people:read']))).statusCode).toBe(403);
+  });
+
   it('finds people and teams by name, and names them by id', async () => {
     const { app, alex, sam, finance, payroll } = await setUp();
     const find = (query: string) => app.inject({ method: 'GET', url: `/v1/directory?${query}`, headers: { authorization: 'Bearer folio' } });

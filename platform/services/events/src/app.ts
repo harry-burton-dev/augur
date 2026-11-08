@@ -7,7 +7,8 @@ import {
   FloorsUnavailable,
   GrantsUnavailable,
   health,
-  identifyService,
+  delegationRefusal,
+  identifyServiceCaller,
   packageVersion,
   PeopleUnavailable,
   ServiceAuthUnavailable,
@@ -24,7 +25,7 @@ import {
   type PrincipalLookup,
   type NewAuditEntry,
   type Scope,
-  type ServiceIdentity,
+  type ServiceCaller,
   type ServiceVerifier,
   signedCallers,
   type CallerCheck,
@@ -206,24 +207,31 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
 
       /**
        * The service sending this, when it may: a platform service always; an
-       * app only for itself, and only with the scope on the floor it names.
+       * app only for itself, and only with the scope on the floor it names. An
+       * app acting for a person (a delegated caller, contract 3) is that app,
+       * held also to the scopes the delegation carries.
        */
-      const fromService = async (req: FastifyRequest, reply: FastifyReply, forApp: string | undefined, scope: Scope): Promise<ServiceIdentity | undefined> => {
-        let service: ServiceIdentity | undefined;
+      const fromService = async (req: FastifyRequest, reply: FastifyReply, forApp: string | undefined, scope: Scope): Promise<ServiceCaller | undefined> => {
+        let service: ServiceCaller | undefined;
         try {
-          service = await identifyService(req.headers, verifyService);
+          service = await identifyServiceCaller(req.headers, verifyService);
         } catch (err) {
           if (!(err instanceof ServiceAuthUnavailable)) throw err;
           void reply.code(503).send({ error: 'unavailable', message: err.message });
           return undefined;
         }
         if (!service) {
-          void reply.code(403).send({ error: 'forbidden', message: 'Only platform and app services can do this.' });
+          void reply.code(403).send({ error: 'forbidden', message: 'Only platform and app services, or an app acting for someone, can do this.' });
           return undefined;
         }
         if (service.kind === 'platform') return service;
         if (forApp !== undefined && service.app !== forApp) {
           void reply.code(403).send({ error: 'forbidden', message: `${service.app} can only send for itself, not for "${forApp}".` });
+          return undefined;
+        }
+        const refusal = delegationRefusal(service, scope);
+        if (refusal) {
+          void reply.code(403).send({ error: 'forbidden', message: refusal });
           return undefined;
         }
         return (await granted(req, reply, service.app, scope, workspaceOf(req))) ? service : undefined;
@@ -274,7 +282,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             response: {
               202: Type.Object({ sent: Type.Integer() }, { description: 'Sent, one notification per recipient' }),
               400: refused('Invalid notification, an unknown floor, or toTeam not on a team'),
-              403: refused('Not a signed-in service, not granted this, team notices are off, or urgent or an audience from an app'),
+              403: refused('Not a signed-in service nor an app acting for a person, not granted this, a scope the delegation doesn’t carry, team notices are off, or urgent or an audience from an app'),
               503: refused("Floors, grants or an audience can't be checked right now"),
             },
           },
@@ -505,7 +513,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             response: {
               202: Type.Object({ added: Type.Integer(), repeated: Type.Integer() }, { description: 'Kept' }),
               400: refused("A topic outside the publisher's, an unknown floor, a floor the app isn't on, or a payload over 16 KB"),
-              403: refused("Not a service, not this publisher's topics, or no events:publish scope"),
+              403: refused("Not a service nor an app acting for a person, not this publisher's topics, no events:publish scope, or a scope the delegation doesn't carry"),
               503: refused("Floors or grants can't be checked right now"),
             },
           },
@@ -564,7 +572,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             response: {
               200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor to read on from' }),
               400: refused('A topic that is not a topic, nor a family such as folio.*'),
-              403: refused('Not a service, or no events:subscribe scope'),
+              403: refused('Not a service nor an app acting for a person, no events:subscribe scope, or a scope the delegation doesn’t carry'),
               503: refused("Grants can't be checked right now"),
             },
           },
@@ -660,7 +668,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             response: {
               201: { ...ref(AuditEntry), description: 'Recorded' },
               400: refused('Invalid entry, an unknown floor, or a bad Idempotency-Key'),
-              403: refused('Not a signed-in service, or not granted this'),
+              403: refused('Not a signed-in service nor an app acting for a person, not granted this, or a scope the delegation doesn’t carry'),
               503: refused("Floors or grants can't be checked right now"),
             },
           },
