@@ -7,6 +7,7 @@ import type { Static } from 'typebox';
 import { createLocalJWKSet } from 'jose';
 import {
   APP_HEADER,
+  appCallerId,
   appClientId,
   CALLER_KEYS_PATH,
   CALLER_TOKEN_HEADER,
@@ -351,7 +352,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         }
       } else {
         // The app itself: a caller named after it, so every service it reaches sees the app and its scopes.
-        req.caller = { id: `app:${id}`, name: appName(id, grant), departments: [], roles: [], app: id, scopes: [...grant.scopes], ...(workspace ? { workspace } : {}) };
+        req.caller = { id: appCallerId(id), name: appName(id, grant), departments: [], roles: [], app: id, scopes: [...grant.scopes], ...(workspace ? { workspace } : {}) };
       }
       return;
     }

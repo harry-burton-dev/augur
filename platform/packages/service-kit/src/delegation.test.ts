@@ -2,7 +2,7 @@ import Fastify from 'fastify';
 import { createLocalJWKSet, decodeJwt } from 'jose';
 import { describe, expect, it } from 'vitest';
 import { callerFromHeaders, callerHeaders, delegationAllows, DELEGATION_HEADERS, isDelegated, withoutCallerHeaders, type Caller } from './caller.js';
-import { DEFAULT_DELEGATION_SECONDS, delegatedCaller, delegationCheck, DelegationError, delegationSecondsFromEnv, signDelegation } from './delegation.js';
+import { appCallerId, DEFAULT_DELEGATION_SECONDS, delegatedCaller, delegationCheck, DelegationError, delegationRefusal, delegationSecondsFromEnv, identifyServiceCaller, isAppItself, signDelegation } from './delegation.js';
 import { CALLER_TOKEN_HEADER, callerCheckFor, callerSigner, signedCallers } from './signed-caller.js';
 
 const sam: Caller = { id: 'u1', name: 'Sam Okafor', departments: ['Research'], roles: ['editor'], workspace: { id: 'w1', kind: 'team', role: 'member' } };
@@ -86,6 +86,35 @@ describe('a delegated caller (contract 3, spec 8.5)', () => {
     expect(withoutCallerHeaders({ ...headers, accept: 'application/json' })).toEqual({ accept: 'application/json' });
     expect(isDelegated(caller)).toBe(true);
     expect(isDelegated(sam)).toBe(false);
+  });
+
+  it('tells a service who is calling: a service by its token, or an app acting for a person by the delegated caller alone', async () => {
+    const verify = async (headers: Record<string, string | string[] | undefined>) =>
+      headers.authorization === 'Bearer app-notes' ? { kind: 'app' as const, app: 'notes' } : headers.authorization === 'Bearer platform-events' ? { kind: 'platform' as const, name: 'events' } : undefined;
+    const acting = delegatedCaller(sam, { app: 'notes', scopes: ['people:read'] });
+    const headers = callerHeaders(acting);
+    // A person alone is no service; an app acting for them is that app, with the person beside it.
+    expect(await identifyServiceCaller(callerHeaders(sam), verify)).toBeUndefined();
+    expect(await identifyServiceCaller(headers, verify)).toEqual({ kind: 'app', app: 'notes', person: acting });
+    // A part's onward call: its own token and the person it acts for.
+    expect(await identifyServiceCaller({ ...headers, authorization: 'Bearer app-notes' }, verify)).toEqual({ kind: 'app', app: 'notes', person: acting });
+    // A token names the service whatever else the call carries.
+    expect(await identifyServiceCaller({ ...headers, authorization: 'Bearer platform-events' }, verify)).toEqual({ kind: 'platform', name: 'events' });
+    const who = (await identifyServiceCaller(headers, verify))!;
+    expect(delegationRefusal(who, 'people:read')).toBeUndefined();
+    expect(delegationRefusal(who, 'audit:write')).toBe('notes isn’t allowed to write to the audit log (audit:write) when acting for Sam Okafor.');
+    expect(delegationRefusal({ kind: 'app', app: 'notes' }, 'audit:write')).toBeUndefined();
+    // An app's token beside a delegation made for another app: the person is kept, so the mismatch is refused in words, never widened to the app's own call.
+    const verifyOther = async () => ({ kind: 'app' as const, app: 'other' });
+    const crossed = (await identifyServiceCaller({ ...headers, authorization: 'Bearer app-other' }, verifyOther))!;
+    expect(crossed).toEqual({ kind: 'app', app: 'other', person: acting });
+    expect(delegationRefusal(crossed, 'people:read')).toBe('other can’t act on a delegation made for notes.');
+    // The caller the gateway signs for an app's own call is the app itself, not someone it acts for.
+    const itself: Caller = { id: appCallerId('notes'), name: 'Notes', departments: [], roles: [], app: 'notes', scopes: ['people:read'] };
+    expect(isAppItself(itself)).toBe(true);
+    expect(isAppItself(acting)).toBe(false);
+    expect(await identifyServiceCaller({ ...callerHeaders(itself), authorization: 'Bearer app-notes' }, verify)).toEqual({ kind: 'app', app: 'notes' });
+    expect(await identifyServiceCaller(callerHeaders(itself), verify)).toEqual({ kind: 'app', app: 'notes' });
   });
 
   it('bounds what a delegated call may do; a person’s own call is bounded by the service as before', () => {
