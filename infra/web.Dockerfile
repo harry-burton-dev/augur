@@ -1,9 +1,7 @@
 # syntax=docker/dockerfile:1
-# The web front door: the shell and the apps' frontends (the platform's own, and the apps that ship
-# with AUGUR) as static files, with /api sent to the gateway and /sso to Keycloak, so everything is one origin.
+# The web front door: the shell and the platform's own apps' frontends as static files, with /api sent to the gateway and /sso to Keycloak, so everything is one origin.
 #   NODE_AUTH_TOKEN=<read:packages token> docker build --secret id=node_auth_token,env=NODE_AUTH_TOKEN -f infra/web.Dockerfile .
-# The shipped apps' frontends come from their releases (ADR 0049): infra/release-images.sh puts each in
-# .shipped/frontends/<id> first. Without that folder the image has the platform's own frontends only.
+# Apps the runner installs are served from Garage's frontends bucket, not from this image (ADR 0075).
 # Everything up to the build stage's `COPY . .` is the same in infra/service.Dockerfile, so the services'
 # images reuse this install (see there). Keep it identical.
 FROM node:22-alpine AS manifests
@@ -11,7 +9,7 @@ WORKDIR /repo
 COPY . .
 # Only what pnpm install reads: every package.json, the lockfile, the workspace and .npmrc. The install
 # below starts from these alone, so it is cached until the dependencies change, not on every change.
-RUN rm -rf .shipped && find . -type f ! -name package.json ! -name pnpm-lock.yaml ! -name pnpm-workspace.yaml ! -name .npmrc -delete \
+RUN find . -type f ! -name package.json ! -name pnpm-lock.yaml ! -name pnpm-workspace.yaml ! -name .npmrc -delete \
  && find . -mindepth 1 -type d -empty -delete
 FROM node:22-alpine AS deps
 RUN corepack enable
@@ -29,7 +27,6 @@ RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/a
  && cp -r platform/frontends/home/dist /site/apps/home \
  && cp -r platform/frontends/admin/dist /site/apps/admin \
  && cp -r platform/frontends/upgrades/dist /site/apps/upgrades \
- && if [ -d .shipped/frontends ]; then cp -r .shipped/frontends/. /site/apps/; fi \
  && mkdir -p /site/legal && cp LICENSE /site/legal/licence.txt && cp THIRD_PARTY_NOTICES.md /site/legal/third-party.txt \
  && mv /site/index.template.html /index.template.html \
  && node scripts/kit.mjs check

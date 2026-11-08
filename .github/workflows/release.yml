@@ -87,16 +87,12 @@ jobs:
       - name: Build, push and sign the images
         if: steps.augur.outputs.new == 'true'
         run: infra/release-images.sh "${{ steps.augur.outputs.version }}" "${{ steps.augur.outputs.channel }}" > "$RUNNER_TEMP/images.json"
-        env:
-          # The shipped apps' releases, source and images, in their own repositories (ADR 0049).
-          APP_RELEASES_TOKEN: ${{ secrets.APP_RELEASES_TOKEN }}
-          PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       - name: AUGUR release
         if: steps.augur.outputs.new == 'true'
         run: node scripts/augur-release.mjs publish "$RUNNER_TEMP/images.json"
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
-      # Apps in apps/ that don't ship with AUGUR are released on their own, whenever their version
+      # Apps in apps/ are released on their own, whenever their version
       # moves: each gets a signed bundle (service image and frontend) and the GitHub release
       # app/<id>@<version> with app-release.json attached, which deployments' app runners install from.
       - name: Are there app releases to make?

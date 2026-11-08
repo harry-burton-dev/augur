@@ -124,13 +124,8 @@ export const CatalogueEntry = Type.Intersect(
           { description: "The app's own claim to a kind when it isn't used, and why" },
         ),
       ),
-      ships: Type.Optional(Type.Boolean({ description: 'Ships with AUGUR: its version comes with the release, and it is turned off rather than removed' })),
-      pillar: Type.Optional(
-        Type.Boolean({
-          description:
-            'The old name for `ships`, kept for /v1 readers. Ships with AUGUR (PILLAR_APPS) but is an ordinary app: it registers itself, is given the scopes its release asks for, changes version with the release, and can be turned off but not removed.',
-        }),
-      ),
+      ships: Type.Optional(Type.Boolean({ description: 'Never set: no app ships with AUGUR (ADR 0075). Kept for /v1 readers.', deprecated: true })),
+      pillar: Type.Optional(Type.Boolean({ description: 'Never set: the old name for `ships`, kept for /v1 readers.', deprecated: true })),
       enabled: Type.Boolean(),
       registeredBy: Type.Optional(Type.String({ description: 'The service or admin that last registered it' })),
       registeredAt: Type.Optional(Type.String({ format: 'date-time' })),

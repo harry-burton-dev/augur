@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appRelease, appTag, APP_RELEASE_SCHEMA, asksOf, changedApps, channelOf, devAppOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion, readApps } from './app-release.mjs';
+import { appRelease, appTag, APP_RELEASE_SCHEMA, asksOf, changedApps, channelOf, devAppOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion } from './app-release.mjs';
 
 const digest = (c) => `sha256:${c.repeat(64)}`;
 const manifest = { id: 'notes', name: 'Notes', version: '1.2.0', sdk: '^1.3.0', route: '/notes', entry: '/apps/notes/entry.js', scopes: ['people:read'] };
@@ -80,6 +80,3 @@ test('asks default to what any app gets', () => {
   assert.deepEqual(asksOf({}), { scopes: [], storage: {}, floors: ['personal', 'team', 'org'], maxUpload: 10, settings: [] });
 });
 
-test('pillar apps go out with AUGUR, not on their own', () => {
-  assert.ok(!readApps().some((a) => a.id === 'folio'));
-});

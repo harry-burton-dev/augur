@@ -30,7 +30,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { changelogFor, PILLAR_APPS } from './augur-release.mjs';
+import { changelogFor } from './augur-release.mjs';
 import { appRelease, appTag, channelOf, devVersion, oldDevBuilds, previewPrOf, previewVersion, releaseNotes, signerOf } from '../platform/packages/app-tools/src/release.mjs';
 // The shared release steps live in @augur/app-tools, so an app in its own repository releases the same way.
 export * from '../platform/packages/app-tools/src/release.mjs';
@@ -46,7 +46,7 @@ export const readApps = () => {
   const apps = [];
   for (const dir of readdirSync(join(root, 'apps'), { withFileTypes: true }).filter((d) => d.isDirectory())) {
     const path = `apps/${dir.name}`;
-    if (PILLAR_APPS.includes(dir.name) || !existsSync(join(root, path, 'manifest.json'))) continue;
+    if (!existsSync(join(root, path, 'manifest.json'))) continue;
     const pkg = (sub) => (existsSync(join(root, path, sub, 'package.json')) ? { name: readJson(`${path}/${sub}/package.json`).name, path: `${path}/${sub}` } : undefined);
     apps.push({ id: dir.name, path, manifest: readJson(`${path}/manifest.json`), service: pkg('service'), frontend: pkg('frontend') });
   }

@@ -157,11 +157,7 @@ for (const [name, r] of Object.entries(RESOURCES)) {
 }
 
 // ---- Each app lives in its own repository (ADR 0047) and keeps its own entry there, catalog-info.yaml, which
-// `augur-app catalog` writes from its manifest. The Location below points Backstage at each shipped app's.
-const shippedApps = json('release/shipped-apps.json').apps;
-const appEntries = Object.keys(shippedApps)
-  .sort()
-  .map((id) => `https://github.com/${shippedApps[id].repo}/blob/main/catalog-info.yaml`);
+// `augur-app catalog` writes from its manifest. No app ships with AUGUR (ADR 0075), so each is registered on its own.
 
 // ---- The files.
 const doc = (entities) => HEADER + entities.map((e) => stringify(e, { lineWidth: 0 })).join('---\n');
@@ -172,8 +168,8 @@ files['catalog/all.yaml'] = doc([
   {
     apiVersion: 'backstage.io/v1alpha1',
     kind: 'Location',
-    metadata: { name: 'augur', description: 'AUGUR and the apps that ship with it, each from its own repository: register this one file in Backstage' },
-    spec: { targets: [...Object.keys(files).map((p) => `./${relative('catalog', p)}`), ...appEntries] },
+    metadata: { name: 'augur', description: 'AUGUR itself: register this one file in Backstage' },
+    spec: { targets: Object.keys(files).map((p) => `./${relative('catalog', p)}`) },
   },
 ]);
 

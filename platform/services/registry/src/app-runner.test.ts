@@ -29,7 +29,7 @@ const runner = { authorization: 'Bearer platform-updater' };
 
 const setup = async () => {
   const entries: { action: string; target?: string }[] = [];
-  const server = await db.app({ verifyService, pillars: ['folio'], audit: async (e) => void entries.push(e) });
+  const server = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
   const ask = (payload: unknown, headers = fresh()) => server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers, payload: payload as object });
   return { server, entries, ask };
 };
@@ -76,9 +76,6 @@ describe.runIf(DATABASE_URL)('the app runner', () => {
     expect((await ask({ action: 'install', release: { ...release, schema: 'something/v2' } })).statusCode).toBe(400);
     expect((await ask({ action: 'install', release: { ...release, version: '1.3.0' } })).json().message).toMatch(/id and version must be its manifest’s/);
     expect((await ask({ action: 'install', release: { ...release, service: null } })).json().message).toMatch(/frontend-only/);
-    const folio = { ...release, id: 'folio', manifest: { ...manifest, id: 'folio', route: '/folio' } };
-    expect((await ask({ action: 'install', release: folio })).json().message).toMatch(/ships with AUGUR/);
-    expect((await ask({ action: 'remove', app: 'folio' })).statusCode).toBe(409);
     // An id a part of AUGUR answers to: its schema, its /api/ path and its Compose service would be the platform's.
     const events = { ...release, id: 'events', manifest: { ...manifest, id: 'events', route: '/events' } };
     expect((await ask({ action: 'install', release: events })).json().message).toBe('"events" is kept for the events service, a part of AUGUR. Choose another id for the app.');

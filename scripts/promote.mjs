@@ -66,13 +66,11 @@ export const versionsFrom = (read, appIds) => {
 /**
  * Where a unit's releases are, for a promotion: AUGUR and the apps released from this repository are
  * here; an app in its own repository (release/app-repos.json, ADR 0047) is there, and is changed with
- * APP_PROMOTE_TOKEN. A pillar app is refused: it reaches stable inside the AUGUR release that ships it
- * (ADR 0049). Returns { repo, own } or { problem }.
+ * APP_PROMOTE_TOKEN. Returns { repo, own } or { problem }.
  */
-export const promotionSource = (unit, { repo, here = [], own = {}, shipped = [] }) => {
+export const promotionSource = (unit, { repo, here = [], own = {} }) => {
   if (unit === AUGUR || here.includes(unit)) return { repo, own: false };
   if (own[unit]) return { repo: own[unit], own: true };
-  if (shipped.includes(unit)) return { problem: `${unit} ships with AUGUR (release/shipped-apps.json, ADR 0049), so it becomes stable with the AUGUR release that ships it. Promote augur instead.` };
   const all = [AUGUR, ...here, ...Object.keys(own)];
   return { problem: `"${unit}" is not a unit: ${all.join(', ')}.` };
 };
@@ -184,7 +182,7 @@ const main = async () => {
   } else if (mode === 'stable') {
     const [unit, wanted] = args;
     const json = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
-    const source = promotionSource(unit, { repo: REPO, here: appIds, own: json('release/app-repos.json').apps ?? {}, shipped: Object.keys(json('release/shipped-apps.json').apps ?? {}) });
+    const source = promotionSource(unit, { repo: REPO, here: appIds, own: json('release/app-repos.json').apps ?? {} });
     if (source.problem) throw new Error(source.problem);
     const owner = REPO.split('/')[0];
     const actor = process.env.GITHUB_ACTOR;

@@ -558,56 +558,17 @@ describe.runIf(DATABASE_URL)('registry', () => {
     });
   });
 
-  describe('apps that ship with AUGUR', () => {
-    const shipped = { ...library, scopes: ['notifications:send' as const] };
-    const put = (app: Awaited<ReturnType<typeof buildApp>>, payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
-
-    it('register themselves with what their release asks, with no admin step', async () => {
-      const entries: { action: string; detail?: unknown }[] = [];
-      const app = await db.app({ verifyService, pillars: ['library'], audit: async (e) => void entries.push(e) });
-      expect((await put(app, shipped)).statusCode).toBe(201);
-      // The next release asks for more: an ordinary app waits for an admin, one that ships with AUGUR doesn't.
-      await put(app, { ...shipped, version: '0.2.0', scopes: ['notifications:send', 'people:read'] });
-      const entry = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json().find((a: { id: string }) => a.id === 'library');
-      expect(entry).toMatchObject({ id: 'library', pillar: true, grantedScopes: ['notifications:send', 'people:read'] });
-      expect(entry.awaitingScopes).toBeUndefined();
-      expect(entries.find((e) => e.action === 'app.scopes-granted')?.detail).toEqual({ scopes: ['notifications:send', 'people:read'], shipsWithAugur: true });
-
-      await db.reset();
-      const ordinary = await db.app({ verifyService });
-      await put(ordinary, shipped);
-      await put(ordinary, { ...shipped, version: '0.2.0', scopes: ['notifications:send', 'people:read'] });
-      const waiting = (await ordinary.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json().find((a: { id: string }) => a.id === 'library');
-      expect(waiting.pillar).toBeUndefined();
-      expect(waiting.awaitingScopes).toEqual(['people:read']);
-    });
-
-    it('can be turned off, org-wide or on a floor, but never removed or held at a version', async () => {
-      const app = await db.app({ verifyService, floors, pillars: ['library'] });
-      await put(app, shipped);
-      expect((await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } })).json().enabled).toBe(false);
-      expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/floors/f', headers: admin, payload: { state: 'off' } })).statusCode).toBe(200);
-      const removed = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
-      expect(removed.statusCode).toBe(409);
-      expect(removed.json().message).toBe('Library ships with AUGUR and can’t be removed. Turn it off instead.');
-      expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } })).statusCode).toBe(409);
-      expect(ids((await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json())).toContain('library');
-    });
-  });
-
   describe('kinds of app (ADR 0032)', () => {
     const manifestFor = (id: string, name: string, category?: string) => ({ ...library, id, name, route: `/${id}`, entry: `/apps/${id}/entry.js`, handles: [], ...(category ? { category } : {}) });
 
-    it('reports the kind in force: its own apps, shipped and feed apps’ claims, and no one else’s', async () => {
+    it('reports the kind in force: its own apps and feed apps’ claims, and no one else’s', async () => {
       const store = db.store;
       // Mandate came from the signed app feed, through the app runner.
       const release = { schema: 'augur.app-release/v1' as const, id: 'mandate', version: '0.1.0', channel: 'stable', manifest: manifestFor('mandate', 'Mandate', 'pillar') as AppEntry, service: null, frontend: null, signer: { repository: 'r', workflow: 'w' } };
       await store.requestAppJob({ id: 'j1', app: 'mandate', action: 'install', release, requestedBy: 'u-1' });
       await store.progressAppJob('j1', { step: 'switch', state: 'done' }, { state: 'done' });
-      const app = await db.app({ verifyService, floors, store, pillars: ['auspex', 'folio'] });
+      const app = await db.app({ verifyService, floors, store });
       const reg = (id: string, name: string, category?: string) => app.inject({ method: 'PUT', url: `/v1/apps/${id}`, headers: as(`app-${id}`), payload: manifestFor(id, name, category) });
-      expect((await reg('auspex', 'Explorer', 'platform')).statusCode).toBe(201);
-      expect((await reg('folio', 'Artifacts', 'pillar')).statusCode).toBe(201);
       expect((await reg('mandate', 'Mandate', 'pillar')).statusCode).toBe(201);
       expect((await reg('rogue', 'Rogue', 'platform')).statusCode).toBe(201);
       expect((await reg('odd', 'Odd', 'tool')).statusCode).toBe(400);
@@ -615,18 +576,15 @@ describe.runIf(DATABASE_URL)('registry', () => {
       type Row = { id: string; category?: string; ships?: boolean; pillar?: boolean; categoryRefused?: { asked: string } };
       const kinds = (rows: Row[]) => Object.fromEntries(rows.map((a) => [a.id, a.category]));
       const manifest: Row[] = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
-      expect(kinds(manifest)).toEqual({ home: 'platform', admin: 'platform', upgrades: 'platform', auspex: 'platform', folio: 'pillar', mandate: 'pillar', rogue: undefined });
+      expect(kinds(manifest)).toEqual({ home: 'platform', admin: 'platform', upgrades: 'platform', mandate: 'pillar', rogue: undefined });
       const mine: Row[] = (await app.inject({ method: 'GET', url: '/v1/me/apps?workspace=f', headers: on('f') })).json().apps;
-      expect(kinds(mine)).toEqual({ home: 'platform', admin: 'platform', upgrades: 'platform', auspex: 'platform', folio: 'pillar', mandate: 'pillar', rogue: undefined });
+      expect(kinds(mine)).toEqual({ home: 'platform', admin: 'platform', upgrades: 'platform', mandate: 'pillar', rogue: undefined });
       const catalogue: Row[] = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
       expect(kinds(catalogue)).toEqual(kinds(manifest));
       expect(catalogue.find((a) => a.id === 'rogue')?.categoryRefused).toMatchObject({ asked: 'platform' });
       expect(catalogue.find((a) => a.id === 'mandate')?.categoryRefused).toBeUndefined();
-      // `ships` says what the deprecated `pillar` says, exactly where it says it.
-      for (const rows of [mine, catalogue]) {
-        expect(rows.filter((a) => a.ships).map((a) => a.id)).toEqual(['auspex', 'folio']);
-        expect(rows.filter((a) => a.pillar).map((a) => a.id)).toEqual(['auspex', 'folio']);
-      }
+      // No app ships with AUGUR (ADR 0075), so neither `ships` nor its old name `pillar` is ever set.
+      for (const rows of [mine, catalogue]) expect(rows.filter((a) => a.ships || a.pillar)).toEqual([]);
     });
   });
 

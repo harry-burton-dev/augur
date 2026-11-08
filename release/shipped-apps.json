@@ -1,4 +1,0 @@
-{
-  "$comment": "The apps that ship with AUGUR (pillar apps): app id -> the repository it lives in and the release of it this AUGUR release ships (ADR 0049). The release takes that release's signed service image, which carries its frontend, and signs it again as AUGUR's; `build` names images built from the app's source at that release's tag instead (Artifacts' rendition worker). `port` is where its service answers in the Compose network (GET /healthz), and `workers` are its images that answer nothing. The updater restarts them in this order, after the platform's services and before the gateway. The compose files name each as a service, which node scripts/shipped-apps.mjs check (and pnpm check:release) holds to this file. Move a pin with: node scripts/shipped-apps.mjs pin <id> <version>",
-  "apps": {}
-}

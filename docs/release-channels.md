@@ -48,8 +48,6 @@ Units move independently: an app can become stable while AUGUR stays where it is
 
 An app listed in `release/app-repos.json` (ADR 0047) is promoted from here too: give its id as the unit. The workflow marks its release stable in the app's own repository, with `promotion.json`, and the feed that follows lists it as stable. It does this with the `APP_PROMOTE_TOKEN` secret, which only this workflow reads: a fine-grained token with Contents read and write on the app repositories, nothing else, expiring after 90 days. Without it, promoting such an app fails and says so. The feed's `APP_RELEASES_TOKEN` stays read-only.
 
-An app in `release/shipped-apps.json` (none, since ADR 0075) isn't promoted on its own: it ships inside AUGUR's release (ADR 0049), so it becomes stable when that AUGUR release does. Asking for one says so.
-
 ## Halting a release
 
 When a release turns out to be bad after it's out, stop it reaching more servers: in GitHub, **Actions → Halt rollout → Run workflow**, with `halt`, the unit (`augur` or an app's id), the version and a reason people will read. It attaches `halted.json` (the reason, when, who) to the release and publishes the feed again at once (ADR 0018). Every server sees the mark at its next check: the release stays listed, marked halted with the reason, and is never offered, chosen as the next upgrade or installed. A server running it is told to move on, or to go back. Only the repository's owner may run it, and only from `main`.

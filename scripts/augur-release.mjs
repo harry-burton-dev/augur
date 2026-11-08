@@ -12,9 +12,8 @@
 //   node scripts/augur-release.mjs devs-clean [<tag>...]
 //                                            deletes AUGUR's older dev builds, keeping the newest DEV_BUILDS_KEPT and those named
 //
-// Parts are the packages under platform/ (services, frontends, packages), those of the apps that ship
-// with AUGUR (PILLAR_APPS), at the releases release/shipped-apps.json pins, and the @augur packages they
-// take from other repositories (the kit). Each keeps its own version and changelog; the AUGUR version moves when any of them does:
+// Parts are the packages under platform/ (services, frontends, packages) and the @augur packages they
+// take from other repositories (the kit). No app ships with AUGUR (ADR 0075). Each keeps its own version and changelog; the AUGUR version moves when any of them does:
 //   - a part's major bump (or a part removed) is breaking: deployments must be on the previous AUGUR
 //     release before taking this one (`upgradeFrom`), and the release lists why under `breaking`
 //   - any other new feature (a minor bump, or a new part) is a feature
@@ -32,7 +31,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
-import { layoutProblems, readShipped, shippedParts, SHIPPED_FILE } from './shipped-apps.mjs';
 import { NOTES_FILE, stamp } from './upgrade-notes.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -42,13 +40,6 @@ const ENV_EXAMPLE = `${DEPLOY_DIR}/.env.example`;
 const VERSION_FILE = 'platform/services/registry/src/augur-version.ts';
 const NAMES_FILE = 'release/names.json';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
-
-/**
- * The apps that ship with AUGUR (pillar apps), by id. Each lives in its own repository and releases there;
- * release/shipped-apps.json pins the release AUGUR ships, so its packages, at those versions, are parts too (ADR 0049).
- */
-const shipped = readShipped();
-export const PILLAR_APPS = Object.keys(shipped.apps);
 
 /** Every part of the platform, by package name, with its version and where it lives. */
 export const readParts = () => {
@@ -62,7 +53,7 @@ export const readParts = () => {
       parts[name] = { version, path };
     }
   }
-  return { ...readExternalParts(parts), ...parts, ...shippedParts(shipped) };
+  return { ...readExternalParts(parts), ...parts };
 };
 
 /**
@@ -301,10 +292,7 @@ export const notes = (release, parts) => {
   lines.push('### What changed', '');
   for (const name of release.changed) {
     const { version } = release.parts[name];
-    const app = parts[name]?.app && shipped.apps[parts[name].app];
-    const tag = app && `app/${parts[name].app}@${app.version}`;
-    const elsewhere = app && `_Released in ${app.repo}: see [${tag}](https://github.com/${app.repo}/releases/tag/${encodeURIComponent(tag)})._`;
-    lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || elsewhere || '_No changelog entry._', '');
+    lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
   lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/HEAD/docs/upgrade.md).`);
   return lines.join('\n');
@@ -342,28 +330,20 @@ const main = () => {
     else {
       // A part added or removed since the last release is fine: the next release takes it in or out.
       // A part's version changing outside the Version packages PR isn't.
-      // A shipped app's parts move with its pin (scripts/shipped-apps.mjs pin), which adds the changeset that moves AUGUR.
       // A package from another repository (the kit) moves with a pull request here that bumps it.
-      for (const [name, { version, app, external }] of Object.entries(parts)) {
-        if (app || external) continue;
+      for (const [name, { version, external }] of Object.entries(parts)) {
+        if (external) continue;
         const released = previous.parts[name]?.version;
         if (released && released !== version) problems.push(`${name} is ${version}, but ${RELEASE_FILE} says ${released}`);
       }
       const shipped = existsSync(join(root, VERSION_FILE)) ? readFileSync(join(root, VERSION_FILE), 'utf8') : '';
       if (shipped !== versionModule(previous)) problems.push(`${VERSION_FILE} doesn't match ${RELEASE_FILE}`);
     }
-    // The compose files name the apps that ship with AUGUR themselves, so they're held to the one list of them.
-    const layout = layoutProblems(shipped);
-    if (problems.length || layout.length) {
-      console.error(
-        [
-          ...problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`),
-          ...layout.map((p) => `✗ ${p} ${SHIPPED_FILE} is the one list of the apps that ship with AUGUR; make the compose file agree with it.`),
-        ].join('\n'),
-      );
+    if (problems.length) {
+      console.error(problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`).join('\n'));
       process.exit(1);
     }
-    console.log(`AUGUR release ${previous.version} is in step, and the compose files run the apps it ships.`);
+    console.log(`AUGUR release ${previous.version} is in step.`);
   } else if (mode === 'pending' || mode === 'publish') {
     if (!previous) throw new Error(`${RELEASE_FILE} is missing.`);
     const tag = `augur@${previous.version}`;

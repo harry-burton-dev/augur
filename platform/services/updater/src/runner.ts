@@ -306,24 +306,6 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
   };
 
   /**
-   * Hands over to AUGUR the apps that now ship with it (release/shipped-apps.json, ADR 0049): the runner's
-   * own containers of each stop and the app leaves the runner's state, so AUGUR's container of it is the
-   * only one. Its data stays where it was, in the app's own schema, which AUGUR's container uses from then
-   * on (docs/upgrade.md). Returns the apps handed over.
-   */
-  const handOver = async (shipped: readonly string[]) => {
-    const state = await host.readState();
-    const ids = Object.keys(state.apps).filter((id) => shipped.includes(id));
-    if (!ids.length) return [];
-    await host.stop(ids.flatMap((id) => [state.apps[id].active, state.apps[id].retiring].filter((r): r is RunningApp => Boolean(r)).map((r) => serviceName(id, r.slot))));
-    for (const id of ids) delete state.apps[id];
-    await save(state, await host.readEnv());
-    // AUGUR's container is reached by APP_UPSTREAMS, so the runner's upstream is forgotten.
-    for (const id of ids) await calls.setUpstream(id, null).catch(() => undefined);
-    return ids;
-  };
-
-  /**
    * Puts the registry and the gateway back on the version that was serving before a switch, or, on a
    * first install, leaves the gateway nowhere to send calls. It holds whichever side of the switch things
    * stopped on, so nobody needs to know. Throws only when the gateway may still be on the new version.
@@ -618,5 +600,5 @@ export const appRunner = ({ host, calls, publishers, appRepos = {}, now = () => 
     }
   };
 
-  return { run, retireDue, handOver };
+  return { run, retireDue };
 };

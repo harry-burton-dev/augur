@@ -80,22 +80,22 @@ describe('an app’s id', () => {
 });
 
 describe('categoryOf (ADR 0032)', () => {
-  const nobody = { ships: false, fromFeed: false };
+  const nobody = { fromFeed: false };
 
   it('counts the registry’s own apps as platform apps, whatever else is said', () => {
     for (const app of platformApps) expect(categoryOf({ id: app.id, category: 'pillar' }, nobody), app.id).toEqual({ category: 'platform' });
   });
 
-  it('honours the claim of an app that ships with AUGUR or came from its app feed', () => {
-    expect(categoryOf({ id: 'auspex', category: 'platform' }, { ships: true, fromFeed: false })).toEqual({ category: 'platform' });
-    expect(categoryOf({ id: 'mandate', category: 'pillar' }, { ships: false, fromFeed: true })).toEqual({ category: 'pillar' });
+  it('honours the claim of an app that came from its app feed', () => {
+    expect(categoryOf({ id: 'explorer', category: 'platform' }, { fromFeed: true })).toEqual({ category: 'platform' });
+    expect(categoryOf({ id: 'mandate', category: 'pillar' }, { fromFeed: true })).toEqual({ category: 'pillar' });
   });
 
   it('keeps any other app’s claim out of force, and says why', () => {
     expect(categoryOf({ id: 'rogue', category: 'platform' }, nobody)).toEqual({ refused: { asked: 'platform', why: CATEGORY_REFUSED } });
   });
 
-  it('gives an app that claims nothing no kind, even when it ships', () => {
-    expect(categoryOf({ id: 'folio' }, { ships: true, fromFeed: false })).toEqual({});
+  it('gives an app that claims nothing no kind, even from the feed', () => {
+    expect(categoryOf({ id: 'notes' }, { fromFeed: true })).toEqual({});
   });
 });

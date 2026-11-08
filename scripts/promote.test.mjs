@@ -118,7 +118,7 @@ describe('the deploy test', () => {
 });
 
 describe('where a promotion happens', () => {
-  const units = { repo: 'harry-burton-dev/augur', here: ['mandate'], own: { notes: 'someone/augur-notes' }, shipped: ['folio'] };
+  const units = { repo: 'harry-burton-dev/augur', here: ['mandate'], own: { notes: 'someone/augur-notes' } };
 
   it('AUGUR and the apps released here are promoted here', () => {
     assert.deepEqual(promotionSource(AUGUR, units), { repo: 'harry-burton-dev/augur', own: false });
@@ -127,10 +127,6 @@ describe('where a promotion happens', () => {
 
   it('an app in its own repository is promoted there', () => {
     assert.deepEqual(promotionSource('notes', units), { repo: 'someone/augur-notes', own: true });
-  });
-
-  it('a pillar app is refused, and told to promote AUGUR', () => {
-    assert.match(promotionSource('folio', units).problem, /ships with AUGUR.*Promote augur/);
   });
 
   it('anything else names the units there are', () => {

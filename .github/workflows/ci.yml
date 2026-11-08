@@ -283,8 +283,6 @@ jobs:
           docker compose -f infra/deploy/compose.yml --env-file /tmp/ci.env config -q
           docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
           COMPOSE_PROFILES=updater docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.build.yml --env-file /tmp/ci.env config -q
-      # The apps that ship with AUGUR come from their own repositories' releases (ADR 0049), which the
-      # release puts in .shipped/frontends; one made up here shows the web image serves what's put there.
       # The workspace's install as the last dev build left it (augur-dev.yml saves it, with the same key):
       # read only, so a change to infra or the deploy files doesn't install every package again. A change
       # to the dependencies misses it and installs, as before.
@@ -299,7 +297,6 @@ jobs:
           cache=()
           [ -f "$RUNNER_TEMP/buildx-deps/index.json" ] && cache=(--cache-from "type=local,src=$RUNNER_TEMP/buildx-deps")
           build() { docker buildx build --load --secret id=node_auth_token,env=NODE_AUTH_TOKEN "${cache[@]}" "$@" .; }
-          mkdir -p .shipped/frontends/shipped-probe && echo 'export {};' > .shipped/frontends/shipped-probe/entry.js
           build -f infra/web.Dockerfile --target web -t platform-web
           build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/identity --target service -t platform-identity
           build -f infra/service.Dockerfile --build-arg PACKAGE=@augur/storage --target service -t platform-storage
@@ -324,8 +321,6 @@ jobs:
           grep -iE "^content-security-policy: default-src 'self'; script-src 'self' ('sha256-[A-Za-z0-9+/=]+' ){2} +https://apps.example.org ?;" /tmp/headers
           # Anywhere but the workbench, nothing on the tailnet may run in the shell.
           ! grep -i "ts.net" /tmp/headers
-          # The apps that ship with AUGUR: the front door serves their frontends too.
-          curl -fsI http://localhost:8088/apps/shipped-probe/entry.js
           docker rm -f web
       - name: The kit is served at /kit/ by default, or from KIT_URL, held to its hashes
         run: |

@@ -14,9 +14,6 @@ __pycache__/
 .pytest_cache/
 infra/deploy/tailscale/public-until
 
-# The shipped apps taken from their releases by infra/release-images.sh.
-.shipped/
-
 # pnpm seed's ledgers: what it made on each deployment, with sample people's one-time passwords.
 .seed/
 

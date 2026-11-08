@@ -1,5 +1,5 @@
 name: App previews
-# A pull request that changes an app in apps/ (other than those that ship with AUGUR) gets a preview
+# A pull request that changes an app in apps/ gets a preview
 # of each app it changes: a signed bundle, as the Release workflow makes, with the version
 # <x.y.z>-pr.<number>.<run>, released as app/<id>@<that version>. Deployments whose app runner has
 # the app installed run the newest one beside the app for the app's developers (Admin → Apps), who
@@ -8,7 +8,6 @@ name: App previews
 on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
-    # The apps that ship with AUGUR go out in its dev builds and releases, not as previews.
     paths: ['apps/**', '!apps/*.md']
 concurrency:
   group: app-preview-${{ github.event.pull_request.number }}

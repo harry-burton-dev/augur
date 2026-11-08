@@ -56,27 +56,25 @@ export const PREVIEW_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_DEVELOPERS = 50;
 
 /** Why a release can't be installed, beyond its shape; undefined when it can. */
-export const releaseProblem = (release: AppRelease, pillars: string[]): string | undefined => {
+export const releaseProblem = (release: AppRelease): string | undefined => {
   if (release.id !== release.manifest.id || release.version !== release.manifest.version) return 'The release file’s id and version must be its manifest’s.';
   if (!semver.valid(release.version)) return `"${release.version}" is not a version such as 1.2.0.`;
-  if (pillars.includes(release.id)) return `${release.manifest.name} ships with AUGUR, so it’s upgraded with AUGUR, not on its own.`;
   if (!release.service) return 'The app runner installs apps with a service. A frontend-only app isn’t supported yet.';
   return reservedIdProblem(release.id) ?? versionProblem(release.manifest) ?? surfaceProblem(release.manifest) ?? settingsProblem(release.manifest);
 };
 
 /** Why a pull request's build can't be previewed beside the installed release; undefined when it can. */
-export const previewProblem = (preview: AppRelease, installed: AppRelease, pillars: string[]): string | undefined => {
+export const previewProblem = (preview: AppRelease, installed: AppRelease): string | undefined => {
   if (previewPr(preview.version) === undefined) return `${preview.version} isn’t a pull request’s build.`;
   // Only the workflow trusted with the app's releases: a preview runs with the app's own sign-in.
   if (!sameRepository(preview.signer.repository, installed.signer.repository)) return `It’s built by ${preview.signer.repository}, not ${installed.signer.repository}.`;
-  return releaseProblem(preview, pillars);
+  return releaseProblem(preview);
 };
 
 export interface AppRunnerRouteOptions {
   store: AppStore;
   /** Who loads which app from their own machine (Live on the workbench). */
   live?: LiveOverrides;
-  pillars: string[];
   /** The app feed: releases admins can install, and newer ones for what's installed. */
   updates: AppUpdateChecker;
   /** What kind of server this is: a production one follows stable releases only. */
@@ -100,7 +98,7 @@ export interface AppRunnerRouteOptions {
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, pillars, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date() }: AppRunnerRouteOptions) =>
+  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date() }: AppRunnerRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** When the runner last asked what to do; it lives only as long as this process. */
@@ -134,7 +132,7 @@ export const appRunnerRoutes =
         const reached = updates.result.releases.filter((r) => r.app === id && semver.gt(r.version, current.version) && !automaticProblem(state, current.version, r.version));
         const newest = newestOn(reached, id, follow.channel);
         if (!newest?.release || updateNeeds(current, newest.release, sdkVersion).length) continue;
-        if (releaseProblem(newest.release, pillars)) continue;
+        if (releaseProblem(newest.release)) continue;
         const jobs = await store.appJobs(id);
         if (jobs.some((j) => j.pr === undefined && j.release?.version === newest.version && j.state === 'failed')) continue;
         if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'install', release: newest.release, requestedBy: 'automatic' }))) continue;
@@ -177,7 +175,7 @@ export const appRunnerRoutes =
           if (busy(pr) || jobs.some((j) => j.pr === pr && j.release?.version === build.version)) continue;
           if (build.released && Date.parse(build.released) + PREVIEW_MS <= at) continue;
           if (!live.has(pr) && live.size >= MAX_PREVIEWS) continue;
-          if (previewProblem(build.release!, current, pillars)) continue;
+          if (previewProblem(build.release!, current)) continue;
           if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'preview', release: build.release, pr, requestedBy: 'automatic' }))) continue;
           live.add(pr);
           await byRegistry('app.preview-requested', id, { pr, version: build.version });
@@ -191,10 +189,7 @@ export const appRunnerRoutes =
 
     /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
     const appsView = async () => {
-      const [all, follows, jobs, running, developers] = await Promise.all([store.installedApps(), store.follows(), store.appJobs(), store.runningPreviews(), store.developers()]);
-      // An app the runner installed before it shipped with AUGUR (as Mandate did) is AUGUR's now: the
-      // updater stops the runner's copy, and the app is upgraded with AUGUR, so it isn't listed here.
-      const installed = all.filter((i) => !pillars.includes(i.app));
+      const [installed, follows, jobs, running, developers] = await Promise.all([store.installedApps(), store.follows(), store.appJobs(), store.runningPreviews(), store.developers()]);
       const { checkedAt, problem, releases } = updates.result;
       const installedIds = new Set(installed.map((i) => i.app));
       const latestJob = (id: string) => jobs.find((j) => j.app === id && j.pr === undefined);
@@ -234,7 +229,7 @@ export const appRunnerRoutes =
           };
         }),
         available: [...new Set(releases.map((r) => r.app))]
-          .filter((id) => !installedIds.has(id) && !pillars.includes(id))
+          .filter((id) => !installedIds.has(id))
           .map((id) => newestOn(releases, id, 'stable') ?? (takesPreview(ring) ? newestOn(releases, id, 'beta') : undefined))
           .filter((r): r is NonNullable<typeof r> => Boolean(r?.release?.service))
           .map((r) => ({
@@ -601,7 +596,7 @@ export const appRunnerRoutes =
             401: signInAgain,
             403: notDeploymentAdmin,
             404: refused('The app feed has no release file for that app and version'),
-            409: refused('The app ships with AUGUR, its publisher halted that release, or it already has a job waiting or under way'),
+            409: refused('Its publisher halted that release, or it already has a job waiting or under way'),
           },
         },
       },
@@ -626,10 +621,8 @@ export const appRunnerRoutes =
           const problem =
             previewPr(release.version) !== undefined
               ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.'
-              : (ringProblem(release, ring, listed) ?? releaseProblem(release, pillars));
+              : (ringProblem(release, ring, listed) ?? releaseProblem(release));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
-        } else if (pillars.includes(target)) {
-          return reply.code(409).send({ error: 'conflict', message: `${target} ships with AUGUR and can’t be removed. Turn it off instead.` });
         }
         const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: caller.id };
         if (!(await store.requestAppJob(job))) return reply.code(409).send({ error: 'conflict', message: `Something is already waiting or under way for ${target}.` });

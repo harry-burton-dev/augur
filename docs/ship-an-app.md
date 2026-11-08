@@ -68,4 +68,4 @@ Servers still read one feed, AUGUR's (ADR 0047):
 - The updater trusts that repository to sign that app, and only that app, so a server needs no `APP_PUBLISHERS` line for it. Releases of the app signed anywhere else, this repository included, are refused from then on.
 - The first release a server installs from the new repository takes over the data the old one left, so the updater takes a backup of the database first, and the install's first step names the file. Later releases from that repository install as usual. A version installed before this rule (its record names no repository) gets the same backup at its next update.
 
-A platform or pillar app (ADR 0032) is listed here like any other: no app ships inside AUGUR's release any more (ADR 0075), so `release/shipped-apps.json` stays empty.
+A platform or pillar app (ADR 0032) is listed here like any other: no app ships inside AUGUR's release (ADR 0075).

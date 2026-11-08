@@ -111,12 +111,6 @@ export interface RegistryOptions {
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
   /**
-   * Apps that ship with AUGUR (PILLAR_APPS), its pillar apps. Each is an ordinary app that registers
-   * itself on first start, but it is given the scopes its release asks for with no admin step, its
-   * version comes with the release, and it can be turned off but never removed.
-   */
-  pillars?: string[];
-  /**
    * The frontends bucket, where each version of an app's frontend is kept and served from
    * /apps/<id>/<version>/. Without it apps are served from wherever their manifests' `entry` says.
    */
@@ -142,9 +136,6 @@ export interface RegistryOptions {
   now?: () => Date;
 }
 
-/** PILLAR_APPS: the ids of the apps this deployment ships with, space or comma separated. */
-export const pillarsFromEnv = (env: Record<string, string | undefined> = process.env) => (env.PILLAR_APPS ?? '').split(/[\s,]+/).filter(Boolean);
-
 /** Records audit entries with the events service, as the registry. */
 export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry, workspace?: string) =>
   recordAudit({ eventsUrl, credentials, entry, workspace });
@@ -165,7 +156,7 @@ const settingsOf = (r: AppRecord) => ({
   }),
 });
 
-const catalogueEntry = (r: AppRecord, allowed: string[], ships: boolean, kind: CategoryInForce) => {
+const catalogueEntry = (r: AppRecord, allowed: string[], kind: CategoryInForce) => {
   const blocked = entryOriginProblem(r.entry, allowed);
   const { category: _asked, ...entry } = r.entry;
   return {
@@ -176,9 +167,6 @@ const catalogueEntry = (r: AppRecord, allowed: string[], ships: boolean, kind: C
     // The kind in force (ADR 0032), and the app's own claim when it isn't used, so Admin can say why.
     ...(kind.category ? { category: kind.category } : {}),
     ...(kind.refused ? { categoryRefused: kind.refused } : {}),
-    // Ships with AUGUR: its version comes with the release, and it's turned off rather than removed.
-    // `pillar` is the old name for `ships`, kept for /v1 readers.
-    ...(ships ? { ships: true, pillar: true } : {}),
     enabled: r.enabled,
     registeredBy: r.registeredBy,
     registeredAt: r.registeredAt,
@@ -206,7 +194,6 @@ export const buildApp = async ({
   floors,
   updates = new UpdateChecker({ running: AUGUR_RELEASE }),
   callers,
-  pillars = [],
   frontendFiles,
   appUpdates = new AppUpdateChecker(),
   allowPrPreviews = true,
@@ -219,13 +206,12 @@ export const buildApp = async ({
   timeZone = 'UTC',
   now = () => new Date(),
 }: RegistryOptions) => {
-  const isPillar = (id: string) => pillars.includes(id);
   /** The apps the app runner installed from the signed app feed, whose kind is honoured too. */
   const feedApps = async () => new Set((await store.installedApps()).map((i) => i.app));
-  const kindOf = (entry: Pick<AppEntry, 'id' | 'category'>, feed: ReadonlySet<string>) => categoryOf(entry, { ships: isPillar(entry.id), fromFeed: feed.has(entry.id) });
+  const kindOf = (entry: Pick<AppEntry, 'id' | 'category'>, feed: ReadonlySet<string>) => categoryOf(entry, { fromFeed: feed.has(entry.id) });
   const live = new LiveOverrides(updates.ring, tailnet);
   const entryOf = (r: AppRecord, allowed: string[], kept: StoredFrontend[], feed: ReadonlySet<string>) =>
-    catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, isPillar(r.entry.id), kindOf(r.entry, feed));
+    catalogueEntry({ ...r, entry: servedEntry(r.entry, kept) }, allowed, kindOf(r.entry, feed));
   // Unknown manifest fields are refused, not dropped: a misspelt requiredRole must not open an app to everyone.
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
@@ -359,8 +345,8 @@ export const buildApp = async ({
                       description: Type.Optional(Type.String()),
                       floors: Type.Optional(Type.Array(Type.Enum(['personal', 'team', 'org']))),
                       category: Type.Optional(Type.Enum([...APP_CATEGORIES])),
-                      ships: Type.Optional(Type.Boolean()),
-                      pillar: Type.Optional(Type.Boolean({ description: 'The old name for `ships`, kept for /v1 readers' })),
+                      ships: Type.Optional(Type.Boolean({ description: 'Never set: no app ships with AUGUR (ADR 0075). Kept for /v1 readers.', deprecated: true })),
+                      pillar: Type.Optional(Type.Boolean({ description: 'Never set: the old name for `ships`, kept for /v1 readers.', deprecated: true })),
                       requiredRole: Type.Optional(Type.String()),
                       hasRole: Type.Optional(Type.Boolean()),
                       state: Type.Object({
@@ -395,7 +381,7 @@ export const buildApp = async ({
           const rules = await store.rules();
           const platform = platformApps
             .filter((a) => !unbuiltApps.has(a.id))
-            .map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description, requiredRole: a.requiredRole, category: categoryOf(a, { ships: false, fromFeed: false }).category, state: { on: true, why: 'platform' } as const }));
+            .map((a) => ({ id: a.id, name: a.name, icon: a.icon, description: a.description, requiredRole: a.requiredRole, category: categoryOf(a, { fromFeed: false }).category, state: { on: true, why: 'platform' } as const }));
           const feed = await feedApps();
           const registered = (await store.records())
             .filter((r) => !entryOriginProblem(r.entry, allowed))
@@ -405,8 +391,6 @@ export const buildApp = async ({
               return {
                 id: r.entry.id, name: r.entry.name, icon: r.entry.icon, description: r.entry.description, requiredRole: r.entry.requiredRole,
                 floors: [...floorKindsOf(r.entry)], category: kindOf(r.entry, feed).category,
-                // `pillar` is the old name for `ships`, kept for /v1 readers.
-                ships: isPillar(r.entry.id) || undefined, pillar: isPillar(r.entry.id) || undefined,
                 state: rule ? { ...state, setBy: rule.setBy, setAt: rule.setAt } : state,
               };
             });
@@ -493,8 +477,8 @@ export const buildApp = async ({
       const pin = async (req: FastifyRequest, reply: FastifyReply, id: string, version: string | null) => {
         const caller = callerFromHeaders(req.headers);
         if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose an app’s version.' });
-        if (platformApps.some((a) => a.id === id) || isPillar(id)) {
-          return reply.code(409).send({ error: 'conflict', message: 'Apps that ship with AUGUR change with AUGUR’s own release.' });
+        if (platformApps.some((a) => a.id === id)) {
+          return reply.code(409).send({ error: 'conflict', message: 'AUGUR’s own apps change with AUGUR’s own release.' });
         }
         try {
           const changed = await store.pin(id, version);
@@ -534,7 +518,7 @@ export const buildApp = async ({
               200: pinned,
               403: refused('Not an admin'),
               404: refused('No such app, or no such version kept'),
-              409: refused('A platform app or one that ships with AUGUR, or another app now has that version\'s route'),
+              409: refused('One of AUGUR\'s own apps, or another app now has that version\'s route'),
             },
           },
         },
@@ -551,7 +535,7 @@ export const buildApp = async ({
               200: pinned,
               403: refused('Not an admin'),
               404: refused('No such app'),
-              409: refused('A platform app or one that ships with AUGUR'),
+              409: refused('One of AUGUR\'s own apps'),
             },
           },
         },
@@ -744,7 +728,7 @@ export const buildApp = async ({
           }
         : undefined;
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
-      await app.register(appRunnerRoutes({ store, live, pillars, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
+      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
       const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });
@@ -809,12 +793,7 @@ export const buildApp = async ({
           }
           try {
             const created = await store.put(entry, by.id);
-            // An app that ships with AUGUR may do what its release asks: the admin chose the release.
             const asked = (await store.records()).find((r) => r.entry.id === entry.id);
-            if (isPillar(entry.id) && asked && awaitingScopes(asked).length) {
-              await store.grant(entry.id, entry.scopes ?? []);
-              await record(req, { actor: by, app: 'registry', action: 'app.scopes-granted', target: entry.id, detail: { scopes: entry.scopes ?? [], shipsWithAugur: true } });
-            }
             const pinned = asked?.pinnedVersion;
             const held = pinned !== undefined && pinned !== entry.version;
             req.log.info({ app: entry.id, version: entry.version, by: by.id, held }, created ? 'app registered' : held ? 'app version kept, pinned elsewhere' : 'app updated');
@@ -1337,15 +1316,12 @@ export const buildApp = async ({
               204: empty('Removed'),
               403: refused('Not an admin'),
               404: refused('No such app'),
-              409: refused('An app that ships with AUGUR (pillar), which is turned off instead'),
             },
           },
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
-          const pillar = (await store.records()).find((r) => r.entry.id === req.params.id && isPillar(r.entry.id));
-          if (pillar) return reply.code(409).send({ error: 'conflict', message: `${pillar.entry.name} ships with AUGUR and can’t be removed. Turn it off instead.` });
           if (!(await store.remove(req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.removed', target: req.params.id });
