@@ -153,7 +153,7 @@ describe('cards of apps on the app contract', () => {
     const first = fakeCard();
     const second = fakeCard();
     const factories = [first.factory, second.factory];
-    const cards = new SurfaceMounter(undefined, ((...args: never[]) => factories.shift()!(...args)) as never);
+    const cards = new SurfaceMounter(undefined, (() => factories.shift()!()) as never);
     const el = document.createElement('div');
     document.body.append(el);
     const one = cards.mount(el, worker, me, ctx());
