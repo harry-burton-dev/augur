@@ -45,13 +45,51 @@ export const featureHint = (preview: FeaturePreviews['previews'][number], floorN
     .filter(Boolean)
     .join(' ');
 
-/** What a release asks to be allowed, in words. */
-export const asksWords = (asks: AvailableApp['asks'], scopeWords: (s: string[]) => string) =>
-  [
+/** One resource a part asks for, in words (spec 4.6, 9.4). */
+const resourceWords = ({ type, params = {} }: AvailableApp['asks']['resources'][number]): string => {
+  const list = (v: unknown) => (Array.isArray(v) ? listWords(v.map(String)) : '');
+  switch (type) {
+    case 'augur-gateway':
+      return params.inbound ? 'answers people’s calls through the gateway' : 'calls AUGUR through the gateway';
+    case 'augur-database':
+      return typeof params.connections === 'number' ? `keeps a database, with up to ${params.connections} connections` : 'keeps a database';
+    case 'augur-bucket':
+      return 'keeps files on the server';
+    case 'augur-floor-graphs':
+      return 'reads the floors’ graphs';
+    case 'augur-telemetry':
+      return 'sends its telemetry to the deployment’s collector';
+    case 'augur-scratch':
+      return `has a private folder of ${String(params.size ?? '')}`.trim();
+    case 'augur-files':
+      return `reads a folder you fill: ${String(params.label ?? '')}`.trim();
+    case 'augur-outbound':
+      return `internet access${params.hosts ? ` to ${list(params.hosts)}` : ''}${params.why ? `, because: ${String(params.why)}` : ''}`;
+    case 'augur-settings':
+      return params.ids ? `reads the settings ${list(params.ids)}` : 'reads its settings';
+    default:
+      return type;
+  }
+};
+
+/** What a release asks to be allowed, in words: one line for its scopes, one per part, then the rest (spec 9.4). */
+export const asksWords = (asks: AvailableApp['asks'], scopeWords: (s: string[]) => string) => {
+  const parts = Object.keys(asks.limits);
+  return [
     `May: ${scopeWords(asks.scopes)}`,
-    asks.storage.database || asks.storage.bucket ? `Keeps ${[asks.storage.database ? 'a database' : '', asks.storage.bucket ? 'files' : ''].filter(Boolean).join(' and ')} on the server` : 'Keeps nothing on the server',
+    ...(parts.length
+      ? parts.map((part) => {
+          const { memory, cpu } = asks.limits[part]!;
+          const uses = asks.resources.filter((r) => r.part === part).map(resourceWords);
+          return `Its ${part} part (${memory} of memory, ${cpu} CPU) ${uses.length ? listWords(uses) : 'asks for nothing'}`;
+        })
+      : ['Runs nothing on the server']),
+    ...(asks.settings.length ? [`Offers ${asks.settings.length === 1 ? 'a setting' : `${asks.settings.length} settings`}: ${listWords(asks.settings)}`] : []),
+    `Works on ${listWords(asks.floors.map((f) => (f === 'personal' ? 'personal floors' : f === 'team' ? 'team floors' : 'the organisation’s floor')))}`,
     `Uploads up to ${asks.maxUpload} MB`,
+    ...(asks.canvas ? ['Draws in a canvas frame'] : []),
   ];
+};
 
 /** Where a job stands, in a few words. */
 export const jobWords = (job: AppJob): string => {

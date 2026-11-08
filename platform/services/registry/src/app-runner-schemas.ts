@@ -4,12 +4,9 @@
  */
 import Type, { type Static } from 'typebox';
 import { APP_JOB_STEPS, type AppRelease as AppReleaseFile } from './store.ts';
-import { AppManifestEntry, ref, ServerRing } from './schemas.ts';
+import { ref, ServerRing } from './schemas.ts';
 import { Change } from './update-schemas.ts';
 
-/** The format an app release file says it is in. */
-export const APP_RELEASE_SCHEMA = 'augur.app-release/v1';
-const DIGEST_REF = '^[a-z0-9][a-z0-9./:_-]*@sha256:[0-9a-f]{64}$';
 const APP_ID = '^[a-z][a-z0-9-]{1,39}$';
 const dateTime = (description?: string) => Type.String({ format: 'date-time', ...(description ? { description } : {}) });
 const JOB_ACTIONS = ['install', 'remove', 'preview', 'preview-remove'];
@@ -18,58 +15,19 @@ const STEP_STATES = ['running', 'done', 'failed'];
 const CHANNELS = ['stable', 'beta', 'dev'];
 const POLICIES = ['automatic', 'ask', 'hold'];
 
-/** What an app release file must say before the runner is asked to install it. */
-export const AppRelease = Type.Unsafe<AppReleaseFile>(Type.Object(
-  {
-    schema: Type.Literal(APP_RELEASE_SCHEMA),
-    id: Type.String({ pattern: APP_ID }),
-    version: Type.String({ minLength: 1, maxLength: 40 }),
-    channel: Type.Enum(['stable', 'beta', 'dev', 'preview']),
-    releasedAt: Type.Optional(Type.String({ maxLength: 40 })),
-    sdk: Type.Optional(Type.String({ maxLength: 100 })),
-    manifest: ref(AppManifestEntry),
-    service: Type.Union([
-      Type.Null(),
-      Type.Object(
-        { image: Type.String({ pattern: DIGEST_REF, maxLength: 300, description: 'The service image by digest, <repo>@sha256:<hex>' }) },
-        { additionalProperties: false },
-      ),
-    ]),
-    frontend: Type.Union([
-      Type.Null(),
-      Type.Object(
-        {
-          artifact: Type.String({ pattern: DIGEST_REF, maxLength: 300, description: "The frontend's OCI artifact by digest" }),
-          digest: Type.String({ pattern: '^sha256:[0-9a-f]{64}$', description: "sha256 of the frontend's tarball" }),
-          mediaType: Type.String({ maxLength: 100 }),
-        },
-        { additionalProperties: false },
-      ),
-    ]),
-    signer: Type.Object(
-      {
-        repository: Type.String({ pattern: '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' }),
-        workflow: Type.String({ pattern: '^\\.github/workflows/[A-Za-z0-9_.-]+\\.ya?ml$' }),
-      },
-      { additionalProperties: false },
-    ),
-    asks: Type.Optional(
-      Type.Unsafe<Record<string, unknown>>({ type: 'object', description: 'What the version asks an admin for: scopes, storage, floors, maxUpload, settings' }),
-    ),
-    notes: Type.Optional(Type.String({ maxLength: 20000 })),
-    preview: Type.Optional(
-      Type.Object(
-        { pr: Type.Integer({ minimum: 1 }), title: Type.Optional(Type.String({ maxLength: 300 })), url: Type.Optional(Type.String({ maxLength: 300 })) },
-        { additionalProperties: false, description: "For a pull request's build (channel preview, version <x.y.z>-pr.<number>.<run>)" },
-      ),
-    ),
-  },
-  {
-    $id: 'AppRelease',
-    additionalProperties: false,
-    description: "An app's release file, app-release.json, as scripts/app-release.mjs writes it (docs/versioning.md, App releases)",
-  },
-));
+/**
+ * An app's release file, app-release.json, on contract 3 (`augur.app-release/v2`). Its shape is the published
+ * schema (@augur/app-tools' app-release-2.schema.json, with the manifest and part schemas it refers to): the
+ * registry checks it against that, and the rules beyond it (spec 9.1, 9.2), when it is given one, and answers
+ * 400 with the reasons. A v1 file is refused with the contract it speaks.
+ */
+export const AppRelease = Type.Unsafe<AppReleaseFile>({
+  $id: 'AppRelease',
+  type: 'object',
+  required: ['schema'],
+  properties: { schema: { type: 'string', description: 'augur.app-release/v2' } },
+  description: "An app's release file, app-release.json, as @augur/app-tools writes it (urn:augur:app-release:2; docs/ship-an-app.md)",
+});
 
 export const Preview = Type.Object(
   {
@@ -179,11 +137,25 @@ export const AppInstalls = Type.Object(
         channel: Type.Enum(['stable', 'beta']),
         notesUrl: Type.Optional(Type.String()),
         signer: Type.Object({ repository: Type.Optional(Type.String()), workflow: Type.Optional(Type.String()) }),
-        asks: Type.Object({
-          scopes: Type.Optional(Type.Array(Type.String())),
-          storage: Type.Optional(Type.Unsafe<Record<string, unknown>>({ type: 'object' })),
-          maxUpload: Type.Optional(Type.Integer()),
-        }),
+        asks: Type.Object(
+          {
+            scopes: Type.Array(Type.String()),
+            resources: Type.Array(
+              Type.Object({ part: Type.String(), type: Type.String(), params: Type.Optional(Type.Unsafe<Record<string, unknown>>({ type: 'object' })) }),
+              { description: 'Each resource a part asks for, with its params' },
+            ),
+            limits: Type.Unsafe<Record<string, { memory: string; cpu: string }>>({
+              type: 'object',
+              additionalProperties: { type: 'object', properties: { memory: { type: 'string' }, cpu: { type: 'string' } } },
+              description: 'By part name',
+            }),
+            floors: Type.Array(Type.String()),
+            maxUpload: Type.Integer(),
+            settings: Type.Array(Type.String()),
+            canvas: Type.Boolean(),
+          },
+          { description: "The release's asks, as its file carries them (spec 9.4)" },
+        ),
         problem: Type.Optional(Type.String({ description: "Why it can't open in this AUGUR" })),
         job: Type.Optional(ref(AppJob)),
       }),
