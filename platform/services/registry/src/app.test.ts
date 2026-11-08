@@ -503,11 +503,13 @@ describe.runIf(DATABASE_URL)('registry', () => {
       const app = await db.app({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
       const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers });
-      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', workspace: 'w1', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
+      expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', name: library.name, workspace: 'w1', on: true, floorKind: 'team', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
+      // The gateway asks as itself, to admit the app's own token (contract 3).
+      expect((await grants(callerHeaders(GATEWAY_CALLER))).json()).toMatchObject({ app: 'library', on: true, scopes: ['notifications:send'] });
       expect((await grants(as('app-library'))).statusCode).toBe(403);
       expect((await grants(admin)).statusCode).toBe(403);
       await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } });
-      expect((await grants(as('platform-events'))).json().scopes).toEqual([]);
+      expect((await grants(as('platform-events'))).json()).toMatchObject({ on: false, scopes: [] });
       expect((await app.inject({ method: 'GET', url: '/v1/apps/nope/grants', headers: as('platform-events') })).statusCode).toBe(404);
     });
 
@@ -685,7 +687,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     it('checks a call that names no floor on the organisation’s', async () => {
       const { app, set } = await setup({ ...library, scopes: ['notifications:send'] });
       const unnamed = async () => (await app.inject({ method: 'GET', url: '/v1/apps/library/grants', headers: as('platform-events') })).json();
-      expect(await unnamed()).toEqual({ app: 'library', workspace: 'o', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
+      expect(await unnamed()).toEqual({ app: 'library', name: 'Library', on: true, workspace: 'o', floorKind: 'org', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
       // Off for the organisation but on for one team: naming no floor no longer gets it through.
       await set('o', 'off');
       await set('f', 'on');

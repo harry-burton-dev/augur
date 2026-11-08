@@ -387,6 +387,10 @@ services:
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/sso/realms/platform/protocol/openid-connect/certs
       OIDC_AUDIENCE: platform-api
+      # Apps' parts sign in as themselves (contract 3): their tokens carry this audience, and their client-credentials
+      # grant is passed on to the sign-in service here (POST /api/identity/v1/token).
+      OIDC_SERVICE_AUDIENCE: platform-services
+      OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
       # Admin's Status reads what the backup container last wrote here.
       BACKUP_DIR: /backups
       # And whether AUGUR is open to the internet, and until when, from what infra/deploy/public.sh wrote.
@@ -402,6 +406,11 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       # Apps' services run beside AUGUR outside the app runner, name=url: none (ADR 0075).
       APP_UPSTREAMS: ""
+      # The brakes on calls to apps' parts, and how long a delegated caller lasts (docs/deploy.md, Limits at the front door).
+      APP_CONNECT_TIMEOUT_MS: ${APP_CONNECT_TIMEOUT_MS:-}
+      APP_RESPONSE_TIMEOUT_MS: ${APP_RESPONSE_TIMEOUT_MS:-}
+      APP_CONCURRENT_CALLS: ${APP_CONCURRENT_CALLS:-}
+      APP_DELEGATION_SECONDS: ${APP_DELEGATION_SECONDS:-}
       # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
       CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
     volumes:
