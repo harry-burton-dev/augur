@@ -1,164 +1,169 @@
 import { expect, test, type Page } from '@playwright/test';
-import { since } from './builds';
+import { check, failOnPageErrors, goTo, openView, pane, press, rail, reference, shellReady } from './reference';
 
 /**
- * What the shell promises every app through the SDK's mount context. Each test
- * opens the reference app in the real shell and checks one part of it.
+ * What the shell promises an app on the app contract (contract 3, spec section 6): its frontend runs
+ * in a worker with no network and no token, draws only Quill's remote vocabulary, reaches the gateway
+ * only through the host, hears where it is from the host, and when it fails, hangs or floods, only its
+ * own pane says so. The reference app opens in the real shell's dev-app mode; the gateway is the
+ * test's stand-in (page.route), so no deployment is needed.
  */
-const app = (page: Page) => page.locator('[data-app="reference"]').first();
-const check = (page: Page, name: string) => app(page).locator(`[data-check="${name}"]`);
-const press = (page: Page, action: string) => app(page).locator(`[data-action="${action}"]`).click();
+const id = reference.id;
+const name = reference.name;
 
-test.beforeEach(async ({ page }) => {
-  page.on('pageerror', (err) => {
-    throw err;
-  });
+failOnPageErrors();
+
+test('draws the screen from a worker that has no network, no page and no token', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await expect(check(page, 'person')).toContainText('Dev Person (dev-person)');
+  await expect(check(page, 'worker')).toContainText('network: none; document: function; page: none; token: none');
+  // The kit drew it: Quill's own parts, in the shell's page, under the heading the app set.
+  await expect(pane(page).getByRole('button', { name: 'Fetch', exact: true })).toHaveClass(/augur-button/);
+  await expect(pane(page).getByRole('heading', { name: 'Reference on the contract' })).toBeVisible();
 });
 
-test('mounts with the signed-in person, the path below its route and a token', async ({ page }) => {
-  await page.goto('/reference/claims/42');
-  await expect(check(page, 'user')).toHaveText('Dev Person (dev-person) Development');
-  await expect(check(page, 'path')).toHaveText('/claims/42');
-  await expect(check(page, 'token')).toHaveText('ok');
-  await expect(check(page, 'intent')).toHaveText('none');
+test('opens with the path below its address, and no intent', async ({ page }) => {
+  await page.goto(`/${id}/claims/42`);
+  await expect(check(page, 'path')).toContainText('/claims/42');
+  await expect(check(page, 'intent')).toContainText('none');
 });
 
-test('mounts with no working context, which SDK 1.10 reserves (ADR 0029)', async ({ page }) => {
-  since('1.10');
-  await page.goto('/reference/claims/42');
-  await expect(check(page, 'focus')).toHaveText('none');
-});
-
-// SDK 1.7: feature previews. The manifest declares `turned-on` and `left-off`, and run.mjs turns the first on
-// for the stand-in person; an id the manifest doesn't list is off.
 test('previewOn says which of the app’s feature previews are on for the person', async ({ page }) => {
-  since('1.7');
-  await page.goto('/reference');
-  await expect(check(page, 'previews')).toHaveText('turned-on:on left-off:off not-declared:off');
+  // The manifest declares `turned-on` and `left-off`, and the contract tests turn the first on for the
+  // stand-in person (DEV_PREVIEWS); an id the manifest doesn't list is off.
+  await page.goto(`/${id}`);
+  await expect(check(page, 'previews')).toContainText('turned-on:on left-off:off not-declared:off');
 });
 
-// SDK 1.9: a team floor names its level. The stand-in's floors are the person's own and the org's,
-// which have none, so this checks it stays absent there and the path still reads from the top.
-test('a floor that isn’t a team has no level, and its path holds itself', async ({ page }) => {
-  since('1.9');
-  await page.goto('/@me/reference');
-  await expect(check(page, 'level')).toHaveText('none me');
-  await page.goto('/@org/reference');
-  await expect(check(page, 'level')).toHaveText('none org');
+test('opens on the person’s own floor unless the address names another', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await expect(page).toHaveURL(new RegExp(`/@me/${id}$`));
+  await expect(check(page, 'floor')).toContainText('You (dev-me, personal)');
+  await page.goto(`/@org/${id}`);
+  await expect(check(page, 'floor')).toContainText('Organisation (dev-org, org)');
 });
 
-// SDK 1.10: the shell serves React 19 and the React kits, so an app's bundle carries neither (ADR 0015).
-test('the app draws with the shell’s React and Quill', async ({ page }) => {
-  since('1.10');
-  await page.goto('/reference');
-  await expect(check(page, 'react')).toHaveText(/^19\./);
-  await expect(app(page).locator('[data-action="notify"]')).toHaveClass(/augur-button/);
-  await expect(app(page).getByRole('heading', { name: 'Reference', exact: true })).toBeVisible();
+test('the worker’s own policy refuses a script from anywhere but the shell’s origin', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await press(page, 'Load from elsewhere');
+  await expect(check(page, 'policy')).toContainText('held: script-src');
+});
+
+test('drops an element outside Quill’s remote vocabulary, with a reason on the console', async ({ page }) => {
+  const warnings: string[] = [];
+  page.on('console', (m) => m.type() === 'warning' && warnings.push(m.text()));
+  await page.goto(`/${id}`);
+  await expect(check(page, 'person')).toBeVisible();
+  await expect(pane(page).locator('evil-frame, iframe')).toHaveCount(0);
+  await expect.poll(() => warnings.join('\n')).toContain('<evil-frame> isn’t in Quill’s remote vocabulary');
+});
+
+test('ctx.fetch reaches the gateway with the person’s token, the floor and the app’s own id, never what the app sends', async ({ page }) => {
+  let seen: Record<string, string> = {};
+  await page.route(`**/api/${id}/v1/echo`, (route) => {
+    seen = route.request().headers();
+    return route.fulfill({ body: 'echoed', contentType: 'text/plain' });
+  });
+  await page.goto(`/@org/${id}`);
+  // The shell settles on the floor before the app is pressed.
+  await expect(check(page, 'floor')).toContainText('(dev-org, org)');
+  await press(page, 'Fetch');
+  await expect(check(page, 'fetched')).toContainText('200 echoed');
+  expect(seen['x-augur-app']).toBe(id);
+  expect(seen['x-workspace-id']).toBe('dev-org');
+  expect(seen.authorization).toBe('Bearer dev-token');
+  await press(page, 'Fetch an address');
+  await expect(check(page, 'fetched')).toContainText('refused: TypeError');
 });
 
 test('notify puts a notification on the shell’s stream', async ({ page }) => {
-  await page.goto('/reference');
-  await press(page, 'notify');
-  const titles = await page.evaluate(() =>
-    ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { notifications: { title: string; level: string }[] }).notifications.map((n) => `${n.title}:${n.level}`),
-  );
-  expect(titles).toContain('Reference notification:needs');
+  await page.goto(`/${id}`);
+  await press(page, 'Notify');
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        (document.querySelector('[data-shell]') as unknown as { shell: { notifications: { title: string; level: string }[] } }).shell.notifications.map((n) => `${n.title}:${n.level}`),
+      ),
+    )
+    .toContain('Reference notification:needs');
 });
 
 test('raise opens the app that handles the intent, with the intent', async ({ page }) => {
-  await page.goto('/reference/somewhere');
-  await press(page, 'raise');
-  await expect(check(page, 'intent')).toHaveText('reference.show {"n":1}');
-  await expect(page).toHaveURL(/\/reference$/);
+  await page.goto(`/${id}/somewhere`);
+  await press(page, 'Raise');
+  await expect(check(page, 'intent')).toContainText('reference.show {"n":1}');
+  await expect(page).toHaveURL(new RegExp(`/${id}$`));
 });
 
 test('request opens the handling app over this one and resolves with its answer', async ({ page }) => {
-  await page.goto('/reference');
-  await press(page, 'request');
-  const answering = page.locator('.augur-dialog [data-app="reference"]');
-  await expect(answering.locator('[data-check="intent"]')).toHaveText('reference.answer {"question":"six times seven"}');
-  await answering.locator('[data-action="respond"]').click();
-  await expect(check(page, 'answer')).toHaveText('42');
+  await page.goto(`/${id}`);
+  await press(page, 'Request');
+  const answering = page.locator(`.augur-dialog [data-app="${id}"]`);
+  await expect(check(page, 'intent', answering)).toContainText('reference.answer {"question":"six times seven"}');
+  await press(page, 'Answer 42', answering);
+  await expect(check(page, 'answer')).toContainText('42');
 });
 
 test('a request the handler declines rejects as cancelled', async ({ page }) => {
-  await page.goto('/reference');
-  await press(page, 'request');
-  await page.locator('.augur-dialog [data-app="reference"] [data-action="cancel"]').click();
-  await expect(check(page, 'answer')).toHaveText('cancelled');
+  await page.goto(`/${id}`);
+  await press(page, 'Request');
+  const answering = page.locator(`.augur-dialog [data-app="${id}"]`);
+  await press(page, 'Decline', answering);
+  await expect(check(page, 'answer')).toContainText('cancelled');
 });
 
-test('the event bus carries events within the page', async ({ page }) => {
-  await page.goto('/reference');
-  await press(page, 'emit');
-  await expect(check(page, 'bus')).toHaveText('pong');
+test('the host owns the address: the app asks to move and hears where it is, without starting again', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await expect(check(page, 'path')).toContainText('/');
+  await press(page, 'Go to claims');
+  await expect(page).toHaveURL(new RegExp(`/${id}/claims/7$`));
+  await expect(check(page, 'path')).toContainText('/claims/7');
+  // The same worker heard it: a command it counted before the move still counts.
+  await pane(page).getByRole('button', { name: 'Check again' }).click();
+  await expect(check(page, 'commands')).toContainText('1');
+  await rail(page).getByRole('button', { name: 'Claims' }).click();
+  await expect(check(page, 'path')).toContainText('/claims');
+  await expect(check(page, 'commands')).toContainText('1');
 });
 
-test('a domain event the person may see reaches the app on the bus, and it reloads', async ({ page }) => {
-  since('1.10');
-  let loads = 0;
-  await page.route('**/api/reference/v1/thing', (route) => route.fulfill({ body: `thing ${++loads}` }));
-  await page.goto('/@me/reference');
-  await press(page, 'follow');
-  await expect(check(page, 'thing')).toHaveText('thing 1');
-  // Published as the stand-in events service would stream it: on this floor, on a topic of an app the person has here.
-  const publish = (detail: object) => page.evaluate((d) => dispatchEvent(new CustomEvent('augur:dev-domain-event', { detail: d })), detail);
-  await expect
-    .poll(async () => {
-      await publish({ topic: 'reference.thing.changed', payload: { thing: 't1' } });
-      return loads;
-    })
-    .toBeGreaterThan(1);
-  await expect(check(page, 'thing')).toHaveText(`thing ${loads}`);
-  // Another floor's: no reload.
-  const before = loads;
-  await publish({ topic: 'reference.thing.changed', workspace: 'dev-org' });
-  await page.waitForTimeout(300);
-  expect(loads).toBe(before);
+test('a move that would climb out of the app’s own address is ignored', async ({ page }) => {
+  await page.goto(`/${id}/claims/1`);
+  await expect(check(page, 'path')).toContainText('/claims/1');
+  await press(page, 'Climb out');
+  // Something the host does move to after it shows the refused move didn't happen first.
+  await press(page, 'Go to claims');
+  await expect(check(page, 'path')).toContainText('/claims/7');
+  await expect(page).toHaveURL(new RegExp(`/@me/${id}/claims/7$`));
 });
 
-test('leaving the app unmounts it', async ({ page }) => {
-  await page.goto('/reference');
-  await expect(check(page, 'token')).toHaveText('ok');
-  // Home in the rail is the way out (PDR-020 D6)
-  await page.getByRole('navigation', { name: 'App bar: Reference' }).getByRole('button', { name: 'Home', exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.referenceUnmounts ?? 0)).toBe(1);
-  await expect(app(page)).toHaveCount(0);
-});
-
-
-test('Back and Forward inside an app that follows the address keep it mounted, and it hears the new path', async ({ page }) => {
-  since('1.11'); // older builds have no navigated to hear it with
-  await page.goto('/@me/reference/claims/1');
-  await expect(check(page, 'path')).toHaveText('/claims/1');
-  // a link inside the app moves the address and tells the shell, as Admin's do
-  await page.evaluate(() => {
-    window.history.pushState(null, '', '/@me/reference/claims/2');
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  });
-  await expect(check(page, 'path')).toHaveText('/claims/2');
+test('Back and Forward inside the app keep its worker, and it hears the new path', async ({ page }) => {
+  await page.goto(`/@me/${id}/claims/1`);
+  await expect(check(page, 'path')).toContainText('/claims/1');
+  await pane(page).getByRole('button', { name: 'Check again' }).click();
+  await expect(check(page, 'commands')).toContainText('1');
+  await press(page, 'Go to claims');
+  await expect(check(page, 'path')).toContainText('/claims/7');
   await page.goBack();
-  await expect(page).toHaveURL(/\/@me\/reference\/claims\/1$/);
-  await expect(check(page, 'path')).toHaveText('/claims/1');
+  await expect(page).toHaveURL(new RegExp(`/@me/${id}/claims/1$`));
+  await expect(check(page, 'path')).toContainText('/claims/1');
   await page.goForward();
-  await expect(check(page, 'path')).toHaveText('/claims/2');
-  expect(await page.evaluate(() => [window.referenceMounts, window.referenceUnmounts ?? 0])).toEqual([1, 0]);
+  await expect(check(page, 'path')).toContainText('/claims/7');
+  // Started once: the count from before the moves is still there.
+  await expect(check(page, 'commands')).toContainText('1');
 });
 
-// SDK 1.1: the floor the app is on, and requests that name it.
-test('mounts on the person’s own floor unless the address names another', async ({ page }) => {
-  since('1.1');
-  await page.goto('/reference');
-  await expect(page).toHaveURL(/\/@me\/reference$/);
-  await expect(check(page, 'floor')).toHaveText('You (me, personal, lead) dev-me');
-  await page.goto('/@org/reference');
-  await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
+test('a floor change starts the app’s worker again on the new floor', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await pane(page).getByRole('button', { name: 'Check again' }).click();
+  await expect(check(page, 'commands')).toContainText('1');
+  await goTo(page, `/@org/${id}`);
+  await expect(check(page, 'floor')).toContainText('Organisation (dev-org, org)');
+  await expect(check(page, 'commands')).toContainText('0');
 });
 
 test('an app sits on flat ground with the rail beside it, and moving floors inside it never shows the desktop', async ({ page }) => {
-  since('1.1'); // the app says which floor it's on from SDK 1.1
-  await page.goto('/@me/reference');
-  await expect(check(page, 'floor')).toHaveText('You (me, personal, lead) dev-me');
+  await page.goto(`/@me/${id}`);
+  await expect(check(page, 'floor')).toContainText('(dev-me, personal)');
   const shell = page.locator('.aerie-shell');
   await expect(shell).toHaveAttribute('data-bar', 'app');
   await shell.evaluate((el) => {
@@ -167,98 +172,105 @@ test('an app sits on flat ground with the rail beside it, and moving floors insi
     new MutationObserver(() => seen.push(el.getAttribute('data-bar') ?? '')).observe(el, { attributes: true, attributeFilter: ['data-bar'] });
     (el as unknown as { shell: EventTarget }).shell.dispatchEvent(new CustomEvent('ui-floor', { detail: { id: 'dev-org', direction: 'up' } }));
   });
-  await expect(page).toHaveURL(/\/@org\/reference$/);
-  await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
+  await expect(page).toHaveURL(new RegExp(`/@org/${id}$`));
+  await expect(check(page, 'floor')).toContainText('(dev-org, org)');
   expect(await page.evaluate(() => (window as unknown as { grounds: string[] }).grounds.filter((g) => g !== 'app'))).toEqual([]);
   await expect(shell).toHaveAttribute('data-bar', 'app');
 });
 
-test('fetch sends the token and the floor the app is on', async ({ page }) => {
-  since('1.1');
-  await page.route('**/api/reference/v1/floor', (route) => {
-    const h = route.request().headers();
-    return route.fulfill({ body: `${h['x-workspace-id']} ${h.authorization}` });
-  });
-  await page.goto('/@org/reference');
-  // The shell settles on the floor (its ground stops covering the stage) before the app is pressed.
-  await expect(check(page, 'floor')).toHaveText('Organisation (org, org, member) dev-org');
-  await press(page, 'fetch');
-  await expect(check(page, 'fetched')).toHaveText('dev-org Bearer dev-token');
+test('leaving the app through Home in the rail takes its pane off the stage', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await expect(check(page, 'person')).toBeVisible();
+  // Home in the rail is the way out (PDR-020 D6).
+  await rail(page).getByRole('button', { name: 'Home', exact: true }).click();
+  await expect(page).toHaveURL(/\/@me\/?$/);
+  await expect(page.locator(`[data-app="${id}"]`)).toHaveCount(0);
 });
 
-// SDK 1.2: buttons on a notification, each raising an intent through the shell.
-test('a notification’s action raises its intent through the shell', async ({ page }) => {
-  since('1.2');
-  await page.goto('/reference/somewhere');
-  await press(page, 'notify-action');
-  await page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { openView(id: string): void }).openView('stream'));
-  await page.locator('.aerie-shell .aerie-act', { hasText: 'Show' }).click();
-  await expect(check(page, 'intent')).toHaveText('reference.show {"n":2}');
-  const left = await page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { notifications: { title: string }[] }).notifications.map((n) => n.title));
-  expect(left).not.toContain('Reference action');
+test('a worker that throws fails only its own pane, and the rail still works', async ({ page }) => {
+  page.removeAllListeners('pageerror');
+  await page.goto(`/${id}`);
+  await press(page, 'Throw');
+  await expect(pane(page)).toContainText(`${name} stopped answering`);
+  await expect(pane(page).getByRole('button', { name: 'Try again' })).toBeVisible();
+  await rail(page).getByRole('button', { name: 'Home', exact: true }).click();
+  await expect(page).toHaveURL(/\/(@me\/?)?$/);
 });
 
-// SDK 1.2: Home lists what needs you with its actions, and places apps' glance cards.
-const goTo = (page: Page, path: string) =>
-  page.evaluate((to) => {
-    window.history.pushState(null, '', to);
-    window.dispatchEvent(new PopStateEvent('popstate'));
-  }, path);
+test('an app that draws 2,001 nodes in one flush is stopped as unresponsive, and Try again starts it afresh', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await press(page, 'Flood');
+  await expect(pane(page)).toContainText('tried to draw 2,001 things at once');
+  await pane(page).getByRole('button', { name: 'Try again' }).click();
+  await expect(check(page, 'person')).toBeVisible();
+});
 
-test('Home lists what needs you, and its actions raise their intents', async ({ page }) => {
-  since('1.2');
-  await page.goto('/reference/somewhere');
-  await press(page, 'notify-action');
+// Home: what needs you, and the cards apps contribute (`contributes.card`), drawn by each app's worker.
+test('Home lists what the app said needs you, and opening it opens the app', async ({ page }) => {
+  await page.goto(`/${id}/somewhere`);
+  await press(page, 'Notify');
   await goTo(page, '/@me/home');
-  const row = page.locator('[data-app="home"] .quill-list-row', { hasText: 'Reference action' });
+  const row = page.locator('[data-app="home"] .quill-list-row', { hasText: 'Reference notification' });
   await expect(row).toBeVisible();
-  await row.getByRole('button', { name: /^Show/ }).click();
-  await expect(check(page, 'intent')).toHaveText('reference.show {"n":2}');
+  await row.click();
+  await expect(page).toHaveURL(new RegExp(`/@me/${id}(/.*)?$`));
+  await expect(check(page, 'person')).toBeVisible();
 });
 
-test('Home places the app’s glance card for the floor, with a working context', async ({ page }) => {
-  since('1.2');
+test('Home places the card the app draws from its worker, on the floor, and the card can raise an intent', async ({ page }) => {
   await page.goto('/@me/home');
-  const card = page.locator('[data-app="home"] [data-card="reference"]');
-  await expect(card.locator('[data-check="card"]')).toHaveText('Reference card on me');
-  await card.locator('[data-action="card-raise"]').click();
-  await expect(check(page, 'intent')).toHaveText('reference.show {"n":3}');
+  const card = page.locator(`[data-app="home"] [data-card="${id}"]`);
+  await expect(check(page, 'card', card)).toContainText('Reference card on dev-me');
+  await press(page, 'Show', card);
+  await expect(check(page, 'intent')).toContainText('reference.show {"n":3}');
 });
 
-// Find over apps' content: the shell asks each app that declares `search`, on the person's floor.
+// Find over apps' content: the shell asks each app that declares `contributes.search`, on the person's floor.
 const find = async (page: Page, q: string) => {
-  // The shell's model is set on its element once it has drawn; wait for it rather than racing the first render.
-  await page.waitForFunction(() => Boolean((document.querySelector('[data-shell]') as unknown as { shell?: unknown } | null)?.shell));
-  await page.evaluate(() => ((document.querySelector('[data-shell]') as unknown as { shell: unknown }).shell as unknown as { openView(id: string): void }).openView('find'));
+  await shellReady(page);
+  await openView(page, 'find');
   await page.locator('.aerie-shell .aerie-search input').fill(q);
 };
 
 test('Find asks the app’s service, on the floor, and opens a result where it says', async ({ page }) => {
-  await page.route('**/api/reference/v1/search?*', (route) => {
+  await page.route(`**/api/${id}/v1/search?*`, (route) => {
     const url = new URL(route.request().url());
     return route.fulfill({
       json: { results: [{ id: 'c42', title: `Claim matching ${url.searchParams.get('q')}`, detail: route.request().headers()['x-workspace-id'], path: '/claims/42' }] },
     });
   });
-  await page.goto('/@org/reference/somewhere');
+  await page.goto(`/@org/${id}/somewhere`);
   await find(page, 'travel');
-  const result = page.locator('.aerie-shell .aerie-view ul[aria-label="Reference"] .aerie-row');
+  const result = page.locator(`.aerie-shell .aerie-view ul[aria-label="${name}"] .aerie-row`);
   await expect(result).toContainText('Claim matching travel');
   await expect(result).toContainText('dev-org');
   await result.click();
-  await expect(check(page, 'path')).toHaveText('/claims/42');
-  await expect(page).toHaveURL(/\/@org\/reference\/claims\/42$/);
+  await expect(check(page, 'path')).toContainText('/claims/42');
+  await expect(page).toHaveURL(new RegExp(`/@org/${id}/claims/42$`));
+});
+
+test('Find asks the app’s service as the app, with the person’s token and the app’s own id', async ({ page }) => {
+  let seen: Record<string, string> | undefined;
+  await page.route(`**/api/${id}/v1/search?*`, (route) => {
+    seen = route.request().headers();
+    return route.fulfill({ json: { results: [] } });
+  });
+  await page.goto(`/@org/${id}`);
+  await find(page, 'travel');
+  await expect.poll(() => seen?.['x-augur-app']).toBe(id);
+  expect(seen?.authorization).toBe('Bearer dev-token');
+  expect(seen?.['x-workspace-id']).toBe('dev-org');
 });
 
 test('Find doesn’t wait for a slow app: it says so, and lets go after the budget', async ({ page }) => {
   // The app never answers while the test runs, so the only way the note can change is the shell's own
   // budget running out, however slow the runner (PER-322).
-  await page.route('**/api/reference/v1/search?*', () => new Promise<void>(() => undefined));
-  await page.goto('/reference');
+  await page.route(`**/api/${id}/v1/search?*`, () => new Promise<void>(() => undefined));
+  await page.goto(`/${id}`);
   await find(page, 'reference');
-  await expect(page.locator('.aerie-shell .aerie-view .aerie-row', { hasText: 'Reference' }).first()).toBeVisible();
+  await expect(page.locator('.aerie-shell .aerie-view .aerie-row', { hasText: name }).first()).toBeVisible();
   // The reference app's own note: other apps in the catalogue have theirs.
-  const note = page.locator('.aerie-shell .aerie-view .aerie-group.aerie-label:has-text("Reference") + p.aerie-note.aerie-small');
+  const note = page.locator(`.aerie-shell .aerie-view .aerie-group.aerie-label:has-text("${name}") + p.aerie-note.aerie-small`);
   await expect(note).toHaveText('Still looking…');
   await expect(note).toHaveText('Didn’t answer in time.');
 });

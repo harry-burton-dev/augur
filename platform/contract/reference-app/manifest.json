@@ -1,17 +1,23 @@
 {
+  "$schema": "urn:augur:app-manifest:3",
   "id": "reference",
   "name": "Reference",
-  "route": "/reference",
-  "entry": "/apps/reference/entry.js",
   "version": "0.0.0",
-  "sdk": "^2.0.0",
-  "description": "Uses every part of the mount context, for the contract tests",
+  "contract": 3,
+  "description": "Uses every part of the app context, for the contract tests",
   "icon": "apps",
-  "handles": ["reference.show", "reference.answer"],
-  "search": true,
-  "followsAddress": true,
-  "inbox": { "kinds": [{ "id": "check", "label": "To check" }] },
-  "surfaces": [{ "floor": "personal", "slot": "card", "module": "./Glance" }],
+  "frontend": { "entry": "entry.js" },
+  "contributes": {
+    "places": [
+      { "id": "home", "label": "Start", "icon": "home", "path": "/" },
+      { "id": "claims", "label": "Claims", "icon": "list" }
+    ],
+    "commands": [{ "id": "check.again", "label": "Check again", "icon": "refresh" }],
+    "intents": { "handles": ["reference.show", "reference.answer"] },
+    "inbox": { "kinds": [{ "id": "check", "label": "To check" }] },
+    "search": true,
+    "card": true
+  },
   "previews": [
     { "id": "turned-on", "name": "Turned on", "detail": "On for the stand-in person in the contract tests" },
     { "id": "left-off", "name": "Left off", "detail": "Off for everyone in the contract tests" }

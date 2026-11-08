@@ -199,7 +199,7 @@ const devApp = (dir: string | undefined) => {
   if (!dir) return undefined;
   const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
   const roles = (process.env.DEV_ROLES ?? '').split(',').map((r) => r.trim()).filter(Boolean);
-  // DEV_APP_ENTRY serves a built entry instead of the source (the contract tests mount frozen builds).
+  // DEV_APP_ENTRY serves a built entry instead of the source.
   // DEV_PREVIEWS turns the app's feature previews on for the stand-in person: ids, comma separated, or `all`.
   const previews = ((manifest.previews ?? []) as { id: string }[]).map((p) => p.id);
   const asked = (process.env.DEV_PREVIEWS ?? '').split(',').map((p) => p.trim()).filter(Boolean);

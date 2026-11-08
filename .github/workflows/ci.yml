@@ -3,7 +3,7 @@ on:
   pull_request:
   push:
     branches: [main, 'release/**']
-  # Everything, every frozen build included, whatever changed.
+  # Everything, whatever changed.
   workflow_dispatch:
 # Every job runs on GitHub's hosted runners unless the repository variable CI_RUNNER names
 # others (as JSON, such as a runner provider's label). The same goes for every other workflow;
@@ -33,7 +33,6 @@ jobs:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     outputs:
       contract: ${{ steps.changes.outputs.contract }}
-      contract_frozen: ${{ steps.changes.outputs.contract_frozen }}
       images: ${{ steps.changes.outputs.images }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -181,10 +180,8 @@ jobs:
         run: pnpm coverage:summary >> "$GITHUB_STEP_SUMMARY"
 
 
-  # The shell keeps its promise to apps: the reference app, as built today and
-  # as built against each earlier SDK minor, mounted by the real shell.
-  # The longest job. On an ordinary pull request it runs today's build and the oldest and newest
-  # frozen ones; on the Version packages pull request, and by hand, every frozen build.
+  # The shell keeps its promise to apps: the reference app on the app contract, run by the real shell.
+  # The longest job, so it runs only when the shell, the packages it is built from or the tests change.
   contract:
     needs: changes
     if: needs.changes.outputs.contract == 'true'
@@ -222,8 +219,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright.outputs.version }}-chromium-shell
       - run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
       - run: pnpm --filter @augur/contract-tests test:contract
-        env:
-          CONTRACT_FROZEN: ${{ needs.changes.outputs.contract_frozen }}
 
   # The server setup in infra/deploy: the compose file is valid and the images build.
   # Secrets committed by mistake, and dependencies with known vulnerabilities (ADR 0043).
