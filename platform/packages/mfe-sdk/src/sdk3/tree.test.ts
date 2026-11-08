@@ -40,4 +40,13 @@ describe('rendering a description into a remote root', () => {
     root.firstChild!.dispatchEvent(new CustomEvent('change', { detail: 'x' }));
     expect(heard).toEqual(['second x']);
   });
+
+  it('stops hearing an event when the handler is set back to nothing', () => {
+    const root = document.createElement('div');
+    const heard: unknown[] = [];
+    reconcile(root, field('', (v) => heard.push(v)));
+    reconcile(root, { type: 'quill-text-field', props: { label: 'Title', value: '', onChange: undefined } });
+    root.firstChild!.dispatchEvent(new CustomEvent('change', { detail: 'x' }));
+    expect(heard).toEqual([]);
+  });
 });

@@ -73,7 +73,8 @@ export const placePath = (p: Place3) => p.path ?? `/${p.id}`;
  */
 export function entryUrl(m: Catalogue3): string | undefined {
   if (!m.frontend) return undefined;
-  if (m.frontend.url) return m.frontend.url;
+  // Only the dev server's stand-in names a served entry itself; a real catalogue's `url` is ignored.
+  if (m.frontend.url && import.meta.env.DEV) return m.frontend.url;
   const entry = m.frontend.entry;
   if (!/^(?!\/)(?!.*\.\.)[A-Za-z0-9_./-]+\.js$/.test(entry)) return undefined;
   return `/apps/${encodeURIComponent(m.id)}/${encodeURIComponent(m.version)}/${entry}`;

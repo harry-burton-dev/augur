@@ -264,7 +264,7 @@ const devApp = (dir: string | undefined) => {
  * only way out. A worker takes its policy from the response that served its script, so the dev server
  * sends it here and nginx.conf sends the same with the built bootstrap under /sandbox/.
  */
-export const WORKER_CSP = "default-src 'none'; script-src 'self'";
+export const WORKER_CSP = "default-src 'none'; script-src 'self'; worker-src 'none'; child-src 'none'";
 const workerPolicy = (): Plugin => ({
   name: 'worker-policy',
   configureServer(server) {

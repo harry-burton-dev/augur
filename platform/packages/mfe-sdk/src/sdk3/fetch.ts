@@ -39,13 +39,22 @@ export function pathProblem(path: unknown): string | undefined {
 }
 
 /** The request headers the host sets itself, whatever the app sends: who is calling, for which app, on which floor. */
-export const HOST_HEADERS: readonly string[] = ['authorization', 'cookie', 'x-augur-app', 'x-workspace-id', 'x-workspace-kind', 'x-workspace-role', 'x-request-id'];
+export const HOST_HEADERS: readonly string[] = ['authorization', 'cookie', 'x-augur-app', 'x-workspace-id', 'x-workspace-kind', 'x-workspace-role', 'x-request-id', 'forwarded', 'x-real-ip'];
 
 /** Whether a request header is the host's to set (or the gateway's), never the app's. */
 export const isHostHeader = (name: string) => {
   const n = name.toLowerCase();
-  return HOST_HEADERS.includes(n) || n.startsWith('x-user-') || n.startsWith('x-augur-');
+  // Who the person is and where they called from are the proxies' to say: x-forwarded-* too.
+  return HOST_HEADERS.includes(n) || n.startsWith('x-user-') || n.startsWith('x-augur-') || n.startsWith('x-forwarded-');
 };
+
+/** The Content-Type fetch would have given a body the app sent without one: a form's, or a Blob's own. */
+function impliedType(body: unknown): string | undefined {
+  if (body instanceof URLSearchParams) return 'application/x-www-form-urlencoded;charset=UTF-8';
+  if (typeof body === 'string') return 'text/plain;charset=UTF-8';
+  if (typeof Blob !== 'undefined' && body instanceof Blob && body.type) return body.type;
+  return undefined;
+}
 
 /** A request's body as bytes or text, ready to cross. Anything else is refused with what to use instead. */
 async function bodyOf(body: unknown): Promise<ArrayBuffer | string | null> {
@@ -62,9 +71,13 @@ async function bodyOf(body: unknown): Promise<ArrayBuffer | string | null> {
 export async function toWire(path: string, init: RequestInit = {}): Promise<WireRequest> {
   const problem = pathProblem(path);
   if (problem) throw new TypeError(problem);
-  const headers = pairsOf(new Headers(init.headers)).filter(([name]) => !isHostHeader(name));
+  const given = new Headers(init.headers);
   const method = (init.method ?? 'GET').toUpperCase();
-  return { path, method, headers, body: method === 'GET' || method === 'HEAD' ? null : await bodyOf(init.body) };
+  const sends = method !== 'GET' && method !== 'HEAD';
+  const implied = sends ? impliedType(init.body) : undefined;
+  if (implied && !given.has('content-type')) given.set('content-type', implied);
+  const headers = pairsOf(given).filter(([name]) => !isHostHeader(name));
+  return { path, method, headers, body: sends ? await bodyOf(init.body) : null };
 }
 
 /** A Headers' pairs, without leaning on its iterator. */

@@ -13,6 +13,7 @@ const asPort = (port: MessagePort) => {
   return {
     fetch: () => undefined,
     WebSocket: class {},
+    navigator: { storage: {}, locks: {}, userAgent: 'test' },
     postMessage: (m: unknown, transfer?: Transferable[]) => port.postMessage(m, transfer as never),
     addEventListener: (_: 'message', fn: (e: MessageEvent) => void) => {
       const on = (data: unknown) => fn({ data } as MessageEvent);
@@ -60,6 +61,12 @@ describe('the worker runtime', () => {
     expect(worker).not.toHaveProperty('WebSocket');
   });
 
+  it('takes away the origin’s file system and locks, which the shell and other apps share', () => {
+    expect(worker.navigator.storage).toBeUndefined();
+    expect(worker.navigator.locks).toBeUndefined();
+    expect(worker.navigator.userAgent).toBe('test');
+  });
+
   it('hands start(ctx) the person, the floor and the previews, and nothing that names a token', () => {
     expect(ctx.person).toEqual({ id: 'p1', name: 'Ada' });
     expect(ctx.workspace.name).toBe('Claims');
@@ -84,11 +91,16 @@ describe('the worker runtime', () => {
   });
 
   it('returns a Response built from the bytes the host sent, and never sends who is calling itself', async () => {
-    const res = await ctx.fetch('/api/notes/v1/notes', { method: 'POST', body: JSON.stringify({ a: 1 }), headers: { authorization: 'Bearer stolen', 'x-augur-app': 'other', 'content-type': 'application/json' } });
+    const res = await ctx.fetch('/api/notes/v1/notes', { method: 'POST', body: JSON.stringify({ a: 1 }), headers: { authorization: 'Bearer stolen', 'x-augur-app': 'other', 'x-forwarded-for': '10.0.0.1', 'content-type': 'application/json' } });
     expect(res).toBeInstanceOf(Response);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ got: '/api/notes/v1/notes' });
     expect(asked[0]).toMatchObject({ path: '/api/notes/v1/notes', method: 'POST', body: '{"a":1}', headers: [['content-type', 'application/json']] });
+  });
+
+  it('sends a form with the type fetch would have given it', async () => {
+    await ctx.fetch('/api/notes/v1/search', { method: 'POST', body: new URLSearchParams({ q: 'a b' }) });
+    expect(asked.at(-1)).toMatchObject({ body: 'q=a+b', headers: [['content-type', 'application/x-www-form-urlencoded;charset=UTF-8']] });
   });
 
   it('runs what start returned when the host stops the app', async () => {

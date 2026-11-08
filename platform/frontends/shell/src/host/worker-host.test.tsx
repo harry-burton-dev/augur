@@ -2,8 +2,8 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel, type Port } from '@augur/mfe-sdk/sdk3/host';
 import { fromCatalogue3, type Catalogue3, type WorkerApp } from './apps3.js';
-import { WorkerMounter, type WorkerContext } from './worker-host.js';
-import { NodeBudget } from './budget.js';
+import { WorkerMounter, inAppPath, type WorkerContext } from './worker-host.js';
+import { NodeBudget, RateBudget } from './budget.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -68,7 +68,7 @@ const manifest: Catalogue3 = {
   name: 'Notes',
   version: '1.0.0',
   frontend: { entry: 'sandbox.js' },
-  contributes: { commands: [{ id: 'note.new', label: 'New note' }] },
+  contributes: { commands: [{ id: 'note.new', label: 'New note' }], places: [{ id: 'notebooks', label: 'Notebooks', fills: true }, { id: 'home', label: 'Home' }] },
 };
 const app: WorkerApp = fromCatalogue3(manifest);
 
@@ -271,6 +271,109 @@ describe('the worker host', () => {
     await flush();
     expect(commands).toEqual(['note.new']);
   });
+
+  it('stops an app that reuses a name in its tree, so what is drawn can’t outgrow the count', async () => {
+    const stub = stubApp((self, method) => method === 'start' && self.mutate('screen', [notice('a', 'One'), notice('a', 'Two')]));
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(app, ctxFor()));
+    await flush();
+    expect(stage.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('unresponsive');
+    expect(stage.textContent).toContain('two things under one name');
+  });
+
+  it('stops an app that floods the shell with small changes', async () => {
+    const stub = stubApp((self, method) => {
+      if (method !== 'start') return;
+      self.mutate('screen', [notice('n1', 'Ready')]);
+      for (let i = 0; i < 50; i++) self.post('frame.set', { title: `t${i}` });
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker, budgets: { perSecond: 20 } });
+    act(() => void mounter.mount(app, ctxFor()));
+    await flush();
+    expect(stage.textContent).toContain('more than 20 changes in a second');
+    expect(stub.worker.terminated).toBe(true);
+  });
+
+  it('stops an app that stops answering after it opened', async () => {
+    vi.useFakeTimers();
+    let hung = false;
+    const stub = stubApp((self, method) => {
+      if (method === 'start') self.mutate('screen', [notice('n1', 'Ready')]);
+      if (method === 'ping' && hung) return new Promise(() => undefined);
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker, budgets: { hangMs: 1000 } });
+    act(() => void mounter.mount(app, ctxFor()));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(10)));
+    expect(stage.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('open');
+    await act(async () => void (await vi.advanceTimersByTimeAsync(3000)));
+    expect(stage.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('open');
+    hung = true;
+    await act(async () => void (await vi.advanceTimersByTimeAsync(3000)));
+    expect(stage.textContent).toContain('Notes stopped answering for 1 seconds');
+  });
+
+  it('moves only inside the app, and takes no function across to another app or the page', async () => {
+    const stub = stubApp((self, method) => {
+      if (method !== 'start') return;
+      self.post('navigate', '/../admin/people');
+      self.post('navigate', '/%2e%2e/admin');
+      self.post('navigate', '/notebooks/7');
+      return self.call('raise', { type: 'note.share', payload: { id: 'n1', run: () => 'called' } });
+    });
+    const ctx = ctxFor();
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(app, ctx));
+    await flush();
+    await flush();
+    expect(ctx.navigate).toHaveBeenCalledTimes(1);
+    expect(ctx.navigate).toHaveBeenCalledWith('/notebooks/7');
+    const raised = (ctx.raise as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0] as { payload: Record<string, unknown> };
+    expect(raised.payload.id).toBe('n1');
+    expect(raised.payload.run).toBeUndefined();
+  });
+
+  it('keeps what sits under a place only for a place that fills, with paths inside the app', async () => {
+    let self!: Channel;
+    const stub = stubApp((app, method) => {
+      self = app;
+      if (method === 'start') app.mutate('screen', [notice('n1', 'Ready')]);
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(app, ctxFor()));
+    await flush();
+    self.post('frame.under', 'home', [{ label: 'Nope', path: '/x' }]);
+    self.post('frame.under', 'notebooks', [{ label: 'Work', path: '/notebooks/1' }, { label: 'Out', path: '/../admin' }]);
+    await flush();
+    const under = mounter.session!.state.under;
+    expect(under.has('home')).toBe(false);
+    expect(under.get('notebooks')!.map((i) => i.label)).toEqual(['Work']);
+  });
+
+  it('answers a stopping app nothing', async () => {
+    let self!: Channel;
+    const stub = stubApp((app, method) => {
+      self = app;
+      if (method === 'start') app.mutate('screen', [notice('n1', 'Ready')]);
+      if (method === 'stop') return new Promise(() => undefined);
+    });
+    const ctx = ctxFor();
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(app, ctx));
+    await flush();
+    act(() => mounter.unmount());
+    self.post('navigate', '/notebooks');
+    self.post('notify', { title: 'Still here' });
+    await flush();
+    expect(ctx.navigate).not.toHaveBeenCalled();
+    expect(ctx.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('a path an app may move to', () => {
+  it('stays below the app', () => {
+    expect(inAppPath('/notebooks/7?tab=a')).toBe(true);
+    for (const bad of ['notebooks', '//evil.example', '/../admin', '/a/%2E%2E/b', '/a/./b', '/a\\b', '/a/%2fb', '/a/%zz']) expect(inAppPath(bad)).toBe(false);
+  });
 });
 
 describe('the node budget', () => {
@@ -285,5 +388,25 @@ describe('the node budget', () => {
     expect(budget.take('card', [[0, '~', tree('c', 6), 0]])).toBeUndefined();
     expect(budget.take('card', [[0, '~', tree('d', 1), 0]])).toEqual({ kind: 'live', nodes: 14, limit: 12 });
     expect(budget.take('card', [[0, '~', tree('e', 10), 0]])).toEqual({ kind: 'flush', nodes: 11, limit: 10 });
+  });
+
+  it('refuses a change that would make its count and the drawing differ', () => {
+    const budget = () => new NodeBudget({ perFlush: 10, live: 100 });
+    const one = (id: string) => ({ id });
+    expect(budget().take('screen', [[0, '~', one('a'), 0], [0, '~', one('a'), 0]])).toMatchObject({ kind: 'malformed' });
+    expect(budget().take('screen', [[0, '~', one('a'), 'first']])).toMatchObject({ kind: 'malformed' });
+    expect(budget().take('screen', [[0, '~', one('a'), 3]])).toMatchObject({ kind: 'malformed' });
+    expect(budget().take('screen', [[0, 'nowhere', one('a'), 0]])).toMatchObject({ kind: 'malformed' });
+    expect(budget().take('screen', [[1, '~', 0]])).toMatchObject({ kind: 'malformed' });
+    expect(budget().take('screen', [[0, '~', { id: 'a', children: [one('b'), one('b')] }, 0]])).toMatchObject({ kind: 'malformed' });
+  });
+
+  it('counts every message and record against a second’s rate', () => {
+    let now = 0;
+    const rate = new RateBudget(10, () => now);
+    expect(rate.take(6)).toBeUndefined();
+    expect(rate.take(5)).toEqual({ kind: 'rate', nodes: 11, limit: 10 });
+    now = 1000;
+    expect(rate.take(10)).toBeUndefined();
   });
 });

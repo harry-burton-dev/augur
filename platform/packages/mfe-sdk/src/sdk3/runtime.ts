@@ -23,11 +23,16 @@ export { CARD_ROOT, SCREEN_ROOT, aboutRoot, type StartInit };
  */
 const TAKEN = ['fetch', 'XMLHttpRequest', 'WebSocket', 'WebSocketStream', 'EventSource', 'WebTransport', 'importScripts', 'indexedDB', 'caches', 'BroadcastChannel', 'Worker', 'SharedWorker'] as const;
 
+/** The same on the worker's `navigator`: the origin's file system and locks, which other apps and the shell share, and service workers. */
+const TAKEN_FROM_NAVIGATOR = ['storage', 'locks', 'serviceWorker'] as const;
+
 const ROOT_TAG = 'augur-remote-root';
 
 /** Runs the worker side of the bridge on `scope`, the worker's global scope. Called once, by the bootstrap. */
 export function runWorker(scope: Port & Record<string, unknown> = globalThis as never) {
   for (const name of TAKEN) takeAway(scope, name);
+  const nav = (scope as { navigator?: object }).navigator;
+  if (nav) for (const name of TAKEN_FROM_NAVIGATOR) takeAway(nav, name);
   if (!customElements.get(ROOT_TAG)) customElements.define(ROOT_TAG, RemoteRootElement);
 
   const roots = new Map<string, RemoteRootElement>();
@@ -58,6 +63,8 @@ export function runWorker(scope: Port & Record<string, unknown> = globalThis as 
       if (!fn) throw new Error('The app has no handler for that command now.');
       return fn(args[1]);
     }
+    // The host asks now and then, to know the app still answers (spec 6.13).
+    if (method === 'ping') return;
     if (method === 'stop') {
       const fn = stop;
       stop = undefined;

@@ -30,6 +30,18 @@ export type Message =
 /** Answers a call by name; what it returns (or throws) goes back to the caller. */
 export type Handler = (method: string, args: unknown[]) => unknown;
 
+export interface ChannelOptions {
+  /**
+   * Where functions may cross. `'all'` (the worker's side) sends and takes them anywhere. `'mutate'`
+   * (the host's side) takes them only in mutation records, as an element's event listeners, and sends
+   * none: a function in a call, a post or an answer would hand one app, or the page, a way to be called
+   * from another worker, which apps never get (spec 6.6).
+   */
+  functions?: 'all' | 'mutate';
+  /** Each message before it is handled; false drops it. The host counts them against the app's budget. */
+  admit?: (message: Message) => boolean;
+}
+
 const FN = '__fn';
 const isPlain = (v: object) => {
   const proto = Object.getPrototypeOf(v);
@@ -49,15 +61,19 @@ export class Channel {
   readonly #ids = new WeakMap<object, string>();
   readonly #pending = new Map<number, { resolve(v: unknown): void; reject(e: unknown): void }>();
   readonly #listener: (event: MessageEvent) => void;
+  readonly #functions: 'all' | 'mutate';
+  readonly #admit?: (message: Message) => boolean;
   #next = 0;
   #seq = 0;
   #closed = false;
   /** Mutation records from the other end, by root. */
   onMutate?: (root: string, records: unknown[]) => void;
 
-  constructor(port: Port, handle: Handler) {
+  constructor(port: Port, handle: Handler, options: ChannelOptions = {}) {
     this.#port = port;
     this.#handle = handle;
+    this.#functions = options.functions ?? 'all';
+    this.#admit = options.admit;
     this.#listener = (event) => void this.#receive(event.data);
     port.addEventListener('message', this.#listener);
   }
@@ -106,6 +122,7 @@ export class Channel {
 
   #encode(v: unknown): unknown {
     if (typeof v === 'function') {
+      if (this.#functions === 'mutate') return undefined;
       let id = this.#ids.get(v);
       if (!id) {
         id = `f${this.#next++}`;
@@ -117,19 +134,20 @@ export class Channel {
     if (Array.isArray(v)) return v.map((x) => this.#encode(x));
     if (v && typeof v === 'object' && isPlain(v)) {
       const out: Record<string, unknown> = {};
-      for (const [k, x] of Object.entries(v)) out[k] = this.#encode(x);
+      for (const [k, x] of Object.entries(v)) own(out, k, this.#encode(x));
       return out;
     }
     return v;
   }
 
-  #decode(v: unknown): unknown {
-    if (Array.isArray(v)) return v.map((x) => this.#decode(x));
+  /** The other end's values, with `{ __fn }` made callable where functions may cross (`fns`). */
+  #decode(v: unknown, fns: boolean): unknown {
+    if (Array.isArray(v)) return v.map((x) => this.#decode(x, fns));
     if (v && typeof v === 'object' && isPlain(v)) {
       const fn = (v as Record<string, unknown>)[FN];
-      if (typeof fn === 'string' && Object.keys(v).length === 1) return (...args: unknown[]) => this.#request({ kind: 'fn', id: fn, args: this.#encode(args) as unknown[] });
+      if (typeof fn === 'string' && Object.keys(v).length === 1) return fns ? (...args: unknown[]) => this.#request({ kind: 'fn', id: fn, args: this.#encode(args) as unknown[] }) : undefined;
       const out: Record<string, unknown> = {};
-      for (const [k, x] of Object.entries(v)) out[k] = this.#decode(x);
+      for (const [k, x] of Object.entries(v)) own(out, k, this.#decode(x, fns));
       return out;
     }
     return v;
@@ -137,20 +155,22 @@ export class Channel {
 
   async #receive(m: unknown) {
     if (this.#closed || !isMessage(m)) return;
+    if (this.#admit && !this.#admit(m)) return;
+    const fns = this.#functions === 'all';
     if (m.kind === 'mutate') {
-      if (typeof m.root === 'string' && Array.isArray(m.records)) this.onMutate?.(m.root, this.#decode(m.records) as unknown[]);
+      if (typeof m.root === 'string' && Array.isArray(m.records)) this.onMutate?.(m.root, this.#decode(m.records, true) as unknown[]);
       return;
     }
     if (m.kind === 'answer') {
       const p = this.#pending.get(m.n);
       if (!p) return;
       this.#pending.delete(m.n);
-      if (m.ok) p.resolve(this.#decode(m.value));
+      if (m.ok) p.resolve(this.#decode(m.value, fns));
       else p.reject(Object.assign(new Error(String(m.error?.message ?? 'The call failed.')), { name: String(m.error?.name ?? 'Error') }));
       return;
     }
     if (!Array.isArray(m.args)) return;
-    const args = this.#decode(m.args) as unknown[];
+    const args = this.#decode(m.args, fns) as unknown[];
     if (m.kind === 'post') {
       try {
         await this.#handle(String(m.method), args);
@@ -170,6 +190,9 @@ export class Channel {
     }
   }
 }
+
+/** Sets a key as the object's own, so one named `__proto__` stays data. */
+const own = (out: Record<string, unknown>, key: string, value: unknown) => Object.defineProperty(out, key, { value, enumerable: true, writable: true, configurable: true });
 
 /** The ArrayBuffers a message carries at its top levels (a call's arguments or answer), to transfer rather than copy. */
 function collectBuffers(m: Message, into: Transferable[]) {

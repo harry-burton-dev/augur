@@ -5,8 +5,8 @@
  * what changed crosses the bridge. An app may also build the tree with `document.createElement`
  * itself; this is the short way.
  *
- * Props become the element's properties; a function prop named `on<Event>` listens to that event and
- * gets its detail (`onOpen` hears `open`); `slot` puts the element in its parent's slot.
+ * Props become the element's properties; a prop named `on<Event>` listens to that event while it is a
+ * function and gets its detail (`onOpen` hears `open`); `slot` puts the element in its parent's slot.
  */
 import type { RemoteElement, RemoteNode } from './context.js';
 
@@ -59,8 +59,14 @@ function update(el: Element, desc: RemoteElement) {
       seen.add(name);
       continue;
     }
-    const event = typeof value === 'function' ? eventOf(name) : undefined;
+    const event = eventOf(name);
     if (event) {
+      seen.add(name);
+      // Left as nothing (`onPress: disabled ? undefined : save`), the event is no longer heard.
+      if (typeof value !== 'function') {
+        was.handlers.delete(event);
+        continue;
+      }
       was.handlers.set(event, value as (detail: unknown) => unknown);
       if (!was.listening.has(event)) {
         was.listening.add(event);
@@ -68,7 +74,6 @@ function update(el: Element, desc: RemoteElement) {
         // One listener per event, calling whichever handler the latest render gave.
         el.addEventListener(event, (e) => void handlers.get(event)?.((e as CustomEvent).detail));
       }
-      seen.add(name);
       continue;
     }
     seen.add(name);
