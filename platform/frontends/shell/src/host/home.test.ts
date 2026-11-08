@@ -2,6 +2,7 @@ import { createEventBus, type AppManifestEntry, type MountContext, type Workspac
 import type { ShellNotification } from '@augur/shell-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { cardOf, cardsFor, needsFor, settingsOf, SurfaceMounter } from './home.js';
+import { fromCatalogue3 } from './apps3.js';
 
 const app = (id: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -118,3 +119,60 @@ describe('glance cards', () => {
     expect(await cards.mount(el, app('plain'), me, ctx())).toBe(false);
   });
 });
+
+describe('cards of apps on the app contract', () => {
+  const worker = fromCatalogue3({ contract: 3, id: 'notes', name: 'Notes', version: '1.0.0', frontend: { entry: 'sandbox.js' }, contributes: { card: true } });
+  /** A stand-in for the worker's card: it says it was shown when the test says so, and counts its ends. */
+  const fakeCard = () => {
+    let settle!: (shown: boolean) => void;
+    const made = { ends: 0, mounted: 0, settle: (v: boolean) => settle(v) };
+    const factory = vi.fn(() => ({
+      shown: new Promise<boolean>((r) => (settle = r)),
+      mount: () => void made.mounted++,
+      unmount: () => {
+        made.ends++;
+        settle(false);
+      },
+    }));
+    return { made, factory };
+  };
+
+  it('ends the card’s worker when the tile goes while it is still opening', async () => {
+    const { made, factory } = fakeCard();
+    const cards = new SurfaceMounter(undefined, factory as never);
+    const el = document.createElement('div');
+    document.body.append(el);
+    const shown = cards.mount(el, worker, me, ctx());
+    await cards.unmount(el);
+    expect(await shown).toBe(false);
+    expect(made.ends).toBe(1);
+    el.remove();
+  });
+
+  it('ends the first card when the same tile is filled again', async () => {
+    const first = fakeCard();
+    const second = fakeCard();
+    const factories = [first.factory, second.factory];
+    const cards = new SurfaceMounter(undefined, (() => factories.shift()!()) as never);
+    const el = document.createElement('div');
+    document.body.append(el);
+    const one = cards.mount(el, worker, me, ctx());
+    await Promise.resolve();
+    const two = cards.mount(el, worker, me, ctx());
+    await Promise.resolve();
+    second.made.settle(true);
+    expect(await one).toBe(false);
+    expect(await two).toBe(true);
+    expect(first.made.ends).toBe(1);
+    expect(second.made.ends).toBe(0);
+    el.remove();
+  });
+
+  it('starts no card for a tile no longer on the page', async () => {
+    const { made, factory } = fakeCard();
+    const cards = new SurfaceMounter(undefined, factory as never);
+    expect(await cards.mount(document.createElement('div'), worker, me, ctx())).toBe(false);
+    expect(made.mounted).toBe(0);
+  });
+});
+

@@ -27,6 +27,7 @@ export interface AppContext {
         cancel(): void;
     };
     request<T = unknown>(intent: Intent): Promise<T>;
+    surface: 'screen' | 'card';
     // (undocumented)
     workspace: Workspace;
 }

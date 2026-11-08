@@ -1,7 +1,7 @@
 import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { isWorkerApp, type WorkerApp } from './apps3.js';
 import { AppMounter, importEntry, type ImportEntry } from './mount.js';
-import { WorkerMounter, type WorkerContext, type WorkerHostOptions } from './worker-host.js';
+import { WorkerMounter, workerCard, type WorkerContext, type WorkerHostOptions } from './worker-host.js';
 
 export interface StageOptions extends WorkerHostOptions {
   /** Moves to `path` inside `app`, for an app on the contract, which asks rather than touching the address. */
@@ -22,6 +22,12 @@ export const workerContext = (app: WorkerApp, ctx: MountContext, navigate: Stage
   raise: (intent) => ctx.raise(intent),
   request: (intent) => ctx.request(intent),
 });
+
+/** Home's cards for apps on the contract: each runs its app's worker, which moves into the app through `navigate`. */
+export const workerCards =
+  (navigate: StageOptions['navigate'], options: WorkerHostOptions = {}) =>
+  (app: WorkerApp, ctx: MountContext) =>
+    workerCard(app, workerContext(app, ctx, navigate), options);
 
 /**
  * The stage's one open app, whichever contract it is on: an app on the app contract runs in a worker

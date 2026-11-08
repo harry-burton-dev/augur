@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Models
-  version: 1.1.0
+  version: 1.2.0
   description: |-
     The model gateway: the only place AUGUR keeps a model provider's key. It speaks the OpenAI-style chat completions API to whichever provider the server is set up with (MODEL_API_URL: OpenRouter, a LiteLLM proxy, any compatible API, or the built-in stand-in model), so nothing else holds an AI key or knows the provider.
     Two kinds of caller. An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services) and needs models:use granted by the registry on the floor named by x-workspace-id. A person reaches it through the gateway (caller in x-user-* headers) from the shell's Agents, naming the agent they are talking to: "assistant", the shell's own, or an AI app granted models:use on their floor.
@@ -384,7 +384,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Models are off, or the app isn't granted models:use there
+          description: Models are off, the app isn't granted models:use there, or an app acting for a person named another agent or holds a delegation without models:use
           content:
             application/problem+json:
               schema:

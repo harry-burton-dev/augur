@@ -81,6 +81,16 @@ describe.runIf(DATABASE_URL)('the inbox', () => {
     expect((await ungranted('k', assignment)).json().message).toContain('inbox:write');
   });
 
+  it('takes an item from an app acting for a person, recorded as that person’s step through the app (contract 3)', async () => {
+    const { put, store } = await setUp();
+    const forSam = (scopes: string[]) => callerHeaders({ id: 'u-sam', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' }, app: 'mandate', scopes });
+    const res = await put('intent/9', assignment, forSam(['inbox:write']));
+    expect(res.statusCode).toBe(201);
+    expect((await store.audit({ limit: 1 })).map((e) => [e.action, e.actor, e.detail.app])).toEqual([['inbox.created', { id: 'u-sam', kind: 'user' }, 'mandate']]);
+    const narrow = await put('intent/10', assignment, forSam([]));
+    expect([narrow.statusCode, narrow.json().message]).toEqual([403, 'mandate isn’t allowed to write to inboxes (inbox:write) when acting for Sam.']);
+  });
+
   it('keeps a closed item closed unless the app reopens it, and lets the app read the notes', async () => {
     const { app, put, act } = await setUp();
     const { id } = (await put('k', assignment)).json();

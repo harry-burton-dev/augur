@@ -143,18 +143,9 @@ importers:
 
   platform/contract:
     dependencies:
-      '@augur/app-kit':
-        specifier: npm:@harry-burton-dev/augur-app-kit@^0.14.0
-        version: '@harry-burton-dev/augur-app-kit@0.14.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../packages/mfe-sdk
-      react:
-        specifier: 'catalog:'
-        version: 19.3.1
-      react-dom:
-        specifier: 'catalog:'
-        version: 19.3.1(react@19.3.1)
     devDependencies:
       '@axe-core/playwright':
         specifier: 4.14.0
@@ -165,12 +156,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
-      '@types/react':
-        specifier: 'catalog:'
-        version: 19.3.0
-      '@types/react-dom':
-        specifier: 'catalog:'
-        version: 19.3.0(@types/react@19.3.0)
       typescript:
         specifier: 'catalog:'
         version: 5.9.3

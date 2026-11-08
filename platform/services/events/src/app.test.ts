@@ -57,6 +57,21 @@ describe.runIf(DATABASE_URL)('events', () => {
     expect((await post(platform, { ...review, link: 'https://elsewhere.example' })).statusCode).toBe(400);
   });
 
+  it('lets an app acting for a person send as that app, within the scopes the delegation carries (contract 3)', async () => {
+    const app = await db.app({ verifyService, grants: async (id) => (id === 'library' ? (['notifications:send'] as const) : ([] as const)) });
+    const forAlex = (scopes: string[]) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], app: 'library', scopes });
+    const post = (headers: Record<string, string>, payload: object) => app.inject({ method: 'POST', url: '/v1/notifications', headers, payload });
+    const sent = await post(forAlex(['notifications:send']), review);
+    expect([sent.statusCode, sent.json()]).toEqual([202, { sent: 2 }]);
+    // Acting for someone, the app is still only itself.
+    expect((await post(forAlex(['notifications:send']), { ...review, app: 'other' })).statusCode).toBe(403);
+    const narrow = await post(forAlex([]), review);
+    expect([narrow.statusCode, narrow.json().message]).toEqual([403, 'library isn’t allowed to send notifications (notifications:send) when acting for Alex.']);
+    // The grant is the second line: a delegation naming a scope the registry doesn't grant the app gets no further.
+    const ungranted = await post(callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: [], app: 'other', scopes: ['notifications:send'] }), { ...review, app: 'other' });
+    expect([ungranted.statusCode, ungranted.json().message]).toEqual([403, 'other isn’t granted notifications:send.']);
+  });
+
   it('takes urgent news only from AUGUR’s own services, and says it is urgent', async () => {
     const app = await db.app({ verifyService, grants: async () => ['notifications:send'] });
     const urgent = { ...review, urgent: true };

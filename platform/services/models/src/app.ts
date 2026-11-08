@@ -4,7 +4,9 @@ import {
   callerFromHeaders,
   GrantsUnavailable,
   health,
+  delegationRefusal,
   identifyService,
+  isDelegated,
   packageVersion,
   recordAudit,
   ServiceAuthUnavailable,
@@ -153,6 +155,13 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
         const caller = callerFromHeaders(req.headers);
         if (!caller) return void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
         if (!people) return void reply.code(403).send({ error: 'forbidden', message: 'Only an app’s own service asks for this, as itself.' });
+        if (isDelegated(caller)) {
+          // An app acting for the person (contract 3) talks to its own agent, within what the delegation carries.
+          if (agent && agent !== caller.app) return void reply.code(403).send({ error: 'forbidden', message: `${caller.app} can only talk to its own agent for you, not to "${agent}".` });
+          agent = caller.app;
+          const refusal = delegationRefusal({ kind: 'app', app: caller.app, person: caller }, 'models:use');
+          if (refusal) return void reply.code(403).send({ error: 'forbidden', message: refusal });
+        }
         if (!agent) return void reply.code(400).send({ error: 'bad_request', message: 'Name the agent you’re talking to.' });
         if (agent !== ASSISTANT) {
           const ok = await granted(req, reply, agent, caller.workspace?.id);
@@ -280,7 +289,7 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
               200: { ...ref(ChatAnswer), description: "The model's answer" },
               400: refused("An invalid request, or a person's call without an agent"),
               401: refused('Neither a signed-in person nor a service'),
-              403: refused("Models are off, or the app isn't granted models:use there"),
+              403: refused("Models are off, the app isn't granted models:use there, or an app acting for a person named another agent or holds a delegation without models:use"),
               429: refused('The app has used its calls for today'),
               502: refused('The model provider failed or refused; the message says what to check'),
               503: refused("No model is set up, or grants or the audit log can't be reached"),

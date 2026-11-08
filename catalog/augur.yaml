@@ -394,7 +394,7 @@ kind: Component
 metadata:
   name: augur-contract-tests
   title: "@augur/contract-tests"
-  description: "The shell's promise to apps, tested: a reference app, and frozen builds of it from each SDK release, mounted by the real shell in a browser."
+  description: "The shell's promise to apps, tested: a reference app on the app contract, run by the real shell in a browser."
   annotations:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/contract/
@@ -415,7 +415,7 @@ metadata:
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.15.0
+    augur.dev/contract-version: 1.16.0
 spec:
   type: openapi
   lifecycle: production
@@ -449,7 +449,7 @@ metadata:
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.31.0
+    augur.dev/contract-version: 1.32.0
 spec:
   type: openapi
   lifecycle: production
@@ -470,7 +470,7 @@ metadata:
     Every call is written to the audit log (model.called, with the model, how many messages and which tools, never what was said) before it is made; a call that can't be recorded isn't made (503). Each app (the shell's assistant counts as one) gets a number of calls a day, UTC (429 after). Models are off until an admin turns them on (403 while off).
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.1.0
+    augur.dev/contract-version: 1.2.0
 spec:
   type: openapi
   lifecycle: production

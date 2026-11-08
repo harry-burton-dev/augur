@@ -86,6 +86,11 @@ const menuOf = (m: Catalogue3): AppMenuCategory[] => {
   return places.length ? [{ label: m.name, items: places.map((p) => ({ id: p.id, label: p.label, icon: p.icon, detail: p.detail, path: placePath(p) })) }] : [];
 };
 
+/** The header that names the app a call is made for (contract 3); the gateway checks it against the app's grants. */
+export const APP_HEADER = 'x-augur-app';
+
+const FLOOR_KINDS: WorkspaceKind[] = ['personal', 'team', 'org'];
+
 /** A contract 3 catalogue row as the shell's entry. */
 export function fromCatalogue3(m: Catalogue3): WorkerApp {
   const c = m.contributes ?? {};
@@ -112,6 +117,8 @@ export function fromCatalogue3(m: Catalogue3): WorkerApp {
     inbox: c.inbox,
     notifications: c.notifications,
     category: m.category,
+    // A card on Home on each kind of floor the app is on, drawn by the app into ctx.frame.card (spec 6.15).
+    ...(c.card ? { surfaces: (m.floors ?? FLOOR_KINDS).map((floor) => ({ floor, slot: 'card' as const, module: 'card' })) } : {}),
     // The worker hears every move inside the app, so a move never starts it again.
     followsAddress: true,
   };

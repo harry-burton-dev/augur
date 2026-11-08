@@ -38,6 +38,9 @@ export interface AppAuditEntry {
 }
 
 // @public
+export const appCallerId: (app: string) => string;
+
+// @public
 export const appClientId: (app: string) => string;
 
 // @public
@@ -470,6 +473,9 @@ export interface DelegationOptions {
     scopes: readonly string[];
 }
 
+// @public
+export const delegationRefusal: (who: ServiceCaller, scope: string) => string | undefined;
+
 // @public (undocumented)
 export const delegationSecondsFromEnv: (env?: NodeJS.ProcessEnv) => number;
 
@@ -711,6 +717,9 @@ export const health: (service: string, version: string, api?: string) => Health;
 // @public
 export const identifyService: (headers: Record<string, string | string[] | undefined>, verify: ServiceVerifier | undefined) => Promise<ServiceIdentity | undefined>;
 
+// @public
+export const identifyServiceCaller: (headers: Record<string, string | string[] | undefined>, verify: ServiceVerifier | undefined) => Promise<ServiceCaller | undefined>;
+
 // @public (undocumented)
 export const identityAudience: (input: Omit<PeopleOptions, "ttlMs" | "now">) => AudienceLookup;
 
@@ -862,6 +871,9 @@ export type InboxState = 'open' | 'done' | 'declined' | 'handed-on' | 'withdrawn
 
 // @public
 export const INSECURE_DEV_CALLERS = "AUGUR_INSECURE_DEV_CALLERS";
+
+// @public
+export const isAppItself: (caller: Pick<Caller, "id" | "app"> | undefined) => boolean;
 
 // @public
 export const isDelegated: (caller: Pick<Caller, "app"> | undefined) => caller is Caller & {
@@ -1453,7 +1465,13 @@ export type Scope = (typeof SCOPES)[number];
 export const SCOPE_PATTERN: RegExp;
 
 // @public
+export const SCOPE_WORDS: Record<Scope, string>;
+
+// @public
 export const SCOPES: readonly ["notifications:send", "audit:write", "models:use", "events:publish", "events:subscribe", "people:read", "inbox:write"];
+
+// @public
+export const scopeWords: (scope: string) => string;
 
 // @public
 export function sendProblem(reply: FastifyReply, problem: Problem): FastifyReply;
@@ -1480,6 +1498,11 @@ export const serviceAuthFromEnv: (env?: NodeJS.ProcessEnv) => {
 // @public
 export class ServiceAuthUnavailable extends Error {
 }
+
+// @public
+export type ServiceCaller = ServiceIdentity & {
+    person?: Caller;
+};
 
 // @public (undocumented)
 export class ServiceCallError extends Error {

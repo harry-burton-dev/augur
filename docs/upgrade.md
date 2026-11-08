@@ -57,6 +57,12 @@ Each note starts with the release it came in (**From**). If your server already 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
 
+### Apps on SDK 2 no longer open
+
+**From** unreleased
+
+This release is SDK 3: apps installed from the feed run only on the app contract, each in a worker of its own. An app still installed from before that names an SDK 2 range stays in the app bar and on Home, and opening it says it was made for an older version of AUGUR; intents and Find pass it by. Nothing of its data is touched. There is nothing to do unless Admin, Apps lists one: ask its team for a release on the app contract, or remove it there. Home, Admin and the Upgrade Centre are AUGUR's own and keep working.
+
 ### The app runner runs an app's Score parts, and trusts only APP_PUBLISHERS
 
 **From** unreleased

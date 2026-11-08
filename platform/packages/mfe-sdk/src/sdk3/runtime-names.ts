@@ -16,6 +16,8 @@ export interface StartInit {
   intent?: Intent;
   /** The app was opened to answer a request. */
   replying?: boolean;
+  /** What the shell runs it for: its screen in the stage (the default), or only its card on Home. */
+  surface?: 'screen' | 'card';
 }
 
 /** The roots an app renders into: the screen, its Home card, and one per declared About section. */

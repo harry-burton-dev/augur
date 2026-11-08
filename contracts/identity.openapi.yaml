@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.31.0
+  version: 1.32.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -1227,7 +1227,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a platform service, or an app without people:read
+          description: Not a platform service, nor an app (or an app acting for a person) with people:read
           content:
             application/problem+json:
               schema:
@@ -1320,7 +1320,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a platform service, or an app without people:read
+          description: Not a platform service, nor an app (or an app acting for a person) with people:read
           content:
             application/problem+json:
               schema:
@@ -1366,7 +1366,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a platform service, or an app without people:read
+          description: Not a platform service, nor an app (or an app acting for a person) with people:read
           content:
             application/problem+json:
               schema:
