@@ -6,7 +6,10 @@
   "type": "module",
   "description": "The release steps every AUGUR app shares: dev builds, previews, signed bundles and the app-release.json a deployment installs from, as the augur-app command for an app in its own repository.",
   "exports": {
-    ".": "./src/release.mjs",
+    ".": {
+      "types": "./src/release.d.ts",
+      "default": "./src/release.mjs"
+    },
     "./release2": {
       "types": "./src/release2.d.ts",
       "default": "./src/release2.mjs"
@@ -20,7 +23,10 @@
     "./score-part-1.schema.json": "./score-part-1.schema.json",
     "./app-release-2.schema.json": "./app-release-2.schema.json",
     "./score-v1b1.json": "./score-v1b1.json",
-    "./catalog": "./src/catalog.mjs",
+    "./catalog": {
+      "types": "./src/catalog.d.ts",
+      "default": "./src/catalog.mjs"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -39,7 +45,9 @@
     "score-v1b1.json",
     "fixtures",
     "src/release2.d.ts",
-    "src/validate.d.ts"
+    "src/validate.d.ts",
+    "src/release.d.ts",
+    "src/catalog.d.ts"
   ],
   "scripts": {
     "test": "node --test src/*.test.mjs"
