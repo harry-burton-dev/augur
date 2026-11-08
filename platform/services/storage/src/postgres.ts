@@ -54,7 +54,19 @@ export async function provisionDatabase(sql: Sql, { app, password, connections =
   await sql.query(`alter role ${role} set search_path = ${schema}, public`);
 }
 
-/** Takes a preview's login and schema away, with everything in the schema. Nothing happens when there's none. */
+/** The apps whose data is already gone (or was kept, being in APP_STORAGE too), from the storage job's own note of them. */
+export async function retiredApps(sql: Sql): Promise<Set<string>> {
+  await sql.query('create table if not exists public.storage_retired_apps (app text primary key, outcome text not null, at timestamptz not null default now())');
+  const { rows } = await sql.query<{ app: string }>('select app from public.storage_retired_apps');
+  return new Set(rows.map((r) => r.app));
+}
+
+/** Notes that a retired app's data was taken away, or kept, so it isn't done again. */
+export async function markRetired(sql: Sql, app: string, outcome: 'removed' | 'kept'): Promise<void> {
+  await sql.query('insert into public.storage_retired_apps (app, outcome) values ($1, $2) on conflict (app) do nothing', [app, outcome]);
+}
+
+/** Takes an app's (or a preview's) login and schemas away, with everything in them. Nothing happens when there's none. */
 export async function dropDatabase(sql: Sql, app: string): Promise<void> {
   const reserved = reservedIdProblem(app);
   if (reserved) throw new Error(`Nothing was dropped: ${reserved}`);

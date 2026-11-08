@@ -2,7 +2,7 @@
 
 A pull request that changes an app gets a preview: its build runs on your server beside the app everyone uses, and the app's developers can switch to it for themselves to try it with the real platform (sign-in, floors, other apps) before it merges. Nobody else sees it, and it never touches the app's data.
 
-Previews are for apps the [app runner](upgrade.md#the-app-runner) installed. Apps that ship with AUGUR (Folio, for now) have none.
+Previews are for apps the [app runner](upgrade.md#the-app-runner) installed, which is every app.
 
 ## How a preview gets to your server
 

@@ -26,8 +26,6 @@ x-logging: &logging
 # OpenTelemetry (ADR 0034, 0059, docs/observability.md): every Node service loads the service kit's
 # telemetry first and sends to the deployment's own otel-lgtm, or to the collector OTEL_EXPORTER_OTLP_ENDPOINT
 # names. OTEL_SDK_DISABLED=true turns it off (and OTEL_LGTM_REPLICAS=0 stops otel-lgtm).
-# The OTEL_* settings alone are shared with the Artifacts rendition worker, which is Python and sends through
-# DBOS (augur-folio's decision 0002).
 x-otel: &otel
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-lgtm:4318}
   OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-}
@@ -72,24 +70,6 @@ x-service: &service
 x-own-login: &own-login
   postgres: { condition: service_healthy }
   storage: { condition: service_completed_successfully }
-
-# Folio's own schema and bucket, for its service and its rendition worker. The storage service
-# makes both from these secrets; the bucket key's id is worked out from its secret.
-x-folio-storage: &folio-storage
-  DATABASE_URL: postgres://app_folio:${FOLIO_DATABASE_PASSWORD:-}@postgres:5432/platform
-  S3_ENDPOINT: http://garage:3900
-  S3_BUCKET: folio
-  S3_SECRET_ACCESS_KEY: ${FOLIO_BUCKET_SECRET:-}
-
-# Data Atlas's own schema. The storage service makes it a bucket too, as it does every app, though
-# Data Atlas keeps nothing there.
-x-atlas-storage: &atlas-storage
-  DATABASE_URL: postgres://app_atlas:${ATLAS_DATABASE_PASSWORD:-}@postgres:5432/platform
-
-# Mandate's own schema, the same login and schema the app runner gave it on a server that installed it
-# before it shipped with AUGUR. The storage service makes it a bucket too, as it does every app.
-x-mandate-storage: &mandate-storage
-  DATABASE_URL: postgres://app_mandate:${MANDATE_DATABASE_PASSWORD:-}@postgres:5432/platform
 
 services:
   # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate. While
@@ -170,7 +150,7 @@ services:
       - ./postgres:/etc/augur:ro
       - wal-archive:/wal-archive
     # And the rendition worker's network, which reaches only Postgres and Garage.
-    networks: [default, renditions]
+    networks: [default]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform"]
       interval: 5s
@@ -252,7 +232,7 @@ services:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
-    networks: [default, renditions]
+    networks: [default]
 
   # Gives each platform service and Keycloak a database login of their own, and each app in
   # APP_STORAGE its own database login and schema, and its own bucket and key, from the secrets
@@ -262,13 +242,16 @@ services:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     restart: on-failure
-    # Each app's secrets are named after it (FOLIO_DATABASE_PASSWORD, ...), so it reads them all from .env.
+    # Each app's secrets are named after it (<APP>_DATABASE_PASSWORD, ...), so it reads them all from .env.
     env_file: [{ path: .env, required: false }]
     environment:
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       GARAGE_ADMIN_URL: http://garage:3903
-      # Those of the apps that ship with AUGUR and keep data (Artifacts, Data Atlas, Mandate), and any others named in .env.
-      APP_STORAGE: folio atlas mandate ${APP_STORAGE:-}
+      # The apps named in .env that keep data outside the app runner (the runner sets up its own apps' storage).
+      APP_STORAGE: ${APP_STORAGE:-}
+      # The apps that shipped with AUGUR until ADR 0075: their database logins, schemas and buckets go, once on each
+      # server (after the upgrade's backup), and are remembered as gone so an app installed later under one of these ids keeps its own.
+      RETIRED_APPS: folio atlas mandate auspex
       # The platform's services that get a login owning only their own schema, each with its
       # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
       PLATFORM_DATABASE_LOGINS: identity registry events models
@@ -350,7 +333,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Each platform service's sign-in in Keycloak, made or set to these secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-},app-folio=${FOLIO_CLIENT_SECRET:-},app-auspex=${AUSPEX_CLIENT_SECRET:-},app-atlas=${ATLAS_CLIENT_SECRET:-},app-mandate=${MANDATE_CLIENT_SECRET:-}
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
@@ -417,8 +400,8 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      # Each app's service, name=url: the apps that ship with AUGUR.
-      APP_UPSTREAMS: folio=http://folio:8083,auspex=http://auspex:8090,atlas=http://atlas:8086,mandate=http://mandate:8087
+      # Apps' services run beside AUGUR outside the app runner, name=url: none (ADR 0075).
+      APP_UPSTREAMS: ""
       # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
       CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
     volumes:
@@ -495,8 +478,8 @@ services:
       ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEED_URL: ${APP_FEED_URL:-}
-      # The apps that ship with AUGUR: they register themselves, and are turned off rather than removed.
-      PILLAR_APPS: folio auspex atlas mandate
+      # Apps that ship with AUGUR and register themselves: none (ADR 0075). Every app comes through the app runner.
+      PILLAR_APPS: ""
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
@@ -566,144 +549,6 @@ services:
       # How long to wait for the model, in seconds (60 when empty).
       MODEL_TIMEOUT_SECONDS: "${MODEL_TIMEOUT_SECONDS:-}"
     depends_on: *own-login
-
-  # Folio, the document libraries: the app every deployment ships with (a pillar app). It's an ordinary
-  # app all the same, with its own sign-in, schema and bucket, and it puts itself in the catalogue when it
-  # starts. Admins turn it off org-wide or floor by floor in Admin, Apps; it can't be removed.
-  folio:
-    logging: *logging
-    # An app's share of the server's memory (1g when empty), so a runaway app can't push AUGUR out (ADR 0073).
-    mem_limit: ${APP_MEM_LIMIT:-1g}
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8083/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    environment:
-      # Its own login comes first: it replaces the platform's DATABASE_URL.
-      <<: [*folio-storage, *env]
-      PORT: 8083
-      SERVICE_CLIENT_SECRET: ${FOLIO_CLIENT_SECRET}
-    depends_on: &shipped-app
-      postgres: { condition: service_healthy }
-      storage: { condition: service_completed_successfully }
-      # It signs in as itself and gives the registry its frontend once, when it starts: so after the
-      # realm job has made its sign-in (it retries the registry for a few seconds), or a fresh server never lists it.
-      keycloak-config: { condition: service_completed_successfully }
-      registry: { condition: service_started }
-
-  # Auspex, where you are on AUGUR and why you can or can't use things: the second app every deployment
-  # ships with. It keeps nothing of its own (no schema, no bucket), so it gets no database login: it reads
-  # identity, the registry and the last 30 days of events, and remembers them in memory.
-  auspex:
-    logging: *logging
-    # An app's share of the server's memory (1g when empty), so a runaway app can't push AUGUR out (ADR 0073).
-    mem_limit: ${APP_MEM_LIMIT:-1g}
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/auspex:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
-    <<: *hardened
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8090/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-    environment:
-      <<: *telemetry
-      NODE_ENV: production
-      PORT: 8090
-      IDENTITY_URL: http://identity:8081
-      EVENTS_URL: http://events:8084
-      REGISTRY_URL: http://registry:8082
-      GATEWAY_URL: http://gateway:8080
-      OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
-      OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
-      SERVICE_CLIENT_SECRET: ${AUSPEX_CLIENT_SECRET}
-    networks: [default, telemetry]
-    # Like the other shipped apps, it starts once its sign-in exists.
-    depends_on:
-      identity: { condition: service_started }
-      events: { condition: service_started }
-      keycloak-config: { condition: service_completed_successfully }
-      registry: { condition: service_started }
-
-  # Data Atlas, the entities the org knows about and how they connect: the third app every deployment
-  # ships with. Its graph lives in Postgres, in its own schema (it uses pg_trgm and pgvector, which the
-  # storage service makes); it follows Mandate's bindings and Artifacts' withdrawals through events.
-  atlas:
-    logging: *logging
-    # An app's share of the server's memory (1g when empty), so a runaway app can't push AUGUR out (ADR 0073).
-    mem_limit: ${APP_MEM_LIMIT:-1g}
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/atlas:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8086/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    environment:
-      # Its own login comes first: it replaces the platform's DATABASE_URL.
-      <<: [*atlas-storage, *env]
-      PORT: 8086
-      SERVICE_CLIENT_SECRET: ${ATLAS_CLIENT_SECRET}
-      # The map's base map: a PMTiles file in ./maps, as the container sees it (docs/atlas.md, "Maps").
-      ATLAS_MAP_TILES: ${ATLAS_MAP_TILES:-}
-      ATLAS_MAP_ATTRIBUTION: ${ATLAS_MAP_ATTRIBUTION:-}
-    volumes:
-      - ./maps:/maps:ro
-    depends_on: *shipped-app
-
-  # Mandate, intent passed down the floors: the fourth app every deployment ships with. Its aims and the
-  # parts passed down live in Postgres, in its own schema.
-  mandate:
-    logging: *logging
-    # An app's share of the server's memory (1g when empty), so a runaway app can't push AUGUR out (ADR 0073).
-    mem_limit: ${APP_MEM_LIMIT:-1g}
-    <<: *service
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/mandate:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
-    environment:
-      # Its own login comes first: it replaces the platform's DATABASE_URL.
-      <<: [*mandate-storage, *env]
-      PORT: 8087
-      SERVICE_CLIENT_SECRET: ${MANDATE_CLIENT_SECRET}
-    depends_on: *shipped-app
-
-  # Folio's rendition worker: reader copies, thumbnails and text of what people upload.
-  # It works on the tables Folio's service makes, so it waits for the service to start.
-  # It reads files anyone on a floor can upload, so it is held tighter than the services: its own files
-  # can't change (only /tmp, in memory, can be written), it has a share of the processors and a cap on
-  # processes, and its networks reach Postgres, Garage and otel-lgtm and nothing else, the internet included.
-  folio-worker:
-    logging: *logging
-    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/folio-worker:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
-    <<: *hardened
-    restart: unless-stopped
-    # Reading an uploaded file (Docling, torch) can take as much memory as it finds: this keeps it to its share.
-    mem_limit: ${FOLIO_WORKER_MEM_LIMIT:-4g}
-    cpus: ${FOLIO_WORKER_CPUS:-2}
-    pids_limit: 512
-    read_only: true
-    # The file being read and what's made from it. In memory, so it counts towards mem_limit.
-    tmpfs:
-      - /tmp:size=${FOLIO_WORKER_TMP_SIZE:-1g},mode=1777
-    environment:
-      # Its traces and logs go where the services' do (OTEL_SDK_DISABLED=true turns them off).
-      <<: [*folio-storage, *otel]
-      # Any cache a library keeps goes in /tmp; Docling's models are in the image (HF_HOME).
-      XDG_CACHE_HOME: /tmp/cache
-      MPLCONFIGDIR: /tmp/matplotlib
-    networks: [renditions]
-    depends_on: [folio]
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
   # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with
@@ -775,7 +620,7 @@ services:
       - 127.0.0.1:3001:3000
     # Not on the compose network, so apps the runner installs can't reach it: only what sends telemetry can.
     # The rendition worker reaches it on its own network, so it never shares one with the services.
-    networks: [telemetry, renditions, grafana]
+    networks: [telemetry, grafana]
     volumes:
       - otel-lgtm:/data
       - ./observability/lgtm/loki.yaml:/otel-lgtm/loki-config.yaml:ro
@@ -796,9 +641,6 @@ networks:
     internal: true
   # Only so Grafana's port can be published on the server (a port can't be published from an internal network).
   grafana:
-  # The rendition worker's way to Postgres, Garage and otel-lgtm, and nowhere else: none of the services is on it.
-  renditions:
-    internal: true
 
 volumes:
   pgdata:

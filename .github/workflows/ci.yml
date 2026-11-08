@@ -182,8 +182,7 @@ jobs:
 
 
   # The shell keeps its promise to apps: the reference app, as built today and
-  # as built against each earlier SDK minor, mounted by the real shell, with
-  # Folio (which ships with AUGUR) on and off.
+  # as built against each earlier SDK minor, mounted by the real shell.
   # The longest job. On an ordinary pull request it runs today's build and the oldest and newest
   # frozen ones; on the Version packages pull request, and by hand, every frozen build.
   contract:
@@ -211,12 +210,6 @@ jobs:
             turbo-${{ runner.os }}-build-test-
       - run: mkdir -p "$TURBO_CACHE_DIR" && find "$TURBO_CACHE_DIR" -type f -mtime +7 -delete
       - run: pnpm turbo run build --filter=@augur/contract-tests... --filter=@augur/shell^... --filter=@augur/home
-      # Folio, which the tests mount beside the reference app, from the release AUGUR ships (ADR 0049).
-      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
-      - run: infra/shipped-app.sh folio
-        env:
-          APP_RELEASES_TOKEN: ${{ secrets.APP_RELEASES_TOKEN }}
-          PACKAGES_READ_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN }}
       # The browser is cached by Playwright version. No --with-deps: the runner image
       # already has Chrome's system libraries, and apt-get was the slow, uneven part
       # (half a minute on a good day, twelve on a bad one).

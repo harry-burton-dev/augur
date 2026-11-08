@@ -57,12 +57,21 @@ Each note starts with the release it came in (**From**). If your server already 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
 
+### Artifacts, Explorer, Data Atlas and Mandate are taken out, with their data
+
+**From** unreleased
+
+- **Their documents, entities and intents are deleted on upgrade.** No app ships with AUGUR any more (ADR 0075): today's apps are being redesigned and will come back from the app feed. This release stops their containers, and the storage job then drops their schemas and logins and empties and deletes their buckets, once on each server (`RETIRED_APPS` in `compose.yml`; `pc logs storage` says what it took). The registry forgets them, and they leave Admin, Apps. The backup the Upgrade Centre takes first is the only copy left: keep it if you may want that data.
+- **Upgrading by hand, take a backup first** (docs/deploy.md, Backups), then upgrade as usual. To keep one app's data instead, add its id to `APP_STORAGE` in `.env` before you upgrade; the storage job then leaves it and says so.
+- **If the upgrade goes back**, the earlier release starts the apps again, but empty. Their data comes back only by restoring that backup.
+- **Tidy up when you like:** the `FOLIO_*`, `FOLIO_WORKER_*`, `ATLAS_*`, `AUSPEX_*` and `MANDATE_*` lines and `APP_MEM_LIMIT` in `.env` are no longer read (the preflight lists them), and `maps/` beside your compose file can go. Their Keycloak clients (`app-folio`, `app-auspex`, `app-atlas`, `app-mandate`) stay in the `platform` realm and can no longer be used by anything; delete them in Keycloak's console if you like (`KEYCLOAK_CONSOLE=open`, docs/deploy.md).
+
 ### An app can't stop AUGUR starting, or its backup check
 
 **From** unreleased
 
-- **Nothing to run.** An app's missing secret, bad id or storage that can't be made no longer stops the storage job, or Compose from reading `compose.yml`: the platform starts, that app alone doesn't, and `pc logs storage` says why. The shipped apps' secrets stay in `.env` as before.
-- **Each app's database login may hold at most 30 connections** (`APP_DATABASE_CONNECTIONS`), and **each app that ships with AUGUR at most 1g of memory** (`APP_MEM_LIMIT`). Raise either in `.env` if `pc logs <app>` shows an app running out.
+- **Nothing to run.** An app's missing secret, bad id or storage that can't be made no longer stops the storage job, or Compose from reading `compose.yml`: the platform starts, that app alone doesn't, and `pc logs storage` says why.
+- **Each app's database login may hold at most 30 connections** (`APP_DATABASE_CONNECTIONS`). Raise it in `.env` if `pc logs storage` or the app's own logs show it running out.
 - **The restore test passes on AUGUR's own data.** An app's data that doesn't come back is shown on Admin → Status for that app instead of turning back the upgrade (ADR 0073).
 
 ### Upgrades no longer stop at the restore test
@@ -448,13 +457,13 @@ A new required setting, `SERVER_RING`: `preview` on the server that runs what's 
 
 **From** augur@0.7.0
 
-Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Upgrade Centre makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). See [atlas.md](atlas.md).
+Data Atlas, the entities the org knows about (ships, people, places) and how they connect, is now part of every release: a new container, `atlas`, and its frontend inside `web`. It keeps its graph in its own Postgres schema, which the storage container makes on its first start along with a bucket (made for every app; Data Atlas keeps nothing there), and it puts itself in Admin, Apps. It needs three new settings: `ATLAS_CLIENT_SECRET` (its sign-in), `ATLAS_DATABASE_PASSWORD` and `ATLAS_BUCKET_SECRET`. An upgrade from the Upgrade Centre makes them up for you. Upgrading by hand, add each to `.env` first (`openssl rand -hex 32`). 
 
 ### Auspex ships with AUGUR
 
 **From** augur@0.7.0
 
-Auspex, which shows people where they are on AUGUR, who's there, and why they can or can't use each app, is now part of every release: a new container, `auspex`, and its frontend inside `web`. It keeps nothing of its own (no schema, no bucket) and puts itself in Admin, Apps on its first start. It needs one new setting, `AUSPEX_CLIENT_SECRET`, its sign-in: an upgrade from the Upgrade Centre makes it up for you. Upgrading by hand, add it to `.env` first (`openssl rand -hex 32`). See [auspex.md](auspex.md).
+Auspex, which shows people where they are on AUGUR, who's there, and why they can or can't use each app, is now part of every release: a new container, `auspex`, and its frontend inside `web`. It keeps nothing of its own (no schema, no bucket) and puts itself in Admin, Apps on its first start. It needs one new setting, `AUSPEX_CLIENT_SECRET`, its sign-in: an upgrade from the Upgrade Centre makes it up for you. Upgrading by hand, add it to `.env` first (`openssl rand -hex 32`). 
 
 ### Folio is called Artifacts
 

@@ -16,5 +16,5 @@ test('catches documents: decisions, plans and guides nobody listed', () => {
 });
 
 test('ignores files that are not Markdown', () => {
-  assert.deepEqual(strayDocs(['docs/images/folio/home.webp', 'mkdocs.yml']), []);
+  assert.deepEqual(strayDocs(['docs/images/shell/home.webp', 'mkdocs.yml']), []);
 });

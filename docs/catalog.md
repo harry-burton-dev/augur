@@ -8,7 +8,7 @@ The portal is one for the whole company, above every AUGUR deployment, and lives
 
 | File | What's in it |
 | --- | --- |
-| `catalog/all.yaml` | One Location listing the rest, and each shipped app's own `catalog-info.yaml` (from `release/shipped-apps.json`). Register this file in Backstage, at `main`. |
+| `catalog/all.yaml` | One Location listing the rest, and the `catalog-info.yaml` of any app in `release/shipped-apps.json` (none, since ADR 0075). Register this file in Backstage, at `main`. |
 | `catalog/augur.yaml` | The AUGUR domain, the `augur-core` team, the `augur-platform` system with each frontend, package and service, the APIs from `contracts/`, and the third-party parts of the stack (Postgres, Garage, Keycloak, Tailscale, backups, the Docker proxy). |
 | `mkdocs.yml` | Every guide in `docs/` as one TechDocs site, on the platform system. |
 
@@ -30,4 +30,4 @@ AUGUR's own facts are annotations under `augur.dev/`, so the portal can show the
 
 Each app lives in its own repository (ADR 0047) and keeps its own entry there: `catalog-info.yaml` at the repository's root, Backstage's usual place. Nobody writes it either. `augur-app catalog` (from `@augur/app-tools`) makes it from the app's `manifest.json` and its parts' `package.json` files: the app as a system, its frontend and service, the intents it handles as an API of type `augur-intent`, and its database and bucket. `augur-app catalog --check` fails when it's out of date, so the app's CI can hold it. The repository it names comes from `GITHUB_REPOSITORY`, or the checkout's GitHub remote.
 
-`catalog/all.yaml` points Backstage at the entry of each app that ships with AUGUR. Register another app's entry in Backstage yourself (**Register existing component**, with the address of its `catalog-info.yaml`).
+No app ships with AUGUR (ADR 0075), so `catalog/all.yaml` names no app. Register each app's entry in Backstage yourself (**Register existing component**, with the address of its `catalog-info.yaml`).

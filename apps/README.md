@@ -20,7 +20,7 @@ When something happens that other services may care about (a document published)
 
 ## Asking another app
 
-To get something from another app, such as a document picked from Folio, an app raises an intent through its mount context rather than calling that app. See [platform/frontends](../platform/frontends/README.md#apps-asking-each-other).
+To get something from another app, such as a document picked from a library, an app raises an intent through its mount context rather than calling that app. See [platform/frontends](../platform/frontends/README.md#apps-asking-each-other).
 
 ## Telling people, and keeping a record
 
@@ -35,4 +35,4 @@ await notify({ eventsUrl, credentials, workspace, notification: {
 } });
 ```
 
-The apps that ship with AUGUR live in their own repositories: Artifacts in [augur-folio](https://github.com/harry-burton-dev/augur-folio), Explorer in [augur-auspex](https://github.com/harry-burton-dev/augur-auspex) Data Atlas in [augur-atlas](https://github.com/harry-burton-dev/augur-atlas) and Mandate in [augur-mandate](https://github.com/harry-burton-dev/augur-mandate). AUGUR's releases ship the release of each that `release/shipped-apps.json` pins (ADR 0049).
+No app ships with AUGUR (ADR 0075): every app lives in its own repository, made from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), and the app runner installs it from the feed.

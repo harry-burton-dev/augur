@@ -13,7 +13,6 @@ pnpm --filter @augur/contract-tests exec playwright install chromium   # once
 pnpm --filter @augur/contract-tests test:contract
 ```
 
-Folio ships with AUGUR but an admin can turn it off, and either way the shell, Home, Find and other apps must keep working. So today's build runs twice, once with Folio in the catalogue beside it (its built frontend, and its service keeping everything in memory, through the dev-app mode's `DEV_ALSO`) and once without, and each frozen build runs beside Folio, as released apps now do. `tests/pillar.spec.ts` checks what changes: Folio's Home card, `document.open` and `document.pick` answered by Folio, and with it off, Home without its card and those intents saying no app handles them. Those check the shell and Folio rather than what an app was built with, so they run against today's build only; the frozen builds run `tests/contract.spec.ts`.
 
 Today's build runs with the manifest's feature preview `turned-on` on for the stand-in person (`DEV_PREVIEWS`) and `left-off` off.
 

@@ -257,7 +257,7 @@ test('Find doesn’t wait for a slow app: it says so, and lets go after the budg
   await page.goto('/reference');
   await find(page, 'reference');
   await expect(page.locator('.aerie-shell .aerie-view .aerie-row', { hasText: 'Reference' }).first()).toBeVisible();
-  // The reference app's own note: other apps in the catalogue (Folio, when it's on) have theirs.
+  // The reference app's own note: other apps in the catalogue have theirs.
   const note = page.locator('.aerie-shell .aerie-view .aerie-group.aerie-label:has-text("Reference") + p.aerie-note.aerie-small');
   await expect(note).toHaveText('Still looking…');
   await expect(note).toHaveText('Didn’t answer in time.');

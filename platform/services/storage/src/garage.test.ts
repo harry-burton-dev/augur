@@ -80,6 +80,15 @@ describe('garageAdmin', () => {
     expect(emptied).toHaveLength(1);
   });
 
+  it('gives a bucket a key of its own for a while, which taking the bucket away deletes', async () => {
+    const { garage, state } = fakeGarage({ roles: [], buckets: { notes: 'b-notes' }, keys: [] });
+    let secret = '';
+    expect(await garage.removeBucket('notes', async (id) => void (secret = await garage.temporaryKey(id, 'app-notes')))).toBe(true);
+    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(state.keys).toEqual([]);
+    expect(state.buckets).toEqual({});
+  });
+
   it('serves a bucket on the web endpoint', async () => {
     const { garage, calls } = fakeGarage({ roles: [], buckets: {}, keys: [] });
     await garage.ensureWebsite('b-augur-frontends');

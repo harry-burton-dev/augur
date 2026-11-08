@@ -1,12 +1,13 @@
 // Gives the platform's services and Keycloak each a database login of their own, and apps their storage: for each app in APP_STORAGE, a database login that owns one schema,
 // and a bucket with a key that opens only it. Runs to the end and stops, on every `up`; running it
 // again changes nothing unless a secret in .env changed. See docs/app-storage.md.
-// With APP_STORAGE_DROP, it instead takes one pull request's preview's scratch storage away.
+// With APP_STORAGE_DROP, it instead takes one pull request's preview's scratch storage away. The apps in
+// RETIRED_APPS lose their data, once on each server (ADR 0075).
 import { startupLog } from '@augur/service-kit';
 import pg from 'pg';
 import { configFromEnv, FRONTENDS_BUCKET, FRONTENDS_KEY } from './config.ts';
-import { garageAdmin, keyIdFor } from './garage.ts';
-import { dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { garageAdmin, keyIdFor, keyNameFor } from './garage.ts';
+import { dropDatabase, markRetired, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, retiredApps, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
 import { emptyBucket } from './s3.ts';
 
 const log = startupLog('storage');
@@ -110,6 +111,41 @@ if (config.garage) {
   }
 } else if (config.apps.length) {
   log.warn('GARAGE_ADMIN_TOKEN is not set, so apps get no bucket.');
+}
+
+// Apps AUGUR no longer runs (RETIRED_APPS): their login, schemas and bucket go, once, after the upgrade's backup.
+// One that fails is tried again next time and never stops AUGUR starting; one APP_STORAGE still names is kept.
+if (config.retire.length) {
+  const sql = new pg.Client({ connectionString: config.databaseUrl });
+  await sql.connect();
+  try {
+    const done = await retiredApps(sql);
+    for (const app of config.retire.filter((a) => !done.has(a))) {
+      if (config.apps.some((a) => a.app === app) || config.skipped.some((a) => a.app === app)) {
+        await markRetired(sql, app, 'kept');
+        log.warn(`${app} no longer ships with AUGUR, but APP_STORAGE names it, so its data is kept.`);
+        continue;
+      }
+      try {
+        await dropDatabase(sql, app);
+        if (config.garage) {
+          const garage = garageAdmin(config.garage);
+          const { s3Url } = config.garage;
+          await garage.removeBucket(app, async (bucketId) => {
+            const secret = await garage.temporaryKey(bucketId, keyNameFor(app));
+            const deleted = await emptyBucket({ endpoint: s3Url, bucket: app, secret });
+            log.info(`emptied bucket ${app} (${deleted} objects)`);
+          });
+        }
+        await markRetired(sql, app, 'removed');
+        log.info(`${app} no longer ships with AUGUR: its database login, schemas and bucket are gone.`);
+      } catch (err) {
+        log.error(`${app} no longer ships with AUGUR, but its data couldn’t all be taken away; it’s tried again next time: ${(err as Error).message}`);
+      }
+    }
+  } finally {
+    await sql.end();
+  }
 }
 
 if (appsFailed.length) log.warn(`AUGUR’s own storage is ready; ${appsFailed.join(', ')} ${appsFailed.length > 1 ? 'aren’t' : 'isn’t'}, and won’t start until ${appsFailed.length > 1 ? 'they are' : 'it is'} (see above).`);

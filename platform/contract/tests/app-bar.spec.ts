@@ -1,14 +1,13 @@
 import { expect, test, type Page } from '@playwright/test';
-import { folioOn, frozenBuild } from './builds';
+import { frozenBuild } from './builds';
 
 /**
  * The app bar (PDR-020): on the desktop a bar of tiles, one per group of apps, each opening a start
  * menu; with an app open, the same bar docked as the rail, with Home, Apps, the open app and its pages.
  * Esc closes a start menu and never leaves an app; Home in the rail does. It checks the shell, not what
- * an app was built with, so it runs once, on today's build with Folio off.
+ * an app was built with, so it runs once, on today's build.
  */
 test.skip(frozenBuild !== undefined, 'The app bar is checked once, on today’s build.');
-test.skip(folioOn, 'The app bar is checked once, with Folio off.');
 
 const desk = (page: Page) => page.getByRole('navigation', { name: 'App bar', exact: true });
 const rail = (page: Page) => page.getByRole('navigation', { name: 'App bar: Reference' });

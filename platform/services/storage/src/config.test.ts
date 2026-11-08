@@ -27,6 +27,7 @@ describe('configFromEnv', () => {
       skipped: [],
       appConnections: 30,
       services: [],
+      retire: [],
     });
   });
 
@@ -93,6 +94,14 @@ describe('configFromEnv', () => {
     expect(configFromEnv({ ...base, APP_STORAGE: 'notes-pr12' })).toMatchObject({ apps: [{ app: 'notes-pr12' }] });
     const bad = configFromEnv({ ...base, APP_STORAGE: 'notes', APP_STORAGE_DROP: 'folio' });
     expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('isn’t a preview’s storage'), expect.stringContaining('leave APP_STORAGE empty')]);
+  });
+
+  it('reads the apps whose data goes once (RETIRED_APPS), and refuses an id that isn’t an app’s', () => {
+    const base = { DATABASE_URL: 'postgres://a:b@db/platform' };
+    expect(configFromEnv({ ...base, RETIRED_APPS: 'notes  maps,board' })).toMatchObject({ retire: ['notes', 'maps', 'board'] });
+    expect(configFromEnv(base)).toMatchObject({ retire: [] });
+    const bad = configFromEnv({ ...base, RETIRED_APPS: 'Notes registry' });
+    expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('"Notes" in RETIRED_APPS'), expect.stringContaining('RETIRED_APPS:')]);
   });
 
   it('works out each app’s secrets from APP_SECRETS_KEY when .env doesn’t name them', () => {

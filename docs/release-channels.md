@@ -4,7 +4,7 @@ Work merges into `main`, the only long-lived branch. Each release is built and s
 
 Which workflow does each step, when it runs and what it costs in CI minutes: [CI/CD](https://drive.google.com/drive/folders/1m2NCsXrXQxhsbnDfIqgezh8nmKY6XBa2).
 
-A **unit** is what moves on its own: **AUGUR** (the platform, its services and the pillar apps, as one `augur@x.y.z` release) or one **app** the app runner installs (`app/<id>@x.y.z`, Mandate today).
+A **unit** is what moves on its own: **AUGUR** (the platform and its services, as one `augur@x.y.z` release) or one **app** the app runner installs (`app/<id>@x.y.z`).
 
 | Step | What happens | Who |
 | --- | --- | --- |
@@ -42,13 +42,13 @@ An AUGUR release goes stable only once its last deploy test passed. Each run on 
 
 A new AUGUR release is made with a pending `deploy-test.json`, which the deploy test replaces with its result. Until that result is a pass, the signed feed and mirrors list the beta halted ("its deploy test hasn't passed yet", or that it failed, with the run): no server is offered it, and the preview ring doesn't take it, whichever workflow publishes the feed meanwhile. A server with no read key reads GitHub's releases directly and sees only `halted.json`, so it can still be offered a beta whose test hasn't passed: give preview servers a read key. A test that never finished, such as one that timed out, leaves it pending, so run **Actions → Deploy test** on `main` with that version. Once a run passes, the next feed lists it as usual: the Release workflow's own feed waits for its test, and after a run by hand, run **Actions → Release feed** or wait for the weekly run. Releases from before this check have no `deploy-test.json`, and are listed as they were. Mirrors do the same when the release is mirrored. A run that released only apps has no deploy test, and its feed goes out straight away. If the test failed or the release has no result, as releases from before this check don't, fix what failed or run **Actions → Deploy test** on `main` with that version, then promote again. `promotion.json` records the run that passed. Apps have no deploy test of their own.
 
-Units move independently: Mandate can become stable while AUGUR stays where it is, and the other way round.
+Units move independently: an app can become stable while AUGUR stays where it is, and the other way round.
 
 ### An app in its own repository
 
 An app listed in `release/app-repos.json` (ADR 0047) is promoted from here too: give its id as the unit. The workflow marks its release stable in the app's own repository, with `promotion.json`, and the feed that follows lists it as stable. It does this with the `APP_PROMOTE_TOKEN` secret, which only this workflow reads: a fine-grained token with Contents read and write on the app repositories, nothing else, expiring after 90 days. Without it, promoting such an app fails and says so. The feed's `APP_RELEASES_TOKEN` stays read-only.
 
-A pillar app (`release/shipped-apps.json`) isn't promoted on its own: it ships inside AUGUR's release (ADR 0049), so it becomes stable when that AUGUR release does. Asking for one says so.
+An app in `release/shipped-apps.json` (none, since ADR 0075) isn't promoted on its own: it ships inside AUGUR's release (ADR 0049), so it becomes stable when that AUGUR release does. Asking for one says so.
 
 ## Halting a release
 
@@ -104,7 +104,7 @@ For an app, **Go back** on its page in the Upgrade Centre installs one of its th
 
 ## Dev builds
 
-Every merge into `main` that changes a runner app (Mandate today) builds it at once, with no Version packages: **App dev builds** (`.github/workflows/app-dev.yml`) makes `app/<id>@<next patch>-dev.<run>` (such as `0.1.3-dev.212` after `0.1.2`), signed by that workflow on `refs/heads/main`, and keeps each app's three newest. A dev build sorts above the release it follows and below the next one.
+Every merge into `main` that changes a runner app builds it at once, with no Version packages: **App dev builds** (`.github/workflows/app-dev.yml`) makes `app/<id>@<next patch>-dev.<run>` (such as `0.1.3-dev.212` after `0.1.2`), signed by that workflow on `refs/heads/main`, and keeps each app's three newest. A dev build sorts above the release it follows and below the next one.
 
 Only a dev or preview server takes them. In the Upgrade Centre, set the installed app's **Releases from** to Dev builds; with **Automatic**, each dev build installs at the server's next check (blue/green, as any install). Before each one, the updater takes a backup of the database, since a dev build runs on the server's real data; the install's first step names the file. On a production server the choice stays in the list, greyed, saying why; the registry refuses one, and the updater refuses to install a dev build unless `.env` says `SERVER_RING=dev` or `preview`.
 
@@ -112,7 +112,7 @@ Because a dev build has run its migrations on a real server, a migration is froz
 
 ## AUGUR dev builds
 
-AUGUR itself gets a dev build of every merge into `main` that changes the platform, the apps that ship with it (Folio, Explorer, Data Atlas) or how it's deployed: **AUGUR dev builds** (`.github/workflows/augur-dev.yml`) builds, pushes and signs every image as a release does and makes the pre-release `augur@<next patch>-dev.<run>` (such as `0.12.1-dev.48` after `0.12.0`). Its parts keep the last release's versions, since nothing is versioned until the Version packages PR; what it changes, what's breaking and its notes come from the changesets waiting (`node scripts/augur-release.mjs dev <run>`). AUGUR keeps its three newest dev builds, and the feed its two newest beside its releases.
+AUGUR itself gets a dev build of every merge into `main` that changes the platform or how it's deployed: **AUGUR dev builds** (`.github/workflows/augur-dev.yml`) builds, pushes and signs every image as a release does and makes the pre-release `augur@<next patch>-dev.<run>` (such as `0.12.1-dev.48` after `0.12.0`). Its parts keep the last release's versions, since nothing is versioned until the Version packages PR; what it changes, what's breaking and its notes come from the changesets waiting (`node scripts/augur-release.mjs dev <run>`). AUGUR keeps its three newest dev builds, and the feed its two newest beside its releases.
 
 Only the workbench takes them. With `SERVER_RING=dev`, the registry follows the dev channel by default (`RELEASE_CHANNEL=dev`), which holds dev builds and every release. When a dev build is next and nothing needs a person (no breaking change, and no new required setting the updater can't make up), the registry asks the updater for it by itself, and it runs as any upgrade: backup first, then roll forward, rolling back if it doesn't come up. The history says **By itself**. A dev build that didn't finish, or that an admin took back or went back from, is never asked for again by itself: it waits for an admin, as does a release. A dev build with something that needs you waits on Updates, saying what.
 

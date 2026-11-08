@@ -332,143 +332,6 @@
       ],
       "x-docs": "docs/upgrade.md#the-updater"
     },
-    "FOLIO_CLIENT_SECRET": {
-      "type": "string",
-      "writeOnly": true,
-      "minLength": 16,
-      "x-generate": true,
-      "description": "Artifacts' own sign-in.",
-      "x-services": [
-        "keycloak-config",
-        "folio"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "FOLIO_DATABASE_PASSWORD": {
-      "type": "string",
-      "writeOnly": true,
-      "minLength": 16,
-      "x-generate": true,
-      "description": "Artifacts' own database login.",
-      "x-services": [
-        "folio",
-        "folio-worker",
-        "storage"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "FOLIO_BUCKET_SECRET": {
-      "type": "string",
-      "writeOnly": true,
-      "pattern": "^[0-9a-fA-F]{64}$",
-      "x-generate": true,
-      "description": "Artifacts' bucket key (64 hex).",
-      "x-services": [
-        "folio",
-        "folio-worker",
-        "storage"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "AUSPEX_CLIENT_SECRET": {
-      "type": "string",
-      "writeOnly": true,
-      "minLength": 16,
-      "x-generate": true,
-      "description": "Explorer's own sign-in.",
-      "x-services": [
-        "keycloak-config",
-        "auspex"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "ATLAS_CLIENT_SECRET": {
-      "type": "string",
-      "writeOnly": true,
-      "minLength": 16,
-      "x-generate": true,
-      "description": "Data Atlas's own sign-in.",
-      "x-services": [
-        "keycloak-config",
-        "atlas"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "ATLAS_DATABASE_PASSWORD": {
-      "type": "string",
-      "writeOnly": true,
-      "minLength": 16,
-      "x-generate": true,
-      "description": "Data Atlas's own database login.",
-      "x-services": [
-        "atlas",
-        "storage"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "ATLAS_MAP_TILES": {
-      "type": "string",
-      "description": "The base map Data Atlas draws its maps on: a PMTiles file in ./maps beside the compose file, named as the container sees it (/maps/<file>.pmtiles). Without it, points go on a plain background.",
-      "pattern": "^/maps/[^/]+\\.pmtiles$",
-      "x-services": [
-        "atlas"
-      ],
-      "x-docs": "docs/atlas.md#maps"
-    },
-    "ATLAS_MAP_ATTRIBUTION": {
-      "type": "string",
-      "description": "The credit the base map's data needs, shown on the map (default: OpenStreetMap's).",
-      "x-services": [
-        "atlas"
-      ],
-      "x-docs": "docs/atlas.md#maps"
-    },
-    "ATLAS_BUCKET_SECRET": {
-      "type": "string",
-      "writeOnly": true,
-      "pattern": "^[0-9a-fA-F]{64}$",
-      "x-generate": true,
-      "description": "Data Atlas's bucket key (made for every app; Data Atlas keeps nothing there). Worked out from APP_SECRETS_KEY when unset.",
-      "x-services": [
-        "storage"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "MANDATE_CLIENT_SECRET": {
-      "type": "string",
-      "writeOnly": true,
-      "minLength": 16,
-      "x-generate": true,
-      "description": "Mandate's own sign-in. On a server whose app runner installed Mandate before, the updater sets it to the one the runner gave it.",
-      "x-services": [
-        "keycloak-config",
-        "mandate"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "MANDATE_DATABASE_PASSWORD": {
-      "type": "string",
-      "writeOnly": true,
-      "minLength": 16,
-      "x-generate": true,
-      "description": "Mandate's own database login. On a server whose app runner installed Mandate before, the updater sets it to the one the runner gave it, so its data stays.",
-      "x-services": [
-        "mandate",
-        "storage"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
-    "MANDATE_BUCKET_SECRET": {
-      "type": "string",
-      "writeOnly": true,
-      "pattern": "^[0-9a-fA-F]{64}$",
-      "x-generate": true,
-      "description": "Mandate's bucket key (made for every app; Mandate keeps nothing there). Worked out from APP_SECRETS_KEY when unset.",
-      "x-services": [
-        "storage"
-      ],
-      "x-docs": "docs/deploy.md#first-start"
-    },
     "PLATFORM_ADMIN_USER": {
       "type": "string",
       "description": "The first person who can sign in; identity gives them the deployment-admin role when nobody has it.",
@@ -810,15 +673,6 @@
       ],
       "x-docs": "docs/app-storage.md#what-an-app-gets"
     },
-    "APP_MEM_LIMIT": {
-      "type": "string",
-      "default": "1g",
-      "description": "The memory each app that ships with AUGUR may use (Docker's mem_limit), so a runaway app can't push AUGUR out (ADR 0073).",
-      "x-services": [
-        "compose"
-      ],
-      "x-docs": "docs/deploy.md#logs-memory-and-health"
-    },
     "API_RATE_PER_SECOND": {
       "type": "string",
       "description": "API requests a second from one address.",
@@ -1107,11 +961,7 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
-        "updater",
-        "folio-worker"
+        "updater"
       ],
       "x-docs": "docs/observability.md#turn-it-on",
       "default": "http://otel-lgtm:4318"
@@ -1126,11 +976,7 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
-        "updater",
-        "folio-worker"
+        "updater"
       ],
       "x-docs": "docs/observability.md#turn-it-on"
     },
@@ -1143,11 +989,7 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
-        "updater",
-        "folio-worker"
+        "updater"
       ],
       "x-docs": "docs/observability.md#for-a-service"
     },
@@ -1160,11 +1002,7 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
-        "updater",
-        "folio-worker"
+        "updater"
       ],
       "x-docs": "docs/observability.md#turn-it-off"
     },
@@ -1177,11 +1015,7 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
-        "updater",
-        "folio-worker"
+        "updater"
       ],
       "x-docs": "docs/observability.md#for-a-service"
     },
@@ -1195,9 +1029,6 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
         "updater"
       ],
       "x-docs": "docs/deploy.md#logs-memory-and-health"
@@ -1212,9 +1043,6 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
         "updater"
       ],
       "x-docs": "docs/deploy.md#logs-memory-and-health"
@@ -1292,9 +1120,7 @@
         "registry",
         "events",
         "models",
-        "storage",
-        "folio",
-        "atlas"
+        "storage"
       ]
     },
     "IDENTITY_URL": {
@@ -1349,8 +1175,7 @@
         "identity",
         "registry",
         "events",
-        "models",
-        "auspex"
+        "models"
       ]
     },
     "OIDC_ISSUER": {
@@ -1419,9 +1244,6 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
         "updater"
       ]
     },
@@ -1468,7 +1290,7 @@
     },
     "APP_UPSTREAMS": {
       "type": "string",
-      "description": "The shipped apps' services, name=url, comma separated.",
+      "description": "Apps' services run beside AUGUR outside the app runner, name=url, comma separated. None by default.",
       "x-internal": "compose",
       "x-services": [
         "gateway"
@@ -1476,7 +1298,7 @@
     },
     "PILLAR_APPS": {
       "type": "string",
-      "description": "The apps that ship with AUGUR, which register themselves.",
+      "description": "Apps that ship with AUGUR and register themselves. None by default.",
       "x-internal": "compose",
       "x-services": [
         "registry"
@@ -1588,6 +1410,14 @@
         "storage": "default"
       }
     },
+    "RETIRED_APPS": {
+      "type": "string",
+      "description": "Apps AUGUR no longer runs whose data the storage job takes away, once on each server (ADR 0075).",
+      "x-internal": "compose",
+      "x-services": [
+        "storage"
+      ]
+    },
     "KEYCLOAK_DATABASE": {
       "type": "string",
       "description": "Keycloak's own database (keycloak).",
@@ -1607,30 +1437,18 @@
     "S3_ENDPOINT": {
       "type": "string",
       "description": "An app's bucket's S3 address.",
-      "x-internal": "compose",
-      "x-services": [
-        "folio",
-        "folio-worker"
-      ]
+      "x-internal": "compose"
     },
     "S3_BUCKET": {
       "type": "string",
       "description": "An app's bucket.",
-      "x-internal": "compose",
-      "x-services": [
-        "folio",
-        "folio-worker"
-      ]
+      "x-internal": "compose"
     },
     "S3_SECRET_ACCESS_KEY": {
       "type": "string",
       "writeOnly": true,
       "description": "An app's bucket secret, from its *_BUCKET_SECRET.",
-      "x-internal": "compose",
-      "x-services": [
-        "folio",
-        "folio-worker"
-      ]
+      "x-internal": "compose"
     },
     "S3_ACCESS_KEY_ID": {
       "type": "string",
@@ -1668,11 +1486,7 @@
         "registry",
         "events",
         "models",
-        "folio",
-        "auspex",
-        "atlas",
-        "updater",
-        "folio-worker"
+        "updater"
       ]
     },
     "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": {
@@ -1771,33 +1585,6 @@
       "type": "string",
       "description": "Keycloak's memory limit; it sizes its Java heap from it.",
       "default": "2g",
-      "x-services": [
-        "compose"
-      ],
-      "x-docs": "docs/deploy.md#logs-memory-and-health"
-    },
-    "FOLIO_WORKER_MEM_LIMIT": {
-      "type": "string",
-      "description": "The memory limit of Artifacts' rendition worker.",
-      "default": "4g",
-      "x-services": [
-        "compose"
-      ],
-      "x-docs": "docs/deploy.md#logs-memory-and-health"
-    },
-    "FOLIO_WORKER_CPUS": {
-      "type": "string",
-      "description": "How many processors Artifacts' rendition worker may use at once (no more than the server has).",
-      "default": "2",
-      "x-services": [
-        "compose"
-      ],
-      "x-docs": "docs/deploy.md#logs-memory-and-health"
-    },
-    "FOLIO_WORKER_TMP_SIZE": {
-      "type": "string",
-      "description": "The size of the rendition worker's in-memory /tmp, where the file being read goes. It counts towards its memory limit.",
-      "default": "1g",
       "x-services": [
         "compose"
       ],

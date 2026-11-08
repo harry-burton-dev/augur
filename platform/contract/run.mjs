@@ -1,11 +1,11 @@
 // Runs the contract tests against each build of the reference app: its source
-// (today's SDK), with Folio on and off, then every frozen build from an earlier SDK release
+// (today's SDK), then every frozen build from an earlier SDK release
 // (one folder for each set of SDK minors whose builds were byte-for-byte the same; freeze.mjs).
 //   pnpm --filter @augur/contract-tests test:contract
 import { spawn } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { availableParallelism, totalmem } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -15,38 +15,23 @@ const frozen = join(here, 'frozen');
 // all before anything is released (CI/CD in the AUGUR handbook, 03 Architecture/Engineering).
 const releases = (existsSync(frozen) ? readdirSync(frozen) : []).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 const chosen = process.env.CONTRACT_FROZEN === 'edges' && releases.length > 2 ? [releases[0], releases.at(-1)] : releases;
-// Folio ships with AUGUR but can be turned off, so today's build runs with it and without it,
-// and each frozen build beside it, as released apps now run.
-// Folio comes from the release AUGUR ships, laid out by infra/shipped-app.sh; without it (on a laptop
-// that hasn't run that), every run has Folio off, and says so. CI always has it.
-const folioDir = resolve(here, process.env.CONTRACT_FOLIO_DIR ?? '../../.shipped/apps/folio');
-const folio = existsSync(join(folioDir, 'service', 'dist', 'index.js'));
-if (!folio) {
-  if (process.env.CI) {
-    console.error(`✗ Folio isn't laid out in ${folioDir}. Run: infra/shipped-app.sh folio`);
-    process.exit(1);
-  }
-  console.log(`Folio isn't laid out in ${folioDir}, so every run has it off. To run with it: infra/shipped-app.sh folio`);
-}
 // Every build runs with the feature preview `turned-on` on for the stand-in person (SDK 1.7), since
-// a frozen build from 1.7 on checks it too. Today's build runs every spec. Folio's own checks (tests/pillar.spec.ts) test the shell and Folio, not the app, so the
-// frozen builds run only the mount context's (tests/contract.spec.ts): Folio is still beside them.
+// a frozen build from 1.7 on checks it too. Today's build runs every spec; the
+// frozen builds run only the mount context's (tests/contract.spec.ts).
 const source = { DEV_PREVIEWS: 'turned-on' };
 const targets = [
-  { name: 'source', folio: false, env: source, specs: [] },
-  ...(folio ? [{ name: 'source', folio: true, env: source, specs: [] }] : []),
+  { name: 'source', env: source, specs: [] },
   ...chosen.map((release) => ({
     name: release,
-    folio,
     env: { ...source, DEV_APP_ENTRY: '/apps/reference/entry.js', APP_DIST: `reference=${join(frozen, release)}` },
     specs: ['tests/contract.spec.ts'],
   })),
 ];
-const label = (target) => `${target.name}, Folio ${target.folio ? 'on' : 'off'}`;
+const label = (target) => target.name;
 
 // Side by side, each with its own shell on its own port, so three builds take
 // about as long as one. Each build's output is printed whole once it finishes.
-// Each run (a shell, Folio's service, two browsers) takes up to about 2.5 GB, so a
+// Each run (a shell and two browsers) takes up to about 2.5 GB, so a
 // machine or container with less memory runs fewer at once rather than having the
 // kernel kill one part way through (as on a small CI runner).
 // Each also keeps about two cores busy, and the tests give the shell a few seconds to
@@ -68,9 +53,6 @@ const run = (target, i) =>
         DEV_APP: join(here, 'reference-app'),
         CONTRACT_TARGET: target.name,
         CONTRACT_PORT: String(5180 + i),
-        CONTRACT_FOLIO: target.folio ? 'on' : 'off',
-        CONTRACT_FOLIO_PORT: String(8190 + i),
-        CONTRACT_FOLIO_DIR: folioDir,
         FORCE_COLOR: process.env.FORCE_COLOR ?? '1',
         ...target.env,
       },
@@ -98,4 +80,4 @@ if (failed.length) {
   console.error(`\n✗ The shell broke the reference app built from: ${failed.join(', ')}`);
   process.exit(1);
 }
-console.log(`\nThe shell keeps its promise in all ${targets.length} runs of the reference app, with Folio on and off.`);
+console.log(`\nThe shell keeps its promise in all ${targets.length} runs of the reference app.`);

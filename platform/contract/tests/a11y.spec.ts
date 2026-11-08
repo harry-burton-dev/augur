@@ -4,10 +4,9 @@ import { expect, test, type Page } from '@playwright/test';
 /**
  * Accessibility: axe on the real shell, on the desktop and its app bar, a start menu, the reference app with the rail, and the stream, failing on any
  * serious or critical finding (alpha goal 16, ADR 0063). It checks the shell, not each SDK release, so it
- * runs once, on the reference app built from source with Folio off, inside the contract job.
+ * runs once, on the reference app built from source, inside the contract job.
  */
 test.skip(process.env.CONTRACT_TARGET !== undefined && process.env.CONTRACT_TARGET !== 'source', 'Checked once, on the build from source.');
-test.skip(process.env.CONTRACT_FOLIO === 'on', 'Checked once, with Folio off.');
 
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
