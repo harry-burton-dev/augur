@@ -8,6 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import type { FastifyReply } from 'fastify';
 import type { FastifyRequest } from 'fastify';
 import { JSONWebKeySet } from 'jose';
+import { JWTPayload } from 'jose';
 import { JWTVerifyGetKey } from 'jose';
 
 // @public
@@ -207,6 +208,7 @@ export const bucketKeyIdFor: (secret: string) => string;
 
 // @public
 export interface Caller {
+    app?: string;
     // (undocumented)
     departments: string[];
     // (undocumented)
@@ -217,6 +219,7 @@ export interface Caller {
     name: string;
     // (undocumented)
     roles: string[];
+    scopes?: string[];
     signedInAt?: string;
     workspace?: CallerWorkspace;
 }
@@ -232,7 +235,13 @@ export const CALLER_HEADERS: {
 };
 
 // @public
+export const CALLER_ISSUER = "augur-gateway";
+
+// @public
 export const CALLER_KEYS_PATH = "/api/gateway/v1/caller-keys";
+
+// @public
+export const CALLER_LIFETIME_SECONDS = 60;
 
 // @public
 export const CALLER_TOKEN_HEADER = "x-augur-caller";
@@ -256,6 +265,9 @@ export interface CallerCheckOptions {
     keys: JWTVerifyGetKey;
 }
 
+// @public (undocumented)
+export const callerFromClaims: (claims: JWTPayload) => Caller;
+
 // Warning: (ae-forgotten-export) The symbol "Headers_2" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -271,7 +283,7 @@ export class CallerKeysUnavailable extends Error {
 // @public (undocumented)
 export interface CallerSigner {
     keys(): Promise<JSONWebKeySet>;
-    sign(caller: Caller, audience: string): Promise<string>;
+    sign(caller: Caller, audience: string, options?: SignOptions): Promise<string>;
 }
 
 // @public
@@ -409,6 +421,15 @@ export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
 
 // @public
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 60000;
+
+// @public
+export const DELEGATION_HEADERS: {
+    readonly app: "x-augur-acting-app";
+    readonly scopes: "x-augur-acting-scopes";
+};
+
+// @public
+export const delegationAllows: (caller: Pick<Caller, "app" | "scopes"> | undefined, scope: string) => boolean;
 
 // @public
 export const describeConfig: (settings: Setting[], env?: NodeJS.ProcessEnv) => SettingState[];
@@ -800,8 +821,19 @@ export type InboxState = 'open' | 'done' | 'declined' | 'handed-on' | 'withdrawn
 // @public
 export const INSECURE_DEV_CALLERS = "AUGUR_INSECURE_DEV_CALLERS";
 
+// @public
+export const isDelegated: (caller: Pick<Caller, "app"> | undefined) => caller is Caller & {
+    app: string;
+};
+
 // @public (undocumented)
 export const isGatewayCaller: (caller?: Pick<Caller, "id">) => boolean;
+
+// @public
+export const isOfferedScope: (s: string) => s is Scope;
+
+// @public
+export const isScopeName: (s: string) => boolean;
 
 // @public
 export interface Job<Input = void> {
@@ -1376,6 +1408,9 @@ export const runMigrations: (pool: Pool_2, input: {
 export type Scope = (typeof SCOPES)[number];
 
 // @public
+export const SCOPE_PATTERN: RegExp;
+
+// @public
 export const SCOPES: readonly ["notifications:send", "audit:write", "models:use", "events:publish", "events:subscribe", "people:read", "inbox:write"];
 
 // @public
@@ -1522,6 +1557,11 @@ export const signedInCaller: (manifest: Pick<AppManifest, "name">) => (req: Pick
 
 // @public
 export const signedInRecently: (caller: Pick<Caller, "signedInAt"> | undefined, withinMs: number, now?: number) => boolean;
+
+// @public (undocumented)
+export interface SignOptions {
+    lifetimeSeconds?: number;
+}
 
 // @public
 export const standInPeople: AppPeople;

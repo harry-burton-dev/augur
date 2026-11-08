@@ -14,14 +14,17 @@
 //   augur-app clean-devs [<tag>...]    deletes all but the newest few dev builds, and those named
 //   augur-app clean-previews <pr> [<tag>...]
 //                                      deletes a pull request's previews, but those named
+//   augur-app validate                 checks manifest.json and score/*.score.yaml against contract 3's schemas (ADR 0075)
+//                                      and prints each problem with its file; exits 1 when there is one
 //   augur-app catalog [--check]        writes catalog-info.yaml, the app's Backstage catalog entry, from manifest.json
 //                                      and the parts' package.json files; --check fails when it's out of date
 // Images go to ghcr.io/<owner>/<repo>/<id> and <id>-frontend (IMAGE_REPO overrides ghcr.io/<owner>/<repo>).
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appCatalog, CATALOG_FILE, catalogText, repoSlug } from '../src/catalog.mjs';
+import { readApp, validateApp } from '../src/validate.mjs';
 import { appRelease, appTag, changelogSection, channelOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion, releaseNotes, signerOf } from '../src/release.mjs';
 
 const root = process.cwd();
@@ -145,6 +148,13 @@ const main = async ([mode, ...args]) => {
   } else if (mode === 'clean-previews') {
     const pr = Number(args[0]);
     for (const tag of releaseTags().filter((t) => previewPrOf(t) === pr && !args.slice(1).includes(t))) deleteRelease(tag);
+  } else if (mode === 'validate') {
+    if (!existsSync(join(root, 'manifest.json'))) throw new Error('No manifest.json here: run augur-app in the app repository’s root.');
+    const checked = readApp(root, { readdirSync, existsSync, join });
+    const { ok, problems } = validateApp(checked);
+    for (const problem of problems) console.error(problem);
+    if (!ok) throw new Error(`${problems.length} problem${problems.length === 1 ? '' : 's'} with this app’s contract-3 files.`);
+    console.log(`manifest.json and ${Object.keys(checked.parts).length} part${Object.keys(checked.parts).length === 1 ? '' : 's'} follow contract 3.`);
   } else if (mode === 'catalog') {
     let remote = '';
     try {
@@ -164,7 +174,7 @@ const main = async ([mode, ...args]) => {
       console.log(`Wrote ${CATALOG_FILE}`);
     }
   } else {
-    console.error('Usage: augur-app pending | dev <run> | preview <pr> <run> | bundle <channel> | describe [bundle.json] | publish <bundle.json> | clean-devs [<tag>...] | clean-previews <pr> [<tag>...] | catalog [--check]');
+    console.error('Usage: augur-app pending | dev <run> | preview <pr> <run> | bundle <channel> | describe [bundle.json] | publish <bundle.json> | clean-devs [<tag>...] | clean-previews <pr> [<tag>...] | validate | catalog [--check]');
     process.exit(2);
   }
 };

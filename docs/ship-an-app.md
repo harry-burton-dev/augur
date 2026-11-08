@@ -59,6 +59,8 @@ To go back, use **Go back** on the app's page in the Upgrade Centre, or hold the
 
 Apps are moving out of this repository into their own (ADR 0012). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
 
+An app on the app contract (contract 3, ADR 0075) also keeps `score/<part>.score.yaml` for each of its parts, and `augur-app validate` checks the manifest and those files against the contract's schemas, which `@augur/app-tools` ships (`manifest-3.schema.json`, `score-part-1.schema.json`, `app-release-2.schema.json`); its release file is `augur.app-release/v2`, written by `@augur/app-tools/release2` with every part's image pinned by digest.
+
 The release steps come from `@augur/app-tools`, published beside the SDK. Its `augur-app` command runs in the app repository's root (`manifest.json`, `frontend/`, `service/` and a `Dockerfile` for the service) and does what `scripts/app-release.mjs` and `infra/release-app.sh` do here: `augur-app pending`, `dev <run>`, `preview <pr> <run>`, `bundle <channel>` (build, push and sign), `publish <bundle.json>`, `clean-devs` and `clean-previews <pr>`. The app template's workflows call it.
 
 Servers still read one feed, AUGUR's (ADR 0047):

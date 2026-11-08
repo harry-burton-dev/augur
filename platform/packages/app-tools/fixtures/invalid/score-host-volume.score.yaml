@@ -1,0 +1,13 @@
+apiVersion: score.dev/v1b1
+metadata:
+  name: worker
+  annotations:
+    augur.dev/part: worker
+containers:
+  worker:
+    image: ghcr.io/example-org/augur-notes-worker@sha256:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809
+    volumes:
+      /data:
+        source: /var/lib/augur
+    resources:
+      limits: { memory: 256Mi, cpu: 500m }

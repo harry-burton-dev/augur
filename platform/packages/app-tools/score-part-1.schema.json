@@ -1,0 +1,437 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:augur:score-part:1",
+  "title": "AUGUR's rules for a part's Score workload (resource types v1)",
+  "description": "Checked in addition to Score's own schema (score.dev/v1b1). One Score workload is one part of an app (decision 3, option A). Only AUGUR's resource types may be asked for, and a part gets nothing it did not ask for.",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "metadata",
+    "containers"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "score.dev/v1b1"
+    },
+    "metadata": {
+      "type": "object",
+      "required": [
+        "name",
+        "annotations"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{0,30}[a-z0-9]$",
+          "description": "The part's name, unique within the app. The runner names the container app-<app>-<part>-<slot>."
+        },
+        "annotations": {
+          "type": "object",
+          "required": [
+            "augur.dev/part"
+          ],
+          "properties": {
+            "augur.dev/part": {
+              "enum": [
+                "service",
+                "worker",
+                "job"
+              ],
+              "description": "service: answers calls and declares one port; worker: works in the background; job: runs to completion before the switch (a migration)."
+            },
+            "augur.dev/ready-seconds": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]{0,3}$",
+              "description": "How long the part may take to answer on its version before the install is undone; the deployment's default without it, and never more than its ceiling."
+            }
+          }
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "properties": {
+        "ports": {
+          "type": "object",
+          "maxProperties": 1,
+          "description": "At most one port: the one the gateway sends the app's calls to. Only a service part has one."
+        }
+      }
+    },
+    "containers": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "description": "Exactly one container: a part is one container, so what a part asks for is what that container gets.",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "image",
+          "resources"
+        ],
+        "properties": {
+          "image": {
+            "type": "string",
+            "pattern": "^(\\.|[a-z0-9][a-z0-9._/-]*@sha256:[0-9a-f]{64})$",
+            "description": "'.' in the repository (the release build fills it in); in a release, always by digest."
+          },
+          "resources": {
+            "type": "object",
+            "required": [
+              "limits"
+            ],
+            "properties": {
+              "limits": {
+                "type": "object",
+                "required": [
+                  "memory",
+                  "cpu"
+                ]
+              }
+            },
+            "description": "The part sets its own limits (ADR 0075 point 5). The deployment's ceilings apply on top."
+          },
+          "volumes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": [
+                "source"
+              ],
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "pattern": "^\\$\\{resources\\.[a-z0-9-]+\\}$",
+                  "description": "Only a provisioned folder (augur-scratch or augur-files): never a host path or a named volume."
+                }
+              }
+            }
+          },
+          "readinessProbe": {
+            "type": "object",
+            "required": [
+              "httpGet"
+            ],
+            "description": "A service part's readiness is its /healthz answering on its version; httpGet only, since the runner checks from outside the container."
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "maxProperties": 12,
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "augur-gateway",
+              "augur-database",
+              "augur-bucket",
+              "augur-floor-graphs",
+              "augur-telemetry",
+              "augur-scratch",
+              "augur-files",
+              "augur-outbound",
+              "augur-settings"
+            ]
+          },
+          "class": false,
+          "id": false,
+          "params": {
+            "type": "object"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-gateway"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "inbound": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-database"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "connections": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-bucket"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {}
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-floor-graphs"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {}
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-telemetry"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {}
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-scratch"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "size"
+                  ],
+                  "properties": {
+                    "size": {
+                      "type": "string",
+                      "pattern": "^[1-9][0-9]*(Mi|Gi)$"
+                    }
+                  }
+                }
+              },
+              "required": [
+                "params"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-files"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "label"
+                  ],
+                  "properties": {
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 60,
+                      "description": "What Admin \u2192 Apps calls the folder the admin fills."
+                    },
+                    "detail": {
+                      "type": "string",
+                      "maxLength": 200
+                    }
+                  }
+                }
+              },
+              "required": [
+                "params"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-outbound"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "hosts": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9.*-]+$",
+                        "maxLength": 253
+                      },
+                      "minItems": 1,
+                      "maxItems": 20,
+                      "description": "The hosts the part needs, shown to the admin. An admin allows the part's internet access per app; a deployment may enforce the list."
+                    },
+                    "why": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 200
+                    }
+                  },
+                  "required": [
+                    "why"
+                  ]
+                }
+              },
+              "required": [
+                "params"
+              ]
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "augur-settings"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-zA-Z0-9]{0,39}$"
+                      },
+                      "minItems": 1,
+                      "uniqueItems": true,
+                      "description": "The settings this part reads; all of the manifest's without it."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "metadata"
+        ],
+        "properties": {
+          "metadata": {
+            "required": [
+              "annotations"
+            ],
+            "properties": {
+              "annotations": {
+                "required": [
+                  "augur.dev/part"
+                ],
+                "properties": {
+                  "augur.dev/part": {
+                    "const": "service"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "service"
+        ],
+        "properties": {
+          "service": {
+            "required": [
+              "ports"
+            ],
+            "properties": {
+              "ports": {
+                "minProperties": 1
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "service": false
+        }
+      }
+    }
+  ]
+}

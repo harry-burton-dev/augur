@@ -1,0 +1,22 @@
+apiVersion: score.dev/v1b1
+metadata:
+  name: web
+  annotations:
+    augur.dev/part: service
+service:
+  ports:
+    http:
+      port: 8080
+containers:
+  web:
+    image: ghcr.io/example-org/augur-notes@sha256:0f3d6a4c1b6b8d9e2f7a5c4b3e2d1c0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b
+    resources:
+      limits: { memory: 512Mi, cpu: "1" }
+  sidecar:
+    image: ghcr.io/example-org/augur-notes-worker@sha256:1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f809
+    resources:
+      limits: { memory: 128Mi, cpu: 100m }
+resources:
+  gateway:
+    type: augur-gateway
+    params: { inbound: true }
