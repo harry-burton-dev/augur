@@ -15,7 +15,7 @@ import {
 } from '@augur/shell-kit';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AppMounter,
+  StageMounter,
   applyPreferences,
   areaOf,
   groupsFor,
@@ -162,14 +162,14 @@ export function Host({
   const [shellModel] = useState(() => new ShellModel());
   const shellRef = useRef<ShellModel>(shellModel);
   const stageRef = useRef<HTMLDivElement>(null);
-  const mounter = useRef<AppMounter | null>(null);
+  const mounter = useRef<StageMounter | null>(null);
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
   const feed = useRef<NotificationFeed | null>(null);
   const broker = useRef(new RequestBroker());
   /** Where the answering app mounts, inside the request dialog while it's open. */
   const [requestStage, setRequestStage] = useState<HTMLDivElement | null>(null);
-  const requestMounter = useRef<AppMounter | null>(null);
+  const requestMounter = useRef<StageMounter | null>(null);
   const [answering, setAnswering] = useState<OpenRequest | null>(null);
   /** The previews this person may try, as a developer of their apps; none for everyone else. */
   const [previewApps, setPreviewApps] = useState<PreviewApp[]>([]);
@@ -567,7 +567,8 @@ export function Host({
   useEffect(() => {
     const stage = requestStage;
     if (!answering || !stage) return;
-    const mounter = new AppMounter(stage, importEntry);
+    // An app answering in the dialog stays where it is: the page behind it doesn't move.
+    const mounter = new StageMounter(stage, importEntry, { navigate: () => undefined });
     requestMounter.current = mounter;
     const { app, intent } = answering;
     const reply: IntentReply = { respond: (result) => broker.current.respond(result), cancel: () => broker.current.cancel() };
@@ -584,7 +585,7 @@ export function Host({
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    mounter.current ??= new AppMounter(stage, importEntry);
+    mounter.current ??= new StageMounter(stage, importEntry, { navigate: (app, path) => navigate(hrefFor(app, path)) });
     // On the way to another floor: the app comes off until that floor's catalogue says what's there.
     if (!manifest) {
       void mounter.current.unmount();

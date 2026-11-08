@@ -1,6 +1,7 @@
 export { matchRoute, hrefFor } from './routes.js';
 export { incompatibility, loadManifest, ManifestError } from './manifest.js';
 export { AppMounter, MountError, type ImportEntry } from './mount.js';
+export { StageMounter } from './stage.js';
 export { routeIntent, IntentError, RequestBroker, type OpenRequest } from './intents.js';
 export { toShellNotification, NotificationActions } from './notifications.js';
 export { startSession, CALLBACK_PATH, type Session } from './session.js';

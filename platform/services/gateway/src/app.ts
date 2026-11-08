@@ -4,24 +4,35 @@ import type { IncomingHttpHeaders } from 'node:http';
 import proxy from '@fastify/http-proxy';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { Static } from 'typebox';
+import { createLocalJWKSet } from 'jose';
 import {
+  APP_HEADER,
+  appClientId,
   CALLER_KEYS_PATH,
   CALLER_TOKEN_HEADER,
   callerHeaders,
+  CallerKeysUnavailable,
   callerSignerFromEnv,
+  CallerTokenError,
+  DELEGATION_HEADER,
+  delegationCheck,
+  delegationSecondsFromEnv,
   GATEWAY_CALLER,
   health,
   packageVersion,
   REQUEST_ID_HEADER,
   problemDetails,
   serviceLogging,
+  signDelegation,
   signedCallerHeaders,
   withoutCallerHeaders,
   WORKSPACE_HEADERS,
   type Caller,
   type CallerSigner,
 } from '@augur/service-kit';
-import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig } from './auth.ts';
+import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig, type Authenticated } from './auth.ts';
+import { AppGrantsUnavailable, notAllowed, registryGrantsFor, scopeFor, type AppGrant, type AppGrants } from './grants.ts';
+import { appFailure, appLimitsFromEnv, InFlight, poolOptions, type AppLimits } from './limits.ts';
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
@@ -85,12 +96,37 @@ export const PUBLIC_LOGO_PATH = '/api/identity/v1/public/organisation/logo';
 /** The most the logo route passes back; identity takes nothing larger. */
 const PUBLIC_LOGO_BYTES = 512 * 1024;
 
-const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH]);
+/**
+ * Where an app's part gets its own token (spec 8.4): a client-credentials grant, passed on to the sign-in
+ * service's token endpoint as the gateway reaches it. No other grant passes, so nobody signs a person in here.
+ */
+export const TOKEN_PATH = '/api/identity/v1/token';
+
+const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH, TOKEN_PATH]);
+/** The public routes that aren't counted as traffic; a storm at the token route is one the watch should see. */
+const UNCOUNTED_ROUTES = new Set([...PUBLIC_ROUTES].filter((r) => r !== TOKEN_PATH));
+
+/** The shape of an app's id in `x-augur-app` and in a client `app-<id>`, as the manifest schema has it. */
+const APP_ID = /^[a-z][a-z0-9-]{1,39}$/;
+/** The shape of a floor's id a part may name: the registry is asked about nothing else. */
+const FLOOR_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
+/** Every header the gateway itself speaks: a request may bring none of them in. */
+const isGatewayHeader = (name: string) => /^x-(augur|user|workspace)-/i.test(name);
 
 declare module 'fastify' {
   interface FastifyRequest {
     caller?: Caller;
+    /** Whose token the call carries, once verified. */
+    identity?: Authenticated;
+    /** For an app's own token: what the registry grants it where the call is for. */
+    grant?: AppGrant;
+    /** The app a person's call is made for (`x-augur-app`, set by the host), once checked to be well-formed. */
+    actingApp?: string;
     signedCaller?: Record<string, string>;
+    /** The app whose in-flight slot this call holds, to give back when it is answered. */
+    appCall?: string;
+    /** What that app is called, for a refusal in words. */
+    appCallName?: string;
     /** The body went past what the app may be sent, part way through. */
     tooLarge?: string;
   }
@@ -125,6 +161,12 @@ export interface GatewayOptions {
   fetchImpl?: typeof fetch;
   /** Checks the organisation's mail relay for Status (ADR 0065). Defaults to the SMTP_* settings. */
   mailer?: Mailer;
+  /** What each app is granted where, for an app's own token and for a call made for an app (spec 8.2, 8.3). Defaults to asking the registry upstream. */
+  appGrants?: AppGrants;
+  /** The brakes on calls to apps' parts (spec 7.5). Defaults to the APP_*_TIMEOUT_MS and APP_CONCURRENT_CALLS settings. */
+  limits?: AppLimits;
+  /** How long a delegated caller lasts (spec 8.5). Defaults to APP_DELEGATION_SECONDS, or 300. */
+  delegationSeconds?: number;
 }
 
 /**
@@ -142,7 +184,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv() }: GatewayOptions = {}) => {
   // Mail comes from the organisation's sender (Admin → Organisation), read from identity as the gateway.
   const sender = upstreams.identity
     ? organisationSender({
@@ -163,6 +205,12 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   const appUpstreams = apps ?? (upstreams.registry ? registryUpstreams({ registryUrl: upstreams.registry, signer }) : undefined);
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
+  const grantsOf = appGrants ?? (upstreams.registry ? registryGrantsFor({ registryUrl: upstreams.registry, signer }) : undefined);
+  const inFlight = new InFlight(limits.concurrentCalls);
+  // A part sends back the delegated caller the gateway signed; it is checked against the gateway's own key.
+  const checkDelegation = delegationCheck({ keys: async (header, token) => createLocalJWKSet(await signer.keys())(header, token) });
+  /** What an app is called where a refusal names it: what the registry says, or its id. */
+  const appName = (app: string, grant?: AppGrant) => grant?.name ?? app;
   const app = Fastify(serviceLogging()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/api/gateway/${API_VERSION}`, `/${API_VERSION}`);
@@ -173,8 +221,16 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   app.get('/healthz', { schema: { hide: true } }, async () => health('gateway', version, API_VERSION));
   // How calls through the gateway have answered lately, for the updater's watch after an upgrade.
   // Only the deployment's own network reaches it: nginx forwards only /api/.
+  // A slot is given back once, whether the call was answered or the caller went away first (abort fires no onResponse).
+  const releaseSlot = (req: FastifyRequest) => {
+    if (!req.appCall) return;
+    inFlight.release(req.appCall);
+    req.appCall = undefined;
+  };
+  app.addHook('onRequestAbort', async (req) => releaseSlot(req));
   app.addHook('onResponse', async (req, reply) => {
-    if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
+    releaseSlot(req);
+    if (req.routeOptions.url && UNCOUNTED_ROUTES.has(req.routeOptions.url)) return;
     const part = trafficPart(req.url);
     traffic.record(reply.statusCode, part);
     metrics.request(reply.statusCode, part);
@@ -243,27 +299,122 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     // the path, so "/%61pi/registry/…" reaches the registry while not starting with "/api/".
     if (req.routeOptions.url && PUBLIC_ROUTES.has(req.routeOptions.url)) return;
     try {
-      req.caller = await authenticate(req.headers.authorization, auth);
+      req.identity = await authenticate(req.headers.authorization, auth);
     } catch (err) {
       if (!(err instanceof AuthError)) throw err;
       if (err.status === 401) reply.header('www-authenticate', 'Bearer');
       return reply.code(err.status).send({ error: err.status === 401 ? 'unauthenticated' : 'unavailable', message: err.message });
     }
-
     const raw = req.headers[WORKSPACE_HEADERS.id];
     const asked = Array.isArray(raw) ? raw[0] : raw;
+
+    // AUGUR's own services reach each other inside the deployment; a platform service's token has no business here yet.
+    if (req.identity.kind === 'service') {
+      reply.header('www-authenticate', 'Bearer');
+      return reply.code(401).send({ error: 'unauthenticated', message: 'AUGUR’s own services don’t call through the gateway.' });
+    }
+
+    // An app's own token (spec 8.2): only for an app the registry knows and has on where the call is for.
+    if (req.identity.kind === 'app') {
+      const { app: id } = req.identity;
+      if (asked !== undefined && !FLOOR_ID.test(asked)) return reply.code(400).send({ error: 'bad_request', message: `${WORKSPACE_HEADERS.id} must be a floor’s id.` });
+      if (!grantsOf) return reply.code(503).send({ error: 'unavailable', message: 'What apps may do can’t be checked right now.' });
+      let grant: AppGrant | undefined;
+      try {
+        grant = await grantsOf(id, asked);
+      } catch (err) {
+        if (!(err instanceof AppGrantsUnavailable)) throw err;
+        req.log.error({ err: err.message, app: id }, 'app grants unavailable');
+        return reply.code(503).send({ error: 'unavailable', message: 'What apps may do can’t be checked right now. Try again in a moment.' });
+      }
+      if (!grant) {
+        reply.header('www-authenticate', 'Bearer');
+        return reply.code(401).send({ error: 'unauthenticated', message: `${id} isn’t installed here.` });
+      }
+      if (!grant.on) return reply.code(403).send({ error: 'forbidden', message: `${appName(id, grant)} is turned off${asked ? ' on that floor' : ''}.` });
+      req.grant = grant;
+      // The floor the call is for, as the registry checked it, so the services see the same floor the grant was read on.
+      const workspace = asked && grant.floorKind ? { id: asked, kind: grant.floorKind, role: 'member' as const } : undefined;
+      const sentBack = req.headers[DELEGATION_HEADER];
+      const delegation = Array.isArray(sentBack) ? sentBack[0] : sentBack;
+      if (delegation) {
+        // The part is calling onward for a person (spec 8.5): the caller is the one the gateway delegated to it.
+        try {
+          req.caller = await checkDelegation(delegation, id);
+        } catch (err) {
+          if (err instanceof CallerTokenError) {
+            reply.header('www-authenticate', 'Bearer');
+            return reply.code(401).send({ error: 'unauthenticated', message: err.message });
+          }
+          if (err instanceof CallerKeysUnavailable) return reply.code(503).send({ error: 'unavailable', message: 'The delegation can’t be checked right now.' });
+          throw err;
+        }
+      } else {
+        // The app itself: a caller named after it, so every service it reaches sees the app and its scopes.
+        req.caller = { id: `app:${id}`, name: appName(id, grant), departments: [], roles: [], app: id, scopes: [...grant.scopes], ...(workspace ? { workspace } : {}) };
+      }
+      return;
+    }
+
+    req.caller = req.identity.caller;
+    // The host names the app a person's call is for (spec 8.5); the sandbox never reaches this header.
+    const forApp = req.headers[APP_HEADER];
+    const acting = Array.isArray(forApp) ? forApp[0] : forApp;
+    if (acting !== undefined) {
+      if (!APP_ID.test(acting)) return reply.code(400).send({ error: 'bad_request', message: `${APP_HEADER} must be an app’s id.` });
+      req.actingApp = acting;
+    }
+
     if (!asked) return;
     if (!floorsOf) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now.' });
     try {
-      const floor = (await floorsOf(req.caller!)).find((f) => f.id === asked);
+      const floor = (await floorsOf(req.caller)).find((f) => f.id === asked);
       if (!floor) return reply.code(403).send({ error: 'forbidden', message: 'You’re not on that floor, or it no longer exists.' });
-      req.caller = { ...req.caller!, workspace: floor };
+      req.caller = { ...req.caller, workspace: floor };
     } catch (err) {
       if (!(err instanceof FloorLookupError)) throw err;
       req.log.error({ err: err.message }, 'floor check failed');
       return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now. Try again in a moment.' });
     }
   });
+
+  // A part's own sign-in (spec 8.4): its client-credentials grant, and only that, goes on to the sign-in service.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, body));
+  app.post<{ Body: string }>(
+    TOKEN_PATH,
+    {
+      bodyLimit: 16 * 1024,
+      schema: {
+        summary: 'Where an app’s part gets its own token',
+        description: [
+          'A client-credentials grant (application/x-www-form-urlencoded, as OAuth has it: grant_type, client_id,',
+          'client_secret), passed on to the deployment’s sign-in service and answered as it answers. No other grant passes:',
+          'nobody signs a person in here. No sign-in is needed to call it.',
+        ].join(' '),
+        consumes: ['application/x-www-form-urlencoded'],
+        response: {
+          200: { description: 'The token, as the sign-in service answered', type: 'object', additionalProperties: true },
+          400: refused('Not a client-credentials grant'),
+          401: refused('The sign-in service refused the client'),
+          503: refused("The sign-in service can't be reached"),
+        },
+      },
+    },
+    async (req, reply) => {
+      const form = new URLSearchParams(typeof req.body === 'string' ? req.body : '');
+      if (form.get('grant_type') !== 'client_credentials') return reply.code(400).send({ error: 'bad_request', message: 'Only a client-credentials grant passes here.' });
+      if (!auth.tokenUrl) return reply.code(503).send({ error: 'unavailable', message: 'The gateway isn’t told where the sign-in service issues tokens.' });
+      let res: Response;
+      try {
+        res = await fetchImpl(auth.tokenUrl, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', [REQUEST_ID_HEADER]: req.id }, body: form.toString(), signal: AbortSignal.timeout(10_000) });
+      } catch (err) {
+        req.log.warn({ err: (err as Error).message }, 'token endpoint not reached');
+        return reply.code(503).send({ error: 'unavailable', message: 'The sign-in service can’t be reached right now.' });
+      }
+      const text = await res.text();
+      return reply.code(res.status).header('content-type', res.headers.get('content-type') ?? 'application/json').header('cache-control', 'no-store').send(text);
+    },
+  );
 
   // The gateway's own API: whether every part of the platform is answering, for admins.
   app.get(
@@ -379,23 +530,84 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
    * to what it may be sent.
    */
   const beforeProxy = async (name: string, req: FastifyRequest, reply: FastifyReply) => {
-    req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
+    const drop = () => {
+      if (req.body instanceof Readable) req.body.resume();
+    };
+    const refuse = (status: 400 | 403 | 503, error: string, message: string) => {
+      drop();
+      return reply.code(status).send({ error, message });
+    };
+    const toPlatform = PLATFORM_SERVICES.includes(name);
+
+    // An app's own token, or a part calling onward for a person (spec 8.3): within the grant, or refused naming the scope.
+    if (req.identity?.kind === 'app' && req.caller && req.grant) {
+      const { app: id } = req.identity;
+      const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
+      const granted = scope === null || (scope !== undefined && req.grant.scopes.includes(scope) && (req.caller.scopes?.includes(scope) ?? true));
+      if (!granted) return refuse(403, 'forbidden', notAllowed(appName(id, req.grant), scope, req.url));
+      // Its own part checks callers as `app-<id>`; a service checks them as itself. A delegated person's caller is signed afresh for a minute.
+      req.signedCaller = await signedCallerHeaders(signer, req.caller, name === id ? appClientId(id) : name);
+      if (toPlatform) return;
+    } else if (req.caller && req.actingApp) {
+      // A person's call made for an app (spec 8.5): the app must be on for them here, and an AUGUR route within its grant.
+      const id = req.actingApp;
+      if (!toPlatform && name !== id) return refuse(400, 'bad_request', `This call is for ${id} but goes to /api/${name}.`);
+      let grant: AppGrant | undefined;
+      try {
+        if (!grantsOf) throw new AppGrantsUnavailable('the gateway has no registry to ask');
+        grant = await grantsOf(id, req.caller.workspace?.id);
+      } catch (err) {
+        if (!(err instanceof AppGrantsUnavailable)) throw err;
+        req.log.error({ err: err.message, app: id }, 'app grants unavailable');
+        return refuse(503, 'unavailable', 'What this app may do can’t be checked right now. Try again in a moment.');
+      }
+      if (!grant) return refuse(403, 'forbidden', `${id} isn’t installed here.`);
+      if (!grant.on) return refuse(403, 'forbidden', `${appName(id, grant)} is turned off${req.caller.workspace ? ' on this floor' : ''}.`);
+      if (toPlatform) {
+        // The app must be on for this person here, as for a call to its own routes: blocked or needing a role they lack is not on.
+        try {
+          const apps = appAccess ? await appAccess(await checkedOn(req.caller)) : undefined;
+          if (apps && !apps.has(id)) return refuse(403, 'forbidden', `That app isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.`);
+        } catch (err) {
+          if (!(err instanceof AppAccessUnavailable) && !(err instanceof FloorLookupError)) throw err;
+          req.log.error({ err: err.message }, 'app access check failed');
+          return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
+        }
+        const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
+        if (scope === undefined || (scope !== null && !grant.scopes.includes(scope))) return refuse(403, 'forbidden', notAllowed(appName(id, grant), scope, req.url));
+        // The service sees the person with the app and its scopes beside them, and applies the smaller access.
+        req.signedCaller = await signedCallerHeaders(signer, { ...req.caller, app: id, scopes: [...grant.scopes] }, name);
+      } else {
+        // The part receives the delegated caller, which it carries on its own calls for the person.
+        req.signedCaller = { [CALLER_TOKEN_HEADER]: await signDelegation(signer, req.caller, { app: id, scopes: grant.scopes, lifetimeSeconds: delegationSeconds }) };
+      }
+    } else {
+      req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
+    }
     // The platform's services check their callers themselves.
-    if (PLATFORM_SERVICES.includes(name) || !req.caller) return;
+    if (toPlatform || !req.caller) return;
+
+    // An app's own token reaches only its own part; an app on for the person is one their catalogue lists.
+    if (req.identity?.kind === 'app') {
+      if (!inFlight.take(name)) return refuse(503, 'unavailable', `${appName(name, req.grant)} is busy; try again in a moment.`);
+      req.appCall = name;
+      req.appCallName = appName(name, req.grant);
+      return;
+    }
     let apps: Map<string, AppAllowed> | undefined;
     try {
       apps = appAccess ? await appAccess(await checkedOn(req.caller)) : undefined;
     } catch (err) {
       if (!(err instanceof AppAccessUnavailable) && !(err instanceof FloorLookupError)) throw err;
       req.log.error({ err: err.message }, 'app access check failed');
-      if (req.body instanceof Readable) req.body.resume();
-      return reply.code(503).send({ error: 'unavailable', message: 'Whether you can use this app can’t be checked right now. Try again in a moment.' });
+      return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
     }
     const allowed = apps?.get(name);
-    if (apps && !allowed) {
-      if (req.body instanceof Readable) req.body.resume();
-      return reply.code(403).send({ error: 'forbidden', message: `That app isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.` });
-    }
+    if (apps && !allowed) return refuse(403, 'forbidden', `That app isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.`);
+    // Only so many calls to one app at once (spec 7.5); AUGUR's own routes are never held by this.
+    if (!inFlight.take(name)) return refuse(503, 'unavailable', `${allowed?.name ?? 'This app'} is busy; try again in a moment.`);
+    req.appCall = name;
+    req.appCallName = allowed?.name ?? 'This app';
     // Bodies stream through, never held here.
     if (!(req.body instanceof Readable)) return;
     const mb = allowed?.maxUpload ?? DEFAULT_UPLOAD_MB;
@@ -416,16 +628,25 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   const replyOptions = {
     onError: (reply: FastifyReply, { error }: { error: Error }) => {
       if (reply.request.tooLarge) return void reply.code(413).send({ error: 'too_large', message: reply.request.tooLarge });
+      // A part that can't be reached or doesn't answer in time, in words (spec 7.5).
+      const failed = reply.request.appCall ? appFailure(error, reply.request.appCallName ?? 'This app') : undefined;
+      if (failed) {
+        reply.request.log.warn({ err: error.message, app: reply.request.appCall }, 'app call failed');
+        return void reply.code(failed.status).send({ error: failed.status === 504 ? 'timeout' : 'bad_gateway', message: failed.message });
+      }
       // As reply-from answers by default.
       reply.send(error);
     },
     rewriteRequestHeaders: (req: FastifyRequest['raw'] & { id?: string }, headers: IncomingHttpHeaders) => {
       const request = req as unknown as FastifyRequest;
-      // Who is calling comes only from the verified token. A service's own token is refused above: its audience isn't this one.
-      // The token itself stays here: it works on every platform API, so no service, an app's least of all, is handed it.
-      // The plain caller headers stay for apps that don't check the signed one yet.
-      const { authorization: _, [CALLER_TOKEN_HEADER]: __, ...clean } = withoutCallerHeaders(headers);
-      return { ...clean, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...callerHeaders(request.caller), ...request.signedCaller } : {}) };
+      // Who is calling comes only from the verified token. A person's token stays here: it works on every platform API,
+      // so no service, an app's least of all, is handed it. An app's own token goes on with its call, because the services
+      // still read which app is calling from it (their second line, spec 8.3) and it reaches only AUGUR and the app's own part.
+      // Every incoming x-augur-* and x-user-* header is dropped; the plain caller headers stay for apps that don't check the signed one yet.
+      const { authorization, [CALLER_TOKEN_HEADER]: __, ...named } = withoutCallerHeaders(headers);
+      const clean = Object.fromEntries(Object.entries(named).filter(([k]) => !isGatewayHeader(k)));
+      const keepToken = request.identity?.kind === 'app' && authorization ? { authorization } : {};
+      return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...callerHeaders(request.caller), ...request.signedCaller } : {}) };
     },
   };
 
@@ -435,6 +656,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       upstream,
       prefix: `/api/${name}`,
       rewritePrefix: '',
+      // An app's part is held to its timeouts (spec 7.5); AUGUR's own services keep the defaults.
+      ...(PLATFORM_SERVICES.includes(name) ? {} : { undici: poolOptions(limits) }),
       // The signed caller is made before the request goes on, since signing is asynchronous.
       preHandler: (req, reply) => beforeProxy(name, req, reply),
       replyOptions: replyOptions as never,
@@ -445,7 +668,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   // above are more specific, so the platform's services and APP_UPSTREAMS always win.
   if (appUpstreams) {
     await app.register(async (sub) => {
-      await sub.register(replyFrom);
+      await sub.register(replyFrom, { undici: poolOptions(limits) });
       // Bodies are passed on as they arrive, as the proxies above do.
       sub.removeAllContentTypeParsers();
       sub.addContentTypeParser('*', (_req, payload, done) => done(null, payload));

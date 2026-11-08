@@ -1,5 +1,6 @@
 import { SDK_VERSION, type AppManifestEntry } from '@augur/mfe-sdk';
 import semver from 'semver';
+import { fromCatalogue3, isCatalogue3 } from './apps3.js';
 
 export class ManifestError extends Error {}
 
@@ -17,9 +18,10 @@ export async function loadManifest(fetchImpl: typeof fetch, url: string, token: 
   if (!res.ok) throw new ManifestError(`The app catalogue answered ${res.status}. Try again, or ask an admin if it keeps happening.`);
   const body: unknown = await res.json();
   if (!Array.isArray(body)) throw new ManifestError('The app catalogue sent something the shell could not read.');
-  return body.filter(
+  // An app on the app contract arrives as its manifest (spec 9.6); one with no frontend has nothing to open.
+  return (body as unknown[]).map((a) => (isCatalogue3(a) ? fromCatalogue3(a) : a)).filter(
     (a): a is AppManifestEntry =>
-      !!a && typeof a === 'object' && typeof a.id === 'string' && typeof a.route === 'string' && typeof a.entry === 'string',
+      !!a && typeof a === 'object' && typeof (a as AppManifestEntry).id === 'string' && typeof (a as AppManifestEntry).route === 'string' && !!(a as AppManifestEntry).entry && typeof (a as AppManifestEntry).entry === 'string',
   );
 }
 
