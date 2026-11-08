@@ -1,6 +1,7 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppSearch, readAnswer, type FindUpdate } from './find.js';
+import { fromCatalogue3 } from './apps3.js';
 
 const app = (id: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -51,6 +52,15 @@ describe('Find over apps’ content', () => {
     await done;
     expect(updates.at(-1)!.results.map((r) => r.id)).toEqual(['library:d7', 'claims:c1']);
     expect(search.foundIn('library:d7')).toMatchObject({ app: { id: 'library' }, path: '/doc/7' });
+  });
+
+  it('asks an app on the app contract as itself, so the gateway holds the call to its grants', async () => {
+    const fetchOnFloor = apps({ notes: { after: 0 }, library: { after: 0 } });
+    const notes = fromCatalogue3({ contract: 3, id: 'notes', name: 'Notes', version: '1.0.0', frontend: { entry: 'sandbox.js' }, contributes: { search: true } });
+    await new AppSearch(fetchOnFloor).run([notes, app('library')], 'budget', 'w-me', () => undefined);
+    const headersFor = (id: string) => (fetchOnFloor.mock.calls.find(([path]) => path.startsWith(`/api/${id}/`))![1] as RequestInit).headers as Record<string, string>;
+    expect(headersFor('notes')['x-augur-app']).toBe('notes');
+    expect(headersFor('library')['x-augur-app']).toBeUndefined();
   });
 
   it('lets go of an app that takes longer than the budget, and says which failed', async () => {

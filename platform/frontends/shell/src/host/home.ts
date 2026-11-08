@@ -1,6 +1,7 @@
 import type { AppManifestEntry, ManifestSurface, MicroFrontend, MountContext, Surface, Workspace } from '@augur/mfe-sdk';
 import type { ShellNotification } from '@augur/shell-kit';
 import { incompatibility } from './manifest.js';
+import { isWorkerApp, type WorkerApp } from './apps3.js';
 import type { ImportEntry } from './mount.js';
 import { importEntry } from './mount.js';
 
@@ -128,7 +129,14 @@ export class SurfaceMounter {
   private readonly loads = new Map<string, Promise<MicroFrontend | undefined>>();
   private readonly mounted = new Map<HTMLElement, Surface>();
 
-  constructor(private readonly load: ImportEntry = importEntry) {}
+  /**
+   * `workerCard` makes the card of an app on the app contract, which runs in a worker rather than
+   * being imported into the page: the shell gives it the app's context and its way to move.
+   */
+  constructor(
+    private readonly load: ImportEntry = importEntry,
+    private readonly workerCard?: (app: WorkerApp, ctx: MountContext) => Surface & { shown: Promise<boolean> },
+  ) {}
 
   private entryOf(app: AppManifestEntry) {
     let pending = this.loads.get(app.entry);
@@ -151,6 +159,16 @@ export class SurfaceMounter {
   /** Mounts one of `app`'s surfaces (a card, its settings) into `el`. False when there is none, or it failed. */
   async mountSurface(el: HTMLElement, app: AppManifestEntry, which: ManifestSurface | undefined, ctx: MountContext): Promise<boolean> {
     if (!which || incompatibility(app)) return false;
+    if (isWorkerApp(app)) {
+      if (which.slot !== 'card' || !this.workerCard || !el.isConnected) return false;
+      await this.unmount(el);
+      const card = this.workerCard(app, ctx);
+      this.mounted.set(el, card);
+      await card.mount(el, ctx);
+      const shown = await card.shown;
+      if (!shown && this.mounted.get(el) === card) await this.unmount(el);
+      return shown;
+    }
     const surface = (await this.entryOf(app))?.surfaces?.[which.module];
     if (!isSurface(surface) || !el.isConnected) return false;
     await this.unmount(el);

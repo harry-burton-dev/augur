@@ -2,7 +2,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel, type Port } from '@augur/mfe-sdk/sdk3/host';
 import { fromCatalogue3, type Catalogue3, type WorkerApp } from './apps3.js';
-import { WorkerMounter, inAppPath, type WorkerContext } from './worker-host.js';
+import { WorkerMounter, inAppPath, workerCard, type WorkerContext } from './worker-host.js';
 import { NodeBudget, RateBudget } from './budget.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -366,6 +366,42 @@ describe('the worker host', () => {
     await flush();
     expect(ctx.navigate).not.toHaveBeenCalled();
     expect(ctx.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('an app’s card on Home', () => {
+  const withCard = fromCatalogue3({ ...manifest, floors: ['personal'], contributes: { ...manifest.contributes, card: true } });
+
+  it('is offered on the floors the app is on, and shows only what the app draws into its card', async () => {
+    expect(withCard.surfaces).toEqual([{ floor: 'personal', slot: 'card', module: 'card' }]);
+    const stub = stubApp((self, method) => {
+      if (method !== 'start') return;
+      self.mutate('screen', [notice('s1', 'The whole screen')]);
+      self.mutate('card', [notice('c1', 'Three to check')]);
+    });
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctxFor(), { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    expect(await card.shown).toBe(true);
+    expect(el.textContent).toContain('Three to check');
+    expect(el.textContent).not.toContain('The whole screen');
+    act(() => void card.unmount!(el));
+    await flush();
+    expect(el.textContent).toBe('');
+  });
+
+  it('isn’t shown when the app fails before drawing it', async () => {
+    const stub = stubApp();
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctxFor(), { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    act(() => void stub.worker.dispatchEvent(new Event('error')));
+    expect(await card.shown).toBe(false);
+    act(() => void card.unmount!(el));
   });
 });
 

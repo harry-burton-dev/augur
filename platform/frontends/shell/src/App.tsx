@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   StageMounter,
+  workerCards,
   applyPreferences,
   areaOf,
   groupsFor,
@@ -552,7 +553,7 @@ export function Host({
     (el: HTMLElement, id: string) => {
       const app = manifest?.find((a) => a.id === id);
       if (!app) return Promise.resolve(false);
-      cards.current ??= new SurfaceMounter(importEntry);
+      cards.current ??= new SurfaceMounter(importEntry, workerCards((app, path) => navigate(hrefFor(app, path))));
       return cards.current.mountSurface(el, app, settingsOf(app, floor ?? home), contextFor(app, '/'));
     },
     [manifest, floor, home, contextFor, importEntry],
@@ -677,7 +678,7 @@ export function Host({
     const shell = shellRef.current;
     if (!shell || !manifest) return;
     const here = floor ?? home;
-    cards.current ??= new SurfaceMounter(importEntry);
+    cards.current ??= new SurfaceMounter(importEntry, workerCards((app, path) => navigate(hrefFor(app, path))));
     const send = () =>
       bus.emit<HomeState>(HOME_CHANNEL.state, {
         // Open inbox items on this floor first (at most five, then a row for the rest), above the notifications that need you.

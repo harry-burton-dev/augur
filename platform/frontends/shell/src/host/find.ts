@@ -1,5 +1,6 @@
 import type { AppManifestEntry, SearchResult } from '@augur/mfe-sdk';
 import type { ShellFindGroup, ShellFindResult } from '@augur/shell-kit';
+import { APP_HEADER, isWorkerApp } from './apps3.js';
 
 /** How long Find waits for any one app before saying it didn't answer in time. */
 export const SEARCH_BUDGET_MS = 1500;
@@ -90,7 +91,9 @@ export class AppSearch {
         }, this.opts.budgetMs ?? SEARCH_BUDGET_MS);
         let state: ShellFindGroup['state'] = 'done';
         try {
-          const res = await this.fetchOnFloor(`/api/${app.id}/v1/search?q=${encodeURIComponent(query)}`, { signal: ask.signal, headers: { accept: 'application/json' } });
+          // An app on the contract is asked as itself: the gateway checks the call against its grants (spec 8.5).
+          const headers: Record<string, string> = { accept: 'application/json', ...(isWorkerApp(app) ? { [APP_HEADER]: app.id } : {}) };
+          const res = await this.fetchOnFloor(`/api/${app.id}/v1/search?q=${encodeURIComponent(query)}`, { signal: ask.signal, headers });
           if (!res.ok) throw new Error(String(res.status));
           results.set(app.id, this.toShell(app, readAnswer(await res.json()), here));
         } catch {
