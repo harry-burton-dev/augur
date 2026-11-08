@@ -15,7 +15,7 @@ WORKDIR /repo
 COPY . .
 # Only what pnpm install reads: every package.json, the lockfile, the workspace and .npmrc. The install
 # below starts from these alone, so it is cached until the dependencies change, not on every change.
-RUN rm -rf .shipped && find . -type f ! -name package.json ! -name pnpm-lock.yaml ! -name pnpm-workspace.yaml ! -name .npmrc -delete \
+RUN find . -type f ! -name package.json ! -name pnpm-lock.yaml ! -name pnpm-workspace.yaml ! -name .npmrc -delete \
  && find . -mindepth 1 -type d -empty -delete
 FROM node:22-alpine AS deps
 RUN corepack enable
@@ -50,8 +50,6 @@ COPY --from=build /out .
 COPY infra/deploy /augur/deploy
 # Which repositories publish the apps that live in their own (ADR 0047): the runner trusts each for its app.
 COPY release/app-repos.json /augur/app-repos.json
-# The apps that ship with this release: the updater restarts and checks them with the platform's own parts.
-COPY release/shipped-apps.json /augur/shipped-apps.json
 ENV NODE_ENV=production
 USER node
 CMD ["node", "dist/index.js"]

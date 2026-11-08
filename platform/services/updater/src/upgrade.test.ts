@@ -1,13 +1,19 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { partsFor } from './parts.ts';
+import { partsFor, type Parts } from './parts.ts';
 import { afterRestart, checkOnce, lookAfterWatch, runUpgrade, Withdrawn, type Journal, type Report, type Server, type Target } from './upgrade.ts';
 
-/** The apps a release ships, as release/shipped-apps.json would have them. */
-const parts = partsFor([
-  { id: 'folio', port: 8083, workers: ['folio-worker'] },
-  { id: 'atlas', port: 8086, workers: [] },
-]);
+/** Parts beyond the platform's own, a service and a worker, as releases before ADR 0075 had for their apps. */
+const parts: Parts = (() => {
+  const own = partsFor();
+  const at = own.order.indexOf('gateway');
+  return {
+    ...own,
+    order: [...own.order.slice(0, at), 'folio', 'folio-worker', 'atlas', ...own.order.slice(at)],
+    roles: { ...own.roles, folio: 'service', 'folio-worker': 'worker', atlas: 'service' },
+    health: { ...own.health, folio: 'http://folio:8083/healthz', atlas: 'http://atlas:8086/healthz' },
+  };
+})();
 const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 const image = (service: string, digest: string) => `ghcr.io/o/r/${service}@sha256:${digest}`;
 const target = (more: Partial<Target> = {}): Target => ({
@@ -223,7 +229,7 @@ describe('an upgrade', () => {
     expect(last.message).toContain('Nothing was changed.');
     expect(last.message).toContain('has an image for mandate, which this server runs, and this updater doesn’t know how to restart it');
     expect(fake.did.some((d) => d.startsWith('up') || d.startsWith('env') || d.startsWith('backup'))).toBe(false);
-    // Without the apps that ship with AUGUR, it knows the platform's own parts only.
+    // Its own parts are the platform's only.
     const alone = fakeServer();
     alone.server.services = async () => [...(await services()), 'folio'];
     const reports: Report[] = [];

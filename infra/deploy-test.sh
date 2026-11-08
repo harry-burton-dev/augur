@@ -126,15 +126,10 @@ probe() {
   ' "$health" 2>/dev/null
 }
 
-# The front door serves the shell, sign-in and the frontends of the apps that ship with the release (the
-# registry's PILLAR_APPS in the compose file in use).
+# The front door serves the shell and sign-in.
 serving() {
   curl -fsS -o /dev/null "http://localhost:$port/" &&
-    curl -fsS -o /dev/null "http://localhost:$port/sso/realms/platform/.well-known/openid-configuration" || return 1
-  local app
-  for app in $(pc config --format json | jq -r '.services.registry.environment.PILLAR_APPS // ""'); do
-    curl -fsS -o /dev/null "http://localhost:$port/apps/$app/entry.js" || return 1
-  done
+    curl -fsS -o /dev/null "http://localhost:$port/sso/realms/platform/.well-known/openid-configuration"
 }
 
 # Waits until every service answers its /healthz and the front door serves; prints the versions they report.
@@ -156,10 +151,7 @@ wait_ready() {
 # Every AUGUR container runs the image it was meant to (the old ones aren't left running).
 on_version() {
   local want=$1 wrong
-  # A build from this checkout runs the shipped apps' images of a release, not ones built here.
-  local skip='[]'
-  if [ "${BUILD:-}" = 1 ] && [ "$want" = "$local_tag" ]; then skip=$(jq -c '[.apps | to_entries[] | .key, (.value.build // {} | keys[])]' "$here/../release/shipped-apps.json"); fi
-  wrong=$(pc ps --format json | jq -rs --arg want ":$want" --argjson skip "$skip" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Service as $s | $skip | index($s) | not) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
+  wrong=$(pc ps --format json | jq -rs --arg want ":$want" 'flatten | map(select(.Image | startswith("ghcr.io/")) | select(.Image | endswith($want) | not)) | map("\(.Service) runs \(.Image)") | .[]')
   if [ -n "$wrong" ]; then echo "Not on $want:"$'\n'"$wrong" >&2; return 1; fi
 }
 
@@ -222,7 +214,7 @@ browser_check() {
   # It changes the first admin's password, which THEN's command still has to change itself.
   [ "${BROWSER_CHECK:-1}" = 1 ] && [ -z "${THEN:-}" ] || return 0
   local env=$deploy/.env apps shots="${BROWSER_CHECK_OUT:-$work/browser-check}"
-  apps="home $( [ -e "$here/../release/shipped-apps.json" ] && jq -r '.apps | keys | join(" ")' "$here/../release/shipped-apps.json")"
+  apps=home
   mkdir -p "$shots"
   docker run --rm --network host --ipc=host -e OUT=/out -v "$shots:/out" \
     -v "$here/deploy-browser-check.mjs:/check/check.mjs:ro" "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" \

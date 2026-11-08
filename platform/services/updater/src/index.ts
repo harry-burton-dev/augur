@@ -13,7 +13,7 @@ import { clientCredentials, commonSettings, loadConfigOrExit, platformClientId, 
 import { envValue } from './env-file.ts';
 import { appRunnerClient, registryClient } from './registry.ts';
 import { appReposFrom, appRunner } from './runner.ts';
-import { partsFor, shippedAppsFrom } from './parts.ts';
+import { partsFor } from './parts.ts';
 import { composeAppHost, composeServer } from './server.ts';
 import { AUGUR_REPOSITORIES, augurDevIdentity, releaseIdentity, repositoryOfIdentity } from './signers.ts';
 import { afterRestart, checkOnce, lookAfterWatch, runUpgrade, UPDATER, Withdrawn } from './upgrade.ts';
@@ -70,12 +70,9 @@ const serviceSecret = process.env.SERVICE_CLIENT_SECRET;
 const signInCheck = serviceSecret
   ? () => clientCredentials({ tokenUrl: serviceAuthFromEnv().tokenUrl, clientId: platformClientId('updater'), clientSecret: serviceSecret })()
   : undefined;
-// The apps that ship with this release (release/shipped-apps.json, in this image): the updater restarts and
-// checks them with the platform's own parts. An image without the file knows the platform's only, and refuses
-// an upgrade of a server that runs any other part (upgrade.ts).
-const shippedFile = '/augur/shipped-apps.json';
-const shipped = existsSync(shippedFile) ? shippedAppsFrom(JSON.parse(readFileSync(shippedFile, 'utf8'))) : [];
-const parts = partsFor(shipped);
+// The platform's own parts: no app ships with AUGUR (ADR 0075), so the updater refuses an upgrade of a server
+// that runs any other part of AUGUR's (upgrade.ts).
+const parts = partsFor();
 const server = composeServer({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, signInUrl, signIn: signInCheck, healthUrls: parts.health });
 
 if (process.argv[2] === 'replace') {
@@ -168,9 +165,6 @@ const afterWatchOnce = async () => {
 /** One turn of the app runner: stops old versions whose time is up, then does the next job, if any. Off without APP_SECRETS_KEY. */
 const appsOnce = async () => {
   if (!envValue(await server.readEnv(), 'APP_SECRETS_KEY')) return;
-  // An app the runner installed that now ships with AUGUR (as Mandate became) is AUGUR's from now on.
-  const handedOver = await runner.handOver(shipped.map((app) => app.id));
-  if (handedOver.length) log('apps now shipped with AUGUR, runner copies stopped', { apps: handedOver });
   await runner.retireDue();
   const job = await apps.next();
   if (!job) return;

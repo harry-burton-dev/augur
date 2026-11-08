@@ -1296,14 +1296,6 @@
         "gateway"
       ]
     },
-    "PILLAR_APPS": {
-      "type": "string",
-      "description": "Apps that ship with AUGUR and register themselves. None by default.",
-      "x-internal": "compose",
-      "x-services": [
-        "registry"
-      ]
-    },
     "FRONTENDS_S3_URL": {
       "type": "string",
       "description": "Where the frontends bucket is.",

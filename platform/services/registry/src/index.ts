@@ -1,5 +1,5 @@
 import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
-import { auditTo, buildApp, pillarsFromEnv } from './app.ts';
+import { auditTo, buildApp } from './app.ts';
 import { appFeed, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
@@ -38,7 +38,6 @@ loadConfigOrExit('registry', [
   { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
   { name: 'DEPLOYMENT_TIME_ZONE', about: 'the time zone upgrade windows are in, such as Europe/London (default UTC).' },
   { name: 'FEED_SIGNER', about: 'who must sign the release feed, for a fork (default: this repository’s Release feed workflow).' },
-  { name: 'PILLAR_APPS', about: 'the apps that ship with AUGUR, which register themselves.' },
   { name: 'FRONTENDS_BUCKET_SECRET', about: 'the registry’s key to the bucket apps’ frontends are kept in by version.', secret: true },
   { name: 'FRONTENDS_S3_URL', about: 'where that bucket is.' },
   { name: 'ALERT_WEBHOOK_TOKEN', about: 'what the deployment’s Grafana sends with its alerts, so they reach deployment admins as notices (ADR 0059).', secret: true },
@@ -109,9 +108,8 @@ appUpdates.start();
 const frontendFiles = frontendFilesFromEnv();
 if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ frontends are served from where their manifests say, not kept by version.');
 
-// Apps and platform services sign in as themselves (their Keycloak clients). PILLAR_APPS are the apps
-// this deployment ships with, which register themselves like any other.
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, pillars: pillarsFromEnv(), frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
+// Apps and platform services sign in as themselves (their Keycloak clients).
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
 await app.listen({ port, host: '0.0.0.0' });
 
 // A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.

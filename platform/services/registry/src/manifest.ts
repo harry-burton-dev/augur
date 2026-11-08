@@ -429,7 +429,7 @@ export const platformApps: AppEntry[] = [
 ];
 
 /** Why an app's own claim to a kind isn't used. */
-export const CATEGORY_REFUSED = 'Only apps that ship with AUGUR or come from its app feed can be a platform or pillar app.';
+export const CATEGORY_REFUSED = 'Only apps that come from AUGUR\'s app feed can be a platform or pillar app.';
 
 /** The kind in force for an app, and the claim it made that isn't used, if any. */
 export interface CategoryInForce {
@@ -439,16 +439,15 @@ export interface CategoryInForce {
 
 /**
  * The kind in force for an app (ADR 0032): the registry's own apps are platform apps;
- * an app's own claim counts only when it ships with AUGUR (PILLAR_APPS) or the app runner
- * installed it from the signed app feed. Anything else is just an app, and the claim is
+ * an app's own claim counts only when the app runner installed it from the signed app feed. Anything else is just an app, and the claim is
  * reported to admins as refused. A value this registry doesn't know is no kind.
  */
-export const categoryOf = (entry: Pick<AppEntry, 'id' | 'category'>, trust: { ships: boolean; fromFeed: boolean }): CategoryInForce => {
+export const categoryOf = (entry: Pick<AppEntry, 'id' | 'category'>, trust: { fromFeed: boolean }): CategoryInForce => {
   const own = platformApps.find((a) => a.id === entry.id);
   if (own) return { category: own.category ?? 'platform' };
   const asked = entry.category;
   if (!asked || !(APP_CATEGORIES as readonly string[]).includes(asked)) return {};
-  if (trust.ships || trust.fromFeed) return { category: asked };
+  if (trust.fromFeed) return { category: asked };
   return { refused: { asked, why: CATEGORY_REFUSED } };
 };
 

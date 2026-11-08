@@ -28,7 +28,7 @@ say() { echo "$1=$2" >> "$out"; echo "$1: $2"; }
 pr_only() { if [ "${EVENT:-}" = push ]; then say "$1" false; elif touches "${@:2}"; then say "$1" true; else say "$1" false; fi; }
 
 # What the shell, Home and the shared packages are built from.
-pr_only contract platform/frontends platform/packages platform/contract release/shipped-apps.json \
+pr_only contract platform/frontends platform/packages platform/contract \
   ':!platform/frontends/admin' ':!platform/frontends/upgrades' ':!**/*.md' package.json pnpm-lock.yaml
 # What goes into the images beyond the code build-test builds: Dockerfiles, deploy files, dependencies.
 pr_only images infra .dockerignore pnpm-lock.yaml pnpm-workspace.yaml package.json '*/package.json' '**/package.json'
