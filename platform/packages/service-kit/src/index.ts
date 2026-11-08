@@ -16,6 +16,7 @@ export * from './storage.js';
 export * from './domain-events.js';
 export * from './bindings.js';
 export * from './signed-caller.js';
+export * from './delegation.js';
 export * from './people.js';
 export * from './frontend.js';
 export * from './config.js';

@@ -21,9 +21,19 @@ app.get('/v1/claims', async (req, reply) => {
 });
 ```
 
-The hook drops every `x-user-*` header a request brings, and the floor's kind and role. It puts back the caller from a valid signed token, so `callerFromHeaders` reads only what the gateway said. A request with a bad, expired or someone else's token gets 401. One with no token has no caller, which is how another service's own calls arrive: they prove who they are with their own sign-in, as before.
+The hook drops every `x-user-*` header a request brings, the floor's kind and role, and the acting-app headers of a delegated caller (below). It puts back the caller from a valid signed token, so `callerFromHeaders` reads only what the gateway said. A request with a bad, expired or someone else's token gets 401. One with no token has no caller, which is how another service's own calls arrive: they prove who they are with their own sign-in, as before.
 
 New apps made from augur-app-template have the hook already (the service kit's `appServer`). An app that hasn't added it keeps working, because the gateway still sends the plain headers beside the token, but it is trusting the network.
+
+## Acting for a person: the delegated caller
+
+Under the app contract (contract 3, ADR 0075) a call the shell makes for an app, and a call an app's part makes onward for the same person, carries a **delegated caller**: the same signed token with two more claims, `app` (the app acting) and `scopes` (what it is granted on that floor), signed for the app's own client `app-<id>` and lasting `APP_DELEGATION_SECONDS` (default 300) rather than a minute. A part checks it with the hook above, naming its client:
+
+```ts
+app.addHook('onRequest', signedCallers(callerCheckFromEnv('app-expenses')));
+```
+
+`callerFromHeaders` then gives the person with `app` and `scopes` beside them (`isDelegated`, `delegationAllows(caller, 'people:read')`). A service that receives a delegated caller applies the smaller of the person's access and the app's scopes. When the part calls AUGUR for that person it sends its own app token and the delegated caller it received in `x-augur-delegation`; the gateway checks the delegation is for that app and still valid (`delegationCheck`), then signs a fresh one-minute caller for the target. No token for the person reaches a part.
 
 ## Where the key comes from
 

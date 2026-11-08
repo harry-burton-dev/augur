@@ -17,6 +17,10 @@
     "./testing": {
       "types": "./dist/testing/index.d.ts",
       "default": "./dist/testing/index.js"
+    },
+    "./sdk3": {
+      "types": "./dist/sdk3/index.d.ts",
+      "default": "./dist/sdk3/index.js"
     }
   },
   "files": [

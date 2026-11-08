@@ -19,6 +19,15 @@ export interface Caller {
    * and the gateway checked the caller is on it. Absent means no floor was asked for.
    */
   workspace?: CallerWorkspace;
+  /**
+   * The app acting for the person (contract 3, spec 8.5): set when the gateway signed a delegated
+   * caller for a call made for an app, from the host's `x-augur-app` or a part's delegation. A
+   * service that sees it applies the smaller of the person's access and `scopes`. Absent means the
+   * person themselves, as every call was before contract 3.
+   */
+  app?: string;
+  /** With `app`: the scopes the app is granted on this floor, which bound what the call may do. */
+  scopes?: string[];
 }
 
 export interface CallerWorkspace {
@@ -37,6 +46,20 @@ export const CALLER_HEADERS = {
   signedInAt: 'x-user-signed-in-at',
 } as const;
 
+/**
+ * The header the shell's host sets on a call it makes for an app (contract 3, spec 8.5): the app's id,
+ * set by the host and never by the sandbox. The gateway reads it, checks the app is on for the person on
+ * that floor, and signs a delegated caller; it strips it, like every incoming `x-augur-*` header, before
+ * forwarding.
+ */
+export const APP_HEADER = 'x-augur-app';
+
+/** The app acting for the person, and what it may do, when a call is made for an app (contract 3). */
+export const DELEGATION_HEADERS = {
+  app: 'x-augur-acting-app',
+  scopes: 'x-augur-acting-scopes',
+} as const;
+
 /** The floor a request is for. An app sends only the id; the gateway replaces all three once it has checked it. */
 export const WORKSPACE_HEADERS = {
   id: 'x-workspace-id',
@@ -44,7 +67,7 @@ export const WORKSPACE_HEADERS = {
   role: 'x-workspace-role',
 } as const;
 
-const HEADER_NAMES: readonly string[] = [...Object.values(CALLER_HEADERS), ...Object.values(WORKSPACE_HEADERS)];
+const HEADER_NAMES: readonly string[] = [...Object.values(CALLER_HEADERS), ...Object.values(WORKSPACE_HEADERS), ...Object.values(DELEGATION_HEADERS), APP_HEADER, 'x-augur-delegation'];
 const KINDS: readonly string[] = ['personal', 'team', 'org'];
 
 type Headers = Record<string, string | string[] | undefined>;
@@ -78,9 +101,19 @@ export const callerHeaders = (caller: Caller): Record<string, string> => ({
         [WORKSPACE_HEADERS.role]: caller.workspace.role,
       }
     : {}),
+  ...(caller.app
+    ? {
+        [DELEGATION_HEADERS.app]: encodeURIComponent(caller.app),
+        [DELEGATION_HEADERS.scopes]: (caller.scopes ?? []).map(encodeURIComponent).join(','),
+      }
+    : {}),
 });
 
-/** Removes any caller and floor headers, so a client cannot claim to be someone or to be on a floor. The gateway calls this on every request. */
+/**
+ * Removes any caller, floor and delegation headers, so a client cannot claim to be someone, to be on a
+ * floor or to act for an app. The gateway calls this on every request, after reading `x-augur-app` and
+ * `x-augur-delegation` itself.
+ */
 export const withoutCallerHeaders = <H extends Headers>(headers: H): H =>
   Object.fromEntries(Object.entries(headers).filter(([k]) => !HEADER_NAMES.includes(k.toLowerCase()))) as H;
 
@@ -92,6 +125,7 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
   const signedInAt = one(headers[CALLER_HEADERS.signedInAt]);
   const floor = one(headers[WORKSPACE_HEADERS.id]);
   const kind = one(headers[WORKSPACE_HEADERS.kind]);
+  const app = one(headers[DELEGATION_HEADERS.app]);
   return {
     id: decode(id),
     name: decode(one(headers[CALLER_HEADERS.name]) ?? id),
@@ -102,8 +136,18 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
     ...(floor && kind && KINDS.includes(kind)
       ? { workspace: { id: decode(floor), kind: kind as CallerWorkspace['kind'], role: one(headers[WORKSPACE_HEADERS.role]) === 'lead' ? 'lead' : 'member' } }
       : {}),
+    ...(app ? { app: decode(app), scopes: list(one(headers[DELEGATION_HEADERS.scopes])) } : {}),
   };
 };
+
+/** Whether a call is made for an app rather than by the person alone (contract 3). */
+export const isDelegated = (caller: Pick<Caller, 'app'> | undefined): caller is Caller & { app: string } => typeof caller?.app === 'string';
+
+/**
+ * Whether a delegated caller may do what `scope` names. A person's own call (no `app`) is not bounded
+ * here: their access is the service's own check, as before. A service applies both.
+ */
+export const delegationAllows = (caller: Pick<Caller, 'app' | 'scopes'> | undefined, scope: string): boolean => !isDelegated(caller) || (caller.scopes ?? []).includes(scope);
 
 /** Whether the caller entered their password within `withinMs`; false when the gateway didn't say. */
 export const signedInRecently = (caller: Pick<Caller, 'signedInAt'> | undefined, withinMs: number, now = Date.now()) =>

@@ -13,6 +13,13 @@ import { withDeadline } from './deadline.js';
 export const SCOPES = ['notifications:send', 'audit:write', 'models:use', 'events:publish', 'events:subscribe', 'people:read', 'inbox:write'] as const;
 export type Scope = (typeof SCOPES)[number];
 
+/** The shape of a scope's name, `<api>:<verb>` (contract 3, spec 3.6); which names AUGUR offers is `SCOPES`. */
+export const SCOPE_PATTERN = /^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/;
+/** Whether a string is shaped like a scope. */
+export const isScopeName = (s: string): boolean => SCOPE_PATTERN.test(s);
+/** Whether this AUGUR offers the scope; a release naming one it doesn't is refused with the scope's name (spec 3.6). */
+export const isOfferedScope = (s: string): s is Scope => (SCOPES as readonly string[]).includes(s);
+
 /** The audience every app and platform service token is issued for. */
 export const SERVICES_AUDIENCE = 'platform-services';
 

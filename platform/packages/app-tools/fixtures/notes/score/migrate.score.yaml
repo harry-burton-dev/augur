@@ -1,0 +1,25 @@
+apiVersion: score.dev/v1b1
+metadata:
+  name: migrate
+  annotations:
+    augur.dev/part: job
+containers:
+  migrate:
+    image: ghcr.io/example-org/augur-notes@sha256:0f3d6a4c1b6b8d9e2f7a5c4b3e2d1c0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b
+    command: ["node", "dist/migrate.js"]
+    variables:
+      DATABASE_HOST: ${resources.db.host}
+      DATABASE_NAME: ${resources.db.name}
+      DATABASE_USER: ${resources.db.user}
+      DATABASE_SCHEMA: ${resources.db.schema}
+    files:
+      /run/augur/database-password:
+        mode: "0400"
+        content: ${resources.db.password}
+    resources:
+      limits:
+        memory: 256Mi
+        cpu: 500m
+resources:
+  db:
+    type: augur-database

@@ -1,6 +1,6 @@
 import { createPrivateKey, createPublicKey, randomBytes, type KeyObject } from 'node:crypto';
 import { calculateJwkThumbprint, createLocalJWKSet, createRemoteJWKSet, errors, exportJWK, jwtVerify, SignJWT, type JSONWebKeySet, type JWTPayload, type JWTVerifyGetKey } from 'jose';
-import { CALLER_HEADERS, callerHeaders, WORKSPACE_HEADERS, type Caller, type CallerWorkspace } from './caller.js';
+import { CALLER_HEADERS, callerHeaders, DELEGATION_HEADERS, WORKSPACE_HEADERS, type Caller, type CallerWorkspace } from './caller.js';
 
 /**
  * The gateway signs the caller it passes on, so a service believes a person is
@@ -22,12 +22,24 @@ export const GATEWAY_CALLER: Caller = { id: 'augur:gateway', name: 'Gateway', de
 export const isGatewayCaller = (caller?: Pick<Caller, 'id'>) => caller?.id === GATEWAY_CALLER.id;
 
 /** How long a signed caller lasts. It is made per request, so a minute is plenty and a copied one soon stops working. */
-const LIFETIME_SECONDS = 60;
-const ISSUER = 'augur-gateway';
+export const CALLER_LIFETIME_SECONDS = 60;
+/** The issuer every signed caller names: the gateway, the only thing that signs them. */
+export const CALLER_ISSUER = 'augur-gateway';
+const LIFETIME_SECONDS = CALLER_LIFETIME_SECONDS;
+const ISSUER = CALLER_ISSUER;
+
+export interface SignOptions {
+  /**
+   * How long the token lasts, in seconds; the minute of `CALLER_LIFETIME_SECONDS` unless said. A
+   * delegated caller (contract 3) lasts `APP_DELEGATION_SECONDS`, because a part carries it on its
+   * own later calls for the person.
+   */
+  lifetimeSeconds?: number;
+}
 
 export interface CallerSigner {
   /** A token naming the caller, which only `audience` (the service it is sent to) accepts. */
-  sign(caller: Caller, audience: string): Promise<string>;
+  sign(caller: Caller, audience: string, options?: SignOptions): Promise<string>;
   /** The public key, for services to check tokens with. */
   keys(): Promise<JSONWebKeySet>;
 }
@@ -49,7 +61,7 @@ export const callerSigner = (seed?: string): CallerSigner => {
     return { ...jwk, kid: await calculateJwkThumbprint(jwk), alg: 'EdDSA', use: 'sig' };
   })();
   return {
-    async sign(caller, audience) {
+    async sign(caller, audience, { lifetimeSeconds = LIFETIME_SECONDS } = {}) {
       const { kid } = await published;
       return new SignJWT({
         name: caller.name,
@@ -58,13 +70,14 @@ export const callerSigner = (seed?: string): CallerSigner => {
         roles: caller.roles,
         ...(caller.workspace ? { workspace: caller.workspace } : {}),
         ...(caller.signedInAt ? { signedInAt: caller.signedInAt } : {}),
+        ...(caller.app ? { app: caller.app, scopes: caller.scopes ?? [] } : {}),
       })
         .setProtectedHeader({ alg: 'EdDSA', kid })
         .setSubject(caller.id)
         .setIssuer(ISSUER)
         .setAudience(audience)
         .setIssuedAt()
-        .setExpirationTime(`${LIFETIME_SECONDS}s`)
+        .setExpirationTime(`${lifetimeSeconds}s`)
         .sign(privateKey);
     },
     async keys() {
@@ -86,8 +99,9 @@ export type CallerCheck = (token: string) => Promise<Caller>;
 const strings = (v: unknown) => (Array.isArray(v) ? v.filter((s): s is string => typeof s === 'string') : []);
 const KINDS: readonly string[] = ['personal', 'team', 'org'];
 
-const callerFromClaims = (claims: JWTPayload): Caller => {
+export const callerFromClaims = (claims: JWTPayload): Caller => {
   const w = claims.workspace as Partial<CallerWorkspace> | undefined;
+  const app = typeof claims.app === 'string' ? claims.app : undefined;
   const email = typeof claims.email === 'string' ? claims.email : undefined;
   const signedInAt = typeof claims.signedInAt === 'string' && !Number.isNaN(Date.parse(claims.signedInAt)) ? claims.signedInAt : undefined;
   return {
@@ -100,6 +114,7 @@ const callerFromClaims = (claims: JWTPayload): Caller => {
     ...(w && typeof w.id === 'string' && typeof w.kind === 'string' && KINDS.includes(w.kind)
       ? { workspace: { id: w.id, kind: w.kind, role: w.role === 'lead' ? 'lead' : 'member' } }
       : {}),
+    ...(app ? { app, scopes: strings(claims.scopes) } : {}),
   };
 };
 
@@ -148,7 +163,7 @@ export const callerCheckFromEnv = (audience: string, env = process.env): CallerC
 };
 
 type HeaderBag = Record<string, string | string[] | undefined>;
-const PERSON_HEADERS: readonly string[] = [...Object.values(CALLER_HEADERS), WORKSPACE_HEADERS.kind, WORKSPACE_HEADERS.role];
+const PERSON_HEADERS: readonly string[] = [...Object.values(CALLER_HEADERS), WORKSPACE_HEADERS.kind, WORKSPACE_HEADERS.role, ...Object.values(DELEGATION_HEADERS)];
 
 const LOOPBACK: readonly string[] = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
 
