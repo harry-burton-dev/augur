@@ -7,16 +7,14 @@
  * budget stops only its own pane.
  */
 import { PageHead, QuillRemote, State, createQuillReceiver, type QuillReceiver } from '@augur/app-kit';
-import type { Intent, IntentReply, NotifyMessage } from '@augur/mfe-sdk';
+import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
 import type { FrameState, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireRequest } from '@augur/mfe-sdk/sdk3/host';
 import { createRoot, type Root } from 'react-dom/client';
 import { useSyncExternalStore } from 'react';
 import { DEFAULT_BUDGETS, NodeBudget, RateBudget, type Budgets, type Overrun } from './budget.js';
-import { actionsOf, type WorkerApp } from './apps3.js';
+import { APP_HEADER, actionsOf, type WorkerApp } from './apps3.js';
 
-/** The header that names the app a call is made for (contract 3); the gateway checks it against the app's grants. */
-export const APP_HEADER = 'x-augur-app';
 export const WORKSPACE_HEADER = 'x-workspace-id';
 
 /** What the shell gives an app's worker: who and where, and the shell's own ways to do what the app asks. */
@@ -57,6 +55,9 @@ export interface WorkerHostOptions {
 }
 
 const defaultWorker = (app: WorkerApp) => new Worker(new URL('../sandbox/worker.ts', import.meta.url), { type: 'module', name: `app ${app.id}` });
+
+/** How long after a press in its card an app may move the person or open another app. */
+const CARD_ACT_MS = 1000;
 
 /** How long the app's own stop gets before its worker is ended anyway. */
 const STOP_GRACE_MS = 1000;
@@ -122,17 +123,34 @@ export class AppSession {
   #receivers = new Map<string, QuillReceiver>();
   #ctx: WorkerContext;
 
+  /**
+   * `primary` is the root whose first drawing opens the pane: the screen in the stage, the card when
+   * Home runs the app for its card (spec 6.15).
+   */
   constructor(
     readonly app: WorkerApp,
     ctx: WorkerContext,
     private readonly makeWorker: (app: WorkerApp) => Worker = defaultWorker,
     budgets: Partial<Budgets> = {},
+    readonly primary: string = SCREEN_ROOT,
   ) {
     this.#ctx = ctx;
     this.#budgets = { ...DEFAULT_BUDGETS, ...budgets };
     this.#budget = new NodeBudget(this.#budgets);
     this.#rate = new RateBudget(this.#budgets.perSecond);
     this.#receivers.set(SCREEN_ROOT, this.screen);
+    if (primary !== SCREEN_ROOT) this.#receivers.set(primary, createQuillReceiver());
+  }
+
+  /**
+   * Whether the app may move the person or open another app now. In the stage it always may; a card
+   * on Home only just after the person pressed something in it, so no card pulls anyone off Home.
+   */
+  mayAct: () => boolean = () => true;
+
+  /** What the app has drawn into one of its roots, for the part of the shell that shows it. */
+  receiverOf(root: string): QuillReceiver | undefined {
+    return this.#receivers.get(root);
   }
 
   get state() {
@@ -188,6 +206,7 @@ export class AppSession {
       workspace: { id: ctx.workspace.id, kind: ctx.workspace.kind, name: ctx.workspace.name },
       path: ctx.path,
       previewsOn: app.previewsOn ?? [],
+      ...(this.primary === CARD_ROOT ? { surface: 'card' as const } : {}),
       ...(ctx.intent ? { intent: ctx.intent } : {}),
       ...(ctx.reply ? { replying: true } : {}),
     };
@@ -250,7 +269,7 @@ export class AppSession {
     // About sections and the card are kept as the app draws them, for when the shell shows them.
     if (!receiver) this.#receivers.set(root, (receiver = createQuillReceiver()));
     receiver.connection.mutate(records);
-    if (root === SCREEN_ROOT && (this.#state.phase === 'opening' || this.#state.phase === 'slow')) {
+    if (root === this.primary && (this.#state.phase === 'opening' || this.#state.phase === 'slow')) {
       for (const t of this.#timers) clearTimeout(t);
       this.#timers = [];
       this.#set({ phase: 'open' });
@@ -290,7 +309,7 @@ export class AppSession {
       case 'fetch':
         return this.#fetch(args[0]);
       case 'navigate': {
-        if (inAppPath(args[0])) ctx.navigate(args[0]);
+        if (inAppPath(args[0]) && this.mayAct()) ctx.navigate(args[0]);
         return;
       }
       case 'notify': {
@@ -299,8 +318,10 @@ export class AppSession {
         return;
       }
       case 'raise':
+        if (!this.mayAct()) throw new Error(`${this.app.name} can open another app from its card only when someone presses something in it.`);
         return ctx.raise(intentOf(args[0]));
       case 'request':
+        if (!this.mayAct()) throw new Error(`${this.app.name} can ask another app from its card only when someone presses something in it.`);
         return ctx.request(intentOf(args[0]));
       case 'reply.respond':
         return ctx.reply?.respond(args[0]);
@@ -399,6 +420,68 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * An app's card on Home (spec 6.15), as the surface Home's tile takes: the app runs in a worker of
+ * its own while the card is there, and Home shows only what it draws into `ctx.frame.card`. The card
+ * counts as shown once the app draws it; an app that fails or doesn't draw it in time isn't shown,
+ * and Home says so in the tile.
+ */
+export function workerCard(app: WorkerApp, ctx: WorkerContext, options: WorkerHostOptions = {}): Surface & { shown: Promise<boolean>; session: AppSession } {
+  const session = new AppSession(app, ctx, options.createWorker, options.budgets, CARD_ROOT);
+  // A press in the card lets it act for a moment: its listener runs in the worker, which then asks.
+  let pressed = -Infinity;
+  session.mayAct = () => Date.now() - pressed < CARD_ACT_MS;
+  const press = () => void (pressed = Date.now());
+  let host: HTMLElement | undefined;
+  let root: Root | undefined;
+  let settle: (shown: boolean) => void = () => undefined;
+  const shown = new Promise<boolean>((resolve) => (settle = resolve));
+  const off = session.subscribe(() => {
+    const { phase } = session.state;
+    if (phase === 'open') settle(true);
+    if (phase === 'failed' || phase === 'unresponsive') settle(false);
+  });
+  return {
+    shown,
+    session,
+    mount(el) {
+      host = el;
+      el.addEventListener('click', press, true);
+      el.addEventListener('keydown', press, true);
+      root = createRoot(el);
+      root.render(<CardPane session={session} />);
+      session.start();
+    },
+    unmount() {
+      off();
+      settle(false);
+      void session.stop();
+      host?.removeEventListener('click', press, true);
+      host?.removeEventListener('keydown', press, true);
+      root?.unmount();
+      root = undefined;
+    },
+  };
+}
+
+/** The card as the app draws it, and its states: opening, and stopped with why (a failed card is never blank, spec 6.13). */
+function CardPane({ session }: { session: AppSession }) {
+  const state = useSyncExternalStore(session.subscribe, () => session.state);
+  const receiver = session.receiverOf(CARD_ROOT);
+  const { app } = session;
+  return (
+    <div className="app-card" data-app={app.id} data-phase={state.phase}>
+      {state.phase === 'failed' || state.phase === 'unresponsive' ? (
+        <State kind="error" heading={`${app.name} stopped`} body={state.reason} />
+      ) : state.phase !== 'open' ? (
+        <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while` : `Opening ${app.name}`} />
+      ) : (
+        receiver && <QuillRemote receiver={receiver} />
+      )}
+    </div>
   );
 }
 

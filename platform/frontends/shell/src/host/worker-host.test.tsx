@@ -2,7 +2,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Channel, type Port } from '@augur/mfe-sdk/sdk3/host';
 import { fromCatalogue3, type Catalogue3, type WorkerApp } from './apps3.js';
-import { WorkerMounter, inAppPath, type WorkerContext } from './worker-host.js';
+import { WorkerMounter, inAppPath, workerCard, type WorkerContext } from './worker-host.js';
 import { NodeBudget, RateBudget } from './budget.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -366,6 +366,81 @@ describe('the worker host', () => {
     await flush();
     expect(ctx.navigate).not.toHaveBeenCalled();
     expect(ctx.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('an app’s card on Home', () => {
+  const withCard = fromCatalogue3({ ...manifest, floors: ['personal'], contributes: { ...manifest.contributes, card: true } });
+
+  it('is offered on the floors the app is on, and shows only what the app draws into its card', async () => {
+    expect(withCard.surfaces).toEqual([{ floor: 'personal', slot: 'card', module: 'card' }]);
+    const stub = stubApp((self, method) => {
+      if (method !== 'start') return;
+      self.mutate('screen', [notice('s1', 'The whole screen')]);
+      self.mutate('card', [notice('c1', 'Three to check')]);
+    });
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctxFor(), { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    expect(await card.shown).toBe(true);
+    expect(el.textContent).toContain('Three to check');
+    expect(el.textContent).not.toContain('The whole screen');
+    act(() => void card.unmount!(el));
+    await flush();
+    expect(el.textContent).toBe('');
+  });
+
+  it('says so in the card when the app stops after drawing it, never leaving it blank', async () => {
+    const stub = stubApp((self, method) => method === 'start' && self.mutate('card', [notice('c1', 'Three to check')]));
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctxFor(), { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    act(() => void stub.worker.dispatchEvent(Object.assign(new Event('error'), { message: 'boom' })));
+    expect(el.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('failed');
+    expect(el.textContent).toContain('Notes stopped');
+    act(() => void card.unmount!(el));
+    expect(stub.worker.terminated).toBe(true);
+  });
+
+  it('moves the person or opens another app only just after a press in the card', async () => {
+    let self!: Channel;
+    const stub = stubApp((app, method, args) => {
+      self = app;
+      if (method === 'start') {
+        expect((args[0] as { surface?: string }).surface).toBe('card');
+        app.mutate('card', [notice('c1', 'Three to check')]);
+      }
+    });
+    const ctx = ctxFor();
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctx, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    self.post('navigate', '/notebooks');
+    await expect(self.call('raise', { type: 'note.share' })).rejects.toThrow(/only when someone presses something/);
+    expect(ctx.navigate).not.toHaveBeenCalled();
+    el.firstElementChild!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    self.post('navigate', '/notebooks');
+    await flush();
+    expect(ctx.navigate).toHaveBeenCalledWith('/notebooks');
+    act(() => void card.unmount!(el));
+  });
+
+  it('isn’t shown when the app fails before drawing it', async () => {
+    const stub = stubApp();
+    const el = document.createElement('div');
+    stage.append(el);
+    const card = workerCard(withCard, ctxFor(), { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void card.mount(el, {} as never));
+    await flush();
+    act(() => void stub.worker.dispatchEvent(new Event('error')));
+    expect(await card.shown).toBe(false);
+    act(() => void card.unmount!(el));
   });
 });
 

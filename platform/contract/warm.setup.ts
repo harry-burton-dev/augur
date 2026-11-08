@@ -1,4 +1,5 @@
 import { chromium, type FullConfig } from '@playwright/test';
+import { check, reference } from './tests/reference';
 
 /**
  * Opens the reference app once before any test, so the shell's dev server has compiled the shell, the
@@ -10,10 +11,9 @@ export default async function warm(config: FullConfig) {
   const browser = await chromium.launch(launchOptions);
   try {
     const page = await browser.newPage({ baseURL });
-    // The reference app on the contract draws its checks as notices, from its worker.
-    const three = process.env.CONTRACT_TARGET === 'contract-3';
-    await page.goto(three ? '/reference3' : '/reference');
-    await page.locator(three ? '[data-app="reference3"] .augur-notice' : '[data-app="reference"] [data-check="user"]').first().waitFor({ timeout: 120_000 });
+    // The reference app draws its checks as notices, from its worker.
+    await page.goto(`/${reference.id}`);
+    await check(page, 'person').waitFor({ timeout: 120_000 });
   } finally {
     await browser.close();
   }

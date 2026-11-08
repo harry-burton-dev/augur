@@ -1,6 +1,7 @@
 import type { AppManifestEntry, ManifestSurface, MicroFrontend, MountContext, Surface, Workspace } from '@augur/mfe-sdk';
 import type { ShellNotification } from '@augur/shell-kit';
 import { incompatibility } from './manifest.js';
+import { isWorkerApp, type WorkerApp } from './apps3.js';
 import type { ImportEntry } from './mount.js';
 import { importEntry } from './mount.js';
 
@@ -128,7 +129,14 @@ export class SurfaceMounter {
   private readonly loads = new Map<string, Promise<MicroFrontend | undefined>>();
   private readonly mounted = new Map<HTMLElement, Surface>();
 
-  constructor(private readonly load: ImportEntry = importEntry) {}
+  /**
+   * `workerCard` makes the card of an app on the app contract, which runs in a worker rather than
+   * being imported into the page: the shell gives it the app's context and its way to move.
+   */
+  constructor(
+    private readonly load: ImportEntry = importEntry,
+    private readonly workerCard?: (app: WorkerApp, ctx: MountContext) => Surface & { shown: Promise<boolean> },
+  ) {}
 
   private entryOf(app: AppManifestEntry) {
     let pending = this.loads.get(app.entry);
@@ -151,6 +159,30 @@ export class SurfaceMounter {
   /** Mounts one of `app`'s surfaces (a card, its settings) into `el`. False when there is none, or it failed. */
   async mountSurface(el: HTMLElement, app: AppManifestEntry, which: ManifestSurface | undefined, ctx: MountContext): Promise<boolean> {
     if (!which || incompatibility(app)) return false;
+    if (isWorkerApp(app)) {
+      if (which.slot !== 'card' || !this.workerCard || !el.isConnected) return false;
+      // The card takes the tile at once, so an unmount or a new mount meanwhile finds it and ends its worker.
+      const was = this.mounted.get(el);
+      const card = this.workerCard(app, ctx);
+      this.mounted.set(el, card);
+      if (was) {
+        await this.end(el, was);
+        if (this.mounted.get(el) === card) el.replaceChildren();
+      }
+      if (this.mounted.get(el) !== card || !el.isConnected) {
+        if (this.mounted.get(el) === card) await this.unmount(el);
+        return false;
+      }
+      try {
+        await card.mount(el, ctx);
+      } catch {
+        if (this.mounted.get(el) === card) await this.unmount(el);
+        return false;
+      }
+      const shown = await card.shown;
+      if (!shown && this.mounted.get(el) === card) await this.unmount(el);
+      return shown && this.mounted.get(el) === card;
+    }
     const surface = (await this.entryOf(app))?.surfaces?.[which.module];
     if (!isSurface(surface) || !el.isConnected) return false;
     await this.unmount(el);
@@ -168,12 +200,16 @@ export class SurfaceMounter {
     const surface = this.mounted.get(el);
     if (!surface) return;
     this.mounted.delete(el);
+    await this.end(el, surface);
+    el.replaceChildren();
+  }
+
+  private async end(el: HTMLElement, surface: Surface) {
     try {
       await surface.unmount?.(el);
     } catch {
       // A card that fails to tidy up is still gone from Home.
     }
-    el.replaceChildren();
   }
 
   async unmountAll() {

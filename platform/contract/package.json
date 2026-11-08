@@ -4,25 +4,19 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "The shell's promise to apps, tested: a reference app, and frozen builds of it from each SDK release, mounted by the real shell in a browser.",
+  "description": "The shell's promise to apps, tested: a reference app on the app contract, run by the real shell in a browser.",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:contract": "node run.mjs",
-    "freeze": "vite build && node freeze.mjs"
+    "test:contract": "playwright test"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.14.0",
-    "@augur/mfe-sdk": "workspace:*",
-    "react": "catalog:",
-    "react-dom": "catalog:"
+    "@augur/mfe-sdk": "workspace:*"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@playwright/test": "1.56.1",
     "@types/node": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:"
   }

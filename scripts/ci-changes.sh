@@ -32,6 +32,3 @@ pr_only contract platform/frontends platform/packages platform/contract \
   ':!platform/frontends/admin' ':!platform/frontends/upgrades' ':!**/*.md' package.json pnpm-lock.yaml
 # What goes into the images beyond the code build-test builds: Dockerfiles, deploy files, dependencies.
 pr_only images infra .dockerignore pnpm-lock.yaml pnpm-workspace.yaml package.json '*/package.json' '**/package.json'
-# Today's SDK and the oldest and newest frozen builds on an ordinary pull request; every frozen build
-# on the Version packages pull request and by hand, once per release.
-if [ "$all" = true ]; then say contract_frozen all; else say contract_frozen edges; fi
