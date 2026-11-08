@@ -92,6 +92,9 @@ export const fakeHost = (env = ENV, network?: string) => {
     async provisionStorage(app, options) {
       did.push(`storage ${app}${options?.connections ? ` (${options.connections} connections)` : ''}`);
     },
+    async removeVolumes(names) {
+      did.push(`remove volumes ${names.join(' ')}`);
+    },
     async dropStorage(id) {
       did.push(`drop ${id}`);
     },

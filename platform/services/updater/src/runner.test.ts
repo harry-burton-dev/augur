@@ -1,9 +1,22 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
 import { APP_WATCH_EVERY_MS, appsProject, publishersFrom, RETIRE_MS, runsAsRoot, type AppJob, type JobReport, type RunningApp } from './runner.ts';
 import { examplePart, ENV, image, install, KEY, release, setup } from './runner.testing.ts';
 import { releaseIdentity } from './signers.ts';
 
+/** Whether this machine has Docker Compose, to check a project with `docker compose config` (CI's runners do). */
+const hasCompose = (() => {
+  try {
+    execFileSync('docker', ['compose', 'version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 const versionOf = (t: ReturnType<typeof setup>, c: string, v: string) => {
   t.versions.set(image(c, 'web'), v);
   t.versions.set(image(c, 'worker'), v);
@@ -214,11 +227,13 @@ describe('running Score parts (spec 4, 10)', () => {
     const t = setup();
     t.users.set(image('a', 'worker'), '');
     expect(await t.run(install('1.0.0'))).toBe('failed');
-    expect(t.reports.at(-1)?.message).toBe('worker’s image runs as root (it sets no user): a part runs as a user other than root (spec 4.13). Set USER in its Dockerfile.');
+    expect(t.reports.at(-1)?.message).toBe('worker’s image runs as root (it sets no user): a part runs as a user other than root, given as a number so it can be told without the image’s own user list (spec 4.13). Set USER to one, such as USER 10001, in its Dockerfile.');
     expect(t.did.some((d) => d.startsWith('start') || d.startsWith('job'))).toBe(false);
     expect(runsAsRoot('0:0')).toBe(true);
     expect(runsAsRoot('root')).toBe(true);
-    expect(runsAsRoot('node')).toBe(false);
+    // A name may be uid 0 in the image's passwd; only a number says it isn't.
+    expect(runsAsRoot('node')).toBe(true);
+    expect(runsAsRoot('00')).toBe(true);
     expect(runsAsRoot('10001:10001')).toBe(false);
   });
 
@@ -230,7 +245,7 @@ describe('running Score parts (spec 4, 10)', () => {
     expect(t.reports.at(-1)?.message).toMatch(/migrate reads the secret db\.password in its arguments \(2\)/);
     // Score's escape is a literal, not a read.
     expect(await t.run(install('1.0.0', 'a', {}, (p) => (p[2]!.containers.migrate!.args = ['--pw', '$${resources.db.password}'])))).toBe('done');
-    expect(t.project()!.services['app-notes-migrate-blue']!.command).toEqual(['--pw', '${resources.db.password}']);
+    expect(t.project()!.services['app-notes-migrate-blue']!.command).toEqual(['--pw', '$${resources.db.password}']);
 
     const u = setup();
     // The release writer refuses these too; the runner doesn't rely on it.
@@ -250,6 +265,57 @@ describe('running Score parts (spec 4, 10)', () => {
     redis.release!.parts[0]!.resources!.cache = { type: 'redis' };
     expect(await u.run(redis)).toBe('failed');
     expect(u.reports.at(-1)?.message).toBe('web asks for cache of type redis: resource type not offered by this AUGUR.');
+  });
+
+  it('refuses a limit Docker would read as none, and a name too long to be a host name', async () => {
+    const t = setup();
+    // Score's schema refuses 0 itself; Docker refuses these.
+    const none = install('1.0.0');
+    none.release!.parts[1]!.containers.worker!.resources.limits.memory = '1';
+    expect(await t.run(none)).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/memory limit 1 is below the 6Mi a container needs\./);
+    const tiny = install('1.0.0');
+    tiny.release!.parts[1]!.containers.worker!.resources.limits.cpu = '1m';
+    expect(await t.run(tiny)).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/^worker’s CPU limit 1m is below the 0\.01 CPU a container may be given\./);
+    // An id and a part name each within their own limits, too long together.
+    const id = `n${'o'.repeat(39)}`;
+    const long = { ...install('1.0.0'), app: id };
+    long.release = { ...long.release!, id, manifest: { ...long.release!.manifest, id } };
+    long.release.parts[1]!.metadata.name = `w${'o'.repeat(31)}`;
+    expect(await t.run(long)).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/is longer than the 63 characters a host name may be/);
+    expect(t.did.some((d) => d.startsWith('start') || d.startsWith('storage'))).toBe(false);
+  });
+
+  it('writes a project Compose reads as written: a $ the part means is never filled in from the updater’s settings', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0', 'a', {}, (p) => (p[0]!.containers.web!.variables!.GREETING = 'costs $5 at $HOME')))).toBe('done');
+    expect((t.project()!.services['app-notes-web-blue']!.environment as Record<string, string>).GREETING).toBe('costs $$5 at $$HOME');
+    // Every $ in the project is doubled, which Compose reads as one.
+    expect(JSON.stringify(t.project()).replace(/\$\$/g, '')).not.toContain('$');
+  });
+
+  it.skipIf(!hasCompose)('passes docker compose config, with every value as the part wrote it', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0', 'a', {}, (p) => {
+      p[0]!.containers.web!.variables!.GREETING = 'costs $5 at $HOME';
+      p[2]!.containers.migrate!.args = ['--pw', '$${resources.db.password}'];
+    }))).toBe('done');
+    const dir = mkdtempSync(join(tmpdir(), 'apps-'));
+    for (const [path, text] of Object.entries(t.files())) {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    }
+    writeFileSync(join(dir, 'compose.yml'), JSON.stringify(t.project()));
+    const config = JSON.parse(execFileSync('docker', ['compose', '-f', join(dir, 'compose.yml'), '--profile', 'jobs', 'config', '--format', 'json'], { env: { PATH: process.env.PATH, HOME: '/somewhere' } }).toString());
+    rmSync(dir, { recursive: true, force: true });
+    // Compose filled nothing in (no error, no HOME): config prints the value escaped again, as it would read it.
+    expect(config.services['app-notes-web-blue'].environment.GREETING).toBe('costs $$5 at $$HOME');
+    expect(config.services['app-notes-migrate-blue'].command).toEqual(['--pw', '$${resources.db.password}']);
+    expect(JSON.stringify(config)).not.toContain('/somewhere');
+    expect(config.services['app-notes-web-blue'].read_only).toBe(true);
+    expect(config.services['app-notes-web-blue'].cap_drop).toEqual(['ALL']);
   });
 
   it('takes only releases on contract 3, for the app the job names', async () => {
@@ -507,11 +573,16 @@ describe('the app runner', () => {
       if (url?.includes('blue')) throw new Error('it couldn’t be reached');
       await set(app, url);
     };
-    expect(await t.runner.run(install('1.1.0', 'b'), failingReport(t))).toBe('failed');
-    expect(t.reports.at(-1)?.message).toMatch(/Going back to 1\.0\.0 didn’t work either, so app-notes-web-green, app-notes-worker-green, app-notes-migrate-green are still running/);
+    // The job isn't ended: the next turn finds it running and goes back from the state.
+    await expect(t.runner.run(install('1.1.0', 'b'), failingReport(t))).rejects.toThrow(/Going back to 1\.0\.0 didn’t work either, so app-notes-web-green, app-notes-worker-green, app-notes-migrate-green are still running/);
     expect(t.running.has('app-notes-web-green')).toBe(true);
     expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'green' });
     expect(t.state().apps.notes.retiring?.until).toBeUndefined();
+    t.calls.calls.setUpstream = set;
+    expect(await t.run({ ...install('1.1.0', 'b'), state: 'running' })).toBe('failed');
+    expect(t.running.has('app-notes-web-green')).toBe(false);
+    expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-web-blue:8080');
+    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
   });
 
   it('takes a backup before the first release from another repository, and not for the next ones', async () => {
@@ -582,6 +653,47 @@ describe('the app runner', () => {
     expect(t.running.size).toBe(0);
     expect(t.state().apps).toEqual({});
     expect(t.calls.did.at(-1)).toBe('upstream notes null');
+  });
+
+  it('goes back from the state when it can’t go back after the watch, and never stops the version serving', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    const wait = t.host.wait;
+    t.host.wait = async (ms) => {
+      await wait(ms);
+      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-web-green');
+    };
+    const set = t.calls.calls.setUpstream;
+    t.calls.calls.setUpstream = async (app, url) => {
+      if (url?.includes('blue')) throw new Error('it couldn’t be reached');
+      await set(app, url);
+    };
+    await expect(t.run(install('1.1.0', 'b'))).rejects.toThrow(/Going back to 1\.0\.0 didn’t work yet/);
+    // Written as a switch not finished: the old version active, the new one retiring with no end, so nothing stops the old.
+    expect(t.state().apps.notes.active).toMatchObject({ slot: 'blue' });
+    expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'green' });
+    expect(t.state().apps.notes.retiring?.until).toBeUndefined();
+    t.later(RETIRE_MS * 2);
+    await t.runner.retireDue();
+    expect(t.running.has('app-notes-web-blue')).toBe(true);
+    t.calls.calls.setUpstream = set;
+    expect(await t.run({ ...install('1.1.0', 'b'), state: 'running' })).toBe('failed');
+    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.running.has('app-notes-worker-green')).toBe(false);
+  });
+
+  it('says what serves when it restarted while watching', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    await t.run(install('1.1.0', 'b'));
+    const now = t.state();
+    now.apps.notes.retiring!.until = '2026-10-27T12:15:00.000Z';
+    await t.host.writeProject(now, {}, {});
+    t.calls.did.length = 0;
+    expect(await t.run({ ...install('1.1.0', 'b'), state: 'running' })).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('The app runner restarted while watching 1.1.0. 1.1.0 is serving, without the rest of its watch; 1.0.0 keeps running until 12:15 UTC, and Admin → Apps can go back to it.');
+    expect(t.calls.did).toEqual([]);
+    expect(t.running.has('app-notes-web-green')).toBe(true);
   });
 
   describe('restarting around a switch', () => {
@@ -764,7 +876,7 @@ describe('settings and previews', () => {
         state: 'requested',
       }),
     ).toBe('done');
-    expect(t.did).toEqual(['stop app-notes-web-pr12', 'stop app-notes-worker-pr12', 'stop app-notes-migrate-pr12', 'drop notes-pr12']);
+    expect(t.did).toEqual(['stop app-notes-web-pr12', 'stop app-notes-worker-pr12', 'stop app-notes-migrate-pr12', 'drop notes-pr12', 'remove volumes app-notes-pr12-web-scratch app-notes-pr12-worker-maps']);
     expect(t.state().previews).toEqual({});
     expect(Object.keys(t.project()!.services)).toEqual(['app-notes-web-blue', 'app-notes-worker-blue', 'app-notes-migrate-blue']);
   });
@@ -850,7 +962,7 @@ describe('settings and previews', () => {
         state: 'requested',
       }),
     ).toBe('done');
-    expect(t.did.at(-1)).toBe('drop notes-pr12');
+    expect(t.did.slice(-2)).toEqual(['drop notes-pr12', 'remove volumes app-notes-pr12-web-scratch app-notes-pr12-worker-maps']);
   });
 
   it('finishes taking away a preview the state doesn’t name, without asking Compose to stop it', async () => {

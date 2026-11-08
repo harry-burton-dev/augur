@@ -518,7 +518,7 @@ On app contract 3 a deployment's app runner runs each part of your release (one 
 - **Time.** `augur.dev/ready-seconds` is how long a service part has to answer on its version, or a job to finish; without it the deployment's `APP_READY_SECONDS` (3 minutes), never more than 10. A `readinessProbe` must name `/healthz` on the part's port.
 - **What it gets.** Only what its `resources` give it ([app-storage.md](app-storage.md#what-a-part-asks-for)): no addresses of AUGUR's services, and no `.env`. It reaches AUGUR through `${resources.gateway.url}`, signing in at `${resources.gateway.token_url}` as `${resources.gateway.client_id}` with the secret in its file. Read every secret from a file (`files`); a secret in a variable, the command or the arguments is refused.
 - **Limits.** `resources.limits.memory` and `cpu` are applied to the container, within the deployment's ceilings.
-- **Hardening.** The image must set a user other than root. The container's filesystem is read-only except its `augur-scratch` folders and `/tmp`; it gets no added capabilities, no new privileges, no host folders and no published ports.
+- **Hardening.** The image must set a user other than root, as a number (`USER 10001`): a name could be root in the image's own user list. The container's filesystem is read-only except its `augur-scratch` folders and `/tmp`; it gets no added capabilities, no new privileges, no host folders and no published ports.
 
 ### Releasing it
 

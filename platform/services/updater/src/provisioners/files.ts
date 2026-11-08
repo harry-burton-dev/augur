@@ -12,15 +12,15 @@ export const files: Provisioner = {
   ],
   needs: [],
   outputs: () => ({}),
-  compose: ({ app, storageId, part, resource, params }) => ({
-    // Kept apart from a preview's, like its other data; the part never writes to it.
+  compose: ({ app, storageId, part, resource }) => ({
+    // Kept apart from a preview's, like its other data; the part never writes to it. Its label stays out of the
+    // volume's own labels, which Compose won't change on a volume that is already there.
     volume: {
       name: volumeName(storageId, part, resource),
       readOnly: true,
       labels: {
         'augur.app': app,
         'augur.resource': 'augur-files',
-        'augur.label': String(params.label),
       },
     },
   }),

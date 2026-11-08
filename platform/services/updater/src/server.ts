@@ -97,6 +97,8 @@ export const runToEnd = (file: string, args: string[], env: Record<string, strin
       const logs = `${stdout}${stderr}`;
       if (!err) return resolve({ code: 0, logs });
       const e = err as NodeJS.ErrnoException & { killed?: boolean; code?: number | string };
+      // Too much output stops it as surely as running out of time, but isn't that.
+      if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return resolve({ code: -1, logs: `${logs.slice(-4000)}\n(it said more than the runner keeps, and was stopped)` });
       resolve({ code: e.killed ? 'timeout' : typeof e.code === 'number' ? e.code : -1, logs: logs || e.message });
     });
   });
@@ -302,6 +304,8 @@ const syncFolder = async (path: string) => {
 
 /** Writes a file whole or not at all: to a temporary name first, then renamed over the old one. */
 const writeWhole = async (path: string, text: string | Uint8Array, mode = 0o600) => {
+  // One left by a write cut short may be read-only (a part's file), which a new write couldn't open.
+  await rm(`${path}.tmp`, { force: true });
   await writeSynced(`${path}.tmp`, text, mode);
   await rename(`${path}.tmp`, path);
   await syncFolder(path);
@@ -413,6 +417,8 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
         }
         if (!(await readdir(join(appsDir, PART_FILES, service)).catch(() => [])).length) await rm(join(appsDir, PART_FILES, service), { recursive: true, force: true });
       }
+      // So do the settings files of versions from before contract 3 that have gone: they hold secrets.
+      for (const name of await readdir(appsDir)) if (name.endsWith('.env') && !wanted.has(name)) await rm(join(appsDir, name), { force: true });
       const header = '# Written by the app runner (the updater) from state.json. Don’t edit it: it is rewritten on every install.\n';
       // JSON is YAML, which Compose reads.
       await writeWhole(join(appsDir, 'compose.yml'), header + JSON.stringify(project, null, 2) + '\n', 0o644);
@@ -445,7 +451,17 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
       await docker(['pull', '--quiet', ref]);
       return (await docker(['image', 'inspect', '--format', '{{.Config.User}}', ref])).trim();
     },
-    runJob: (service, ms) => runToEnd('docker', ['compose', '-p', 'augur-apps', '-f', join(appsDir, 'compose.yml'), 'run', '--rm', '--no-deps', '-T', service], env(), ms),
+    async runJob(service, ms) {
+      // Named, so a run whose time is up is stopped and taken away: killing `compose run` leaves its container running.
+      const name = `${service}-run`;
+      await docker(['rm', '--force', name]).catch(() => undefined);
+      const run = await runToEnd('docker', ['compose', '-p', 'augur-apps', '-f', join(appsDir, 'compose.yml'), 'run', '--rm', '--no-deps', '-T', '--name', name, service], env(), ms);
+      if (run.code !== 0) await docker(['rm', '--force', name]).catch(() => undefined);
+      return run;
+    },
+    async removeVolumes(names) {
+      if (names.length) await docker(['volume', 'rm', '--force', ...names]);
+    },
     async dropStorage(previewId) {
       await platform(['run', '--rm', '--no-deps', '-e', 'APP_STORAGE=', '-e', `APP_STORAGE_DROP=${previewId}`, 'storage']);
     },

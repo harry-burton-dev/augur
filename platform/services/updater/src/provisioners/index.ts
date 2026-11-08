@@ -113,6 +113,10 @@ const connectionProblems = (unit: AppUnit) => {
     : [];
 };
 
+/** The least memory and CPU Docker gives a container a limit of: below these, 0 among them, is no limit at all or refused. */
+export const MIN_MEMORY = 6 * 2 ** 20;
+export const MIN_CPU = 10;
+
 /** The deployment's ceilings (spec 7.2), from .env, with their defaults. */
 export const CEILING_DEFAULTS = {
   APP_PART_MEMORY_CEILING: '2Gi',
@@ -141,6 +145,9 @@ export const ceilingProblems = (parts: ScorePart[], env: string, volumes?: Provi
     const c = milliCpuOf(limits.cpu);
     if (m === undefined) out.push(`${part.metadata.name}’s memory limit ${limits.memory} isn’t an amount such as 512Mi.`);
     if (c === undefined) out.push(`${part.metadata.name}’s CPU limit ${limits.cpu} isn’t an amount such as 500m or 1.`);
+    // Docker reads 0 as no limit at all, and refuses less than these.
+    if (m !== undefined && m < MIN_MEMORY) out.push(`${part.metadata.name}’s memory limit ${limits.memory} is below the ${bytesWords(MIN_MEMORY)} a container needs.`);
+    if (c !== undefined && c < MIN_CPU) out.push(`${part.metadata.name}’s CPU limit ${limits.cpu} is below the ${cpuWords(MIN_CPU)} a container may be given.`);
     if (m !== undefined && m > partMemory)
       out.push(`${part.metadata.name} asks for ${limits.memory} of memory, above this deployment’s ceiling of ${bytesWords(partMemory)} a part (APP_PART_MEMORY_CEILING in .env).`);
     if (c !== undefined && c > partCpu) out.push(`${part.metadata.name} asks for ${cpuWords(c)}, above this deployment’s ceiling of ${cpuWords(partCpu)} a part (APP_PART_CPU_CEILING in .env).`);

@@ -6,7 +6,8 @@ import type { Provisioner } from './types.ts';
 export const DEFAULT_APP_CONNECTIONS = 30;
 export const appConnections = (env: string) => {
   const n = Number(envValue(env, 'APP_DATABASE_CONNECTIONS') || DEFAULT_APP_CONNECTIONS);
-  return Number.isInteger(n) && n > 0 ? n : DEFAULT_APP_CONNECTIONS;
+  // The storage container takes no fewer than 2 (one for the app, one for its migrations).
+  return Number.isInteger(n) && n >= 2 ? n : DEFAULT_APP_CONNECTIONS;
 };
 export const roleFor = (id: string) => `app_${id.replace(/-/g, '_')}`;
 export const schemaFor = (id: string) => id.replace(/-/g, '_');

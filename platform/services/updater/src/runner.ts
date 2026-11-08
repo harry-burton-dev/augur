@@ -26,6 +26,7 @@ import { isRelease2, type AppRelease2 } from '@augur/app-tools/release2';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import { envValue } from './env-file.ts';
 import { ceilingProblems, PROVISIONERS, provisionParts, type AppSecrets, type Provisioned } from './provisioners/index.ts';
+import { volumeName } from './provisioners/scratch.ts';
 import {
   bytesOf,
   containerOf,
@@ -136,6 +137,8 @@ export interface AppHost {
   provisionStorage(app: string, options?: { connections?: number }): Promise<void>;
   /** Runs the storage container to take a preview's scratch storage away, data and all. */
   dropStorage(previewId: string): Promise<void>;
+  /** Removes these volumes, and what is in them; one that isn't there is no matter. */
+  removeVolumes(names: string[]): Promise<void>;
   /** Pulls and starts these services of the apps' project, leaving the others alone. */
   start(services: string[]): Promise<void>;
   /** Runs one of the project's job services to its end, within `ms`, and says how it ended. */
@@ -249,6 +252,14 @@ const provisioned = (unit: Unit, env: string) =>
     secrets: unitSecrets(env, unit),
   });
 
+/**
+ * A value as Compose must be given it: Compose fills in `$NAME` and `${NAME}` in every string of a
+ * project from the updater's own settings, so each `$` the part means literally is written `$$`.
+ */
+export const composeLiteral = (text: string) => text.replace(/\$/g, '$$$$');
+/** The longest name Docker's DNS answers to, which a part's service name (its host name on the network) must fit. */
+const MAX_HOST_NAME = 63;
+
 /** Score's map of target path → details, or its older list with `target` in each. */
 const byTarget = <T extends object>(list: unknown): [string, T][] => (Array.isArray(list) ? list.map((f: T & { target: string }) => [f.target, f]) : (Object.entries(list ?? {}) as [string, T][]));
 
@@ -263,7 +274,8 @@ const renderUnit = (unit: Unit, env: string) => {
     const name = part.metadata.name;
     const service = partService(unit.app, name, unit.slot);
     const { spec } = containerOf(part);
-    const fill = (text: unknown, where: Parameters<typeof substitute>[3], label: string) => substitute(String(text), name, p.outputs[name] ?? {}, where, label);
+    if (service.length > MAX_HOST_NAME) throw new PartRefused(`${service} is longer than the ${MAX_HOST_NAME} characters a host name may be: give the app or the ${name} part a shorter name.`);
+    const fill = (text: unknown, where: Parameters<typeof substitute>[3], label: string) => composeLiteral(substitute(String(text), name, p.outputs[name] ?? {}, where, label));
     const environment = Object.fromEntries(Object.entries(spec.variables ?? {}).map(([k, v]) => [k, fill(v, 'variable', `the variable ${k}`)]));
     const mounts: object[] = [];
     let n = 0;
@@ -329,7 +341,7 @@ const renderUnit = (unit: Unit, env: string) => {
       security_opt: ['no-new-privileges:true'],
       labels: {
         'augur.app': unit.app,
-        'augur.version': unit.version,
+        'augur.version': composeLiteral(unit.version),
         'augur.part': name,
         'augur.kind': partKind(part),
         ...(unit.slot.startsWith('pr') ? { 'augur.preview': unit.slot.slice(2) } : {}),
@@ -421,6 +433,10 @@ export const appsProject = (state: RunnerState, env: string, network = DEFAULT_N
 const servicesOf = (app: string, running: RunningApp) => (running.parts ? running.parts.map((p) => partService(app, p.metadata.name, running.slot)) : [legacyService(app, running.slot)]);
 const previewServices = (id: string, p: RunningPreview) => (p.parts ? p.parts.map((part) => partService(p.app, part.metadata.name, previewSlot(p.pr))) : [`app-${id}`]);
 
+/** The volumes a preview's parts were given (its scratch and files folders), by name. */
+const previewVolumes = (id: string, p: RunningPreview) =>
+  p.parts!.flatMap((part) => Object.entries(part.resources ?? {}).filter(([, r]) => r.type === 'augur-scratch' || r.type === 'augur-files').map(([name]) => volumeName(id, part.metadata.name, name)));
+
 /** Where each service part answers /healthz, by part. */
 const healthUrls = (unit: Pick<Unit, 'app' | 'slot' | 'parts'>) =>
   unit.parts
@@ -437,6 +453,11 @@ const inboundUrl = (unit: Pick<Unit, 'app' | 'slot' | 'parts'>) => {
 const upstreamOf = (app: string, running: RunningApp) => (running.parts ? inboundUrl({ app, slot: running.slot, parts: running.parts }) : `http://${legacyService(app, running.slot)}:${LEGACY_PORT}`);
 
 class StepFailed extends Error {}
+/**
+ * Something the runner couldn't put right, with the gateway maybe on the new version: the job isn't
+ * ended, so the next turn finds it still running and goes back from what the state says (run, below).
+ */
+class NotFinished extends Error {}
 
 const reason = (err: unknown) => (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 500);
 /** The last lines of a job's output, for its step's message. */
@@ -450,7 +471,11 @@ const tail = (logs: string) =>
     .join(' | ')
     .slice(-400);
 /** An image's user, as Docker reads it: unset, root and uid 0 all run as root (spec 4.13). */
-export const runsAsRoot = (user: string) => ['', 'root', '0'].includes(user.trim().split(':')[0]!);
+export const runsAsRoot = (user: string) => {
+  const uid = user.trim().split(':')[0]!;
+  // A name may be uid 0 in the image's own passwd, so only a number says it isn't root.
+  return !/^\d+$/.test(uid) || Number(uid) === 0;
+};
 
 /** Why the runner won't run a release, before anything is verified or started. */
 const releaseRefusal = (release: unknown, app: string): string | undefined => {
@@ -581,7 +606,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
         throw new StepFailed(`${part.metadata.name}’s image couldn’t be pulled: ${reason(err)}`);
       });
       if (runsAsRoot(user))
-        throw new StepFailed(`${part.metadata.name}’s image runs as ${user.trim() ? user : 'root (it sets no user)'}: a part runs as a user other than root (spec 4.13). Set USER in its Dockerfile.`);
+        throw new StepFailed(`${part.metadata.name}’s image runs as ${user.trim() ? user : 'root (it sets no user)'}: a part runs as a user other than root, given as a number so it can be told without the image’s own user list (spec 4.13). Set USER to one, such as USER 10001, in its Dockerfile.`);
     }
   };
 
@@ -743,7 +768,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       const refused = `The registry didn’t take ${release.version}: ${reason(err)}`;
       // The new version may be serving by now, so it stops only once the gateway has left it.
       await goBack(app, current.active, secrets.signIn).catch((back) => {
-        throw new StepFailed(`${refused} Going back to ${current.active?.version} didn’t work either, so ${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} still running: ${reason(back)}`);
+        throw new NotFinished(`${refused} Going back to ${current.active?.version} didn’t work either, so ${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} still running; the runner tries again on its next turn: ${reason(back)}`);
       });
       await undo();
       throw new StepFailed(refused);
@@ -780,11 +805,13 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
         if (!old.manifest) {
           throw new StepFailed(`${why} It didn’t go back by itself: ${old.version} was installed before the runner kept what it needs to go back. Install ${old.version} again from Admin → Apps.`);
         }
+        // Written first as a switch not finished, so a runner that restarts from here goes back too, and never stops the old one.
+        await save({ ...state, apps: { ...state.apps, [app]: { active: old, retiring: candidate } } }, env);
         try {
           await calls.register(old.manifest, secrets.signIn);
           await calls.setUpstream(app, upstreamOf(app, old));
         } catch (err) {
-          throw new StepFailed(`${why} Going back to ${old.version} didn’t work: ${reason(err)}`);
+          throw new NotFinished(`${why} Going back to ${old.version} didn’t work yet; the runner tries again on its next turn: ${reason(err)}`);
         }
         await host.stop(names).catch(() => undefined);
         await save({ ...state, apps: { ...state.apps, [app]: { active: old } } }, env);
@@ -894,6 +921,9 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     }
     // A build from before contract 3 that never got as far as storage has none to drop.
     if (!had || had.parts || had.storage?.database || had.storage?.bucket) await host.dropStorage(id);
+    // Its scratch and files folders go with it.
+    const volumes = had?.parts ? previewVolumes(id, had) : [];
+    if (volumes.length) await host.removeVolumes(volumes);
     await report({
       step: 'remove',
       state: 'done',
@@ -928,6 +958,17 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       // A new version it had started but not finished switching to (retiring, with no end) is taken away.
       const state = await host.readState();
       const started = job.pr === undefined ? state.apps[job.app]?.retiring : undefined;
+      const active = state.apps[job.app]?.active;
+      if (started?.until && active && active.version === job.release?.version) {
+        // It had switched and was watching the new version: that one serves, unwatched, and the old one runs until its time.
+        await report({
+          step: 'watch',
+          state: 'failed',
+          outcome: 'failed',
+          message: `The app runner restarted while watching ${active.version}. ${active.version} is serving, without the rest of its watch; ${started.version} keeps running until ${started.until.slice(11, 16)} UTC, and Admin → Apps can go back to it.`,
+        });
+        return 'failed';
+      }
       if (started && !started.until) {
         const env = await host.readEnv();
         // It may have stopped after the switch. If this throws, the job stays running and comes back here.
@@ -956,6 +997,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       await work(job, tracked);
       return 'done';
     } catch (err) {
+      if (err instanceof NotFinished) throw err;
       await report({
         step,
         state: 'failed',
