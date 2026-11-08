@@ -36,6 +36,7 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   kit: 'the UI kit’s path, /kit/',
   shared: 'the shared modules’ path, /shared/',
   assets: 'the shell’s assets, /assets/',
+  sandbox: 'the apps’ worker bootstrap, /sandbox/',
   // Names the deployment itself goes by: its database, sign-in realm and Compose project, and Postgres's own schemas.
   augur: 'AUGUR itself',
   platform: 'AUGUR’s database, sign-in realm and Compose project',

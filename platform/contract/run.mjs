@@ -21,6 +21,8 @@ const chosen = process.env.CONTRACT_FROZEN === 'edges' && releases.length > 2 ? 
 const source = { DEV_PREVIEWS: 'turned-on' };
 const targets = [
   { name: 'source', env: source, specs: [] },
+  // The reference app on the app contract (contract 3): its own app, in a worker, against its own spec.
+  { name: 'contract-3', env: { ...source, DEV_APP: join(here, 'reference-app-3') }, specs: ['tests/contract3.spec.ts'] },
   ...chosen.map((release) => ({
     name: release,
     env: { ...source, DEV_APP_ENTRY: '/apps/reference/entry.js', APP_DIST: `reference=${join(frozen, release)}` },

@@ -8,5 +8,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["reference-app", "tests", "vite.config.ts", "playwright.config.ts", "warm.setup.ts"]
+  "include": ["reference-app", "reference-app-3", "tests", "vite.config.ts", "playwright.config.ts", "warm.setup.ts"]
 }

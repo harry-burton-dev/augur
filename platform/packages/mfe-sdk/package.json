@@ -21,6 +21,14 @@
     "./sdk3": {
       "types": "./dist/sdk3/index.d.ts",
       "default": "./dist/sdk3/index.js"
+    },
+    "./sdk3/runtime": {
+      "types": "./dist/sdk3/runtime.d.ts",
+      "default": "./dist/sdk3/runtime.js"
+    },
+    "./sdk3/host": {
+      "types": "./dist/sdk3/host.d.ts",
+      "default": "./dist/sdk3/host.js"
     }
   },
   "files": [
@@ -30,6 +38,9 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@remote-dom/core": "1.12.1"
   },
   "devDependencies": {
     "msw": "2.15.0",
