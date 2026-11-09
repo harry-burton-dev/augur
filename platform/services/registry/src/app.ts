@@ -78,8 +78,9 @@ import type { PipelineReader } from './pipeline.ts';
 import { UpdateChecker } from './updates.ts';
 import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
+import type { ReleaseFetch } from './release-fetch.ts';
 import { SERVED_CONTRACTS } from './release-check.ts';
-import { AppManifest3Body, entryOf3, handedOver, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, handedOver, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -122,8 +123,10 @@ export interface RegistryOptions {
   allowPrPreviews?: boolean;
   /** The app feed, for the app runner's installs and updates (Admin → Apps). Without one nothing is offered. */
   appUpdates?: AppUpdateChecker;
-  /** How a release file an admin pastes the address of is fetched (Admin → Apps); `fetch` by default. */
-  releaseFetch?: typeof fetch;
+  /** How a release file an admin pastes the address of is read (Admin → Apps); over https, its name's addresses checked, by default. */
+  releaseFetch?: ReleaseFetch;
+  /** Where this deployment is (PLATFORM_URL): never read from as a pasted address. */
+  platformUrl?: string;
   /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
   pipeline?: PipelineReader;
   /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to and the deployment reports to. */
@@ -203,6 +206,7 @@ export const buildApp = async ({
   frontendFiles,
   appUpdates = new AppUpdateChecker(),
   releaseFetch,
+  platformUrl,
   allowPrPreviews = true,
   pipeline,
   portalUrl,
@@ -764,7 +768,7 @@ export const buildApp = async ({
           }
         : undefined;
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
-      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}) }));
+      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}) }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
       const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });
@@ -814,6 +818,9 @@ export const buildApp = async ({
           if (!by) return reply;
           if (isManifest3(req.body)) return register3(req, reply, req.body, by);
           const entry = req.body as AppEntry;
+          // An app installed on contract 3 never goes back to a contract 2 manifest: that would load its code outside the sandbox.
+          const on3 = (await store.records()).find((r) => r.entry.id === req.params.id && manifest3Of(r.entry));
+          if (on3) return reply.code(403).send({ error: 'forbidden', message: staysOn3(on3.entry.name) });
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
           const badVersion = versionProblem(entry) ?? surfaceProblem(entry) ?? settingsProblem(entry);
           if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
@@ -858,15 +865,26 @@ export const buildApp = async ({
         if (manifest.id !== id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${manifest.id}", not "${id}".` });
         const problems = manifest3Problems(manifest);
         if (problems.length) return reply.code(400).send({ error: 'bad_request', message: `The manifest isn’t one this AUGUR reads: ${problems.join('; ')}.` });
-        if (!handedOver(await store.appJobs(id), manifest)) {
+        const job = handedOver(await store.installJobs(id), manifest);
+        if (!job) {
           req.log.warn({ app: id, version: manifest.version, by: by.id }, 'a contract 3 manifest of no release the runner was given; refused');
           return reply.code(403).send({ error: 'forbidden', message: notHandedOver(manifest) });
+        }
+        // An admin's removal stands against the app's own sign-in, unless an admin asked for this install.
+        if (by.kind === 'service' && by.id === id && (await staysRemoved(id))) {
+          req.log.warn({ app: id }, 'a removed app tried to register itself; refused');
+          return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${manifest.name}, so it can’t register itself again. An admin has to install it again.` });
         }
         const entry = entryOf3(manifest);
         const conflict = conflictFor(entry, await store.list());
         if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
         try {
+          const before = (await store.records()).find((r) => r.entry.id === id);
           const created = await store.put(entry, by.id);
+          // The scopes a version under way asks for that the one before didn't: the admin agreed to them by installing it (spec 9.5).
+          const was = before && manifest3Of(before.entry);
+          const added = job.state === 'running' && before ? (manifest.scopes ?? []).filter((s) => !(was?.scopes ?? before.entry.scopes ?? []).includes(s as never)) : [];
+          if (before && added.length) await store.grant(id, [...new Set([...before.grantedScopes, ...added])] as typeof before.grantedScopes);
           req.log.info({ app: id, version: manifest.version, by: by.id, contract: manifest.contract }, created ? 'app registered' : 'app updated');
           await record(req, { actor: by, app: 'registry', action: created ? 'app.registered' : 'app.updated', target: id, detail: { version: manifest.version, contract: manifest.contract } });
           return reply.code(created ? 201 : 200).send(manifest);

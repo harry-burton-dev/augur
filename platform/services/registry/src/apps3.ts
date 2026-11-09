@@ -25,9 +25,19 @@ const REASONS = 3;
 /** Why a contract 3 manifest fails its schema, its first few problems with their paths; empty when it doesn't. */
 export const manifest3Problems = (manifest: unknown): string[] => contractValidators().manifest(manifest).slice(0, REASONS);
 
-/** The install the manifest belongs to: one this registry handed the runner, under way or finished (a version gone back to). */
-export const handedOver = (jobs: AppJob[], manifest: AppManifest3) =>
-  jobs.some((j) => j.app === manifest.id && j.action === 'install' && j.pr === undefined && (j.state === 'running' || j.state === 'done') && j.release && stable(j.release.manifest) === stable(manifest));
+/**
+ * The install a manifest belongs to, of `jobs` (the app's install jobs under way or finished, newest first):
+ * the one under way, or the newest that finished, which is what the runner goes back to. Never an older
+ * version an admin has since replaced. Undefined when it is none of those.
+ */
+export const handedOver = (jobs: AppJob[], manifest: AppManifest3): AppJob | undefined => {
+  const mine = jobs.filter((j) => j.app === manifest.id && j.action === 'install' && j.pr === undefined && j.release);
+  const lastDone = mine.find((j) => j.state === 'done');
+  return [...mine.filter((j) => j.state === 'running'), ...(lastDone ? [lastDone] : [])].find((j) => stable(j.release!.manifest) === stable(manifest));
+};
+
+/** Why a contract 2 registration can't replace an app installed on contract 3. */
+export const staysOn3 = (name: string) => `${name} is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.`;
 
 /** Why the registry won't take a contract 3 manifest it didn't hand the runner. */
 export const notHandedOver = (m: AppManifest3) => `${m.name} ${m.version} is installed from the app feed, through Admin → Apps: only a release the app runner was given can register it.`;
@@ -44,7 +54,8 @@ export const entryOf3 = (m: AppManifest3): KeptEntry => {
     // Where the shell loads it from, which it works out itself (spec 3.3); kept so the catalogue's checks read one.
     entry: `/apps/${m.id}/${m.version}/${m.frontend?.entry ?? ''}`,
     version: m.version,
-    sdk: `^${m.contract}.0.0`,
+    // Contract 3 apps name no SDK range: the contract major is the promise (spec 11). The Upgrade Centre skips them.
+    sdk: '*',
     ...pick('description', m.description),
     ...pick('icon', m.icon),
     ...pick('requiredRole', m.requiredRole),

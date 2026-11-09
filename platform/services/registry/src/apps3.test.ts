@@ -3,6 +3,8 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders, type FloorPlace } from '@augur/service-kit';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
+import type { ReleaseFetch } from './release-fetch.ts';
+import { addressProblem } from './upstreams.ts';
 import { releaseOf } from './release3.testing.ts';
 
 const db = registryDb();
@@ -52,12 +54,48 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
     expect((await t.register(release.manifest)).statusCode).toBe(200);
   });
 
-  it('takes the version it goes back to, which it installed before', async () => {
+  it('takes the version it goes back to, the last it installed, but never one an admin has since replaced', async () => {
     const t = await setup();
+    const oldest = releaseOf('notes', '1.0.0');
     const old = releaseOf('notes', '1.1.0');
+    await t.install(oldest, 'done');
     await t.install(old, 'done');
     await t.install(releaseOf('notes', '1.2.0'));
     expect((await t.register(old.manifest)).statusCode).toBe(201);
+    expect((await t.register(oldest.manifest)).statusCode).toBe(403);
+  });
+
+  it('never goes back to a contract 2 manifest, which would run its code outside the sandbox', async () => {
+    const t = await setup();
+    const release = releaseOf('notes', '1.2.0');
+    await t.install(release);
+    await t.register(release.manifest);
+    const v2 = { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/x/evil.js', version: '1.2.1', sdk: '^2.0.0' };
+    const res = await t.register(v2);
+    expect(res.statusCode).toBe(403);
+    expect(res.json().message).toBe('Notes is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.');
+    expect((await t.register(v2, fresh())).statusCode).toBe(403);
+  });
+
+  it('stays removed when an admin removed it, though its install once finished', async () => {
+    const t = await setup();
+    const release = releaseOf('notes', '1.2.0');
+    await t.install(release, 'done');
+    await t.register(release.manifest);
+    expect((await t.server.inject({ method: 'DELETE', url: '/v1/apps/notes', headers: fresh() })).statusCode).toBeLessThan(300);
+    expect((await t.register(release.manifest)).json().message).toBe('An admin removed Notes, so it can’t register itself again. An admin has to install it again.');
+  });
+
+  it('is granted the scopes a later version adds once an admin has had it installed', async () => {
+    const t = await setup();
+    const first = releaseOf('notes', '1.1.0');
+    await t.install(first, 'done');
+    await t.register(first.manifest);
+    const later = releaseOf('notes', '1.2.0', { scopes: [...first.manifest.scopes!, 'models:use'] });
+    await t.install(later);
+    await t.register(later.manifest);
+    const admins = (await t.server.inject({ method: 'GET', url: '/v1/apps', headers: fresh() })).json();
+    expect(admins.find((a: { id: string }) => a.id === 'notes').grantedScopes).toContain('models:use');
   });
 
   it('refuses a manifest that fails its schema, saying where', async () => {
@@ -106,13 +144,13 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
 
 describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', () => {
   const release = releaseOf('maps', '2.0.0', { name: 'Maps' });
-  const fetchImpl = (async (input: RequestInfo | URL) => {
-    const url = String(input);
+  const fetchImpl = (async (url: string) => {
     if (url === 'https://apps.example.org/maps/app-release.json') return json(release);
     if (url === 'https://apps.example.org/old/app-release.json') return json({ schema: 'augur.app-release/v1', id: 'old', version: '1.0.0', manifest: { id: 'old', name: 'Old' } });
     if (url === 'https://apps.example.org/page') return new Response('<html></html>', { headers: { 'content-type': 'text/html' } });
+    if (url === 'https://apps.example.org/other.json') return json({ secret: 'something else' });
     return json({ message: 'Not Found' }, 404);
-  }) as typeof fetch;
+  }) as ReleaseFetch;
   const read = async (url: string, headers = fresh()) => {
     const { server } = await setup({ releaseFetch: fetchImpl });
     return server.inject({ method: 'POST', url: '/v1/app-runner/releases/read', headers, payload: { url } });
@@ -129,11 +167,23 @@ describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', ()
     expect((await read('https://apps.example.org/old/app-release.json')).json()).toMatchObject({ refusals: ['This release is on contract 2; this AUGUR serves 3.'] });
     expect((await read('https://apps.example.org/page')).json().message).toBe('https://apps.example.org/page isn’t a release file: it isn’t JSON.');
     expect((await read('https://apps.example.org/gone')).json().message).toBe('https://apps.example.org/gone couldn’t be read: it answered 404.');
+    // Any other JSON isn't echoed back: the route reads release files and nothing else.
+    expect((await read('https://apps.example.org/other.json')).json()).toMatchObject({ message: 'https://apps.example.org/other.json isn’t a release file.' });
   });
 
   it('is only an https address, read for a deployment admin', async () => {
     expect((await read('http://apps.example.org/maps/app-release.json')).statusCode).toBe(400);
     expect((await read('https://127.0.0.1/app-release.json')).statusCode).toBe(400);
     expect((await read('https://apps.example.org/maps/app-release.json', editor)).statusCode).toBe(403);
+  });
+
+  it('is never read from an address its name resolves to on this machine or the deployment’s own networks', () => {
+    expect(addressProblem('127.0.0.1')).toMatch(/this machine/);
+    expect(addressProblem('::1')).toMatch(/this machine/);
+    expect(addressProblem('::ffff:127.0.0.1')).toMatch(/this machine/);
+    expect(addressProblem('172.18.0.4')).toMatch(/own networks/);
+    expect(addressProblem('10.1.2.3', { networks: ['10.1.0.0/16'], setAt: '2026-11-09T00:00:00Z' })).toMatch(/own networks/);
+    expect(addressProblem('10.20.30.40', { networks: ['10.1.0.0/16'], setAt: '2026-11-09T00:00:00Z' })).toBeUndefined();
+    expect(addressProblem('140.82.121.4')).toBeUndefined();
   });
 });

@@ -141,8 +141,11 @@ const FEED_ADDRESS = /^(https?:\/\/|oci:\/\/|file:\/\/\/)\S+$/;
 export const appFeedUrls = (env: Record<string, string | undefined>, own: string): string[] => {
   const named = env.APP_FEEDS?.trim() || env.APP_FEED_URL?.trim();
   if (!named) return env.RELEASE_FEED_URL ? [] : [own];
-  if (named === 'off') return [];
   const urls = [...new Set(named.split(/[\s,]+/).filter(Boolean))];
+  if (urls.includes('off')) {
+    if (urls.length > 1) throw new Error('APP_FEEDS is off, or a list of feeds, not both.');
+    return [];
+  }
   for (const url of urls) if (!FEED_ADDRESS.test(url)) throw new Error(`APP_FEEDS lists the app feeds to read, each an https://, oci:// or file:/// address, or off; "${url}" is none of those.`);
   return urls;
 };

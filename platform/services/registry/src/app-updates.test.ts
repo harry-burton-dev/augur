@@ -104,6 +104,7 @@ describe('the feeds a deployment reads', () => {
     // A mirror for AUGUR's own releases means no feed of apps unless one is named.
     expect(appFeedUrls({ RELEASE_FEED_URL: 'https://mirror/augur.json' }, own)).toEqual([]);
     expect(appFeedUrls({ APP_FEEDS: 'off' }, own)).toEqual([]);
+    expect(() => appFeedUrls({ APP_FEEDS: 'off, https://a.example/apps.json' }, own)).toThrow('APP_FEEDS is off, or a list of feeds, not both.');
     expect(appFeedUrls({ APP_FEEDS: '' , APP_FEED_URL: '' }, own)).toEqual([own]);
     expect(() => appFeedUrls({ APP_FEEDS: 'ftp://x' }, own)).toThrow('APP_FEEDS lists the app feeds to read, each an https://, oci:// or file:/// address, or off; "ftp://x" is none of those.');
   });

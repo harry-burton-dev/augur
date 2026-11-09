@@ -16,6 +16,7 @@ import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } 
 import { empty, orNull, ref, refused } from './schemas.ts';
 import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
 import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
+import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
 
@@ -98,21 +99,25 @@ export interface AppRunnerRouteOptions {
   /** Which app or platform service sent this call; undefined when the reply has been sent. */
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
-  /** How a release file an admin pastes the address of is fetched; `fetch` by default. */
-  releaseFetch?: typeof fetch;
+  /** How a release file an admin pastes the address of is read; by default over https, every address its name gives checked first. */
+  releaseFetch?: ReleaseFetch;
+  /** Where this deployment is (PLATFORM_URL), whose host is never read from as a pasted address. */
+  platformUrl?: string;
 }
 
 /** The largest release file the registry reads from a pasted address. */
 const RELEASE_FILE_BYTES = 1024 * 1024;
 /** How long reading one may take. */
 const RELEASE_FILE_MS = 10_000;
+/** The `schema` every release file names, of any version. */
+const RELEASE_SCHEMA = /^augur\.app-release\/v\d+$/;
 
 /**
  * The deployment's app runner (part of the updater) installs, upgrades and removes apps that don't
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = fetch }: AppRunnerRouteOptions) =>
+  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = releaseFileFetch({ bytes: RELEASE_FILE_BYTES, ms: RELEASE_FILE_MS }), platformUrl }: AppRunnerRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** When the runner last asked what to do; it lives only as long as this process. */
@@ -710,7 +715,7 @@ export const appRunnerRoutes =
         schema: {
           summary: 'Read a release file from a pasted address, to review before installing (deployment admins only)',
           description: [
-            'Fetches an https address (never AUGUR itself, this machine or the deployment’s own networks), at most 1 MB',
+            'Fetches an https address (never AUGUR itself, this machine or the deployment’s own networks, by every address its name resolves to), at most 1 MB,',
             'in 10 seconds, and checks the file as the feed’s are checked (spec 9.1 to 9.3). The file comes back with its',
             'asks and signer for the review, and its refusals and warnings; install it with POST /app-runner/jobs.',
           ].join(' '),
@@ -739,21 +744,23 @@ export const appRunnerRoutes =
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install an app. It’s asked for anything this drastic.' });
         }
         const { url } = req.body;
-        const where = releaseAddressProblem(url, await store.ownNetworks());
+        const own = await store.ownNetworks();
+        const where = releaseAddressProblem(url, own, platformUrl);
         if (where) return reply.code(400).send({ error: 'bad_request', message: where });
         const cannot = (why: string) => reply.code(400).send({ error: 'bad_request', message: `${url} couldn’t be read: ${why}.` });
+        const tooLarge = 'it is larger than a release file can be (1 MB)';
         let text: string;
         try {
-          // No redirect is followed: one could lead anywhere the check above refuses.
-          const res = await releaseFetch(url, { redirect: 'manual', signal: AbortSignal.timeout(RELEASE_FILE_MS), headers: { accept: 'application/json, application/octet-stream' } });
+          // No redirect is followed: one could lead anywhere the checks refuse.
+          const res = await releaseFetch(url, own);
           if (res.status >= 300 && res.status < 400) return cannot(`it sends the registry on to ${res.headers.get('location') ?? 'another address'}. Paste that address instead`);
           if (!res.ok) return cannot(`it answered ${res.status}`);
-          const length = Number(res.headers.get('content-length') ?? 0);
-          if (length > RELEASE_FILE_BYTES) return cannot('it is larger than a release file can be (1 MB)');
+          if (Number(res.headers.get('content-length') ?? 0) > RELEASE_FILE_BYTES) return cannot(tooLarge);
           text = await res.text();
-          if (text.length > RELEASE_FILE_BYTES) return cannot('it is larger than a release file can be (1 MB)');
+          if (Buffer.byteLength(text) > RELEASE_FILE_BYTES) return cannot(tooLarge);
         } catch (err) {
-          return cannot((err as Error).name === 'TimeoutError' ? 'it took longer than 10 seconds' : 'it couldn’t be reached');
+          const e = err as Error;
+          return cannot(e instanceof TooLarge ? tooLarge : e.name === 'TimeoutError' ? 'it took longer than 10 seconds' : /this machine or one of this deployment/.test(e.message) ? e.message : 'it couldn’t be reached');
         }
         let file: unknown;
         try {
@@ -761,7 +768,10 @@ export const appRunnerRoutes =
         } catch {
           return reply.code(400).send({ error: 'bad_request', message: `${url} isn’t a release file: it isn’t JSON.` });
         }
-        if (!file || typeof file !== 'object' || Array.isArray(file)) return reply.code(400).send({ error: 'bad_request', message: `${url} isn’t a release file.` });
+        // Only a release file comes back, so the route reads nothing else for anyone.
+        if (!file || typeof file !== 'object' || Array.isArray(file) || !RELEASE_SCHEMA.test(String((file as { schema?: unknown }).schema))) {
+          return reply.code(400).send({ error: 'bad_request', message: `${url} isn’t a release file.` });
+        }
         const { refusals, warnings } = checkRelease(file);
         req.log.info({ by: caller.id, url, refused: refusals.length }, 'release file read from a pasted address');
         const r = file as Partial<AppRelease>;
