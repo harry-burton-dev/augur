@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
 import type { ScorePart } from '@augur/app-tools/validate';
 import { APP_WATCH_EVERY_MS, appNetworksOf, appsProject, publishersFrom, RETIRE_MS, runsAsRoot, type AppJob, type JobReport, type RunnerState, type RunningApp } from './runner.ts';
-import { examplePart, ENV, image, install, KEY, release, setup } from './runner.testing.ts';
+import { examplePart, ENV, FRONTEND_DIGEST, image, install, KEY, release, setup } from './runner.testing.ts';
 import { releaseIdentity } from './signers.ts';
 
 /** Whether this machine has Docker Compose, to check a project with `docker compose config` (CI's runners do). */
@@ -122,12 +122,15 @@ describe('running Score parts (spec 4, 10)', () => {
     expect(t.did).toEqual([
       `verify ${releaseIdentity(PUBLISHER_WORKFLOW)}`,
       `verify ${releaseIdentity(PUBLISHER_WORKFLOW)}`,
+      // The frontend bundle: signed like the images, then fetched by digest (spec 3.3, 3.4).
+      `verify ${releaseIdentity(PUBLISHER_WORKFLOW)}`,
+      'fetch notes-frontend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa application/vnd.augur.frontend.v1.tar+gzip',
       'storage notes (30 connections)',
       'job app-notes-migrate-blue',
       'start app-notes-web-blue',
       'start app-notes-worker-blue',
     ]);
-    expect(t.calls.did).toEqual([`credential notes ${SECRET.slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.calls.did).toEqual([`frontend notes 1.0.0 ${FRONTEND_DIGEST.slice(7, 19)}`, `credential notes ${SECRET.slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
     expect(t.state().apps.notes).toEqual({
       active: {
         slot: 'blue',
@@ -154,8 +157,9 @@ describe('running Score parts (spec 4, 10)', () => {
       outcome: 'failed',
       message: 'web asks for 2Gi of memory, above this deployment’s ceiling of 1Gi a part (APP_PART_MEMORY_CEILING in .env). Nothing was started.',
     });
-    expect(t.did.filter((d) => !d.startsWith('verify'))).toEqual([]);
-    expect(t.calls.did).toEqual([]);
+    expect(t.did.filter((d) => !d.startsWith('verify') && !d.startsWith('fetch'))).toEqual([]);
+    // The registry has the frontend bundle by then (kept on verify, inert until the version registers); nothing else.
+    expect(t.calls.did.filter((d) => !d.startsWith('frontend'))).toEqual([]);
     expect(t.state().apps).toEqual({});
     // The app's totals have ceilings too, and the ceiling's default stands without the setting.
     const total = setup(`${ENV}APP_CPU_CEILING=1500m\n`);
@@ -359,9 +363,11 @@ describe('the app runner', () => {
     const t = setup(`${ENV}SERVER_RING=preview\n`);
     versionOf(t, 'c', '1.0.1-dev.40');
     expect(await t.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
-    expect(t.did.slice(0, 3)).toEqual([
+    expect(t.did.slice(0, 5)).toEqual([
       'verify ^https://github\\.com/o/r/\\.github/workflows/app-dev\\.yml@refs/heads/(main|dev)$',
       'verify ^https://github\\.com/o/r/\\.github/workflows/app-dev\\.yml@refs/heads/(main|dev)$',
+      'verify ^https://github\\.com/o/r/\\.github/workflows/app-dev\\.yml@refs/heads/(main|dev)$',
+      'fetch notes-frontend@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc application/vnd.augur.frontend.v1.tar+gzip',
       'backup',
     ]);
     expect(t.reports.find((r) => r.step === 'verify' && r.state === 'done')?.message).toMatch(/Backup platform-20261030-0100\.sql\.gz/);
@@ -634,6 +640,41 @@ describe('the app runner', () => {
     expect(none.reports.at(-1)?.message).toMatch(/isn’t trusted to publish apps on this server/);
   });
 
+  it('fetches the release’s frontend bundle by digest, checks it, and gives it to the registry before the manifest (spec 3.3)', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    expect(t.did.filter((d) => d === `verify ${releaseIdentity(PUBLISHER_WORKFLOW)}`)).toHaveLength(3);
+    expect(t.did).toContain('fetch notes-frontend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa application/vnd.augur.frontend.v1.tar+gzip');
+    const kept = t.calls.did.indexOf(`frontend notes 1.0.0 ${FRONTEND_DIGEST.slice(7, 19)}`);
+    expect(kept).toBeGreaterThan(-1);
+    expect(kept).toBeLessThan(t.calls.did.indexOf('register notes 1.0.0'));
+    // The frontend is fetched once the images are trusted, never before.
+    expect(t.did.indexOf('fetch notes-frontend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa application/vnd.augur.frontend.v1.tar+gzip')).toBeGreaterThan(t.did.findIndex((d) => d.startsWith('verify')));
+  });
+
+  it('refuses a frontend bundle that isn’t signed, or isn’t the one the release names, before anything starts', async () => {
+    const t = setup();
+    t.unsigned.add(`ghcr.io/o/r/notes-frontend@sha256:${'a'.repeat(64)}`);
+    expect(await t.run(install('1.0.0'))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/^The frontend bundle isn’t signed by o\/r/);
+    const swapped = setup();
+    swapped.artifacts.set(`ghcr.io/o/r/notes-frontend@sha256:${'a'.repeat(64)}`, Buffer.from('not the bundle'));
+    expect(await swapped.run(install('1.0.0'))).toBe('failed');
+    expect(swapped.reports.at(-1)?.message).toBe(`The frontend bundle at ghcr.io/o/r/notes-frontend@sha256:${'a'.repeat(64)} isn’t the one the release names (${FRONTEND_DIGEST}).`);
+    expect(swapped.did.some((d) => d.startsWith('start') || d.startsWith('storage'))).toBe(false);
+  });
+
+  it('goes back when the registry won’t keep the frontend, as when it refuses the manifest', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.calls.refuseFrontend();
+    expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/^The registry didn’t keep notes 1\.1\.0’s frontend: it answered 501, This deployment doesn’t keep apps’ frontends by version/);
+    expect(t.state().apps.notes.active).toMatchObject({ version: '1.0.0' });
+    // Found before anything of the new version ran.
+    expect(t.did.filter((d) => d.startsWith('start') || d.startsWith('storage') || d.startsWith('backup'))).toHaveLength(3);
+  });
+
   it('needs APP_SECRETS_KEY', async () => {
     const t = setup('PLATFORM_URL=https://augur.example\nAPP_PUBLISHERS=o/r\n');
     expect(await t.run(install('1.0.0'))).toBe('failed');
@@ -859,9 +900,10 @@ describe('settings and previews', () => {
     t.did.length = 0;
     expect(await t.run(preview('1.1.0-pr.12.1', 'd'))).toBe('done');
     const verify = 'verify https://github.com/o/r/.github/workflows/app-preview.yml@refs/pull/12/merge';
-    expect(t.did).toEqual([verify, verify, 'storage notes-pr12 (30 connections)', 'job app-notes-migrate-pr12', 'start app-notes-web-pr12', 'start app-notes-worker-pr12']);
-    // Never registered, never the app's upstream: the registry sends only its developers to it.
-    expect(t.calls.did).toEqual([]);
+    const fetch = 'fetch notes-frontend@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd application/vnd.augur.frontend.v1.tar+gzip';
+    expect(t.did).toEqual([verify, verify, verify, fetch, 'storage notes-pr12 (30 connections)', 'job app-notes-migrate-pr12', 'start app-notes-web-pr12', 'start app-notes-worker-pr12']);
+    // Never registered, never the app's upstream: the registry sends only its developers to it. Its frontend is kept under the build's version.
+    expect(t.calls.did).toEqual([`frontend notes 1.1.0-pr.12.1 ${FRONTEND_DIGEST.slice(7, 19)}`]);
     expect(t.reports.at(-1)).toMatchObject({
       step: 'switch',
       outcome: 'done',
@@ -891,7 +933,7 @@ describe('settings and previews', () => {
 
     t.did.length = 0;
     expect(await t.run(preview('1.1.0-pr.12.2', 'e'))).toBe('done');
-    expect(t.did.slice(2, 6)).toEqual(['storage notes-pr12 (30 connections)', 'stop app-notes-web-pr12', 'stop app-notes-worker-pr12', 'stop app-notes-migrate-pr12']);
+    expect(t.did.slice(4, 8)).toEqual(['storage notes-pr12 (30 connections)', 'stop app-notes-web-pr12', 'stop app-notes-worker-pr12', 'stop app-notes-migrate-pr12']);
     expect(t.state().previews?.['notes-pr12']).toMatchObject({
       version: '1.1.0-pr.12.2',
     });

@@ -21,7 +21,7 @@
  * the registry gives its manifest, and the gateway sends calls to it, only for developers who chose
  * it. A newer build of the pull request replaces it in place; taking it away drops its storage.
  */
-import { appSecretFor } from '@augur/service-kit';
+import { appSecretFor, FRONTEND_LIMITS, frontendDigest } from '@augur/service-kit';
 import { isRelease2, type AppRelease2 } from '@augur/app-tools/release2';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import { envValue } from './env-file.ts';
@@ -138,8 +138,10 @@ export interface AppHost {
    * from before contract 3, its settings file. Files it wrote before and doesn't name now go.
    */
   writeProject(state: RunnerState, project: object, files: Record<string, string | Uint8Array>): Promise<void>;
-  /** Throws unless `ref` (an image by digest) was signed by `identity` (a workflow's certificate identity). */
+  /** Throws unless `ref` (an image or artifact by digest) was signed by `identity` (a workflow's certificate identity). */
   verifySignedBy(ref: string, identity: string): Promise<void>;
+  /** The one file of `mediaType` in the OCI artifact `ref` (by digest), at most `maxBytes`: a release's frontend bundle (spec 3.3). */
+  fetchArtifact(ref: string, mediaType: string, maxBytes: number): Promise<Buffer>;
   /** Pulls an image and gives the user its config runs as ('' when it sets none). */
   imageUser(ref: string): Promise<string>;
   /** Takes a fresh backup of the platform's database (apps' tables with it) and returns its file name. */
@@ -173,6 +175,8 @@ export interface PlatformCalls {
   setCredential(app: string, secret: string): Promise<void>;
   /** Registers the release's manifest, signed in as the app itself. */
   register(manifest: AppManifest3, secret: string): Promise<void>;
+  /** Gives the registry a version's frontend bundle to keep and serve (PUT /v1/apps/:id/versions/:version/frontend), as the updater. */
+  putFrontend(app: string, version: string, tarball: Buffer): Promise<void>;
   /** Points the gateway at the app's inbound part (registry, PUT /v1/apps/:id/upstream); null forgets it. */
   setUpstream(app: string, url: string | null): Promise<void>;
 }
@@ -603,12 +607,35 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     const ok = own === undefined ? trusted.includes(publisher) : r.signer.workflow === own && trusted.some((t) => t.startsWith(`${r.signer.repository}/`));
     const what = job.pr !== undefined ? 'previews' : dev ? 'dev builds' : 'apps';
     if (!ok) throw new StepFailed(`${publisher} isn’t trusted to publish ${what} on this server. Add ${own === undefined ? 'it' : 'its repository'} to APP_PUBLISHERS in .env to trust it.`);
+    const identity = dev ? devIdentity(r.signer.repository) : signerIdentity(publisher, job.pr);
     for (const image of new Set(r.parts.map((p) => containerOf(p).spec.image))) {
       try {
-        await host.verifySignedBy(image, dev ? devIdentity(r.signer.repository) : signerIdentity(publisher, job.pr));
+        await host.verifySignedBy(image, identity);
       } catch (err) {
         const part = r.parts.find((p) => containerOf(p).spec.image === image)!.metadata.name;
         throw new StepFailed(`${part}’s image isn’t signed by ${publisher}${dev ? ' on dev' : ''}: ${reason(err)}`);
+      }
+    }
+    // The frontend bundle is signed like an image (spec 3.4), fetched here by digest (3.3) and checked against the digest the release names.
+    let frontend: Buffer;
+    if (r.frontend) {
+      try {
+        await host.verifySignedBy(r.frontend.artifact, identity);
+      } catch (err) {
+        throw new StepFailed(`The frontend bundle isn’t signed by ${publisher}${dev ? ' on dev' : ''}: ${reason(err)}`);
+      }
+      try {
+        frontend = await host.fetchArtifact(r.frontend.artifact, r.frontend.mediaType, FRONTEND_LIMITS.bytes);
+      } catch (err) {
+        throw new StepFailed(`The frontend bundle couldn’t be fetched: ${reason(err)}`);
+      }
+      if (frontendDigest(frontend) !== r.frontend.digest) throw new StepFailed(`The frontend bundle at ${r.frontend.artifact} isn’t the one the release names (${r.frontend.digest}).`);
+      // The registry keeps it now, before anything runs: a deployment that doesn't keep frontends says so here, and
+      // the manifest the registry serves later has the files to point at (spec 3.3).
+      try {
+        await calls.putFrontend(job.app, r.version, frontend);
+      } catch (err) {
+        throw new StepFailed(reason(err));
       }
     }
     // A dev build runs on the server's real data, and the first release from another repository takes
@@ -953,6 +980,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       throw new StepFailed(notReady);
     }
     await report({ step: 'health', state: 'done' });
+    await report({ step: 'switch', state: 'running' });
     const upstream = inboundUrl(unit);
     await report({
       step: 'switch',

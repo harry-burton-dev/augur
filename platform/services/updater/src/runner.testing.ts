@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { appRelease2, type AppRelease2 } from '@augur/app-tools/release2';
+import { frontendDigest, packFrontend } from '@augur/service-kit';
 import { parseWorkload, type ScorePart } from '@augur/app-tools/validate';
 import { appRunner, type AppHost, type AppJob, type AppNetwork, type JobReport, type JobRun, type PlatformCalls, type RunnerState } from './runner.ts';
 
@@ -21,6 +22,10 @@ export const image = (c: string, part = 'web') => `ghcr.io/o/r/notes${part === '
 
 export const examplePart = (name: string): ScorePart => parseWorkload(fixture(`score/${name}.score.yaml`));
 
+/** The example's frontend bundle, as the release workflow packs it; the release names its digest. */
+export const FRONTEND = packFrontend([{ path: 'sandbox.js', data: Buffer.from('export default function start() {}\n') }]);
+export const FRONTEND_DIGEST = frontendDigest(FRONTEND);
+
 /** The example's release in `version`, its images in version `c`; `change` changes its parts first, `more` replaces top-level fields after. */
 export const release = (version: string, c = 'a', more: Partial<AppRelease2> = {}, change?: (parts: ScorePart[]) => void): AppRelease2 => {
   const parts = ['web', 'worker', 'migrate'].map(examplePart);
@@ -31,7 +36,7 @@ export const release = (version: string, c = 'a', more: Partial<AppRelease2> = {
     bundle: {
       frontend: {
         artifact: `ghcr.io/o/r/notes-frontend@sha256:${c.repeat(64)}`,
-        digest: `sha256:${'f'.repeat(64)}`,
+        digest: FRONTEND_DIGEST,
       },
       images: Object.fromEntries(parts.map((p) => [p.metadata.name, image(c, p.metadata.name)])),
       channel: 'stable',
@@ -64,6 +69,8 @@ export const fakeHost = (env = ENV, network?: string) => {
   const running = new Map<string, string>();
   const versions = new Map<string, string>();
   const unsigned = new Set<string>();
+  /** What the registry holds at an artifact ref, when not the example's own frontend. */
+  const artifacts = new Map<string, Buffer>();
   const users = new Map<string, string>();
   const jobs = new Map<string, JobRun>();
   const health: string[] = [];
@@ -89,6 +96,10 @@ export const fakeHost = (env = ENV, network?: string) => {
       if (unsigned.has(ref)) throw new Error('no matching signatures');
     },
     imageUser: async (ref) => users.get(ref) ?? '10001',
+    async fetchArtifact(ref, mediaType) {
+      did.push(`fetch ${ref.split('/').at(-1)} ${mediaType}`);
+      return artifacts.get(ref) ?? FRONTEND;
+    },
     async backup() {
       did.push('backup');
       return 'platform-20261030-0100.sql.gz';
@@ -140,6 +151,7 @@ export const fakeHost = (env = ENV, network?: string) => {
     running,
     versions,
     unsigned,
+    artifacts,
     users,
     jobs,
     health,
@@ -156,6 +168,7 @@ export const fakeHost = (env = ENV, network?: string) => {
 export const fakeCalls = () => {
   const did: string[] = [];
   let refuseRegister = false;
+  let refuseFrontend = false;
   const calls: PlatformCalls = {
     async setCredential(app, secret) {
       did.push(`credential ${app} ${secret.slice(0, 6)}`);
@@ -167,8 +180,12 @@ export const fakeCalls = () => {
     async setUpstream(app, url) {
       did.push(`upstream ${app} ${url}`);
     },
+    async putFrontend(app, version, tarball) {
+      if (refuseFrontend) throw new Error(`The registry didn’t keep ${app} ${version}’s frontend: it answered 501, This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set)`);
+      did.push(`frontend ${app} ${version} ${frontendDigest(tarball).slice(7, 19)}`);
+    },
   };
-  return { calls, did, refuse: () => (refuseRegister = true) };
+  return { calls, did, refuse: () => (refuseRegister = true), refuseFrontend: () => (refuseFrontend = true) };
 };
 
 export const setup = (env = ENV, network?: string) => {

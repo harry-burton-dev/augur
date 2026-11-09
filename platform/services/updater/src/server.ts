@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { access, chmod, mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, statfs, writeFile, type FileHandle } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { parseRef, pullArtifactLayer, type ArtifactAuth } from './oci.ts';
 import { partsFor } from './parts.ts';
 import type { AppHost, PlatformPart, RunnerState } from './runner.ts';
 
@@ -380,7 +381,10 @@ export const writeSettings = async (path: string, text: string, { chown = (file,
  * (compose.yml, a settings file per container and state.json, all written by the runner and never
  * by hand), driven with the same docker CLI as the platform's.
  */
-export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<ServerOptions, 'healthUrls'>): AppHost => {
+/** The read key for a registry host, when the deployment has one for it (index.ts reads the secret files). */
+export type RegistryAuth = (host: string) => ArtifactAuth | undefined;
+
+export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registryAuth = () => undefined }: Omit<ServerOptions, 'healthUrls'> & { registryAuth?: RegistryAuth }): AppHost => {
   const env = () => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig });
   const appsDir = join(dir, 'apps');
   const apps = (args: string[]) => command('docker', ['compose', '-p', 'augur-apps', '-f', join(appsDir, 'compose.yml'), ...args], env());
@@ -431,6 +435,9 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
     },
     async verifySignedBy(ref, identity) {
       await command('cosign', verifyArgs(identity, signer.issuer, ref, await trustedRootIn(dir)), env());
+    },
+    fetchArtifact(ref, mediaType, maxBytes) {
+      return pullArtifactLayer({ ref, mediaType, maxBytes, auth: registryAuth(parseRef(ref).host) });
     },
     async backup() {
       const said = await platform(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);

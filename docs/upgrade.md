@@ -63,6 +63,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Each app on the app contract now runs on a network of its own, `app-<id>`, which the app runner makes. Nothing on it reaches the internet. The gateway joins every app's network, and Postgres, Garage and otel-lgtm join only the networks of apps that ask for them, so one app can't reach another app or a store it wasn't given. An app already installed moves onto its network the next time it's installed or updated. An app's telemetry goes only to AUGUR's own otel-lgtm: when `OTEL_EXPORTER_OTLP_ENDPOINT` names a collector elsewhere, apps send none. Docker's default address pools hold about 30 networks, so a server with more apps than that needs larger `default-address-pools` in `/etc/docker/daemon.json`.
 
+### Apps on the app contract need the frontends bucket
+
+**From** unreleased
+
+Installing an app on the app contract (contract 3) now brings its frontend too: the app runner checks the bundle's signature, pulls it by the digest the release names and gives it to the registry, which serves it at `/apps/<id>/<version>/`. That needs the frontends bucket ([Apps' frontends by version](#apps-frontends-by-version)): a server without `FRONTENDS_BUCKET_SECRET` can't install such an app, and the install says so before anything of it runs. A private bundle is pulled with the same read key as the images, so there is nothing else to set.
+
 ### App feeds are a list, APP_FEEDS
 
 **From** unreleased
@@ -590,7 +596,7 @@ An install (a first install, an upgrade or going back to an older version alike)
 1. **verify**: the release must be on app contract 3 and its signer listed in `APP_PUBLISHERS` in `.env`, as `owner/repo` or `owner/repo/.github/workflows/<file>` (nobody else is trusted), and every part's image must carry that workflow's signature.
 2. **storage**: the provisioners work out what each part gets from the resources its Score file asks for ([app-storage.md](app-storage.md)), and the asks are held to the deployment's ceilings: a part that asks for more memory or CPU than they allow stops the install here, naming the ceiling. When a part asks for a database or a bucket, the storage container makes them for that app alone.
 3. **sign-in**: identity sets the app's sign-in to its worked-out secret.
-4. **start**: each image is pulled and refused if it runs as root. Job parts (a migration, say) run to the end, in the release's order; one that fails or runs out of time stops the install with its last log lines. Then the service and worker parts start in the slot (blue or green) the app isn't using, beside the old ones, on the platform's network. They can't add powers, get no host folders, write only to their scratch folders and `/tmp`, and aren't privileged.
+4. **start**: each image is pulled and refused if it runs as root. Job parts (a migration, say) run to the end, in the release's order; one that fails or runs out of time stops the install with its last log lines. Then the service and worker parts start in the slot (blue or green) the app isn't using, beside the old ones, on the app's own network. They can't add powers, get no host folders, write only to their scratch folders and `/tmp`, and aren't privileged.
 5. **health**: every service part must answer `/healthz` on its new version within its time (`augur.dev/ready-seconds`, else `APP_READY_SECONDS`, 3 minutes; never more than 10). If one doesn't, the new parts are removed and the old version carries on as if nothing happened.
 6. **switch**: the runner registers the new version and points the gateway at its inbound part, in that order.
 7. **watch**: when an older version was serving, every service part must keep answering `/healthz` on its version for 5 minutes, checked every half minute. If one misses twice in a row, the runner registers the old version again, points the gateway back at it and stops the new one, and Admin → Apps says why. A version installed before the runner kept its manifest can't be gone back to by itself: the result says so, and you install it again by hand. A first install has nothing to go back to, so it isn't watched.
