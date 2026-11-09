@@ -189,13 +189,29 @@ restore_keycloak() {
 }
 
 # What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's left out.
+# Given apps the release retires (RETIRED_APPS, ADR 0075), it counts what the upgrade must keep: their schemas and
+# their rows (in any table with an app_id, and registry.apps) go on purpose, after the upgrade's backup.
 tables() {
+  local schemas="" ids=""
+  for app in $1; do
+    schemas+="${schemas:+,}${app//-/_},${app//-/_}_jobs"
+    ids+="${ids:+,}$app"
+  done
   pc exec -T postgres psql -U platform -d platform -At -F' ' -c "
-    select table_schema || '.' || table_name,
-      (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text
-    from information_schema.tables
-    where table_type = 'BASE TABLE' and table_schema not in ('pg_catalog', 'information_schema')" | sort
+    select t.table_schema || '.' || t.table_name,
+      (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', t.table_schema, t.table_name) ||
+        case
+          when t.table_schema = 'registry' and t.table_name = 'apps' then ' where id <> all(''{$ids}''::text[])'
+          when exists (select 1 from information_schema.columns c where c.table_schema = t.table_schema and c.table_name = t.table_name and c.column_name = 'app_id')
+            then ' where app_id <> all(''{$ids}''::text[])'
+          else ''
+        end, false, true, '')))[1]::text
+    from information_schema.tables t
+    where t.table_type = 'BASE TABLE' and t.table_schema not in ('pg_catalog', 'information_schema')
+      and t.table_schema <> all('{$schemas}'::text[])" | sort
 }
+# The apps this checkout retires, from its storage job's settings.
+retired_apps() { (dir=$deploy; pc config --format json) | jq -r '.services.storage.environment.RETIRED_APPS // ""'; }
 
 # Nothing that was there before may be gone or emptied.
 kept() {
@@ -321,7 +337,7 @@ case "$mode" in
       not_running >&2
     fi
     on_version "$from"
-    tables > "$work/before"
+    tables "$(retired_apps)" > "$work/before"
     keycloak_from=$(keycloak_version)
     save_keycloak
 
