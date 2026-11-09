@@ -1215,7 +1215,8 @@
         "knowledge"
       ],
       "x-via": {
-        "gateway": "default"
+        "gateway": "default",
+        "permissions": "infra/docker-compose.yml"
       }
     },
     "DATABASE_URL": {
@@ -1835,6 +1836,32 @@
       "x-docs": "docs/observability.md#turn-it-off",
       "x-via": {
         "updater": ".env"
+      }
+    },
+    "OPENFGA_URL": {
+      "type": "string",
+      "description": "Where the permissions service reaches OpenFGA, which holds the relationships it answers from (ADR 0085).",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
+      }
+    },
+    "OPENFGA_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "OpenFGA's preshared key, which the permissions service sends when OpenFGA is set to need one.",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "default"
+      }
+    },
+    "PERMISSIONS_STORE": {
+      "type": "string",
+      "description": "The OpenFGA store this deployment's permissions are kept in.",
+      "default": "augur",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
       }
     }
   }
