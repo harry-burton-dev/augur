@@ -13,6 +13,9 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   storage: 'the storage service',
   gateway: 'the gateway',
   updater: 'the updater',
+  knowledge: 'the knowledge graph service',
+  // Its schema is kg, not its name, so an app called kg would share it.
+  kg: 'the knowledge graph service’s database schema',
   // The platform's own apps, which the shell serves itself.
   shell: 'the shell',
   home: 'Home',

@@ -175,6 +175,10 @@ jobs:
       - run: pnpm turbo run test --concurrency=${{ steps.fit.outputs.tests }} ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '-- --coverage.enabled --coverage.reporter=json-summary' || '' }}
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
+          # The knowledge service's fence: a few random worlds on a pull request, many and the 200,000-row
+          # check on main (platform/services/knowledge, sight.property.test.ts and perf.test.ts).
+          KG_PROPERTY_RUNS: ${{ github.event_name == 'push' && '300' || '30' }}
+          KG_PERF: ${{ github.event_name == 'push' && '1' || '' }}
       - name: Test coverage
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm coverage:summary >> "$GITHUB_STEP_SUMMARY"

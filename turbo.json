@@ -3,7 +3,7 @@
   "globalPassThroughEnv": ["NODE_AUTH_TOKEN"],
   "tasks": {
     "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
-    "test": { "dependsOn": ["^build"], "env": ["DATABASE_URL"], "outputs": ["coverage/**"] },
+    "test": { "dependsOn": ["^build"], "env": ["DATABASE_URL", "KG_PROPERTY_RUNS", "KG_PERF"], "outputs": ["coverage/**"] },
     "typecheck": { "dependsOn": ["^build"] },
     "dev": { "cache": false, "persistent": true }
   }
