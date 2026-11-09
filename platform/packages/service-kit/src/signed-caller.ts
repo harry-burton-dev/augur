@@ -21,6 +21,22 @@ export const CALLER_KEYS_PATH = '/api/gateway/v1/caller-keys';
 export const GATEWAY_CALLER: Caller = { id: 'augur:gateway', name: 'Gateway', departments: [], roles: [] };
 export const isGatewayCaller = (caller?: Pick<Caller, 'id'>) => caller?.id === GATEWAY_CALLER.id;
 
+/** Where the gateway is inside a deployment, when GATEWAY_URL doesn't say. */
+export const DEFAULT_GATEWAY_URL = 'http://gateway:8080';
+
+/**
+ * The id of the caller the gateway signs when one of AUGUR's own services calls an app's part through it
+ * (contract 3, spec 8.6: the events service pushing an event): `augur:<service>`, no person. Only the gateway
+ * signs callers and a person's id is their sign-in subject, so nothing else can be one.
+ */
+export const serviceCallerId = (service: string): string => `augur:${service}`;
+/** The caller for one of AUGUR's own services, as the gateway signs it for a part. */
+export const callerOfService = (service: string): Caller => ({ id: serviceCallerId(service), name: service, departments: [], roles: [] });
+/** Whether a caller is one of AUGUR's own services (the gateway included) rather than a person or an app. */
+export const isServiceCaller = (caller?: Pick<Caller, 'id'>): boolean => typeof caller?.id === 'string' && caller.id.startsWith('augur:');
+/** Which of AUGUR's services a service caller is; undefined for anyone else. */
+export const serviceOfCaller = (caller?: Pick<Caller, 'id'>): string | undefined => (isServiceCaller(caller) ? caller!.id.slice('augur:'.length) : undefined);
+
 /** How long a signed caller lasts. It is made per request, so a minute is plenty and a copied one soon stops working. */
 export const CALLER_LIFETIME_SECONDS = 60;
 /** The issuer every signed caller names: the gateway, the only thing that signs them. */
@@ -157,7 +173,7 @@ export const INSECURE_DEV_CALLERS = 'AUGUR_INSECURE_DEV_CALLERS';
 export const callerCheckFromEnv = (audience: string, env = process.env): CallerCheck | undefined => {
   const unchecked = env.NODE_ENV !== 'production' && (env[INSECURE_DEV_CALLERS] === '1' || (env.NODE_ENV === 'test' && Boolean(env.VITEST)));
   if (unchecked && !env.CALLER_KEYS_URL) return undefined;
-  const url = env.CALLER_KEYS_URL || `${(env.GATEWAY_URL || 'http://gateway:8080').replace(/\/+$/, '')}${CALLER_KEYS_PATH}`;
+  const url = env.CALLER_KEYS_URL || `${(env.GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')}${CALLER_KEYS_PATH}`;
   // A new gateway key is fetched as soon as a token names it, at most every few seconds.
   return callerCheck({ audience, keys: createRemoteJWKSet(new URL(url), { cooldownDuration: 5_000 }) });
 };

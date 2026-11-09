@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.16.0
+  version: 1.17.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -613,6 +613,100 @@ components:
           type: integer
           minimum: 1
           description: How many days back the done tab looks (the deployment's INBOX_DONE_DAYS)
+    Delivery:
+      type: object
+      required:
+        - app
+        - cursor
+        - failures
+        - nextAt
+        - lastError
+        - failingSince
+        - deliveredAt
+        - dropped
+        - droppedAt
+        - state
+        - words
+      properties:
+        app:
+          type: string
+          description: The subscribing app
+        cursor:
+          type: string
+          description: The seq of the last event its part took
+        failures:
+          type: integer
+          description: Failed attempts at the next event in a row
+        nextAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the next attempt is due, after a failure
+        lastError:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: What the last failed attempt said
+        failingSince:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the attempts at the next event began failing
+        deliveredAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the part last took an event
+        dropped:
+          type: integer
+          description: Events passed over after a day of failures, each recorded in Activity as delivery.dropped
+        droppedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the last was passed over
+        state:
+          enum:
+            - ok
+            - retrying
+            - stalled
+          description: "ok: taking events; retrying: failing for under an hour; stalled: failing for an hour or more"
+        words:
+          type: string
+          description: The state in words, with the reason, as Admin shows it; Admin adds since when from failingSince
+      description: How one app’s part is taking the events pushed to it (contract 3, spec 8.6)
+    Pushing:
+      anyOf:
+        - type: object
+          required:
+            - on
+          properties:
+            on:
+              type: boolean
+              enum:
+                - true
+            problem:
+              type: string
+              description: "What stopped the last pass, when something did: the registry or the database not answering"
+        - type: object
+          required:
+            - on
+            - why
+            - whoCanChange
+          properties:
+            on:
+              type: boolean
+              enum:
+                - false
+            why:
+              type: string
+            whoCanChange:
+              type: string
+      description: Whether events are being pushed to apps’ parts at all, and when not, why and who can change that
 paths:
   /inbox/items/{app}/{key}:
     put:
@@ -1678,6 +1772,40 @@ paths:
                 description: Audit entries
         "403":
           description: Not an admin, nor a lead asking for their own floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /deliveries:
+    get:
+      summary: How each subscribing app is taking the events pushed to its part (admins)
+      description: "One row per app the registry says holds events:subscribe: the last event its part took, how many attempts at the next one have failed, what went wrong last, and since when. An app that has taken nothing for an hour is stalled, and Admin → Apps says so with the reason. `pushing` says whether events are being pushed at all, and why not when they aren’t. Since 1.17."
+      responses:
+        "200":
+          description: Each subscribing app’s deliveries, and whether pushing is on
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deliveries
+                  - pushing
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Delivery"
+                  pushing:
+                    $ref: "#/components/schemas/Pushing"
+                description: Each subscribing app’s deliveries, and whether pushing is on
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
           content:
             application/problem+json:
               schema:

@@ -12,6 +12,7 @@ import {
   CALLER_KEYS_PATH,
   CALLER_TOKEN_HEADER,
   callerHeaders,
+  callerOfService,
   CallerKeysUnavailable,
   callerSignerFromEnv,
   CallerTokenError,
@@ -309,10 +310,16 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     const raw = req.headers[WORKSPACE_HEADERS.id];
     const asked = Array.isArray(raw) ? raw[0] : raw;
 
-    // AUGUR's own services reach each other inside the deployment; a platform service's token has no business here yet.
+    // AUGUR's own services reach each other inside the deployment; through the gateway one reaches only an app's part
+    // (events pushes events to parts, spec 8.6), as a caller named after it, which the part checks (isServiceCaller).
     if (req.identity.kind === 'service') {
-      reply.header('www-authenticate', 'Bearer');
-      return reply.code(401).send({ error: 'unauthenticated', message: 'AUGUR’s own services don’t call through the gateway.' });
+      // Decided by the matched route, as for public routes: an app proxy is `/api/<name>` or `/api/:name`, and the
+      // gateway's own routes and the platform's services are neither.
+      const target = /^\/api\/([^/]+)/.exec(req.routeOptions.url ?? '')?.[1];
+      const name = target === ':name' ? (req.params as { name?: string }).name : target;
+      if (!name || name === 'gateway' || PLATFORM_SERVICES.includes(name)) return reply.code(403).send({ error: 'forbidden', message: 'AUGUR’s own services reach each other inside the deployment, not through the gateway.' });
+      req.caller = callerOfService(req.identity.service);
+      return;
     }
 
     // An app's own token (spec 8.2): only for an app the registry knows and has on where the call is for.
@@ -582,6 +589,25 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         // The part receives the delegated caller, which it carries on its own calls for the person.
         req.signedCaller = { [CALLER_TOKEN_HEADER]: await signDelegation(signer, req.caller, { app: id, scopes: grant.scopes, lifetimeSeconds: delegationSeconds }) };
       }
+    } else if (req.identity?.kind === 'service' && req.caller) {
+      // A platform service's token (spec 8.6): only to an app's part, and only an app that is on, signed for that part to check.
+      if (toPlatform) return refuse(403, 'forbidden', 'AUGUR’s own services reach each other inside the deployment, not through the gateway.');
+      let grant: AppGrant | undefined;
+      try {
+        if (!grantsOf) throw new AppGrantsUnavailable('the gateway has no registry to ask');
+        grant = await grantsOf(name);
+      } catch (err) {
+        if (!(err instanceof AppGrantsUnavailable)) throw err;
+        req.log.error({ err: err.message, app: name }, 'app grants unavailable');
+        return refuse(503, 'unavailable', 'Whether this app is on can’t be checked right now. Try again in a moment.');
+      }
+      if (!grant) return refuse(403, 'forbidden', `${name} isn’t installed here.`);
+      if (!grant.on) return refuse(403, 'forbidden', `${appName(name, grant)} is turned off.`);
+      req.signedCaller = await signedCallerHeaders(signer, req.caller, appClientId(name));
+      if (!inFlight.take(name)) return refuse(503, 'unavailable', `${appName(name, grant)} is busy; try again in a moment.`);
+      req.appCall = name;
+      req.appCallName = appName(name, grant);
+      return;
     } else {
       req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
     }

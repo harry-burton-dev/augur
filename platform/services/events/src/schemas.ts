@@ -260,6 +260,31 @@ export const InboxCounts = Type.Object(
   { $id: 'InboxCounts' },
 );
 
+export const Delivery = Type.Object(
+  {
+    app: Type.String({ description: 'The subscribing app' }),
+    cursor: Type.String({ description: 'The seq of the last event its part took' }),
+    failures: Type.Integer({ description: 'Failed attempts at the next event in a row' }),
+    nextAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When the next attempt is due, after a failure' }),
+    lastError: Type.Union([Type.String(), Type.Null()], { description: 'What the last failed attempt said' }),
+    failingSince: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When the attempts at the next event began failing' }),
+    deliveredAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When the part last took an event' }),
+    dropped: Type.Integer({ description: 'Events passed over after a day of failures, each recorded in Activity as delivery.dropped' }),
+    droppedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When the last was passed over' }),
+    state: Type.Enum(['ok', 'retrying', 'stalled'], { description: 'ok: taking events; retrying: failing for under an hour; stalled: failing for an hour or more' }),
+    words: Type.String({ description: 'The state in words, with the reason, as Admin shows it; Admin adds since when from failingSince' }),
+  },
+  { $id: 'Delivery', description: 'How one app’s part is taking the events pushed to it (contract 3, spec 8.6)' },
+);
+
+export const Pushing = Type.Union(
+  [
+    Type.Object({ on: Type.Literal(true), problem: Type.Optional(Type.String({ description: 'What stopped the last pass, when something did: the registry or the database not answering' })) }),
+    Type.Object({ on: Type.Literal(false), why: Type.String(), whoCanChange: Type.String() }),
+  ],
+  { $id: 'Pushing', description: 'Whether events are being pushed to apps’ parts at all, and when not, why and who can change that' },
+);
+
 /**
  * What every refusal carries: an RFC 9457 problem (`application/problem+json`, @augur/service-kit's
  * problemDetails), with AUGUR's `reason` and `whoCanChange`, and `error` and `message` for SDK 1.x clients.
@@ -289,4 +314,4 @@ export const refused = (description: string) => ({ description, content: { 'appl
 export const empty = (description: string) => Type.Null({ description });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, NewNotification, NotificationAction, Notification, NewAuditEntry, AuditEntry, EventFloor, TeamNotices, NewDomainEvent, DomainEvent, InboxRef, InboxOwner, NewInboxItem, InboxChange, InboxItem, InboxHistory, InboxCounts];
+export const SCHEMAS = [Refusal, NewNotification, NotificationAction, Notification, NewAuditEntry, AuditEntry, EventFloor, TeamNotices, NewDomainEvent, DomainEvent, InboxRef, InboxOwner, NewInboxItem, InboxChange, InboxItem, InboxHistory, InboxCounts, Delivery, Pushing];
