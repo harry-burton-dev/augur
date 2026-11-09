@@ -243,7 +243,23 @@ kept() {
   if [ -n "$lost" ]; then echo "Data lost:"$'\n'"$lost" >&2; return 1; fi
 }
 
-up() { pc up -d --no-build --remove-orphans $(services) >&2; }
+# Starts everything, and gives up after twice the ready timeout rather than wait for ever on a dependency that
+# never comes good (a job that fails and restarts, a service never healthy): Compose would, and a run cancelled
+# by its time limit dumps no state. On giving up, the containers not running well are named; cleanup dumps the rest.
+up() {
+  local starting watchdog
+  pc up -d --no-build --remove-orphans $(services) >&2 &
+  starting=$!
+  ( sleep "$((timeout * 2))"; kill "$starting" 2>/dev/null ) &
+  watchdog=$!
+  if wait "$starting"; then
+    kill "$watchdog" 2>/dev/null || true
+    return 0
+  fi
+  kill "$watchdog" 2>/dev/null || true
+  echo "Starting didn't finish in $((timeout * 2))s. Not running well:"$'\n'"$(not_running)" >&2
+  return 1
+}
 
 # The first admin signs in in a real browser, and Home and each app that ships with AUGUR render with
 # the kit from KIT_URL (infra/deploy-browser-check.mjs, in Playwright's own image). BROWSER_CHECK=0 skips it;
@@ -379,6 +395,7 @@ case "$mode" in
     echo "Versions after:  $new" >&2
 
     # A server can always go back to the release it came from, so its tables must still work for it.
+    echo "Going back to augur@$from." >&2
     use "$from"
     if [ "$keycloak_from" != "$keycloak_to" ]; then restore_keycloak "$keycloak_from" "$keycloak_to"; fi
     up
