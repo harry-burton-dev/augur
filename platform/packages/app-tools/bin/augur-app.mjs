@@ -78,10 +78,16 @@ const attest = (ref, out) => {
   }
 };
 
-const bundle = async (channel) => {
-  const { id, version } = manifest();
+/** Where the app's images go: IMAGE_REPO, or ghcr.io under the GitHub repository. */
+const imageRepo = () => {
   const repo = (process.env.IMAGE_REPO ?? `ghcr.io/${process.env.GITHUB_REPOSITORY ?? ''}`).toLowerCase();
   if (repo === 'ghcr.io/') throw new Error('Set GITHUB_REPOSITORY or IMAGE_REPO to say where images go.');
+  return repo;
+};
+
+const bundle = async (channel) => {
+  const { id, version } = manifest();
+  const repo = imageRepo();
   const out = mkdtempSync(join(tmpdir(), 'augur-app-'));
   let service = null;
   if (parts.includes('service')) {
@@ -145,9 +151,11 @@ const main = async ([mode, ...args]) => {
     const on3 = manifest().contract !== undefined;
     const hasFrontend = on3 ? Boolean(manifest().frontend) : parts.includes('frontend');
     const hasService = on3 ? readCheckout(root, { readdirSync, existsSync, join }).parts.some((p) => Object.values(p.containers ?? {}).some((c) => c.image === '.')) : parts.includes('service');
+    // The placeholder images are named where the build would push them, so they pass the part schema's image rule.
+    const repo = imageRepo();
     const bundleJson = args[0]
       ? JSON.parse(readFileSync(args[0], 'utf8'))
-      : { service: hasService ? `ghcr.io/<repo>/${manifest().id}@${zero}` : null, frontend: hasFrontend ? { artifact: `ghcr.io/<repo>/${manifest().id}-frontend@${zero}`, digest: zero } : null };
+      : { service: hasService ? `${repo}/${manifest().id}@${zero}` : null, frontend: hasFrontend ? { artifact: `${repo}/${manifest().id}-frontend@${zero}`, digest: zero } : null };
     const release = releaseFile(bundleJson);
     if (mode === 'describe') return console.log(JSON.stringify(release, null, 2));
     if (!args[0]) throw new Error('publish needs the bundle.json that augur-app bundle printed.');
