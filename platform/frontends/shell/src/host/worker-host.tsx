@@ -31,6 +31,8 @@ export interface WorkerContext {
   /** Moves to `path` below `/<id>`. */
   navigate(path: string): void;
   notify(message: NotifyMessage): void;
+  /** Sends the person to enter their password again, then back to where they are. */
+  signInAgain(): void;
   raise(intent: Intent): Promise<void>;
   request(intent: Intent): Promise<unknown>;
 }
@@ -368,6 +370,9 @@ export class AppSession {
         if (isPlain(n) && typeof n.title === 'string') ctx.notify({ title: n.title.slice(0, 200), body: text(n.body, 1000), kind: text(n.kind, 60), needsYou: n.needsYou === true });
         return;
       }
+      case 'signInAgain':
+        if (this.mayAct()) ctx.signInAgain();
+        return;
       case 'raise':
         if (!this.mayAct()) throw new Error(`${this.app.name} can open another app from its card only when someone presses something in it.`);
         return ctx.raise(intentOf(args[0]));
