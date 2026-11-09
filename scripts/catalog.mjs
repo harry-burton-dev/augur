@@ -173,8 +173,9 @@ files['catalog/all.yaml'] = doc([
   },
 ]);
 
-// TechDocs: every guide in docs/, in one site on the platform system.
-const guides = readdirSync(join(root, 'docs')).filter((f) => f.endsWith('.md')).sort();
+// TechDocs: every guide in docs/, in one site on the platform system. docs/README.md is about working on
+// the docs site itself, not a guide.
+const guides = readdirSync(join(root, 'docs')).filter((f) => f.endsWith('.md') && f !== 'README.md').sort();
 const titleOf = (f) => (read(`docs/${f}`).match(/^#\s+(.+)$/m)?.[1] ?? f.replace('.md', '')).trim();
 files['mkdocs.yml'] =
   HEADER +

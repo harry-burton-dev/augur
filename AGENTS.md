@@ -22,9 +22,10 @@ layout yet.
    (https://drive.google.com/drive/folders/1CDGBoi620UrDG3DY2biDXIHrpA8dICDh).
    Shell principles and App patterns are in its `02 Principles`; CI/CD and the
    deploy test in `03 Architecture/Engineering`.
-4. **Guides:** `docs/` holds only the guides that ship with a release, one per
-   topic; update the matching guide in the same PR. Any other Markdown file
-   fails `pnpm check:docs`: documents belong in the handbook.
+4. **Docs:** `docs/` is the docs site (Starlight, ADR 0082; `docs/README.md`
+   has the page kinds and front matter), plus the older guides still waiting
+   to move into it. Update the matching page in the same PR. Any other
+   Markdown file fails `pnpm check:docs`: documents belong in the handbook.
 
 Project memory holds current state (what's in flight, ids, links), not rules.
 If a rule is only in memory, it belongs here, in an ADR or in the handbook.

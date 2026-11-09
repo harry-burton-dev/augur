@@ -30,5 +30,7 @@ pr_only() { if [ "${EVENT:-}" = push ]; then say "$1" false; elif touches "${@:2
 # What the shell, Home and the shared packages are built from.
 pr_only contract platform/frontends platform/packages platform/contract \
   ':!platform/frontends/admin' ':!platform/frontends/upgrades' ':!**/*.md' package.json pnpm-lock.yaml
+# The docs site, its own pnpm project.
+pr_only docs docs ':(glob,exclude)docs/*.md'
 # What goes into the images beyond the code build-test builds: Dockerfiles, deploy files, dependencies.
-pr_only images infra .dockerignore pnpm-lock.yaml pnpm-workspace.yaml package.json '*/package.json' '**/package.json'
+pr_only images infra .dockerignore pnpm-lock.yaml pnpm-workspace.yaml package.json '*/package.json' '**/package.json' ':!docs'

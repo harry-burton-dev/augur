@@ -408,6 +408,15 @@
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
+    "KNOWLEDGE_PAGE_LIMIT": {
+      "type": "string",
+      "description": "The most one page of a knowledge graph read gives, whatever the caller asks for.",
+      "default": "100",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
     "UPDATER_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
