@@ -147,6 +147,7 @@ export function runWorker(scope: Port & Record<string, unknown> = globalThis as 
       raise: async (intent) => void (await channel.call('raise', plain(intent))),
       request: async <T>(intent: Intent) => (await channel.call('request', plain(intent))) as T,
       notify: (notice: Notice) => channel.post('notify', plain(notice)),
+      signInAgain: () => channel.post('signInAgain'),
       ...(init.intent ? { intent: init.intent } : {}),
       ...(init.replying ? { reply: { respond: (result: unknown) => channel.post('reply.respond', plain(result)), cancel: () => channel.post('reply.cancel') } } : {}),
       previewOn: (id) => previews.has(id),
