@@ -61,13 +61,13 @@ describe('appServer', () => {
     expect(signed.json()).toEqual({ floor: 'w1' });
     const forOther = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: await signedCallerHeaders(gateway, onFloor, 'notes') });
     expect(forOther.statusCode).toBe(401);
+    const forged = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: callerHeaders(onFloor) });
+    expect(forged.statusCode).toBe(401);
   });
 
   it('expects the gateway to sign for the app’s client on the app contract, and for its id on contract 2', () => {
     expect(callerAudienceOf({ id: 'notes' })).toBe('notes');
     expect(callerAudienceOf({ id: 'notes', contract: 3 })).toBe('app-notes');
-    const forged = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: callerHeaders(onFloor) });
-    expect(forged.statusCode).toBe(401);
   });
 });
 

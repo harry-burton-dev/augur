@@ -142,8 +142,9 @@ const main = async ([mode, ...args]) => {
   } else if (mode === 'describe' || mode === 'publish') {
     const zero = `sha256:${'0'.repeat(64)}`;
     // Without a bundle, placeholders: on contract 3 the manifest says whether there is a frontend; before it, the folders do.
-    const hasFrontend = manifest().contract !== undefined ? Boolean(manifest().frontend) : parts.includes('frontend');
-    const hasService = manifest().contract !== undefined || parts.includes('service');
+    const on3 = manifest().contract !== undefined;
+    const hasFrontend = on3 ? Boolean(manifest().frontend) : parts.includes('frontend');
+    const hasService = on3 ? readCheckout(root, { readdirSync, existsSync, join }).parts.some((p) => Object.values(p.containers ?? {}).some((c) => c.image === '.')) : parts.includes('service');
     const bundleJson = args[0]
       ? JSON.parse(readFileSync(args[0], 'utf8'))
       : { service: hasService ? `ghcr.io/<repo>/${manifest().id}@${zero}` : null, frontend: hasFrontend ? { artifact: `ghcr.io/<repo>/${manifest().id}-frontend@${zero}`, digest: zero } : null };
