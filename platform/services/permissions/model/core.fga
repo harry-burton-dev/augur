@@ -1,0 +1,72 @@
+module core
+
+# Who someone is comes from Keycloak (the token's `sub`). This model says what they may do.
+
+type person
+
+# A second identity a person may act as for a while: their "master role". The person is its holder;
+# acting as it needs a persona session (step-up sign-in, time limit, reason), which the gateway proves.
+# Grants made to a persona never reach the person, and the person's grants never reach the persona.
+type persona
+  relations
+    define holder: [person]
+
+# Meta-platform: the deployment itself (ADR 0084: removal, version pins, site allowing, app secrets).
+type deployment
+  relations
+    define org: [org]
+    define admin: [persona]
+    define can_upgrade: admin
+    define can_install_apps: admin
+    define can_remove_apps: admin
+    define can_pin_versions: admin
+    define can_allow_sites: admin
+    define can_set_app_secrets: admin
+    define can_read_settings: admin
+    define can_read_health: admin or admin from org
+
+# The organisation: the top floor, and where org-wide roles live.
+type org
+  relations
+    define child: [floor]
+    define admin: [persona]
+    define member: [person]
+    define publisher: [person, role#assignee]
+    define audit_reader: [person, persona, role#assignee]
+    define manager: admin
+    define stands: member or stands from child
+    define can_see: stands or admin
+    define can_manage_people: admin
+    define can_manage_apps: admin
+    define can_manage_org: admin
+    define can_read_audit: admin or audit_reader
+    define can_publish_to_org: publisher
+    define can_create_role: admin
+
+# A team or department floor, or someone's own floor. Standing goes up: a member of a team stands on
+# every floor above it. Managing goes down: a lead manages the floors below theirs. Leading does not.
+type floor
+  relations
+    define parent: [floor, org]
+    define child: [floor]
+    define owner: [person]
+    define lead: [person, role#assignee]
+    define member: [person, role#assignee] or lead
+    define blocked: [person]
+    define admin: admin from parent
+    define manager: lead or manager from parent
+    define stands: (owner or member or stands from child) but not blocked
+    define can_see: stands or admin
+    define can_manage_members: manager or admin
+    define can_act_as_lead: lead but not blocked
+    define can_create_role: manager or admin
+
+# A role made inside AUGUR (by an admin, a lead, or an app) for one floor or the org. Roles hold people,
+# personas, other roles' holders, or a whole floor's members. A role is a set of holders; what it gives
+# is written where it applies (OpenFGA's custom-roles pattern).
+type role
+  relations
+    define scope: [floor, org]
+    define assignee: [person, persona, role#assignee, floor#member]
+    define can_assign: manager from scope or admin from scope
+    define can_grant_with: can_assign
