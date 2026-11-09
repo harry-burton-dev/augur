@@ -671,6 +671,7 @@ export const buildApp = async ({
                   requiredRole: Type.Union([Type.String(), Type.Null()], {
                     description: "The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.",
                   }),
+                  contract: Type.Optional(Type.Integer({ description: "The app contract the app is on (3), so the gateway signs a plain call to its part for the app's client `app-<id>`, as its part checks; absent for an app on contract 2, whose part checks for its id" })),
                 },
                 { description: "The app's grants" },
               ),
@@ -707,6 +708,7 @@ export const buildApp = async ({
             inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
             requiredRole: found.entry.requiredRole ?? null,
+            ...(manifest3Of(found.entry) ? { contract: 3 } : {}),
           };
         },
       );

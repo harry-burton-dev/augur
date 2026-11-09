@@ -32,6 +32,8 @@ Under the app contract (contract 3, ADR 0075) the shell's host makes an app's ca
 - to the app's own part (`/api/<id>/*`), a **delegated caller**: signed for the app's own client `app-<id>` and lasting `APP_DELEGATION_SECONDS` (default 300) rather than a minute, because the part carries it on its own later calls for the person;
 - to one of AUGUR's services, the usual one-minute caller for that service, with `app` and `scopes` beside the person. The service treats the call as the app's (`identifyServiceCaller` in the service kit: a service by its token, or an app acting for a person by the delegated caller alone) and applies the smaller of the two: the app's grant where the call is for, as for the app's own calls, and the scopes the delegation carries (`delegationRefusal`), refusing outside them in words that name the app, the scope and the person. Events (notifications, events, the Inbox), identity (people) and models (chat, to the app's own agent) do this; a route meant for the person alone is not reachable for an app, which the gateway's route table holds to.
 
+A call to a contract 3 app's part that no host makes for the app (a direct call to `/api/<id>/…` with a person's token, as the run suite makes) is signed for `app-<id>` too, so the same check admits it; it carries no `app` or `scopes`, because no app is acting. The gateway reads which contract an app is on from the registry's grants (`GET /v1/apps/:id/grants`, `contract`), and answers 503 while the registry can't say rather than sign for the wrong client.
+
 A part checks its callers with the hook above, naming its client:
 
 ```ts

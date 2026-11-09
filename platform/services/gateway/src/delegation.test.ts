@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { APP_HEADER, appClientId, callerCheckFor, callerSigner, DELEGATION_HEADER, signDelegation, type Caller } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import type { AuthConfig } from './auth.ts';
-import type { AppGrants } from './grants.ts';
+import { AppGrantsUnavailable, type AppGrants } from './grants.ts';
 import { HealthMonitor } from './status.ts';
 import type { FloorLookup } from './floors.ts';
 
@@ -21,6 +21,7 @@ describe('a call made for an app', () => {
   let signApp: (app: string) => Promise<string>;
   const signer = callerSigner('ab'.repeat(32));
   const appGrants: AppGrants = async (app, workspace) => (app === 'notes' ? { name: 'Notes', on: workspace !== 'off-floor', scopes: ['notifications:send'] } : undefined);
+  const appGrants3: AppGrants = async (app, workspace) => (app === 'notes' ? { name: 'Notes', on: workspace !== 'off-floor', scopes: ['notifications:send'], contract: 3 } : undefined);
   const floors: FloorLookup = async () => [w1, { id: 'off-floor', kind: 'team', role: 'member' }];
   const access = async () => new Map([['notes', { name: 'Notes', maxUpload: 10 }]]);
   const alex = { sub: 'u-1', name: 'Alex Rivera', roles: ['editor'], departments: ['Finance'] };
@@ -38,7 +39,7 @@ describe('a call made for an app', () => {
   });
   afterAll(() => upstream.close());
 
-  const gateway = () => buildApp({ upstreams: { events: url, notes: url }, auth, signer, appGrants, floors, access, monitor: new HealthMonitor({ probes: [] }), delegationSeconds: 120 });
+  const gateway = (grants: AppGrants = appGrants) => buildApp({ upstreams: { events: url, notes: url }, auth, signer, appGrants: grants, floors, access, monitor: new HealthMonitor({ probes: [] }), delegationSeconds: 120 });
   const callerIn = async (res: { json: () => { headers: Record<string, string> } }, audience: string): Promise<Caller & { exp?: number }> => {
     const token = res.json().headers['x-augur-caller'];
     const caller = await callerCheckFor(signer, audience)(token);
@@ -92,6 +93,25 @@ describe('a call made for an app', () => {
     const sent = res.json().headers;
     expect(Object.keys(sent).filter((k) => /^x-(augur|user|workspace)-/.test(k)).sort()).toEqual(['x-augur-caller', 'x-user-departments', 'x-user-id', 'x-user-name', 'x-user-roles']);
     expect(sent['x-user-roles']).toBe('editor');
+  });
+
+  it('signs a plain call to an app on the app contract for its client, app-<id>, which its part checks for', async () => {
+    const app = await gateway(appGrants3);
+    const res = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, 'x-workspace-id': 'w1' } });
+    expect(res.statusCode).toBe(200);
+    const caller = await callerIn(res, appClientId('notes'));
+    expect(caller).toMatchObject({ id: 'u-1', name: 'Alex Rivera', workspace: w1 });
+    // Not a delegation: no host acts for the app, so the caller names no app and carries no scopes.
+    expect(caller.app).toBeUndefined();
+    expect(caller.scopes).toBeUndefined();
+    await expect(callerIn(res, 'notes')).rejects.toThrow();
+  });
+
+  it('refuses a plain call to an app while the registry can’t say which contract it is on, rather than signing it wrong', async () => {
+    const app = await gateway(async () => { throw new AppGrantsUnavailable('down'); });
+    const res = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, 'x-workspace-id': 'w1' } });
+    expect(res.statusCode).toBe(503);
+    expect(res.json().message).toBe('Which contract this app is on can’t be checked right now. Try again in a moment.');
   });
 
   it('turns a part’s onward call with a valid delegation into a fresh one-minute caller for the target (8.5)', async () => {

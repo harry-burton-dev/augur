@@ -608,6 +608,20 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       req.appCall = name;
       req.appCallName = appName(name, grant);
       return;
+    } else if (req.caller && !toPlatform && grantsOf) {
+      // A person's plain call to an app (no host acting for the app: a direct API call, the run suite). An app on
+      // the app contract has its part check callers for its client, `app-<id>` (spec 8.5), so the caller is signed
+      // for that; a part on contract 2 checks for the app's id, as before. A gateway with no registry to ask
+      // (no apps on the contract) signs for the id.
+      let grant: AppGrant | undefined;
+      try {
+        grant = await grantsOf(name, req.caller.workspace?.id);
+      } catch (err) {
+        if (!(err instanceof AppGrantsUnavailable)) throw err;
+        req.log.error({ err: err.message, app: name }, 'app grants unavailable');
+        return refuse(503, 'unavailable', 'Which contract this app is on can’t be checked right now. Try again in a moment.');
+      }
+      req.signedCaller = await signedCallerHeaders(signer, req.caller, grant?.contract !== undefined ? appClientId(name) : name);
     } else {
       req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
     }
