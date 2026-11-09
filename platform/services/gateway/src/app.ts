@@ -608,6 +608,22 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       req.appCall = name;
       req.appCallName = appName(name, grant);
       return;
+    } else if (req.caller && req.identity?.kind !== 'app' && !toPlatform && grantsOf) {
+      // A person's plain call to an app (no host acting for the app: a direct API call, the run suite). An app on
+      // the app contract has its part check callers for its client, `app-<id>` (spec 8.3), so the caller is signed
+      // for that; a part on contract 2 checks for the app's id, as before. A gateway with no registry to ask
+      // (no apps on the contract) signs for the id. A turned-off app is refused here in words naming it; one the
+      // registry doesn't know is left to the catalogue check below.
+      let grant: AppGrant | undefined;
+      try {
+        grant = await grantsOf(name, req.caller.workspace?.id);
+      } catch (err) {
+        if (!(err instanceof AppGrantsUnavailable)) throw err;
+        req.log.error({ err: err.message, app: name }, 'app grants unavailable');
+        return refuse(503, 'unavailable', 'Whether this app can be reached can’t be checked right now: AUGUR’s registry isn’t answering. Try again in a moment.');
+      }
+      if (grant && !grant.on) return refuse(403, 'forbidden', `${appName(name, grant)} is turned off${req.caller.workspace ? ' on this floor' : ''}.`);
+      req.signedCaller = await signedCallerHeaders(signer, req.caller, grant?.contract !== undefined ? appClientId(name) : name);
     } else {
       req.signedCaller = req.caller ? await signedCallerHeaders(signer, req.caller, name) : undefined;
     }
