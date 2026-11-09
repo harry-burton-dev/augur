@@ -1,4 +1,6 @@
-@prefix sh:   <http://www.w3.org/ns/shacl#> .
+// The SHACL shapes the store is checked against (draft 4's shapes.ttl): served at GET /ontology/shapes and
+// used by shacl.test.ts. A shape added here must hold for the store as SQL too (see that test).
+export const SHAPES = String.raw`@prefix sh:   <http://www.w3.org/ns/shacl#> .
 @prefix kg:   <urn:augur:kg:> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
@@ -56,3 +58,4 @@ kg:BeliefShape a sh:NodeShape ; sh:targetClass kg:Belief ;
 kg:EventShape a sh:NodeShape ; sh:targetClass kg:Event ;
   sh:sparql [ sh:message "an event has at most one current reported time" ;
     sh:select """SELECT $this WHERE { ?b1 a kg:Belief ; kg:subject $this ; kg:predicate kg:occursOn ; kg:modality "reported" ; kg:current true . ?b2 a kg:Belief ; kg:subject $this ; kg:predicate kg:occursOn ; kg:modality "reported" ; kg:current true . FILTER (?b1 != ?b2) }""" ] .
+`;

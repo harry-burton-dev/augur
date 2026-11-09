@@ -4,6 +4,7 @@ import { sql as store } from './migrations/001-store.ts';
 import { sql as baseOntology } from './migrations/002-base-ontology.ts';
 import { sql as fence } from './migrations/003-fence.ts';
 import { sql as service } from './migrations/004-service.ts';
+import { sql as reads } from './migrations/005-reads.ts';
 
 /** The knowledge service's schema in the platform database. */
 export const SCHEMA = 'kg';
@@ -14,13 +15,15 @@ export const APP_LOGIN = 'kg_app';
 /**
  * The knowledge graph's schema, in order. Once a migration ships it never changes (`pnpm check:migrations`).
  * 001 and 002 are the store spec draft 4 proved; 003 hardens its floor fence (see fence.test.ts); 004 is what
- * the service needs: standing mirrored from identity, answers kept per Idempotency-Key, and the outbox.
+ * the service needs: standing mirrored from identity, answers kept per Idempotency-Key, and the outbox; 005
+ * is what the object reads need: your own action records, and the kind of floor of what isn't in sight.
  */
 export const migrations: Migration[] = [
   { id: '001-store', sql: store },
   { id: '002-base-ontology', sql: baseOntology },
   { id: '003-fence', sql: fence },
   { id: '004-service', sql: service },
+  { id: '005-reads', sql: reads },
 ];
 
 /**

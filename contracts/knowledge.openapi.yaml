@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Knowledge
-  version: 1.0.0
+  version: 1.1.0
   description: |-
     The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
     A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. Apps reach it through its client in a later release.
@@ -220,6 +220,36 @@ components:
         why:
           type: string
           description: On a dry run that would be refused, why.
+    ActionRecord:
+      type: object
+      required:
+        - actionId
+        - action
+        - by
+        - at
+        - effects
+        - undone
+      properties:
+        actionId:
+          type: string
+        action:
+          type: string
+        by:
+          type: string
+          description: "Who took it: you, since you can read only your own."
+        at:
+          type: string
+          format: date-time
+        effects:
+          type: object
+          description: "What changed, by kind: sources, entities, observations, beliefs."
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        undone:
+          type: boolean
+      description: The record of one action you took.
     Unseen:
       type: object
       required:
@@ -276,6 +306,9 @@ components:
             - type: string
               enum:
                 - source
+            - type: string
+              enum:
+                - summary
         id:
           type: string
         unseen:
@@ -328,6 +361,21 @@ components:
           type: array
           items:
             type: string
+    EntityPage:
+      type: object
+      required:
+        - entities
+      properties:
+        entities:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entity"
+        next:
+          type: string
+          description: Pass as cursor for the next page.
+        limitApplied:
+          type: integer
+          description: The deployment’s ceiling, when it cut the page shorter than you asked.
     Value:
       type: object
       required:
@@ -388,6 +436,46 @@ components:
                 type: integer
           description: The ones you can see, by floor.
       description: Structure, not a score.
+    Dispute:
+      type: object
+      required:
+        - id
+        - belief
+        - floor
+        - by
+        - reason
+        - at
+        - state
+      properties:
+        id:
+          type: string
+        belief:
+          type: string
+        floor:
+          type: string
+        by:
+          type: string
+        reason:
+          type: string
+        at:
+          type: string
+          format: date-time
+        state:
+          anyOf:
+            - type: string
+              enum:
+                - open
+            - type: string
+              enum:
+                - upheld
+            - type: string
+              enum:
+                - retracted
+            - type: string
+              enum:
+                - withdrawn
+        settledBy:
+          type: string
     Belief:
       type: object
       required:
@@ -439,6 +527,15 @@ components:
         recordedAt:
           type: string
           format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          description: When it stopped being so.
+        supersededAt:
+          type: string
+          format: date-time
+        supersededBy:
+          type: string
         state:
           anyOf:
             - type: string
@@ -450,9 +547,23 @@ components:
             - type: string
               enum:
                 - disputed
+            - type: string
+              enum:
+                - superseded
+            - type: string
+              enum:
+                - ended
+            - type: string
+              enum:
+                - fallen
+          description: "fallen: every observation behind it was retracted or forgotten."
         heldBy:
           type: string
           description: Who held it, or memory.
+        disputes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dispute"
         evidence:
           $ref: "#/components/schemas/Evidence"
     BeliefList:
@@ -472,6 +583,336 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Belief"
+    SourceRef:
+      type: object
+      required:
+        - id
+        - app
+        - ref
+        - version
+        - title
+        - floor
+        - author
+      properties:
+        id:
+          type: string
+        app:
+          type: string
+          description: The app that holds the source. Its text stays there.
+        ref:
+          type: string
+        version:
+          type: string
+          description: Versions of one (app, ref) are one source and count once.
+        title:
+          type: string
+        floor:
+          type: string
+        author:
+          type: string
+        writtenAt:
+          type: string
+          format: date-time
+        publishedFrom:
+          type: string
+          description: The source on a personal floor this one was published from.
+        extraction:
+          type: object
+          required:
+            - observations
+            - flagged
+          properties:
+            observations:
+              type: integer
+              description: Observations read from it, on this floor.
+            flagged:
+              type: integer
+              description: Of those, text that addressed the system.
+      description: "A reference to a source: the app, its ref and version. The text stays in the app that holds it."
+    Observation:
+      type: object
+      required:
+        - id
+        - floor
+        - source
+        - subject
+        - predicate
+        - kind
+        - quote
+        - modality
+        - validPrecision
+        - state
+        - extractor
+        - ontologyVersion
+        - recordedAt
+      properties:
+        id:
+          type: string
+        floor:
+          type: string
+        source:
+          $ref: "#/components/schemas/SourceRef"
+        subject:
+          type: string
+        predicate:
+          type: string
+          description: A declared relation or property IRI.
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - property
+            - type: string
+              enum:
+                - link
+        value:
+          $ref: "#/components/schemas/Value"
+        object:
+          type: string
+        quote:
+          type: string
+        anchor:
+          type: object
+          required:
+            - start
+            - end
+          properties:
+            start:
+              type: integer
+            end:
+              type: integer
+        modality:
+          anyOf:
+            - type: string
+              enum:
+                - reported
+            - type: string
+              enum:
+                - expected
+            - type: string
+              enum:
+                - planned
+            - type: string
+              enum:
+                - possible
+            - type: string
+              enum:
+                - denied
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: string
+          format: date-time
+        validPrecision:
+          anyOf:
+            - type: string
+              enum:
+                - minute
+            - type: string
+              enum:
+                - day
+            - type: string
+              enum:
+                - month
+            - type: string
+              enum:
+                - year
+            - type: string
+              enum:
+                - unknown
+        attributedTo:
+          type: string
+          description: The original speaker, when the source relays someone.
+        flagged:
+          type: boolean
+          description: Text that addressed the system. Never held on a shared floor; waits for the owner on a personal one.
+        flagReason:
+          type: string
+        state:
+          anyOf:
+            - type: string
+              enum:
+                - memory
+            - type: string
+              enum:
+                - proposed
+            - type: string
+              enum:
+                - faithful
+            - type: string
+              enum:
+                - held
+            - type: string
+              enum:
+                - disputed
+            - type: string
+              enum:
+                - retracted
+            - type: string
+              enum:
+                - flagged
+        faithfulBy:
+          type: array
+          items:
+            type: string
+        derivedFrom:
+          type: string
+        extractor:
+          type: string
+        promptVersion:
+          type: string
+        ontologyVersion:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+      description: "One claim read in one source. Immutable: a wrong one is retracted, a private one forgotten."
+    Class:
+      type: object
+      required:
+        - iri
+        - label
+        - kind
+        - status
+      properties:
+        iri:
+          type: string
+        label:
+          type: string
+        parent:
+          type: string
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - continuant
+            - type: string
+              enum:
+                - occurrent
+        status:
+          anyOf:
+            - type: string
+              enum:
+                - base
+            - type: string
+              enum:
+                - accepted
+            - type: string
+              enum:
+                - proposed
+            - type: string
+              enum:
+                - dismissed
+        packTerm:
+          type: string
+          description: skos:exactMatch to the pack (Common Core Ontologies) term.
+        sinceVersion:
+          type: string
+    Predicate:
+      type: object
+      required:
+        - iri
+        - label
+        - kind
+        - singleValued
+        - status
+      properties:
+        iri:
+          type: string
+        label:
+          type: string
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - property
+            - type: string
+              enum:
+                - link
+        domain:
+          type: string
+        range:
+          type: string
+        datatype:
+          type: string
+          description: quantity, date, text or boolean.
+        unit:
+          type: string
+        singleValued:
+          type: boolean
+        status:
+          anyOf:
+            - type: string
+              enum:
+                - base
+            - type: string
+              enum:
+                - accepted
+            - type: string
+              enum:
+                - proposed
+            - type: string
+              enum:
+                - dismissed
+    Ontology:
+      type: object
+      required:
+        - base
+        - version
+        - classes
+        - predicates
+      properties:
+        base:
+          type: string
+        version:
+          type: string
+        classes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Class"
+        predicates:
+          type: array
+          items:
+            $ref: "#/components/schemas/Predicate"
+      description: "The deployment’s ontology now: the base profile and the terms adopted since."
+    Candidate:
+      type: object
+      required:
+        - term
+        - kind
+        - askedBy
+        - status
+      properties:
+        term:
+          type: string
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - class
+            - type: string
+              enum:
+                - predicate
+        suggestedParent:
+          type: string
+        why:
+          type: string
+        askedBy:
+          type: integer
+          description: How many sources asked for it.
+        status:
+          anyOf:
+            - type: string
+              enum:
+                - proposed
+            - type: string
+              enum:
+                - adopted
+            - type: string
+              enum:
+                - dismissed
+      description: A term extraction asked for that the ontology lacks.
 paths:
   /meta:
     get:
@@ -602,6 +1043,151 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Problem"
+    get:
+      summary: One action’s declaration
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,60}$
+          in: path
+          name: action
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionDecl"
+        "404":
+          description: No such action; problems lists the ones there are
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /actions/runs/{actionId}:
+    get:
+      summary: The record of one action you took
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+          in: path
+          name: actionId
+          required: true
+      responses:
+        "200":
+          description: The record of one action you took.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionRecord"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: You took no action with that id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/entities:
+    get:
+      summary: Entities in sight from a floor
+      parameters:
+        - schema:
+            type: string
+            maxLength: 200
+          in: query
+          name: class
+          required: false
+          description: A class IRI or label; subclasses come too.
+        - schema:
+            type: string
+            maxLength: 200
+          in: query
+          name: text
+          required: false
+          description: Matches labels and aliases on the floors in sight.
+        - schema:
+            anyOf:
+              - type: string
+                enum:
+                  - continuant
+              - type: string
+                enum:
+                  - occurrent
+          in: query
+          name: kind
+          required: false
+        - schema:
+            type: string
+            maxLength: 80
+          in: query
+          name: cursor
+          required: false
+        - schema:
+            type: integer
+            minimum: 1
+          in: query
+          name: limit
+          required: false
+          description: The deployment sets the ceiling; the answer says when it applied.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPage"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: The cursor isn’t one a page gave
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
   /floors/{floor}/entities/{id}:
     get:
       summary: One entity as this floor knows it, or why it can’t be seen from here
@@ -695,6 +1281,308 @@ paths:
                 $ref: "#/components/schemas/Problem"
         "404":
           description: No such entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/entities/{id}/events:
+    get:
+      summary: The occurrences this entity took part in (arrivals, calls, incidents), each with its own time
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntityPage"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/beliefs/{id}:
+    get:
+      summary: One belief with its reach, evidence and disputes
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Belief"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such belief in sight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/observations/{id}:
+    get:
+      summary: One observation, or why it can’t be read from here
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/Observation"
+                  - $ref: "#/components/schemas/UnseenObject"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such observation, or none you may know exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/sources/{id}:
+    get:
+      summary: A source reference (the text stays in the app that holds it) and what was read from it
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/SourceRef"
+                  - $ref: "#/components/schemas/UnseenObject"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such source, or none you may know exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /ontology:
+    get:
+      summary: "The deployment’s ontology now: the base profile and the terms adopted since"
+      responses:
+        "200":
+          description: "The deployment’s ontology now: the base profile and the terms adopted since."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Ontology"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /ontology/shapes:
+    get:
+      summary: The SHACL shapes the store is checked against
+      responses:
+        "200":
+          description: Turtle.
+          content:
+            text/turtle:
+              schema:
+                type: string
+                description: Turtle.
+        "401":
+          description: No signed-in caller
+          content:
+            text/turtle:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /ontology/classes/{iri}:
+    get:
+      summary: One class, by IRI or label
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          in: path
+          name: iri
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Class"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such class
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /ontology/candidates:
+    get:
+      summary: Terms extraction asked for that the ontology lacks, from the sources you can see
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - candidates
+                properties:
+                  candidates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Candidate"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
           content:
             application/json:
               schema:
