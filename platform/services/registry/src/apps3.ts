@@ -36,6 +36,23 @@ export const handedOver = (jobs: AppJob[], manifest: AppManifest3): AppJob | und
   return [...mine.filter((j) => j.state === 'running'), ...(lastDone ? [lastDone] : [])].find((j) => stable(j.release!.manifest) === stable(manifest));
 };
 
+/**
+ * The job of `jobs` (the app's, newest first) whose release names the frontend bundle `digest` as `version`'s: an
+ * install under way or finished, or a preview. The shell loads that build from /apps/<id>/<version>/ (spec 3.3),
+ * so the registry keeps it at the version's own folder, not one named by the build. Undefined for any other upload,
+ * which is a contract 2 build: those get a folder of their own.
+ */
+export const frontendHandedOver = (jobs: AppJob[], app: string, version: string, digest: string): AppJob | undefined =>
+  jobs.find((j) => j.app === app && (j.action === 'install' || j.action === 'preview') && (j.state === 'running' || j.state === 'done') && j.release?.version === version && j.release.frontend?.digest === digest);
+
+/**
+ * Whether another release the runner has (an install under way or finished, or a preview) names `version` with a
+ * frontend bundle other than `digest`: the version was cut again. Its folder's files are kept for good by
+ * browsers, so the second bundle is refused rather than written over the first.
+ */
+export const versionRecut = (jobs: AppJob[], app: string, version: string, digest: string): AppJob | undefined =>
+  jobs.find((j) => j.app === app && (j.action === 'install' || j.action === 'preview') && (j.state === 'running' || j.state === 'done') && j.release?.version === version && j.release.frontend !== null && j.release.frontend?.digest !== digest);
+
 /** Why a contract 2 registration can't replace an app installed on contract 3. */
 export const staysOn3 = (name: string) => `${name} is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.`;
 
@@ -78,6 +95,27 @@ export const served3 = (m: AppManifest3, filled: { maxUpload: number; previewsOn
   const { $schema: _schema, ...manifest } = m as AppManifest3 & { $schema?: string };
   return { ...manifest, contract: m.contract, maxUpload: filled.maxUpload, ...(filled.previewsOn?.length ? { previewsOn: filled.previewsOn } : {}) };
 };
+
+/**
+ * What the admin review shows beyond a release's asks (spec 5.6, 9.4): each part's kind, and each setting with
+ * its label, type (a secret is type secret) and whether it must be filled in before the app starts.
+ */
+export const reviewOf = (release: { manifest: AppManifest3; parts: { metadata: { name: string; annotations?: Record<string, string> } }[] }) => ({
+  kinds: Object.fromEntries(release.parts.map((p) => [p.metadata.name, p.metadata.annotations?.['augur.dev/part'] ?? 'service'])),
+  settings: (release.manifest.contributes?.settings ?? []).map((s) => ({ id: s.id, label: s.label, type: s.type, required: s.required === true })),
+});
+
+/** The review's schema, beside the asks in Admin → Apps' lists and the pasted release's read. */
+export const ReviewSchema = Type.Object(
+  {
+    kinds: Type.Record(Type.String(), Type.String(), { description: 'Each part’s kind (service, worker or job), by part name' }),
+    settings: Type.Array(
+      Type.Object({ id: Type.String(), label: Type.String(), type: Type.String({ description: 'string, number, boolean, enum or secret' }), required: Type.Boolean() }),
+      { description: 'Each setting it offers admins' },
+    ),
+  },
+  { description: 'What the review shows beyond the asks (spec 5.6, 9.4)' },
+);
 
 /** A contract 3 manifest as a registration takes it; @augur/app-tools' manifest-3.schema.json checks the rest. */
 export const AppManifest3Body = Type.Object(

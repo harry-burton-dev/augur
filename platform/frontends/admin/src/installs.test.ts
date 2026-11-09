@@ -1,5 +1,34 @@
 import { describe, expect, it } from 'vitest';
-import { featureHint, featureModeChoices } from './installs.js';
+import { asksWords, featureHint, featureModeChoices } from './installs.js';
+
+describe('what a release asks for, as the review says it', () => {
+  const asks = {
+    scopes: ['audit:write'],
+    resources: [{ part: 'web', type: 'augur-files', params: { label: 'Templates' } }],
+    limits: { web: { memory: '256Mi', cpu: '500m' }, migrate: { memory: '128Mi', cpu: '100m' } },
+    floors: ['team'],
+    maxUpload: 10,
+    settings: ['apiKey'],
+    canvas: false,
+  };
+  const scopes = (s: string[]) => s.join(', ');
+
+  it('names each part’s kind, each setting’s type, the folders to fill and who signed it', () => {
+    const review = { kinds: { web: 'service', migrate: 'job' }, settings: [{ id: 'apiKey', label: 'API key', type: 'secret', required: true }] };
+    const words = asksWords(asks, scopes, review, { repository: 'o/r', workflow: 'release.yml' });
+    expect(words).toContainEqual(expect.stringMatching(/^Its web part \(a service; 256Mi of memory, 500m CPU\)/));
+    expect(words).toContainEqual(expect.stringMatching(/^Its migrate part \(a job run before each version starts; 128Mi/));
+    expect(words).toContain('Offers a setting: API key (secret, required)');
+    expect(words).toContain('Asks you to fill a folder: Templates');
+    expect(words).toContain('Signed by o/r’s release.yml');
+  });
+
+  it('says what the asks say when there is no review', () => {
+    const words = asksWords(asks, scopes);
+    expect(words).toContainEqual(expect.stringMatching(/^Its web part \(256Mi of memory, 500m CPU\)/));
+    expect(words).toContain('Offers a setting: apiKey');
+  });
+});
 
 describe('who gets a feature preview', () => {
   const preview = { id: 'board', name: 'Board view', mode: 'opt-in' as const, ended: false, chosen: false, optedIn: 2 };

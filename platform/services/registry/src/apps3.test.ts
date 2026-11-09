@@ -1,11 +1,13 @@
 // P2b's acceptance (spec 3.3, 9.4, 9.6): the registry takes a contract 3 manifest only from a release it handed
 // the runner, serves it to the shell as the manifest in force, and reads a release file an admin pastes.
 import { describe, expect, it } from 'vitest';
-import { callerHeaders, type FloorPlace } from '@augur/service-kit';
+import { callerHeaders, frontendDigest, packFrontend, type FloorPlace } from '@augur/service-kit';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { addressProblem } from './upstreams.ts';
-import { releaseOf } from './release3.testing.ts';
+import { frontendHandedOver } from './apps3.ts';
+import { MemoryFrontendFiles } from './frontends.ts';
+import { exampleRelease, releaseOf } from './release3.testing.ts';
 
 const db = registryDb();
 
@@ -160,6 +162,17 @@ describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', ()
     const res = await read('https://apps.example.org/maps/app-release.json');
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ release: { id: 'maps', version: '2.0.0' }, refusals: [], asks: release.asks, signer: release.signer });
+    // What the asks don't say, from the manifest and parts, so the review reads no Score (spec 5.6, 9.4).
+    expect(res.json().review).toEqual({
+      kinds: { web: 'service', worker: 'worker', migrate: 'job' },
+      settings: [
+        { id: 'retentionDays', label: 'Keep archived notes for', type: 'number', required: false },
+        { id: 'allowSharing', label: 'Notes can be shared outside the floor', type: 'boolean', required: false },
+        { id: 'defaultNotebook', label: 'Default notebook name', type: 'string', required: false },
+        { id: 'theme', label: 'Note colour', type: 'enum', required: false },
+        { id: 'exportKey', label: 'Export service key', type: 'secret', required: false },
+      ],
+    });
     expect(res.json().warnings).toEqual(expect.any(Array));
   });
 
@@ -185,5 +198,50 @@ describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', ()
     expect(addressProblem('10.1.2.3', { networks: ['10.1.0.0/16'], setAt: '2026-11-09T00:00:00Z' })).toMatch(/own networks/);
     expect(addressProblem('10.20.30.40', { networks: ['10.1.0.0/16'], setAt: '2026-11-09T00:00:00Z' })).toBeUndefined();
     expect(addressProblem('140.82.121.4')).toBeUndefined();
+  });
+});
+
+describe.runIf(DATABASE_URL)('a frontend bundle on contract 3', () => {
+  it('is kept at /apps/<id>/<version>/, where the shell loads it from, once its digest is the one a release the runner has names', async () => {
+    const frontendFiles = new MemoryFrontendFiles();
+    const t = await setup({ frontendFiles });
+    const bundle = packFrontend([{ path: 'sandbox.js', data: Buffer.from('export default function start() {}') }]);
+    const release = releaseOf('notes', '1.2.0', {}, { frontend: { ...exampleRelease().frontend!, digest: frontendDigest(bundle) } });
+    const give = (body: Buffer) =>
+      t.server.inject({ method: 'PUT', url: '/v1/apps/notes/versions/1.2.0/frontend', headers: { ...runner, 'content-type': 'application/gzip' }, payload: body });
+    const own = /^1\.2\.0_[0-9a-f]{12}$/;
+    // Until the runner has the release, it is a build like any other, in a folder of its own.
+    expect((await give(packFrontend([{ path: 'sandbox.js', data: Buffer.from('other') }]))).json().folder).toMatch(own);
+    // Kept before the runner had the release (an admin's upload, say), it sits in a folder of its own, and the
+    // runner's upload of the same bundle then puts it where the shell loads from.
+    expect((await give(bundle)).json().folder).toMatch(own);
+    await t.install(release, 'done');
+    const kept = await give(bundle);
+    expect(kept.statusCode).toBe(201);
+    expect(kept.json().folder).toBe('1.2.0');
+    expect(frontendFiles.objects.get('apps/notes/1.2.0/sandbox.js')?.toString()).toBe('export default function start() {}');
+    // The same bundle again changes nothing; any other build of the version isn't the release's, and never takes that folder.
+    expect((await give(bundle)).statusCode).toBe(200);
+    const other = await give(packFrontend([{ path: 'sandbox.js', data: Buffer.from('else') }]));
+    expect(other.statusCode).toBe(201);
+    expect(other.json().folder).toMatch(own);
+    expect(frontendFiles.objects.get('apps/notes/1.2.0/sandbox.js')?.toString()).toBe('export default function start() {}');
+    // A second release cut as the same version, with another bundle, is refused: browsers keep the folder's files for good.
+    const recut = packFrontend([{ path: 'sandbox.js', data: Buffer.from('recut') }]);
+    await t.install(releaseOf('notes', '1.2.0', {}, { frontend: { ...exampleRelease().frontend!, digest: frontendDigest(recut) } }));
+    const refused = await give(recut);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().message).toBe(`notes 1.2.0 was released with another frontend bundle (${frontendDigest(bundle).slice(0, 19)}); a version is never cut again. Release it as a new version.`);
+  });
+
+  it('is a preview’s too, at the preview’s own version, but never a job that failed or was cancelled', () => {
+    const job = (version: string, action: 'install' | 'preview', state: 'running' | 'done' | 'failed' | 'cancelled', digest = 'sha256:' + 'f'.repeat(64)) =>
+      ({ id: `j-${version}`, app: 'notes', action, state, release: releaseOf('notes', version, {}, { frontend: { ...exampleRelease().frontend!, digest } }), requestedBy: 'u-1', requestedAt: '', steps: [] }) as never;
+    const d = 'sha256:' + 'f'.repeat(64);
+    expect(frontendHandedOver([job('1.3.0-pr.7.1', 'preview', 'running')], 'notes', '1.3.0-pr.7.1', d)?.id).toBe('j-1.3.0-pr.7.1');
+    expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'notes', '1.3.0', d)?.id).toBe('j-1.3.0');
+    expect(frontendHandedOver([job('1.3.0', 'install', 'failed'), job('1.3.0', 'install', 'cancelled')], 'notes', '1.3.0', d)).toBeUndefined();
+    expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'notes', '1.3.0', 'sha256:' + 'e'.repeat(64))).toBeUndefined();
+    expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'other', '1.3.0', d)).toBeUndefined();
   });
 });

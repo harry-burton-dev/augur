@@ -96,10 +96,18 @@ if (!credentials) throw new Error('SERVICE_CLIENT_SECRET is not set: the updater
 const registry = registryClient({ registryUrl: REGISTRY_URL, credentials });
 const apps = appRunnerClient({ registryUrl: REGISTRY_URL, identityUrl: IDENTITY_URL, credentials, oidc: serviceAuthFromEnv() });
 // Only the repositories APP_PUBLISHERS in .env lists may publish apps (spec 3.4); the runner reads it on every job.
-const appHost = composeAppHost({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer });
+const readFile = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8').trim() : '');
+
+// A release's frontend bundle is pulled straight from the image registry, with the same read key the images use.
+const registryAuth = (host: string) => {
+  const key = readFile(READ_KEY_FILE);
+  if (key && GITHUB_READ_USER && host === 'ghcr.io') return { user: GITHUB_READ_USER, token: key };
+  const token = readFile(PULL_TOKEN_FILE);
+  return token && IMAGE_PULL_USER ? { user: IMAGE_PULL_USER, token } : undefined;
+};
+const appHost = composeAppHost({ dir: PLATFORM_DIR, dockerHost: DOCKER_HOST, dockerConfig: '/tmp/docker', signer, registryAuth });
 const runner = appRunner({ host: appHost, calls: apps.calls });
 
-const readFile = (path: string) => (existsSync(path) ? readFileSync(path, 'utf8').trim() : '');
 
 /**
  * Signs the docker CLI in to the image registry, when the images are private: with the deployment's

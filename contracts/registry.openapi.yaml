@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.40.0
+  version: 1.42.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -131,6 +131,38 @@ components:
                     items:
                       type: string
                     description: Why it waits for an admin; empty when it can install by itself
+                  review:
+                    type: object
+                    required:
+                      - kinds
+                      - settings
+                    properties:
+                      kinds:
+                        type: object
+                        description: Each part’s kind (service, worker or job), by part name
+                        additionalProperties:
+                          type: string
+                      settings:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - id
+                            - label
+                            - type
+                            - required
+                          properties:
+                            id:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              description: string, number, boolean, enum or secret
+                            required:
+                              type: boolean
+                        description: Each setting it offers admins
+                    description: What the review shows beyond the asks (spec 5.6, 9.4)
                   changes:
                     type: array
                     items:
@@ -294,6 +326,38 @@ components:
                   canvas:
                     type: boolean
                 description: The release's asks, as its file carries them (spec 9.4); missing for one that can't install here
+              review:
+                type: object
+                required:
+                  - kinds
+                  - settings
+                properties:
+                  kinds:
+                    type: object
+                    description: Each part’s kind (service, worker or job), by part name
+                    additionalProperties:
+                      type: string
+                  settings:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - label
+                        - type
+                        - required
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+                        type:
+                          type: string
+                          description: string, number, boolean, enum or secret
+                        required:
+                          type: boolean
+                    description: Each setting it offers admins
+                description: What the review shows beyond the asks (spec 5.6, 9.4)
               problem:
                 type: string
                 description: "Why it can't open in this AUGUR: for one on contract 2, the only thing said of it"
@@ -3318,6 +3382,38 @@ paths:
                         type: string
                       workflow:
                         type: string
+                  review:
+                    type: object
+                    required:
+                      - kinds
+                      - settings
+                    properties:
+                      kinds:
+                        type: object
+                        description: Each part’s kind (service, worker or job), by part name
+                        additionalProperties:
+                          type: string
+                      settings:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - id
+                            - label
+                            - type
+                            - required
+                          properties:
+                            id:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              description: string, number, boolean, enum or secret
+                            required:
+                              type: boolean
+                        description: Each setting it offers admins
+                    description: What the review shows beyond the asks (spec 5.6, 9.4)
                 description: The file, checked
         "400":
           description: Not an https address it reads from, or nothing there is a release file
@@ -3903,8 +3999,8 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/versions/{version}/frontend:
     put:
-      summary: Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/
-      description: "The app's own service (or a platform service, or an admin) gives the built frontend as one gzipped tarball, before registering that version. From then on the manifest the shell is given points `entry` at that version's own copy whenever the entry is a file under /apps/{id}/ and the tarball holds it. The same tarball again answers 200 and changes nothing. A different one for the same version is a new build of it: it takes the old build's place, in a folder of its own, so no browser goes on running the build it kept. At most 2000 files and 50 MB. Audited as app.frontend-published."
+      summary: Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/ (a release's bundle at /apps/{id}/{version}/)
+      description: "The app's own service (or a platform service, or an admin) gives the built frontend as one gzipped tarball, before registering that version. From then on the manifest the shell is given points `entry` at that version's own copy whenever the entry is a file under /apps/{id}/ and the tarball holds it. The same tarball again answers 200 and changes nothing. A different one for the same version is a new build of it: it takes the old build's place, in a folder of its own, so no browser goes on running the build it kept. The bundle of a release on the app contract (one the app runner is installing or has installed, or a preview), told by its digest, is kept at /apps/{id}/{version}/ itself, where the shell loads it from. At most 2000 files and 50 MB. Audited as app.frontend-published."
       requestBody:
         required: true
         content:
@@ -3951,7 +4047,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: One of AUGUR's own apps
+          description: One of AUGUR's own apps, or a second bundle for a version already released with another
           content:
             application/problem+json:
               schema:
