@@ -124,6 +124,18 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
       await registerApp({ registryUrl, credentials: as, manifest, fetchImpl, env: {} });
     },
     setUpstream: (app, url) => call(registry(`/apps/${encodeURIComponent(app)}/upstream`), 'PUT', { url }, `The registry didn’t take where ${app} is`),
+    async putFrontend(app, version, tarball) {
+      const res = await withDeadline(fetchImpl)(registry(`/apps/${encodeURIComponent(app)}/versions/${encodeURIComponent(version)}/frontend`), {
+        method: 'PUT',
+        headers: { 'content-type': 'application/gzip', ...(await serviceHeaders(credentials)) },
+        // A copy (at most the bundle ceiling): the fetch types want a plain ArrayBuffer behind the body.
+        body: new Uint8Array(tarball),
+      });
+      if (!res.ok) {
+        const said = ((await res.json().catch(() => ({}))) as { message?: string }).message;
+        throw new Error(`The registry didn’t keep ${app} ${version}’s frontend: it answered ${res.status}${said ? `, ${said.replace(/\.$/, '')}` : ''}.`);
+      }
+    },
   };
 
   /** Tells the registry the deployment's own networks (PUT /v1/runner/networks), which no app's address may be on. */

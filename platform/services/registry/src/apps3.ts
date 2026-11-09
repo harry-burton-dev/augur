@@ -36,6 +36,23 @@ export const handedOver = (jobs: AppJob[], manifest: AppManifest3): AppJob | und
   return [...mine.filter((j) => j.state === 'running'), ...(lastDone ? [lastDone] : [])].find((j) => stable(j.release!.manifest) === stable(manifest));
 };
 
+/**
+ * The job of `jobs` (the app's, newest first) whose release names the frontend bundle `digest` as `version`'s: an
+ * install under way or finished, or a preview. The shell loads that build from /apps/<id>/<version>/ (spec 3.3),
+ * so the registry keeps it at the version's own folder, not one named by the build. Undefined for any other upload,
+ * which is a contract 2 build: those get a folder of their own.
+ */
+export const frontendHandedOver = (jobs: AppJob[], app: string, version: string, digest: string): AppJob | undefined =>
+  jobs.find((j) => j.app === app && (j.action === 'install' || j.action === 'preview') && (j.state === 'running' || j.state === 'done') && j.release?.version === version && j.release.frontend?.digest === digest);
+
+/**
+ * Whether another release the runner has (an install under way or finished, or a preview) names `version` with a
+ * frontend bundle other than `digest`: the version was cut again. Its folder's files are kept for good by
+ * browsers, so the second bundle is refused rather than written over the first.
+ */
+export const versionRecut = (jobs: AppJob[], app: string, version: string, digest: string): AppJob | undefined =>
+  jobs.find((j) => j.app === app && (j.action === 'install' || j.action === 'preview') && (j.state === 'running' || j.state === 'done') && j.release?.version === version && j.release.frontend !== null && j.release.frontend?.digest !== digest);
+
 /** Why a contract 2 registration can't replace an app installed on contract 3. */
 export const staysOn3 = (name: string) => `${name} is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.`;
 
