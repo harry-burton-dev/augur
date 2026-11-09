@@ -76,11 +76,11 @@ import { AUGUR_RELEASE } from './augur-version.ts';
 import { LiveOverrides } from './live.ts';
 import type { PipelineReader } from './pipeline.ts';
 import { UpdateChecker } from './updates.ts';
-import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
+import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { SERVED_CONTRACTS } from './release-check.ts';
-import { AppManifest3Body, entryOf3, frontendHandedOver, handedOver, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -937,7 +937,7 @@ export const buildApp = async ({
         '/apps/:id/versions/:version/frontend',
         {
           schema: {
-            summary: "Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/",
+            summary: "Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/ (a release's bundle at /apps/{id}/{version}/)",
             description: [
               "The app's own service (or a platform service, or an admin) gives the",
               'built frontend as one gzipped tarball, before registering that version.',
@@ -959,7 +959,7 @@ export const buildApp = async ({
               201: { ...ref(StoredFrontendSchema), description: 'Kept' },
               400: refused('Not a semver version, or not a usable tarball (links, odd paths, too big)'),
               403: refused('Another app, not an admin, or an app an admin removed'),
-              409: refused("One of AUGUR's own apps"),
+              409: refused("One of AUGUR's own apps, or a second bundle for a version already released with another"),
               415: refused('Not sent as application/gzip'),
               501: refused("This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set)"),
               503: refused("The sign-in service can't be reached to check the app's token"),
@@ -978,7 +978,19 @@ export const buildApp = async ({
         if (!Buffer.isBuffer(req.body)) return reply.code(415).send({ error: 'unsupported_media_type', message: 'Send the frontend as one gzipped tarball, Content-Type application/gzip.' });
         const digest = frontendDigest(req.body);
         const had = (await store.frontends(id)).find((f) => f.version === version);
-        if (had?.digest === digest) return reply.code(200).send(had);
+        // A contract 3 release names its bundle by digest, and the shell loads it from /apps/<id>/<version>/ (spec 3.3):
+        // that build is the version, so it's kept at the version's own folder. Any other build gets one of its own.
+        const jobs = await store.appJobs(id);
+        const released = frontendHandedOver(jobs, id, version, digest) !== undefined;
+        const folder = released ? version : frontendFolder(version, digest);
+        if (had?.digest === digest && folderOf(had) === folder) return reply.code(200).send(had);
+        // The version's folder is immutable once a release's bundle is in it (browsers keep its files for good):
+        // a release is never cut again as the same version, so a second bundle for it is a mistake to say, not take.
+        const first = released ? versionRecut(jobs, id, version, digest) : undefined;
+        if (first) {
+          req.log.warn({ app: id, version, digest, first: first.release!.frontend!.digest }, 'a second bundle for a released version; refused');
+          return reply.code(409).send({ error: 'conflict', message: `${id} ${version} was released with another frontend bundle (${first.release!.frontend!.digest.slice(0, 19)}); a version is never cut again. Release it as a new version.` });
+        }
         let files;
         try {
           files = unpackFrontend(req.body);
@@ -986,9 +998,6 @@ export const buildApp = async ({
           if (err instanceof FrontendProblem) return reply.code(400).send({ error: 'bad_request', message: err.message });
           throw err;
         }
-        // A contract 3 release names its bundle by digest, and the shell loads it from /apps/<id>/<version>/ (spec 3.3):
-        // that build is the version, so it's kept at the version's own folder. Any other build gets one of its own.
-        const folder = frontendHandedOver(await store.appJobs(id), id, version, digest) ? version : frontendFolder(version, digest);
         await frontendFiles.put(id, folder, files);
         const stored = await store.putFrontend({ app: id, version, digest, folder, files: files.map((f) => f.path), bytes: files.reduce((n, f) => n + f.data.length, 0), publishedBy: by.id });
         req.log.info({ app: id, version, folder, files: files.length, bytes: stored.bytes, by: by.id, replaced: had?.digest }, had ? 'app frontend rebuilt' : 'app frontend kept');

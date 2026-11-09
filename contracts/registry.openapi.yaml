@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.40.0
+  version: 1.41.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -3903,7 +3903,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/versions/{version}/frontend:
     put:
-      summary: Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/
+      summary: Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/ (a release's bundle at /apps/{id}/{version}/)
       description: "The app's own service (or a platform service, or an admin) gives the built frontend as one gzipped tarball, before registering that version. From then on the manifest the shell is given points `entry` at that version's own copy whenever the entry is a file under /apps/{id}/ and the tarball holds it. The same tarball again answers 200 and changes nothing. A different one for the same version is a new build of it: it takes the old build's place, in a folder of its own, so no browser goes on running the build it kept. The bundle of a release on the app contract (one the app runner is installing or has installed, or a preview), told by its digest, is kept at /apps/{id}/{version}/ itself, where the shell loads it from. At most 2000 files and 50 MB. Audited as app.frontend-published."
       requestBody:
         required: true
@@ -3951,7 +3951,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: One of AUGUR's own apps
+          description: One of AUGUR's own apps, or a second bundle for a version already released with another
           content:
             application/problem+json:
               schema:

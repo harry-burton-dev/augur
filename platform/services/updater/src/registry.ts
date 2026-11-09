@@ -128,6 +128,7 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
       const res = await withDeadline(fetchImpl)(registry(`/apps/${encodeURIComponent(app)}/versions/${encodeURIComponent(version)}/frontend`), {
         method: 'PUT',
         headers: { 'content-type': 'application/gzip', ...(await serviceHeaders(credentials)) },
+        // A copy (at most the bundle ceiling): the fetch types want a plain ArrayBuffer behind the body.
         body: new Uint8Array(tarball),
       });
       if (!res.ok) {

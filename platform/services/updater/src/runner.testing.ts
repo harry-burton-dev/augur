@@ -168,7 +168,7 @@ export const fakeCalls = () => {
       did.push(`upstream ${app} ${url}`);
     },
     async putFrontend(app, version, tarball) {
-      if (refuseFrontend) throw new Error('it answered 501, This deployment doesn’t keep apps’ frontends by version');
+      if (refuseFrontend) throw new Error(`The registry didn’t keep ${app} ${version}’s frontend: it answered 501, This deployment doesn’t keep apps’ frontends by version (FRONTENDS_BUCKET_SECRET isn’t set)`);
       did.push(`frontend ${app} ${version} ${frontendDigest(tarball).slice(7, 19)}`);
     },
   };

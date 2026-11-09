@@ -201,13 +201,26 @@ describe.runIf(DATABASE_URL)('a frontend bundle on contract 3', () => {
     const own = /^1\.2\.0_[0-9a-f]{12}$/;
     // Until the runner has the release, it is a build like any other, in a folder of its own.
     expect((await give(packFrontend([{ path: 'sandbox.js', data: Buffer.from('other') }]))).json().folder).toMatch(own);
-    await t.install(release);
+    // Kept before the runner had the release (an admin's upload, say), it sits in a folder of its own, and the
+    // runner's upload of the same bundle then puts it where the shell loads from.
+    expect((await give(bundle)).json().folder).toMatch(own);
+    await t.install(release, 'done');
     const kept = await give(bundle);
     expect(kept.statusCode).toBe(201);
     expect(kept.json().folder).toBe('1.2.0');
     expect(frontendFiles.objects.get('apps/notes/1.2.0/sandbox.js')?.toString()).toBe('export default function start() {}');
-    // Any other build of the version isn't the release's, and never takes that folder.
-    expect((await give(packFrontend([{ path: 'sandbox.js', data: Buffer.from('else') }]))).json().folder).toMatch(own);
+    // The same bundle again changes nothing; any other build of the version isn't the release's, and never takes that folder.
+    expect((await give(bundle)).statusCode).toBe(200);
+    const other = await give(packFrontend([{ path: 'sandbox.js', data: Buffer.from('else') }]));
+    expect(other.statusCode).toBe(201);
+    expect(other.json().folder).toMatch(own);
+    expect(frontendFiles.objects.get('apps/notes/1.2.0/sandbox.js')?.toString()).toBe('export default function start() {}');
+    // A second release cut as the same version, with another bundle, is refused: browsers keep the folder's files for good.
+    const recut = packFrontend([{ path: 'sandbox.js', data: Buffer.from('recut') }]);
+    await t.install(releaseOf('notes', '1.2.0', {}, { frontend: { ...exampleRelease().frontend!, digest: frontendDigest(recut) } }));
+    const refused = await give(recut);
+    expect(refused.statusCode).toBe(409);
+    expect(refused.json().message).toBe(`notes 1.2.0 was released with another frontend bundle (${frontendDigest(bundle).slice(0, 19)}); a version is never cut again. Release it as a new version.`);
   });
 
   it('is a preview’s too, at the preview’s own version, but never a job that failed or was cancelled', () => {

@@ -129,7 +129,7 @@ describe('running Score parts (spec 4, 10)', () => {
       'start app-notes-web-blue',
       'start app-notes-worker-blue',
     ]);
-    expect(t.calls.did).toEqual([`credential notes ${SECRET.slice(0, 6)}`, `frontend notes 1.0.0 ${FRONTEND_DIGEST.slice(7, 19)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.calls.did).toEqual([`frontend notes 1.0.0 ${FRONTEND_DIGEST.slice(7, 19)}`, `credential notes ${SECRET.slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
     expect(t.state().apps.notes).toEqual({
       active: {
         slot: 'blue',
@@ -157,7 +157,8 @@ describe('running Score parts (spec 4, 10)', () => {
       message: 'web asks for 2Gi of memory, above this deployment’s ceiling of 1Gi a part (APP_PART_MEMORY_CEILING in .env). Nothing was started.',
     });
     expect(t.did.filter((d) => !d.startsWith('verify') && !d.startsWith('fetch'))).toEqual([]);
-    expect(t.calls.did).toEqual([]);
+    // The registry has the frontend bundle by then (kept on verify, inert until the version registers); nothing else.
+    expect(t.calls.did.filter((d) => !d.startsWith('frontend'))).toEqual([]);
     expect(t.state().apps).toEqual({});
     // The app's totals have ceilings too, and the ceiling's default stands without the setting.
     const total = setup(`${ENV}APP_CPU_CEILING=1500m\n`);
@@ -667,8 +668,10 @@ describe('the app runner', () => {
     await t.run(install('1.0.0'));
     t.calls.refuseFrontend();
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
-    expect(t.reports.at(-1)?.message).toMatch(/^The registry didn’t take 1\.1\.0: it answered 501/);
+    expect(t.reports.at(-1)?.message).toMatch(/^The registry didn’t keep notes 1\.1\.0’s frontend: it answered 501, This deployment doesn’t keep apps’ frontends by version/);
     expect(t.state().apps.notes.active).toMatchObject({ version: '1.0.0' });
+    // Found before anything of the new version ran.
+    expect(t.did.filter((d) => d.startsWith('start') || d.startsWith('storage') || d.startsWith('backup'))).toHaveLength(3);
   });
 
   it('needs APP_SECRETS_KEY', async () => {

@@ -560,7 +560,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       }
     }
     // The frontend bundle is signed like an image (spec 3.4), fetched here by digest (3.3) and checked against the digest the release names.
-    let frontend: Buffer | undefined;
+    let frontend: Buffer;
     if (r.frontend) {
       try {
         await host.verifySignedBy(r.frontend.artifact, identity);
@@ -573,6 +573,13 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
         throw new StepFailed(`The frontend bundle couldn’t be fetched: ${reason(err)}`);
       }
       if (frontendDigest(frontend) !== r.frontend.digest) throw new StepFailed(`The frontend bundle at ${r.frontend.artifact} isn’t the one the release names (${r.frontend.digest}).`);
+      // The registry keeps it now, before anything runs: a deployment that doesn't keep frontends says so here, and
+      // the manifest the registry serves later has the files to point at (spec 3.3).
+      try {
+        await calls.putFrontend(job.app, r.version, frontend);
+      } catch (err) {
+        throw new StepFailed(reason(err));
+      }
     }
     // A dev build runs on the server's real data, and the first release from another repository takes
     // over the data the old one left: a backup first, to go back to.
@@ -589,7 +596,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
         message: `${dev ? 'Signed on dev.' : `Signed in ${r.signer.repository}, where ${job.app} now comes from.`} Backup ${file} taken first.`,
       });
     } else await report({ step: 'verify', state: 'done' });
-    return { release: r, env, frontend };
+    return { release: r, env };
   };
 
   /**
@@ -715,7 +722,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
 
   const install = async (job: AppJob, report: JobReporter) => {
     const app = job.app;
-    const { release, env, frontend } = await verified(job, report);
+    const { release, env } = await verified(job, report);
     const state = await host.readState();
     const current = state.apps[app] ?? {};
     const slot: Slot = current.active?.slot === 'blue' ? 'green' : 'blue';
@@ -781,8 +788,6 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
 
     await report({ step: 'switch', state: 'running' });
     try {
-      // The frontend is kept first, so the manifest the registry serves next has its files to point at (spec 3.3).
-      if (frontend) await calls.putFrontend(app, release.version, frontend);
       await calls.register(release.manifest, secrets.signIn);
       await calls.setUpstream(app, inboundUrl(unit));
       await report({ step: 'switch', state: 'done' });
@@ -867,7 +872,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
   /** Runs a pull request's build beside the app, replacing the pull request's last one. */
   const preview = async (job: AppJob, report: JobReporter) => {
     if (job.pr === undefined) throw new StepFailed('The job names no pull request.');
-    const { release, env, frontend } = await verified(job, report);
+    const { release, env } = await verified(job, report);
     const id = previewId(job.app, job.pr);
     const unit: Unit = {
       app: job.app,
@@ -919,15 +924,6 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     }
     await report({ step: 'health', state: 'done' });
     await report({ step: 'switch', state: 'running' });
-    // The build's frontend is kept under its own version, which the registry serves to the developers who chose the preview.
-    if (frontend) {
-      try {
-        await calls.putFrontend(job.app, release.version, frontend);
-      } catch (err) {
-        await undo();
-        throw new StepFailed(`The registry didn’t take the preview’s frontend: ${reason(err)}`);
-      }
-    }
     const upstream = inboundUrl(unit);
     await report({
       step: 'switch',
