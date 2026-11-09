@@ -1,0 +1,6 @@
+# The docs site is its own pnpm root, apart from AUGUR's workspace, so it installs from public
+# packages alone (no GitHub Packages token) and its build never waits on the rest of AUGUR.
+packages: []
+onlyBuiltDependencies:
+  - esbuild
+  - sharp

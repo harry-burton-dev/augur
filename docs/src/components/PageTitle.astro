@@ -1,0 +1,35 @@
+---
+// Starlight's page title, with the page's status beside it and, for Beta and Planned pages, a line on what
+// that means. "Checked against" names the release the page was last compared with.
+import Default from '@astrojs/starlight/components/PageTitle.astro';
+import { Badge } from '@astrojs/starlight/components';
+import { STATUS_LABEL, STATUS_NOTE, STATUS_VARIANT, type Status } from '../lib/status';
+
+// Starlight's own 404 page has no status.
+const { status, checkedAgainst } = Astro.locals.starlightRoute.entry.data as { status?: Status; checkedAgainst?: string };
+const note = status && STATUS_NOTE[status];
+---
+
+<Default />
+{status && (
+<p class="augur-status">
+  <Badge text={STATUS_LABEL[status]} variant={STATUS_VARIANT[status]} />
+  {checkedAgainst && <span>Checked against AUGUR {checkedAgainst}</span>}
+</p>
+)}
+{note && <p class="augur-status-note">{note}</p>}
+
+<style>
+  .augur-status {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 0.5rem;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-3);
+  }
+  .augur-status-note {
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+</style>
