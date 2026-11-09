@@ -478,6 +478,8 @@ describe('gateway', () => {
     expect(defaultUpstreams({ APP_UPSTREAMS: 'library=http://library:8083' }).library).toBe('http://library:8083');
     expect(() => defaultUpstreams({ APP_UPSTREAMS: 'models=http://elsewhere:9000' })).toThrow(/can't name models/);
     expect(defaultUpstreams({ MODELS_URL: 'http://models:8085' }).models).toBe('http://models:8085');
+    expect(() => defaultUpstreams({ APP_UPSTREAMS: 'knowledge=http://elsewhere:9000' })).toThrow(/can't name knowledge/);
+    expect(defaultUpstreams({ KNOWLEDGE_URL: 'http://knowledge:8086' }).knowledge).toBe('http://knowledge:8086');
   });
 
   it('shows admins whether every part of the platform is answering', async () => {

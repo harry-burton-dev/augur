@@ -1,5 +1,33 @@
 # @augur/gateway
 
+## 0.13.0
+
+### Minor Changes
+
+- 203eaaf: An app can't stop AUGUR starting or turn back its upgrade (ADR 0073). The storage job sets up the platform's own logins first and skips an app it can't set up, saying why, instead of failing; Compose no longer refuses the whole file over one app's missing secret. Each app's database login holds at most `APP_DATABASE_CONNECTIONS` (30) connections. The restore test passes or fails on AUGUR's own data; an app's schema that doesn't come back is listed under `appsNotRestored`, which Status shows (gateway API 1.9.0). The deploy test takes a backup and runs the restore test on every release.
+- 0e4e55f: AUGUR pushes each domain event to the inbound part of every app granted `events:subscribe` (contract 3, spec 8.6): `POST /augur/events` through the gateway, in order per app, with `Idempotency-Key: events-<seq>`, retried with a backoff from a second to ten minutes, passed over and recorded after a day. An app's own events and events on floors where it lacks the scope are not sent. The gateway now takes a platform service's token, but only to an app's part, signing the caller `augur:<service>` for the part to check (`isServiceCaller`, `serviceOfCaller`); the registry lists the apps granted a scope (`GET /v1/scopes/{scope}/apps`, platform services); events shows how each app is taking its events (`GET /v1/deliveries`, admins), which Admin → Apps shows, saying since when and why an app is stalled.
+- 8a4ea28: The gateway admits apps (contract 3, ADR 0075, spec section 8). An app's part signs in as itself at `POST /api/identity/v1/token` (a client-credentials grant, the only one passed on to the sign-in service) and its token, audience `platform-services` (`OIDC_SERVICE_AUDIENCE`), is accepted for an app the registry knows and has on, held to the scopes it is granted where the call is for, with a refusal that names the scope it lacks. A call the shell's host makes for an app (`x-augur-app`) gets a delegated caller: signed for the app's own client `app-<id>`, carrying the app and its scopes and lasting `APP_DELEGATION_SECONDS` (default 300), which the part sends back in `x-augur-delegation` on its own calls for the person and the gateway turns into a fresh caller for the target. Calls to apps' parts have brakes (`APP_CONNECT_TIMEOUT_MS` 5000, `APP_RESPONSE_TIMEOUT_MS` 60000, `APP_CONCURRENT_CALLS` 64) that answer 502, 504 and 503 in words naming the app and never hold AUGUR's own routes. The registry's `/v1/apps/:id/grants` now says the app's `name` and whether it is `on` where the call is for, and answers the gateway as well as the platform's services.
+- 84a8c21: The gateway passes `/api/knowledge/*` to the knowledge graph service (`KNOWLEDGE_URL`), as one of AUGUR's own services. Apps can't call it yet: no app scope reaches it until the knowledge client ships.
+- 0114dfa: The organisation's logo is reachable without signing in, at `/api/identity/v1/public/organisation/logo`, so sign-in pages can show it. It is the only path under `/api/` that needs no sign-in: GET and HEAD only, no caller passed on, and only the PNG and its caching headers passed back, with `nosniff`.
+
+### Patch Changes
+
+- b2c7a81: A person's plain call to an app on the app contract (no `x-augur-app`: a direct API call, the run suite) is signed for the app's client, `app-<id>`, which its part checks for, instead of the app's bare id, which the part refused. The registry's `GET /v1/apps/:id/grants` says the app's `contract` (contract 1.43.0); the gateway refuses a plain call to any app with 503 in words while the registry can't be asked (it already did, a step later, when it checked the person's catalogue), and refuses one to an app turned off on the floor naming the app, as it does a call the shell's host makes for the app.
+- 699af61: Followers can't miss an event, and leavers can't be lost. Publishers take turns on a lock only the events login can touch, so seq order is commit order and a long transaction elsewhere no longer stalls followers. An audit entry, its domain event, and each inbox step are one transaction, and `recordAudit` sends an `Idempotency-Key`, so a retry keeps one entry (contract 1.15.0, migrations `013_one_write_each`, `014_forget_notes`). The events channels carry ids only and ignore anything else. A night identity can't give Activity's retention removes nothing. A leaver's team items that couldn't go back are retried. Leaving now and Delete now answer 503 when Activity can't be reached and carry on within five minutes, and a heir who can't sign in any more is passed over and admins told. Deletion also takes a leaver's note (`note` is in `PERSONAL_DETAIL_KEYS`), the notice that they asked to leave, their inbox notes and open items, and, in the registry, their name on upgrades (`GET /v1/people/{id}/data`, contract 1.36.0, migrations `022_followed_events`, `lifecycle_006_carry_on`). Entra's first sign-in no longer links an account holding a two-step role, and a flow that isn't whole is rebuilt. A removed app can't publish a frontend. Gateway refusals use an app's name, not its id. The service kit adds `followLeavers`, `readPersonLeft`, `readPersonDeleted`, `eventCursor`, `EVENT_CURSOR_TABLE_SQL` and `leaveNoticeKey`; the outbox keeps `refused_at` and `refused_why`. Followers keep their place past events they don't follow (`next`). No app has to change.
+- 0118233: Browser telemetry is scrubbed at every depth: URLs nested in tracing events lose their query strings and personal keys are dropped there too.
+- 832458f: AUGUR's services apply the smaller of a person's access and an app's scopes when an app acts for the person (contract 3, spec 8.5). The service kit's `identifyServiceCaller` tells a service who is calling, a service by its own token or an app acting for a person by the delegated caller the gateway signed, and `delegationRefusal` says in words when the delegation's scopes don't cover the call. Events (notifications, domain events, the Inbox), identity (people) and models (chat, to the app's own agent only) now take an app's call made for a person within the app's grant and the delegation's scopes, and refuse outside them naming the app, the scope and the person.
+- Updated dependencies [3e2ff05]
+- Updated dependencies [e2089a3]
+- Updated dependencies [656f2d1]
+- Updated dependencies [0e4e55f]
+- Updated dependencies [6c0abe4]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [f01d0c4]
+- Updated dependencies [832458f]
+- Updated dependencies [1ce4194]
+  - @augur/service-kit@0.18.0
+
 ## 0.12.2
 
 ### Patch Changes

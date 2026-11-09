@@ -1,5 +1,31 @@
 # @augur/shell
 
+## 0.20.0
+
+### Minor Changes
+
+- 57ebab2: The app bar replaces Title and Orbit (PDR-020), on kit 0.5.8 (Common 0.11, Quill 0.13, Aerie 0.8.1). On the desktop the bar runs across the still horizon with a tile per group of apps, from each app's manifest category: Platform, Pillars, then Apps. With an app open it docks as the rail beside it, with Home, Apps, the app and its pages, one per item of its manifest menu; an app with one page or none shows no page list. Esc no longer leaves an app: it closes a start menu, and Home in the rail goes back to the desktop. The groups' names are the shell's words, not the kit's. Where the bar rests is kept in the person's preferences: Identity takes `barStop` (0 to 3) in `PUT /v1/me/preferences` (contract 1.31.0). The manifest's `areas` and `orbit` are still read but no longer drawn. The contract tests check the desktop bar, a start menu, the rail, Esc, Home and an address with no app.
+
+  The kit is the Horizon look Harry picked on 6 Nov 2026, for the shell's own pages and every app that takes the kit from `KIT_URL`: square corners, buttons as keys, fields, checks, toggles and selects as wells with one focus ring, solid sheets for dialogs, notices, toasts, menus and tips, and the needs-you colour and the typefaces (Instrument Sans, IBM Plex Mono) as tokens. Nothing an app uses is removed.
+
+- 40a331c: Apps on the app contract move files over the bridge and can draw on a canvas. `ctx.files.upload` and `ctx.files.download` carry the bytes to and from the host, which calls the gateway with the person's token and answers a body past the app's `maxUpload` as the gateway would, without sending it; a download can be saved for the person; files dropped on the pane reach `ctx.files.onDrop`. With `contributes.canvas`, `ctx.canvas.open(entry)` shows a canvas in the pane in place of the screen: the shell's own page in a frame sandboxed to scripts, with an opaque origin and no network, which talks to the app only over the port `open` resolves to, and stops with the app.
+- 365f25c: On kit 0.5.11, the shell draws the frame round an app on the app contract: the command palette over the commands it declares (Ctrl+Shift+P or ⌘⇧P, or Alt+Shift+P), each one it hasn't loaded yet locked with why; the radial menu on the things it marks in its lists, tables and tiles, sending the command with the thing; the About panel with the sections it declares, each saying so until the app fills it; and in the rail, what the app puts under the places it fills, cut at 50 with "and n more".
+- a4f9905: SDK 3: installed apps run only on the app contract (ADR 0075 point 10). An installed app that names an SDK 2 range no longer opens: opening it, and its card on Home, say it was made for an older version of AUGUR, and intents and Find pass it by. The shell's own frontends (Home, Admin, the Upgrade Centre) keep the in-page mount from the same SDK and name `^2.0.0 || ^3.0.0`. An app on the contract that declares `contributes.card` gets its card on Home, drawn by the app into `ctx.frame.card` from a worker of its own (`ctx.surface` is `'card'` there, and a card moves the person or opens another app only just after a press in it); Find asks an app on the contract as itself (`x-augur-app`). The contract tests run against a reference app on the contract.
+- f01d0c4: The shell runs apps on the app contract (contract 3, ADR 0076) in a web worker each. The SDK's worker runtime (`@augur/mfe-sdk/sdk3/runtime`, run by the shell's bootstrap) gives the app `start(ctx)`: `ctx.frame.screen.render` draws Quill's remote vocabulary, which the shell draws with the kit; `ctx.fetch` takes a path under `/api/` and the shell makes the call with the person's token, `X-Workspace-Id` and `x-augur-app`; `ctx.navigate` and `ctx.onNavigate` leave the address to the shell; `ctx.frame.set` gives the pane its heading and actions. The worker has no network, none of the page's storage and no token, under its own policy (`default-src 'none'; script-src 'self'`, served with the bootstrap under `/sandbox/`). The pane says when the app is opening, slow (5 s) or failed (30 s, or the worker threw), and stops an app that draws more than 2,000 nodes at once or keeps more than 50,000, each with Try again; the rest of the shell keeps working. A new floor starts the worker again. The catalogue's contract 3 rows (the manifest in force) become entries the app bar, rail, Find and intents already take; the shell's own frontends stay on SDK 2. `sandbox` is now a reserved app id.
+- 1ce4194: Urgent news (ADR 0044 D3, PER-283). A notification can be `urgent`, from AUGUR's own services only (an app's is refused, 403). The Upgrade Centre marks a halted release and a go-back that didn't finish urgent, and offers a feature preview, `urgent-letterbox`: with it on, the shell opens urgent news in a see-through letterbox over the work, one at a time with the rest in its queue, and steps it back to the edge rule until someone opens it. Events contract 1.14.0.
+
+  Not breaking: `NewNotification.urgent` in `@augur/service-kit` is a new optional field, so existing callers build and send as before.
+
+### Patch Changes
+
+- c8f3a69: On kit 0.5.9: Quill's remote vocabulary for contract 3 (the elements an app's sandbox describes its screen with, the host's receiver and the allowlist), and long lists and tables that draw only the rows in view.
+- 024e635: Preferences are never saved over before they have loaded, and telemetry starting no longer remounts the open app. Notifications aren't lost on reconnect, Home's cards unmount on a floor change, the leaver form keeps the agreed handover, Organisation says plainly that leavers are deleted, and failed reads no longer stop job tracking or hide installed apps.
+- Updated dependencies [3e2ff05]
+- Updated dependencies [40a331c]
+- Updated dependencies [a4f9905]
+- Updated dependencies [f01d0c4]
+  - @augur/mfe-sdk@3.0.0
+
 ## 0.19.0
 
 ### Minor Changes

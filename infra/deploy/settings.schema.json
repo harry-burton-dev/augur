@@ -1270,6 +1270,14 @@
         "gateway"
       ]
     },
+    "KNOWLEDGE_URL": {
+      "type": "string",
+      "description": "Where the knowledge graph service is.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
     "GATEWAY_URL": {
       "type": "string",
       "description": "Where the gateway is, for the key it signs callers with.",

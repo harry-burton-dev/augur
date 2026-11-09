@@ -66,7 +66,7 @@ On the first `up`, `knowledge-migrate` signs in as Postgres's admin login and ma
 
 ### Moving to the app contract, in order
 
-**From** unreleased
+**From** augur@0.24.0
 
 This release finishes AUGUR's side of the app contract (contract 3): apps are installed only from app feeds, each runs its own Score parts on a network of its own, and the shell opens them in workers. The notes below say what each change needs. In order, on a server upgrading to it:
 
@@ -79,50 +79,50 @@ The sign-ins of the apps that used to ship with AUGUR are left as they are: inst
 
 ### Default apps, DEFAULT_APPS
 
-**From** unreleased
+**From** augur@0.24.0
 
 A deployment can name the apps it installs by default in `.env`, split by commas or spaces: `DEFAULT_APPS=notes maps`. On its next check of the app feed the registry installs each one that isn't installed from its newest stable release, its asks agreed by the deployment rather than an admin, and Admin → Apps marks it a default app. Reaching the internet (`augur-outbound`) still needs a deployment admin to allow it. While it's named it can't be removed; take it out of `DEFAULT_APPS` and run `pc up -d` first. Nothing ships inside AUGUR: an app the feed doesn't have yet, or one that needs a setting filled in first, waits, and Admin → Apps says why; filling the setting in asks for it at once. A release whose install failed isn't tried again by itself: a newer one is, or install it by hand. Empty, the default, installs nothing.
 
 
 ### A removed app's data goes after a grace period
 
-**From** unreleased
+**From** augur@0.24.0
 
 Removing an app from the server now also takes its sign-in away, and its data (database schema and login, bucket, scratch folders, settings and floors) is deleted `APP_DATA_GRACE_DAYS` days later, 30 if you don't set it, after a backup. Until then Admin → Apps lists it under **Removed, data kept** with the date; installing it again keeps everything. An app you removed before this release keeps its data until you remove it again. To keep removed apps' data longer, set `APP_DATA_GRACE_DAYS` (up to 365) in `.env`. A waiting deletion can't be cancelled; install the app again to keep its data. A try that fails waits longer each time, up to a day, and Admin → Apps says why. The folders you filled for an app are kept (docs/app-storage.md, When an app is removed). The sign-ins of the apps that used to ship with AUGUR are left as they are: installing one from the app feed gives it a new secret.
 
 ### Apps' own settings are filled in under Admin → Apps
 
-**From** unreleased
+**From** augur@0.24.0
 
 An app on the app contract can offer settings of its own: text, a number within bounds, on or off, a choice, or a secret. A deployment admin fills them in under Admin → Apps, on the app's row, or when installing it if one is required; never in `.env`. An app with a required setting and no default doesn't install until it has a value. A changed value reaches the parts that read it within a minute: the app runner starts those parts again, and only those. A secret reaches a part only as a file, is never shown again once given, and giving one asks for your password again. A pull request's preview gets the app's values but never its secrets. A value the app's new version no longer offers, or of an app removed from the server, is kept 30 days, in case it comes back. Nothing to do on upgrade.
 
 ### Each app on a network of its own
 
-**From** unreleased
+**From** augur@0.24.0
 
 Each app on the app contract now runs on a network of its own, `app-<id>`, which the app runner makes. Nothing on it reaches the internet. An app that asks for the internet (`augur-outbound`) says so in Admin → Apps, with what it fetches; it stays off until a deployment admin allows it there, and then only its parts that ask for it reach the internet, any host on it. The gateway joins every app's network, and Postgres, Garage and otel-lgtm join only the networks of apps that ask for them, so one app can't reach another app or a store it wasn't given. A pull request's preview shares its app's network, with storage of its own. An app already installed moves onto its network the next time it's installed or updated. An app's telemetry goes only to AUGUR's own otel-lgtm: when `OTEL_EXPORTER_OTLP_ENDPOINT` names a collector elsewhere, apps send none. Docker's default address pools hold about 30 networks, so a server with more apps than that needs larger `default-address-pools` in `/etc/docker/daemon.json`.
 
 ### Apps on the app contract need the frontends bucket
 
-**From** unreleased
+**From** augur@0.24.0
 
 Installing an app on the app contract (contract 3) now brings its frontend too: the app runner checks the bundle's signature, pulls it by the digest the release names and gives it to the registry, which serves it at `/apps/<id>/<version>/`. That needs the frontends bucket ([Apps' frontends by version](#apps-frontends-by-version)): a server without `FRONTENDS_BUCKET_SECRET` can't install such an app, and the install says so before anything of it runs. A private bundle is pulled with the same read key as the images, so there is nothing else to set.
 
 ### App feeds are a list, APP_FEEDS
 
-**From** unreleased
+**From** augur@0.24.0
 
 `APP_FEEDS` names the feeds apps are installed from, split by commas or spaces, and replaces `APP_FEED_URL`, which is still read when `APP_FEEDS` isn't set: nothing to do unless you want a second feed. Admin → Apps lists every feed's apps, and says which feed couldn't be read while the others still count. A release file on contract 2 in a feed is listed with why it can't install, and an app installed from a feed registers only as the release the app runner was given. Admin → Apps also reads a release file from an address you paste, for an app no feed lists (docs/ship-an-app.md).
 
 ### Apps on SDK 2 no longer open
 
-**From** unreleased
+**From** augur@0.24.0
 
 This release is SDK 3: apps installed from the feed run only on the app contract, each in a worker of its own. An app still installed from before that names an SDK 2 range stays in the app bar and on Home, and opening it says it was made for an older version of AUGUR; intents and Find pass it by. Nothing of its data is touched. There is nothing to do unless Admin, Apps lists one: ask its team for a release on the app contract, or remove it there. Home, Admin and the Upgrade Centre are AUGUR's own and keep working.
 
 ### The app runner runs an app's Score parts, and trusts only APP_PUBLISHERS
 
-**From** unreleased
+**From** augur@0.24.0
 
 The app runner installs app contract 3 releases: each part in the release's Score files runs as a container of its own, `app-<id>-<part>-<slot>`, with only what its resources give it, held to its memory and CPU limits, on a read-only filesystem, and refused if its image runs as root. Job parts (a migration) run to the end before the switch; every service part must answer `/healthz` on the new version. A part's secrets reach it as files, mounted as Compose secrets from `infra/deploy/apps/files/`, never in its settings ([app-storage.md](app-storage.md)).
 
@@ -130,13 +130,13 @@ Before you install an app, list its repository in `APP_PUBLISHERS` in `.env`, th
 
 ### The registry takes only app contract 3 releases
 
-**From** unreleased
+**From** augur@0.24.0
 
 The registry installs only releases on the app contract (contract 3, `augur.app-release/v2`). A contract 2 release file is refused with "Notes 1.4.0 speaks contract 2, and this AUGUR serves 3; the app needs a release on contract 3", in Admin → Apps and when a job is asked for. No app is installed on a deployment after the release that took today's apps out, so nothing that runs changes. An app's address may be on any network except loopback, link-local and the deployment's own networks. The app runner will say those at start; until it does, Docker's default range (172.16.0.0/12) stands in for them, as before. Nothing to do.
 
 ### Artifacts, Explorer, Data Atlas and Mandate are taken out, with their data
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Their documents, entities and intents are deleted on upgrade.** No app ships with AUGUR any more (ADR 0075): today's apps are being redesigned and will come back from the app feed. This release stops their containers, and the storage job then drops their schemas and logins and empties and deletes their buckets, once on each server (`RETIRED_APPS` in `compose.yml`; `pc logs storage` says what it took). The registry forgets them, and they leave Admin, Apps. The backup the Upgrade Centre takes first is the only copy left: keep it if you may want that data.
 - **Upgrading by hand, take a backup first** (docs/deploy.md, Backups), then upgrade as usual. To keep one app's data instead, add its id to `APP_STORAGE` in `.env` before you upgrade; the storage job then leaves it and says so.
@@ -145,7 +145,7 @@ The registry installs only releases on the app contract (contract 3, `augur.app-
 
 ### An app can't stop AUGUR starting, or its backup check
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Nothing to run.** An app's missing secret, bad id or storage that can't be made no longer stops the storage job, or Compose from reading `compose.yml`: the platform starts, that app alone doesn't, and `pc logs storage` says why.
 - **Each app's database login may hold at most 30 connections** (`APP_DATABASE_CONNECTIONS`). Raise it in `.env` if `pc logs storage` or the app's own logs show it running out.
@@ -153,7 +153,7 @@ The registry installs only releases on the app contract (contract 3, `augur.app-
 
 ### Upgrades no longer stop at the restore test
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **If an upgrade was turned back with "didn't restore in the test" and `type public.vector does not exist`, run this once on the server before you upgrade again.** The test runs in the backup container your server already has, which before this release lacked pgvector, so the release that fixes it can't get past it on its own. From the folder AUGUR is in:
   ```sh
@@ -167,14 +167,14 @@ The registry installs only releases on the app contract (contract 3, `augur.app-
 
 ### The app bar replaces Title and Orbit
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Nothing to run.** People see the new navigation after the upgrade: a bar of tiles across the desktop, one per group of apps (Platform, Pillars, Apps), which docks beside an app as the rail with that app's pages.
 - **Tell people Esc no longer leaves an app.** Home in the rail is the way back to the desktop. Where someone moves the bar to is kept with their other preferences.
 
 ### Two-step accounts aren't linked to Entra, and leavers' events can't be lost
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Entra:** an account holding a two-step role is no longer linked automatically at its first sign-in through Entra; that sign-in is refused and says why. If two steps for everyone is on, that's every account that already exists, and only people with no account yet get one through Entra. Accounts already linked aren't touched. The realm job rebuilds the first sign-in flow on the next `pc up -d`, and for those few seconds a first sign-in gets Keycloak's own flow, which asks for the old password.
 - **Nothing to run for old entries.** The events service's migrations take the notes out of Activity for people already deleted, and delete the notices that they asked to leave.
@@ -182,14 +182,14 @@ The registry installs only releases on the app contract (contract 3, `augur.app-
 - A night identity can't say how long Activity is kept now removes nothing, where it used to remove what was older than 365 days. If `pc logs events` says `Activity retention: nothing removed tonight` every night, fix what it names.
 ### Artifacts asks for two more scopes
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Scopes**: Artifacts now asks for `events:subscribe` and `inbox:write`. It's still served without them, but gets them only once an admin allows them in Admin, Apps: allow them after upgrading.
 - **Deleted people**: people deleted more than 30 days before the upgrade keep their names in Artifacts.
 
 ### Backups are root's alone, and the off-server copy carries .env
 
-**From** unreleased
+**From** augur@0.24.0
 
 - **Backups**: dumps and archives in `infra/deploy/backups/` are now readable by root alone, and Status's results move to `infra/deploy/backups/status/`, the only part the gateway sees. Read a dump through the backup container, as the guides now do (`pc run --rm --no-deps -T --entrypoint gunzip backup -c /backups/<file>`).
 - **Off-server copy**: `.env` and `secrets/` now go into it each night, encrypted with `OFFSITE_PASSWORD`. Keep every `OFFSITE_*` setting off the server: they're what a lost server needs ([deploy.md, Restore a lost server](deploy.md#restore-a-lost-server), which replaces the old steps; those copied an empty database over the real copies). The copy also refuses a dump with no AUGUR in it, and a repository another server filled, until `backup.sh --adopt-offsite`.
@@ -199,7 +199,7 @@ The registry installs only releases on the app contract (contract 3, `augur.app-
 
 ### Upgrades only take settings they add, and removed apps stay removed
 
-**From** unreleased
+**From** augur@0.24.0
 
 **Upgrade to …** now takes only settings the upgrade adds, and never one that says what the server trusts, such as `SERVER_RING`, `IMAGE_SIGNER` or `APP_PUBLISHERS`. Set those in `.env` on the server.
 
@@ -207,19 +207,19 @@ An app an admin removed can no longer register itself back. If you want it again
 
 ### Leavers' accounts are deleted after the retention period
 
-**From** unreleased
+**From** augur@0.24.0
 
 Identity now deletes a leaver's account once the organisation's leaver retention has passed (Admin → Organisation, Security and retention; 90 days unless a deployment admin changed it; ADR 0072). It can't be undone: Activity loses their personal values and Keycloak deletes the account. Anyone who left more than that many days before you upgrade is deleted within five minutes of identity starting. If you want to keep someone longer, raise the retention before upgrading. Apps that follow `platform.person.deleted` should delete or anonymise what they keep about that person.
 
 ### The organisation's logo, sign-in notice, languages and security move into Admin
 
-**From** unreleased
+**From** augur@0.24.0
 
 Admin → Organisation now also keeps the organisation's logo, a sign-in notice, the languages offered and, for a deployment admin, two steps for everyone and how long leavers and Activity are kept (docs/deploy.md, "Organisation settings"). Nothing to do. If you set `ORG_LOGO_URL`, it still wins; take it out of `.env` to use the logo kept in Admin. Languages chosen in Admin replace `REALM_LANGUAGES`. The sign-in pages pick up the notice, languages and the organisation's name at the next `pc up -d`.
 
 ### An app's updates are in the Upgrade Centre only
 
-**From** unreleased
+**From** augur@0.24.0
 
 Admin → Apps no longer has an installed app's **New releases**, **When one is out**, waiting version, history or **Go back**, nor a **Needs you** list of app updates: they were a second copy of what the Upgrade Centre (`/upgrades`) does, and they now live only there. Admin → Apps keeps installing new apps from their releases, each job's steps, developers and previews, and **Remove from the server**, and links to the Upgrade Centre from each installed app. Nothing changes on the server; each app keeps the channel and policy it had.
 
