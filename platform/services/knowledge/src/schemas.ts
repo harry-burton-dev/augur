@@ -139,6 +139,7 @@ export const Evidence = Type.Object(
     sources: Type.Integer({ description: 'Distinct (app, ref). Versions count once.' }),
     unseen: Type.Integer({ description: 'How many of the observations are on floors you can’t see.' }),
     byFloor: Type.Array(Type.Object({ floor: Type.String(), floorKind: FloorKind, observations: Type.Integer() }), { description: 'The ones you can see, by floor.' }),
+    seen: Type.Optional(Type.Array(Type.String(), { description: 'The ids of the observations behind it that you can see: each reads back with its quote and source.' })),
   },
   { $id: 'Evidence', description: 'Structure, not a score.' },
 );
