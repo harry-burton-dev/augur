@@ -653,9 +653,24 @@ importers:
       '@augur/service-kit':
         specifier: workspace:*
         version: link:../../packages/service-kit
+      '@fastify/swagger':
+        specifier: 'catalog:'
+        version: 9.9.3
+      '@fastify/type-provider-typebox':
+        specifier: 'catalog:'
+        version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
+      fastify:
+        specifier: 'catalog:'
+        version: 5.12.7
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      typebox:
+        specifier: 'catalog:'
+        version: 1.4.3
+      ulid:
+        specifier: ^3.0.2
+        version: 3.0.2
     devDependencies:
       '@types/n3':
         specifier: ^1.26.6
@@ -681,6 +696,9 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(happy-dom@21.0.4)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.1
 
   platform/services/models:
     dependencies:
@@ -4587,6 +4605,10 @@ packages:
 
   uc.micro@2.1.0:
     resolution: {integrity: sha512-ARDJmphmdvUk6Glw7y9DQ2bFkKBHwQHLi2lsaH6PPmz/Ka9sFOBsBluozhDltWmnv9u/cF6Rt87znRTPV+yp/A==}
+
+  ulid@3.0.2:
+    resolution: {integrity: sha512-yu26mwteFYzBAot7KVMqFGCVpsF6g8wXfJzQUHvu1no3+rRRSFcSV2nKeYvNPLD2J4b08jYBDhHUjeH0ygIl9w==}
+    hasBin: true
 
   unbash@6.0.3:
     resolution: {integrity: sha512-hRzSpMeM8uYMQkrnIVaVy3f44oLlokglVeEyP5hIQj88z60bKPO9VVbEpGfxChGBh9lBkzuWKOTOzPdfD6KNEA==}
@@ -8876,6 +8898,8 @@ snapshots:
   ua-parser-js@1.0.41: {}
 
   uc.micro@2.1.0: {}
+
+  ulid@3.0.2: {}
 
   unbash@6.0.3: {}
 
