@@ -265,11 +265,18 @@ const devApp = (dir: string | undefined) => {
  * sends it here and nginx.conf sends the same with the built bootstrap under /sandbox/.
  */
 export const WORKER_CSP = "default-src 'none'; script-src 'self'; worker-src 'none'; child-src 'none'";
+/**
+ * The canvas's page (spec 6.11, public/sandbox/canvas.html): framed with a sandbox of scripts alone, so its
+ * origin is opaque, it may load scripts, styles and images from this origin and reach nothing; the port the
+ * shell hands it is its only way out. nginx.conf sends the same.
+ */
+export const CANVAS_CSP = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; sandbox allow-scripts";
 const workerPolicy = (): Plugin => ({
   name: 'worker-policy',
   configureServer(server) {
     server.middlewares.use((req, res, next) => {
       if (req.url?.includes('worker_file')) res.setHeader('Content-Security-Policy', WORKER_CSP);
+      if (/^\/sandbox\/canvas\.(html|js)(\?|$)/.test(req.url ?? '')) res.setHeader('Content-Security-Policy', CANVAS_CSP);
       next();
     });
   },

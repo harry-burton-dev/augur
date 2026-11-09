@@ -27,10 +27,28 @@ const asPort = (port: MessagePort) => {
 const { port1, port2 } = new MessageChannel();
 const worker = asPort(port1);
 const asked: WireRequest[] = [];
+const uploads: WireRequest[] = [];
+const downloads: [string, { save?: boolean }?][] = [];
+const opened: string[] = [];
+const posted: [string, unknown[]][] = [];
 const drawn: { root: string; records: unknown[] }[] = [];
+const canvasPorts = new MessageChannel();
 const host = new Channel(asPort(port2), (method, args) => {
-  if (method !== 'fetch') return undefined;
+  if (method === 'files.drops' || method === 'canvas.close') posted.push([method, args]);
+  if (method === 'files.download') {
+    downloads.push(args as [string, { save?: boolean }?]);
+    if ((args[1] as { save?: boolean } | undefined)?.save) return undefined;
+    const missing = args[0] === '/api/notes/v1/files/gone';
+    const body = new TextEncoder().encode(missing ? JSON.stringify({ message: 'That file is gone.' }) : 'hello').buffer as ArrayBuffer;
+    return { status: missing ? 404 : 200, statusText: '', headers: [['content-type', missing ? 'application/json' : 'text/plain']], body } satisfies WireResponse;
+  }
+  if (method === 'canvas.open') {
+    opened.push(String(args[0]));
+    return canvasPorts.port1;
+  }
+  if (method !== 'fetch' && method !== 'files.upload') return undefined;
   const wire = args[0] as WireRequest;
+  if (method === 'files.upload') uploads.push(wire);
   asked.push(wire);
   const body = new TextEncoder().encode(JSON.stringify({ got: wire.path })).buffer as ArrayBuffer;
   return { status: 200, statusText: 'OK', headers: [['content-type', 'application/json']], body } satisfies WireResponse;
@@ -49,6 +67,7 @@ beforeAll(async () => {
     workspace: { id: 'w1', kind: 'team', name: 'Claims' },
     path: '/',
     previewsOn: ['board'],
+    canvas: true,
   };
   await host.call('start', init);
   ctx = (globalThis as { testCtx?: AppContext }).testCtx!;
@@ -101,6 +120,46 @@ describe('the worker runtime', () => {
   it('sends a form with the type fetch would have given it', async () => {
     await ctx.fetch('/api/notes/v1/search', { method: 'POST', body: new URLSearchParams({ q: 'a b' }) });
     expect(asked.at(-1)).toMatchObject({ body: 'q=a+b', headers: [['content-type', 'application/x-www-form-urlencoded;charset=UTF-8']] });
+  });
+
+  it('uploads a file’s bytes through the host, with its type, and hands back the answer', async () => {
+    const res = await ctx.files.upload(new Blob(['hi there'], { type: 'text/plain' }), '/api/notes/v1/files');
+    expect(res.status).toBe(200);
+    expect(uploads.at(-1)).toMatchObject({ path: '/api/notes/v1/files', method: 'POST', headers: [['content-type', 'text/plain']] });
+    expect(new TextDecoder().decode(uploads.at(-1)!.body as ArrayBuffer)).toBe('hi there');
+    await expect(ctx.files.upload(new Blob(['x']), 'https://example.org/up')).rejects.toThrow(TypeError);
+  });
+
+  it('downloads a file as a Blob, has the host save one, and says why one can’t be had', async () => {
+    const blob = await ctx.files.download('/api/notes/v1/files/1');
+    expect(blob?.type).toBe('text/plain');
+    expect(await blob!.text()).toBe('hello');
+    expect(await ctx.files.download('/api/notes/v1/files/1', { save: true })).toBeUndefined();
+    expect(downloads.at(-1)).toEqual(['/api/notes/v1/files/1', { save: true }]);
+    await expect(ctx.files.download('/api/notes/v1/files/gone')).rejects.toThrow('That file is gone.');
+    await expect(ctx.files.download('/elsewhere')).rejects.toThrow(TypeError);
+  });
+
+  it('hands files dropped on the pane to the app’s handler, and tells the host when it takes them', async () => {
+    const got: File[] = [];
+    const off = ctx.files.onDrop((files) => void got.push(...files));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(posted).toContainEqual(['files.drops', [true]]);
+    await host.call('drop', [{ name: 'a.txt', type: 'text/plain', lastModified: 1, bytes: new TextEncoder().encode('A').buffer }]);
+    expect(got.map((f) => [f.name, f.type])).toEqual([['a.txt', 'text/plain']]);
+    expect(await got[0]!.text()).toBe('A');
+    off();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(posted.at(-1)).toEqual(['files.drops', [false]]);
+  });
+
+  it('opens the canvas through the host and hands the app the port to talk to it', async () => {
+    const port = await ctx.canvas!.open('canvas.js');
+    expect(opened).toEqual(['canvas.js']);
+    expect(port).toBeDefined();
+    ctx.canvas!.close();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(posted).toContainEqual(['canvas.close', []]);
   });
 
   it('runs what start returned when the host stops the app', async () => {

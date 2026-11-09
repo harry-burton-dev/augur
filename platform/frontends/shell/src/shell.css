@@ -100,3 +100,5 @@ html[data-density='compact'] {
 .app-frame > .app-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .app-pane-screen { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
 .aerie-frame-pane { display: contents; }
+/* An app's canvas fills the main column where its screen would be (spec 6.11). */
+.app-canvas { flex: 1; min-height: 0; width: 100%; border: 0; display: block; background: var(--surface-pane); }

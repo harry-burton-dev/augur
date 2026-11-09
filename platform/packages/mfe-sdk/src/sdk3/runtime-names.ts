@@ -18,6 +18,16 @@ export interface StartInit {
   replying?: boolean;
   /** What the shell runs it for: its screen in the stage (the default), or only its card on Home. */
   surface?: 'screen' | 'card';
+  /** The manifest declares `contributes.canvas`, so `ctx.canvas` is there. */
+  canvas?: boolean;
+}
+
+/** A file dropped on the app's pane, as it crosses to the worker. */
+export interface WireFile {
+  name: string;
+  type: string;
+  lastModified: number;
+  bytes: ArrayBuffer;
 }
 
 /** The roots an app renders into: the screen, its Home card, and one per declared About section. */

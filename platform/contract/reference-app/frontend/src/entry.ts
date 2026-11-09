@@ -22,6 +22,20 @@ export default defineApp((ctx: AppContext) => {
   let flood = false;
   let commands = 0;
   let policy = 'not tried';
+  let uploaded = 'not yet';
+  let canvas = 'closed';
+  const upload = (bytes: Uint8Array) =>
+    ctx.files.upload(new Blob([bytes as BlobPart], { type: 'application/octet-stream' }), '/api/reference/v1/files').then(
+      async (res) => {
+        const text = await res.text();
+        uploaded = `${res.status} ${res.status === 413 ? (JSON.parse(text) as { message: string }).message : text}`;
+        draw();
+      },
+      (err: Error) => {
+        uploaded = `failed: ${err.message}`;
+        draw();
+      },
+    );
   // The worker's own Content-Security-Policy says what it may load: scripts from the shell's origin, nothing else.
   (globalThis as unknown as EventTarget).addEventListener('securitypolicyviolation', (e) => {
     policy = `held: ${(e as SecurityPolicyViolationEvent).effectiveDirective}`;
@@ -64,6 +78,8 @@ export default defineApp((ctx: AppContext) => {
     check('answer', answer),
     check('commands', String(commands)),
     check('policy', policy),
+    check('uploaded', uploaded),
+    check('canvas', canvas),
     // Not in Quill's remote vocabulary: the host drops it, with a reason on the console.
     { type: 'evil-frame', props: { src: 'https://example.org/' } },
     button('Notify', () => ctx.notify({ title: 'Reference notification', body: 'From the reference app', needsYou: true })),
@@ -90,6 +106,18 @@ export default defineApp((ctx: AppContext) => {
     button('Load from elsewhere', () => {
       const elsewhere: string = 'https://example.org/module.js';
       void import(/* @vite-ignore */ elsewhere).catch(() => undefined);
+    }),
+    button('Upload', () => void upload(new Uint8Array([0, 1, 2, 253, 254, 255]))),
+    // Past the manifest's maxUpload (1 MB): the shell answers as the gateway would, without sending it.
+    button('Upload too much', () => void upload(new Uint8Array(2 * 1024 * 1024))),
+    button('Open canvas', () => {
+      void ctx.canvas?.open('canvas.js').then((port) => {
+        port.onmessage = (e) => {
+          canvas = String(e.data);
+          draw();
+        };
+        port.postMessage('hello canvas');
+      });
     }),
     button('Go to claims', () => ctx.navigate('/claims/7')),
     button('Climb out', () => ctx.navigate('/../admin')),

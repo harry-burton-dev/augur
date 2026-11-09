@@ -7,6 +7,7 @@
   "description": "Uses every part of the app context, for the contract tests",
   "icon": "apps",
   "frontend": { "entry": "entry.js" },
+  "maxUpload": 1,
   "contributes": {
     "places": [
       { "id": "home", "label": "Start", "icon": "home", "path": "/" },
@@ -16,7 +17,8 @@
     "intents": { "handles": ["reference.show", "reference.answer"] },
     "inbox": { "kinds": [{ "id": "check", "label": "To check" }] },
     "search": true,
-    "card": true
+    "card": true,
+    "canvas": true
   },
   "previews": [
     { "id": "turned-on", "name": "Turned on", "detail": "On for the stand-in person in the contract tests" },
