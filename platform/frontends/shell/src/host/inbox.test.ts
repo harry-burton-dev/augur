@@ -1,8 +1,9 @@
 import type { AppManifestEntry, InboxItem, Workspace } from '@augur/mfe-sdk';
+import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it, vi } from 'vitest';
 import { INBOX_MORE, InboxClient, InboxError, inboxLabel, inboxNeeds, itemOfNeed, menuFor, openProblem, ordered, subjectLabel, withInbox } from './inbox.js';
 
-const app = (id: string, more: Partial<AppManifestEntry> = {}): AppManifestEntry => ({ id, name: id === 'mandate' ? 'Intent' : id, route: `/${id}`, entry: `/apps/${id}/entry.js`, version: '1.0.0', sdk: '^1.0.0 || ^2.0.0', ...more });
+const app = (id: string, more: Partial<AppManifestEntry> = {}): AppManifestEntry => ({ id, name: id === 'mandate' ? 'Intent' : id, route: `/${id}`, entry: `/apps/${id}/entry.js`, version: '1.0.0', sdk: CURRENT_SDK, ...more });
 const manifest = [app('mandate', { inbox: { kinds: [{ id: 'assignment', label: 'Assigned to you' }] } })];
 const floors: Workspace[] = [
   { id: 'me', kind: 'personal', name: 'Nora', slug: 'me', role: 'lead', path: [] } as Workspace,

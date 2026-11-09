@@ -1,4 +1,5 @@
 import { createEventBus, type AppManifestEntry, type MountContext } from '@augur/mfe-sdk';
+import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it, vi } from 'vitest';
 import { AppMounter, fromServer, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, NotificationActions, routeIntent, toShellNotification } from './index.js';
 
@@ -8,7 +9,7 @@ const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): 
   route,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
-  sdk: '^1.0.0 || ^2.0.0',
+  sdk: CURRENT_SDK,
   ...extra,
 });
 const manifest = [app('home', '/'), app('library', '/library', { handles: ['document.open'] }), app('admin', '/admin')];
