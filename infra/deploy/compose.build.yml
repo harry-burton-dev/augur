@@ -22,6 +22,10 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/events" } }
   models:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/models" } }
+  knowledge:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/knowledge" } }
+  knowledge-migrate:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/knowledge" } }
   storage:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/storage" } }
   keycloak:

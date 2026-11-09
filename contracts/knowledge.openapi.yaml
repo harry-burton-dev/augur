@@ -1,0 +1,709 @@
+# Generated from platform/services/knowledge: its routes' TypeBox schemas and src/contract.ts (ADR 0055).
+# Change those, then run pnpm contracts. CI fails when this file is out of step.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
+openapi: 3.1.0
+info:
+  title: Knowledge
+  version: 0.1.0
+  description: |-
+    The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
+    A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. Apps reach it through its client in a later release.
+    0.x while the seam fills in: draft 4 of the spec is its target, and paths are added until it is met.
+components:
+  schemas:
+    Problem:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
+        - error
+        - message
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        reason:
+          type: string
+          description: "A stable code to switch on: not_found, not_on_floor, not_allowed, unknown_action, idempotency_key_required, idempotency_key_reused, invalid_input, unavailable, …"
+        whoCanChange:
+          type: string
+          description: A role or floor, never a person’s private detail.
+        problems:
+          type: array
+          items:
+            type: string
+          description: Each thing wrong with the input.
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients.
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients.
+      description: RFC 9457 problem details with AUGUR’s fields.
+    Meta:
+      type: object
+      required:
+        - apiMajor
+        - version
+        - ontology
+        - speaks
+      properties:
+        apiMajor:
+          type: number
+          enum:
+            - 1
+        version:
+          type: string
+        ontology:
+          type: object
+          required:
+            - base
+            - version
+          properties:
+            base:
+              type: string
+              description: The shipped base profile.
+            version:
+              type: string
+              description: This deployment’s ontology version.
+        speaks:
+          type: object
+          description: Majors this service speaks, for the registry’s install check.
+          additionalProperties:
+            type: array
+            items:
+              type: integer
+    Floor:
+      type: object
+      required:
+        - id
+        - kind
+        - parent
+        - sight
+        - trust
+      properties:
+        id:
+          type: string
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - personal
+            - type: string
+              enum:
+                - team
+            - type: string
+              enum:
+                - org
+        parent:
+          anyOf:
+            - type: string
+            - type: "null"
+        sight:
+          type: array
+          items:
+            type: string
+          description: "This floor and every floor it sees: those above it, and for your own floor, yours and theirs."
+        trust:
+          type: object
+          required:
+            - hold
+          properties:
+            hold:
+              anyOf:
+                - type: string
+                  enum:
+                    - memory
+                - type: string
+                  enum:
+                    - role
+                - type: string
+                  enum:
+                    - auto
+              description: How a faithful claim becomes a belief here.
+      description: "A floor you can stand on. Its name is identity’s: ask identity for it."
+    ActionDecl:
+      type: object
+      required:
+        - name
+        - since
+        - summary
+        - input
+        - who
+        - scope
+        - grantedToAppsByDefault
+        - undoable
+        - emits
+      properties:
+        name:
+          type: string
+        since:
+          type: string
+        summary:
+          type: string
+        input:
+          type: object
+          description: JSON Schema for the body.
+        who:
+          type: string
+          description: Who may take it, in words.
+        scope:
+          anyOf:
+            - type: string
+              enum:
+                - knowledge:act
+            - type: string
+              enum:
+                - knowledge:extract
+        role:
+          type: string
+          description: The floor role or standing it also needs.
+        grantedToAppsByDefault:
+          type: boolean
+        undoable:
+          type: boolean
+        emits:
+          type: array
+          items:
+            type: string
+    Catalogue:
+      type: object
+      required:
+        - apiMajor
+        - version
+        - actions
+      properties:
+        apiMajor:
+          type: number
+          enum:
+            - 1
+        version:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActionDecl"
+    ActionResult:
+      type: object
+      required:
+        - action
+        - actionId
+        - effects
+      properties:
+        action:
+          type: string
+        actionId:
+          type: string
+        effects:
+          type: object
+          description: "What changed, by kind: sources, entities, observations, beliefs."
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        replayed:
+          type: boolean
+          description: "A repeat of an earlier request with the same key and body: this is its first answer."
+        dryRun:
+          type: boolean
+        wouldSucceed:
+          type: boolean
+        why:
+          type: string
+          description: On a dry run that would be refused, why.
+    Unseen:
+      type: object
+      required:
+        - reason
+        - floorKind
+        - message
+      properties:
+        reason:
+          anyOf:
+            - type: string
+              enum:
+                - elsewhere
+            - type: string
+              enum:
+                - kept
+            - type: string
+              enum:
+                - retracted
+            - type: string
+              enum:
+                - forgotten
+        floorKind:
+          anyOf:
+            - type: string
+              enum:
+                - personal
+            - type: string
+              enum:
+                - team
+            - type: string
+              enum:
+                - org
+        message:
+          type: string
+      description: Why something can’t be seen from here. Never carries its label.
+    UnseenObject:
+      type: object
+      required:
+        - kind
+        - id
+        - unseen
+      properties:
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - entity
+            - type: string
+              enum:
+                - observation
+            - type: string
+              enum:
+                - belief
+            - type: string
+              enum:
+                - source
+        id:
+          type: string
+        unseen:
+          $ref: "#/components/schemas/Unseen"
+    Entity:
+      type: object
+      required:
+        - id
+        - class
+        - kind
+        - state
+        - label
+        - labelFrom
+        - aliases
+      properties:
+        id:
+          type: string
+          description: "`ent_` and a ULID. Made by the service, never by a model; it survives merges."
+        class:
+          type: string
+          description: The nearest accepted class IRI.
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - continuant
+            - type: string
+              enum:
+                - occurrent
+        state:
+          anyOf:
+            - type: string
+              enum:
+                - active
+            - type: string
+              enum:
+                - retired
+            - type: string
+              enum:
+                - merged
+        mergedInto:
+          type: string
+        label:
+          type: string
+          description: "As the floors in sight know it: the nearest floor’s label."
+        labelFrom:
+          type: string
+          description: The floor the label is from.
+        aliases:
+          type: array
+          items:
+            type: string
+    Value:
+      type: object
+      required:
+        - v
+      properties:
+        v:
+          anyOf:
+            - type: number
+            - type: string
+            - type: boolean
+        unit:
+          type: string
+        approx:
+          type: boolean
+        asked:
+          type: string
+      description: A typed value. A quantity keeps its unit apart from its number.
+    Evidence:
+      type: object
+      required:
+        - observations
+        - sources
+        - unseen
+        - byFloor
+      properties:
+        observations:
+          type: integer
+          description: Every observation behind it, those you can’t see included.
+        sources:
+          type: integer
+          description: Distinct (app, ref). Versions count once.
+        unseen:
+          type: integer
+          description: How many of the observations are on floors you can’t see.
+        byFloor:
+          type: array
+          items:
+            type: object
+            required:
+              - floor
+              - floorKind
+              - observations
+            properties:
+              floor:
+                type: string
+              floorKind:
+                anyOf:
+                  - type: string
+                    enum:
+                      - personal
+                  - type: string
+                    enum:
+                      - team
+                  - type: string
+                    enum:
+                      - org
+              observations:
+                type: integer
+          description: The ones you can see, by floor.
+      description: Structure, not a score.
+    Belief:
+      type: object
+      required:
+        - id
+        - homeFloor
+        - reach
+        - subject
+        - predicate
+        - kind
+        - modality
+        - recordedAt
+        - state
+        - heldBy
+        - evidence
+      properties:
+        id:
+          type: string
+        homeFloor:
+          type: string
+        reach:
+          type: array
+          items:
+            type: string
+          description: Every floor that holds it.
+        subject:
+          type: string
+        predicate:
+          type: string
+        kind:
+          anyOf:
+            - type: string
+              enum:
+                - property
+            - type: string
+              enum:
+                - link
+        value:
+          $ref: "#/components/schemas/Value"
+        object:
+          type: string
+        modality:
+          type: string
+        validFrom:
+          type: string
+          format: date-time
+        validTo:
+          type: string
+          format: date-time
+        recordedAt:
+          type: string
+          format: date-time
+        state:
+          anyOf:
+            - type: string
+              enum:
+                - memory
+            - type: string
+              enum:
+                - held
+            - type: string
+              enum:
+                - disputed
+        heldBy:
+          type: string
+          description: Who held it, or memory.
+        evidence:
+          $ref: "#/components/schemas/Evidence"
+    BeliefList:
+      type: object
+      required:
+        - floor
+        - seeing
+        - beliefs
+      properties:
+        floor:
+          type: string
+        seeing:
+          type: array
+          items:
+            type: string
+        beliefs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Belief"
+paths:
+  /meta:
+    get:
+      summary: The majors this service speaks, its version and the ontology version
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Meta"
+  /floors:
+    get:
+      summary: The floors you can stand on, what each sees, and how it holds
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - floors
+                properties:
+                  floors:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Floor"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /actions:
+    get:
+      summary: The action catalogue, read at run time
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Catalogue"
+  /actions/{action}:
+    post:
+      summary: "Take an action: the only way anything changes"
+      description: "The body is the input `GET /actions` gives for the action. A repeat with the same Idempotency-Key and body answers what the first did; the same key with another body is refused. With dryRun=true the action is taken and then undone: the answer says whether it would succeed and why not."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: The input schema of the action in GET /actions.
+        description: The input schema of the action in GET /actions.
+      parameters:
+        - schema:
+            type: boolean
+            default: false
+          in: query
+          name: dryRun
+          required: false
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,60}$
+          in: path
+          name: action
+          required: true
+        - schema:
+            type: string
+          in: header
+          name: idempotency-key
+          required: false
+          description: 8 to 200 characters, unique per intended change.
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+        "400":
+          description: The Idempotency-Key header is missing or malformed, or no floor is named
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: "Not on that floor, or not allowed: says why and who can change it"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such action; problems lists the ones there are
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "409":
+          description: That key was used for another request, or what it adds is already there
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "422":
+          description: The input doesn’t fit the action’s schema, or names things the graph doesn’t have
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/entities/{id}:
+    get:
+      summary: One entity as this floor knows it, or why it can’t be seen from here
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The entity, or an Unseen that names no label
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/Entity"
+                  - $ref: "#/components/schemas/UnseenObject"
+                description: The entity, or an Unseen that names no label
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such entity, or none you may know exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/entities/{id}/beliefs:
+    get:
+      summary: What this floor and the floors it sees believe about an entity now
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BeliefList"
+        "401":
+          description: No signed-in caller
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "404":
+          description: No such entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+servers:
+  - url: /v1

@@ -311,7 +311,12 @@ spec:
   lifecycle: experimental
   owner: group:default/augur-core
   system: augur-platform
-  consumesApis: []
+  consumesApis:
+    - api:default/events-api
+    - api:default/gateway-api
+    - api:default/identity-api
+    - api:default/models-api
+    - api:default/registry-api
   dependsOn: []
 ---
 apiVersion: backstage.io/v1alpha1

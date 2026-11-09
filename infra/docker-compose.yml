@@ -14,6 +14,7 @@ x-internal: &internal
   REGISTRY_URL: http://registry:8082
   EVENTS_URL: http://events:8084
   MODELS_URL: http://models:8085
+  KNOWLEDGE_URL: http://knowledge:8086
   # Services believe a person is calling only when the gateway signed it; they fetch its key here.
   GATEWAY_URL: http://gateway:8080
   # Services' tokens name the browser's address; they are fetched and checked over the compose network.
@@ -82,7 +83,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       IDENTITY_CLIENT_SECRET: platform-local-only-identity
       # The clients for the platform's services, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models
+      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,platform-knowledge=platform-local-only-knowledge
       PLATFORM_ADMIN_USER: alex
       REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
@@ -111,6 +112,7 @@ services:
       REGISTRY_URL: http://registry:8082
       EVENTS_URL: http://events:8084
       MODELS_URL: http://models:8085
+      KNOWLEDGE_URL: http://knowledge:8086
       # Tokens are issued for the browser's address; signing keys are fetched over the compose network.
       OIDC_ISSUER: http://localhost:8180/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs
@@ -177,6 +179,27 @@ services:
       MODEL_API_URL: stand-in
       <<: *internal
     depends_on: [postgres]
+
+  # The knowledge graph: its job makes the kg schema and the kg_app login as the admin, then the service
+  # signs in as kg_app, which row security fences (ADR 0079).
+  knowledge-migrate:
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/knowledge" } }
+    command: ["node", "dist/migrate-job.js"]
+    restart: on-failure:3
+    environment:
+      DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
+      KNOWLEDGE_DATABASE_PASSWORD: platform-local-only-knowledge
+    depends_on: [postgres]
+  knowledge:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/knowledge" } }
+    environment:
+      PORT: 8086
+      DATABASE_URL: postgres://kg_app:platform-local-only-knowledge@postgres:5432/platform
+      SERVICE_CLIENT_SECRET: platform-local-only-knowledge
+      <<: *internal
+    depends_on:
+      knowledge-migrate: { condition: service_completed_successfully }
 
 volumes:
   pgdata:

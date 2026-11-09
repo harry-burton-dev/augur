@@ -7,11 +7,19 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "start": "node dist/index.js",
+    "migrate": "node dist/migrate-job.js",
     "test": "vitest run"
   },
   "dependencies": {
     "@augur/service-kit": "workspace:*",
-    "pg": "catalog:"
+    "@fastify/swagger": "catalog:",
+    "@fastify/type-provider-typebox": "catalog:",
+    "fastify": "catalog:",
+    "pg": "catalog:",
+    "typebox": "catalog:",
+    "ulid": "^3.0.2"
   },
   "devDependencies": {
     "@types/n3": "^1.26.6",
@@ -21,6 +29,7 @@
     "n3": "^2.13.12",
     "rdf-validate-shacl": "^0.6.5",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "yaml": "catalog:"
   }
 }

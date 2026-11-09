@@ -333,7 +333,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Each platform service's sign-in in Keycloak, made or set to these secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-}
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
@@ -561,6 +561,42 @@ services:
       # How long to wait for the model, in seconds (60 when empty).
       MODEL_TIMEOUT_SECONDS: "${MODEL_TIMEOUT_SECONDS:-}"
     depends_on: *own-login
+
+  # Brings the knowledge graph's schema up to date as Postgres's admin login, then stops (ADR 0079). It makes
+  # the two roles the graph runs under: kg_owner, which owns it and can't sign in, and kg_app, the service's
+  # own login, which row security fences and which writes only through the graph's actions. Runs on every `up`.
+  knowledge-migrate:
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/knowledge:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: on-failure:3
+    command: ["node", "dist/migrate-job.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
+      KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
+    depends_on: *own-login
+
+  # The knowledge graph of each floor (ADR 0079): what AUGUR knows of the entities in people's work, and
+  # what each floor believes of them. People reach it through the gateway; it signs in to Postgres as kg_app.
+  knowledge:
+    logging: *logging
+    <<: *service
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/knowledge:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8086/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      <<: *env
+      PORT: 8086
+      SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
+      DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
+    depends_on:
+      knowledge-migrate: { condition: service_completed_successfully }
+      identity: { condition: service_healthy }
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
   # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with

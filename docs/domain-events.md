@@ -124,6 +124,13 @@ The events service publishes these as identity and the registry record the chang
 | `platform.inbox.taken`, `.released`, `.declined`, `.done` | `{ item, app, key, by }` | Someone takes a team's inbox item, gives it back, declines it or marks it done ([The Inbox](inbox.md)) |
 | `platform.inbox.handed-on` | `{ item, app, key, by, to }` | Someone hands an item on; `to` is `person:<id>` or `team:<id>` |
 
+The knowledge graph service publishes its own as each action commits, from its outbox. Each carries ids only, on the floor it happened on; one on a personal floor carries that floor and nothing else. Ask the service for the rest, as the person:
+
+| Topic | Payload | When |
+| --- | --- | --- |
+| `platform.knowledge.entity.created` | `{ entity, floor }` | An entity is first named, on that floor |
+| `platform.knowledge.observation.retained` | `{ observation, floor }` | A claim read in a source is kept |
+
 Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own profile in their account (`PATCH /v1/me/profile`, docs/account.md) aren't sent yet.
 
 An audit entry and the event it stands for are one transaction: both are kept or neither is. `recordAudit` sends an `Idempotency-Key`, one for all of a call's tries, so a retry keeps one entry and one event. Give an entry your own `key` when a later run may say it again, as identity does for `person.left`.

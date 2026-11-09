@@ -39,6 +39,9 @@ const PLATFORM_FIRST: Row[] = [
   ['registry', 'service', 'http://registry:8082/healthz'],
   ['events', 'service', 'http://events:8084/healthz'],
   ['models', 'service', 'http://models:8085/healthz'],
+  // The knowledge graph's schema first, as Postgres's admin login, then the service, which signs in as kg_app.
+  ['knowledge-migrate', 'job'],
+  ['knowledge', 'service', 'http://knowledge:8086/healthz'],
 ];
 const PLATFORM_LAST: Row[] = [
   ['gateway', 'service', 'http://gateway:8080/healthz'],
