@@ -17,6 +17,7 @@ import { empty, orNull, ref, refused } from './schemas.ts';
 import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
 import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
+import { ReviewSchema, reviewOf } from './apps3.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
 
@@ -233,7 +234,7 @@ export const appRunnerRoutes =
             installedAt,
             ...follow,
             ...(newest?.release && semver.gt(newest.version, release.version)
-              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2)], changes: changesIn(newest.release.notes ?? '', id) } }
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2)], ...(releaseProblem(newest.release) ? {} : { review: reviewOf(newest.release) }), changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
             changes: changesIn(release.notes ?? '', id),
@@ -266,6 +267,7 @@ export const appRunnerRoutes =
             ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
             signer: r.release!.signer,
             asks: r.release!.asks,
+            ...(releaseProblem(r.release) ? {} : { review: reviewOf(r.release!) }),
             ...(r.feed ? { feed: r.feed } : {}),
             ...(releaseProblem(r.release) ? { problem: releaseProblem(r.release)! } : {}),
             ...(latestJob(r.app) ? { job: latestJob(r.app) } : {}),
@@ -728,6 +730,7 @@ export const appRunnerRoutes =
                 warnings: Type.Array(Type.String(), { description: 'What an admin is told, but doesn’t stop it' }),
                 asks: Type.Optional(Type.Unsafe<Record<string, unknown>>({ type: 'object', additionalProperties: true, description: 'What it asks an admin to agree to (spec 9.4)' })),
                 signer: Type.Optional(Type.Object({ repository: Type.String(), workflow: Type.String() })),
+                review: Type.Optional(ReviewSchema),
               },
               { description: 'The file, checked' },
             ),
@@ -781,6 +784,7 @@ export const appRunnerRoutes =
           warnings,
           ...(isRelease2(file) ? { asks: r.asks as unknown as Record<string, unknown> } : {}),
           ...(isRelease2(file) && r.signer ? { signer: r.signer } : {}),
+          ...(isRelease2(file) && refusals.length === 0 ? { review: reviewOf(file) } : {}),
         };
       },
     );

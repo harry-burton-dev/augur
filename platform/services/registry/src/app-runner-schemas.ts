@@ -6,6 +6,7 @@ import Type, { type Static } from 'typebox';
 import { APP_JOB_STEPS, type AppRelease as AppReleaseFile } from './store.ts';
 import { ref, ServerRing } from './schemas.ts';
 import { Change } from './update-schemas.ts';
+import { ReviewSchema } from './apps3.ts';
 
 const APP_ID = '^[a-z][a-z0-9-]{1,39}$';
 const dateTime = (description?: string) => Type.String({ format: 'date-time', ...(description ? { description } : {}) });
@@ -97,6 +98,7 @@ export const AppInstalls = Type.Object(
               channel: Type.Enum(CHANNELS),
               notesUrl: Type.Optional(Type.String()),
               needs: Type.Array(Type.String(), { description: 'Why it waits for an admin; empty when it can install by itself' }),
+              review: Type.Optional(ReviewSchema),
               changes: Type.Optional(Type.Array(ref(Change))),
             },
             { description: 'The newest release on its channel, when newer than what runs' },
@@ -157,6 +159,7 @@ export const AppInstalls = Type.Object(
           },
           { description: "The release's asks, as its file carries them (spec 9.4); missing for one that can't install here" },
         )),
+        review: Type.Optional(ReviewSchema),
         problem: Type.Optional(Type.String({ description: "Why it can't open in this AUGUR: for one on contract 2, the only thing said of it" })),
         job: Type.Optional(ref(AppJob)),
       }),
