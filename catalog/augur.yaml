@@ -487,7 +487,7 @@ metadata:
   description: Catalogue of apps and micro frontends; serves the shell manifest.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.41.0
+    augur.dev/contract-version: 1.42.0
 spec:
   type: openapi
   lifecycle: production
