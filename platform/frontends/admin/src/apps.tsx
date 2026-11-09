@@ -1,6 +1,6 @@
 import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TagPicker, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
+import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, EventDelivery, EventPushing, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
 import { InstallsSection, RunnerControls, useInstalls, type Installs } from './app-runner.js';
 import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, inboxWords, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
 import { featureHint, featureModeChoices } from './installs.js';
@@ -178,6 +178,7 @@ function AppDetails({ api, app, ins, openUpgrades, upgradesName, took, onIssue, 
       {app.platform ? null : <AppSettings api={api} app={app} />}
       {app.platform ? null : <FeaturePreviewsPart api={api} app={app} />}
       {app.platform ? null : <Floors api={api} app={app} />}
+      {app.platform ? null : <Deliveries api={api} app={app} />}
       {app.handles?.length ? <p>Answers {app.handles.join(', ')}.</p> : null}
       {ships ? <p data-pillar>It ships with AUGUR and changes version with it. Turn it off here or floor by floor; it can’t be removed, and its sign-in is in the server’s settings.</p> : null}
       {shipped ? null : <Versions api={api} app={app} took={took} />}
@@ -216,6 +217,28 @@ function useLoaded<T>(load: () => Promise<T>, when = true) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return { value, setValue, error, setError };
+}
+
+/** How the app's part is taking the events AUGUR pushes to it (contract 3): shown only for an app granted events:subscribe. */
+function Deliveries({ api, app }: { api: AdminApi; app: CatalogueApp }) {
+  const subscribes = (app.grantedScopes ?? []).includes('events:subscribe');
+  const { value, error } = useLoaded<{ deliveries: EventDelivery[]; pushing: EventPushing }>(() => api.deliveries(), subscribes);
+  if (!subscribes) return null;
+  const row = value?.deliveries.find((d) => d.app === app.id);
+  const trouble = value && (!value.pushing.on || value.pushing.problem || row?.state === 'stalled');
+  return (
+    <div data-deliveries>
+      <p className={trouble ? undefined : 'admin-muted'} data-state={value?.pushing.on === false ? 'off' : row?.state}>
+        {!value
+          ? error
+            ? `Events: can’t be looked up right now (${error}).`
+            : 'Looking up how it takes events…'
+          : !value.pushing.on
+            ? `Events aren’t pushed to apps: ${value.pushing.why} ${value.pushing.whoCanChange}`
+            : `Events: ${row?.words ?? 'Nothing to deliver yet.'}${row?.failingSince ? ` Since ${new Date(row.failingSince).toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}.` : ''}${value.pushing.problem ? ` ${value.pushing.problem}` : ''}`}
+      </p>
+    </div>
+  );
 }
 
 /** The settings the app offers, each a whole number to type, saved when the field is left. */

@@ -499,6 +499,22 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect((await listed(as('app-atlas'))).json()).toEqual([]);
     });
 
+    it('tells platform services which apps are granted a scope', async () => {
+      const app = await db.app({ verifyService, floors });
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['events:subscribe'] } });
+      await app.inject({ method: 'PUT', url: '/v1/apps/atlas', headers: as('app-atlas'), payload: { ...library, id: 'atlas', name: 'Atlas', route: '/atlas', entry: '/apps/atlas/entry.js', scopes: ['notifications:send'] } });
+      const listed = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/scopes/events:subscribe/apps', headers });
+      expect((await listed(as('platform-events'))).json()).toEqual([{ app: 'library', name: library.name, enabled: true }]);
+      expect((await listed(as('app-library'))).statusCode).toBe(403);
+      expect((await listed(admin)).statusCode).toBe(403);
+      // Turned off, it is still listed, so the events service keeps its place for when it is turned on again.
+      await app.inject({ method: 'PATCH', url: '/v1/apps/library', headers: admin, payload: { enabled: false } });
+      expect((await listed(as('platform-events'))).json()).toEqual([{ app: 'library', name: library.name, enabled: false }]);
+      // The grant withdrawn, it is gone from the list.
+      await app.inject({ method: 'PUT', url: '/v1/apps/library/scopes', headers: admin, payload: { scopes: [] } });
+      expect((await listed(as('platform-events'))).json()).toEqual([]);
+    });
+
     it('tells platform services what an app is granted, and nothing once it is off', async () => {
       const app = await db.app({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });

@@ -42,6 +42,10 @@ app.addHook('onRequest', signedCallers(callerCheckFromEnv('app-expenses')));
 
 An app's own token, with no delegation, is admitted only for an app the registry knows and has on ("Notes isn’t installed here", "Notes is turned off"), and only for the routes its grant covers, its own routes and its own registry entry; the caller the gateway signs then names the app (`app:<id>`, with `app` and `scopes`) and the app's own token goes on with the call, so a service still reads which app is calling the way it did before.
 
+## AUGUR calling your part
+
+AUGUR's own services reach each other inside the deployment, never through the gateway, with one exception: the events service pushes events to each subscribing app's inbound part (`POST /augur/events`, see docs/domain-events.md). That call carries a signed caller like any other, named after the service: `isServiceCaller(caller)` says it is AUGUR, and `serviceOfCaller(caller)` which service (`events`). No person's token is behind it, so `caller.roles` and `caller.departments` are empty; a part that needs a person refuses it.
+
 ## Where the key comes from
 
 The gateway publishes its public key at `/api/gateway/v1/caller-keys`, with no sign-in needed. `callerCheckFromEnv` fetches it from `CALLER_KEYS_URL` when set (an app hosted outside the compose network sets this to `https://<your platform>/api/gateway/v1/caller-keys`), otherwise from `GATEWAY_URL` plus that path. `GATEWAY_URL` defaults to `http://gateway:8080`.

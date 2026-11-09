@@ -81,6 +81,23 @@ followLeavers({
 
 As with `followEvents`, a handler that throws gets the same event again, so doing it twice must do no harm. Read one yourself with `readPersonLeft(event)` and `readPersonDeleted(event)`, which answer undefined for any other event. `handOverTo` is left out when nobody was named, or when the person named can't sign in by the time the leaver flow runs.
 
+## Pushed to your part
+
+An app built under the app contract doesn't poll. With `events:subscribe` granted, AUGUR pushes every event your app may see to your inbound part, as `POST /augur/events` through the gateway: the body is the event (`seq`, `topic`, `payload`, `workspace`, `publisher`, `at`), the caller the gateway signed is AUGUR's events service, and `Idempotency-Key` is `events-<seq>`. Answer any 2xx once you have kept the event; AUGUR takes anything else, or no answer in time (the shorter of the events service's own call timeout, `SERVICE_CALL_TIMEOUT_SECONDS`, and the gateway's app-route timeout), as not delivered and tries again. Events come one app at a time, in order: a failing event holds the ones after it, with a second's wait doubling to ten minutes. After a day of failures the event is passed over and recorded in the audit log (`delivery.dropped`), and an app that has taken nothing for an hour is shown as stalled, with the reason, in Admin → Apps.
+
+```ts
+import { callerFromHeaders, IDEMPOTENCY_KEY_HEADER, isServiceCaller, PART_EVENTS_PATH, serviceOfCaller } from '@augur/service-kit';
+
+app.post(PART_EVENTS_PATH, async (req, reply) => {
+  const caller = callerFromHeaders(req.headers);
+  if (!isServiceCaller(caller) || serviceOfCaller(caller) !== 'events') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR delivers events here.' });
+  await keep(req.body, req.headers[IDEMPOTENCY_KEY_HEADER]); // the same key may come twice: keep it once
+  return reply.code(204).send();
+});
+```
+
+You don't get your own events, nor events on floors where your app isn't on or lacks `events:subscribe`; an event on no floor counts as the organisation's. An app an admin turns off keeps its place and catches up when turned on again; one whose grant is withdrawn loses its place (recorded as `delivery.forgotten`). A newly granted app starts from the events after the grant, not from the beginning; `GET /v1/domain-events?after=` is still there for catching up on what came before.
+
 ## In the browser
 
 People's screens hear domain events too, so what an app shows can refresh when it changes instead of polling. The events service serves `GET /v1/domain-events/stream?topics=…` to signed-in people: server-sent events named `domain-event`, each one a domain event on the topics asked for, **on the floor the person stands on** (`X-Workspace-Id`, which the gateway checks they're on). Events on no floor, or on another floor, never reach it, and nothing else is added: the browser hears what services hear, ids and a little context.

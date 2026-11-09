@@ -47,6 +47,39 @@ export const registryGrants = ({ registryUrl, credentials, ttlMs = 30_000, fetch
   };
 };
 
+/** An app the registry says holds a scope: its id and its name, for what a person reads. */
+export interface GrantedApp {
+  /** The app's id. */
+  app: string;
+  /** What the app is called, for what a person reads. */
+  name: string;
+  /** Whether an admin has it on: a turned-off app keeps its grant, so what it has to catch up on is kept too. */
+  enabled: boolean;
+}
+/** The apps granted a scope and turned on, as the registry says; throws GrantsUnavailable when it can't be reached. */
+export type GrantedAppsLookup = (scope: Scope) => Promise<GrantedApp[]>;
+
+/** Asks the registry (`GET /v1/scopes/:scope/apps`, as a platform service) which apps are granted a scope; the answer is kept 30 s. */
+export const registryGrantedApps = ({ registryUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: GrantsOptions): GrantedAppsLookup => {
+  const cache = new BoundedMap<string, { apps: GrantedApp[]; at: number }>();
+  return async (scope) => {
+    const hit = cache.get(scope);
+    if (hit && now() - hit.at < ttlMs) return hit.apps;
+    const url = `${registryUrl.replace(/\/$/, '')}/v1/scopes/${encodeURIComponent(scope)}/apps`;
+    let res: Response;
+    try {
+      res = await withDeadline(fetchImpl)(url, { headers: await serviceHeaders(credentials) });
+    } catch (err) {
+      throw new GrantsUnavailable(`The registry could not be reached (${(err as Error).message}).`);
+    }
+    if (!res.ok) throw new GrantsUnavailable(`The registry answered ${res.status}.`);
+    const apps = (await res.json()) as GrantedApp[];
+    if (!Array.isArray(apps)) throw new GrantsUnavailable('The registry’s answer wasn’t a list of apps.');
+    cache.set(scope, { apps, at: now() });
+    return apps;
+  };
+};
+
 /** The ids of the inbox kinds an app's manifest declares; undefined from a registry too old to say. */
 export type InboxKindsLookup = (app: string) => Promise<string[] | undefined>;
 /** The ids of the notification kinds an app's manifest declares; undefined from a registry too old to say. */
