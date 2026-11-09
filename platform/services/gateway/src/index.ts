@@ -7,6 +7,7 @@ loadConfigOrExit('gateway', [
   commonSettings.registry,
   commonSettings.events,
   commonSettings.models,
+  { name: 'KNOWLEDGE_URL', about: 'where the knowledge graph service is, such as http://knowledge:8086.', required: true },
   commonSettings.issuer,
   { name: 'OIDC_JWKS_URL', about: 'where the sign-in service’s signing keys are, when the gateway reaches it at another address than browsers do.' },
   { name: 'OIDC_AUDIENCE', about: 'the audience people’s tokens are issued for (default platform-api).' },
