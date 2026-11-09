@@ -7,6 +7,7 @@ import Type, { type Static } from 'typebox';
 import semver from 'semver';
 import { APP_CATEGORIES, type AppCategory } from '@augur/mfe-sdk';
 import { reservedIdProblem, SCOPES, type PlatformScope } from '@augur/service-kit';
+import type { AppManifest3 } from '@augur/app-tools/validate';
 import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
 /** How many settings one app may offer. */
@@ -427,6 +428,13 @@ export const platformApps: AppEntry[] = [
     ],
   },
 ];
+
+/**
+ * AUGUR's own apps that are on the app contract (contract 3, ADR 0083): the manifest the shell is sent in place of
+ * the entry above, which still holds the app's id, route and role for everything else the registry checks. Its
+ * frontend is in AUGUR's web image at /apps/<id>/<version>/, and it runs in the shell's worker host like any app.
+ */
+export const platformManifests3: Readonly<Record<string, AppManifest3>> = {};
 
 /**
  * The platform scopes each of AUGUR's own frontends holds (ADR 0083). They come only from here, in AUGUR's own

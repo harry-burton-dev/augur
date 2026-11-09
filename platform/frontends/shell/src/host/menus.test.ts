@@ -136,4 +136,9 @@ describe('an app on the contract’s places in the rail', () => {
     ]);
     expect(pagesOf(notes([{ id: 'home', label: 'Home' }]))).toEqual([]);
   });
+  it('rests the floor gauge for one of AUGUR’s own apps the registry says is the same on every floor (ADR 0083)', () => {
+    const own = fromCatalogue3({ contract: 3, id: 'upgrades', name: 'Deployment', version: '1.0.0', frontend: { entry: 'entry.js' }, sameOnEveryFloor: true });
+    expect(toShellApp(own).sameOnEveryFloor).toBe(true);
+    expect(toShellApp(notes([])).sameOnEveryFloor).toBeUndefined();
+  });
 });
