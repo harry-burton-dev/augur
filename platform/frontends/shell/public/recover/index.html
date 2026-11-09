@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>The way back</title>
+    <link rel="stylesheet" href="recover.css" />
+    <script type="module" src="recover.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>The way back</h1>
+      <p class="lead">
+        This page works without the rest of the server's pages, so a deployment admin can still see what the server runs
+        and take it back to an earlier release when the usual screens won't open.
+      </p>
+      <div id="recover" aria-live="polite">
+        <noscript><p>This page needs JavaScript. The manual way back is in the upgrade guide (docs/upgrade.md, Going back).</p></noscript>
+      </div>
+      <p class="foot"><a href="/">Open the usual screens</a></p>
+    </main>
+  </body>
+</html>

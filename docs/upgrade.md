@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### A way back that works when the screens don't
+
+**From** unreleased
+
+The web container now serves `/recover/`, a page that needs nothing from the shell, the kit or any app. When the Upgrade Centre won't open after an upgrade, a deployment admin opens `/recover/`, signs in (it always asks for the password) and sees what the server runs, the latest change step by step, and **Go back** for each release the Upgrade Centre would offer, with the same reasons for one it can't. Nothing to do: bookmark it for the night something goes wrong.
+
 ### The knowledge graph service
 
 **From** unreleased
@@ -723,7 +729,7 @@ Two optional touches:
 
 **If an upgrade went back by itself, didn't install, or kept running after its watch saw a problem**, start from [upgrade-went-back.md](upgrade-went-back.md), a printable card for that night: four checks, and when a restore is worth it.
 
-**Upgrade Centre → Go back** does this for you while no release between is breaking ([release-channels.md](release-channels.md#going-back)). By hand:
+**Upgrade Centre → Go back** does this for you while no release between is breaking ([release-channels.md](release-channels.md#going-back)). If the Upgrade Centre won't open, `/recover/` on the same address does the same with nothing but a sign-in: it shows what the server runs and asks for the same go-back, so it needs the updater too. By hand:
 
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:
 
