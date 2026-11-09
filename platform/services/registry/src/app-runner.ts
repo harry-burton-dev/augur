@@ -306,7 +306,13 @@ export const appRunnerRoutes =
         dataGraceDays,
         removed: deletions
           .filter((d) => !installed.some((i) => i.app === d.app))
-          .map((d) => ({ app: d.app, name: records.find((r) => r.entry.id === d.app)?.entry.name ?? d.app, removedAt: d.removedAt, deleteAt: d.dueAt })),
+          .map((d) => ({
+            app: d.app,
+            name: records.find((r) => r.entry.id === d.app)?.entry.name ?? d.app,
+            removedAt: d.removedAt,
+            deleteAt: d.dueAt,
+            ...(d.problem ? { failures: d.failures, problem: d.problem } : {}),
+          })),
         installed: installed.map(({ app: id, release, installedAt }) => {
           const follow = followOf(follows, id);
           const newest = newestOn(releases, id, follow.channel);
@@ -1057,7 +1063,7 @@ export const appRunnerRoutes =
             204: empty('Cancelled'),
             403: refused('Not an admin'),
             404: refused('No such job is waiting'),
-            409: refused('It has started; it finishes by itself'),
+            409: refused('It has started, so it finishes by itself; or it deletes a removed app’s data, which only installing the app again stops'),
           },
         },
       },
@@ -1066,6 +1072,8 @@ export const appRunnerRoutes =
         if (!caller) return reply;
         const job = (await store.appJobs()).find((j) => j.id === req.params.id);
         if (job?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes by itself.' });
+        // Its grace period is over, so the registry would ask again at once: only installing the app again keeps its data.
+        if (job?.action === 'purge') return reply.code(409).send({ error: 'conflict', message: 'Its grace period is over, so its data goes. Install the app again to keep it.' });
         if (!job || !(await store.cancelAppJob(job.id))) return reply.code(404).send({ error: 'not_found', message: 'No such job is waiting.' });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.job-cancelled', target: job.app, detail: { action: job.action } });
         return reply.code(204).send();
@@ -1171,7 +1179,10 @@ export const appRunnerRoutes =
         }
         // Its data gone, the registry forgets the rest; a try that failed is tried again later.
         if (outcome === 'done' && job.action === 'purge') await store.forgetApp(job.app, RUNNER);
-        if (outcome === 'failed' && job.action === 'purge') await store.scheduleDataDeletion(job.app, new Date(now().getTime() + PURGE_RETRY_MS), RUNNER);
+        // Each try that fails in a row waits twice as long, an hour first and a day at most, so a lasting problem doesn't
+        // take a backup every hour; Admin → Apps says why.
+        if (outcome === 'failed' && job.action === 'purge')
+          await store.deferDataDeletion(job.app, (failures) => new Date(now().getTime() + Math.min(PURGE_RETRY_MS * 2 ** (failures - 1), DAY_MS)), message ?? 'The app runner gave no reason.');
         // Removed from the server, it gives up the internet: installed again, an admin decides again (spec 10.4).
         if (outcome === 'done' && job.action === 'remove' && (await store.internetAllowed()).some((a) => a.app === job.app)) {
           await store.setInternet(job.app, null);

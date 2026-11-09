@@ -485,7 +485,7 @@ export interface AppJobStepState {
 export interface AppJob {
   id: string;
   app: string;
-  action: 'install' | 'remove';
+  action: 'install' | 'remove' | 'purge';
   release?: { version: string; channel: string };
   requestedBy: string;
   requestedAt: string;
@@ -653,7 +653,7 @@ export interface AppInstalls {
   /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS). */
   dataGraceDays?: number;
   /** Apps removed from the server whose data is still kept, and until when. */
-  removed?: { app: string; name: string; removedAt: string; deleteAt: string }[];
+  removed?: { app: string; name: string; removedAt: string; deleteAt: string; failures?: number; problem?: string }[];
   installed: InstalledApp[];
   available: AvailableApp[];
 }

@@ -103,6 +103,12 @@ components:
                 type: string
                 format: date-time
                 description: When its data goes, unless it is installed again first
+              failures:
+                type: integer
+                description: Tries to delete it that failed in a row; each waits longer, up to a day
+              problem:
+                type: string
+                description: Why the last try failed
           description: Apps removed from the server whose data is still kept
         installed:
           type: array
@@ -3821,7 +3827,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: It has started; it finishes by itself
+          description: It has started, so it finishes by itself; or it deletes a removed app’s data, which only installing the app again stops
           content:
             application/problem+json:
               schema:

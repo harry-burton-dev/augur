@@ -61,7 +61,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 **From** unreleased
 
-Removing an app from the server now also takes its sign-in away, and its data (database schema and login, bucket, scratch folders, settings and floors) is deleted `APP_DATA_GRACE_DAYS` days later, 30 if you don't set it, after a backup. Until then Admin → Apps lists it under **Removed, data kept** with the date; installing it again keeps everything. An app you removed before this release keeps its data until you remove it again. To keep removed apps' data longer, set `APP_DATA_GRACE_DAYS` (up to 365) in `.env`. The sign-ins of the four apps that used to ship with AUGUR (`app-folio`, `app-atlas`, `app-mandate`, `app-auspex`) are taken away by the realm job on this upgrade.
+Removing an app from the server now also takes its sign-in away, and its data (database schema and login, bucket, scratch folders, settings and floors) is deleted `APP_DATA_GRACE_DAYS` days later, 30 if you don't set it, after a backup. Until then Admin → Apps lists it under **Removed, data kept** with the date; installing it again keeps everything. An app you removed before this release keeps its data until you remove it again. To keep removed apps' data longer, set `APP_DATA_GRACE_DAYS` (up to 365) in `.env`. A waiting deletion can't be cancelled; install the app again to keep its data. A try that fails waits longer each time, up to a day, and Admin → Apps says why. The folders you filled for an app are kept (docs/app-storage.md, When an app is removed). The sign-ins of the apps that used to ship with AUGUR are left as they are: installing one from the app feed gives it a new secret.
 
 ### Apps' own settings are filled in under Admin → Apps
 

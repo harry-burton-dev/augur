@@ -98,19 +98,6 @@ export class KeycloakAppClients implements AppClients {
   }
 }
 
-/**
- * Deletes the clients of apps AUGUR no longer runs (RETIRED_APPS, ADR 0075), the way an uninstall does, once
- * the sign-in service answers. Each one already gone changes nothing, so this runs at every start.
- */
-export const removeRetiredClients = async (clients: AppClients, retired: string[], log: (message: string) => void, retryMs = 2000, attempts = 60) => {
-  if (!retired.length) return;
-  const removed: string[] = [];
-  await retrying(async () => {
-    for (const app of retired) if (await clients.remove(app)) removed.push(app);
-  }, retryMs, attempts);
-  if (removed.length) log(`Took away the sign-ins of apps AUGUR no longer runs: ${removed.map(appClientId).join(', ')}.`);
-};
-
 /** "platform-registry=s3cret,app-library=…" (SERVICE_CLIENT_SECRETS) as client ids and secrets. */
 export const parseClientSecrets = (list: string | undefined): [string, string][] =>
   (list ?? '')

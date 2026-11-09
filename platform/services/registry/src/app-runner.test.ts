@@ -189,8 +189,8 @@ describe.runIf(DATABASE_URL)('an app removed from the server keeps its data for 
     const server = await db.app({ verifyService, audit: async (e) => void entries.push(e), now: () => at, dataGraceDays: 10 });
     const ask = (payload: object) => server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(at), payload });
     const next = async () => (await server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner }));
-    const finish = async (id: string, outcome: 'done' | 'failed' = 'done') =>
-      server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${id}/progress`, headers: runner, payload: { step: 'remove', state: outcome, outcome } });
+    const finish = async (id: string, outcome: 'done' | 'failed' = 'done', message?: string) =>
+      server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${id}/progress`, headers: runner, payload: { step: 'remove', state: outcome, outcome, ...(message ? { message } : {}) } });
     const view = async () => (await server.inject({ method: 'GET', url: '/v1/app-runner/apps', headers: fresh(at) })).json();
     const removeIt = async () => {
       const job = (await ask({ action: 'remove', app: 'notes' })).json();
@@ -214,13 +214,26 @@ describe.runIf(DATABASE_URL)('an app removed from the server keeps its data for 
     at = new Date('2026-11-26T10:00:00Z');
     const purge = (await next()).json();
     expect(purge).toMatchObject({ app: 'notes', action: 'purge', requestedBy: 'automatic' });
-    // A try that fails is tried again an hour later, not straight away.
-    await finish(purge.id, 'failed');
+    // Its grace period over, cancelling the purge would only last until the next ask: refused.
+    const cancel = await server.inject({ method: 'DELETE', url: `/v1/app-runner/jobs/${purge.id}`, headers: fresh(at) });
+    expect(cancel.statusCode).toBe(409);
+    expect(cancel.json().message).toMatch(/Install the app again/);
+    // A try that fails is tried again an hour later, not straight away, and Admin → Apps says why.
+    await finish(purge.id, 'failed', 'identity didn’t answer');
     expect((await next()).statusCode).toBe(204);
+    expect((await view()).removed).toEqual([expect.objectContaining({ deleteAt: '2026-11-26T11:00:00.000Z', failures: 1, problem: 'identity didn’t answer' })]);
     at = new Date('2026-11-26T11:01:00Z');
     const again = (await next()).json();
     expect(again).toMatchObject({ action: 'purge' });
-    await finish(again.id);
+    // The next waits twice as long.
+    await finish(again.id, 'failed', 'still not');
+    expect((await view()).removed).toEqual([expect.objectContaining({ deleteAt: '2026-11-26T13:01:00.000Z', failures: 2 })]);
+    at = new Date('2026-11-26T13:02:00Z');
+    const third = (await next()).json();
+    await db.store.setDesiredState({ unit: 'notes', channel: 'dev', policy: 'automatic', automaticUpTo: 'patch', pin: '1.x', windows: [], setBy: 'u-1' });
+    await finish(third.id);
+    // Forgotten, its follow goes too: installed again, it starts afresh.
+    expect((await db.store.desiredStates()).some((d) => d.unit === 'notes')).toBe(false);
     expect((await view()).removed).toEqual([]);
     expect(await db.store.dataDeletions()).toEqual([]);
     expect(entries.filter((e) => e.action === 'app.data-deleted')).toHaveLength(1);

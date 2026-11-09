@@ -1161,15 +1161,20 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     }
     // An app that never registered has no upstream to forget.
     await calls.setUpstream(job.app, null).catch(() => undefined);
-    // Its sign-in goes with it: nothing of it can call AUGUR again until it's installed again, with a new one.
-    await calls.removeCredential(job.app);
+    // Its sign-in goes with it: nothing of it can call AUGUR again until it's installed again, with a new one. Its
+    // containers are gone already, so a sign-in identity can't take away now doesn't undo the removal: it's said, and
+    // taken away again when its data goes.
+    const signIn = await calls.removeCredential(job.app).then(
+      () => 'its sign-in taken away',
+      (err: Error) => `its sign-in couldn’t be taken away yet (${err.message}); that is tried again when its data goes`,
+    );
     await report({
       step: 'remove',
       state: 'done',
       outcome: 'done',
       message: running
-        ? 'Its containers are gone and its sign-in taken away. Its data, settings and floors are kept for a while: install it again before then to keep them (Admin → Apps says until when).'
-        : 'Nothing of it was running; its sign-in is taken away.',
+        ? `Its containers are gone and ${signIn}. Its data, settings and floors are kept for a while: install it again before then to keep them (Admin → Apps says until when).`
+        : `Nothing of it was running; ${signIn}.`,
     });
   };
 

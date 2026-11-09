@@ -1541,11 +1541,10 @@
     },
     "RETIRED_APPS": {
       "type": "string",
-      "description": "Apps AUGUR no longer runs whose data the storage job takes away, once on each server, and whose sign-ins the realm job takes away (ADR 0075).",
+      "description": "Apps AUGUR no longer runs whose data the storage job takes away, once on each server (ADR 0075).",
       "x-internal": "compose",
       "x-services": [
-        "storage",
-        "keycloak-config"
+        "storage"
       ]
     },
     "KEYCLOAK_DATABASE": {

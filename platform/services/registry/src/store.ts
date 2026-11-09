@@ -228,6 +228,9 @@ export interface DataDeletion {
   dueAt: string;
   removedBy: string;
   removedAt: string;
+  /** Tries that failed in a row, and why the last one did. */
+  failures: number;
+  problem?: string;
 }
 
 /** An app a deployment admin let reach the internet. */
@@ -392,10 +395,12 @@ export interface AppStore {
   restoreSettings(app: string, ids: string[]): Promise<void>;
   /** The apps removed from the server whose data goes once their grace period ends (spec 5.5, APP_DATA_GRACE_DAYS). */
   dataDeletions(): Promise<DataDeletion[]>;
-  /** Schedules an app's data to go at `dueAt` (again, after a failed try); replaces one already scheduled. */
+  /** Schedules an app's data to go at `dueAt`; replaces one already scheduled, and its failed tries. */
   scheduleDataDeletion(app: string, dueAt: Date, removedBy: string): Promise<void>;
   /** Calls a scheduled deletion off: the app was installed again. False when none was scheduled. */
   cancelDataDeletion(app: string): Promise<boolean>;
+  /** A try that failed: counts it, keeps why, and moves the deletion to `after(failures)`. Undefined when none is scheduled. */
+  deferDataDeletion(app: string, after: (failures: number) => Date, problem: string): Promise<{ failures: number; dueAt: Date } | undefined>;
   /** Forgets everything the registry kept of an app whose data went: its settings' values, developers, follow, deletion and its catalogue entry with its floors' grants. */
   forgetApp(app: string, by: string): Promise<void>;
   /** Forgets values removed before `before`; how many it forgot. */
@@ -795,7 +800,10 @@ export const migrations: Migration[] = [
         app_id text primary key,
         due_at timestamptz not null,
         removed_by text not null,
-        removed_at timestamptz not null default now()
+        removed_at timestamptz not null default now(),
+        -- Tries that failed in a row, and why the last one did: each waits longer, up to a day.
+        failures integer not null default 0,
+        problem text
       );`,
   },
 ];
@@ -1342,16 +1350,35 @@ export class PgAppStore implements AppStore {
   }
 
   async dataDeletions() {
-    const { rows } = await this.pool.query<{ app_id: string; due_at: Date; removed_by: string; removed_at: Date }>('select * from registry.app_data_deletions order by due_at');
-    return rows.map((r) => ({ app: r.app_id, dueAt: r.due_at.toISOString(), removedBy: r.removed_by, removedAt: r.removed_at.toISOString() }));
+    const { rows } = await this.pool.query<{ app_id: string; due_at: Date; removed_by: string; removed_at: Date; failures: number; problem: string | null }>(
+      'select * from registry.app_data_deletions order by due_at',
+    );
+    return rows.map((r) => ({
+      app: r.app_id,
+      dueAt: r.due_at.toISOString(),
+      removedBy: r.removed_by,
+      removedAt: r.removed_at.toISOString(),
+      failures: r.failures,
+      ...(r.problem ? { problem: r.problem } : {}),
+    }));
   }
 
   async scheduleDataDeletion(app: string, dueAt: Date, removedBy: string) {
     await this.pool.query(
       `insert into registry.app_data_deletions (app_id, due_at, removed_by) values ($1, $2, $3)
-       on conflict (app_id) do update set due_at = excluded.due_at`,
+       on conflict (app_id) do update set due_at = excluded.due_at, removed_by = excluded.removed_by, removed_at = now(), failures = 0, problem = null`,
       [app, dueAt, removedBy],
     );
+  }
+
+  async deferDataDeletion(app: string, after: (failures: number) => Date, problem: string) {
+    return this.transaction(async (client) => {
+      const { rows } = await client.query<{ failures: number }>('update registry.app_data_deletions set failures = failures + 1, problem = $2 where app_id = $1 returning failures', [app, problem]);
+      if (!rows[0]) return undefined;
+      const dueAt = after(rows[0].failures);
+      await client.query('update registry.app_data_deletions set due_at = $2 where app_id = $1', [app, dueAt]);
+      return { failures: rows[0].failures, dueAt };
+    });
   }
 
   async cancelDataDeletion(app: string) {
@@ -1363,6 +1390,8 @@ export class PgAppStore implements AppStore {
     await this.transaction(async (client) => {
       for (const table of ['app_setting_values', 'app_developers', 'preview_choices', 'app_follows', 'app_internet', 'app_data_deletions'])
         await client.query(`delete from registry.${table} where app_id = $1`, [app]);
+      // How it followed updates (channel, policy, pin, windows) and the history of that go too: installed again, it starts afresh.
+      for (const table of ['desired_states', 'desired_state_history']) await client.query(`delete from registry.${table} where unit = $1`, [app]);
     });
     // Its catalogue entry goes too, with its versions, frontends and floors' grants, as an admin's removal from the catalogue does.
     await this.remove(app, by);

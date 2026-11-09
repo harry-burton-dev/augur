@@ -336,8 +336,6 @@ services:
       SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-updater=${UPDATER_CLIENT_SECRET:-}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
-      # The apps that shipped with AUGUR until ADR 0075: their sign-ins (app-<id>) are taken away, as the storage job takes their data.
-      RETIRED_APPS: folio atlas mandate auspex
       # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
       REALM_PASSWORD_MIN_LENGTH: ${REALM_PASSWORD_MIN_LENGTH:-}
       REALM_PASSWORD_DENYLIST: ${REALM_PASSWORD_DENYLIST:-}

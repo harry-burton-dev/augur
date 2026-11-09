@@ -413,6 +413,7 @@ export function InstallsSection({ ins }: { ins: Installs }) {
               <Line key={r.app} end={`Deleted on ${new Date(r.deleteAt).toLocaleDateString()}`}>
                 {r.name}
                 <Quiet> · install it again before then to keep its data, settings and floors</Quiet>
+                {r.problem ? <Status status="warning" label={`Deleting its data failed ${r.failures === 1 ? 'once' : `${r.failures} times in a row`}, and is tried again then: ${r.problem}`} /> : null}
               </Line>
             ))}
           </div>

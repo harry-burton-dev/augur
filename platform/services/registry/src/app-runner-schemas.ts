@@ -92,6 +92,8 @@ export const AppInstalls = Type.Object(
           name: Type.String(),
           removedAt: dateTime(),
           deleteAt: dateTime('When its data goes, unless it is installed again first'),
+          failures: Type.Optional(Type.Integer({ description: 'Tries to delete it that failed in a row; each waits longer, up to a day' })),
+          problem: Type.Optional(Type.String({ description: 'Why the last try failed' })),
         }),
         { description: 'Apps removed from the server whose data is still kept' },
       ),

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { ensureClients, KeycloakAppClients, MemoryAppClients, parseClientSecrets, removeRetiredClients } from './clients.ts';
+import { ensureClients, KeycloakAppClients, MemoryAppClients, parseClientSecrets } from './clients.ts';
 import type { KeycloakDirectory } from './directory.ts';
 import { DATABASE_URL, identityDb } from './db.testing.ts';
 
@@ -68,15 +68,6 @@ describe.runIf(DATABASE_URL)('apps’ sign-ins', () => {
     // Already gone: nothing changes, nothing more is audited.
     expect((await remove('Bearer platform-updater')).statusCode).toBe(204);
     expect(entries).toEqual([{ actor: { id: 'updater', kind: 'service' }, app: 'identity', action: 'app.credential-removed', target: 'notes' }]);
-  });
-
-  it('takes away the sign-ins of apps AUGUR no longer runs, by the same code', async () => {
-    const appClients = new MemoryAppClients();
-    await appClients.ensure('app-folio', 's');
-    const said: string[] = [];
-    await removeRetiredClients(appClients, ['folio', 'atlas'], (m) => void said.push(m), 1, 1);
-    expect(appClients.secrets.has('app-folio')).toBe(false);
-    expect(said).toEqual(['Took away the sign-ins of apps AUGUR no longer runs: app-folio.']);
   });
 
   it('answers 503 without the sign-in service', async () => {

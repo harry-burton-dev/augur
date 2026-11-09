@@ -699,6 +699,17 @@ describe('the app runner', () => {
     expect(t.did.some((d) => d.startsWith('retire') || d.startsWith('remove volumes'))).toBe(false);
   });
 
+  it('finishes removing an app when identity can’t take its sign-in away yet, and says so', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.calls.calls.removeCredential = async () => {
+      throw new Error('identity answered 503');
+    };
+    expect(await t.run({ id: 'r', app: 'notes', action: 'remove', state: 'requested' })).toBe('done');
+    expect(t.state().apps).toEqual({});
+    expect(t.reports.at(-1)?.message).toMatch(/sign-in couldn’t be taken away yet \(identity answered 503\)/);
+  });
+
   it('takes a removed app’s data away once its grace period ended, after a backup, never while it is installed', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
