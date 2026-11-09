@@ -1,6 +1,7 @@
 {
   "name": "@augur/docs",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "description": "AUGUR's documentation site. It has its own lockfile and depends only on public packages.",
   "scripts": {
