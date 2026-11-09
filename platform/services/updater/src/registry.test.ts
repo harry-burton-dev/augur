@@ -31,6 +31,19 @@ describe('the registry client', () => {
     await expect(report({ step: 'verify', state: 'done' })).rejects.toBeInstanceOf(Withdrawn);
   });
 
+  it('gives the registry a version’s frontend bundle as gzip, as the updater', async () => {
+    const seen: { url: string; method?: string; type?: string; bytes: number; auth?: string }[] = [];
+    const fetchImpl = (async (url: string, init?: RequestInit) => {
+      const headers = init?.headers as Record<string, string>;
+      seen.push({ url, method: init?.method, type: headers['content-type'], bytes: (init?.body as Uint8Array).byteLength, auth: headers.authorization });
+      return seen.length === 1 ? new Response('{}', { status: 201 }) : Response.json({ message: 'This deployment doesn’t keep apps’ frontends by version.' }, { status: 501 });
+    }) as typeof fetch;
+    const apps = appRunnerClient({ registryUrl: 'http://registry:8082/', identityUrl: 'http://identity:8081', credentials, oidc: { tokenUrl: 'http://k/token' }, fetchImpl });
+    await apps.calls.putFrontend('notes', '1.0.0', Buffer.from('gzip bytes'));
+    expect(seen).toEqual([{ url: 'http://registry:8082/v1/apps/notes/versions/1.0.0/frontend', method: 'PUT', type: 'application/gzip', bytes: 10, auth: 'Bearer tok' }]);
+    await expect(apps.calls.putFrontend('notes', '1.0.0', Buffer.from('x'))).rejects.toThrow('The registry didn’t keep notes 1.0.0’s frontend: it answered 501, This deployment doesn’t keep apps’ frontends by version.');
+  });
+
   it('tells the registry the deployment’s own networks, as the updater', async () => {
     const seen: { url: string; method?: string; body: unknown; auth?: string }[] = [];
     const fetchImpl = (async (url: string, init?: RequestInit) => {
