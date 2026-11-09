@@ -24,7 +24,35 @@ import {
   unseenElsewhere,
   uuidOr404,
 } from './objects.ts';
-import { ActionDecl, ActionRecord, ActionResult, Belief, BeliefList, Candidate, Catalogue, Class, Entity, EntityPage, Floor, Meta, Observation, Ontology, problem, ref, SourceRef, UnseenObject } from './schemas.ts';
+import { conflicts, knownEntities, lookup, query, queue, recall, subgraph, summaries } from './queries.ts';
+import {
+  ActionDecl,
+  ActionRecord,
+  ActionResult,
+  Belief,
+  BeliefList,
+  Candidate,
+  Catalogue,
+  Class,
+  ConflictList,
+  Entity,
+  EntityPage,
+  Floor,
+  Meta,
+  Observation,
+  Ontology,
+  problem,
+  Query,
+  QueryResult,
+  Queue,
+  Recall,
+  RecallResult,
+  ref,
+  SourceRef,
+  Subgraph,
+  SummaryList,
+  UnseenObject,
+} from './schemas.ts';
 import { SHAPES } from './shapes.ts';
 import type { StandingLookup } from './standing.ts';
 import { asPerson } from './store.ts';
@@ -47,10 +75,14 @@ export interface KnowledgeOptions {
   callers?: CallerCheck;
   /** The most a page of a read gives, whatever it asks for (KNOWLEDGE_PAGE_LIMIT). */
   pageLimit?: number;
+  /** The most hops a subgraph goes from its entity, whatever it asks for (KNOWLEDGE_SUBGRAPH_DEPTH). */
+  subgraphDepth?: number;
 }
 
 /** A page's ceiling when the deployment sets none. */
 export const DEFAULT_PAGE_LIMIT = 100;
+/** A subgraph's ceiling when the deployment sets none. */
+export const DEFAULT_SUBGRAPH_DEPTH = 3;
 
 const KEY = /^[\x21-\x7e]{8,200}$/;
 const NOT_ON_FLOOR = 'You can’t stand on that floor, or it no longer exists.';
@@ -73,7 +105,7 @@ const fromStore = (err: unknown): unknown => {
  * action, and reads, each answered as the person calling on the floor they stand on. The store's fence does
  * the deciding (migrations 003 and 004); this only says who is asking and where.
  */
-export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_PAGE_LIMIT }: KnowledgeOptions) => {
+export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -233,6 +265,14 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
 
       const Errors = { 401: problem('No signed-in caller'), 403: problem('Not on that floor'), 503: problem('Identity can’t be asked where you stand') };
       const FloorParams = Type.Object({ floor: ObjectParams.properties.floor });
+      const Clocks = Type.Object({
+        at: Type.Optional(Type.String({ format: 'date-time', description: 'Valid clock: so in the world at this moment. Without it, whatever time it is about.' })),
+        known: Type.Optional(Type.String({ format: 'date-time', description: 'Recorded clock: as the floors had it recorded by this moment. Default now.' })),
+        includeSuperseded: Type.Optional(Type.Boolean({ default: false, description: 'Also the forecasts and values that were superseded, marked.' })),
+      });
+      const Limit = Type.Optional(Type.Integer({ minimum: 1, description: 'The deployment sets the ceiling; the answer says when it applied.' }));
+      /** The page size asked for within the deployment's ceiling, and what to say when the ceiling cut it. */
+      const capped = (asked = pageLimit) => ({ limit: Math.min(asked, pageLimit), applied: asked > pageLimit ? { limitApplied: pageLimit } : {} });
 
       app.get(
         '/actions/:action',
@@ -307,14 +347,17 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
         '/floors/:floor/entities/:id/beliefs',
         {
           schema: {
-            summary: 'What this floor and the floors it sees believe about an entity now',
+            summary: 'What this floor and the floors it sees believe about an entity, on two clocks',
+            description: 'Without a clock, what is believed now, whatever time it is about.',
             params: ObjectParams,
+            querystring: Clocks,
             response: { 200: ref(BeliefList), 404: problem('No such entity'), ...Errors },
           },
         },
         async (req) => {
           const uuid = entityOr404(req.params.id);
-          return standOn(req, req.params.floor, async (db, sight) => ({ floor: req.params.floor, seeing: sight, beliefs: await entityBeliefs(db, uuid) }));
+          const { at, known } = req.query;
+          return standOn(req, req.params.floor, async (db, sight) => ({ floor: req.params.floor, seeing: sight, beliefs: await entityBeliefs(db, uuid, req.query), ...(at ? { at } : {}), ...(known ? { known } : {}) }));
         },
       );
 
@@ -369,6 +412,136 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
         async (req) => {
           const uuid = uuidOr404(req.params.id, 'source');
           return standOn(req, req.params.floor, async (db) => readSource(db, uuid));
+        },
+      );
+
+      app.get(
+        '/floors/:floor/lookup',
+        {
+          schema: {
+            summary: 'Whether a thing with this identity key is known, and where. Outside sight it says only the kind of floor, never a name',
+            params: FloorParams,
+            querystring: Type.Object({ scheme: Type.String({ minLength: 1, maxLength: 60 }), value: Type.String({ minLength: 1, maxLength: 200 }) }),
+            response: { 200: Type.Union([ref(Entity), ref(UnseenObject)], { description: 'The entity, or an Unseen with the kind of floor' }), 404: problem('No such key, or none you may know of'), ...Errors },
+          },
+        },
+        async (req) => standOn(req, req.params.floor, async (db, sight) => lookup(db, sight, req.query.scheme, req.query.value)),
+      );
+
+      app.get(
+        '/floors/:floor/known-entities',
+        {
+          schema: {
+            summary: 'What an extractor working for this floor may be told is already known (floors in sight only; never another person’s floor)',
+            description: 'With a text, the entities it may be about: an identity key or name that appears in it first, then names alike to a stretch of it. Capped by the deployment; the answer says when the cap applied.',
+            params: FloorParams,
+            querystring: Type.Object({ text: Type.Optional(Type.String({ maxLength: 20000, description: 'The source text.' })), limit: Limit }),
+            response: { 200: ref(EntityPage), ...Errors },
+          },
+        },
+        async (req) => {
+          const { limit, applied } = capped(req.query.limit);
+          return standOn(req, req.params.floor, async (db, sight) => {
+            const { entities, more } = await knownEntities(db, sight, req.query.text, limit);
+            return { entities, ...(more ? applied : {}) };
+          });
+        },
+      );
+
+      app.get(
+        '/floors/:floor/entities/:id/subgraph',
+        {
+          schema: {
+            summary: 'The entity and what links to it, to a depth the deployment caps',
+            params: ObjectParams,
+            querystring: Type.Object({
+              depth: Type.Optional(Type.Integer({ minimum: 1, default: 1 })),
+              predicate: Type.Optional(Type.Array(Type.String({ maxLength: 200 }), { maxItems: 20, description: 'Only links by these predicates.' })),
+            }),
+            response: { 200: ref(Subgraph), 404: problem('No such entity in sight'), ...Errors },
+          },
+        },
+        async (req) => {
+          const uuid = entityOr404(req.params.id);
+          const asked = req.query.depth ?? 1;
+          const depth = Math.min(asked, subgraphDepth);
+          return standOn(req, req.params.floor, async (db, sight) => ({
+            ...(await subgraph(db, sight, uuid, { depth, limit: pageLimit, predicates: req.query.predicate })),
+            ...(asked > subgraphDepth ? { depthApplied: subgraphDepth } : {}),
+          }));
+        },
+      );
+
+      app.get(
+        '/floors/:floor/entities/:id/summary',
+        {
+          schema: {
+            summary: 'The stacked summary (this floor’s and the floors above), each marked when older than its beliefs',
+            params: ObjectParams,
+            response: { 200: ref(SummaryList), 404: problem('No such entity in sight'), ...Errors },
+          },
+        },
+        async (req) => {
+          const uuid = entityOr404(req.params.id);
+          return standOn(req, req.params.floor, async (db, sight) => summaries(db, sight, req.params.floor, uuid));
+        },
+      );
+
+      app.get(
+        '/floors/:floor/conflicts',
+        {
+          schema: {
+            summary: 'Live beliefs in sight that contradict each other, and possible duplicates',
+            description: 'Two beliefs conflict when they have the same subject and single-valued predicate, the same modality, overlapping valid time and a different value. A forecast against its outcome is not a conflict.',
+            params: FloorParams,
+            response: { 200: ref(ConflictList), ...Errors },
+          },
+        },
+        async (req) => standOn(req, req.params.floor, async (db) => conflicts(db, req.params.floor)),
+      );
+
+      app.get(
+        '/floors/:floor/queue',
+        {
+          schema: {
+            summary: 'What waits on this floor for you (to confirm, to hold, to settle, flagged text to keep), with can and why',
+            params: FloorParams,
+            response: { 200: ref(Queue), ...Errors },
+          },
+        },
+        async (req) => standOn(req, req.params.floor, async (db) => queue(db, req.params.floor, personOn(req, req.params.floor).person)),
+      );
+
+      app.post(
+        '/floors/:floor/query',
+        {
+          schema: {
+            summary: 'A structured query over beliefs (read only; a POST because the query is a body)',
+            params: FloorParams,
+            body: ref(Query),
+            response: { 200: ref(QueryResult), 422: problem('The query names a class or entity the graph doesn’t have, or the cursor isn’t one a page gave'), ...Errors },
+          },
+        },
+        async (req) => {
+          const { limit, applied } = capped(req.body.limit);
+          return standOn(req, req.params.floor, async (db, sight) => ({ ...(await query(db, sight, { ...req.body, limit })), ...applied }));
+        },
+      );
+
+      app.post(
+        '/floors/:floor/recall',
+        {
+          schema: {
+            summary: 'Recall for a person or an agent (text, link and time retrieval fused; each hit says why it matched)',
+            description: 'Semantic retrieval needs vectors this deployment doesn’t have yet: the answer names it in ranWithout.',
+            params: FloorParams,
+            body: ref(Recall),
+            response: { 200: ref(RecallResult), ...Errors },
+          },
+        },
+        async (req) => {
+          const { limit, applied } = capped(req.body.limit);
+          return standOn(req, req.params.floor, async (db, sight) => ({ ...(await recall(db, sight, { ...req.body, limit })), ...applied }));
         },
       );
 

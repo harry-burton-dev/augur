@@ -43,26 +43,8 @@ describe('the seam against draft 4', () => {
   });
 });
 
-/** The gap, as of PR 3a. Each line goes as PR 3b and 3c add it. */
-const GAP = [
-  // Paths
-  'get /floors/{floor}/entities/{id}/subgraph',
-  'get /floors/{floor}/entities/{id}/summary',
-  'get /floors/{floor}/queue',
-  'get /floors/{floor}/conflicts',
-  'post /floors/{floor}/query',
-  'post /floors/{floor}/recall',
-  'get /floors/{floor}/known-entities',
-  'get /floors/{floor}/lookup',
-  'get /floors/{floor}/export',
-  // Required fields of the objects those paths answer with
-  'Summary.entity', 'Summary.floor', 'Summary.state',
-  'Subgraph.nodes', 'Subgraph.edges',
-  'Queue.floor', 'Queue.items',
-  'ConflictList.floor', 'ConflictList.conflicts', 'ConflictList.possibleDuplicates',
-  'QueryResult.entities',
-  'RecallResult.hits',
-];
+/** The gap, as of PR 3b. Export goes with PR 3c, and then the list is empty. */
+const GAP = ['get /floors/{floor}/export'];
 
 /** The inputs of the actions that come with their own pull requests: publish to undo in PR 6, reflect in 7, adopt and dismiss in 8. */
 const LATER = [
