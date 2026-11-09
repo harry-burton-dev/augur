@@ -1,5 +1,5 @@
 import { loadConfigOrExit, startupLog } from '@augur/service-kit';
-import { KeycloakAppClients, parseClientSecrets, retrying } from './clients.ts';
+import { KeycloakAppClients, parseClientSecrets, removeRetiredClients, retrying } from './clients.ts';
 import { KeycloakDirectory } from './directory.ts';
 import { applyRealm, productNameFromEnv, realmEntraFromEnv, realmLookFromEnv, realmMailFromEnv, realmSettingsFromEnv } from './realm.ts';
 import { IDLE_DEFAULTS } from './organisation.ts';
@@ -87,6 +87,8 @@ try {
     120,
   );
   log.info(changes.length ? `The ${KEYCLOAK_REALM} realm is up to date. Changed:\n- ${changes.join('\n- ')}` : `The ${KEYCLOAK_REALM} realm was already up to date.`);
+  // Apps AUGUR no longer runs lose their sign-in, as an uninstalled app does (RETIRED_APPS, ADR 0075).
+  await removeRetiredClients(new KeycloakAppClients(kc), (process.env.RETIRED_APPS ?? '').split(/[\s,]+/).filter(Boolean), (m) => log.info(m), 5000, 3);
 } catch (err) {
   log.error(`The ${KEYCLOAK_REALM} realm couldn't be brought up to date: ${(err as Error).message}`);
   process.exit(1);

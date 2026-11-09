@@ -551,6 +551,13 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
     async removeVolumes(names) {
       if (names.length) await docker(['volume', 'rm', '--force', ...names]);
     },
+    async scratchVolumes(app) {
+      const said = await docker(['volume', 'ls', '--quiet', '--filter', `label=augur.app=${app}`, '--filter', 'label=augur.resource=augur-scratch']);
+      return said.split('\n').map((l) => l.trim()).filter(Boolean);
+    },
+    async retireStorage(app) {
+      await platform(['run', '--rm', '--no-deps', '-e', 'APP_STORAGE=', '-e', `APP_STORAGE_RETIRE=${app}`, 'storage']);
+    },
     async dropStorage(previewId) {
       await platform(['run', '--rm', '--no-deps', '-e', 'APP_STORAGE=', '-e', `APP_STORAGE_DROP=${previewId}`, 'storage']);
     },

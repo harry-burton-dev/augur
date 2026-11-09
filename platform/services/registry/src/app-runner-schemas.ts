@@ -11,7 +11,7 @@ import { GivenSettings, SettingView } from './settings.ts';
 
 const APP_ID = '^[a-z][a-z0-9-]{1,39}$';
 const dateTime = (description?: string) => Type.String({ format: 'date-time', ...(description ? { description } : {}) });
-const JOB_ACTIONS = ['install', 'remove', 'preview', 'preview-remove'];
+const JOB_ACTIONS = ['install', 'remove', 'preview', 'preview-remove', 'purge'];
 const JOB_STATES = ['requested', 'running', 'done', 'failed', 'cancelled'];
 const STEP_STATES = ['running', 'done', 'failed'];
 const CHANNELS = ['stable', 'beta', 'dev'];
@@ -84,6 +84,18 @@ export const AppInstalls = Type.Object(
       Type.Boolean({ description: "Whether pull requests' builds run beside apps for their developers: always on a preview server, with ALLOW_PR_PREVIEWS=on on a production one" }),
     ),
     channelNote: Type.Optional(Type.String({ description: 'Why apps here follow stable only, on a production server' })),
+    dataGraceDays: Type.Optional(Type.Integer({ description: 'How long an app removed from the server keeps its data, in days (APP_DATA_GRACE_DAYS)' })),
+    removed: Type.Optional(
+      Type.Array(
+        Type.Object({
+          app: Type.String(),
+          name: Type.String(),
+          removedAt: dateTime(),
+          deleteAt: dateTime('When its data goes, unless it is installed again first'),
+        }),
+        { description: 'Apps removed from the server whose data is still kept' },
+      ),
+    ),
     installed: Type.Array(
       Type.Object({
         app: Type.String(),

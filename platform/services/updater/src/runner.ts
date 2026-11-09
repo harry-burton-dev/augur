@@ -55,7 +55,7 @@ export type AppRelease = AppRelease2;
 export interface AppJob {
   id: string;
   app: string;
-  action: 'install' | 'remove' | 'preview' | 'preview-remove';
+  action: 'install' | 'remove' | 'preview' | 'preview-remove' | 'purge';
   release?: AppRelease;
   /** For a preview: its pull request. */
   pr?: number;
@@ -161,6 +161,10 @@ export interface AppHost {
   dropStorage(previewId: string): Promise<void>;
   /** Removes these volumes, and what is in them; one that isn't there is no matter. */
   removeVolumes(names: string[]): Promise<void>;
+  /** The app's scratch volumes (augur-scratch, labelled with the app), of every version and preview. */
+  scratchVolumes(app: string): Promise<string[]>;
+  /** Runs the storage container to take an app's own data away for good: its database login and schemas, its bucket and key (APP_STORAGE_RETIRE). */
+  retireStorage(app: string): Promise<void>;
   /**
    * Makes each app's network, internal so nothing on it reaches the internet, and joins to it the runner
    * itself (to see the parts' health) and the platform's parts it names; takes away the app networks not
@@ -182,6 +186,8 @@ export interface AppHost {
 export interface PlatformCalls {
   /** Sets the app's sign-in secret (identity, PUT /v1/admin/apps/:id/credential). */
   setCredential(app: string, secret: string): Promise<void>;
+  /** Takes the app's sign-in away, so no secret of it works (identity, DELETE /v1/admin/apps/:id/credential). One already gone is no matter. */
+  removeCredential(app: string): Promise<void>;
   /** Registers the release's manifest, signed in as the app itself. */
   register(manifest: AppManifest3, secret: string): Promise<void>;
   /** Gives the registry a version's frontend bundle to keep and serve (PUT /v1/apps/:id/versions/:version/frontend), as the updater. */
@@ -1155,11 +1161,36 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     }
     // An app that never registered has no upstream to forget.
     await calls.setUpstream(job.app, null).catch(() => undefined);
+    // Its sign-in goes with it: nothing of it can call AUGUR again until it's installed again, with a new one.
+    await calls.removeCredential(job.app);
     await report({
       step: 'remove',
       state: 'done',
       outcome: 'done',
-      message: running ? 'Its containers are gone. Its data stays; remove the app in Admin → Apps to take it out of the catalogue.' : 'Nothing of it was running.',
+      message: running
+        ? 'Its containers are gone and its sign-in taken away. Its data, settings and floors are kept for a while: install it again before then to keep them (Admin → Apps says until when).'
+        : 'Nothing of it was running; its sign-in is taken away.',
+    });
+  };
+
+  /**
+   * Takes away the data of an app removed from the server once its grace period ended (spec 5.5): a backup first,
+   * then its database login and schemas, its bucket, its scratch volumes and its sign-in. The registry forgets its
+   * settings and grants when this is done.
+   */
+  const purge = async (job: AppJob, report: JobReporter) => {
+    await report({ step: 'remove', state: 'running' });
+    if ((await host.readState()).apps[job.app]) throw new StepFailed(`${job.app} is installed again, so its data stays.`);
+    const file = await host.backup();
+    await host.retireStorage(job.app);
+    const volumes = await host.scratchVolumes(job.app);
+    await host.removeVolumes(volumes);
+    await calls.removeCredential(job.app);
+    await report({
+      step: 'remove',
+      state: 'done',
+      outcome: 'done',
+      message: `Its database, bucket${volumes.length ? `, ${volumes.length} scratch ${volumes.length === 1 ? 'folder' : 'folders'}` : ''} and sign-in are gone. Backup ${file} was taken first.`,
     });
   };
 
@@ -1198,7 +1229,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       });
       return 'failed';
     }
-    const work = { install, remove, preview, 'preview-remove': removePreview }[job.action];
+    const work = { install, remove, preview, 'preview-remove': removePreview, purge }[job.action];
     let step: JobStep = job.action === 'install' || job.action === 'preview' ? 'verify' : 'remove';
     const tracked: JobReporter = async (r) => {
       step = r.step;

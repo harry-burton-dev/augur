@@ -115,15 +115,15 @@ const folderWords = (asks: NonNullable<AvailableApp['asks']>) => {
 
 /** Where a job stands, in a few words. */
 export const jobWords = (job: AppJob): string => {
-  const what = job.action === 'install' ? `Installing ${job.release?.version ?? ''}`.trim() : 'Removing';
+  const what = job.action === 'install' ? `Installing ${job.release?.version ?? ''}`.trim() : job.action === 'purge' ? 'Deleting its data' : 'Removing';
   if (job.state === 'requested') return `${what}: waiting for the app runner`;
   if (job.state === 'running') {
     const at = job.steps.at(-1);
     return `${what}: ${at ? STEP_WORDS[at.step].toLowerCase() : 'starting'}`;
   }
-  if (job.state === 'failed') return `${job.action === 'install' ? `${job.release?.version ?? 'The install'} didn’t install` : 'Not removed'}: ${job.message ?? 'see its steps'}`;
+  if (job.state === 'failed') return `${job.action === 'install' ? `${job.release?.version ?? 'The install'} didn’t install` : job.action === 'purge' ? 'Its data wasn’t deleted, and is tried again in an hour' : 'Not removed'}: ${job.message ?? 'see its steps'}`;
   if (job.state === 'cancelled') return `${what} was cancelled`;
-  return job.message ?? (job.action === 'install' ? `Installed ${job.release?.version ?? ''}`.trim() : 'Removed');
+  return job.message ?? (job.action === 'install' ? `Installed ${job.release?.version ?? ''}`.trim() : job.action === 'purge' ? 'Its data is deleted' : 'Removed');
 };
 
 /** Names as a person says them: "A", "A and B", "A, B and C". */
