@@ -29,7 +29,7 @@ export const Problem = Type.Object(
   { $id: 'Problem', description: 'RFC 9457 problem details with AUGUR’s fields.' },
 );
 /** A problem response, described. */
-export const problem = (description: string) => ({ ...ref(Problem), description });
+export const problem = (description: string) => ({ description, content: { 'application/problem+json': { schema: ref(Problem) } } });
 
 export const Meta = Type.Object(
   {

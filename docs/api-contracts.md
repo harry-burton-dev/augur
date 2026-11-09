@@ -20,6 +20,17 @@ and the contract in `contracts/<service>.openapi.yaml` all come from them.
 CI runs `pnpm check:contracts`. It fails when a contract isn't what its service generates, or when
 Spectral finds an error in it (`.spectral.yaml`).
 
+On a pull request CI also runs `pnpm check:breaking` (`scripts/check-breaking.mjs`, needing Docker): each
+contract the change touches is compared with its base by oasdiff, and anything oasdiff calls breaking fails,
+unless `info.version`'s major went up or a pending changeset has a line `Not breaking: <service>.openapi.yaml`
+with why (a response documented as what the service always sent, say). Run it yourself with
+`BASE_REF=main pnpm check:breaking` once the change is committed.
+
+The knowledge service is also fuzzed against its contract on main: Schemathesis sends it the requests the
+contract allows and fails on a 5xx, a status or content type the contract doesn't name, or a body that isn't
+the shape it says (`platform/services/knowledge/src/schemathesis.test.ts`, run with `KG_FUZZ=1` and the
+`schemathesis` CLI on the path).
+
 ## How it fits together
 
 | Part | Where |

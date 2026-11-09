@@ -40,6 +40,7 @@
     "contracts": "node scripts/check-contracts.mjs write",
     "check:contracts": "node scripts/check-contracts.mjs check",
     "check:api": "node scripts/check-api.mjs",
+    "check:breaking": "node scripts/check-breaking.mjs",
     "api:update": "node scripts/check-api.mjs update",
     "knip": "knip",
     "coverage:summary": "node scripts/coverage-summary.mjs"

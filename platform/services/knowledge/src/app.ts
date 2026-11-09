@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import Fastify, { type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type pg from 'pg';
-import Type from 'typebox';
+import Type, { type Static } from 'typebox';
 import { ulid } from 'ulid';
 import { callerFromHeaders, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type Effects } from './actions.ts';
@@ -97,7 +97,7 @@ const fromStore = (err: unknown): unknown => {
     return new Problem(403, 'not_allowed', `Not done: ${why}.`, { extensions: { why } });
   }
   if (e.code === '23505') return new Problem(409, 'conflict', 'That is already in the graph, so nothing was added.');
-  if (e.code && /^(23503|23514|22P02|22007|22008|22003)$/.test(e.code)) return new Problem(422, 'invalid_input', 'The input names something the graph doesn’t have, or a value it can’t take.');
+  if (e.code && /^(23503|23514|22P02|22007|22008|22003|22021|22P05)$/.test(e.code)) return new Problem(422, 'invalid_input', 'The input names something the graph doesn’t have, or a value it can’t take.');
   return err;
 };
 
@@ -107,7 +107,9 @@ const fromStore = (err: unknown): unknown => {
  * the deciding (migrations 003 and 004); this only says who is asking and where.
  */
 export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
-  const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
+  // A path parameter may be as long as the contract lets it be once percent-encoded (an IRI of 200 characters,
+  // say), not only Fastify's default of 100, which answered a longer one with a 414 the contract doesn't name.
+  const app = Fastify({ ...serviceFastifyOptions(), routerOptions: { maxParamLength: 1024 } }).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
   app.addHook('onRequest', signedCallers(callers));
@@ -264,7 +266,13 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
         },
       );
 
-      const Errors = { 401: problem('No signed-in caller'), 403: problem('Not on that floor'), 503: problem('Identity can’t be asked where you stand') };
+      const Errors = {
+        401: problem('No signed-in caller'),
+        403: problem('Not on that floor'),
+        // Text the schema allows that Postgres can't hold, such as a NUL character.
+        422: problem('A value the graph can’t take'),
+        503: problem('Identity can’t be asked where you stand'),
+      };
       const FloorParams = Type.Object({ floor: ObjectParams.properties.floor });
       const Clocks = Type.Object({
         at: Type.Optional(Type.String({ format: 'date-time', description: 'Valid clock: so in the world at this moment. Without it, whatever time it is about.' })),
@@ -310,7 +318,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
               cursor: Type.Optional(Type.String({ maxLength: 80 })),
               limit: Type.Optional(Type.Integer({ minimum: 1, description: 'The deployment sets the ceiling; the answer says when it applied.' })),
             }),
-            response: { 200: ref(EntityPage), 422: problem('The cursor isn’t one a page gave'), ...Errors },
+            response: { 200: ref(EntityPage), ...Errors, 422: problem('The cursor isn’t one a page gave') },
           },
         },
         async (req) => {
@@ -429,24 +437,37 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
         async (req) => standOn(req, req.params.floor, async (db, sight) => lookup(db, sight, req.query.scheme, req.query.value)),
       );
 
+      const KNOWN_SUMMARY = 'What an extractor working for this floor may be told is already known (floors in sight only; never another person’s floor)';
+      const KNOWN_DESCRIPTION =
+        'With a text, the entities it may be about: an identity key or name that appears in it first, then names alike to a stretch of it. Capped by the deployment; the answer says when the cap applied.';
+      const KnownEntities = Type.Object({ text: Type.Optional(Type.String({ maxLength: 20000, description: 'The source text.' })), limit: Limit });
+      const known = (req: FastifyRequest, floor: string, { text, limit: asked }: Static<typeof KnownEntities>) => {
+        const { limit, applied } = capped(asked);
+        return standOn(req, floor, async (db, sight) => {
+          const { entities, more } = await knownEntities(db, sight, text, limit);
+          return { entities, ...(more ? applied : {}) };
+        });
+      };
+      app.post(
+        '/floors/:floor/known-entities',
+        { schema: { summary: KNOWN_SUMMARY, description: KNOWN_DESCRIPTION, params: FloorParams, body: KnownEntities, response: { 200: ref(EntityPage), ...Errors } } },
+        async (req) => known(req, req.params.floor, req.body),
+      );
+      // A source text of any length doesn't fit a URL (a server takes about 16 KB of headers), so the text goes in
+      // a body, as the POST above takes it. This stays for callers that send a short one, until /v2.
       app.get(
         '/floors/:floor/known-entities',
         {
           schema: {
-            summary: 'What an extractor working for this floor may be told is already known (floors in sight only; never another person’s floor)',
-            description: 'With a text, the entities it may be about: an identity key or name that appears in it first, then names alike to a stretch of it. Capped by the deployment; the answer says when the cap applied.',
+            summary: KNOWN_SUMMARY,
+            description: `${KNOWN_DESCRIPTION} Deprecated: a long text doesn’t fit a URL, so send it to POST /floors/{floor}/known-entities.`,
+            deprecated: true,
             params: FloorParams,
-            querystring: Type.Object({ text: Type.Optional(Type.String({ maxLength: 20000, description: 'The source text.' })), limit: Limit }),
+            querystring: KnownEntities,
             response: { 200: ref(EntityPage), ...Errors },
           },
         },
-        async (req) => {
-          const { limit, applied } = capped(req.query.limit);
-          return standOn(req, req.params.floor, async (db, sight) => {
-            const { entities, more } = await knownEntities(db, sight, req.query.text, limit);
-            return { entities, ...(more ? applied : {}) };
-          });
-        },
+        async (req) => known(req, req.params.floor, req.query),
       );
 
       app.get(
@@ -520,7 +541,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
             summary: 'A structured query over beliefs (read only; a POST because the query is a body)',
             params: FloorParams,
             body: ref(Query),
-            response: { 200: ref(QueryResult), 422: problem('The query names a class or entity the graph doesn’t have, or the cursor isn’t one a page gave'), ...Errors },
+            response: { 200: ref(QueryResult), ...Errors, 422: problem('The query names a class or entity the graph doesn’t have, or the cursor isn’t one a page gave') },
           },
         },
         async (req) => {
