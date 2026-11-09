@@ -13,12 +13,11 @@ import { feedHeld } from './updates.ts';
 import { checkRelease, contractMessage } from './release-check.ts';
 import { isRelease2 } from '@augur/app-tools/release2';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
-import { ReviewSchema } from './apps3.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
 import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
 import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
-import { reviewOf } from './apps3.ts';
+import { ReviewSchema, reviewOf } from './apps3.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
 
@@ -235,7 +234,7 @@ export const appRunnerRoutes =
             installedAt,
             ...follow,
             ...(newest?.release && semver.gt(newest.version, release.version)
-              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2)], review: reviewOf(newest.release), changes: changesIn(newest.release.notes ?? '', id) } }
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2)], ...(releaseProblem(newest.release) ? {} : { review: reviewOf(newest.release) }), changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
             changes: changesIn(release.notes ?? '', id),
@@ -268,7 +267,7 @@ export const appRunnerRoutes =
             ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
             signer: r.release!.signer,
             asks: r.release!.asks,
-            review: reviewOf(r.release!),
+            ...(releaseProblem(r.release) ? {} : { review: reviewOf(r.release!) }),
             ...(r.feed ? { feed: r.feed } : {}),
             ...(releaseProblem(r.release) ? { problem: releaseProblem(r.release)! } : {}),
             ...(latestJob(r.app) ? { job: latestJob(r.app) } : {}),

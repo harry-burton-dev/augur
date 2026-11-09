@@ -343,13 +343,15 @@ export function InstallsSection({ ins }: { ins: Installs }) {
             <div>
               <Button kind="tertiary" size="sm" busy={ins.checking} onPress={() => void ins.check()}>
                 Check for releases
-              </Button>{' '}
-              <Button kind="tertiary" size="sm" onPress={ins.paste}>
-                Install from an address
               </Button>
             </div>
           </>
         )}
+        <div>
+          <Button kind="tertiary" size="sm" onPress={ins.paste}>
+            Install from an address
+          </Button>
+        </div>
       </Section>
       <Problem>{ins.error}</Problem>
     </div>
