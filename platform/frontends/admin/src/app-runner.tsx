@@ -1,13 +1,13 @@
-import { Button, Dialog, Section, Status, TagPicker } from '@augur/app-kit';
+import { Button, Dialog, Section, Status, TagPicker, TextField } from '@augur/app-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, fullName, type AdminApi, type AppInstalls, type InstalledApp, type Person } from './api.js';
+import { ApiError, fullName, type AdminApi, type AppInstalls, type InstalledApp, type PastedRelease, type Person } from './api.js';
 import { scopeWords } from './apps-model.js';
 import { JobSteps } from './changes.js';
 import { asksWords, JOB_REFRESH_MS, jobOpen, jobWords } from './installs.js';
 import { Line, Problem, Quiet } from './parts.js';
 
 /** A release about to be installed, while the admin confirms: with what it asks, or why it waited. */
-export type InstallAsk = { app: string; name: string; version: string; notes: string[] };
+export type InstallAsk = { app: string; name: string; version: string; notes: string[]; release?: PastedRelease['release']; from?: string };
 
 /** Where the password is entered again before anything is installed or removed; back here after. */
 const signInAgain = (query: string) => {
@@ -28,6 +28,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
   const [checking, setChecking] = useState(false);
   const [confirmInstall, setConfirmInstall] = useState<InstallAsk>();
   const [confirmRemove, setConfirmRemove] = useState<InstalledApp>();
+  const [pasting, setPasting] = useState<string>();
   const [people, setPeople] = useState<Person[]>();
   const resumed = useRef(false);
   const latest = useRef(installs);
@@ -35,7 +36,8 @@ export function useInstalls(api: AdminApi, then: () => void) {
 
   const ask = useCallback((app: string, version: string, i = latest.current) => {
     const offered = i?.available.find((a) => a.app === app && a.version === version);
-    if (offered) setConfirmInstall({ app, name: offered.name, version, notes: [...(offered.asks ? asksWords(offered.asks, scopeWords) : []), ...(offered.problem ? [offered.problem] : [])] });
+    if (offered)
+      setConfirmInstall({ app, name: offered.name, version, notes: [...(offered.asks ? asksWords(offered.asks, scopeWords, offered.review, offered.signer) : []), ...(offered.problem ? [offered.problem] : [])] });
   }, []);
 
   /** Back from entering the password again (`?install=<app>@<version>` or `?uninstall=<app>`): ask once more. */
@@ -46,14 +48,17 @@ export function useInstalls(api: AdminApi, then: () => void) {
       const params = new URLSearchParams(window.location.search);
       const install = params.get('install');
       const uninstall = params.get('uninstall');
-      if (!install && !uninstall) return;
+      const paste = params.get('paste');
+      if (!install && !uninstall && !paste) return;
       params.delete('install');
       params.delete('uninstall');
+      params.delete('paste');
       const rest = params.toString();
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
       const at = install?.lastIndexOf('@') ?? -1;
       if (install && at > 0) ask(install.slice(0, at), install.slice(at + 1), i);
       if (uninstall) setConfirmRemove(i.installed.find((x) => x.app === uninstall));
+      if (paste) setPasting(paste);
     },
     [ask],
   );
@@ -106,6 +111,35 @@ export function useInstalls(api: AdminApi, then: () => void) {
     await load();
   };
 
+  /**
+   * Reads a pasted release file's address and, when it can install, asks to confirm it with what it asks
+   * for. Why it can't is the read dialog's error; the password asked again comes back here to read it again.
+   */
+  const readPasted = async (url: string) => {
+    let read: PastedRelease;
+    try {
+      read = await api.readRelease(url);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') {
+        signInAgain(`paste=${encodeURIComponent(url)}`);
+        return false as const;
+      }
+      throw err;
+    }
+    if (read.refusals.length) throw new Error(`It can’t install here: ${read.refusals.join(' ')}`);
+    const { release } = read;
+    const name = typeof release.manifest?.name === 'string' ? release.manifest.name : release.id;
+    setPasting(undefined);
+    setConfirmInstall({
+      app: release.id,
+      name,
+      version: release.version,
+      release,
+      from: url,
+      notes: [...(read.asks ? asksWords(read.asks, scopeWords, read.review, read.signer) : []), ...read.warnings, 'No feed lists it: later versions are installed the same way, from their address.'],
+    });
+  };
+
   const loadPeople = useCallback(() => {
     if (people) return;
     api.people().then(setPeople, (err: Error) => setError(err.message));
@@ -132,7 +166,11 @@ export function useInstalls(api: AdminApi, then: () => void) {
           actionLabel="Install"
           busyLabel="Asking…"
           cancelLabel="Not now"
-          onSubmit={() => stepUp(() => api.installApp(confirmInstall.app, confirmInstall.version), `install=${encodeURIComponent(`${confirmInstall.app}@${confirmInstall.version}`)}`)}
+          onSubmit={() =>
+            confirmInstall.release
+              ? stepUp(() => api.installRelease(confirmInstall.release!), `paste=${encodeURIComponent(confirmInstall.from ?? '')}`)
+              : stepUp(() => api.installApp(confirmInstall.app, confirmInstall.version), `install=${encodeURIComponent(`${confirmInstall.app}@${confirmInstall.version}`)}`)
+          }
           onClose={() => setConfirmInstall(undefined)}
         >
           {confirmInstall.notes.length ? (
@@ -144,6 +182,21 @@ export function useInstalls(api: AdminApi, then: () => void) {
           ) : null}
           <p>You may be asked for your password again.</p>
         </Dialog>
+      ) : null}
+      {pasting !== undefined ? (
+        <Dialog
+          open
+          size="glance"
+          eyebrow="Apps"
+          heading="Install from a release file’s address"
+          summary="For an app no feed lists: paste the address of its app-release.json. It is read over https and checked as the feed’s are, and you see what it asks for before anything is installed."
+          actionLabel="Read it"
+          busyLabel="Reading…"
+          cancelLabel="Not now"
+          onSubmit={(values) => readPasted((values.url ?? '').trim())}
+          onClose={() => setPasting(undefined)}
+          fields={<TextField name="url" label="Release file address" placeholder="https://github.com/owner/repo/releases/download/…/app-release.json" defaultValue={pasting} required />}
+        />
       ) : null}
       {confirmRemove ? (
         <Dialog
@@ -163,7 +216,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
     </>
   );
 
-  return { installs, error, checking, check, ask, people, loadPeople, setDevelopers, remove: setConfirmRemove, dialogs };
+  return { installs, error, checking, check, ask, paste: () => setPasting(''), people, loadPeople, setDevelopers, remove: setConfirmRemove, dialogs };
 }
 
 export type Installs = ReturnType<typeof useInstalls>;
@@ -290,6 +343,9 @@ export function InstallsSection({ ins }: { ins: Installs }) {
             <div>
               <Button kind="tertiary" size="sm" busy={ins.checking} onPress={() => void ins.check()}>
                 Check for releases
+              </Button>{' '}
+              <Button kind="tertiary" size="sm" onPress={ins.paste}>
+                Install from an address
               </Button>
             </div>
           </>

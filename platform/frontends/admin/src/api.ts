@@ -531,7 +531,7 @@ export interface InstalledApp {
   channel: AppChannel;
   policy: AppPolicy;
   /** The newest release on its channel, when newer; `needs` says why it waits for an admin. */
-  update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[]; changes?: Change[] };
+  update?: { version: string; channel: AppChannel; notesUrl?: string; needs: string[]; review?: AppReview; changes?: Change[] };
   job?: AppJob;
   /** What changed in the version it runs. */
   changes?: Change[];
@@ -568,6 +568,24 @@ interface AppAsks {
   canvas: boolean;
 }
 
+/** What the review shows beyond the asks (spec 5.6, 9.4): each part's kind, and each setting with its type and whether it must be filled in. */
+export interface AppReview {
+  /** By part name: service, worker or job. */
+  kinds: Record<string, string>;
+  settings: { id: string; label: string; type: string; required: boolean }[];
+}
+
+/** A release file read from an address an admin pasted, checked as the feed's are. */
+export interface PastedRelease {
+  release: { id: string; version: string; manifest?: { name?: string } } & Record<string, unknown>;
+  /** Why it can't install here; empty when it can. */
+  refusals: string[];
+  warnings: string[];
+  asks?: AppAsks;
+  signer?: { repository: string; workflow: string };
+  review?: AppReview;
+}
+
 /** An app the feed offers that isn't installed. */
 export interface AvailableApp {
   app: string;
@@ -582,6 +600,7 @@ export interface AvailableApp {
   signer?: { repository: string; workflow: string };
   /** What its release asks for, as the file carries it (contract 3, spec 9.4); missing for one that can't install here. */
   asks?: AppAsks;
+  review?: AppReview;
   /** Why it can't open in this AUGUR. */
   problem?: string;
   job?: AppJob;
@@ -799,6 +818,10 @@ export class AdminApi {
   checkInstalls = () => this.call<AppInstalls>('POST', '/api/registry/v1/app-runner/check');
   /** Asks the app runner to install a release from the feed. Turned down with `sign_in_again` unless the admin just entered their password. */
   installApp = (app: string, version: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', app, version });
+  /** Reads a release file from an address an admin pasted, for one no feed lists. Needs the password just entered too. */
+  readRelease = (url: string) => this.call<PastedRelease>('POST', '/api/registry/v1/app-runner/releases/read', { url });
+  /** Asks the app runner to install a release given whole, such as one read from a pasted address. */
+  installRelease = (release: PastedRelease['release']) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', release });
   /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
   uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
   setDevelopers = (app: string, people: string[]) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/developers`, { people });

@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.40.0
+  version: 1.41.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -131,6 +131,38 @@ components:
                     items:
                       type: string
                     description: Why it waits for an admin; empty when it can install by itself
+                  review:
+                    type: object
+                    required:
+                      - kinds
+                      - settings
+                    properties:
+                      kinds:
+                        type: object
+                        description: Each part’s kind (service, worker or job), by part name
+                        additionalProperties:
+                          type: string
+                      settings:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - id
+                            - label
+                            - type
+                            - required
+                          properties:
+                            id:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              description: string, number, boolean, enum or secret
+                            required:
+                              type: boolean
+                        description: Each setting it offers admins
+                    description: What the review shows beyond the asks (spec 5.6, 9.4)
                   changes:
                     type: array
                     items:
@@ -294,6 +326,38 @@ components:
                   canvas:
                     type: boolean
                 description: The release's asks, as its file carries them (spec 9.4); missing for one that can't install here
+              review:
+                type: object
+                required:
+                  - kinds
+                  - settings
+                properties:
+                  kinds:
+                    type: object
+                    description: Each part’s kind (service, worker or job), by part name
+                    additionalProperties:
+                      type: string
+                  settings:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - label
+                        - type
+                        - required
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+                        type:
+                          type: string
+                          description: string, number, boolean, enum or secret
+                        required:
+                          type: boolean
+                    description: Each setting it offers admins
+                description: What the review shows beyond the asks (spec 5.6, 9.4)
               problem:
                 type: string
                 description: "Why it can't open in this AUGUR: for one on contract 2, the only thing said of it"
@@ -3318,6 +3382,38 @@ paths:
                         type: string
                       workflow:
                         type: string
+                  review:
+                    type: object
+                    required:
+                      - kinds
+                      - settings
+                    properties:
+                      kinds:
+                        type: object
+                        description: Each part’s kind (service, worker or job), by part name
+                        additionalProperties:
+                          type: string
+                      settings:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - id
+                            - label
+                            - type
+                            - required
+                          properties:
+                            id:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              description: string, number, boolean, enum or secret
+                            required:
+                              type: boolean
+                        description: Each setting it offers admins
+                    description: What the review shows beyond the asks (spec 5.6, 9.4)
                 description: The file, checked
         "400":
           description: Not an https address it reads from, or nothing there is a release file

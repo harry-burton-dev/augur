@@ -186,7 +186,14 @@ describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
   it('offers what the feed has, and installs it by version', async () => {
     const t = await setup(feedOf(release('1.0.0', { description: 'Jot things down', scopes: ['audit:write'] })));
     expect((await t.view()).available).toEqual([
-      expect.objectContaining({ app: 'notes', name: 'Notes', description: 'Jot things down', version: '1.0.0', asks: expect.objectContaining({ scopes: ['audit:write'], maxUpload: 25 }) }),
+      expect.objectContaining({
+        app: 'notes',
+        name: 'Notes',
+        description: 'Jot things down',
+        version: '1.0.0',
+        asks: expect.objectContaining({ scopes: ['audit:write'], maxUpload: 25 }),
+        review: expect.objectContaining({ kinds: { web: 'service', worker: 'worker', migrate: 'job' } }),
+      }),
     ]);
     const missing = await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'notes', version: '9.9.9' } });
     expect(missing.statusCode).toBe(404);
@@ -209,7 +216,7 @@ describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
     // It failed, so it isn't tried again by itself.
     await t.check(feedOf(release('1.0.0'), release('1.1.0')));
     expect((await t.server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner })).statusCode).toBe(204);
-    expect((await t.view()).installed[0].update).toEqual({ version: '1.1.0', channel: 'stable', needs: [], changes: [] });
+    expect((await t.view()).installed[0].update).toEqual({ version: '1.1.0', channel: 'stable', needs: [], changes: [], review: expect.objectContaining({ kinds: expect.any(Object) }) });
     // Its history: the install, then the update that failed, newest first.
     expect((await t.view()).installed[0].history.map((h: { version: string; state: string; requestedBy: string }) => [h.version, h.state, h.requestedBy])).toEqual([
       ['1.1.0', 'failed', 'automatic'],
