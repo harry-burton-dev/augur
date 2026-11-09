@@ -6,7 +6,7 @@
   "type": "module",
   "description": "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL.",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && vite build -c vite.sandbox.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

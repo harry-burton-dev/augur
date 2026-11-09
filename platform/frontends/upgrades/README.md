@@ -28,3 +28,18 @@ When the registry asks for the password again (`sign_in_again`: upgrading, going
 | `src/units.ts` | A row per unit from the overview, and its state in the spec's words. |
 | `src/api.ts` | The registry calls, through `ctx.fetch`, and the gateway's refusals (`forbidden`, `step_up_required`). |
 | `src/model/` | State words, Needs you, maintenance windows in a time zone, levels and pins, the upgrade's steps and how it ended, the history list and its CSV, the way back from entering the password, and the policy sentence and checks worded as the registry words them. |
+
+## Under the app contract
+
+Deployment, the Upgrade Centre's new name, is being rebuilt as a contract 3 app (ADR 0075, 0076). Its frontend runs in the shell's worker, so it draws Quill's remote elements by name and reaches only the registry, through the gateway. It is built beside the page above as `dist/sandbox.js` (`vite.sandbox.config.ts`), and the shell starts using it when the registry lists Deployment's contract 3 manifest. Until then, the page above is what people use.
+
+Its pages are Overview (the one thing that needs you, what's installed and the deployment's status), AUGUR (available updates and breaking changes, upgrade, roll back, and its upgrade history) and Apps, with each installed app under it in the rail (its update, and its install history). Each page keeps its own history: there's no History page. A question that may need the password again has its own path (`/augur/upgrade/<version>`, `/augur/roll-back/<version>`, `/augur/test/<version>`, `/apps/<id>/install/<version>`), so signing in again comes back to it open. Settings typed into a question are typed again after signing in: a worker keeps nothing between visits, and the address must never hold them. Whether the person may change anything comes from the overview's `you.deploymentAdmin`, because a contract 3 frontend is never told anyone's roles. Without it, each change stays visible, turned off, naming the deployment-admin role.
+
+| File | What it does |
+| --- | --- |
+| `src/sandbox/entry.ts` | `start(ctx)`: reads, draws, follows the shell's moves, and runs each change. |
+| `src/sandbox/routes.ts` | Pages and questions, to and from their paths. |
+| `src/sandbox/data.ts` | Reads the overview, AUGUR's updates, the apps and their jobs: every 2 s while something runs, every 30 s otherwise. |
+| `src/sandbox/view.ts` | Overview and Apps, the installed table, and each page's history. |
+| `src/sandbox/unit.ts` | AUGUR's and each app's page, following an upgrade, and the upgrade, roll back, test and install questions. |
+| `src/sandbox/words.ts` | The words release and operations people use: update available, breaking change, roll back, release channel. |
