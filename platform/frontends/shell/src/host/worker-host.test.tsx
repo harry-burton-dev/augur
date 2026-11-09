@@ -473,6 +473,11 @@ describe('files and the canvas', () => {
     expect(frame.getAttribute('src')).toBe('/sandbox/canvas.html');
     expect(frame.title).toBe('Notes');
     await expect(self().call('canvas.open', '../admin.js')).rejects.toThrow(/inside its bundle/);
+    // Opened again over the first: a new frame, which loads afresh for its new port.
+    const first = stage.querySelector('iframe');
+    await self().call('canvas.open', 'canvas.js');
+    await flush();
+    expect(stage.querySelector('iframe')).not.toBe(first);
     self().post('canvas.close');
     await flush();
     expect(stage.querySelector('iframe')).toBeNull();

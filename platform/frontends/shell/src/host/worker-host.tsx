@@ -52,7 +52,7 @@ export interface PaneState {
   /** The app takes files dropped on its pane (`ctx.files.onDrop`). */
   drops?: boolean;
   /** The canvas the app opened (spec 6.11): its script, and the host's end of the port the app holds the other end of. */
-  canvas?: { entry: string; port: MessagePort };
+  canvas?: { entry: string; port: MessagePort; opened: number };
 }
 
 export interface WorkerHostOptions {
@@ -97,7 +97,7 @@ function savedName(res: Response, path: string) {
   } catch {
     // Kept as sent.
   }
-  return name.replace(/[\\/]/g, '_').slice(0, 200) || 'download';
+  return name.replace(/[\\/]/g, '_').replace(/^\.+/, '').slice(0, 200) || 'download';
 }
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : undefined);
@@ -446,7 +446,8 @@ export class AppSession {
     if (at.origin !== location.origin) throw new TypeError('ctx.canvas.open takes a script inside its bundle, such as canvas.js.');
     this.#state.canvas?.port.close();
     const { port1, port2 } = new MessageChannel();
-    this.#set({ canvas: { entry: at.pathname, port: port1 } });
+    // Each open is a new frame, so a canvas opened again over one already there loads afresh and gets its new port.
+    this.#set({ canvas: { entry: at.pathname, port: port1, opened: (this.#state.canvas?.opened ?? 0) + 1 } });
     return port2;
   }
 
@@ -602,7 +603,7 @@ function Pane({ session, state, stopped, onRetry, source }: { session: AppSessio
           {state.phase !== 'open' && (
             <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while to open` : `Opening ${app.name}`} body={state.phase === 'slow' ? 'It’s still starting. The rest of the shell works meanwhile.' : undefined} />
           )}
-          {state.canvas && state.phase === 'open' && <CanvasFrame name={app.name} canvas={state.canvas} />}
+          {state.canvas && state.phase === 'open' && <CanvasFrame key={state.canvas.opened} name={app.name} canvas={state.canvas} />}
           <div className="app-pane-screen" hidden={state.phase !== 'open' || !!state.canvas}>
             <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
               <QuillRemote receiver={session.screen} />
