@@ -28,8 +28,11 @@ export const migrations: Migration[] = [
 export const migrate = async (admin: pg.Pool, { password }: { password: string }): Promise<void> => {
   if (!password) throw new Error(`The knowledge service needs a password for its own database login (${APP_LOGIN}): set it in the deployment's settings.`);
   await runMigrations(admin, { schema: SCHEMA, migrations });
-  const { rows } = await admin.query<{ q: string }>(`select format('alter role ${APP_LOGIN} with login nosuperuser nobypassrls password %L', $1::text) as q`, [password]);
+  const { rows } = await admin.query<{ q: string }>(`select format('alter role ${APP_LOGIN} with login nosuperuser nobypassrls nocreatedb nocreaterole password %L', $1::text) as q`, [password]);
   await admin.query(rows[0]!.q);
+  // Storage takes CONNECT on the database from public (each app login is granted its own), so kg_app needs its own grant too.
+  const { rows: db } = await admin.query<{ db: string }>('select current_database() as db');
+  await admin.query(`grant connect on database ${pg.escapeIdentifier(db[0]!.db)} to ${APP_LOGIN}`);
   // The owner of everything in kg must stay a plain role: its functions run as it (fence.test.ts, T1).
   await admin.query('alter role kg_owner with nologin nosuperuser nobypassrls');
 };
