@@ -67,6 +67,7 @@ import {
   parseOrigin,
   PLATFORM_APP_SCOPES,
   platformApps,
+  platformManifests3,
   settingsProblem,
   surfaceProblem,
   floorKindsOf,
@@ -84,7 +85,7 @@ import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './fro
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { SERVED_CONTRACTS } from './release-check.ts';
-import { AppManifest3Body, entryOf3, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -347,7 +348,7 @@ export const buildApp = async ({
             .filter((a) => !unbuiltApps.has(a.id))
             .map((a) => {
               const on = a.previews?.length ? previewsOnFor(platformRecord(a), optIns, updates.ring, at) : [];
-              return on.length ? { ...a, previewsOn: on } : a;
+              return ownServed(a, platformManifests3[a.id], { maxUpload: a.maxUpload ?? DEFAULT_UPLOAD_MB, previewsOn: on });
             });
           const apps = [...platform, ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));

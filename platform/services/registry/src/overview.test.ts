@@ -52,6 +52,9 @@ describe.runIf(DATABASE_URL)('the Upgrade Centre overview (ADR 0020)', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: editor })).statusCode).toBe(403);
     const view = (await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json();
     expect(view).toMatchObject({ ring: 'production', timeZone: 'Europe/London', needsYou: [] });
+    // A contract 3 frontend never sees roles, so the overview says what the caller may change (ADR 0083).
+    expect(view.you).toEqual({ deploymentAdmin: false });
+    expect((await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: deployer })).json().you).toEqual({ deploymentAdmin: true });
     expect(view.units[0]).toMatchObject({
       unit: 'augur',
       running: '0.13.0',

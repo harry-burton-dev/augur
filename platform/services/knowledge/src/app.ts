@@ -7,6 +7,7 @@ import { ulid } from 'ulid';
 import { callerFromHeaders, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type Effects } from './actions.ts';
 import { describeApi } from './contract.ts';
+import { EXPORT_TYPES, exportFloor, type ExportFormat } from './export.ts';
 import {
   entityBeliefs,
   entityEvents,
@@ -542,6 +543,26 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
         async (req) => {
           const { limit, applied } = capped(req.body.limit);
           return standOn(req, req.params.floor, async (db, sight) => ({ ...(await recall(db, sight, { ...req.body, limit })), ...applied }));
+        },
+      );
+
+      app.get(
+        '/floors/:floor/export',
+        {
+          schema: {
+            summary: 'The beliefs held in sight from this floor as RDF with PROV-O provenance, for a reasoner or triple store beside the service',
+            description:
+              'Turtle gives one graph. TriG puts the beliefs in a named graph for the floor, and the entities, observations and sources they rest on in the default graph. Evidence on floors out of sight is a count, never a node. Ask with format, or with Accept.',
+            params: FloorParams,
+            querystring: Type.Object({ format: Type.Optional(Type.Union([Type.Literal('turtle'), Type.Literal('trig')], { description: 'Wins over Accept. Turtle when neither says.' })) }),
+            produces: Object.values(EXPORT_TYPES),
+            response: { 200: Type.String({ description: 'Turtle or TriG.' }), ...Errors },
+          },
+        },
+        async (req, reply) => {
+          const format: ExportFormat = req.query.format ?? (/application\/trig/.test(req.headers.accept ?? '') ? 'trig' : 'turtle');
+          const text = await standOn(req, req.params.floor, async (db) => exportFloor(db, req.params.floor, format));
+          return reply.type(`${EXPORT_TYPES[format]}; charset=utf-8`).send(text);
         },
       );
 
