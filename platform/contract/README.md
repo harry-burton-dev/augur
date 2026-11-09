@@ -6,6 +6,7 @@ The shell's promise to apps, tested in a browser. A reference app on the app con
 - `tests/app-bar.spec.ts`: the app bar, its start menus and the rail with the app's places.
 - `tests/inbox.spec.ts`: the Inbox, in the words of the app's inbox kinds.
 - `tests/a11y.spec.ts`: axe on the desktop, a start menu, the app with its rail, and the stream.
+- `tests/manifest-frame.spec.ts`: Starter, the app template's app, drawn from its manifest alone (`starter/manifest.json`, a copy of the template's, with no code), on a second dev server at `CONTRACT_PORT` + 1: its tile, its places and its commands.
 
 ```sh
 pnpm build   # the shell's packages and Home

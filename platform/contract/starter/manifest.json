@@ -1,0 +1,56 @@
+{
+  "id": "starter",
+  "name": "Starter",
+  "version": "0.0.0",
+  "contract": 3,
+  "description": "What Starter is for, in a line",
+  "icon": "apps",
+  "floors": [
+    "personal",
+    "team",
+    "org"
+  ],
+  "frontend": {
+    "entry": "sandbox.js"
+  },
+  "api": {
+    "openapi": "openapi.json"
+  },
+  "scopes": [
+    "events:subscribe"
+  ],
+  "contributes": {
+    "places": [
+      {
+        "id": "hello",
+        "label": "Hello",
+        "icon": "hand",
+        "path": "/"
+      }
+    ],
+    "commands": [
+      {
+        "id": "greeting.again",
+        "label": "Ask again",
+        "icon": "refresh-cw",
+        "keywords": "greeting reload"
+      }
+    ],
+    "about": [
+      {
+        "id": "details",
+        "label": "Details",
+        "icon": "info"
+      }
+    ],
+    "settings": [
+      {
+        "id": "greeting",
+        "label": "Greeting",
+        "type": "string",
+        "default": "Hello",
+        "detail": "The word the service greets people with"
+      }
+    ]
+  }
+}
