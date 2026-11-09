@@ -96,6 +96,15 @@ describe('configFromEnv', () => {
     expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('isn’t a preview’s storage'), expect.stringContaining('leave APP_STORAGE empty')]);
   });
 
+  it('takes one removed app’s data away on its own (APP_STORAGE_RETIRE), never AUGUR’s own', () => {
+    const base = { DATABASE_URL: 'postgres://a:b@db/platform', APP_SECRETS_KEY: 'k'.repeat(64) };
+    expect(configFromEnv({ ...base, APP_STORAGE_RETIRE: 'notes' })).toMatchObject({ retireNow: 'notes' });
+    const bad = configFromEnv({ ...base, APP_STORAGE_RETIRE: 'registry' });
+    expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('APP_STORAGE_RETIRE:')]);
+    const beside = configFromEnv({ ...base, APP_STORAGE: 'maps', MAPS_DATABASE_PASSWORD: 'p'.repeat(16), MAPS_BUCKET_SECRET: 'b'.repeat(64), APP_STORAGE_RETIRE: 'notes' });
+    expect('problems' in beside && beside.problems).toEqual([expect.stringContaining('on its own')]);
+  });
+
   it('reads the apps whose data goes once (RETIRED_APPS), and refuses an id that isn’t an app’s', () => {
     const base = { DATABASE_URL: 'postgres://a:b@db/platform' };
     expect(configFromEnv({ ...base, RETIRED_APPS: 'notes  maps,board' })).toMatchObject({ retire: ['notes', 'maps', 'board'] });

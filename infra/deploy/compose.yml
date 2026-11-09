@@ -485,6 +485,8 @@ services:
       # On the workbench, Live on the workbench loads apps only from machines on this address's tailnet.
       PLATFORM_URL: ${PLATFORM_URL}
       ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
+      # How long an app removed from the server keeps its data, in days (30 when unset).
+      APP_DATA_GRACE_DAYS: ${APP_DATA_GRACE_DAYS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEEDS: ${APP_FEEDS:-}
       APP_FEED_URL: ${APP_FEED_URL:-}

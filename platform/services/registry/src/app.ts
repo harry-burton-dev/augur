@@ -127,6 +127,8 @@ export interface RegistryOptions {
   releaseFetch?: ReleaseFetch;
   /** Where this deployment is (PLATFORM_URL): never read from as a pasted address. */
   platformUrl?: string;
+  /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS, 30 by default). */
+  dataGraceDays?: number;
   /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
   pipeline?: PipelineReader;
   /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to and the deployment reports to. */
@@ -207,6 +209,7 @@ export const buildApp = async ({
   appUpdates = new AppUpdateChecker(),
   releaseFetch,
   platformUrl,
+  dataGraceDays,
   allowPrPreviews = true,
   pipeline,
   portalUrl,
@@ -797,7 +800,7 @@ export const buildApp = async ({
           }
         : undefined;
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
-      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}) }));
+      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}) }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
       const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });

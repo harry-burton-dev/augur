@@ -75,7 +75,12 @@ export const registryClient = ({ registryUrl, credentials, retryForMs = 5 * 60_0
 export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, retryForMs = 60_000, retryMs = 2_000, fetchImpl = fetch }: RegistryOptions & { identityUrl: string; oidc: { tokenUrl: string } }) => {
   const registry = (path: string) => `${registryUrl.replace(/\/$/, '')}/v1${path}`;
   const call = async (url: string, method: string, body: unknown, what: string, as: ServiceCredentials = credentials) => {
-    const res = await withDeadline(fetchImpl)(url, { method, headers: { 'content-type': 'application/json', ...(await serviceHeaders(as)) }, body: JSON.stringify(body) });
+    // No body, no content type: a JSON content type with nothing in it is refused.
+    const res = await withDeadline(fetchImpl)(url, {
+      method,
+      headers: { ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...(await serviceHeaders(as)) },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
     if (!res.ok) {
       const said = ((await res.json().catch(() => ({}))) as { message?: string }).message;
       throw new Error(`${what}: it answered ${res.status}${said ? `, ${said.replace(/\.$/, '')}` : ''}.`);
@@ -119,6 +124,7 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
   const calls: PlatformCalls = {
     setCredential: (app, secret) =>
       call(`${identityUrl.replace(/\/$/, '')}/v1/admin/apps/${encodeURIComponent(app)}/credential`, 'PUT', { secret }, `Identity didn’t take ${app}’s sign-in`),
+    removeCredential: (app) => call(`${identityUrl.replace(/\/$/, '')}/v1/admin/apps/${encodeURIComponent(app)}/credential`, 'DELETE', undefined, `Identity didn’t take ${app}’s sign-in away`),
     async register(manifest, secret) {
       const as = { name: manifest.id, getToken: clientCredentials({ tokenUrl: oidc.tokenUrl, clientId: appClientId(manifest.id), clientSecret: secret }) };
       await registerApp({ registryUrl, credentials: as, manifest, fetchImpl, env: {} });

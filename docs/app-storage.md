@@ -107,6 +107,14 @@ An app AUGUR no longer runs can have its data taken away once on each server: it
 
 Both stores are inside the compose network only: an app hosted elsewhere can't reach them.
 
+## When an app is removed
+
+Removing an app from the server (Admin → Apps, **Remove from the server**) stops its parts and takes its sign-in away at once, so nothing of it can call AUGUR. Its data stays for `APP_DATA_GRACE_DAYS` days (30 when unset, from 1 to 365): its schema and login, its bucket, its scratch folders, the values of its settings and its floors' grants. Admin → Apps lists it under **Removed, data kept** with the day they go. Installing it again before then keeps everything and calls the deletion off.
+
+When the day comes, the app runner takes a backup, then runs the storage container with `APP_STORAGE_RETIRE=<id>`, which drops the app's schemas and login and empties and deletes its bucket, the way `RETIRED_APPS` does, and notes it in `public.storage_retired_apps`. The runner removes its scratch volumes and makes sure its sign-in is gone, and the registry forgets its settings, developers, floors, how it followed updates and its catalogue entry. A try that fails is tried again an hour later, then two hours, and so on up to once a day, each after a backup; Admin → Apps shows why it failed. A waiting deletion can't be cancelled: install the app again to keep its data. The backup is the only copy left after that.
+
+The folders an admin fills for an app (`augur-files`) are not deleted: they are the admin's own files, and stay in their Docker volumes (labelled `augur.app=<id>`) until you remove them with `docker volume rm`.
+
 ## Backups
 
 The nightly backup takes apps' schemas with the rest of the database, and apps' files as `objects-YYYY-MM-DD.tar.gz` beside it (see [Running AUGUR on your own server](deploy.md#backups)).

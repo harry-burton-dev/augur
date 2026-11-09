@@ -61,9 +61,15 @@ export async function retiredApps(sql: Sql): Promise<Set<string>> {
   return new Set(rows.map((r) => r.app));
 }
 
-/** Notes that a retired app's data was taken away, or kept, so it isn't done again. */
-export async function markRetired(sql: Sql, app: string, outcome: 'removed' | 'kept'): Promise<void> {
-  await sql.query('insert into public.storage_retired_apps (app, outcome) values ($1, $2) on conflict (app) do nothing', [app, outcome]);
+/**
+ * Notes that a retired app's data was taken away, or kept, so it isn't done again. An app removed from the server
+ * (`again`) is noted each time, as one id can be installed and removed more than once.
+ */
+export async function markRetired(sql: Sql, app: string, outcome: 'removed' | 'kept', again = false): Promise<void> {
+  await sql.query(
+    `insert into public.storage_retired_apps (app, outcome) values ($1, $2) on conflict (app) do ${again ? 'update set outcome = excluded.outcome, at = now()' : 'nothing'}`,
+    [app, outcome],
+  );
 }
 
 /** Takes an app's (or a preview's) login and schemas away, with everything in them. Nothing happens when there's none. */

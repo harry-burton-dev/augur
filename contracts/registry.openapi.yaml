@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.45.0
+  version: 1.46.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -79,6 +79,37 @@ components:
         channelNote:
           type: string
           description: Why apps here follow stable only, on a production server
+        dataGraceDays:
+          type: integer
+          description: How long an app removed from the server keeps its data, in days (APP_DATA_GRACE_DAYS)
+        removed:
+          type: array
+          items:
+            type: object
+            required:
+              - app
+              - name
+              - removedAt
+              - deleteAt
+            properties:
+              app:
+                type: string
+              name:
+                type: string
+              removedAt:
+                type: string
+                format: date-time
+              deleteAt:
+                type: string
+                format: date-time
+                description: When its data goes, unless it is installed again first
+              failures:
+                type: integer
+                description: Tries to delete it that failed in a row; each waits longer, up to a day
+              problem:
+                type: string
+                description: Why the last try failed
+          description: Apps removed from the server whose data is still kept
         installed:
           type: array
           items:
@@ -314,6 +345,7 @@ components:
                         - remove
                         - preview
                         - preview-remove
+                        - purge
                     version:
                       type: string
                     requestedBy:
@@ -541,6 +573,7 @@ components:
             - remove
             - preview
             - preview-remove
+            - purge
         release:
           $ref: "#/components/schemas/AppRelease"
         pr:
@@ -3794,7 +3827,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: It has started; it finishes by itself
+          description: It has started, so it finishes by itself; or it deletes a removed app’s data, which only installing the app again stops
           content:
             application/problem+json:
               schema:

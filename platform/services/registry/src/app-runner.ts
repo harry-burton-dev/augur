@@ -32,7 +32,13 @@ const OUTCOME_ACTIONS: Record<AppJob['action'], Record<AppJobOutcome, string>> =
   remove: { done: 'app.uninstalled', failed: 'app.uninstall-failed' },
   preview: { done: 'app.preview-started', failed: 'app.preview-failed' },
   'preview-remove': { done: 'app.preview-removed', failed: 'app.preview-remove-failed' },
+  purge: { done: 'app.data-deleted', failed: 'app.data-delete-failed' },
 };
+/** How long an app removed from the server keeps its data by default (APP_DATA_GRACE_DAYS). */
+export const DATA_GRACE_DAYS = 30;
+/** How long after a failed try to take an app's data away it is tried again. */
+const PURGE_RETRY_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Why a production server doesn't install a dev build. */
 export const DEV_BUILDS_PREVIEW_ONLY = 'That’s a dev build. Only a dev or preview server (SERVER_RING=dev or preview) installs dev builds.';
@@ -124,6 +130,8 @@ export interface AppRunnerRouteOptions {
   releaseFetch?: ReleaseFetch;
   /** Where this deployment is (PLATFORM_URL), whose host is never read from as a pasted address. */
   platformUrl?: string;
+  /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS). */
+  dataGraceDays?: number;
 }
 
 /** The largest release file the registry reads from a pasted address. */
@@ -138,7 +146,7 @@ const RELEASE_SCHEMA = /^augur\.app-release\/v\d+$/;
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = releaseFileFetch({ bytes: RELEASE_FILE_BYTES, ms: RELEASE_FILE_MS }), platformUrl }: AppRunnerRouteOptions) =>
+  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = releaseFileFetch({ bytes: RELEASE_FILE_BYTES, ms: RELEASE_FILE_MS }), platformUrl, dataGraceDays = DATA_GRACE_DAYS }: AppRunnerRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** When the runner last asked what to do; it lives only as long as this process. */
@@ -259,9 +267,20 @@ export const appRunnerRoutes =
       return { known: releases.length > 0, name: releases[0]?.manifest.name ?? app, declared: [...byId.values()], live, inUse: Boolean(pending || running) };
     };
 
+    /**
+     * Asks the runner to take away the data of each removed app whose grace period ended (a purge job), unless it was
+     * installed again or has a job of its own waiting or under way.
+     */
+    const duePurges = async () => {
+      const [deletions, installed] = await Promise.all([store.dataDeletions(), store.installedApps()]);
+      for (const d of deletions.filter((x) => Date.parse(x.dueAt) <= now().getTime() && !installed.some((i) => i.app === x.app))) {
+        if (await store.requestAppJob({ id: randomUUID(), app: d.app, action: 'purge', requestedBy: 'automatic' })) await byRegistry('app.data-delete-requested', d.app, { removedAt: d.removedAt, graceDays: dataGraceDays });
+      }
+    };
+
     /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
     const appsView = async () => {
-      const [installed, follows, jobs, running, developers, internet, values] = await Promise.all([
+      const [installed, follows, jobs, running, developers, internet, values, deletions, records] = await Promise.all([
         store.installedApps(),
         store.follows(),
         store.appJobs(),
@@ -269,6 +288,8 @@ export const appRunnerRoutes =
         store.developers(),
         store.internetAllowed(),
         store.settingValues(),
+        store.dataDeletions(),
+        store.records(),
       ]);
       const { checkedAt, problem, releases } = updates.result;
       const installedIds = new Set(installed.map((i) => i.app));
@@ -282,6 +303,16 @@ export const appRunnerRoutes =
         ring,
         previewsAllowed: allowPrPreviews,
         ...(takesPreview(ring) ? {} : { channelNote: PRODUCTION_ONLY }),
+        dataGraceDays,
+        removed: deletions
+          .filter((d) => !installed.some((i) => i.app === d.app))
+          .map((d) => ({
+            app: d.app,
+            name: records.find((r) => r.entry.id === d.app)?.entry.name ?? d.app,
+            removedAt: d.removedAt,
+            deleteAt: d.dueAt,
+            ...(d.problem ? { failures: d.failures, problem: d.problem } : {}),
+          })),
         installed: installed.map(({ app: id, release, installedAt }) => {
           const follow = followOf(follows, id);
           const newest = newestOn(releases, id, follow.channel);
@@ -1032,7 +1063,7 @@ export const appRunnerRoutes =
             204: empty('Cancelled'),
             403: refused('Not an admin'),
             404: refused('No such job is waiting'),
-            409: refused('It has started; it finishes by itself'),
+            409: refused('It has started, so it finishes by itself; or it deletes a removed app’s data, which only installing the app again stops'),
           },
         },
       },
@@ -1041,6 +1072,8 @@ export const appRunnerRoutes =
         if (!caller) return reply;
         const job = (await store.appJobs()).find((j) => j.id === req.params.id);
         if (job?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes by itself.' });
+        // Its grace period is over, so the registry would ask again at once: only installing the app again keeps its data.
+        if (job?.action === 'purge') return reply.code(409).send({ error: 'conflict', message: 'Its grace period is over, so its data goes. Install the app again to keep it.' });
         if (!job || !(await store.cancelAppJob(job.id))) return reply.code(404).send({ error: 'not_found', message: 'No such job is waiting.' });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.job-cancelled', target: job.app, detail: { action: job.action } });
         return reply.code(204).send();
@@ -1070,6 +1103,7 @@ export const appRunnerRoutes =
           lastAutoAt = now().getTime();
           await autoUpdate().catch((err) => req.log.warn({ err }, 'automatic app updates failed'));
         }
+        await duePurges().catch((err) => req.log.warn({ err }, 'apps’ data due to go couldn’t be asked for'));
         const job = await store.nextAppJob();
         return job ?? reply.code(204).send();
       },
@@ -1134,9 +1168,21 @@ export const appRunnerRoutes =
         // Installed, the values of settings its release no longer declares are kept 30 days from now, in case it comes back (spec 5.5).
         if (outcome === 'done' && job.action === 'install' && job.release && isRelease2(job.release)) {
           await store.keepDeclaredSettings(job.app, declaredSettings(job.release.manifest).map((d) => d.id));
+          // Installed again within its grace period: its data stays.
+          if (await store.cancelDataDeletion(job.app)) await record(req, { actor: { id: RUNNER, kind: 'service' }, app: 'registry', action: 'app.data-deletion-cancelled', target: job.app, detail: { because: 'installed again' } });
         }
-        // Removed from the server, its settings' values are kept 30 days from now, in case it's installed again (spec 5.5).
-        if (outcome === 'done' && job.action === 'remove') await store.keepDeclaredSettings(job.app, []);
+        // Removed from the server: its data, settings and grants are kept for the grace period, then go (spec 5.5).
+        if (outcome === 'done' && job.action === 'remove') {
+          const dueAt = new Date(now().getTime() + dataGraceDays * DAY_MS);
+          await store.scheduleDataDeletion(job.app, dueAt, job.requestedBy);
+          await record(req, { actor: { id: RUNNER, kind: 'service' }, app: 'registry', action: 'app.data-deletion-scheduled', target: job.app, detail: { dueAt: dueAt.toISOString(), graceDays: dataGraceDays } });
+        }
+        // Its data gone, the registry forgets the rest; a try that failed is tried again later.
+        if (outcome === 'done' && job.action === 'purge') await store.forgetApp(job.app, RUNNER);
+        // Each try that fails in a row waits twice as long, an hour first and a day at most, so a lasting problem doesn't
+        // take a backup every hour; Admin → Apps says why.
+        if (outcome === 'failed' && job.action === 'purge')
+          await store.deferDataDeletion(job.app, (failures) => new Date(now().getTime() + Math.min(PURGE_RETRY_MS * 2 ** (failures - 1), DAY_MS)), message ?? 'The app runner gave no reason.');
         // Removed from the server, it gives up the internet: installed again, an admin decides again (spec 10.4).
         if (outcome === 'done' && job.action === 'remove' && (await store.internetAllowed()).some((a) => a.app === job.app)) {
           await store.setInternet(job.app, null);

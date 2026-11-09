@@ -52,6 +52,24 @@ describe.runIf(DATABASE_URL)('apps’ sign-ins', () => {
     expect((await put('Bearer platform-updater', 'short')).statusCode).toBe(400);
   });
 
+  it('lets only the app runner take an app’s sign-in away, once', async () => {
+    const entries: unknown[] = [];
+    const appClients = new MemoryAppClients();
+    await appClients.ensure('app-notes', 'a'.repeat(64));
+    const verifyService = async (h: Record<string, string | string[] | undefined>) => {
+      const m = /^Bearer platform-(\S+)$/.exec(String(h.authorization ?? ''));
+      return m ? { kind: 'platform' as const, name: m[1] } : undefined;
+    };
+    const app = await db.app({ appClients, verifyService, audit: async (e) => void entries.push(e) });
+    const remove = (authorization: string) => app.inject({ method: 'DELETE', url: '/v1/admin/apps/notes/credential', headers: { authorization } });
+    expect((await remove('Bearer platform-registry')).statusCode).toBe(403);
+    expect((await remove('Bearer platform-updater')).statusCode).toBe(204);
+    expect(appClients.secrets.has('app-notes')).toBe(false);
+    // Already gone: nothing changes, nothing more is audited.
+    expect((await remove('Bearer platform-updater')).statusCode).toBe(204);
+    expect(entries).toEqual([{ actor: { id: 'updater', kind: 'service' }, app: 'identity', action: 'app.credential-removed', target: 'notes' }]);
+  });
+
   it('answers 503 without the sign-in service', async () => {
     const app = await db.app();
     expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: admin })).statusCode).toBe(503);
@@ -74,6 +92,11 @@ describe.runIf(DATABASE_URL)('apps’ sign-ins', () => {
     exists = true;
     expect(await clients.issue('library')).toEqual({ clientId: 'app-library', secret: 'rotated' });
     expect(calls.at(-1)?.slice(0, 2)).toEqual(['POST', '/clients/kc-1/client-secret']);
+    // Taking it away deletes exactly that client.
+    expect(await clients.remove('library')).toBe(true);
+    expect(calls.at(-1)?.slice(0, 2)).toEqual(['DELETE', '/clients/kc-1']);
+    exists = false;
+    expect(await clients.remove('library')).toBe(false);
   });
 });
 

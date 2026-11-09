@@ -694,7 +694,34 @@ describe('the app runner', () => {
     ).toBe('done');
     expect(t.running.size).toBe(0);
     expect(t.state().apps).toEqual({});
-    expect(t.calls.did.at(-1)).toBe('upstream notes null');
+    // Its sign-in goes with it; its data stays for the grace period.
+    expect(t.calls.did.slice(-2)).toEqual(['upstream notes null', 'no credential notes']);
+    expect(t.did.some((d) => d.startsWith('retire') || d.startsWith('remove volumes'))).toBe(false);
+  });
+
+  it('finishes removing an app when identity can’t take its sign-in away yet, and says so', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.calls.calls.removeCredential = async () => {
+      throw new Error('identity answered 503');
+    };
+    expect(await t.run({ id: 'r', app: 'notes', action: 'remove', state: 'requested' })).toBe('done');
+    expect(t.state().apps).toEqual({});
+    expect(t.reports.at(-1)?.message).toMatch(/sign-in couldn’t be taken away yet \(identity answered 503\)/);
+  });
+
+  it('takes a removed app’s data away once its grace period ended, after a backup, never while it is installed', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    const purge: AppJob = { id: 'p', app: 'notes', action: 'purge', state: 'requested' };
+    expect(await t.run(purge)).toBe('failed');
+    expect(t.did.some((d) => d.startsWith('retire'))).toBe(false);
+    await t.run({ id: 'r', app: 'notes', action: 'remove', state: 'requested' });
+    t.did.length = 0;
+    t.calls.did.length = 0;
+    expect(await t.run(purge)).toBe('done');
+    expect(t.did.filter((d) => /^(backup|retire|remove volumes)/.test(d))).toEqual(['backup', 'retire notes', 'remove volumes app-notes-web-scratch']);
+    expect(t.calls.did).toEqual(['no credential notes']);
   });
 
   it('goes back from the state when it can’t go back after the watch, and never stops the version serving', async () => {

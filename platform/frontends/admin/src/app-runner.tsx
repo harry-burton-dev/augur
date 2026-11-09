@@ -275,7 +275,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
           danger
           eyebrow={confirmRemove.name}
           heading="Remove it from the server?"
-          summary="Its containers stop and are removed, so nobody can open it. Its data stays: install it again to get it back. Remove it from the catalogue too, to stop it being listed."
+          summary={`Its containers stop and are removed and its sign-in is taken away, so nobody can open it. Its data, settings and floors are kept ${installs?.dataGraceDays ? `for ${installs.dataGraceDays} days` : 'for a while'}: install it again before then to get them back. After that they are deleted, a backup taken first.`}
           actionLabel="Remove"
           busyLabel="Asking…"
           cancelLabel="Keep it"
@@ -406,6 +406,19 @@ export function InstallsSection({ ins }: { ins: Installs }) {
         <Status status="warning" label="No app runner has asked for work since the registry started, so nothing below can be installed yet. It’s the updater with APP_SECRETS_KEY set: see docs/upgrade.md, The app runner." />
       ) : null}
       {i.problem ? <Status status="warning" label={`Not every app release could be read. ${i.problem}`} /> : null}
+      {i.removed?.length ? (
+        <Section label="Removed, data kept" count={-1} limit={0}>
+          <div data-removed>
+            {i.removed.map((r) => (
+              <Line key={r.app} end={`Deleted on ${new Date(r.deleteAt).toLocaleDateString()}`}>
+                {r.name}
+                <Quiet> · install it again before then to keep its data, settings and floors</Quiet>
+                {r.problem ? <Status status="warning" label={`Deleting its data failed ${r.failures === 1 ? 'once' : `${r.failures} times in a row`}, and is tried again then: ${r.problem}`} /> : null}
+              </Line>
+            ))}
+          </div>
+        </Section>
+      ) : null}
       {busy.length ? (
         <Section label="Under way" limit={0}>
           {busy.map((a) => (

@@ -113,6 +113,12 @@ export const fakeHost = (env = ENV, network?: string) => {
     async dropStorage(id) {
       did.push(`drop ${id}`);
     },
+    async retireStorage(app) {
+      did.push(`retire ${app}`);
+    },
+    async scratchVolumes(app) {
+      return [`app-${app}-web-scratch`];
+    },
     async appNetworks(wants) {
       networks = structuredClone(wants);
       networkCalls += 1;
@@ -172,6 +178,9 @@ export const fakeCalls = () => {
   const calls: PlatformCalls = {
     async setCredential(app, secret) {
       did.push(`credential ${app} ${secret.slice(0, 6)}`);
+    },
+    async removeCredential(app) {
+      did.push(`no credential ${app}`);
     },
     async register(manifest) {
       if (refuseRegister) throw new Error('it answered 400');

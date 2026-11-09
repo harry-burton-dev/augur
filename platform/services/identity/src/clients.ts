@@ -4,7 +4,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { appClientId, callerFromHeaders, identifyService, reservedIdProblem, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
 import { DirectoryError, type KeycloakDirectory } from './directory.ts';
-import { AppParams, refused } from './schemas.ts';
+import { AppParams, empty, refused } from './schemas.ts';
 
 /**
  * Each app's own sign-in: a Keycloak client `app-<id>` that can only get
@@ -17,6 +17,8 @@ export interface AppClients {
   issue(app: string): Promise<{ clientId: string; secret: string }>;
   /** Makes sure a client (an app's, or a platform service's) exists with this secret, as the server's settings say. */
   ensure(clientId: string, secret: string): Promise<void>;
+  /** Deletes the app's client, so no secret of it works again; false when it had none. */
+  remove(app: string): Promise<boolean>;
 }
 
 interface KcClient {
@@ -84,6 +86,16 @@ export class KeycloakAppClients implements AppClients {
       await this.keycloak.call('POST', `/clients/${found[0].id}/protocol-mappers/models`, audienceMapper);
     }
   }
+
+  async remove(app: string) {
+    const clientId = appClientId(app);
+    const { data: found } = await this.keycloak.call<KcClient[]>('GET', `/clients?clientId=${encodeURIComponent(clientId)}`);
+    // Keycloak's search matches a prefix too: only the client of exactly this id goes.
+    const client = found.find((c) => c.clientId === clientId);
+    if (!client) return false;
+    await this.keycloak.call('DELETE', `/clients/${client.id}`);
+    return true;
+  }
 }
 
 /** "platform-registry=s3cret,app-library=…" (SERVICE_CLIENT_SECRETS) as client ids and secrets. */
@@ -133,6 +145,10 @@ export class MemoryAppClients implements AppClients {
 
   async ensure(clientId: string, secret: string) {
     this.secrets.set(clientId, secret);
+  }
+
+  async remove(app: string) {
+    return this.secrets.delete(appClientId(app));
   }
 }
 
@@ -254,6 +270,50 @@ export const appRunnerRoutes =
             req.log.error({ err: err.message }, 'audit entry not recorded'),
           );
           return reply.code(200).send({ clientId });
+        } catch (err) {
+          if (!(err instanceof DirectoryError)) throw err;
+          return reply.code(err.status === 503 ? 503 : 502).send({ error: 'unavailable', message: err.message });
+        }
+      },
+    );
+
+    /** The app runner takes away the sign-in of an app it removes from the server: no secret of it works again. */
+    app.delete(
+      '/:id/credential',
+      {
+        schema: {
+          summary: "Take away an app's sign-in (the app runner only)",
+          description: "Deletes the app's Keycloak client (app-<id>), when it removes the app from the server. One already gone changes nothing. Audited as app.credential-removed.",
+          params: AppParams,
+          response: {
+            204: empty('Gone, or never there'),
+            400: refused('Not an app id, or one AUGUR keeps for itself'),
+            403: refused('Not the app runner'),
+            ...signInServiceFailed,
+            503: refused("The caller's token can't be checked right now, or identity isn't connected to the sign-in service or can't reach it"),
+          },
+        },
+      },
+      async (req, reply) => {
+        let service;
+        try {
+          service = await identifyService(req.headers, verifyService);
+        } catch (err) {
+          if (!(err instanceof ServiceAuthUnavailable)) throw err;
+          return reply.code(503).send({ error: 'unavailable', message: err.message });
+        }
+        if (service?.kind !== 'platform' || service.name !== APP_RUNNER) return reply.code(403).send({ error: 'forbidden', message: 'Only the app runner takes an app’s sign-in away.' });
+        const reserved = reservedIdProblem(req.params.id);
+        if (reserved) return reply.code(400).send({ error: 'invalid', message: reserved });
+        if (!clients) return reply.code(503).send({ error: 'unavailable', message: 'Identity isn’t connected to the sign-in service, so apps’ sign-ins can’t be taken away here yet.' });
+        try {
+          const had = await clients.remove(req.params.id);
+          req.log.info({ app: req.params.id, by: service.name, had }, 'app credential removed');
+          if (had)
+            await audit?.({ actor: { id: service.name, kind: 'service' }, app: 'identity', action: 'app.credential-removed', target: req.params.id }).catch((err: Error) =>
+              req.log.error({ err: err.message }, 'audit entry not recorded'),
+            );
+          return reply.code(204).send(null);
         } catch (err) {
           if (!(err instanceof DirectoryError)) throw err;
           return reply.code(err.status === 503 ? 503 : 502).send({ error: 'unavailable', message: err.message });

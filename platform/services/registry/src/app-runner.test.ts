@@ -182,6 +182,64 @@ describe.runIf(DATABASE_URL)('internet for an app that asks for it (spec 4.6, 10
   });
 });
 
+describe.runIf(DATABASE_URL)('an app removed from the server keeps its data for the grace period (spec 5.5)', () => {
+  it('schedules its data to go at the grace date, calls that off when it is installed again, and forgets it once gone', async () => {
+    let at = new Date('2026-11-09T10:00:00Z');
+    const entries: { action: string; target?: string; detail?: Record<string, unknown> }[] = [];
+    const server = await db.app({ verifyService, audit: async (e) => void entries.push(e), now: () => at, dataGraceDays: 10 });
+    const ask = (payload: object) => server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(at), payload });
+    const next = async () => (await server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner }));
+    const finish = async (id: string, outcome: 'done' | 'failed' = 'done', message?: string) =>
+      server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${id}/progress`, headers: runner, payload: { step: 'remove', state: outcome, outcome, ...(message ? { message } : {}) } });
+    const view = async () => (await server.inject({ method: 'GET', url: '/v1/app-runner/apps', headers: fresh(at) })).json();
+    const removeIt = async () => {
+      const job = (await ask({ action: 'remove', app: 'notes' })).json();
+      await next();
+      await finish(job.id);
+    };
+    const r = await exampleRelease();
+    await finish((await ask({ action: 'install', release: r })).json().id);
+    await removeIt();
+    expect((await view()).removed).toEqual([{ app: 'notes', name: 'notes', removedAt: expect.any(String), deleteAt: '2026-11-19T10:00:00.000Z' }]);
+    expect((await view()).dataGraceDays).toBe(10);
+    expect(entries.find((e) => e.action === 'app.data-deletion-scheduled')?.detail).toEqual({ dueAt: '2026-11-19T10:00:00.000Z', graceDays: 10 });
+    // Installed again within it: the deletion is called off.
+    at = new Date('2026-11-15T10:00:00Z');
+    await finish((await ask({ action: 'install', release: r })).json().id);
+    expect((await view()).removed).toEqual([]);
+    expect(entries.some((e) => e.action === 'app.data-deletion-cancelled')).toBe(true);
+    // Removed again, and its time passes: the runner is asked to take its data away.
+    await removeIt();
+    expect((await next()).statusCode).toBe(204);
+    at = new Date('2026-11-26T10:00:00Z');
+    const purge = (await next()).json();
+    expect(purge).toMatchObject({ app: 'notes', action: 'purge', requestedBy: 'automatic' });
+    // Its grace period over, cancelling the purge would only last until the next ask: refused.
+    const cancel = await server.inject({ method: 'DELETE', url: `/v1/app-runner/jobs/${purge.id}`, headers: fresh(at) });
+    expect(cancel.statusCode).toBe(409);
+    expect(cancel.json().message).toMatch(/Install the app again/);
+    // A try that fails is tried again an hour later, not straight away, and Admin → Apps says why.
+    await finish(purge.id, 'failed', 'identity didn’t answer');
+    expect((await next()).statusCode).toBe(204);
+    expect((await view()).removed).toEqual([expect.objectContaining({ deleteAt: '2026-11-26T11:00:00.000Z', failures: 1, problem: 'identity didn’t answer' })]);
+    at = new Date('2026-11-26T11:01:00Z');
+    const again = (await next()).json();
+    expect(again).toMatchObject({ action: 'purge' });
+    // The next waits twice as long.
+    await finish(again.id, 'failed', 'still not');
+    expect((await view()).removed).toEqual([expect.objectContaining({ deleteAt: '2026-11-26T13:01:00.000Z', failures: 2 })]);
+    at = new Date('2026-11-26T13:02:00Z');
+    const third = (await next()).json();
+    await db.store.setDesiredState({ unit: 'notes', channel: 'dev', policy: 'automatic', automaticUpTo: 'patch', pin: '1.x', windows: [], setBy: 'u-1' });
+    await finish(third.id);
+    // Forgotten, its follow goes too: installed again, it starts afresh.
+    expect((await db.store.desiredStates()).some((d) => d.unit === 'notes')).toBe(false);
+    expect((await view()).removed).toEqual([]);
+    expect(await db.store.dataDeletions()).toEqual([]);
+    expect(entries.filter((e) => e.action === 'app.data-deleted')).toHaveLength(1);
+  });
+});
+
 describe.runIf(DATABASE_URL)('the deployment’s own networks and contract (9.8, 11.1)', () => {
   it('takes its own networks from the runner alone, and refuses a preview answering on one', async () => {
     const { server, ask } = await setup();
