@@ -1,4 +1,4 @@
-import { callerHeaders, GATEWAY_CALLER, scopeWords, signedCallerHeaders, withDeadline, type CallerSigner } from '@augur/service-kit';
+import { callerHeaders, GATEWAY_CALLER, isPlatformScope, scopeWords, signedCallerHeaders, withDeadline, type CallerSigner, type PlatformScope } from '@augur/service-kit';
 
 /**
  * What an app may do (contract 3, spec 8.2 and 8.3). The gateway admits an app's own token only for an app the
@@ -12,6 +12,8 @@ export interface AppGrant {
   name?: string;
   on: boolean;
   scopes: readonly string[];
+  /** AUGUR's own admin scopes (ADR 0083): only one of AUGUR's own frontends has any, and only for a person's call made through it. */
+  platformScopes?: readonly PlatformScope[];
   /** The kind of the floor the grant was read on, when the registry knows it, so the call carries that floor to the service. */
   floorKind?: 'personal' | 'team' | 'org';
   /** The app contract the app is on (3); absent for an app on contract 2, whose part checks callers for its bare id. */
@@ -55,9 +57,18 @@ export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
     let grant: AppGrant | undefined;
     if (res.status === 404) grant = undefined;
     else if (res.ok) {
-      const body = (await res.json()) as { name?: string; on?: boolean; scopes?: string[]; floorKind?: AppGrant['floorKind']; contract?: number };
+      const body = (await res.json()) as { name?: string; on?: boolean; scopes?: string[]; platformScopes?: string[]; floorKind?: AppGrant['floorKind']; contract?: number };
       // A registry from before contract 3 doesn't say whether the app is on; it isn't said off, and its scopes still bound the call.
-      grant = { ...(body.name ? { name: body.name } : {}), on: body.on ?? true, scopes: body.scopes ?? [], ...(body.floorKind ? { floorKind: body.floorKind } : {}), ...(typeof body.contract === 'number' ? { contract: body.contract } : {}) };
+      // Only names AUGUR knows as platform scopes are kept from what the registry says, and never among the app's scopes.
+      const platformScopes = (body.platformScopes ?? []).filter(isPlatformScope);
+      grant = {
+        ...(body.name ? { name: body.name } : {}),
+        on: body.on ?? true,
+        scopes: (body.scopes ?? []).filter((s) => !isPlatformScope(s)),
+        ...(platformScopes.length ? { platformScopes } : {}),
+        ...(body.floorKind ? { floorKind: body.floorKind } : {}),
+        ...(typeof body.contract === 'number' ? { contract: body.contract } : {}),
+      };
     } else throw new AppGrantsUnavailable(`the registry answered ${res.status}`);
     cache.delete(key);
     cache.set(key, { grant, at: now() });
@@ -81,7 +92,32 @@ const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
   { method: /^(GET|PUT|PATCH)$/, path: /^\/api\/events\/v1\/inbox\/items\//, scope: 'inbox:write' },
   { method: /^GET$/, path: /^\/api\/identity\/v1\/(people\/[^/]+\/principals|directory|members)\/?$/, scope: 'people:read' },
   { method: /^POST$/, path: /^\/api\/models\/v1\/(chat|embeddings)\/?$/, scope: 'models:use' },
+  // AUGUR's own admin APIs (ADR 0083), held only by AUGUR's own frontends, for a person's call; the service still checks their roles.
+  // Admin: who and what is allowed.
+  { method: /^(GET|POST|PATCH|PUT|DELETE)$/, path: /^\/api\/identity\/v1\/admin\/(people|leave-requests|lifecycle|roles|departments|levels)(\/|$)/, scope: 'people:manage' },
+  { method: /^(GET|PUT)$/, path: /^\/api\/events\/v1\/team-notices\/[^/]+\/?$/, scope: 'people:manage' },
+  { method: /^(GET|PATCH|PUT|DELETE)$/, path: /^\/api\/identity\/v1\/admin\/organisation(\/|$)/, scope: 'org:manage' },
+  { method: /^(GET|PUT)$/, path: /^\/api\/models\/v1\/settings\/?$/, scope: 'org:manage' },
+  { method: /^GET$/, path: /^\/api\/models\/v1\/usage\/?$/, scope: 'org:manage' },
+  { method: /^GET$/, path: /^\/api\/events\/v1\/audit(\/export)?\/?$/, scope: 'audit:read' },
+  // The Upgrade Centre: what runs, and changing it. Installing and removing apps, before who may use them.
+  { method: /^POST$/, path: /^\/api\/identity\/v1\/admin\/apps\/[^/]+\/credential\/?$/, scope: 'deployment:apps' },
+  { method: /^(GET|POST|PUT|DELETE)$/, path: /^\/api\/registry\/v1\/(app-runner|origins)(\/|$)/, scope: 'deployment:apps' },
+  { method: /^DELETE$/, path: /^\/api\/registry\/v1\/apps\/[^/]+\/?$/, scope: 'deployment:apps' },
+  { method: /^(PUT|DELETE)$/, path: /^\/api\/registry\/v1\/apps\/[^/]+\/pin\/?$/, scope: 'deployment:apps' },
+  { method: /^GET$/, path: /^\/api\/registry\/v1\/apps\/[^/]+\/versions\/?$/, scope: 'deployment:apps' },
+  { method: /^GET$/, path: /^\/api\/registry\/v1\/apps\/?$/, scope: 'apps:manage' },
+  { method: /^(PATCH)$/, path: /^\/api\/registry\/v1\/apps\/[^/]+\/?$/, scope: 'apps:manage' },
+  { method: /^(GET|PUT)$/, path: /^\/api\/registry\/v1\/apps\/[^/]+\/(feature-previews|floors|settings|scopes|upload-limit)(\/|$)/, scope: 'apps:manage' },
+  { method: /^GET$/, path: /^\/api\/registry\/v1\/platform\/reporting(\/export)?\/?$/, scope: 'deployment:settings' },
+  { method: /^(GET|POST|PUT|DELETE)$/, path: /^\/api\/registry\/v1\/platform\/(upgrade|go-back|updates|units|overview|results)(\/|$)/, scope: 'deployment:upgrade' },
+  { method: /^GET$/, path: /^\/api\/registry\/v1\/upstreams\/?$/, scope: 'deployment:health' },
+  { method: /^GET$/, path: /^\/api\/events\/v1\/deliveries(\/|$)/, scope: 'deployment:health' },
 ];
+
+/** Whether a grant holds a scope: an app's own scopes, or for one of AUGUR's own frontends, its platform scopes (ADR 0083). */
+export const holds = (grant: Pick<AppGrant, 'scopes' | 'platformScopes'>, scope: string): boolean =>
+  isPlatformScope(scope) ? (grant.platformScopes ?? []).includes(scope) : grant.scopes.includes(scope);
 
 /** What a scope lets an app do, in words for a refusal: "send notifications (notifications:send)". */
 /**
@@ -94,7 +130,7 @@ export const scopeFor = (method: string, url: string, app: string, platformServi
   if (!name) return undefined;
   if (name === app) return null;
   if (!platformServices.includes(name)) return undefined;
-  if (name === 'registry') return new RegExp(`^/api/registry/v1/apps/${app}(/|$)`).test(path) ? null : undefined;
+  if (name === 'registry' && new RegExp(`^/api/registry/v1/apps/${app}(/|$)`).test(path)) return null;
   return ROUTE_SCOPES.find((r) => r.method.test(method) && r.path.test(path))?.scope;
 };
 

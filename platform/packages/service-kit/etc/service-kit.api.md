@@ -952,6 +952,9 @@ export const isGatewayCaller: (caller?: Pick<Caller, "id">) => boolean;
 export const isOfferedScope: (s: string) => s is Scope;
 
 // @public
+export const isPlatformScope: (s: string) => s is PlatformScope;
+
+// @public
 export const isScopeName: (s: string) => boolean;
 
 // @public
@@ -1317,6 +1320,12 @@ export interface PersonLeft {
     person: string;
 }
 
+// @public (undocumented)
+export const PLATFORM_SCOPE_WORDS: Record<PlatformScope, string>;
+
+// @public
+export const PLATFORM_SCOPES: readonly ["people:manage", "apps:manage", "org:manage", "audit:read", "deployment:upgrade", "deployment:apps", "deployment:health", "deployment:settings"];
+
 // @public
 export const PLATFORM_TOPICS: {
     readonly personJoined: "platform.person.joined";
@@ -1344,6 +1353,9 @@ export const platformCredentialsFromEnv: (service: string, env?: NodeJS.ProcessE
     name: string;
     getToken: TokenSource;
 } | undefined;
+
+// @public (undocumented)
+export type PlatformScope = (typeof PLATFORM_SCOPES)[number];
 
 // @public
 export const previewOf: (env?: Record<string, string | undefined>) => number | undefined;

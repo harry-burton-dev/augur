@@ -73,6 +73,29 @@ describe('a call made for an app', () => {
     expect(notForApps.json().message).toMatch(/isn’t allowed to call/);
   });
 
+  it('lets AUGUR’s own frontend reach an admin API with the platform scope its release gives it, and no app without one (ADR 0083)', async () => {
+    const grants: AppGrants = async (app) =>
+      app === 'upgrades' ? { name: 'Upgrade Centre', on: true, scopes: [], platformScopes: ['deployment:upgrade'] } : app === 'notes' ? { name: 'Notes', on: true, scopes: ['notifications:send'] } : undefined;
+    const app = await buildApp({ upstreams: { events: url, registry: url, notes: url }, auth, signer, appGrants: grants, floors, access: async () => new Map([['notes', { name: 'Notes', maxUpload: 10 }], ['upgrades', { name: 'Upgrade Centre', maxUpload: 1 }]]), monitor: new HealthMonitor({ probes: [] }) });
+    const asFor = async (id: string) => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: id });
+    const goBack = await app.inject({ method: 'PUT', url: '/api/registry/v1/platform/go-back', headers: await asFor('upgrades'), payload: { version: '0.24.1' } });
+    expect(goBack.statusCode).toBe(200);
+    expect(await callerIn(goBack, 'registry')).toMatchObject({ id: 'u-1', app: 'upgrades', scopes: ['deployment:upgrade'], roles: ['editor'] });
+    const notItsOwn = await app.inject({ method: 'GET', url: '/api/events/v1/audit', headers: await asFor('upgrades') });
+    expect(notItsOwn.statusCode).toBe(403);
+    expect(notItsOwn.json().message).toBe('Upgrade Centre isn’t allowed to read the audit log (audit:read).');
+    const fromAFeed = await app.inject({ method: 'PUT', url: '/api/registry/v1/platform/go-back', headers: await asFor('notes'), payload: { version: '0.24.1' } });
+    expect(fromAFeed.statusCode).toBe(403);
+    expect(fromAFeed.json().message).toBe('Notes isn’t allowed to upgrade AUGUR or take it back (deployment:upgrade).');
+  });
+
+  it('never lets an app’s own token use a platform scope, even one a registry wrongly listed', async () => {
+    const grants: AppGrants = async (app) => (app === 'notes' ? { name: 'Notes', on: true, scopes: [], platformScopes: ['audit:read'] } : undefined);
+    const app = await buildApp({ upstreams: { events: url, notes: url }, auth, signer, appGrants: grants, floors, access, monitor: new HealthMonitor({ probes: [] }) });
+    const res = await app.inject({ method: 'GET', url: '/api/events/v1/audit', headers: { authorization: `Bearer ${await signApp('notes')}` } });
+    expect(res.statusCode).toBe(403);
+  });
+
   it('answers 400 when the path and the header name different apps, and refuses an app that is off here', async () => {
     const app = await gateway();
     const crossed = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: 'other' } });
