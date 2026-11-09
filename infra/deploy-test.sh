@@ -188,21 +188,38 @@ restore_keycloak() {
   pc exec -T postgres pg_restore -U platform -d keycloak --no-owner --role=keycloak < "$work/keycloak.dump"
 }
 
-# The apps whose data the release under test takes away, once, on upgrade (RETIRED_APPS on the storage job,
-# ADR 0075): their schemas go, and the registry forgets them. Read from this checkout's compose file.
-retired_apps() {
-  local was=$dir
-  dir=$deploy
-  pc config --format json | jq -r '.services.storage.environment.RETIRED_APPS // ""' | tr -s ' ,' '  '
-  dir=$was
+# The app ids a compose file's storage job retires (RETIRED_APPS, ADR 0075), one line. $1 is the deploy
+# folder to read; run in a subshell so `pc` reads that folder's compose file and .env.
+retired_in() (
+  dir=$1
+  pc config --format json | jq -r '.services.storage.environment.RETIRED_APPS // ""' | tr -s ' ,\n' ' '
+)
+
+# The apps this upgrade retires: named in this checkout's RETIRED_APPS and not in the release before's. Their
+# data goes on this upgrade, as docs/upgrade.md says: the storage job drops their schemas (`<app>` and `<app>_jobs`,
+# dashes as underscores) and the registry forgets them (migration 023). Once a release before also names them,
+# nothing is excused, so an app installed later under one of those ids is guarded like any other.
+retired_by_upgrade() {
+  local id before
+  before=" $(retired_in "$old_deploy") "
+  for id in $(retired_in "$deploy"); do
+    case "$before" in *" $id "*) ;; *) printf '%s ' "$id" ;; esac
+  done
 }
 
 # What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's
-# left out, and so is what the release takes away on purpose ($1, app ids): those apps' schemas, and their rows
-# in any table that names apps (a text app_id column, or the registry's apps table), so that what is counted
-# before the upgrade is what must still be there after it.
+# left out, and so is what the upgrade takes away on purpose ($1, app ids from retired_by_upgrade): those apps'
+# schemas, and their rows in any table that names apps (a text app_id column, or the registry's apps table),
+# mirroring what migration 023 deletes, so that what is counted before the upgrade is what must still be there
+# after it. The same list is used for every snapshot, so they are like for like.
 tables() {
-  local arr="{$(echo $1 | tr ' ' ',')}"
+  local id schemas='' ids=''
+  for id in $1; do
+    ids+="$id,"
+    schemas+="${id//-/_},${id//-/_}_jobs,"
+  done
+  ids="{${ids%,}}"
+  schemas="{${schemas%,}}"
   pc exec -T postgres psql -U platform -d platform -At -F' ' -v ON_ERROR_STOP=1 -c "
     select t.table_schema || '.' || t.table_name,
       (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I where %s', t.table_schema, t.table_name,
@@ -210,13 +227,13 @@ tables() {
           when exists (select 1 from information_schema.columns c
                        where c.table_schema = t.table_schema and c.table_name = t.table_name
                          and c.column_name = 'app_id' and c.data_type in ('text', 'character varying'))
-            then format('app_id <> all (%L::text[])', '$arr')
-          when t.table_schema = 'registry' and t.table_name = 'apps' then format('id <> all (%L::text[])', '$arr')
+            then format('coalesce(app_id <> all (%L::text[]), true)', '$ids')
+          when t.table_schema = 'registry' and t.table_name = 'apps' then format('coalesce(id <> all (%L::text[]), true)', '$ids')
           else 'true'
         end), false, true, '')))[1]::text
     from information_schema.tables t
     where t.table_type = 'BASE TABLE' and t.table_schema not in ('pg_catalog', 'information_schema')
-      and t.table_schema <> all ('$arr'::text[])" | sort
+      and t.table_schema <> all ('$schemas'::text[])" | sort
 }
 
 # Nothing that was there before may be gone or emptied.
@@ -343,8 +360,8 @@ case "$mode" in
       not_running >&2
     fi
     on_version "$from"
-    retired=$(retired_apps)
-    if [ -n "$retired" ]; then echo "This checkout takes the data of $(echo $retired) away on upgrade (RETIRED_APPS), so their schemas and the registry's rows for them are expected to go." >&2; fi
+    retired=$(retired_by_upgrade)
+    if [ -n "$retired" ]; then echo "This checkout retires ${retired% }(RETIRED_APPS): their schemas and the registry's rows for them are expected to go, and aren't counted." >&2; fi
     tables "$retired" > "$work/before"
     keycloak_from=$(keycloak_version)
     save_keycloak
