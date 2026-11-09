@@ -7,8 +7,25 @@ import { ulid } from 'ulid';
 import { callerFromHeaders, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type Effects } from './actions.ts';
 import { describeApi } from './contract.ts';
-import { entityId, entityUuid } from './ids.ts';
-import { ActionResult, BeliefList, Catalogue, Entity, Floor, Meta, problem, ref, UnseenObject } from './schemas.ts';
+import {
+  entityBeliefs,
+  entityEvents,
+  entityOr404,
+  listCandidates,
+  listEntities,
+  notFound,
+  readBelief,
+  readClass,
+  readEntity,
+  readObservation,
+  readOntology,
+  readRun,
+  readSource,
+  unseenElsewhere,
+  uuidOr404,
+} from './objects.ts';
+import { ActionDecl, ActionRecord, ActionResult, Belief, BeliefList, Candidate, Catalogue, Class, Entity, EntityPage, Floor, Meta, Observation, Ontology, problem, ref, SourceRef, UnseenObject } from './schemas.ts';
+import { SHAPES } from './shapes.ts';
 import type { StandingLookup } from './standing.ts';
 import { asPerson } from './store.ts';
 
@@ -28,7 +45,12 @@ export interface KnowledgeOptions {
   standing?: StandingLookup;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
+  /** The most a page of a read gives, whatever it asks for (KNOWLEDGE_PAGE_LIMIT). */
+  pageLimit?: number;
 }
+
+/** A page's ceiling when the deployment sets none. */
+export const DEFAULT_PAGE_LIMIT = 100;
 
 const KEY = /^[\x21-\x7e]{8,200}$/;
 const NOT_ON_FLOOR = 'You can’t stand on that floor, or it no longer exists.';
@@ -51,7 +73,7 @@ const fromStore = (err: unknown): unknown => {
  * action, and reads, each answered as the person calling on the floor they stand on. The store's fence does
  * the deciding (migrations 003 and 004); this only says who is asking and where.
  */
-export const buildApp = async ({ store, standing, callers }: KnowledgeOptions) => {
+export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_PAGE_LIMIT }: KnowledgeOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -209,51 +231,74 @@ export const buildApp = async ({ store, standing, callers }: KnowledgeOptions) =
         },
       );
 
+      const Errors = { 401: problem('No signed-in caller'), 403: problem('Not on that floor'), 503: problem('Identity can’t be asked where you stand') };
+      const FloorParams = Type.Object({ floor: ObjectParams.properties.floor });
+
+      app.get(
+        '/actions/:action',
+        { schema: { summary: 'One action’s declaration', params: ActionParams, response: { 200: ref(ActionDecl), 404: problem('No such action; problems lists the ones there are') } } },
+        async (req) => {
+          const action = actionNamed(req.params.action);
+          if (!action) throw unknown(req.params.action);
+          return declaration(action);
+        },
+      );
+
+      app.get(
+        '/actions/runs/:actionId',
+        {
+          schema: {
+            summary: 'The record of one action you took',
+            params: Type.Object({ actionId: Type.String({ minLength: 1, maxLength: 80 }) }),
+            response: { 200: ref(ActionRecord), 404: problem('You took no action with that id'), ...Errors },
+          },
+        },
+        async (req) => standOn(req, undefined, async (db) => readRun(db, personOn(req, undefined, { orOrg: true }).person, req.params.actionId), { orOrg: true }),
+      );
+
+      app.get(
+        '/floors/:floor/entities',
+        {
+          schema: {
+            summary: 'Entities in sight from a floor',
+            params: FloorParams,
+            querystring: Type.Object({
+              class: Type.Optional(Type.String({ maxLength: 200, description: 'A class IRI or label; subclasses come too.' })),
+              text: Type.Optional(Type.String({ maxLength: 200, description: 'Matches labels and aliases on the floors in sight.' })),
+              kind: Type.Optional(Type.Union([Type.Literal('continuant'), Type.Literal('occurrent')])),
+              cursor: Type.Optional(Type.String({ maxLength: 80 })),
+              limit: Type.Optional(Type.Integer({ minimum: 1, description: 'The deployment sets the ceiling; the answer says when it applied.' })),
+            }),
+            response: { 200: ref(EntityPage), 422: problem('The cursor isn’t one a page gave'), ...Errors },
+          },
+        },
+        async (req) => {
+          const asked = req.query.limit ?? pageLimit;
+          const limit = Math.min(asked, pageLimit);
+          return standOn(req, req.params.floor, async (db, sight) => ({
+            ...(await listEntities(db, sight, { ...req.query, limit })),
+            ...(asked > pageLimit ? { limitApplied: pageLimit } : {}),
+          }));
+        },
+      );
+
       app.get(
         '/floors/:floor/entities/:id',
         {
           schema: {
             summary: 'One entity as this floor knows it, or why it can’t be seen from here',
             params: ObjectParams,
-            response: {
-              200: Type.Union([ref(Entity), ref(UnseenObject)], { description: 'The entity, or an Unseen that names no label' }),
-              401: problem('No signed-in caller'),
-              403: problem('Not on that floor'),
-              404: problem('No such entity, or none you may know exists'),
-              503: problem('Identity can’t be asked where you stand'),
-            },
+            response: { 200: Type.Union([ref(Entity), ref(UnseenObject)], { description: 'The entity, or an Unseen that names no label' }), 404: problem('No such entity, or none you may know exists'), ...Errors },
           },
         },
         async (req) => {
-          const uuid = entityUuid(req.params.id);
-          if (!uuid) throw new Problem(404, 'not_found', 'There is no such entity.');
+          const uuid = entityOr404(req.params.id);
           return standOn(req, req.params.floor, async (db, sight) => {
-            const e = (
-              await db.query<{ class: string; state: 'active' | 'retired' | 'merged'; merged_into: string | null; kind: 'continuant' | 'occurrent' }>(
-                'select e.class, e.state, e.merged_into, c.kind from kg.entities e join kg.classes c on c.iri = e.class where e.id = $1',
-                [uuid],
-              )
-            ).rows[0];
-            if (!e) {
-              const kind = (await db.query<{ kind: 'team' | 'org' | null }>('select kg.entity_elsewhere($1) as kind', [uuid])).rows[0]!.kind;
-              if (!kind) throw new Problem(404, 'not_found', 'There is no such entity.');
-              return { kind: 'entity' as const, id: req.params.id, unseen: { reason: 'elsewhere' as const, floorKind: kind, message: `This is known on ${kind === 'org' ? 'the organisation’s floor' : 'a team’s floor'}, which you can’t see from here.` } };
-            }
-            const names = (await db.query<{ name: string; is_label: boolean; floor: string }>('select name, is_label, floor from kg.entity_names where entity = $1', [uuid])).rows;
-            // The label from the nearest floor: this one first, then up through what it sees.
-            const near = (floor: string) => (sight.indexOf(floor) === -1 ? sight.length : sight.indexOf(floor));
-            const labels = names.filter((n) => n.is_label).sort((a, b) => near(a.floor) - near(b.floor));
-            const label = labels[0] ?? names[0]!;
-            return {
-              id: req.params.id,
-              class: e.class,
-              kind: e.kind,
-              state: e.state,
-              ...(e.merged_into ? { mergedInto: entityId(e.merged_into) } : {}),
-              label: label.name,
-              labelFrom: label.floor,
-              aliases: [...new Set(names.filter((n) => n.name !== label.name).map((n) => n.name))].sort(),
-            };
+            const entity = await readEntity(db, sight, uuid);
+            if (entity) return entity;
+            const kind = (await db.query<{ kind: 'team' | 'org' | null }>('select kg.entity_elsewhere($1) as kind', [uuid])).rows[0]!.kind;
+            if (!kind) throw notFound('entity');
+            return unseenElsewhere('entity', req.params.id, kind);
           });
         },
       );
@@ -264,64 +309,103 @@ export const buildApp = async ({ store, standing, callers }: KnowledgeOptions) =
           schema: {
             summary: 'What this floor and the floors it sees believe about an entity now',
             params: ObjectParams,
-            response: { 200: ref(BeliefList), 401: problem('No signed-in caller'), 403: problem('Not on that floor'), 404: problem('No such entity'), 503: problem('Identity can’t be asked where you stand') },
+            response: { 200: ref(BeliefList), 404: problem('No such entity'), ...Errors },
           },
         },
         async (req) => {
-          const uuid = entityUuid(req.params.id);
-          if (!uuid) throw new Problem(404, 'not_found', 'There is no such entity.');
-          return standOn(req, req.params.floor, async (db, sight) => {
-            const { rows } = await db.query<{
-              id: string;
-              home_floor: string;
-              reach: string[];
-              predicate: string;
-              value: { v: number | string | boolean; unit?: string } | null;
-              object: string | null;
-              modality: string;
-              valid_from: Date | null;
-              valid_to: Date | null;
-              recorded_at: Date;
-              held_by: string;
-              disputed: boolean;
-              sources_behind: string;
-              evidence_unseen: string;
-              by_floor: { floor: string; floorKind: 'personal' | 'team' | 'org'; observations: number }[];
-            }>(
-              `select b.id, b.home_floor, b.reach, b.predicate, b.value, b.object, b.modality, lower(b.valid) as valid_from, upper(b.valid) as valid_to,
-                      b.recorded_at, b.held_by, b.disputed, b.sources_behind, b.evidence_unseen,
-                      coalesce((select jsonb_agg(jsonb_build_object('floor', x.floor, 'floorKind', x.kind, 'observations', x.n) order by x.floor)
-                                from (select o.floor, f.kind, count(*)::int as n from kg.belief_evidence be join kg.observations o on o.id = be.observation
-                                      join kg.floors f on f.id = o.floor where be.belief = b.id group by o.floor, f.kind) x), '[]') as by_floor
-               from kg.live_beliefs b where b.subject = $1 order by b.predicate, b.recorded_at`,
-              [uuid],
-            );
-            return {
-              floor: req.params.floor,
-              seeing: sight,
-              beliefs: rows.map((b) => {
-                const seen = b.by_floor.reduce((n, f) => n + f.observations, 0);
-                return {
-                  id: b.id,
-                  homeFloor: b.home_floor,
-                  reach: b.reach,
-                  subject: req.params.id,
-                  predicate: b.predicate,
-                  kind: b.object ? ('link' as const) : ('property' as const),
-                  ...(b.value ? { value: b.value } : {}),
-                  ...(b.object ? { object: entityId(b.object) } : {}),
-                  modality: b.modality,
-                  ...(b.valid_from ? { validFrom: b.valid_from.toISOString() } : {}),
-                  ...(b.valid_to ? { validTo: b.valid_to.toISOString() } : {}),
-                  recordedAt: b.recorded_at.toISOString(),
-                  state: b.disputed ? ('disputed' as const) : b.held_by === 'memory' ? ('memory' as const) : ('held' as const),
-                  heldBy: b.held_by,
-                  evidence: { observations: seen + Number(b.evidence_unseen), sources: Number(b.sources_behind), unseen: Number(b.evidence_unseen), byFloor: b.by_floor },
-                };
-              }),
-            };
-          });
+          const uuid = entityOr404(req.params.id);
+          return standOn(req, req.params.floor, async (db, sight) => ({ floor: req.params.floor, seeing: sight, beliefs: await entityBeliefs(db, uuid) }));
         },
+      );
+
+      app.get(
+        '/floors/:floor/entities/:id/events',
+        {
+          schema: {
+            summary: 'The occurrences this entity took part in (arrivals, calls, incidents), each with its own time',
+            params: ObjectParams,
+            response: { 200: ref(EntityPage), 404: problem('No such entity'), ...Errors },
+          },
+        },
+        async (req) => {
+          const uuid = entityOr404(req.params.id);
+          return standOn(req, req.params.floor, async (db, sight) => entityEvents(db, sight, uuid));
+        },
+      );
+
+      app.get(
+        '/floors/:floor/beliefs/:id',
+        { schema: { summary: 'One belief with its reach, evidence and disputes', params: ObjectParams, response: { 200: ref(Belief), 404: problem('No such belief in sight'), ...Errors } } },
+        async (req) => {
+          const uuid = uuidOr404(req.params.id, 'belief');
+          return standOn(req, req.params.floor, async (db) => (await readBelief(db, uuid)) ?? Promise.reject(notFound('belief')));
+        },
+      );
+
+      app.get(
+        '/floors/:floor/observations/:id',
+        {
+          schema: {
+            summary: 'One observation, or why it can’t be read from here',
+            params: ObjectParams,
+            response: { 200: Type.Union([ref(Observation), ref(UnseenObject)]), 404: problem('No such observation, or none you may know exists'), ...Errors },
+          },
+        },
+        async (req) => {
+          const uuid = uuidOr404(req.params.id, 'observation');
+          return standOn(req, req.params.floor, async (db) => readObservation(db, uuid));
+        },
+      );
+
+      app.get(
+        '/floors/:floor/sources/:id',
+        {
+          schema: {
+            summary: 'A source reference (the text stays in the app that holds it) and what was read from it',
+            params: ObjectParams,
+            response: { 200: Type.Union([ref(SourceRef), ref(UnseenObject)]), 404: problem('No such source, or none you may know exists'), ...Errors },
+          },
+        },
+        async (req) => {
+          const uuid = uuidOr404(req.params.id, 'source');
+          return standOn(req, req.params.floor, async (db) => readSource(db, uuid));
+        },
+      );
+
+      // The ontology belongs to no floor: anyone signed in reads it, and only candidates are fenced (to sources in sight).
+      const signedIn = (req: FastifyRequest) => {
+        if (!callerFromHeaders(req.headers)) throw new Problem(401, 'unauthenticated', 'Sign in to continue.');
+      };
+      app.get('/ontology', { schema: { summary: 'The deployment’s ontology now: the base profile and the terms adopted since', response: { 200: ref(Ontology), 401: problem('No signed-in caller') } } }, async (req) => {
+        signedIn(req);
+        return { base: BASE_PROFILE, ...(await readOntology(store)) };
+      });
+      app.get(
+        '/ontology/shapes',
+        { schema: { summary: 'The SHACL shapes the store is checked against', produces: ['text/turtle'], response: { 200: Type.String({ description: 'Turtle.' }), 401: problem('No signed-in caller') } } },
+        async (req, reply) => {
+          signedIn(req);
+          return reply.type('text/turtle; charset=utf-8').send(SHAPES);
+        },
+      );
+      app.get(
+        '/ontology/classes/:iri',
+        {
+          schema: {
+            summary: 'One class, by IRI or label',
+            params: Type.Object({ iri: Type.String({ minLength: 1, maxLength: 200 }) }),
+            response: { 200: ref(Class), 401: problem('No signed-in caller'), 404: problem('No such class') },
+          },
+        },
+        async (req) => {
+          signedIn(req);
+          return readClass(store, req.params.iri);
+        },
+      );
+      app.get(
+        '/ontology/candidates',
+        { schema: { summary: 'Terms extraction asked for that the ontology lacks, from the sources you can see', response: { 200: Type.Object({ candidates: Type.Array(ref(Candidate)) }), ...Errors } } },
+        async (req) => standOn(req, undefined, async (db) => ({ candidates: await listCandidates(db) }), { orOrg: true }),
       );
     },
     { prefix: `/${API_VERSION}` },

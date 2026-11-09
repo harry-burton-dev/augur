@@ -593,6 +593,7 @@ services:
     environment:
       <<: *env
       PORT: 8086
+      KNOWLEDGE_PAGE_LIMIT: ${KNOWLEDGE_PAGE_LIMIT:-100}
       SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
       DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
     depends_on:
