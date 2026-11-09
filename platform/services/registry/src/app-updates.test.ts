@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { callerHeaders } from '@augur/service-kit';
-import { appFeed, AppUpdateChecker, newestOn, updateNeeds, type AppFeedRead, type AppFeedRelease } from './app-updates.ts';
+import { appFeed, appFeeds, appFeedUrls, AppUpdateChecker, newestOn, updateNeeds, type AppFeed, type AppFeedRead, type AppFeedRelease } from './app-updates.ts';
 import { PgAppStore, type AppRelease } from './store.ts';
 import { FeedProblem, UpdateChecker } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
@@ -78,6 +78,56 @@ describe('the app feed', () => {
     await expect(feed()).rejects.toThrow(/before the one this server already accepted/);
     expect((await checker.check()).problem).toMatch(/before the one this server already accepted/);
     expect(checker.result.releases.map((r) => r.version)).toEqual(['1.0.0']);
+  });
+
+  it('lists a release file on contract 2 as refused, saying why, and never takes it', async () => {
+    const v1 = { schema: 'augur.app-release/v1', id: 'tasks', version: '3.0.0', channel: 'stable', manifest: { id: 'tasks', name: 'Tasks', version: '3.0.0' } };
+    const mirror = (async () => json({ apps: [release('1.0.0'), v1] })) as unknown as typeof fetch;
+    const fromMirror = listOf(await appFeed({ url: 'https://mirror/apps.json', fetchImpl: mirror })());
+    expect(fromMirror.find((r) => r.app === 'tasks')).toMatchObject({ version: '3.0.0', name: 'Tasks', refused: 'This release is on contract 2; this AUGUR serves 3.' });
+    expect(fromMirror.find((r) => r.app === 'tasks')?.release).toBeUndefined();
+    expect(newestOn(fromMirror, 'tasks', 'stable')).toBeUndefined();
+    const github = (async (url: string) =>
+      url === 'https://api/releases' ? json([{ tag_name: 'app/tasks@3.0.0', prerelease: false, draft: false, assets: [{ name: 'app-release.json', url: 'https://api/assets/tasks' }] }]) : json(v1)) as typeof fetch;
+    expect(listOf(await appFeed({ url: 'https://api/releases', fetchImpl: github })())).toEqual([expect.objectContaining({ app: 'tasks', name: 'Tasks', refused: 'This release is on contract 2; this AUGUR serves 3.' })]);
+  });
+});
+
+describe('the feeds a deployment reads', () => {
+  it('are APP_FEEDS, or APP_FEED_URL as it was named before, or AUGUR’s own feed', () => {
+    const own = 'oci://ghcr.io/o/r/feed:latest';
+    expect(appFeedUrls({ APP_FEEDS: 'https://a.example/apps.json, oci://ghcr.io/x/y/feed:latest\nhttps://b.example/apps.json' }, own)).toEqual(['https://a.example/apps.json', 'oci://ghcr.io/x/y/feed:latest', 'https://b.example/apps.json']);
+    expect(appFeedUrls({ APP_FEED_URL: 'https://a.example/apps.json' }, own)).toEqual(['https://a.example/apps.json']);
+    expect(appFeedUrls({ APP_FEEDS: 'file:///run/augur/releases/apps.json' }, own)).toEqual(['file:///run/augur/releases/apps.json']);
+    expect(appFeedUrls({ APP_FEEDS: 'https://a.example/apps.json', APP_FEED_URL: 'https://old.example' }, own)).toEqual(['https://a.example/apps.json']);
+    expect(appFeedUrls({}, own)).toEqual([own]);
+    // A mirror for AUGUR's own releases means no feed of apps unless one is named.
+    expect(appFeedUrls({ RELEASE_FEED_URL: 'https://mirror/augur.json' }, own)).toEqual([]);
+    expect(appFeedUrls({ APP_FEEDS: 'off' }, own)).toEqual([]);
+    expect(appFeedUrls({ APP_FEEDS: '' , APP_FEED_URL: '' }, own)).toEqual([own]);
+    expect(() => appFeedUrls({ APP_FEEDS: 'ftp://x' }, own)).toThrow('APP_FEEDS lists the app feeds to read, each an https://, oci:// or file:/// address, or off; "ftp://x" is none of those.');
+  });
+
+  it('are all read, each release saying which it came from, and one that fails is named while the rest still count', async () => {
+    const a: AppFeed = async () => feedOf(release('1.0.0'));
+    const b: AppFeed = async () => feedOf(releaseOf('tasks', '2.0.0'), release('1.0.0'));
+    const broken: AppFeed = async () => {
+      throw new FeedProblem('The feed isn’t signed.');
+    };
+    const read = await appFeeds([
+      { url: 'https://a.example/apps.json', feed: a },
+      { url: 'https://b.example/apps.json', feed: b },
+      { url: 'https://c.example/apps.json', feed: broken },
+    ])();
+    const releases = listOf(read);
+    // The first feed listing a version is the one it comes from.
+    expect(releases.map((r) => `${r.app} ${r.version} ${r.feed}`)).toEqual(['notes 1.0.0 https://a.example/apps.json', 'tasks 2.0.0 https://b.example/apps.json']);
+    const checker = new AppUpdateChecker(appFeeds([{ url: 'https://a.example/apps.json', feed: a }, { url: 'https://c.example/apps.json', feed: broken }]));
+    const result = await checker.check();
+    expect(result.releases.map((r) => r.version)).toEqual(['1.0.0']);
+    expect(result.problem).toBe('https://c.example/apps.json couldn’t be read: The feed isn’t signed.');
+    // Every feed failing is the feed failing.
+    await expect(appFeeds([{ url: 'https://c.example/apps.json', feed: broken }])()).rejects.toThrow('https://c.example/apps.json couldn’t be read: The feed isn’t signed.');
   });
 });
 
@@ -233,6 +283,12 @@ describe.runIf(DATABASE_URL)('installs and updates in Admin → Apps', () => {
     expect(byVersion.statusCode).toBe(400);
     expect(byVersion.json().message).toMatch(/only releases promoted to production/);
     expect((await ask({ action: 'install', release: { ...release('1.1.0-beta.1'), channel: 'stable' } })).statusCode).toBe(400);
+  });
+
+  it('offers a release on contract 2 only to say why it can’t install', async () => {
+    const t = await setup([...feedOf(release('1.0.0')), { app: 'tasks', name: 'Tasks', version: '3.0.0', channel: 'stable', refused: 'This release is on contract 2; this AUGUR serves 3.' }]);
+    expect((await t.view()).available).toContainEqual({ app: 'tasks', name: 'Tasks', version: '3.0.0', channel: 'stable', problem: 'This release is on contract 2; this AUGUR serves 3.' });
+    expect((await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', app: 'tasks', version: '3.0.0' } })).statusCode).toBe(404);
   });
 
   it('installs nothing by itself from a refused feed, though an admin still can', async () => {

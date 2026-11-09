@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.38.0
+  version: 1.40.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -216,8 +216,6 @@ components:
               - name
               - version
               - channel
-              - signer
-              - asks
             properties:
               app:
                 type: string
@@ -233,6 +231,9 @@ components:
                   - beta
               notesUrl:
                 type: string
+              feed:
+                type: string
+                description: The feed it is listed in, one of APP_FEEDS
               signer:
                 type: object
                 properties:
@@ -292,10 +293,10 @@ components:
                       type: string
                   canvas:
                     type: boolean
-                description: The release's asks, as its file carries them (spec 9.4)
+                description: The release's asks, as its file carries them (spec 9.4); missing for one that can't install here
               problem:
                 type: string
-                description: Why it can't open in this AUGUR
+                description: "Why it can't open in this AUGUR: for one on contract 2, the only thing said of it"
               job:
                 $ref: "#/components/schemas/AppJob"
     AppRelease:
@@ -1404,6 +1405,9 @@ components:
             platform:
               type: boolean
               description: One of AUGUR's own apps, always on
+            contract:
+              type: integer
+              description: The app contract major it is on; missing for one registered on contract 2
             category:
               enum:
                 - platform
@@ -1973,22 +1977,50 @@ paths:
           description: The floor to list apps for
       responses:
         "200":
-          description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there
+          description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there. An app on contract 3 is its manifest in force, with `contract`
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  allOf:
-                    - $ref: "#/components/schemas/AppManifestEntry"
+                  anyOf:
+                    - allOf:
+                        - $ref: "#/components/schemas/AppManifestEntry"
+                        - type: object
+                          properties:
+                            previewsOn:
+                              type: array
+                              items:
+                                type: string
+                              description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)"
                     - type: object
+                      required:
+                        - contract
+                        - id
+                        - name
+                        - version
+                        - maxUpload
                       properties:
+                        contract:
+                          type: integer
+                          minimum: 3
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        version:
+                          type: string
+                        maxUpload:
+                          type: integer
+                          description: "What the gateway lets through to the app in one request, in MB: what it asks, or less where an admin lowered it"
                         previewsOn:
                           type: array
                           items:
                             type: string
-                          description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)"
-                description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there
+                          description: The ids of the app's previews on for the caller
+                      additionalProperties: true
+                      description: "An app on contract 3: its manifest in force, filled in with maxUpload, previewsOn and its contract major"
+                description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there. An app on contract 3 is its manifest in force, with `contract`
         "403":
           description: The workspace isn't the floor the gateway checked
           content:
@@ -3182,6 +3214,84 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /app-runner/releases/read:
+    post:
+      summary: Read a release file from a pasted address, to review before installing (deployment admins only)
+      description: Fetches an https address (never AUGUR itself, this machine or the deployment’s own networks), at most 1 MB in 10 seconds, and checks the file as the feed’s are checked (spec 9.1 to 9.3). The file comes back with its asks and signer for the review, and its refusals and warnings; install it with POST /app-runner/jobs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: The release file’s address
+              additionalProperties: false
+      responses:
+        "200":
+          description: The file, checked
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - release
+                  - refusals
+                  - warnings
+                properties:
+                  release:
+                    type: object
+                    additionalProperties: true
+                    description: The release file as read
+                  refusals:
+                    type: array
+                    items:
+                      type: string
+                    description: Why it can’t install here, in plain words; empty when it can
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: What an admin is told, but doesn’t stop it
+                  asks:
+                    type: object
+                    additionalProperties: true
+                    description: What it asks an admin to agree to (spec 9.4)
+                  signer:
+                    type: object
+                    required:
+                      - repository
+                      - workflow
+                    properties:
+                      repository:
+                        type: string
+                      workflow:
+                        type: string
+                description: The file, checked
+        "400":
+          description: Not an https address it reads from, or nothing there is a release file
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /app-runner/jobs/{id}:
     delete:
       summary: Take back a job the runner hasn't started (admins only)
@@ -3564,13 +3674,33 @@ paths:
   /apps/{id}:
     put:
       summary: Register an app, or update it
-      description: "Called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. AUGUR's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may. An app an admin removed can't register itself again: only an admin or a platform service (the app runner) can."
+      description: "An app on contract 3 (its manifest carries `contract`) is taken only when it is the manifest of a release an admin had the app runner install, under way or installed before; it is checked against manifest-3.schema.json first. Otherwise, called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. AUGUR's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may. An app an admin removed can't register itself again: only an admin or a platform service (the app runner) can."
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AppManifestEntry"
+              anyOf:
+                - $ref: "#/components/schemas/AppManifestEntry"
+                - type: object
+                  required:
+                    - contract
+                    - id
+                    - name
+                    - version
+                  properties:
+                    contract:
+                      type: integer
+                      minimum: 3
+                      description: The app contract major it is on
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    version:
+                      type: string
+                  additionalProperties: true
+                  description: "An app on contract 3: its manifest (manifest-3.schema.json in @augur/app-tools), registered by the app runner from the release it installed"
       parameters:
         - schema:
             type: string
@@ -3583,13 +3713,55 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AppManifestEntry"
+                anyOf:
+                  - $ref: "#/components/schemas/AppManifestEntry"
+                  - type: object
+                    required:
+                      - contract
+                      - id
+                      - name
+                      - version
+                    properties:
+                      contract:
+                        type: integer
+                        minimum: 3
+                        description: The app contract major it is on
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      version:
+                        type: string
+                    additionalProperties: true
+                    description: "An app on contract 3: its manifest (manifest-3.schema.json in @augur/app-tools), registered by the app runner from the release it installed"
+                description: Updated
         "201":
           description: Registered
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AppManifestEntry"
+                anyOf:
+                  - $ref: "#/components/schemas/AppManifestEntry"
+                  - type: object
+                    required:
+                      - contract
+                      - id
+                      - name
+                      - version
+                    properties:
+                      contract:
+                        type: integer
+                        minimum: 3
+                        description: The app contract major it is on
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      version:
+                        type: string
+                    additionalProperties: true
+                    description: "An app on contract 3: its manifest (manifest-3.schema.json in @augur/app-tools), registered by the app runner from the release it installed"
+                description: Registered
         "400":
           description: The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed
           content:
@@ -3597,7 +3769,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Neither the app itself, a platform service nor an admin, or the app itself after an admin removed it
+          description: Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, or a contract 3 manifest of no release the runner was given
           content:
             application/problem+json:
               schema:

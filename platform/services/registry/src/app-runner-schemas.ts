@@ -136,8 +136,9 @@ export const AppInstalls = Type.Object(
         version: Type.String(),
         channel: Type.Enum(['stable', 'beta']),
         notesUrl: Type.Optional(Type.String()),
-        signer: Type.Object({ repository: Type.Optional(Type.String()), workflow: Type.Optional(Type.String()) }),
-        asks: Type.Object(
+        feed: Type.Optional(Type.String({ description: 'The feed it is listed in, one of APP_FEEDS' })),
+        signer: Type.Optional(Type.Object({ repository: Type.Optional(Type.String()), workflow: Type.Optional(Type.String()) })),
+        asks: Type.Optional(Type.Object(
           {
             scopes: Type.Array(Type.String()),
             resources: Type.Array(
@@ -154,9 +155,9 @@ export const AppInstalls = Type.Object(
             settings: Type.Array(Type.String()),
             canvas: Type.Boolean(),
           },
-          { description: "The release's asks, as its file carries them (spec 9.4)" },
-        ),
-        problem: Type.Optional(Type.String({ description: "Why it can't open in this AUGUR" })),
+          { description: "The release's asks, as its file carries them (spec 9.4); missing for one that can't install here" },
+        )),
+        problem: Type.Optional(Type.String({ description: "Why it can't open in this AUGUR: for one on contract 2, the only thing said of it" })),
         job: Type.Optional(ref(AppJob)),
       }),
     ),

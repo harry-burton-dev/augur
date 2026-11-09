@@ -1,6 +1,6 @@
 import semver from 'semver';
 import { asksOf2, isRelease2 } from '@augur/app-tools/release2';
-import { stable } from './release-check.ts';
+import { contractMessage, stable } from './release-check.ts';
 import { isZeroMinor } from './desired-state.ts';
 import type { AppRelease } from './store.ts';
 import { sameRepository, type FeedTrust } from './feed-trust.ts';
@@ -26,12 +26,20 @@ export interface AppFeedRelease {
   release?: AppRelease;
   /** Halted by its publisher (ADR 0018): listed, never installed or offered. */
   halted?: Halt;
+  /** Why its release file can't install here, such as one on contract 2 (spec 11.6): listed to say so, never installed. */
+  refused?: string;
+  /** What the app is called, for one refused: its release file isn't kept. */
+  name?: string;
+  /** The feed it was listed in, one of APP_FEEDS. */
+  feed?: string;
 }
 
 /** What a read of the app feed found: its releases, and whether the feed itself can be trusted. */
 export interface AppFeedRead {
   releases: AppFeedRelease[];
   trust?: FeedTrust;
+  /** A feed of several that couldn't be read; the releases are the others'. */
+  problem?: string;
 }
 
 export type AppFeed = () => Promise<AppFeedRelease[] | AppFeedRead>;
@@ -57,6 +65,14 @@ const channelOf = (version: string, prerelease: boolean): Pick<AppFeedRelease, '
 
 const isAppRelease = (x: unknown): x is AppRelease => isRelease2(x) && semver.valid(x.version) !== null;
 
+/** A release file on contract 2 (augur.app-release/v1), which this AUGUR lists only to say why it can't install. */
+type OldRelease = { schema: 'augur.app-release/v1'; id: string; version: string; channel?: string; manifest?: { name?: unknown } };
+const isOldRelease = (x: unknown): x is OldRelease => {
+  const r = x as Partial<OldRelease> | null;
+  return !!r && typeof r === 'object' && r.schema === 'augur.app-release/v1' && typeof r.id === 'string' && TAG.test(`app/${r.id}@x`) && typeof r.version === 'string' && semver.valid(r.version) !== null;
+};
+const refusedOld = (r: OldRelease) => ({ refused: contractMessage(2), ...(typeof r.manifest?.name === 'string' ? { name: r.manifest.name } : {}) });
+
 /**
  * Reads app releases from `url`: GitHub's releases API (the `app/<id>@<version>` ones, with their
  * app-release.json asset), or a mirror's JSON, which is a list of release files or `{ apps: [...] }`.
@@ -71,10 +87,12 @@ export const appFeed =
     const get = feedReader({ token, key, fetchImpl });
     const { body, trust } = await source(url, 'application/vnd.github+json, application/json');
     const items: unknown[] = Array.isArray(body) ? body : Array.isArray((body as { apps?: unknown })?.apps) ? (body as { apps: unknown[] }).apps : [];
-    if (items.some(isAppRelease)) {
-      const releases = items.filter(isAppRelease).map((r) => {
+    if (items.some((x) => isAppRelease(x) || isOldRelease(x))) {
+      const releases = items.flatMap((r): AppFeedRelease[] => {
+        if (isOldRelease(r)) return [{ app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...refusedOld(r) }];
+        if (!isAppRelease(r)) return [];
         const halted = haltOf(r);
-        return { app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r, ...(halted ? { halted } : {}) };
+        return [{ app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r, ...(halted ? { halted } : {}) }];
       });
       return { releases, trust };
     }
@@ -97,11 +115,67 @@ export const appFeed =
         if (count >= (key === app ? FILES_READ_PER_APP : 1) || !asset) return base;
         read.set(key, count + 1);
         const file = await get(asset.url, 'application/octet-stream').catch(() => undefined);
+        if (isOldRelease(file) && file.id === app && file.version === version) return { ...base, ...refusedOld(file) };
         return isAppRelease(file) && file.id === app && file.version === version ? { ...base, release: file } : base;
       }),
     );
     return { releases: found, trust };
   };
+};
+
+/** An app feed and where it is, as APP_FEEDS names it. */
+export interface NamedFeed {
+  url: string;
+  feed: AppFeed;
+}
+
+/** A feed's address: on the web, on an OCI registry, or a file on the server (a mirror's, docs/mirror.md). */
+const FEED_ADDRESS = /^(https?:\/\/|oci:\/\/|file:\/\/\/)\S+$/;
+
+/**
+ * The app feeds a deployment reads (spec 3.3): APP_FEEDS, a list split by commas, spaces or lines; or
+ * APP_FEED_URL, its name before contract 3; or else `own`, the feed AUGUR's releases come from. None when
+ * either says off, or when AUGUR's own releases come from a mirror (RELEASE_FEED_URL) and neither is set.
+ * Compose passes unset settings as empty strings.
+ */
+export const appFeedUrls = (env: Record<string, string | undefined>, own: string): string[] => {
+  const named = env.APP_FEEDS?.trim() || env.APP_FEED_URL?.trim();
+  if (!named) return env.RELEASE_FEED_URL ? [] : [own];
+  if (named === 'off') return [];
+  const urls = [...new Set(named.split(/[\s,]+/).filter(Boolean))];
+  for (const url of urls) if (!FEED_ADDRESS.test(url)) throw new Error(`APP_FEEDS lists the app feeds to read, each an https://, oci:// or file:/// address, or off; "${url}" is none of those.`);
+  return urls;
+};
+
+/**
+ * Reads every feed, in order. A release is from the first feed that lists its version. A feed that
+ * can't be read is named in the problem while the others' releases still count; when none can be
+ * read, that is the problem. The trust shown is the first feed's (AUGUR's own, by default).
+ */
+export const appFeeds = (feeds: NamedFeed[]): AppFeed => async () => {
+  const reads = await Promise.allSettled(feeds.map((f) => f.feed()));
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  const releases: AppFeedRelease[] = [];
+  let trust: FeedTrust | undefined;
+  reads.forEach((read, i) => {
+    const { url } = feeds[i]!;
+    if (read.status === 'rejected') {
+      const why = read.reason instanceof FeedProblem ? read.reason.message : 'it couldn’t be reached. Try again later.';
+      problems.push(`${url} couldn’t be read: ${why}`);
+      return;
+    }
+    const list = Array.isArray(read.value) ? read.value : read.value.releases;
+    if (i === 0 && !Array.isArray(read.value)) trust = read.value.trust;
+    for (const r of list) {
+      const key = `${r.app}@${r.version}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      releases.push({ ...r, feed: url });
+    }
+  });
+  if (problems.length === feeds.length && feeds.length) throw new FeedProblem(problems.join(' '));
+  return { releases, ...(trust ? { trust } : {}), ...(problems.length ? { problem: problems.join(' ') } : {}) };
 };
 
 const RECHECK_MS = 30_000;
@@ -148,7 +222,9 @@ export class AppUpdateChecker {
     this.inFlight = (async () => {
       try {
         const read = await feed();
-        this.last = Array.isArray(read) ? { checkedAt: this.now().toISOString(), releases: read } : { checkedAt: this.now().toISOString(), releases: read.releases, ...(read.trust ? { trust: read.trust } : {}) };
+        this.last = Array.isArray(read)
+          ? { checkedAt: this.now().toISOString(), releases: read }
+          : { checkedAt: this.now().toISOString(), releases: read.releases, ...(read.trust ? { trust: read.trust } : {}), ...(read.problem ? { problem: read.problem } : {}) };
         for (const listener of this.listeners) await Promise.resolve(listener(this.last)).catch(() => undefined);
       } catch (err) {
         this.last = { ...this.last, checkedAt: this.now().toISOString(), problem: err instanceof FeedProblem ? err.message : 'The app feed couldn’t be read. Try again later.' };
@@ -180,6 +256,10 @@ export const newestOn = (releases: AppFeedRelease[], app: string, channel: AppCh
   releases
     .filter((r) => r.app === app && r.release && !r.halted && onChannel(channel, r.channel))
     .sort((a, b) => semver.rcompare(a.version, b.version))[0];
+
+/** The newest release of `app` on `channel` that is listed only to say why it can't install, such as one on contract 2. */
+export const refusedIn = (releases: AppFeedRelease[], app: string, channel: AppChannel) =>
+  releases.filter((r) => r.app === app && r.refused && !r.release && onChannel(channel, r.channel)).sort((a, b) => semver.rcompare(a.version, b.version))[0];
 
 /** Each open pull request's newest build of `app` that the feed has a release file for, newest pull request first. */
 export const previewsIn = (releases: AppFeedRelease[], app: string) => {

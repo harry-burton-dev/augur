@@ -8,14 +8,14 @@ import { changesIn } from './changes.ts';
 import { LiveOverrides } from './live.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { automaticProblem, defaultDesiredState, windowAt } from './desired-state.ts';
-import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
+import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, refusedIn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
 import { feedHeld } from './updates.ts';
 import { checkRelease, contractMessage } from './release-check.ts';
 import { isRelease2 } from '@augur/app-tools/release2';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
 import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
-import { isCidr, upstreamProblem } from './upstreams.ts';
+import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
 
@@ -98,14 +98,21 @@ export interface AppRunnerRouteOptions {
   /** Which app or platform service sent this call; undefined when the reply has been sent. */
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
+  /** How a release file an admin pastes the address of is fetched; `fetch` by default. */
+  releaseFetch?: typeof fetch;
 }
+
+/** The largest release file the registry reads from a pasted address. */
+const RELEASE_FILE_BYTES = 1024 * 1024;
+/** How long reading one may take. */
+const RELEASE_FILE_MS = 10_000;
 
 /**
  * The deployment's app runner (part of the updater) installs, upgrades and removes apps that don't
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date() }: AppRunnerRouteOptions) =>
+  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = fetch }: AppRunnerRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** When the runner last asked what to do; it lives only as long as this process. */
@@ -238,9 +245,13 @@ export const appRunnerRoutes =
         }),
         available: [...new Set(releases.map((r) => r.app))]
           .filter((id) => !installedIds.has(id))
-          .map((id) => newestOn(releases, id, 'stable') ?? (takesPreview(ring) ? newestOn(releases, id, 'beta') : undefined))
-          .filter((r): r is NonNullable<typeof r> => Boolean(r?.release))
-          .map((r) => ({
+          .map((id) => newestOn(releases, id, 'stable') ?? (takesPreview(ring) ? newestOn(releases, id, 'beta') : undefined) ?? refusedIn(releases, id, takesPreview(ring) ? 'beta' : 'stable'))
+          .filter((r): r is NonNullable<typeof r> => Boolean(r?.release || r?.refused))
+          .map((r) =>
+            !r.release
+              ? // Listed in a feed, but its file can't install here (a contract 2 one): shown to say why, with nothing to agree to.
+                { app: r.app, name: r.name ?? r.app, version: r.version, channel: r.channel as 'stable' | 'beta', ...(r.feed ? { feed: r.feed } : {}), ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}), problem: r.refused! }
+              : {
             app: r.app,
             name: r.release!.manifest.name,
             ...(typeof r.release!.manifest.description === 'string' ? { description: r.release!.manifest.description } : {}),
@@ -250,9 +261,10 @@ export const appRunnerRoutes =
             ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
             signer: r.release!.signer,
             asks: r.release!.asks,
+            ...(r.feed ? { feed: r.feed } : {}),
             ...(releaseProblem(r.release) ? { problem: releaseProblem(r.release)! } : {}),
             ...(latestJob(r.app) ? { job: latestJob(r.app) } : {}),
-          })),
+          }),
       };
     };
 
@@ -684,6 +696,82 @@ export const appRunnerRoutes =
           detail: release ? { version: release.version, channel: release.channel, signer: `${release.signer.repository}/${release.signer.workflow}` } : {},
         });
         return reply.code(202).send((await store.appJobs(target))[0]);
+      },
+    );
+
+    /**
+     * Reads a release file from an address an admin pasted, for one no feed lists (spec 9.4), and says what it
+     * asks for and why it can't install, if it can't. Nothing is kept: installing it is asking for a job with
+     * the file, as for any other, and the runner still checks every image's signature against APP_PUBLISHERS.
+     */
+    app.post(
+      '/app-runner/releases/read',
+      {
+        schema: {
+          summary: 'Read a release file from a pasted address, to review before installing (deployment admins only)',
+          description: [
+            'Fetches an https address (never AUGUR itself, this machine or the deployment’s own networks), at most 1 MB',
+            'in 10 seconds, and checks the file as the feed’s are checked (spec 9.1 to 9.3). The file comes back with its',
+            'asks and signer for the review, and its refusals and warnings; install it with POST /app-runner/jobs.',
+          ].join(' '),
+          body: Type.Object({ url: Type.String({ minLength: 1, maxLength: 2000, description: 'The release file’s address' }) }, { additionalProperties: false }),
+          response: {
+            200: Type.Object(
+              {
+                release: Type.Unsafe<Record<string, unknown>>({ type: 'object', additionalProperties: true, description: 'The release file as read' }),
+                refusals: Type.Array(Type.String(), { description: 'Why it can’t install here, in plain words; empty when it can' }),
+                warnings: Type.Array(Type.String(), { description: 'What an admin is told, but doesn’t stop it' }),
+                asks: Type.Optional(Type.Unsafe<Record<string, unknown>>({ type: 'object', additionalProperties: true, description: 'What it asks an admin to agree to (spec 9.4)' })),
+                signer: Type.Optional(Type.Object({ repository: Type.String(), workflow: Type.String() })),
+              },
+              { description: 'The file, checked' },
+            ),
+            400: refused('Not an https address it reads from, or nothing there is a release file'),
+            401: signInAgain,
+            403: notDeploymentAdmin,
+          },
+        },
+      },
+      async (req, reply) => {
+        const caller = deploymentAdmin(req, reply, 'read a release file to install');
+        if (!caller) return reply;
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+          return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install an app. It’s asked for anything this drastic.' });
+        }
+        const { url } = req.body;
+        const where = releaseAddressProblem(url, await store.ownNetworks());
+        if (where) return reply.code(400).send({ error: 'bad_request', message: where });
+        const cannot = (why: string) => reply.code(400).send({ error: 'bad_request', message: `${url} couldn’t be read: ${why}.` });
+        let text: string;
+        try {
+          // No redirect is followed: one could lead anywhere the check above refuses.
+          const res = await releaseFetch(url, { redirect: 'manual', signal: AbortSignal.timeout(RELEASE_FILE_MS), headers: { accept: 'application/json, application/octet-stream' } });
+          if (res.status >= 300 && res.status < 400) return cannot(`it sends the registry on to ${res.headers.get('location') ?? 'another address'}. Paste that address instead`);
+          if (!res.ok) return cannot(`it answered ${res.status}`);
+          const length = Number(res.headers.get('content-length') ?? 0);
+          if (length > RELEASE_FILE_BYTES) return cannot('it is larger than a release file can be (1 MB)');
+          text = await res.text();
+          if (text.length > RELEASE_FILE_BYTES) return cannot('it is larger than a release file can be (1 MB)');
+        } catch (err) {
+          return cannot((err as Error).name === 'TimeoutError' ? 'it took longer than 10 seconds' : 'it couldn’t be reached');
+        }
+        let file: unknown;
+        try {
+          file = JSON.parse(text);
+        } catch {
+          return reply.code(400).send({ error: 'bad_request', message: `${url} isn’t a release file: it isn’t JSON.` });
+        }
+        if (!file || typeof file !== 'object' || Array.isArray(file)) return reply.code(400).send({ error: 'bad_request', message: `${url} isn’t a release file.` });
+        const { refusals, warnings } = checkRelease(file);
+        req.log.info({ by: caller.id, url, refused: refusals.length }, 'release file read from a pasted address');
+        const r = file as Partial<AppRelease>;
+        return {
+          release: file as Record<string, unknown>,
+          refusals,
+          warnings,
+          ...(isRelease2(file) ? { asks: r.asks as unknown as Record<string, unknown> } : {}),
+          ...(isRelease2(file) && r.signer ? { signer: r.signer } : {}),
+        };
       },
     );
 

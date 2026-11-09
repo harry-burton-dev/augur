@@ -113,6 +113,27 @@ const ipProblem = (host: string): string | undefined => {
 };
 
 /**
+ * Why the registry won't read a release file from `url`, an address an admin pasted (spec 9.4); undefined
+ * when it will. Only https, and never AUGUR itself, this machine or the deployment's own networks: the
+ * address is one an admin typed, and the registry fetches it from inside.
+ */
+export const releaseAddressProblem = (url: string, own: OwnNetworks = { networks: [] }): string | undefined => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return `"${url}" isn’t an address. Paste the release file’s address, such as https://github.com/owner/repo/releases/download/app%2Fnotes%401.0.0/app-release.json.`;
+  }
+  if (parsed.protocol !== 'https:') return 'A release file is read only over https.';
+  if (parsed.username || parsed.password) return 'The address can’t carry a user name or password.';
+  const host = parsed.hostname.toLowerCase().replace(/\.+$/, '');
+  const inside = `The registry doesn’t read release files from ${host}: it is AUGUR itself, this machine or one of this deployment’s own networks.`;
+  if (PLATFORM_HOSTS.includes(host) || host.endsWith('.localhost') || !host.includes('.') || ipProblem(host)) return inside;
+  if (ownNetworkOf(host, own.setAt ? own.networks : [...own.networks, DOCKER_DEFAULT])) return inside;
+  return undefined;
+};
+
+/**
  * Why `url` can't be where an app's service is: plain http(s) to a host and port, nothing else, and not
  * on one of the deployment's own networks (`own`, from the runner). Undefined when it can.
  */

@@ -57,6 +57,12 @@ Each note starts with the release it came in (**From**). If your server already 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
 
+### App feeds are a list, APP_FEEDS
+
+**From** unreleased
+
+`APP_FEEDS` names the feeds apps are installed from, split by commas or spaces, and replaces `APP_FEED_URL`, which is still read when `APP_FEEDS` isn't set: nothing to do unless you want a second feed. Admin → Apps lists every feed's apps, and says which feed couldn't be read while the others still count. A release file on contract 2 in a feed is listed with why it can't install, and an app installed from a feed registers only as the release the app runner was given. Admin → Apps also reads a release file from an address you paste, for an app no feed lists (docs/ship-an-app.md).
+
 ### Apps on SDK 2 no longer open
 
 **From** unreleased
@@ -584,7 +590,7 @@ An install (a first install, an upgrade or going back to an older version alike)
 7. **watch**: when an older version was serving, every service part must keep answering `/healthz` on its version for 5 minutes, checked every half minute. If one misses twice in a row, the runner registers the old version again, points the gateway back at it and stops the new one, and Admin → Apps says why. A version installed before the runner kept its manifest can't be gone back to by itself: the result says so, and you install it again by hand. A first install has nothing to go back to, so it isn't watched.
 8. **retire**: the old version keeps running 10 more minutes for shells still holding the old manifest, then stops.
 
-Admin → Apps lists, under the catalogue, the apps this repository has released that aren't installed, with **Install**; it says what each one asks for, and asks for your password again before anything is installed or removed. The registry reads the releases every 15 minutes, or at once with **Check for releases**: the same GitHub releases Updates reads, with the same token (`APP_FEED_URL` points it elsewhere, and `off` turns it off; it's off by itself when `RELEASE_FEED_URL` is a mirror).
+Admin → Apps lists, under the catalogue, the apps this repository has released that aren't installed, with **Install**; it says what each one asks for, and asks for your password again before anything is installed or removed. The registry reads the releases every 15 minutes, or at once with **Check for releases**: by default the same GitHub releases Updates reads, with the same token. `APP_FEEDS` lists other feeds instead, split by commas or spaces (each an `https://`, `oci://` or mirror's `file:///` address; `APP_FEED_URL`, its name before, is read when it isn't set), and `off` turns it off; it's off by itself when `RELEASE_FEED_URL` is a mirror. The deployment's GitHub key or token is sent only to GitHub, and a feed on GitHub's container registry must be signed by its own repository's Release feed workflow. When one of several feeds can't be read, Admin → Apps says which, and the others' releases still count. A release on contract 2 is listed with why it can't install.
 
 How an installed app takes new releases, installing a newer one, going back and its history are on its page in the **Upgrade Centre** (`/upgrades`); Admin → Apps links there. In its settings:
 

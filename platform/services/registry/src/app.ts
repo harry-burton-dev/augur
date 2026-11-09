@@ -79,6 +79,8 @@ import { UpdateChecker } from './updates.ts';
 import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import { SERVED_CONTRACTS } from './release-check.ts';
+import { AppManifest3Body, entryOf3, handedOver, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, type KeptEntry } from './apps3.ts';
+import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
   RouteTakenError,
@@ -120,6 +122,8 @@ export interface RegistryOptions {
   allowPrPreviews?: boolean;
   /** The app feed, for the app runner's installs and updates (Admin → Apps). Without one nothing is offered. */
   appUpdates?: AppUpdateChecker;
+  /** How a release file an admin pastes the address of is fetched (Admin → Apps); `fetch` by default. */
+  releaseFetch?: typeof fetch;
   /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
   pipeline?: PipelineReader;
   /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to and the deployment reports to. */
@@ -159,9 +163,10 @@ const settingsOf = (r: AppRecord) => ({
 
 const catalogueEntry = (r: AppRecord, allowed: string[], kind: CategoryInForce) => {
   const blocked = entryOriginProblem(r.entry, allowed);
-  const { category: _asked, ...entry } = r.entry;
+  const { category: _asked, manifest3, ...entry } = r.entry as KeptEntry;
   return {
     ...entry,
+    ...(manifest3 ? { contract: manifest3.contract } : {}),
     // Registered from an origin no longer allowed: kept, but not offered.
     ...(blocked ? { blocked } : {}),
     platform: false,
@@ -197,6 +202,7 @@ export const buildApp = async ({
   callers,
   frontendFiles,
   appUpdates = new AppUpdateChecker(),
+  releaseFetch,
   allowPrPreviews = true,
   pipeline,
   portalUrl,
@@ -272,8 +278,9 @@ export const buildApp = async ({
             ].join(' '),
             querystring: Type.Object({ workspace: Type.Optional(Type.String({ maxLength: 100, description: 'The floor to list apps for' })) }),
             response: {
-              200: Type.Array(ServedEntry, {
-                description: "Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there",
+              200: Type.Array(Type.Union([ServedEntry, Served3]), {
+                description:
+                  "Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there. An app on contract 3 is its manifest in force, with `contract`",
               }),
               403: refused("The workspace isn't the floor the gateway checked"),
               404: refused('No such floor'),
@@ -306,6 +313,13 @@ export const buildApp = async ({
             // A build is a contract 3 release: until the shell draws contract 3 frames (PER-350), only its version is served.
             .map((r) => {
               const on = previewsOnFor(r, optIns, updates.ring, at, place ? ruleChain(place) : []);
+              // An app on contract 3 is sent as its manifest in force (spec 9.6): for a developer trying one of its
+              // pull requests, that build's. Live on the workbench serves contract 2 frontends only.
+              const m3 = manifest3Of(r.entry);
+              if (m3) {
+                const preview = previews.get(r.entry.id)?.release.manifest;
+                return served3(preview ?? m3, { maxUpload: uploadLimitOf(r), previewsOn: on });
+              }
               const served = servedEntry(previews.has(r.entry.id) ? { ...r.entry, version: previews.get(r.entry.id)!.release.version } : r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
@@ -750,7 +764,7 @@ export const buildApp = async ({
           }
         : undefined;
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
-      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now }));
+      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}) }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
       const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });
@@ -767,7 +781,10 @@ export const buildApp = async ({
           schema: {
             summary: 'Register an app, or update it',
             description: [
-              "Called by an app's own service on the internal network, signed in as",
+              'An app on contract 3 (its manifest carries `contract`) is taken only when it is the',
+            'manifest of a release an admin had the app runner install, under way or installed',
+            'before; it is checked against manifest-3.schema.json first.',
+            "Otherwise, called by an app's own service on the internal network, signed in as",
               'itself (a bearer token for its Keycloak client app-<id>, audience',
               'platform-services), which may register only its own id; by a platform',
               'service signed in as its own client (platform-<name>); or by an admin',
@@ -781,12 +798,12 @@ export const buildApp = async ({
               'itself again: only an admin or a platform service (the app runner) can.',
             ].join(' '),
             params: params('id'),
-            body: ref(AppManifestEntry),
+            body: Type.Union([ref(AppManifestEntry), AppManifest3Body]),
             response: {
-              200: { ...ref(AppManifestEntry), description: 'Updated' },
-              201: { ...ref(AppManifestEntry), description: 'Registered' },
+              200: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Updated' },
+              201: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Registered' },
               400: refused("The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed"),
-              403: refused('Neither the app itself, a platform service nor an admin, or the app itself after an admin removed it'),
+              403: refused('Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, or a contract 3 manifest of no release the runner was given'),
               409: refused('The id belongs to a platform app, or the route is taken'),
               503: refused("The sign-in service can't be reached to check the app's token"),
             },
@@ -795,7 +812,8 @@ export const buildApp = async ({
         async (req, reply) => {
           const by = await changedBy(req, reply, req.params.id);
           if (!by) return reply;
-          const entry = req.body;
+          if (isManifest3(req.body)) return register3(req, reply, req.body, by);
+          const entry = req.body as AppEntry;
           if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
           const badVersion = versionProblem(entry) ?? surfaceProblem(entry) ?? settingsProblem(entry);
           if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
@@ -833,6 +851,30 @@ export const buildApp = async ({
           }
         },
       );
+
+      /** Registers an app on contract 3: the manifest of a release this registry handed the runner, and nothing else (spec 3.3). */
+      const register3 = async (req: FastifyRequest, reply: FastifyReply, manifest: AppManifest3, by: NewAuditEntry['actor']) => {
+        const id = (req.params as { id: string }).id;
+        if (manifest.id !== id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${manifest.id}", not "${id}".` });
+        const problems = manifest3Problems(manifest);
+        if (problems.length) return reply.code(400).send({ error: 'bad_request', message: `The manifest isn’t one this AUGUR reads: ${problems.join('; ')}.` });
+        if (!handedOver(await store.appJobs(id), manifest)) {
+          req.log.warn({ app: id, version: manifest.version, by: by.id }, 'a contract 3 manifest of no release the runner was given; refused');
+          return reply.code(403).send({ error: 'forbidden', message: notHandedOver(manifest) });
+        }
+        const entry = entryOf3(manifest);
+        const conflict = conflictFor(entry, await store.list());
+        if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
+        try {
+          const created = await store.put(entry, by.id);
+          req.log.info({ app: id, version: manifest.version, by: by.id, contract: manifest.contract }, created ? 'app registered' : 'app updated');
+          await record(req, { actor: by, app: 'registry', action: created ? 'app.registered' : 'app.updated', target: id, detail: { version: manifest.version, contract: manifest.contract } });
+          return reply.code(created ? 201 : 200).send(manifest);
+        } catch (err) {
+          if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
+          throw err;
+        }
+      };
 
       // A frontend arrives as one gzipped tarball (service kit's packFrontend), held in memory while it's checked.
       app.addContentTypeParser('application/gzip', { parseAs: 'buffer', bodyLimit: FRONTEND_LIMITS.bytes + 1024 * 1024 }, (_req, body, done) => done(null, body));

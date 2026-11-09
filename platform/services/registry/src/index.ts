@@ -1,6 +1,6 @@
 import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
-import { appFeed, AppUpdateChecker } from './app-updates.ts';
+import { appFeed, appFeeds, appFeedUrls, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
 import { knownTimeZone } from './desired-state.ts';
@@ -35,7 +35,8 @@ loadConfigOrExit('registry', [
   { name: 'PLATFORM_URL', about: 'where AUGUR is; on the workbench, Live on the workbench loads apps only from machines on its tailnet (https://<machine>.<tailnet>.ts.net).' },
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
   { name: 'ALLOW_PR_PREVIEWS', about: 'on: run pull requests’ builds for apps’ developers on a production server too.' },
-  { name: 'APP_FEED_URL', about: 'where new versions of apps are listed, or off.' },
+  { name: 'APP_FEEDS', about: 'the feeds apps are installed from, by address, split by commas or spaces; or off (default: the feed AUGUR’s releases come from).' },
+  { name: 'APP_FEED_URL', about: 'the name APP_FEEDS had before contract 3, read when APP_FEEDS isn’t set.' },
   { name: 'DEPLOYMENT_TIME_ZONE', about: 'the time zone upgrade windows are in, such as Europe/London (default UTC).' },
   { name: 'FEED_SIGNER', about: 'who must sign the release feed, for a fork (default: this repository’s Release feed workflow).' },
   { name: 'FRONTENDS_BUCKET_SECRET', about: 'the registry’s key to the bucket apps’ frontends are kept in by version.', secret: true },
@@ -97,11 +98,22 @@ const reporting = reportingFrom(process.env);
 // Live on the workbench loads apps only from machines on the workbench's own tailnet, the one in PLATFORM_URL.
 const tailnet = tailnetOf(process.env.PLATFORM_URL);
 
-// Apps' own releases, for the app runner (Admin → Apps): from the same feed, read with the same key or
-// token, unless APP_FEED_URL says otherwise. Off when the AUGUR feed is a mirror or off and APP_FEED_URL
-// isn't set, or with APP_FEED_URL=off.
-const appFeedUrl = process.env.APP_FEED_URL || (process.env.RELEASE_FEED_URL ? 'off' : githubFeed);
-const appUpdates = new AppUpdateChecker(appFeedUrl === 'off' ? undefined : appFeed({ url: appFeedUrl, token: feedTokenFromEnv(), key: readKey, ...checking }));
+// Apps' own releases, for the app runner (Admin → Apps): from each feed in APP_FEEDS (APP_FEED_URL before
+// contract 3), by default the feed AUGUR's releases come from. None when the AUGUR feed is a mirror or off
+// and neither is set, or when either says off. The deployment's GitHub key or token goes only to GitHub,
+// and a feed on GitHub's container registry must be signed by its own repository's Release feed workflow.
+const onGitHub = (url: string) => /^(oci:\/\/ghcr\.io\/|https:\/\/(api\.)?github\.com\/)/i.test(url);
+const feedChecking = (url: string) => {
+  if (url === feedUrl || !repoOfFeed(url)) return checking;
+  const identity = feedSigner(repoOfFeed(url)!);
+  return { check: cosignFeedCheck({ identity, trustedRoot: TRUSTED_ROOT_IN_REGISTRY }), signer: identity };
+};
+const appFeedList = appFeedUrls(process.env, githubFeed);
+const appUpdates = new AppUpdateChecker(
+  appFeedList.length
+    ? appFeeds(appFeedList.map((url) => ({ url, feed: appFeed({ url, ...(onGitHub(url) ? { token: feedTokenFromEnv(), key: readKey } : {}), ...feedChecking(url) }) })))
+    : undefined,
+);
 appUpdates.start();
 
 // Apps' frontends, kept by version in the frontends bucket (FRONTENDS_BUCKET_SECRET, made by the storage service).
