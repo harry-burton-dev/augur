@@ -9,10 +9,10 @@
 import { PageHead, QuillRemote, State, createQuillReceiver, type QuillReceiver } from '@augur/app-kit';
 import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
 import type { FrameState, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
-import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireRequest } from '@augur/mfe-sdk/sdk3/host';
+import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireFile, type WireRequest, type WireResponse } from '@augur/mfe-sdk/sdk3/host';
 import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
 import { createRoot, type Root } from 'react-dom/client';
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import { DEFAULT_BUDGETS, NodeBudget, RateBudget, type Budgets, type Overrun } from './budget.js';
 import { APP_HEADER, actionsOf, type WorkerApp } from './apps3.js';
 
@@ -49,6 +49,10 @@ export interface PaneState {
   under: ReadonlyMap<string, PlaceItem[]>;
   /** The roots the app has drawn into, so an About section it hasn't filled says so. */
   drawn: ReadonlySet<string>;
+  /** The app takes files dropped on its pane (`ctx.files.onDrop`). */
+  drops?: boolean;
+  /** The canvas the app opened (spec 6.11): its script, and the host's end of the port the app holds the other end of. */
+  canvas?: { entry: string; port: MessagePort };
 }
 
 export interface WorkerHostOptions {
@@ -71,6 +75,30 @@ const STOP_GRACE_MS = 1000;
 const UNDER_MAX = 200;
 
 const WIDTHS = new Set(['read', 'wide', 'full']);
+
+/** The page every canvas opens in: the shell's own, served with the canvas's policy (vite.config.ts, nginx.conf). */
+export const CANVAS_PAGE = '/sandbox/canvas.html';
+
+/** A canvas script's path inside the app's bundle, as an app's entry is: never an address and never out of it. */
+const BUNDLE_SCRIPT = /^(?!\/)(?!.*\.\.)[A-Za-z0-9_./-]+\.js$/;
+
+/** The answer to a body past the app's upload limit, in the gateway's words (spec 7.4), so it isn't sent to be refused. */
+function tooLarge(name: string, mb: number): WireResponse {
+  const body = new TextEncoder().encode(JSON.stringify({ error: 'too_large', message: `This is more than ${name} takes at once (${mb} MB).` })).buffer as ArrayBuffer;
+  return { status: 413, statusText: 'Payload Too Large', headers: [['content-type', 'application/json']], body };
+}
+
+/** The name a download is saved under: the service's, else the path's last part. */
+function savedName(res: Response, path: string) {
+  const given = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(res.headers.get('content-disposition') ?? '')?.[1];
+  let name = given ?? path.split(/[?#]/, 1)[0]!.split('/').pop() ?? '';
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    // Kept as sent.
+  }
+  return name.replace(/[\\/]/g, '_').slice(0, 200) || 'download';
+}
 const isPlain = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : undefined);
 
@@ -212,6 +240,7 @@ export class AppSession {
       path: ctx.path,
       previewsOn: app.previewsOn ?? [],
       ...(this.primary === CARD_ROOT ? { surface: 'card' as const } : {}),
+      ...(app.manifest.contributes?.canvas === true && this.primary === SCREEN_ROOT ? { canvas: true } : {}),
       ...(ctx.intent ? { intent: ctx.intent } : {}),
       ...(ctx.reply ? { replying: true } : {}),
     };
@@ -230,6 +259,19 @@ export class AppSession {
     this.#channel?.call('command', id, detail).catch((err: Error) => this.#ctx.notify({ title: `${this.app.name} couldn’t do that: ${err.message}` }));
   }
 
+  /** Files dropped on the pane: read here, cut at the app's upload limit, and handed to the app's handler (spec 6.10). */
+  async drop(files: readonly File[]) {
+    if (!this.#state.drops || !this.#channel) return;
+    const mb = this.app.manifest.maxUpload;
+    const total = files.reduce((n, f) => n + f.size, 0);
+    if (mb !== undefined && total > mb * 1024 * 1024) {
+      this.#ctx.notify({ title: `${files.length === 1 ? files[0]!.name : `These ${files.length} files`} ${files.length === 1 ? 'is' : 'are'} more than ${this.app.name} takes at once (${mb} MB).` });
+      return;
+    }
+    const wire: WireFile[] = await Promise.all(files.map(async (f) => ({ name: f.name, type: f.type, lastModified: f.lastModified, bytes: await f.arrayBuffer() })));
+    this.#channel?.call('drop', wire).catch((err: Error) => this.#ctx.notify({ title: `${this.app.name} couldn’t take those files: ${err.message}` }));
+  }
+
   /** Ends the run, giving the app's own stop a moment first. Meanwhile it is answered nothing. */
   async stop() {
     this.#stopping = true;
@@ -242,6 +284,9 @@ export class AppSession {
 
   #end() {
     this.#stopping = true;
+    // The canvas stops with the app: its port closes, and its frame goes with the screen.
+    this.#state.canvas?.port.close();
+    if (this.#state.canvas) this.#state = { ...this.#state, canvas: undefined };
     for (const t of this.#timers) clearTimeout(t);
     this.#timers = [];
     this.#channel?.close();
@@ -351,6 +396,20 @@ export class AppSession {
         );
         return this.#set({ under });
       }
+      case 'files.upload': {
+        const wire = args[0];
+        if (!isPlain(wire)) throw new TypeError('ctx.files.upload sent something the shell couldn’t read.');
+        return this.#fetch({ ...wire, method: wire.method === 'PUT' ? 'PUT' : 'POST' });
+      }
+      case 'files.download':
+        return this.#download(args[0], isPlain(args[1]) && args[1].save === true);
+      case 'files.drops':
+        return this.#set({ drops: args[0] === true });
+      case 'canvas.open':
+        return this.#openCanvas(args[0]);
+      case 'canvas.close':
+        this.#state.canvas?.port.close();
+        return this.#set({ canvas: undefined });
       case 'commands': {
         const declared = new Set((this.app.manifest.contributes?.commands ?? []).map((c) => c.id));
         const ids = Array.isArray(args[0]) ? args[0].filter((id): id is string => typeof id === 'string' && declared.has(id)) : [];
@@ -359,6 +418,36 @@ export class AppSession {
       default:
         throw new Error(`The shell doesn’t answer ${String(method).slice(0, 40)}.`);
     }
+  }
+
+  /** `ctx.files.download`: the bytes back to the app, or saved for the person, who must just have pressed something on a card. */
+  async #download(path: unknown, save: boolean) {
+    if (!save) return this.#fetch({ path, method: 'GET', headers: [], body: null });
+    if (!this.mayAct()) throw new Error(`${this.app.name} can save a file from its card only when someone presses something in it.`);
+    const res = (await this.#fetch({ path, method: 'GET', headers: [], body: null })) as WireResponse;
+    const back = new Response(res.status >= 200 && res.status <= 599 && ![204, 205, 304].includes(res.status) ? res.body : null, { status: res.status >= 200 && res.status <= 599 ? res.status : 502, headers: res.headers });
+    if (!back.ok) throw new Error(`${String(path).slice(0, 200)} couldn’t be downloaded (${back.status}).`);
+    const url = URL.createObjectURL(new Blob([await back.arrayBuffer()], { type: back.headers.get('content-type') ?? '' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = savedName(back, String(path));
+    a.rel = 'noopener';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+    return undefined;
+  }
+
+  /** `ctx.canvas.open` (spec 6.11): only for an app that declares it, on its screen, a script inside its bundle. */
+  #openCanvas(entry: unknown) {
+    if (this.app.manifest.contributes?.canvas !== true) throw new Error(`${this.app.name} doesn’t declare a canvas (contributes.canvas).`);
+    if (this.primary !== SCREEN_ROOT) throw new Error('A canvas opens only on the app’s screen, not its card.');
+    if (typeof entry !== 'string' || !BUNDLE_SCRIPT.test(entry)) throw new TypeError('ctx.canvas.open takes a script inside its bundle, such as canvas.js.');
+    const at = new URL(entry, new URL(this.app.entry, location.href));
+    if (at.origin !== location.origin) throw new TypeError('ctx.canvas.open takes a script inside its bundle, such as canvas.js.');
+    this.#state.canvas?.port.close();
+    const { port1, port2 } = new MessageChannel();
+    this.#set({ canvas: { entry: at.pathname, port: port1 } });
+    return port2;
   }
 
   /** `ctx.fetch`, made by the host: a path under /api/ on this origin, with the token, the floor and the app (spec 6.6, 6.14). */
@@ -374,10 +463,14 @@ export class AppSession {
     sent.set(WORKSPACE_HEADER, ctx.workspace.id);
     sent.set(APP_HEADER, this.app.id);
     const verb = typeof method === 'string' && /^[A-Z]{3,7}$/.test(method) ? method : 'GET';
+    const payload = verb === 'GET' || verb === 'HEAD' ? undefined : typeof body === 'string' || body instanceof ArrayBuffer ? body : undefined;
+    const mb = this.app.manifest.maxUpload;
+    const size = typeof payload === 'string' ? new Blob([payload]).size : (payload?.byteLength ?? 0);
+    if (mb !== undefined && size > mb * 1024 * 1024) return tooLarge(this.app.name, mb);
     const res = await ctx.fetchImpl(path, {
       method: verb,
       headers: sent,
-      body: verb === 'GET' || verb === 'HEAD' ? undefined : typeof body === 'string' || body instanceof ArrayBuffer ? body : undefined,
+      body: payload,
       credentials: 'omit',
       // A redirect would be followed with the token: the gateway answers, or the call fails.
       redirect: 'error',
@@ -458,6 +551,24 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
   );
 }
 
+/**
+ * The canvas (spec 6.11): the one place an app draws its own pixels, in the shell's page for it, in a frame
+ * whose sandbox gives it an opaque origin (scripts, nothing else) and whose page's policy lets it load only
+ * its script and reach nothing. Once it has loaded, it is handed the host's end of the port the app holds:
+ * it gets no token and no other way out.
+ */
+function CanvasFrame({ name, canvas }: { name: string; canvas: NonNullable<PaneState['canvas']> }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  useEffect(() => {
+    const frame = ref.current;
+    if (!frame) return;
+    const handOver = () => frame.contentWindow?.postMessage({ augur: 'canvas', entry: canvas.entry }, '*', [canvas.port]);
+    frame.addEventListener('load', handOver, { once: true });
+    return () => frame.removeEventListener('load', handOver);
+  }, [canvas]);
+  return <iframe ref={ref} className="app-canvas" title={name} sandbox="allow-scripts" src={CANVAS_PAGE} referrerPolicy="no-referrer" />;
+}
+
 /** A radial command's detail: the thing it was opened on, as the app marked it. */
 const thingDetail = (thing: FrameThing) => ({ thing: { kind: thing.kind, ...(thing.id ? { id: thing.id } : {}), label: thing.label } });
 
@@ -465,8 +576,24 @@ const thingDetail = (thing: FrameThing) => ({ thing: { kind: thing.kind, ...(thi
 function Pane({ session, state, stopped, onRetry, source }: { session: AppSession; state: PaneState; stopped: boolean; onRetry: () => void; source: CommandSource }) {
   const { app } = session;
   const actions = stopped ? [] : actionsOf(app, state.frame.actions, state.handled);
+  const [dropping, setDropping] = useState(false);
+  // Files from the desktop land here, in the host, only while the app has a handler for them (spec 6.10).
+  const takes = (e: DragEvent) => !stopped && state.drops === true && [...(e.dataTransfer?.types ?? [])].includes('Files');
   return (
-    <section className="app-pane" data-app={app.id} data-width={state.frame.width ?? 'read'} data-phase={state.phase} aria-busy={state.frame.busy || state.phase === 'opening' || state.phase === 'slow'}>
+    <section
+      onDragOver={(e) => {
+        if (!takes(e)) return;
+        e.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={(e) => {
+        setDropping(false);
+        if (!takes(e)) return;
+        e.preventDefault();
+        void session.drop([...(e.dataTransfer?.files ?? [])]);
+      }}
+      data-dropping={dropping ? '' : undefined} className="app-pane" data-app={app.id} data-width={state.frame.width ?? 'read'} data-phase={state.phase} aria-busy={state.frame.busy || state.phase === 'opening' || state.phase === 'slow'}>
       <PageHead heading={state.frame.title || app.name} actions={actions} onAction={(a) => session.command(a.id)} />
       {stopped ? (
         <State kind="error" heading={state.phase === 'unresponsive' ? `${app.name} was stopped` : `${app.name} stopped`} body={state.reason} action="Try again" onAction={onRetry} />
@@ -475,7 +602,8 @@ function Pane({ session, state, stopped, onRetry, source }: { session: AppSessio
           {state.phase !== 'open' && (
             <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while to open` : `Opening ${app.name}`} body={state.phase === 'slow' ? 'It’s still starting. The rest of the shell works meanwhile.' : undefined} />
           )}
-          <div className="app-pane-screen" hidden={state.phase !== 'open'}>
+          {state.canvas && state.phase === 'open' && <CanvasFrame name={app.name} canvas={state.canvas} />}
+          <div className="app-pane-screen" hidden={state.phase !== 'open' || !!state.canvas}>
             <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
               <QuillRemote receiver={session.screen} />
             </FrameRadial>

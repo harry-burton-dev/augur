@@ -104,8 +104,13 @@ export interface Files {
 
 /** The full-canvas frame of an app that declares `contributes.canvas` (spec 6.11): the one place an app draws its own pixels. */
 export interface Canvas {
-  /** Opens the canvas at `entry`, a path inside the release's bundle; the host sizes it and stops it with the app. */
-  open(entry: string): Promise<void>;
+  /**
+   * Opens the canvas at `entry`, one script inside the release's bundle beside the app's entry; the host
+   * sizes it and stops it with the app. The port is the canvas's only way out: what the app posts on it
+   * reaches the canvas's `augurCanvas` port, and back.
+   */
+  open(entry: string): Promise<MessagePort>;
+  /** Takes the canvas away; the screen shows again. */
   close(): void;
 }
 

@@ -14,8 +14,8 @@ function pair() {
     return {
       listeners,
       other: undefined as unknown as { listeners: Set<(e: MessageEvent) => void> },
-      postMessage(m: unknown) {
-        const data = structuredClone(m);
+      postMessage(m: unknown, transfer: Transferable[] = []) {
+        const data = structuredClone(m, { transfer });
         const to = this.other.listeners;
         queueMicrotask(() => to.forEach((fn) => fn({ data } as MessageEvent)));
       },
@@ -36,8 +36,8 @@ class FakeWorker extends EventTarget {
   constructor(readonly end: ReturnType<typeof pair>[0]) {
     super();
   }
-  postMessage(m: unknown) {
-    if (!this.terminated) this.end.postMessage(m);
+  postMessage(m: unknown, transfer?: Transferable[]) {
+    if (!this.terminated) this.end.postMessage(m, transfer);
   }
   override addEventListener(type: string, fn: EventListenerOrEventListenerObject | null) {
     if (type === 'message') this.end.addEventListener(type, fn as never);
@@ -381,6 +381,112 @@ describe('the worker host', () => {
     await flush();
     expect(ctx.navigate).not.toHaveBeenCalled();
     expect(ctx.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('files and the canvas', () => {
+  const filer: WorkerApp = fromCatalogue3({ ...manifest, maxUpload: 1, contributes: { ...manifest.contributes, canvas: true } });
+  const wire = (body: ArrayBuffer | string, path = '/api/notes/v1/files') => ({ path, method: 'POST', headers: [['content-type', 'text/plain']], body });
+  const start = (target: WorkerApp = filer, over: Partial<WorkerContext> = {}) => {
+    let self!: Channel;
+    const dropped: unknown[] = [];
+    const stub = stubApp((app, method, args) => {
+      self = app;
+      if (method === 'start') app.mutate('screen', [notice('n1', 'Ready')]);
+      if (method === 'drop') dropped.push(...(args[0] as unknown[]));
+    });
+    const ctx = ctxFor(over);
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(target, ctx));
+    return { self: () => self, ctx, dropped };
+  };
+  const fetched = (ctx: WorkerContext) => (ctx.fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls;
+
+  it('uploads the bytes the worker sends with the person’s token and the app’s id, intact', async () => {
+    const { self, ctx } = start();
+    await flush();
+    const bytes = new Uint8Array([1, 2, 3, 250]).buffer;
+    const answer = (await self().call('files.upload', wire(bytes))) as { status: number };
+    expect(answer.status).toBe(200);
+    const [path, init] = fetched(ctx)[0]!;
+    expect(path).toBe('/api/notes/v1/files');
+    expect(init.method).toBe('POST');
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer the-token');
+    expect(new Headers(init.headers).get('x-augur-app')).toBe('notes');
+    expect([...new Uint8Array(init.body as ArrayBuffer)]).toEqual([1, 2, 3, 250]);
+  });
+
+  it('answers an upload past the app’s limit as the gateway would, without sending it', async () => {
+    const { self, ctx } = start();
+    await flush();
+    const answer = (await self().call('files.upload', wire(new ArrayBuffer(2 * 1024 * 1024)))) as { status: number; body: ArrayBuffer };
+    expect(answer.status).toBe(413);
+    expect(JSON.parse(new TextDecoder().decode(answer.body))).toEqual({ error: 'too_large', message: 'This is more than Notes takes at once (1 MB).' });
+    expect(fetched(ctx)).toEqual([]);
+  });
+
+  it('saves a download for the person when the app asks, and hands it the bytes otherwise', async () => {
+    const fetchImpl = vi.fn(async () => new Response('file body', { headers: { 'content-type': 'text/plain', 'content-disposition': 'attachment; filename="notes.txt"' } })) as unknown as typeof fetch;
+    const { self } = start(filer, { fetchImpl });
+    await flush();
+    const made: Blob[] = [];
+    Object.assign(URL, { createObjectURL: (b: Blob) => (made.push(b), 'blob:saved'), revokeObjectURL: () => undefined });
+    const clicked: HTMLAnchorElement[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      clicked.push(this);
+    });
+    expect(await self().call('files.download', '/api/notes/v1/files/1', { save: true })).toBeUndefined();
+    expect(clicked[0]?.download).toBe('notes.txt');
+    expect(await made[0]!.text()).toBe('file body');
+    const got = (await self().call('files.download', '/api/notes/v1/files/1')) as { status: number; body: ArrayBuffer };
+    expect(new TextDecoder().decode(got.body)).toBe('file body');
+    await expect(self().call('files.download', 'https://example.org/x')).rejects.toThrow();
+  });
+
+  it('takes files dropped on the pane only once the app has a handler, and hands it their bytes', async () => {
+    const { self, dropped } = start();
+    await flush();
+    const pane = () => stage.querySelector('.app-pane')!;
+    const drop = (files: File[]) => {
+      const e = Object.assign(new Event('drop', { bubbles: true, cancelable: true }), { dataTransfer: { files, types: ['Files'] } });
+      act(() => void pane().dispatchEvent(e));
+      return e;
+    };
+    expect(drop([new File(['A'], 'a.txt', { type: 'text/plain' })]).defaultPrevented).toBe(false);
+    self().post('files.drops', true);
+    await flush();
+    expect(drop([new File(['A'], 'a.txt', { type: 'text/plain' })]).defaultPrevented).toBe(true);
+    await flush();
+    await flush();
+    expect(dropped).toMatchObject([{ name: 'a.txt', type: 'text/plain' }]);
+    expect(new TextDecoder().decode((dropped[0] as { bytes: ArrayBuffer }).bytes)).toBe('A');
+  });
+
+  it('opens the canvas as a sandboxed frame with an opaque origin in place of the screen, and stops it with the app', async () => {
+    const { self } = start();
+    await flush();
+    const port = await self().call('canvas.open', 'canvas.js');
+    expect((port as object).constructor.name).toBe('MessagePort');
+    await flush();
+    const frame = stage.querySelector('iframe')!;
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
+    expect(frame.getAttribute('src')).toBe('/sandbox/canvas.html');
+    expect(frame.title).toBe('Notes');
+    await expect(self().call('canvas.open', '../admin.js')).rejects.toThrow(/inside its bundle/);
+    self().post('canvas.close');
+    await flush();
+    expect(stage.querySelector('iframe')).toBeNull();
+    await self().call('canvas.open', 'canvas.js');
+    await flush();
+    expect(stage.querySelector('iframe')).not.toBeNull();
+    act(() => mounter.unmount());
+    expect(stage.querySelector('iframe')).toBeNull();
+  });
+
+  it('refuses a canvas to an app that doesn’t declare one', async () => {
+    const { self } = start(app);
+    await flush();
+    await expect(self().call('canvas.open', 'canvas.js')).rejects.toThrow(/doesn’t declare a canvas/);
   });
 });
 

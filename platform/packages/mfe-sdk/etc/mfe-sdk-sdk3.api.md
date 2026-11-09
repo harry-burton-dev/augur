@@ -34,9 +34,8 @@ export interface AppContext {
 
 // @public
 export interface Canvas {
-    // (undocumented)
     close(): void;
-    open(entry: string): Promise<void>;
+    open(entry: string): Promise<MessagePort>;
 }
 
 // @public
