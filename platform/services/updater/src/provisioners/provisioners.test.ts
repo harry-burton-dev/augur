@@ -171,7 +171,7 @@ describe('provisioners (spec 4.6, 10.2)', () => {
       exportKey: { value: '', secret: true },
     });
     expect(settings.outputs(ctx('augur-settings', { ids: ['retentionDays'] }, { settings: { retentionDays: '30' } }))).toEqual({ retentionDays: { value: '30' } });
-    expect(() => provisionParts(unit([partWith({ s: { type: 'augur-settings' } })]))).toThrow('Notes needs its Map service key before it can start. An admin fills it in under Admin → Apps.');
+    expect(() => provisionParts(unit([partWith({ s: { type: 'augur-settings' } })]))).toThrow('Notes needs Map service key before it can start. A deployment admin fills it in under Admin → Apps.');
   });
 
   it('sends telemetry where AUGUR’s own services send it, and leaves the endpoint empty without a collector', () => {

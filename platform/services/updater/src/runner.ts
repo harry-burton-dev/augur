@@ -21,6 +21,7 @@
  * the registry gives its manifest, and the gateway sends calls to it, only for developers who chose
  * it. A newer build of the pull request replaces it in place; taking it away drops its storage.
  */
+import { createHmac } from 'node:crypto';
 import { appSecretFor, FRONTEND_LIMITS, frontendDigest } from '@augur/service-kit';
 import { isRelease2, type AppRelease2 } from '@augur/app-tools/release2';
 import type { AppManifest3 } from '@augur/app-tools/validate';
@@ -107,6 +108,8 @@ export interface RunnerState {
   previews?: Record<string, RunningPreview>;
   /** The apps a deployment admin let reach the internet, as the registry last said (spec 4.6, augur-outbound). */
   internet?: string[];
+  /** The values admins gave apps' settings, by app then setting id, as the registry last said (spec 5.3, augur-settings). */
+  settings?: Record<string, Record<string, string>>;
 }
 
 /** What `compose run` of a job part said: its exit code (or that it ran out of time) and its output. */
@@ -272,6 +275,8 @@ interface Unit {
   parts: ScorePart[];
   /** Whether an admin let the app reach the internet: its parts that ask for it get it. */
   internet?: boolean;
+  /** The values an admin gave the app's settings, by id. */
+  settings?: Record<string, string>;
 }
 
 /** The secrets of a unit: the app's sign-in, with its storage id's storage secrets. */
@@ -289,7 +294,23 @@ const provisioned = (unit: Unit, env: string) =>
     parts: unit.parts,
     env,
     secrets: unitSecrets(env, unit),
+    settings: unit.settings ?? {},
   });
+
+/**
+ * What a part's settings are, as a label on its service: a keyed hash of every value its augur-settings resources
+ * give it, so the label changes when one does and Compose starts the part again (a secret's file is read only at
+ * start), while nothing of the value can be read from it. Undefined for a part that reads no settings.
+ */
+const settingsMark = (outputs: Provisioned['outputs'][string], part: ScorePart, env: string) => {
+  const names = Object.entries(part.resources ?? {})
+    .filter(([, r]) => r.type === 'augur-settings')
+    .map(([n]) => n)
+    .sort();
+  if (!names.length) return undefined;
+  const values = names.map((n) => Object.entries(outputs[n] ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([k, o]) => [k, o.value]));
+  return createHmac('sha256', envValue(env, 'APP_SECRETS_KEY') || 'augur').update(JSON.stringify([names, values])).digest('hex').slice(0, 16);
+};
 
 /**
  * A value as Compose must be given it: Compose fills in `$NAME` and `${NAME}` in every string of a
@@ -353,6 +374,7 @@ const renderUnit = (unit: Unit, env: string) => {
     }
     const { limits } = spec.resources;
     const job = partKind(part) === 'job';
+    const mark = settingsMark(p.outputs[name] ?? {}, part, env);
     services[service] = {
       image: spec.image,
       // A job runs once, when the runner runs it (`compose run`), never with `up`.
@@ -385,6 +407,7 @@ const renderUnit = (unit: Unit, env: string) => {
         'augur.part': name,
         'augur.kind': partKind(part),
         ...(unit.slot.startsWith('pr') ? { 'augur.preview': unit.slot.slice(2) } : {}),
+        ...(mark ? { 'augur.settings': mark } : {}),
       },
     };
   }
@@ -478,7 +501,7 @@ export const appsProject = (state: RunnerState, env: string, network = DEFAULT_N
   const secrets: Record<string, object> = {};
   const files: Record<string, string | Uint8Array> = {};
   const add = (unit: Unit, preview = false) => {
-    const r = renderUnit({ ...unit, internet: !preview && (state.internet?.includes(unit.app) ?? false) }, env);
+    const r = renderUnit({ ...unit, internet: !preview && (state.internet?.includes(unit.app) ?? false), settings: state.settings?.[unit.app] }, env);
     Object.assign(services, r.services);
     Object.assign(volumes, r.volumes);
     Object.assign(secrets, r.secrets);
@@ -603,6 +626,30 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     const off = [...was].filter((a) => !now.has(a)).sort();
     if (on.length || off.length) await save({ ...state, internet: [...now].sort() }, await host.readEnv());
     return { on, off };
+  };
+  /**
+   * Hands apps' parts the values admins gave their settings (the registry's list, spec 5.3, 5.4): the project is
+   * written with them, and each running part whose values changed, a secret's file among them, is started again
+   * with them (only those: a part that reads none of the changed values keeps running). Says which it started.
+   */
+  const keepSettings = async (values: Record<string, Record<string, string>>) => {
+    const state = await host.readState();
+    const tidy = (v: Record<string, Record<string, string>>) => JSON.stringify(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([app, s]) => [app, Object.entries(s).sort(([a], [b]) => a.localeCompare(b))]));
+    if (tidy(state.settings ?? {}) === tidy(values)) return { restarted: [] as string[] };
+    const env = await host.readEnv();
+    const marks = (s: RunnerState) =>
+      new Map(
+        Object.entries(appsProject(s, env).project.services as Record<string, { labels?: Record<string, string> }>)
+          .filter(([, svc]) => svc.labels?.['augur.kind'] !== 'job')
+          .map(([name, svc]) => [name, svc.labels?.['augur.settings']]),
+      );
+    const before = marks(state);
+    const next = { ...state, settings: values };
+    const after = marks(next);
+    await save(next, env);
+    const restarted = [...after].filter(([name, mark]) => before.has(name) && before.get(name) !== mark).map(([name]) => name);
+    if (restarted.length) await host.start(restarted);
+    return { restarted };
   };
   /** Joins the gateway and stores to the apps' networks again: an upgrade of AUGUR gives them new containers, which aren't on them. */
   const keepNetworks = async () => host.appNetworks(appNetworksOf(await host.readState(), await host.readEnv()));
@@ -834,6 +881,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       version: release.version,
       manifest: release.manifest,
       parts: release.parts,
+      settings: state.settings?.[app],
     };
 
     await provision(unit, env, report);
@@ -984,6 +1032,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       version: release.version,
       manifest: release.manifest,
       parts: release.parts,
+      settings: (await host.readState()).settings?.[job.app],
     };
     await provision(unit, env, report);
 
@@ -1140,5 +1189,5 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     }
   };
 
-  return { run, retireDue, keepNetworks, keepInternet };
+  return { run, retireDue, keepNetworks, keepInternet, keepSettings };
 };

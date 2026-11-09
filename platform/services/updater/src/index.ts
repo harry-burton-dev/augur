@@ -185,6 +185,12 @@ const appsOnce = async () => {
     .then((allowed) => runner.keepInternet(allowed))
     .then(({ on, off }) => (on.length || off.length) && log('apps’ internet changed', { on, off }))
     .catch((err) => log('couldn’t give apps the internet an admin allowed', { error: (err as Error).message }));
+  // Also between jobs, and before the next one: an install takes the values an admin gave with it.
+  await apps
+    .settingValues()
+    .then((values) => runner.keepSettings(values))
+    .then(({ restarted }) => restarted.length && log('apps’ settings changed', { restarted }))
+    .catch((err) => log('couldn’t give apps the settings admins gave them', { error: (err as Error).message }));
   const job = await apps.next();
   if (!job) return;
   log('app job', { app: job.app, action: job.action, version: job.release?.version });

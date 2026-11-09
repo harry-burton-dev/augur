@@ -544,6 +544,8 @@ export interface InstalledApp {
   previews?: AppPreview[];
   /** For a version that asks for the internet: what for, from where, and whether a deployment admin allowed it. */
   internet?: { allowed: boolean; why: string[]; hosts: string[]; allowedBy?: string; allowedAt?: string };
+  /** Its own settings (contract 3), and any a newer version needs first. */
+  settings?: AppSettingView[];
 }
 
 /** A pull request's build of an installed app, running beside it for its developers. */
@@ -574,8 +576,37 @@ interface AppAsks {
 export interface AppReview {
   /** By part name: service, worker or job. */
   kinds: Record<string, string>;
-  settings: { id: string; label: string; type: string; required: boolean }[];
+  settings: AppSettingDecl[];
 }
+
+/** A setting a contract 3 app offers admins (spec 5.2), as its manifest declares it. */
+export interface AppSettingDecl {
+  id: string;
+  label: string;
+  /** string, number, boolean, enum or secret. */
+  type: string;
+  required: boolean;
+  detail?: string;
+  unit?: string;
+  min?: number;
+  max?: number;
+  options?: string[];
+  /** What it is until an admin gives it a value; a secret has none. */
+  default?: string | number | boolean;
+}
+
+/** One of an installed app's settings, with the admin's value if one was given (never a secret's). */
+export interface AppSettingView extends AppSettingDecl {
+  set: boolean;
+  value?: string | number | boolean;
+  setBy?: string;
+  setAt?: string;
+  /** Asked for only by this newer version, which needs it before it installs. */
+  newIn?: string;
+}
+
+/** Values for a release's settings, by id, given with its install. */
+export type GivenSettings = Record<string, string | number | boolean>;
 
 /** A release file read from an address an admin pasted, checked as the feed's are. */
 export interface PastedRelease {
@@ -819,11 +850,16 @@ export class AdminApi {
   /** Reads the app feed now, starting any automatic updates it finds. */
   checkInstalls = () => this.call<AppInstalls>('POST', '/api/registry/v1/app-runner/check');
   /** Asks the app runner to install a release from the feed. Turned down with `sign_in_again` unless the admin just entered their password. */
-  installApp = (app: string, version: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', app, version });
+  installApp = (app: string, version: string, settings?: GivenSettings) =>
+    this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', app, version, ...(settings && Object.keys(settings).length ? { settings } : {}) });
+  /** Gives one of an app's settings a value, or with null puts it back to its default. A secret needs the password just entered. */
+  setAppSetting = (app: string, setting: string, value: string | number | boolean | null) =>
+    this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/settings/${encodeURIComponent(setting)}`, { value });
   /** Reads a release file from an address an admin pasted, for one no feed lists. Needs the password just entered too. */
   readRelease = (url: string) => this.call<PastedRelease>('POST', '/api/registry/v1/app-runner/releases/read', { url });
   /** Asks the app runner to install a release given whole, such as one read from a pasted address. */
-  installRelease = (release: PastedRelease['release']) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', release });
+  installRelease = (release: PastedRelease['release'], settings?: GivenSettings) =>
+    this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', release, ...(settings && Object.keys(settings).length ? { settings } : {}) });
   /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
   uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
   /** Lets an app's parts that ask for it reach the internet, or takes that away. Needs the password just entered too. */

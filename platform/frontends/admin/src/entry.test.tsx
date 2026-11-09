@@ -715,6 +715,43 @@ describe('Apps', () => {
       expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/internet', body: { allowed: true } });
     });
 
+    it('shows an app’s own settings and changes one, never showing a secret', async () => {
+      const notes = { ...library, id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js' };
+      const withSettings: AppInstalls = {
+        ...installs,
+        installed: [
+          {
+            ...installs.installed[0]!,
+            update: undefined,
+            settings: [
+              { id: 'retentionDays', label: 'Keep archived notes for', type: 'number', unit: 'days', min: 7, max: 3650, default: 365, required: false, set: false },
+              { id: 'exportKey', label: 'Export key', type: 'secret', required: true, set: true, setAt: '2026-11-09T10:00:00Z' },
+            ],
+          },
+        ],
+      };
+      const { sent } = gateway((method, url) =>
+        url === '/api/registry/v1/apps'
+          ? Response.json([notes])
+          : url.startsWith('/api/registry/v1/app-runner/') && (method === 'GET' || url.includes('/settings/'))
+            ? Response.json(withSettings)
+            : url.endsWith('/versions') || url.endsWith('/floors')
+              ? Response.json([])
+              : undefined,
+      );
+      const el = await open('/apps');
+      await openRow(el, 'Notes');
+      const said = document.querySelector('[data-settings]');
+      expect(said?.textContent).toContain('365 days (its default)');
+      expect(said?.textContent).toContain('Given');
+      await press(button('Change its settings', said!));
+      await type(fieldNamed('Keep archived notes for (days)'), '30');
+      await press(button('Save', document.querySelectorAll('.augur-dialog')[1] ?? document));
+      expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/settings/retentionDays', body: { value: 30 } });
+      // The secret left empty stays as it was.
+      expect(sent.some((r) => r.url.endsWith('/settings/exportKey'))).toBe(false);
+    });
+
     it('says why a pasted release can’t install, and keeps its address', async () => {
       gateway((method, url, body) =>
         url === '/api/registry/v1/app-runner/releases/read'

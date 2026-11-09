@@ -57,6 +57,12 @@ Each note starts with the release it came in (**From**). If your server already 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
 
+### Apps' own settings are filled in under Admin → Apps
+
+**From** unreleased
+
+An app on the app contract can offer settings of its own: text, a number within bounds, on or off, a choice, or a secret. A deployment admin fills them in under Admin → Apps, on the app's row, or when installing it if one is required; never in `.env`. An app with a required setting and no default doesn't install until it has a value. A changed value reaches the parts that read it within a minute: the app runner starts those parts again, and only those. A secret reaches a part only as a file, is never shown again once given, and giving one asks for your password again. A value the app's new version no longer offers is kept 30 days, in case it comes back. Nothing to do on upgrade.
+
 ### Each app on a network of its own
 
 **From** unreleased

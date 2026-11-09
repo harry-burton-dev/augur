@@ -148,5 +148,11 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
     return ((await res.json()) as { apps: string[] }).apps;
   };
 
-  return { next, reporter, calls, setOwnNetworks, internetApps };
+  /** The values admins gave apps' settings, secrets included, by app then setting (GET /v1/runner/settings). */
+  const settingValues = async (): Promise<Record<string, Record<string, string>>> => {
+    const res = await withDeadline(fetchImpl)(registry('/runner/settings'), { headers: await serviceHeaders(credentials) });
+    if (!res.ok) throw new Error(`The registry answered ${res.status} when asked for apps’ settings.`);
+    return ((await res.json()) as { apps: Record<string, Record<string, string>> }).apps;
+  };
+  return { next, reporter, calls, setOwnNetworks, internetApps, settingValues };
 };

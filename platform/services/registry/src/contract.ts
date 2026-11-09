@@ -51,7 +51,7 @@ import {
 
 export const info = {
   title: 'Registry',
-  version: '1.44.0',
+  version: '1.45.0',
   description: 'Catalogue of apps and micro frontends; serves the shell manifest.',
 };
 

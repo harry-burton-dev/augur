@@ -32,7 +32,7 @@ export interface ProvisionContext {
   manifest: AppManifest3;
   /** The app's sign-in, with the storage secrets of `storageId`. */
   secrets: AppSecrets;
-  /** The values an admin gave the app's settings, by id (P4 fills them in; none until then). */
+  /** The values an admin gave the app's settings, by id, as the registry last said. */
   settings?: Record<string, string>;
 }
 
