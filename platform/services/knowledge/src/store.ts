@@ -3,6 +3,7 @@ import { runMigrations, type Migration } from '@augur/service-kit';
 import { sql as store } from './migrations/001-store.ts';
 import { sql as baseOntology } from './migrations/002-base-ontology.ts';
 import { sql as fence } from './migrations/003-fence.ts';
+import { sql as service } from './migrations/004-service.ts';
 
 /** The knowledge service's schema in the platform database. */
 export const SCHEMA = 'kg';
@@ -12,12 +13,14 @@ export const APP_LOGIN = 'kg_app';
 
 /**
  * The knowledge graph's schema, in order. Once a migration ships it never changes (`pnpm check:migrations`).
- * 001 and 002 are the store spec draft 4 proved; 003 hardens its floor fence (see fence.test.ts).
+ * 001 and 002 are the store spec draft 4 proved; 003 hardens its floor fence (see fence.test.ts); 004 is what
+ * the service needs: standing mirrored from identity, answers kept per Idempotency-Key, and the outbox.
  */
 export const migrations: Migration[] = [
   { id: '001-store', sql: store },
   { id: '002-base-ontology', sql: baseOntology },
   { id: '003-fence', sql: fence },
+  { id: '004-service', sql: service },
 ];
 
 /**
@@ -47,8 +50,9 @@ export interface Acting {
 /**
  * Runs `work` in one transaction on kg_app's pool, as `acting`. Every read and action inside it is fenced to
  * what that person may see from that floor. The settings last only for the transaction (`set_config(…, true)`).
+ * With `keep: false` the work runs and is rolled back, for a dry run.
  */
-export const asPerson = async <T>(pool: pg.Pool, acting: Acting, work: (client: pg.PoolClient) => Promise<T>): Promise<T> => {
+export const asPerson = async <T>(pool: pg.Pool, acting: Acting, work: (client: pg.PoolClient) => Promise<T>, { keep = true }: { keep?: boolean } = {}): Promise<T> => {
   const client = await pool.connect();
   try {
     await client.query('begin');
@@ -58,7 +62,8 @@ export const asPerson = async <T>(pool: pg.Pool, acting: Acting, work: (client: 
       acting.app ?? '',
     ]);
     const out = await work(client);
-    await client.query('commit');
+    // A dry run does everything, then keeps none of it.
+    await client.query(keep ? 'commit' : 'rollback');
     return out;
   } catch (err) {
     await client.query('rollback');

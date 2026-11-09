@@ -15,12 +15,14 @@
     "REGISTRY_DATABASE_PASSWORD",
     "EVENTS_DATABASE_PASSWORD",
     "MODELS_DATABASE_PASSWORD",
+    "KNOWLEDGE_DATABASE_PASSWORD",
     "KEYCLOAK_DATABASE_PASSWORD",
     "GARAGE_RPC_SECRET",
     "GARAGE_ADMIN_TOKEN",
     "IDENTITY_CLIENT_SECRET",
     "REGISTRY_CLIENT_SECRET",
     "EVENTS_CLIENT_SECRET",
+    "KNOWLEDGE_CLIENT_SECRET",
     "PLATFORM_ADMIN_USER",
     "PLATFORM_ADMIN_PASSWORD",
     "PLATFORM_ADMIN_EMAIL",
@@ -196,6 +198,18 @@
       "x-services": [
         "models",
         "storage"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "KNOWLEDGE_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The knowledge graph service's own database login (kg_app), which its migration job makes.",
+      "x-services": [
+        "knowledge",
+        "knowledge-migrate"
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
@@ -381,6 +395,18 @@
         "models"
       ],
       "x-docs": "docs/agents.md#setting-up-the-model"
+    },
+    "KNOWLEDGE_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The knowledge graph service's own sign-in, to ask identity where people stand and to send its events.",
+      "x-services": [
+        "keycloak-config",
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
     },
     "UPDATER_CLIENT_SECRET": {
       "type": "string",
@@ -1176,7 +1202,8 @@
         "identity",
         "registry",
         "events",
-        "models"
+        "models",
+        "knowledge"
       ],
       "x-via": {
         "gateway": "default"
@@ -1192,7 +1219,9 @@
         "registry",
         "events",
         "models",
-        "storage"
+        "storage",
+        "knowledge",
+        "knowledge-migrate"
       ]
     },
     "IDENTITY_URL": {
@@ -1202,7 +1231,8 @@
       "x-services": [
         "gateway",
         "registry",
-        "events"
+        "events",
+        "knowledge"
       ],
       "x-via": {
         "updater": "default"
@@ -1228,7 +1258,8 @@
         "gateway",
         "identity",
         "registry",
-        "models"
+        "models",
+        "knowledge"
       ]
     },
     "MODELS_URL": {

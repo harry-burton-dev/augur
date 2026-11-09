@@ -1,0 +1,485 @@
+openapi: 3.1.0
+info:
+  title: Knowledge graph service (floor graphs), draft 4
+  version: 1.0.0-draft4
+  summary: The seam. Objects that can be read and actions that can be taken, reached only through the gateway, as a person, on a floor.
+  description: |
+    The API behind ADR 0075's `augur-floor-graphs` capability (PER-351). This file is the seam and the only
+    promise: everything behind it (store, extraction, trust rules, reflect) may change in any minor.
+
+    Rules this contract keeps:
+    - **Objects and actions.** Reads return objects. Every change is a declared action posted to one route,
+      `POST /actions/{action}`, with its input checked against the catalogue's JSON Schema. Nothing else writes.
+    - **The catalogue is data.** `GET /actions` lists every action with who may take it, its input, whether it
+      can be undone and what it emits. Clients bind at run time; a new action needs no app rebuild.
+    - **Additive within a major.** Objects, fields, actions, inputs, classes and relations are only added. No
+      action gains a required input. A retired thing is `deprecated`, keeps working, names its replacement
+      and carries a `Deprecation` header until the next major. The major is in the path.
+    - **Floors.** Every read names the floor it is made from. A floor sees itself and every floor above, never
+      below or beside. The caller must be able to stand on the floor.
+    - **Explain, never hide.** What the caller may know exists but cannot open comes back as an `Unseen`:
+      reason, kind of floor, words to show, never a label. A refusal says `why` and `whoCanChange`.
+      `dryRun=true` gives the same answer with no effect.
+    - **Idempotency.** Every action carries an `Idempotency-Key`; a repeat with the same key and body replays
+      the first answer; the same key with another body is 409.
+    - **Events carry ids only.** An event about a personal floor carries the floor and nothing else.
+    - **Names, limits and ids** come from the deployment and its config, never from this file.
+servers:
+  - url: '{origin}/api/{service}/v1'
+    variables:
+      origin: { default: '', description: The deployment's own origin. }
+      service: { default: knowledge, description: The service's id from its manifest. }
+security: [ { appForPerson: [] } ]
+tags:
+  - { name: Meta, description: Majors, versions, the catalogue. }
+  - { name: Actions, description: The one route that takes any action, and action records. }
+  - { name: Objects, description: Entity, observation, belief, source, summary, dispute, candidate, class. }
+  - { name: Reads, description: Floors, query, subgraph, recall, known entities, conflicts, export. }
+  - { name: Ontology, description: The deployment's ontology now, base plus adopted; candidates. }
+paths:
+  /meta:
+    get: { tags: [Meta], operationId: getMeta, summary: Majors this service speaks, its version, the ontology version, responses: { '200': { description: Versions., content: { application/json: { schema: { $ref: '#/components/schemas/Meta' } } } } } }
+  /actions:
+    get:
+      tags: [Meta, Actions]
+      operationId: listActions
+      summary: The action catalogue, read at run time
+      responses:
+        '200': { description: The catalogue., headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: '#/components/schemas/Catalogue' } } } }
+  /actions/{action}:
+    parameters: [ { $ref: '#/components/parameters/Action' } ]
+    get: { tags: [Actions], operationId: describeAction, summary: One action's declaration, responses: { '200': { description: The declaration., content: { application/json: { schema: { $ref: '#/components/schemas/ActionDecl' } } } }, '404': { $ref: '#/components/responses/UnknownAction' } } }
+    post:
+      tags: [Actions]
+      operationId: takeAction
+      summary: Take an action (the only way anything changes)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - { name: dryRun, in: query, schema: { type: boolean, default: false }, description: Answer whether it would be taken and why not; change nothing. }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              description: The input schema of `{action}` in `GET /actions` is the source. v1's inputs are mirrored under components.
+              anyOf:
+                - { $ref: '#/components/schemas/RetainInput' }
+                - { $ref: '#/components/schemas/PublishInput' }
+                - { $ref: '#/components/schemas/ConfirmFaithfulInput' }
+                - { $ref: '#/components/schemas/HoldInput' }
+                - { $ref: '#/components/schemas/KeepInput' }
+                - { $ref: '#/components/schemas/DisputeInput' }
+                - { $ref: '#/components/schemas/SettleInput' }
+                - { $ref: '#/components/schemas/RetractInput' }
+                - { $ref: '#/components/schemas/RaiseInput' }
+                - { $ref: '#/components/schemas/EndInput' }
+                - { $ref: '#/components/schemas/MergeInput' }
+                - { $ref: '#/components/schemas/SplitInput' }
+                - { $ref: '#/components/schemas/RetireInput' }
+                - { $ref: '#/components/schemas/UndoInput' }
+                - { $ref: '#/components/schemas/ForgetInput' }
+                - { $ref: '#/components/schemas/AdoptInput' }
+                - { $ref: '#/components/schemas/DismissInput' }
+                - { $ref: '#/components/schemas/ReflectInput' }
+                - { type: object, description: An action a later minor adds; its schema is in the catalogue. }
+      responses:
+        '200': { description: Done, replayed, or (dryRun) would be done., content: { application/json: { schema: { $ref: '#/components/schemas/ActionResult' } } } }
+        '400': { $ref: '#/components/responses/KeyRequired' }
+        '403': { $ref: '#/components/responses/Refused' }
+        '404': { $ref: '#/components/responses/UnknownAction' }
+        '409': { $ref: '#/components/responses/KeyReused' }
+        '422': { $ref: '#/components/responses/InvalidInput' }
+        '503': { $ref: '#/components/responses/Unavailable' }
+  /actions/runs/{actionId}:
+    get:
+      tags: [Actions]
+      operationId: getActionRun
+      summary: The record of one action taken
+      parameters: [ { name: actionId, in: path, required: true, schema: { type: string } } ]
+      responses: { '200': { description: The record., content: { application/json: { schema: { $ref: '#/components/schemas/ActionRecord' } } } }, '404': { $ref: '#/components/responses/NotFound' } }
+  /floors:
+    get: { tags: [Reads], operationId: listFloors, summary: The floors the caller can stand on, what each sees, its trust policy and roles, responses: { '200': { description: Floors., content: { application/json: { schema: { type: object, required: [floors], properties: { floors: { type: array, items: { $ref: '#/components/schemas/Floor' } } } } } } } } }
+  /floors/{floor}/entities:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    get:
+      tags: [Reads]
+      operationId: queryEntities
+      summary: Entities in sight from a floor
+      parameters:
+        - { name: class, in: query, schema: { type: string }, description: A class IRI or name; subclasses come too. }
+        - { name: text, in: query, schema: { type: string, maxLength: 200 }, description: Matches labels and aliases on floors in sight. }
+        - { name: kind, in: query, schema: { type: string, enum: [continuant, occurrent] } }
+        - { $ref: '#/components/parameters/Cursor' }
+        - { $ref: '#/components/parameters/Limit' }
+      responses: { '200': { description: Entities., content: { application/json: { schema: { $ref: '#/components/schemas/EntityPage' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } }
+  /floors/{floor}/entities/{id}:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get: { tags: [Objects], operationId: getEntity, summary: One entity as this floor knows it, responses: { '200': { description: The entity or an Unseen., content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/Entity' }, { $ref: '#/components/schemas/UnseenObject' } ] } } } }, '403': { $ref: '#/components/responses/NotOnFloor' }, '404': { $ref: '#/components/responses/NotFound' } } }
+  /floors/{floor}/entities/{id}/beliefs:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Reads]
+      operationId: getEntityBeliefs
+      summary: What this floor and the floors above believe about an entity, on two clocks
+      parameters:
+        - { name: at, in: query, schema: { type: string, format: date-time }, description: Valid clock. True in the world at this moment. Default now. }
+        - { name: known, in: query, schema: { type: string, format: date-time }, description: Recorded clock. As the floors had recorded it by this moment. Default now. }
+        - { name: includeSuperseded, in: query, schema: { type: boolean, default: false }, description: Also the forecasts and values that were superseded, marked. }
+      responses: { '200': { description: Beliefs., content: { application/json: { schema: { $ref: '#/components/schemas/BeliefList' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } }
+  /floors/{floor}/entities/{id}/events:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get: { tags: [Reads], operationId: getEntityEvents, summary: The occurrences this entity took part in (arrivals, calls, incidents), each with its own time, responses: { '200': { description: Event entities and their occursOn beliefs., content: { application/json: { schema: { $ref: '#/components/schemas/EntityPage' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } } }
+  /floors/{floor}/entities/{id}/subgraph:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get:
+      tags: [Reads]
+      operationId: getSubgraph
+      summary: The entity and what links to it, to a depth the deployment caps
+      parameters:
+        - { name: depth, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: predicate, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
+      responses: { '200': { description: Nodes and believed links., content: { application/json: { schema: { $ref: '#/components/schemas/Subgraph' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } }
+  /floors/{floor}/entities/{id}/summary:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get: { tags: [Objects], operationId: getSummary, summary: The stacked summary (this floor's and the floors above), each marked when older than its beliefs, responses: { '200': { description: Summaries., content: { application/json: { schema: { type: object, required: [floor, summaries], properties: { floor: { type: string }, summaries: { type: array, items: { $ref: '#/components/schemas/Summary' } } } } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } } }
+  /floors/{floor}/beliefs/{id}:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get: { tags: [Objects], operationId: getBelief, summary: One belief with its reach, evidence and disputes, responses: { '200': { description: The belief., content: { application/json: { schema: { $ref: '#/components/schemas/Belief' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' }, '404': { $ref: '#/components/responses/NotFound' } } }
+  /floors/{floor}/observations/{id}:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get: { tags: [Objects], operationId: getObservation, summary: One observation or an Unseen, responses: { '200': { description: The observation., content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/Observation' }, { $ref: '#/components/schemas/UnseenObject' } ] } } } }, '403': { $ref: '#/components/responses/NotOnFloor' }, '404': { $ref: '#/components/responses/NotFound' } } }
+  /floors/{floor}/sources/{id}:
+    parameters: [ { $ref: '#/components/parameters/Floor' }, { $ref: '#/components/parameters/Id' } ]
+    get: { tags: [Objects], operationId: getSource, summary: A source reference (the text stays in the app that holds it) with its observations' states, responses: { '200': { description: The reference or an Unseen., content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/SourceRef' }, { $ref: '#/components/schemas/UnseenObject' } ] } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } } }
+  /floors/{floor}/queue:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    get: { tags: [Reads], operationId: getQueue, summary: What waits on this floor for the caller (to confirm, to hold, to settle, flagged text to keep), with can and why, responses: { '200': { description: Queue., content: { application/json: { schema: { $ref: '#/components/schemas/Queue' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } } }
+  /floors/{floor}/conflicts:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    get: { tags: [Reads], operationId: listConflicts, summary: Live beliefs in sight that contradict each other (same subject and single-valued predicate, same modality, overlapping valid time, different value), and possible duplicates, responses: { '200': { description: Conflicts., content: { application/json: { schema: { $ref: '#/components/schemas/ConflictList' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } } }
+  /floors/{floor}/query:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    post:
+      tags: [Reads]
+      operationId: structuredQuery
+      summary: A structured query over beliefs (read only; a POST because the query is a body)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/Query' } } } }
+      responses: { '200': { description: Matches., content: { application/json: { schema: { $ref: '#/components/schemas/QueryResult' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' }, '422': { $ref: '#/components/responses/InvalidInput' } }
+  /floors/{floor}/recall:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    post:
+      tags: [Reads]
+      operationId: recall
+      summary: Recall for a person or an agent (text, semantic, link and time retrieval fused; each hit says why it matched)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [text], properties: { text: { type: string, maxLength: 2000 }, at: { type: string, format: date-time }, limit: { type: integer, minimum: 1 }, tokenBudget: { type: integer, minimum: 1, description: The most the answer may cost an agent caller, in tokens; the answer says when it was cut. } } } } } }
+      responses: { '200': { description: Hits., content: { application/json: { schema: { $ref: '#/components/schemas/RecallResult' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } }
+  /floors/{floor}/known-entities:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    get:
+      tags: [Reads]
+      operationId: knownEntities
+      summary: What an extractor working for this floor may be told is already known (floors in sight only; never a personal floor's names)
+      description: Needs `knowledge:extract`. Capped by config; the answer says when the cap applied. Resolution candidates for a text go through `text`.
+      parameters: [ { name: text, in: query, schema: { type: string, maxLength: 20000 }, description: The source text, to pick candidates by identity key, name and trigram, then vectors where the deployment has them. }, { $ref: '#/components/parameters/Limit' } ]
+      responses: { '200': { description: Candidates., content: { application/json: { schema: { $ref: '#/components/schemas/EntityPage' } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } }
+  /floors/{floor}/lookup:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    get:
+      tags: [Reads]
+      operationId: lookupIdentityKey
+      summary: Whether a thing with this identity key is known, and where. Outside sight it says only the kind of floor, never a name
+      parameters: [ { name: scheme, in: query, required: true, schema: { type: string } }, { name: value, in: query, required: true, schema: { type: string } } ]
+      responses: { '200': { description: The entity, or an Unseen with the kind of floor., content: { application/json: { schema: { oneOf: [ { $ref: '#/components/schemas/Entity' }, { $ref: '#/components/schemas/UnseenObject' } ] } } } } }
+  /floors/{floor}/export:
+    parameters: [ { $ref: '#/components/parameters/Floor' } ]
+    get: { tags: [Reads], operationId: exportFloor, summary: The floor's held beliefs as a named graph with PROV-O provenance, for a reasoner or triple store beside the service, responses: { '200': { description: Turtle or TriG., content: { text/turtle: { schema: { type: string } }, application/trig: { schema: { type: string } } } }, '403': { $ref: '#/components/responses/NotOnFloor' } } }
+  /ontology:
+    get: { tags: [Ontology], operationId: getOntology, summary: The deployment's ontology now (base profile plus adopted terms) as JSON or Turtle, responses: { '200': { description: The ontology., content: { application/json: { schema: { $ref: '#/components/schemas/Ontology' } }, text/turtle: { schema: { type: string } } } } } }
+  /ontology/shapes:
+    get: { tags: [Ontology], operationId: getShapes, summary: The SHACL shapes the service checks against, responses: { '200': { description: Shapes., content: { text/turtle: { schema: { type: string } } } } } }
+  /ontology/classes/{iri}:
+    get: { tags: [Ontology], operationId: getClass, summary: One class by IRI or name, parameters: [ { name: iri, in: path, required: true, schema: { type: string } } ], responses: { '200': { description: The class., content: { application/json: { schema: { $ref: '#/components/schemas/Class' } } } }, '404': { $ref: '#/components/responses/NotFound' } } }
+  /ontology/candidates:
+    get: { tags: [Ontology], operationId: listCandidates, summary: Terms extraction asked for that the ontology lacks, one row per term with the count of sources, responses: { '200': { description: Candidates., content: { application/json: { schema: { type: object, required: [candidates], properties: { candidates: { type: array, items: { $ref: '#/components/schemas/Candidate' } } } } } } } } }
+
+components:
+  securitySchemes:
+    appForPerson:
+      type: http
+      scheme: bearer
+      description: "The app's token for the person, through the gateway, which forwards the signed caller. Scopes from the manifest, agreed by an admin: `knowledge:read`, `knowledge:act`, `knowledge:extract`. hold, settle, raise, merge, split, retire, adopt and dismiss are not granted to apps by default and also need a floor role or ontology admin, which the catalogue states."
+  parameters:
+    Floor: { name: floor, in: path, required: true, description: A floor id as identity gives it., schema: { type: string, maxLength: 120 } }
+    Id: { name: id, in: path, required: true, schema: { type: string, maxLength: 80 } }
+    Action: { name: action, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9-]{1,60}$' } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, description: 8 to 200 characters, unique per intended change, kept per caller for at least the deployment's idempotency window., schema: { type: string, minLength: 8, maxLength: 200 } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+    Limit: { name: limit, in: query, description: The deployment sets the ceiling; the answer says when it applied., schema: { type: integer, minimum: 1 } }
+  responses:
+    NotFound: { description: No such thing, or nothing the caller may know exists., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    NotOnFloor: { description: The caller cannot stand on that floor., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Refused: { description: Not allowed for this caller now, with why and who can change it., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    UnknownAction: { description: No such action; `problems` lists the ones there are., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    KeyRequired: { description: The Idempotency-Key header is missing or malformed., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    KeyReused: { description: That key was used for a different request., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    InvalidInput: { description: The input does not match the action's schema or names things it did not declare., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+    Unavailable: { description: Something the action needs is unavailable (the models service refused on this floor, say). Says what and who can change it., content: { application/problem+json: { schema: { $ref: '#/components/schemas/Problem' } } } }
+  schemas:
+    Meta:
+      type: object
+      required: [apiMajor, version, ontology, speaks]
+      properties:
+        apiMajor: { type: integer, const: 1 }
+        version: { type: string }
+        ontology: { type: object, required: [base, version], properties: { base: { type: string, description: The shipped base profile and its version. }, version: { type: string, description: This deployment's ontology version. } } }
+        speaks: { type: object, additionalProperties: { type: array, items: { type: integer } }, description: Majors this service speaks, for the registry's install check. }
+    Unseen:
+      type: object
+      description: Why something cannot be seen from here. Never carries the thing's label.
+      required: [reason, floorKind, message]
+      properties:
+        reason: { type: string, enum: [elsewhere, kept, retracted, forgotten] }
+        floorKind: { type: string, enum: [personal, team, org] }
+        floor: { type: string, description: Present only when the caller may stand on it. }
+        message: { type: string }
+    UnseenObject: { type: object, required: [kind, id, unseen], properties: { kind: { type: string, enum: [entity, observation, belief, source, summary] }, id: { type: string }, unseen: { $ref: '#/components/schemas/Unseen' } } }
+    Problem:
+      type: object
+      description: RFC 9457 problem details with AUGUR's fields.
+      required: [type, title, status, code]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        code: { type: string, enum: [not-found, no-such-floor, not-on-floor, not-allowed, unknown-action, idempotency-key-required, idempotency-key-reused, invalid-input, unavailable] }
+        detail: { type: string }
+        why: { type: string, description: In words, for the person. }
+        whoCanChange: { type: string, description: A role or floor, never a person's private detail. }
+        unseen: { $ref: '#/components/schemas/Unseen' }
+        problems: { type: array, items: { type: string } }
+    Floor:
+      type: object
+      required: [id, kind, name, sight, trust]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [personal, team, org], description: Further kinds (department) are added within the major. }
+        name: { type: string }
+        parent: { type: [string, 'null'] }
+        sight: { type: array, items: { type: string }, description: This floor and every floor above it. }
+        trust:
+          type: object
+          required: [hold]
+          properties:
+            hold: { type: string, enum: [memory, role, auto], description: How a faithful claim becomes a belief here (X1). From config. }
+            settlerRole: { type: string, description: The role that holds, settles, ends, retracts, merges (X2). From config. }
+            raiserRole: { type: string, description: The role that raises. From config. }
+            reflectBudgetPerDay: { type: integer }
+        can: { type: object, additionalProperties: true }
+    SourceRef:
+      type: object
+      required: [id, app, ref, version, title, floor, author]
+      properties:
+        id: { type: string }
+        app: { type: string, description: The app that holds the source. }
+        ref: { type: string }
+        version: { type: string, description: Versions of one (app, ref) are one source and count once. }
+        title: { type: string }
+        floor: { type: string }
+        author: { type: string }
+        writtenAt: { type: string, format: date-time }
+        publishedFrom: { type: string, description: The personal-floor source this one was published from. }
+        extraction: { type: object, properties: { state: { type: string, enum: [done, pending, partial, failed, refused] }, why: { type: string }, whoCanChange: { type: string }, observations: { type: integer }, flagged: { type: integer } } }
+    Entity:
+      type: object
+      required: [id, class, kind, state, label, aliases]
+      properties:
+        id: { type: string, description: Made by the service. Never chosen by a model. Survives merges. }
+        class: { type: string, description: The nearest accepted class IRI. }
+        kind: { type: string, enum: [continuant, occurrent], description: Occurrents are events with their own time (X4). }
+        proposedClass: { type: string, description: A candidate class extraction asked for, not yet adopted. }
+        state: { type: string, enum: [active, retired, merged] }
+        mergedInto: { type: string }
+        possibleDuplicate: { type: boolean, description: The same name carries conflicting identity-bearing facts in sight. }
+        label: { type: string, description: As the floors in sight know it. Labels and aliases are per floor. }
+        aliases: { type: array, items: { type: string } }
+        labelFrom: { type: string }
+        identityKeys: { type: array, items: { type: object, required: [scheme, value], properties: { scheme: { type: string }, value: { type: string } } } }
+        can: { type: object, additionalProperties: true }
+    Value:
+      type: object
+      description: A typed value. A quantity keeps its unit apart from its number.
+      required: [v]
+      properties:
+        v: { oneOf: [ { type: number }, { type: string }, { type: boolean } ] }
+        unit: { type: string }
+        approx: { type: boolean }
+        asked: { type: string, description: When the predicate is the generic fallback, the predicate name the extractor asked for. }
+    Observation:
+      type: object
+      description: One claim read in one source. Immutable. A wrong one is retracted; a private one is forgotten.
+      required: [id, floor, source, subject, predicate, kind, quote, modality, validPrecision, state, recordedAt, extractor, ontologyVersion]
+      properties:
+        id: { type: string }
+        floor: { type: string }
+        source: { $ref: '#/components/schemas/SourceRef' }
+        subject: { type: string }
+        predicate: { type: string, description: A declared relation or property IRI. }
+        kind: { type: string, enum: [property, link] }
+        value: { $ref: '#/components/schemas/Value' }
+        object: { type: string }
+        quote: { type: string }
+        anchor: { type: object, properties: { start: { type: integer }, end: { type: integer } } }
+        modality: { type: string, enum: [reported, expected, planned, possible, denied] }
+        validFrom: { type: string, format: date-time }
+        validTo: { type: string, format: date-time }
+        validPrecision: { type: string, enum: [minute, day, month, year, unknown] }
+        attributedTo: { type: string, description: The original speaker when the source relays someone. }
+        flagged: { type: boolean, description: Text that addressed the system. Never held on a shared floor; waits for the owner on a personal one (X3). }
+        flagReason: { type: string }
+        state: { type: string, enum: [memory, proposed, faithful, held, disputed, retracted, forgotten, flagged] }
+        faithfulBy: { type: array, items: { type: string } }
+        derivedFrom: { type: string }
+        extractor: { type: string }
+        promptVersion: { type: string }
+        ontologyVersion: { type: string }
+        recordedAt: { type: string, format: date-time }
+    Evidence:
+      type: object
+      description: Structure, not a number (F4, X6).
+      required: [observations, sources, byFloor]
+      properties:
+        observations: { type: integer }
+        sources: { type: integer, description: Distinct (app, ref). Versions count once. }
+        byFloor: { type: array, items: { type: object, required: [floorKind, observations], properties: { floor: { type: string }, floorKind: { type: string }, observations: { type: integer }, canOpen: { type: boolean }, titles: { type: array, items: { type: string }, description: Only when the raiser agreed titles may be cited above. } } } }
+        grades: { type: array, items: { type: object, properties: { source: { type: string }, grade: { type: string, enum: [first-hand, relayed, pasted, personal] }, modality: { type: string }, state: { type: string } } } }
+        flags: { type: array, items: { type: string, enum: [superseded, stale, contested, possible-duplicate] } }
+    Belief:
+      type: object
+      required: [id, homeFloor, reach, subject, predicate, kind, modality, state, recordedAt, evidence]
+      properties:
+        id: { type: string }
+        homeFloor: { type: string }
+        reach: { type: array, items: { type: string }, description: Every floor that holds it. A raise adds one; nothing is copied. }
+        subject: { type: string }
+        predicate: { type: string }
+        kind: { type: string, enum: [property, link] }
+        value: { $ref: '#/components/schemas/Value' }
+        object: { type: string }
+        modality: { type: string, enum: [reported, expected, planned, possible, denied] }
+        validFrom: { type: string, format: date-time }
+        validTo: { type: string, format: date-time }
+        recordedAt: { type: string, format: date-time }
+        endedAt: { type: string, format: date-time }
+        supersededAt: { type: string, format: date-time }
+        supersededBy: { type: string }
+        state: { type: string, enum: [memory, held, disputed, superseded, ended, fallen] }
+        heldBy: { type: string }
+        disputes: { type: array, items: { $ref: '#/components/schemas/Dispute' } }
+        conflictsWith: { type: array, items: { type: string } }
+        evidence: { $ref: '#/components/schemas/Evidence' }
+        can: { type: object, additionalProperties: true }
+    BeliefList: { type: object, required: [floor, seeing, beliefs], properties: { floor: { type: string }, seeing: { type: array, items: { type: string } }, beliefs: { type: array, items: { $ref: '#/components/schemas/Belief' } } } }
+    Dispute: { type: object, required: [id, belief, by, reason, at, state], properties: { id: { type: string }, belief: { type: string }, floor: { type: string }, by: { type: string }, reason: { type: string }, at: { type: string, format: date-time }, state: { type: string, enum: [open, upheld, retracted, withdrawn] }, settledBy: { type: string }, note: { type: string } } }
+    Summary:
+      type: object
+      required: [entity, floor, state]
+      properties:
+        entity: { type: string }
+        floor: { type: string }
+        state: { type: string, enum: [current, older-than-beliefs, none, unavailable] }
+        text: { type: string }
+        writtenAt: { type: string, format: date-time }
+        beliefsChangedAt: { type: string, format: date-time }
+        cites: { type: array, items: { type: string }, description: Belief ids the summary rests on. }
+        why: { type: string }
+    Candidate: { type: object, required: [term, kind, status, askedBy], properties: { term: { type: string }, kind: { type: string, enum: [class, predicate] }, suggestedParent: { type: string }, why: { type: string }, askedBy: { type: integer }, status: { type: string, enum: [proposed, adopted, dismissed] } } }
+    Class: { type: object, required: [iri, label, kind, status], properties: { iri: { type: string }, label: { type: string }, parent: { type: string }, kind: { type: string, enum: [continuant, occurrent] }, status: { type: string, enum: [base, accepted, proposed, dismissed] }, packTerm: { type: string, description: skos:exactMatch to the pack (Common Core Ontologies) term. }, sinceVersion: { type: string } } }
+    Predicate: { type: object, required: [iri, label, kind, status], properties: { iri: { type: string }, label: { type: string }, kind: { type: string, enum: [property, link] }, domain: { type: string }, range: { type: string }, datatype: { type: string, enum: [quantity, date, text, boolean] }, unit: { type: string }, singleValued: { type: boolean }, status: { type: string } } }
+    Ontology: { type: object, required: [base, version, classes, predicates], properties: { base: { type: string }, version: { type: string }, classes: { type: array, items: { $ref: '#/components/schemas/Class' } }, predicates: { type: array, items: { $ref: '#/components/schemas/Predicate' } } } }
+    EntityPage: { type: object, required: [entities], properties: { entities: { type: array, items: { $ref: '#/components/schemas/Entity' } }, next: { type: string }, limitApplied: { type: integer } } }
+    Subgraph: { type: object, required: [nodes, edges], properties: { nodes: { type: array, items: { $ref: '#/components/schemas/Entity' } }, edges: { type: array, items: { $ref: '#/components/schemas/Belief' } }, unseen: { type: array, items: { $ref: '#/components/schemas/UnseenObject' } }, depthApplied: { type: integer } } }
+    Queue: { type: object, required: [floor, items], properties: { floor: { type: string }, items: { type: array, items: { type: object, required: [kind, id, can], properties: { kind: { type: string, enum: [to-confirm, to-hold, to-settle, to-keep] }, id: { type: string }, can: { type: object, additionalProperties: true } } } } } }
+    ConflictList: { type: object, required: [floor, conflicts, possibleDuplicates], properties: { floor: { type: string }, conflicts: { type: array, items: { type: object, required: [subject, predicate, beliefs], properties: { subject: { type: string }, predicate: { type: string }, beliefs: { type: array, items: { type: string } }, overlapFrom: { type: string, format: date-time }, overlapTo: { type: string, format: date-time } } } }, possibleDuplicates: { type: array, items: { type: object, required: [entity, predicate], properties: { entity: { type: string }, predicate: { type: string } } } } } }
+    Query:
+      type: object
+      additionalProperties: false
+      properties:
+        class: { type: string }
+        kind: { type: string, enum: [continuant, occurrent] }
+        text: { type: string }
+        where: { type: array, items: { type: object, required: [predicate], properties: { predicate: { type: string }, equals: { $ref: '#/components/schemas/Value' }, object: { type: string }, modality: { type: string } } } }
+        at: { type: string, format: date-time }
+        known: { type: string, format: date-time }
+        limit: { type: integer, minimum: 1 }
+    QueryResult: { type: object, required: [entities], properties: { entities: { type: array, items: { $ref: '#/components/schemas/Entity' } }, beliefs: { type: array, items: { $ref: '#/components/schemas/Belief' } }, next: { type: string } } }
+    RecallResult: { type: object, required: [hits], properties: { hits: { type: array, items: { type: object, required: [why], properties: { belief: { $ref: '#/components/schemas/Belief' }, summary: { $ref: '#/components/schemas/Summary' }, why: { type: array, items: { type: string, enum: [text, semantic, link, time] } } } } }, ranWithout: { type: array, items: { type: string } }, cutAt: { type: integer, description: Tokens, when a tokenBudget cut the answer. } } }
+    ActionDecl:
+      type: object
+      required: [name, since, summary, input, who, scope, undoable, emits]
+      properties:
+        name: { type: string }
+        since: { type: string }
+        summary: { type: string }
+        input: { type: object, description: JSON Schema 2020-12 for the body. }
+        who: { type: string, description: In words. }
+        scope: { type: string, enum: ['knowledge:act', 'knowledge:extract'] }
+        role: { type: string, enum: [settler, raiser, ontology-admin, owner, author, member], description: The floor role or standing an action also needs, where it does. }
+        grantedToAppsByDefault: { type: boolean }
+        undoable: { type: boolean }
+        emits: { type: array, items: { type: string } }
+        deprecated: { type: boolean }
+        replacedBy: { type: string }
+    Catalogue: { type: object, required: [apiMajor, version, actions], properties: { apiMajor: { type: integer }, version: { type: string }, actions: { type: array, items: { $ref: '#/components/schemas/ActionDecl' } } } }
+    ActionResult: { type: object, required: [action, actionId, effects], properties: { action: { type: string }, actionId: { type: string }, effects: { type: object, additionalProperties: { type: array, items: { type: string } } }, note: { type: string }, replayed: { type: boolean }, dryRun: { type: boolean }, wouldSucceed: { type: boolean }, why: { type: string } } }
+    ActionRecord: { type: object, required: [actionId, action, by, at, effects, undone], properties: { actionId: { type: string }, action: { type: string }, by: { type: string }, onBehalfOf: { type: string }, floor: { type: string }, at: { type: string, format: date-time }, input: { type: object }, effects: { type: object, additionalProperties: { type: array, items: { type: string } } }, undone: { type: boolean }, undoneBy: { type: string } } }
+    # ---- v1 action inputs (the catalogue is the source; these mirror it)
+    RetainInput:
+      type: object
+      additionalProperties: false
+      required: [source, entities, observations]
+      description: Extraction output. It can only add. No status, confirm, dispute, hold, raise or merge can be expressed here.
+      properties:
+        source: { type: object, additionalProperties: false, required: [app, ref, version, contentSha256, title], properties: { app: { type: string }, ref: { type: string }, version: { type: string }, contentSha256: { type: string }, title: { type: string }, writtenAt: { type: string, format: date-time } } }
+        extractor: { type: string }
+        promptVersion: { type: string }
+        ontologyVersion: { type: string }
+        entities:
+          type: array
+          items: { type: object, additionalProperties: false, required: [ref, label, class], properties: { ref: { type: string, description: Local to this call. Resolution chooses the entity. }, label: { type: string }, class: { type: string, description: A declared class IRI, or a candidate name with `proposedClass`. }, proposedClass: { type: object, properties: { name: { type: string }, parent: { type: string }, why: { type: string } } }, aliases: { type: array, items: { type: string } }, identityKeys: { type: array, items: { type: object, required: [scheme, value], properties: { scheme: { type: string }, value: { type: string } } } }, distinguishedBy: { type: array, items: { type: string }, description: Facts that tell same-named things apart (employer, place), for resolution. } } }
+        observations:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [subject, predicate, kind, quote, modality]
+            properties:
+              subject: { type: string }
+              predicate: { type: string, description: A declared IRI, or a candidate name with `proposedPredicate`. }
+              proposedPredicate: { type: object, properties: { name: { type: string }, parent: { type: string }, why: { type: string } } }
+              kind: { type: string, enum: [property, link] }
+              value: { $ref: '#/components/schemas/Value' }
+              object: { type: string }
+              quote: { type: string }
+              anchor: { type: object, properties: { start: { type: integer }, end: { type: integer } } }
+              modality: { type: string, enum: [reported, expected, planned, possible, denied] }
+              validFrom: { type: string }
+              validTo: { type: string }
+              validPrecision: { type: string, enum: [minute, day, month, year, unknown] }
+              attributedTo: { type: string }
+    PublishInput: { type: object, additionalProperties: false, required: [source, to], properties: { source: { type: string }, to: { type: string } } }
+    ConfirmFaithfulInput: { type: object, additionalProperties: false, required: [observation, verdict], properties: { observation: { type: string }, verdict: { type: string, enum: [faithful, unfaithful] }, note: { type: string } } }
+    HoldInput: { type: object, additionalProperties: false, required: [observations], properties: { observations: { type: array, items: { type: string }, minItems: 1 }, supersedes: { type: array, items: { type: string } }, into: { type: string, description: An existing belief this evidence also supports. } } }
+    KeepInput: { type: object, additionalProperties: false, required: [observation], properties: { observation: { type: string } } }
+    DisputeInput: { type: object, additionalProperties: false, required: [belief, reason], properties: { belief: { type: string }, reason: { type: string } } }
+    SettleInput: { type: object, additionalProperties: false, required: [dispute, outcome], properties: { dispute: { type: string }, outcome: { type: string, enum: [upheld, retracted, withdrawn] }, note: { type: string } } }
+    RetractInput: { type: object, additionalProperties: false, required: [observation, why], properties: { observation: { type: string }, why: { type: string } } }
+    RaiseInput: { type: object, additionalProperties: false, required: [belief, why], properties: { belief: { type: string }, why: { type: string }, citeSources: { type: boolean, default: false } } }
+    EndInput: { type: object, additionalProperties: false, required: [belief, at, why], properties: { belief: { type: string }, at: { type: string, format: date-time }, why: { type: string } } }
+    MergeInput: { type: object, additionalProperties: false, required: [senior, junior, why], properties: { senior: { type: string }, junior: { type: string }, why: { type: string } } }
+    SplitInput: { type: object, additionalProperties: false, required: [merge, why], properties: { merge: { type: string }, why: { type: string } } }
+    RetireInput: { type: object, additionalProperties: false, required: [entity, why], properties: { entity: { type: string }, why: { type: string } } }
+    UndoInput: { type: object, additionalProperties: false, required: [action, why], properties: { action: { type: string }, why: { type: string } } }
+    ForgetInput: { type: object, additionalProperties: false, required: [observation], properties: { observation: { type: string } } }
+    AdoptInput: { type: object, additionalProperties: false, required: [term, kind, iri, label], properties: { term: { type: string }, kind: { type: string, enum: [class, predicate] }, iri: { type: string }, label: { type: string }, parent: { type: string }, classKind: { type: string, enum: [continuant, occurrent] }, domain: { type: string }, range: { type: string }, datatype: { type: string }, unit: { type: string }, singleValued: { type: boolean } } }
+    DismissInput: { type: object, additionalProperties: false, required: [term, kind, why], properties: { term: { type: string }, kind: { type: string, enum: [class, predicate] }, why: { type: string } } }
+    ReflectInput: { type: object, additionalProperties: false, required: [entity], properties: { entity: { type: string } } }

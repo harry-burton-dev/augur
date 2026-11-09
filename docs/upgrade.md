@@ -56,6 +56,14 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The knowledge graph service
+
+**From** unreleased
+
+This release adds the knowledge graph service (`knowledge`) and the job that keeps its schema (`knowledge-migrate`). It needs two new settings, `KNOWLEDGE_DATABASE_PASSWORD` (the service's own Postgres login, `kg_app`) and `KNOWLEDGE_CLIENT_SECRET` (its sign-in, which the realm job makes). The Upgrade Centre makes both up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`).
+
+On the first `up`, `knowledge-migrate` signs in as Postgres's admin login and makes the `kg` schema and its two roles: `kg_owner`, which owns the schema and can't sign in, and `kg_app`. Then the service starts as `kg_app`, which row security keeps to what each person may see. Nothing in the graph exists yet, so there is nothing to move. Going back to an earlier release leaves the `kg` schema and its roles in place, unused.
+
 ### Moving to the app contract, in order
 
 **From** augur@0.24.0

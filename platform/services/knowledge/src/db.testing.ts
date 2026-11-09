@@ -53,7 +53,7 @@ export const knowledgeDb = (url: string | undefined): KnowledgeDb => {
     const empty = async () => {
       await admin.query(`truncate kg.floors, kg.floor_members, kg.floor_roles, kg.entities, kg.identity_keys, kg.entity_names, kg.sources,
         kg.observations, kg.mentions, kg.faithful_checks, kg.beliefs, kg.belief_evidence, kg.belief_reach, kg.disputes, kg.merges,
-        kg.summaries, kg.actions, kg.outbox, kg.forget_ledger, kg.candidates restart identity cascade`);
+        kg.summaries, kg.actions, kg.outbox, kg.forget_ledger, kg.candidates, kg.action_answers restart identity cascade`);
     };
     const peekAs = async (acting: Acting, query: pg.QueryConfig & { rowMode?: 'array' }) => {
       const client = await app.connect();
