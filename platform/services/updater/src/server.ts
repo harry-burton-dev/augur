@@ -10,7 +10,12 @@ import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseRef, pullArtifactLayer, type ArtifactAuth } from './oci.ts';
 import { partsFor } from './parts.ts';
-import type { AppHost, RunnerState } from './runner.ts';
+import type { AppHost, PlatformPart, RunnerState } from './runner.ts';
+
+/** The label the runner marks the apps' own networks with: `augur.network=app`. */
+const APP_NETWORK_LABEL = 'augur.network';
+/** A command's output, one entry a line. */
+const lines = (said: string) => said.split('\n').map((l) => l.trim()).filter(Boolean);
 import type { Journal, Server } from './upgrade.ts';
 
 export interface ServerOptions {
@@ -445,14 +450,77 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
       await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, ...connections, 'storage']);
     },
     async ownNetworks() {
-      // The networks the updater's own container is on are the deployment's: their address ranges.
+      // The networks the updater's own container is on are the deployment's, but for the apps' own, which it joins to see their health.
       const networks = Object.keys(JSON.parse(await docker(['container', 'inspect', '--format', '{{json .NetworkSettings.Networks}}', hostname()])) as object);
       const ranges: string[] = [];
       for (const name of networks) {
-        const said = await docker(['network', 'inspect', '--format', '{{range .IPAM.Config}}{{.Subnet}} {{end}}', name]);
-        ranges.push(...said.split(/\s+/).filter(Boolean));
+        const said = await docker(['network', 'inspect', '--format', `{{index .Labels "${APP_NETWORK_LABEL}"}}|{{range .IPAM.Config}}{{.Subnet}} {{end}}`, name]);
+        const [label, subnets = ''] = said.trim().split('|');
+        if (label === 'app') continue;
+        ranges.push(...subnets.split(/\s+/).filter(Boolean));
       }
       return [...new Set(ranges)];
+    },
+    async appNetworks(wants) {
+      // Each network and each container is tried on its own, so one that fails holds up no other; the reasons come together at the end.
+      const problems: string[] = [];
+      const attempt = async (what: string, work: () => Promise<unknown>) => {
+        try {
+          await work();
+        } catch (err) {
+          problems.push(`${what}: ${(err as Error).message.split('\n')[0]}`);
+        }
+      };
+      const membersOf = async (name: string, all = false) =>
+        all
+          ? lines(await docker(['ps', '--all', '--no-trunc', '--filter', `network=${name}`, '--format', '{{.ID}}']))
+          : Object.keys((JSON.parse((await docker(['network', 'inspect', '--format', '{{json .Containers}}', name])) || 'null') as object | null) ?? {});
+      const self = (await docker(['container', 'inspect', '--format', '{{.Id}}', hostname()])).trim();
+      const have = lines(await docker(['network', 'ls', '--filter', `label=${APP_NETWORK_LABEL}=app`, '--format', '{{.Name}}']));
+      // The platform's parts are the containers of the updater's own Compose project, by service.
+      const project = wants.length ? (await docker(['container', 'inspect', '--format', '{{index .Config.Labels "com.docker.compose.project"}}', self])).trim() : '';
+      if (wants.length && !project) throw new Error('The app runner can’t tell which Compose project AUGUR runs as, so it can’t join the gateway to an app’s network: run the updater with docker compose.');
+      const found = new Map<PlatformPart, string[]>();
+      const containersOf = async (part: PlatformPart) => {
+        if (!found.has(part))
+          found.set(part, lines(await docker(['ps', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`, '--filter', `label=com.docker.compose.service=${part}`, '--format', '{{.ID}}'])));
+        return found.get(part)!;
+      };
+      for (const want of wants) {
+        await attempt(want.name, async () => {
+          if (!have.includes(want.name)) {
+            // Internal: nothing on it reaches beyond it (spec 10.4). Made here, not by Compose, as the platform's parts join it too.
+            const made = await docker(['network', 'create', '--internal', '--label', `${APP_NETWORK_LABEL}=app`, '--label', `augur.app=${want.app}`, want.name]).then(
+              () => true,
+              () => false,
+            );
+            if (!made) {
+              // Made meanwhile by another turn, or there already under that name: only the runner's own, internal network will do.
+              const said = (await docker(['network', 'inspect', '--format', `{{.Internal}}|{{index .Labels "${APP_NETWORK_LABEL}"}}`, want.name])).trim();
+              if (said !== 'true|app') throw new Error(`a network called ${want.name} is already there, and isn’t one the app runner made (internal, labelled ${APP_NETWORK_LABEL}=app): remove it with docker network rm ${want.name}`);
+            }
+          }
+          const on = new Set(await membersOf(want.name));
+          const joins: [string, string[]][] = [[self, []]];
+          for (const part of want.join) for (const id of await containersOf(part)) joins.push([id, ['--alias', part]]);
+          for (const [id, alias] of joins)
+            if (!on.has(id))
+              await attempt(`joining ${alias[1] ?? 'the app runner'} to ${want.name}`, async () => {
+                await docker(['network', 'connect', ...alias, want.name, id]).catch(async (err) => {
+                  // Joined meanwhile is joined.
+                  if (!(await membersOf(want.name)).includes(id)) throw err;
+                });
+              });
+        });
+      }
+      // An app's network goes with the app's last version: whatever is on it leaves first, stopped containers too,
+      // or one would name a network that's gone and fail to start.
+      for (const name of have.filter((n) => !wants.some((w) => w.name === n)))
+        await attempt(`removing ${name}`, async () => {
+          for (const id of await membersOf(name, true)) await docker(['network', 'disconnect', '--force', name, id]).catch(() => undefined);
+          await docker(['network', 'rm', name]);
+        });
+      if (problems.length) throw new Error(`The apps’ networks aren’t all as they should be. ${problems.join(' ')}`);
     },
     async imageUser(ref) {
       await docker(['pull', '--quiet', ref]);

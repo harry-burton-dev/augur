@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { appRelease2, type AppRelease2 } from '@augur/app-tools/release2';
 import { frontendDigest, packFrontend } from '@augur/service-kit';
 import { parseWorkload, type ScorePart } from '@augur/app-tools/validate';
-import { appRunner, type AppHost, type AppJob, type JobReport, type JobRun, type PlatformCalls, type RunnerState } from './runner.ts';
+import { appRunner, type AppHost, type AppJob, type AppNetwork, type JobReport, type JobRun, type PlatformCalls, type RunnerState } from './runner.ts';
 
 const require = createRequire(import.meta.url);
 const tools = dirname(require.resolve('@augur/app-tools/package.json'));
@@ -57,7 +57,7 @@ export const install = (version: string, c = 'a', more: Partial<AppRelease2> = {
 type Project = {
   name: string;
   services: Record<string, Record<string, unknown> & { image: string }>;
-  networks: { platform: { name: string } };
+  networks?: Record<string, { external: boolean; name: string }>;
   volumes?: Record<string, object>;
   secrets?: Record<string, { file: string }>;
 };
@@ -76,6 +76,10 @@ export const fakeHost = (env = ENV, network?: string) => {
   const health: string[] = [];
   let project: Project | undefined;
   let files: Record<string, string | Uint8Array> = {};
+  /** The app networks the host was last told to keep, and every network a part started on had to exist. */
+  let networks: AppNetwork[] = [];
+  const missing: string[] = [];
+  let networkCalls = 0;
   let clock = 0;
   const host: AppHost = {
     readEnv: async () => env,
@@ -109,15 +113,21 @@ export const fakeHost = (env = ENV, network?: string) => {
     async dropStorage(id) {
       did.push(`drop ${id}`);
     },
+    async appNetworks(wants) {
+      networks = structuredClone(wants);
+      networkCalls += 1;
+    },
     async start(services) {
       for (const s of services) {
         const svc = project!.services[s]!;
+        for (const n of (svc.networks as string[] | undefined) ?? []) if (n !== 'platform' && !networks.some((w) => w.name === n)) missing.push(`${s} on ${n}`);
         running.set(s, versions.get(svc.image) ?? '');
         did.push(`start ${s}`);
       }
     },
     async runJob(service) {
       did.push(`job ${service}`);
+      for (const n of (project!.services[service]!.networks as string[] | undefined) ?? []) if (!networks.some((w) => w.name === n)) missing.push(`${service} on ${n}`);
       return jobs.get(service) ?? { code: 0, logs: 'migrated\n' };
     },
     async stop(services) {
@@ -148,6 +158,9 @@ export const fakeHost = (env = ENV, network?: string) => {
     state: () => state,
     project: () => project,
     files: () => files,
+    networks: () => networks,
+    missing: () => missing,
+    networkCalls: () => networkCalls,
     clock: () => clock,
   };
 };

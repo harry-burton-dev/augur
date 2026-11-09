@@ -22,7 +22,7 @@ A secret output may be read only in `files`: the runner refuses a part that read
 
 The login, schema and bucket are the same for every part of an app, and both slots of an upgrade share them. A scratch or files folder is a Docker volume of its own for each part and resource, `app-<id>-<part>-<resource>`, kept across upgrades; a preview's go when it's taken away. Docker doesn't cap a volume's size, so `size` is held to the deployment's ceiling when the app installs, not enforced on the disk. Until Admin can fill an `augur-files` folder, put files in it from the server: `docker run --rm -v app-<id>-<part>-<resource>:/f -v "$PWD":/from:ro alpine cp -r /from/. /f/`.
 
-A part that asks for nothing gets nothing: no store, no sign-in, no secrets, no folders, and no addresses of AUGUR's services. Until each app has a network of its own, parts share the platform's network.
+A part that asks for nothing gets nothing: no store, no sign-in, no secrets, no folders, and no addresses of AUGUR's services. Each app's parts are on a network of their own, which the gateway joins, and Postgres, the object store and the collector only when a part asks for them; nothing on it reaches the internet.
 
 ## Limits and ceilings
 
