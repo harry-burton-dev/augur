@@ -1,126 +1,368 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
-import { APP_WATCH_EVERY_MS, appReposFrom, appRunner, appsProject, containerEnv, publishersFrom, READY_MS, RETIRE_MS, type AppHost, type AppJob, type JobReport, type PlatformCalls, type RunnerState } from './runner.ts';
+import { APP_WATCH_EVERY_MS, appsProject, publishersFrom, RETIRE_MS, runsAsRoot, type AppJob, type JobReport, type RunningApp } from './runner.ts';
+import { examplePart, ENV, image, install, KEY, release, setup } from './runner.testing.ts';
 import { releaseIdentity } from './signers.ts';
 
-const KEY = 'k'.repeat(64);
-const ENV = `PLATFORM_URL=https://augur.example\nAPP_SECRETS_KEY=${KEY}\n`;
-const PUBLISHER = 'o/r/.github/workflows/release.yml';
-const image = (c: string) => `ghcr.io/o/r/apps/notes@sha256:${c.repeat(64)}`;
-const release = (version: string, c = 'a', more: object = {}) => ({
-  id: 'notes',
-  version,
-  manifest: { id: 'notes', name: 'Notes', version, storage: { database: true } },
-  service: { image: image(c) },
-  signer: { repository: 'o/r', workflow: '.github/workflows/release.yml' },
-  ...more,
+/** Whether this machine has Docker Compose, to check a project with `docker compose config` (CI's runners do). */
+const hasCompose = (() => {
+  try {
+    execFileSync('docker', ['compose', 'version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const versionOf = (t: ReturnType<typeof setup>, c: string, v: string) => {
+  t.versions.set(image(c, 'web'), v);
+  t.versions.set(image(c, 'worker'), v);
+};
+const SECRET = appSecretFor(KEY, 'notes', 'sign-in');
+
+describe('running Score parts (spec 4, 10)', () => {
+  it('makes the example’s three parts three services: named by part and slot, held to their limits, read-only, with no added powers and only the volumes they asked for', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    const services = t.project()!.services;
+    expect(Object.keys(services)).toEqual(['app-notes-web-blue', 'app-notes-worker-blue', 'app-notes-migrate-blue']);
+    for (const s of Object.values(services)) {
+      expect(s).toMatchObject({
+        read_only: true,
+        tmpfs: ['/tmp'],
+        cap_drop: ['ALL'],
+        security_opt: ['no-new-privileges:true'],
+        networks: ['platform'],
+      });
+      expect(s).not.toHaveProperty('ports');
+      expect(s).not.toHaveProperty('privileged');
+    }
+    expect(services['app-notes-web-blue']).toMatchObject({
+      image: image('a'),
+      mem_limit: 512 * 2 ** 20,
+      cpus: 1,
+      restart: 'unless-stopped',
+    });
+    expect(services['app-notes-worker-blue']).toMatchObject({
+      image: image('a', 'worker'),
+      mem_limit: 256 * 2 ** 20,
+      cpus: 0.5,
+    });
+    // A job runs only when the runner runs it.
+    expect(services['app-notes-migrate-blue']).toMatchObject({
+      entrypoint: ['node', 'dist/migrate.js'],
+      restart: 'no',
+      profiles: ['jobs'],
+      mem_limit: 256 * 2 ** 20,
+      cpus: 0.5,
+    });
+    // Volumes: web's scratch, writable; the worker's files, read-only; nothing for migrate.
+    expect(services['app-notes-web-blue']!.volumes).toEqual([
+      {
+        type: 'volume',
+        source: 'app-notes-web-scratch',
+        target: '/scratch',
+        read_only: false,
+      },
+    ]);
+    expect(services['app-notes-worker-blue']!.volumes).toEqual([
+      {
+        type: 'volume',
+        source: 'app-notes-worker-maps',
+        target: '/maps',
+        read_only: true,
+      },
+    ]);
+    expect(services['app-notes-migrate-blue']).not.toHaveProperty('volumes');
+    expect(Object.keys(t.project()!.volumes ?? {})).toEqual(['app-notes-web-scratch', 'app-notes-worker-maps']);
+    // Only ${resources.*} outputs: no service addresses, and the database login is the app's own.
+    const web = services['app-notes-web-blue']!.environment as Record<string, string>;
+    expect(web).toMatchObject({
+      PORT: '8080',
+      GATEWAY_URL: 'http://gateway:8080',
+      CLIENT_ID: 'app-notes',
+      DATABASE_USER: 'app_notes',
+      DATABASE_SCHEMA: 'notes',
+      DATABASE_HOST: 'postgres',
+      RETENTION_DAYS: '365',
+      ALLOW_SHARING: 'false',
+      OTEL_SERVICE_NAME: 'notes-web',
+    });
+    for (const s of Object.values(services)) {
+      for (const key of ['IDENTITY_URL', 'EVENTS_URL', 'REGISTRY_URL', 'MODELS_URL', 'DATABASE_URL', 'SERVICE_CLIENT_SECRET']) expect(s.environment).not.toHaveProperty(key);
+    }
+    // Secrets arrive as files, mounted as Compose secrets; the project itself holds none.
+    expect(services['app-notes-web-blue']!.secrets).toEqual([
+      {
+        source: 'app-notes-web-blue-file-0',
+        target: '/run/augur/client-secret',
+      },
+      {
+        source: 'app-notes-web-blue-file-1',
+        target: '/run/augur/database-password',
+      },
+      { source: 'app-notes-web-blue-file-2', target: '/run/augur/export-key' },
+    ]);
+    expect(t.project()!.secrets!['app-notes-web-blue-file-0']).toEqual({
+      file: './files/app-notes-web-blue/0',
+    });
+    expect(t.files()['files/app-notes-web-blue/0']).toBe(SECRET);
+    expect(t.files()['files/app-notes-web-blue/1']).toBe(appSecretFor(KEY, 'notes', 'database'));
+    // An optional secret setting with no value is an empty file.
+    expect(t.files()['files/app-notes-web-blue/2']).toBe('');
+    const text = JSON.stringify(t.project());
+    for (const secret of [SECRET, appSecretFor(KEY, 'notes', 'database'), appSecretFor(KEY, 'notes', 'bucket')]) expect(text).not.toContain(secret);
+    expect(JSON.stringify(t.state())).not.toContain(SECRET);
+
+    // Provisioned, signed in, the job run, then the long-running parts started; the inbound part is the upstream.
+    expect(t.did).toEqual([
+      `verify ${releaseIdentity(PUBLISHER_WORKFLOW)}`,
+      `verify ${releaseIdentity(PUBLISHER_WORKFLOW)}`,
+      'storage notes (30 connections)',
+      'job app-notes-migrate-blue',
+      'start app-notes-web-blue',
+      'start app-notes-worker-blue',
+    ]);
+    expect(t.calls.did).toEqual([`credential notes ${SECRET.slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.state().apps.notes).toEqual({
+      active: {
+        slot: 'blue',
+        version: '1.0.0',
+        parts: expect.any(Array),
+        manifest: expect.objectContaining({ id: 'notes', version: '1.0.0' }),
+        repository: 'o/r',
+      },
+    });
+    expect(t.reports.find((r) => r.step === 'start' && r.state === 'done')?.message).toBe('Ran migrate to the end first.');
+    expect(t.reports.at(-1)).toMatchObject({
+      step: 'retire',
+      outcome: 'done',
+      message: 'Notes 1.0.0 is installed.',
+    });
+  });
+
+  it('stops at provisioning, naming the ceiling, when a part asks for more memory than it allows', async () => {
+    const t = setup(`${ENV}APP_PART_MEMORY_CEILING=1Gi\n`);
+    const big = install('1.0.0', 'a', {}, (parts) => (parts[0]!.containers.web!.resources.limits.memory = '2Gi'));
+    expect(await t.run(big)).toBe('failed');
+    expect(t.reports.at(-1)).toMatchObject({
+      step: 'storage',
+      outcome: 'failed',
+      message: 'web asks for 2Gi of memory, above this deployment’s ceiling of 1Gi a part (APP_PART_MEMORY_CEILING in .env). Nothing was started.',
+    });
+    expect(t.did.filter((d) => !d.startsWith('verify'))).toEqual([]);
+    expect(t.calls.did).toEqual([]);
+    expect(t.state().apps).toEqual({});
+    // The app's totals have ceilings too, and the ceiling's default stands without the setting.
+    const total = setup(`${ENV}APP_CPU_CEILING=1500m\n`);
+    expect(await total.run(install('1.0.0'))).toBe('failed');
+    expect(total.reports.at(-1)?.message).toMatch(/2 CPU together, above this deployment’s ceiling of 1\.5 CPU an app \(APP_CPU_CEILING in \.env\)/);
+  });
+
+  it('never switches when the migrate job fails, and says what it said last', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    t.calls.did.length = 0;
+    t.jobs.set('app-notes-migrate-green', {
+      code: 3,
+      logs: `${'line\n'.repeat(20)}error: relation "notes" already exists\n`,
+    });
+    expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
+    expect(t.reports.at(-1)).toMatchObject({
+      step: 'start',
+      outcome: 'failed',
+    });
+    expect(t.reports.at(-1)?.message).toBe(
+      'migrate (a job) exited 3. Its last lines: line | line | line | line | line | line | line | line | line | error: relation "notes" already exists 1.0.0 is still serving.',
+    );
+    expect(t.did.filter((d) => d.startsWith('start')).slice(-1)).toEqual(['start app-notes-worker-blue']);
+    expect(t.calls.did.filter((d) => d.startsWith('register') || d.startsWith('upstream'))).toEqual([]);
+    expect(t.state().apps.notes).toEqual({
+      active: expect.objectContaining({ slot: 'blue', version: '1.0.0' }),
+    });
+
+    // One that runs out of time doesn't switch either.
+    t.jobs.set('app-notes-migrate-green', { code: 'timeout', logs: '' });
+    expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('migrate (a job) didn’t finish within 180 s, saying nothing 1.0.0 is still serving.');
+  });
+
+  it('waits on every service part’s /healthz, each within its own time', async () => {
+    const api = (parts: ReturnType<typeof examplePart>[]) => {
+      const second = structuredClone(parts[0]!);
+      second.metadata.name = 'api';
+      second.metadata.annotations!['augur.dev/ready-seconds'] = '30';
+      delete second.resources!.gateway!.params;
+      delete second.resources!.scratch;
+      delete second.containers.web!.volumes;
+      parts.splice(1, 0, second);
+    };
+    const t = setup();
+    expect(await t.run(install('1.0.0', 'a', {}, api))).toBe('done');
+    expect(new Set(t.health)).toEqual(new Set(['http://app-notes-web-blue:8080/healthz', 'http://app-notes-api-blue:8080/healthz']));
+    // The worker and the job are never asked.
+    expect(t.health.some((u) => /worker|migrate/.test(u))).toBe(false);
+
+    // The second service part never answers: the install is undone once its 30 s are up.
+    const slow = setup();
+    const start = slow.host.start;
+    slow.host.start = async (services) => {
+      await start(services);
+      slow.running.delete('app-notes-api-blue');
+    };
+    expect(await slow.run(install('1.0.0', 'a', {}, api))).toBe('failed');
+    expect(slow.reports.at(-1)).toMatchObject({
+      step: 'health',
+      message: 'The api part of Notes 1.0.0 didn’t answer within 30 s; its logs say why.',
+    });
+    expect(slow.clock()).toBeGreaterThanOrEqual(30_000);
+    expect(slow.clock()).toBeLessThan(60_000);
+    expect(slow.running.size).toBe(0);
+  });
+
+  it('refuses an image that runs as root', async () => {
+    const t = setup();
+    t.users.set(image('a', 'worker'), '');
+    expect(await t.run(install('1.0.0'))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('worker’s image runs as root (it sets no user): a part runs as a user other than root, given as a number so it can be told without the image’s own user list (spec 4.13). Set USER to one, such as USER 10001, in its Dockerfile.');
+    expect(t.did.some((d) => d.startsWith('start') || d.startsWith('job'))).toBe(false);
+    expect(runsAsRoot('0:0')).toBe(true);
+    expect(runsAsRoot('root')).toBe(true);
+    // A name may be uid 0 in the image's passwd; only a number says it isn't.
+    expect(runsAsRoot('node')).toBe(true);
+    expect(runsAsRoot('00')).toBe(true);
+    expect(runsAsRoot('10001:10001')).toBe(false);
+  });
+
+  it('refuses a part that reads a secret anywhere but a file, or mounts what it wasn’t given', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0', 'a', {}, (p) => (p[0]!.containers.web!.variables!.DB_PASSWORD = '${resources.db.password}')))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('web reads the secret db.password in the variable DB_PASSWORD: a secret arrives only as a file (files), never anywhere else.');
+    expect(await t.run(install('1.0.0', 'a', {}, (p) => (p[2]!.containers.migrate!.args = ['--pw', '${resources.db.password}'])))).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/migrate reads the secret db\.password in its arguments \(2\)/);
+    // Score's escape is a literal, not a read.
+    expect(await t.run(install('1.0.0', 'a', {}, (p) => (p[2]!.containers.migrate!.args = ['--pw', '$${resources.db.password}'])))).toBe('done');
+    expect(t.project()!.services['app-notes-migrate-blue']!.command).toEqual(['--pw', '$${resources.db.password}']);
+
+    const u = setup();
+    // The release writer refuses these too; the runner doesn't rely on it.
+    const hostFolder = install('1.0.0');
+    hostFolder.release!.parts[0]!.containers.web!.volumes = {
+      '/data': { source: '/srv/data' },
+    };
+    expect(await u.run(hostFolder)).toBe('failed');
+    expect(u.reports.at(-1)?.message).toMatch(/^web: AUGUR: \/containers\/web\/volumes\/~1data\/source must match/);
+    const notGiven = install('1.0.0');
+    notGiven.release!.parts[0]!.containers.web!.volumes = {
+      '/data': { source: '${resources.db}' },
+    };
+    expect(await u.run(notGiven)).toBe('failed');
+    expect(u.reports.at(-1)?.message).toBe('web mounts ${resources.db} at /data: a part mounts only its own augur-scratch or augur-files resources, as ${resources.<name>} (spec 4.7).');
+    const redis = install('1.0.0');
+    redis.release!.parts[0]!.resources!.cache = { type: 'redis' };
+    expect(await u.run(redis)).toBe('failed');
+    expect(u.reports.at(-1)?.message).toBe('web asks for cache of type redis: resource type not offered by this AUGUR.');
+  });
+
+  it('refuses a limit Docker would read as none, and a name too long to be a host name', async () => {
+    const t = setup();
+    // Score's schema refuses 0 itself; Docker refuses these.
+    const none = install('1.0.0');
+    none.release!.parts[1]!.containers.worker!.resources.limits.memory = '1';
+    expect(await t.run(none)).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/memory limit 1 is below the 6Mi a container needs\./);
+    const tiny = install('1.0.0');
+    tiny.release!.parts[1]!.containers.worker!.resources.limits.cpu = '1m';
+    expect(await t.run(tiny)).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/^worker’s CPU limit 1m is below the 0\.01 CPU a container may be given\./);
+    // An id and a part name each within their own limits, too long together.
+    const id = `n${'o'.repeat(39)}`;
+    const long = { ...install('1.0.0'), app: id };
+    long.release = { ...long.release!, id, manifest: { ...long.release!.manifest, id } };
+    long.release.parts[1]!.metadata.name = `w${'o'.repeat(31)}`;
+    expect(await t.run(long)).toBe('failed');
+    expect(t.reports.at(-1)?.message).toMatch(/is longer than the 63 characters a host name may be/);
+    expect(t.did.some((d) => d.startsWith('start') || d.startsWith('storage'))).toBe(false);
+  });
+
+  it('writes a project Compose reads as written: a $ the part means is never filled in from the updater’s settings', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0', 'a', {}, (p) => (p[0]!.containers.web!.variables!.GREETING = 'costs $5 at $HOME')))).toBe('done');
+    expect((t.project()!.services['app-notes-web-blue']!.environment as Record<string, string>).GREETING).toBe('costs $$5 at $$HOME');
+    // Every $ in the project is doubled, which Compose reads as one.
+    expect(JSON.stringify(t.project()).replace(/\$\$/g, '')).not.toContain('$');
+  });
+
+  it.skipIf(!hasCompose)('passes docker compose config, with every value as the part wrote it', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0', 'a', {}, (p) => {
+      p[0]!.containers.web!.variables!.GREETING = 'costs $5 at $HOME';
+      p[2]!.containers.migrate!.args = ['--pw', '$${resources.db.password}'];
+    }))).toBe('done');
+    const dir = mkdtempSync(join(tmpdir(), 'apps-'));
+    for (const [path, text] of Object.entries(t.files())) {
+      mkdirSync(dirname(join(dir, path)), { recursive: true });
+      writeFileSync(join(dir, path), text);
+    }
+    writeFileSync(join(dir, 'compose.yml'), JSON.stringify(t.project()));
+    const config = JSON.parse(execFileSync('docker', ['compose', '-f', join(dir, 'compose.yml'), '--profile', 'jobs', 'config', '--format', 'json'], { env: { PATH: process.env.PATH, HOME: '/somewhere' } }).toString());
+    rmSync(dir, { recursive: true, force: true });
+    // Compose filled nothing in (no error, no HOME): config prints the value escaped again, as it would read it.
+    expect(config.services['app-notes-web-blue'].environment.GREETING).toBe('costs $$5 at $$HOME');
+    expect(config.services['app-notes-migrate-blue'].command).toEqual(['--pw', '$${resources.db.password}']);
+    expect(JSON.stringify(config)).not.toContain('/somewhere');
+    expect(config.services['app-notes-web-blue'].read_only).toBe(true);
+    expect(config.services['app-notes-web-blue'].cap_drop).toEqual(['ALL']);
+  });
+
+  it('takes only releases on contract 3, for the app the job names', async () => {
+    const t = setup();
+    expect(
+      await t.run({
+        id: 'j',
+        app: 'notes',
+        action: 'install',
+        release: {
+          id: 'notes',
+          version: '1.0.0',
+          service: { image: image('a') },
+        } as never,
+        state: 'requested',
+      }),
+    ).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('This release isn’t on app contract 3, the only one this AUGUR’s runner runs.');
+    expect(await t.run({ ...install('1.0.0'), app: 'other' })).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('The release is for notes, not other.');
+  });
 });
-const install = (version: string, c = 'a', more: object = {}): AppJob => ({ id: `j-${version}`, app: 'notes', action: 'install', release: release(version, c, more), state: 'requested' });
 
-/** A server that runs whatever it's told; a container answers on the version its image was released as. */
-const fakeHost = (env = ENV, network?: string) => {
-  let state: RunnerState = { apps: {} };
-  const did: string[] = [];
-  const running = new Map<string, string>();
-  const versions = new Map<string, string>();
-  const unsigned = new Set<string>();
-  let project: ReturnType<typeof appsProject> | undefined;
-  let envFiles: Record<string, string> = {};
-  let clock = 0;
-  const host: AppHost = {
-    readEnv: async () => env,
-    platformNetwork: async () => network,
-    readState: async () => structuredClone(state),
-    async writeProject(s, p, files) {
-      state = structuredClone(s);
-      project = p as ReturnType<typeof appsProject>;
-      envFiles = files;
-    },
-    async verifySignedBy(ref, identity) {
-      did.push(`verify ${identity}`);
-      if (unsigned.has(ref)) throw new Error('no matching signatures');
-    },
-    async backup() {
-      did.push('backup');
-      return 'platform-20261030-0100.sql.gz';
-    },
-    async provisionStorage(app) {
-      did.push(`storage ${app}`);
-    },
-    async dropStorage(id) {
-      did.push(`drop ${id}`);
-    },
-    async start(services) {
-      for (const s of services) {
-        const svc = (project!.services as Record<string, { image: string }>)[s];
-        running.set(s, versions.get(svc.image) ?? '');
-        did.push(`start ${s}`);
-      }
-    },
-    async stop(services) {
-      for (const s of services) {
-        running.delete(s);
-        did.push(`stop ${s}`);
-      }
-    },
-    async health(url) {
-      const name = new URL(url).hostname;
-      return running.has(name) ? { version: running.get(name) } : undefined;
-    },
-    async wait(ms) {
-      clock += ms;
-    },
-  };
-  return { host, did, running, versions, unsigned, state: () => state, project: () => project, envFiles: () => envFiles, clock: () => clock };
-};
-
-const fakeCalls = () => {
-  const did: string[] = [];
-  let refuseRegister = false;
-  const calls: PlatformCalls = {
-    async setCredential(app, secret) {
-      did.push(`credential ${app} ${secret.slice(0, 6)}`);
-    },
-    async register(manifest) {
-      if (refuseRegister) throw new Error('it answered 400');
-      did.push(`register ${manifest.id} ${manifest.version}`);
-    },
-    async setUpstream(app, url) {
-      did.push(`upstream ${app} ${url}`);
-    },
-  };
-  return { calls, did, refuse: () => (refuseRegister = true) };
-};
-
-const setup = (env = ENV, network?: string, appRepos?: Record<string, string>) => {
-  const h = fakeHost(env, network);
-  const c = fakeCalls();
-  let now = new Date('2026-10-27T12:00:00Z');
-  const runner = appRunner({ host: h.host, calls: c.calls, publishers: [PUBLISHER], appRepos, now: () => now });
-  const reports: JobReport[] = [];
-  const run = (job: AppJob) => runner.run(job, async (r) => void reports.push(r));
-  h.versions.set(image('a'), '1.0.0');
-  h.versions.set(image('b'), '1.1.0');
-  return { ...h, calls: c, runner, reports, run, later: (ms: number) => (now = new Date(now.getTime() + ms)) };
-};
+const PUBLISHER_WORKFLOW = 'o/r/.github/workflows/release.yml';
 
 describe('the app runner', () => {
   it('installs a dev build only on a dev or preview server, from the dev workflow on dev, after a backup', async () => {
-    const dev = { signer: { repository: 'o/r', workflow: '.github/workflows/app-dev.yml' } };
+    const dev = {
+      signer: { repository: 'o/r', workflow: '.github/workflows/app-dev.yml' },
+    };
     const onProduction = setup(`${ENV}SERVER_RING=production\n`);
-    onProduction.versions.set(image('c'), '1.0.1-dev.40');
     expect(await onProduction.run(install('1.0.1-dev.40', 'c', dev))).toBe('failed');
     expect(onProduction.reports.at(-1)?.message).toMatch(/only a dev or preview server/);
     expect(onProduction.did).toEqual([]);
 
     const workbench = setup(`${ENV}SERVER_RING=dev\n`);
-    workbench.versions.set(image('c'), '1.0.1-dev.40');
+    versionOf(workbench, 'c', '1.0.1-dev.40');
     expect(await workbench.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
 
     const t = setup(`${ENV}SERVER_RING=preview\n`);
-    t.versions.set(image('c'), '1.0.1-dev.40');
+    versionOf(t, 'c', '1.0.1-dev.40');
     expect(await t.run(install('1.0.1-dev.40', 'c', dev))).toBe('done');
-    expect(t.did.slice(0, 2)).toEqual(['verify ^https://github\\.com/o/r/\\.github/workflows/app-dev\\.yml@refs/heads/(main|dev)$', 'backup']);
+    expect(t.did.slice(0, 3)).toEqual([
+      'verify ^https://github\\.com/o/r/\\.github/workflows/app-dev\\.yml@refs/heads/(main|dev)$',
+      'verify ^https://github\\.com/o/r/\\.github/workflows/app-dev\\.yml@refs/heads/(main|dev)$',
+      'backup',
+    ]);
     expect(t.reports.find((r) => r.step === 'verify' && r.state === 'done')?.message).toMatch(/Backup platform-20261030-0100\.sql\.gz/);
 
     // Signed by the release workflow, a dev version isn't taken as a dev build.
@@ -129,33 +371,41 @@ describe('the app runner', () => {
     expect(wrong.reports.at(-1)?.message).toMatch(/isn’t trusted to publish dev builds/);
   });
 
-  it('installs an app: checks its signature, gives it storage and a sign-in, starts it, then lists it', async () => {
-    const t = setup();
-    expect(await t.run(install('1.0.0'))).toBe('done');
-    expect(t.did).toEqual([`verify ${releaseIdentity('o/r/.github/workflows/release.yml')}`, 'storage notes', 'start app-notes-blue']);
-    expect(t.calls.did).toEqual([`credential notes ${appSecretFor(KEY, 'notes', 'sign-in').slice(0, 6)}`, 'register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
-    expect(t.state().apps.notes).toEqual({ active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: true, bucket: false }, manifest: expect.objectContaining({ id: 'notes', version: '1.0.0' }), repository: 'o/r' } });
-    expect(t.reports.at(-1)).toMatchObject({ step: 'retire', outcome: 'done', message: 'Notes 1.0.0 is installed.' });
-    expect(t.envFiles()['app-notes-blue']).toContain(`DATABASE_URL=postgres://app_notes:${appSecretFor(KEY, 'notes', 'database')}@postgres:5432/platform`);
-    expect(t.envFiles()['app-notes-blue']).toContain('APP_REGISTERED_BY=runner');
-  });
-
   it('upgrades blue/green, and stops the old version once its time is up', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
     t.did.length = 0;
     expect(await t.run(install('1.1.0', 'b'))).toBe('done');
-    expect(t.did).toContain('start app-notes-green');
-    expect(t.running.has('app-notes-blue')).toBe(true);
-    expect(t.state().apps.notes.active).toMatchObject({ slot: 'green', version: '1.1.0' });
-    expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'blue', version: '1.0.0', until: '2026-10-27T12:10:00.000Z' });
-    expect(Object.keys(t.project()!.services)).toEqual(['app-notes-green', 'app-notes-blue']);
+    expect(t.did).toContain('job app-notes-migrate-green');
+    expect(t.did).toContain('start app-notes-web-green');
+    expect(t.running.has('app-notes-web-blue')).toBe(true);
+    expect(t.state().apps.notes.active).toMatchObject({
+      slot: 'green',
+      version: '1.1.0',
+    });
+    expect(t.state().apps.notes.retiring).toMatchObject({
+      slot: 'blue',
+      version: '1.0.0',
+      until: '2026-10-27T12:10:00.000Z',
+    });
+    expect(Object.keys(t.project()!.services)).toEqual([
+      'app-notes-web-green',
+      'app-notes-worker-green',
+      'app-notes-migrate-green',
+      'app-notes-web-blue',
+      'app-notes-worker-blue',
+      'app-notes-migrate-blue',
+    ]);
+    // Both slots share the app's scratch folder and files.
+    expect(Object.keys(t.project()!.volumes ?? {})).toEqual(['app-notes-web-scratch', 'app-notes-worker-maps']);
     await t.runner.retireDue();
-    expect(t.running.has('app-notes-blue')).toBe(true);
+    expect(t.running.has('app-notes-web-blue')).toBe(true);
     t.later(RETIRE_MS);
     await t.runner.retireDue();
-    expect(t.running.has('app-notes-blue')).toBe(false);
-    expect(Object.keys(t.project()!.services)).toEqual(['app-notes-green']);
+    expect(t.running.has('app-notes-web-blue')).toBe(false);
+    expect(t.running.has('app-notes-worker-blue')).toBe(false);
+    expect(Object.keys(t.project()!.services)).toEqual(['app-notes-web-green', 'app-notes-worker-green', 'app-notes-migrate-green']);
+    expect(Object.keys(t.files()).filter((f) => f.includes('blue'))).toEqual([]);
   });
 
   it('watches an upgrade for 5 minutes after the switch, and goes back by itself when it stops answering', async () => {
@@ -167,39 +417,113 @@ describe('the app runner', () => {
     t.host.wait = async (ms) => {
       await wait(ms);
       if (ms === APP_WATCH_EVERY_MS) switchedAt ??= t.clock() - ms;
-      if (switchedAt !== undefined && t.clock() - switchedAt >= 2 * 60_000) t.running.delete('app-notes-green');
+      if (switchedAt !== undefined && t.clock() - switchedAt >= 2 * 60_000) t.running.delete('app-notes-web-green');
     };
     t.calls.did.length = 0;
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
-    expect(t.reports.at(-1)).toMatchObject({ step: 'watch', state: 'failed', outcome: 'failed', message: 'Notes 1.1.0 stopped answering after the switch. Back on 1.0.0 by itself.' });
-    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
-    expect(t.running.has('app-notes-blue')).toBe(true);
-    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue', version: '1.0.0' }) });
+    expect(t.reports.at(-1)).toMatchObject({
+      step: 'watch',
+      state: 'failed',
+      outcome: 'failed',
+      message: 'Notes 1.1.0: the web part stopped answering after the switch. Back on 1.0.0 by itself.',
+    });
+    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.running.has('app-notes-web-blue')).toBe(true);
+    expect(t.running.has('app-notes-worker-green')).toBe(false);
+    expect(t.state().apps.notes).toEqual({
+      active: expect.objectContaining({ slot: 'blue', version: '1.0.0' }),
+    });
   });
 
   it('says so, and leaves it running, when the old version was installed before the runner kept its manifest', async () => {
     const t = setup();
-    await t.run(install('1.0.0'));
-    delete (t.state().apps.notes.active as { manifest?: unknown }).manifest;
+    await t.host.writeProject(
+      {
+        apps: {
+          notes: {
+            active: {
+              slot: 'blue',
+              version: '1.0.0',
+              image: image('a'),
+              storage: { database: true, bucket: false },
+            },
+          },
+        },
+      },
+      {},
+      {},
+    );
+    t.running.set('app-notes-blue', '1.0.0');
     const wait = t.host.wait;
     t.host.wait = async (ms) => {
       await wait(ms);
-      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-green');
+      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-web-green');
     };
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
-    expect(t.reports.at(-1)?.message).toBe('Notes 1.1.0 stopped answering after the switch. It didn’t go back by itself: 1.0.0 was installed before the runner kept what it needs to go back. Install 1.0.0 again from Admin → Apps.');
+    expect(t.reports.at(-1)?.message).toBe(
+      'Notes 1.1.0: the web part stopped answering after the switch. It didn’t go back by itself: 1.0.0 was installed before the runner kept what it needs to go back. Install 1.0.0 again from Admin → Apps.',
+    );
+  });
+
+  it('keeps a version from before contract 3 running as it was until it is replaced', async () => {
+    const t = setup();
+    await t.host.writeProject(
+      {
+        apps: {
+          notes: {
+            active: {
+              slot: 'blue',
+              version: '0.9.0',
+              image: image('z'),
+              storage: { database: true, bucket: false },
+              manifest: {
+                id: 'notes',
+                name: 'Notes',
+                version: '0.9.0',
+              } as never,
+            },
+          },
+        },
+      },
+      {},
+      {},
+    );
+    t.running.set('app-notes-blue', '0.9.0');
+    t.calls.did.length = 0;
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    // Its container is in the project as it was, its settings file left beside it, until it retires.
+    expect(t.project()!.services['app-notes-blue']).toMatchObject({
+      image: image('z'),
+      env_file: ['./app-notes-blue.env'],
+    });
+    expect(t.state().apps.notes.active).toMatchObject({
+      slot: 'green',
+      version: '1.0.0',
+    });
+    t.later(RETIRE_MS);
+    await t.runner.retireDue();
+    expect(t.running.has('app-notes-blue')).toBe(false);
+    expect(t.project()!.services).not.toHaveProperty('app-notes-blue');
   });
 
   it('leaves the old version serving when the new one doesn’t come up on its version', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
-    t.versions.set(image('c'), '1.0.9');
+    versionOf(t, 'c', '1.0.9');
     t.calls.did.length = 0;
     expect(await t.run(install('1.2.0', 'c'))).toBe('failed');
-    expect(t.clock()).toBeGreaterThanOrEqual(READY_MS);
-    expect(t.reports.at(-1)).toMatchObject({ step: 'health', state: 'failed', outcome: 'failed', message: 'Notes came up on 1.0.9, not 1.2.0. 1.0.0 is still serving.' });
-    expect(t.running.has('app-notes-green')).toBe(false);
-    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue', version: '1.0.0' }) });
+    expect(t.clock()).toBeGreaterThanOrEqual(120_000);
+    expect(t.reports.at(-1)).toMatchObject({
+      step: 'health',
+      state: 'failed',
+      outcome: 'failed',
+      message: 'The web part of Notes came up on 1.0.9, not 1.2.0. 1.0.0 is still serving.',
+    });
+    expect(t.running.has('app-notes-web-green')).toBe(false);
+    expect(t.running.has('app-notes-worker-green')).toBe(false);
+    expect(t.state().apps.notes).toEqual({
+      active: expect.objectContaining({ slot: 'blue', version: '1.0.0' }),
+    });
     expect(t.calls.did.filter((d) => d.startsWith('register') || d.startsWith('upstream'))).toEqual([]);
   });
 
@@ -208,7 +532,7 @@ describe('the app runner', () => {
     await t.run(install('1.0.0'));
     t.calls.refuse();
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
-    expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-blue:8080');
+    expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-web-blue:8080');
     expect(t.state().apps.notes.active?.version).toBe('1.0.0');
   });
 
@@ -222,9 +546,11 @@ describe('the app runner', () => {
     };
     t.calls.did.length = 0;
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
-    expect(t.calls.did.slice(-3)).toEqual(['register notes 1.1.0', 'register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
-    expect(t.running.has('app-notes-green')).toBe(false);
-    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
+    expect(t.calls.did.slice(-3)).toEqual(['register notes 1.1.0', 'register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.running.has('app-notes-web-green')).toBe(false);
+    expect(t.state().apps.notes).toEqual({
+      active: expect.objectContaining({ slot: 'blue' }),
+    });
   });
 
   it('goes back when the switch can’t be reported, and leaves the new version running if going back fails too', async () => {
@@ -235,9 +561,11 @@ describe('the app runner', () => {
     const t = setup();
     await t.run(install('1.0.0'));
     expect(await t.runner.run(install('1.1.0', 'b'), failingReport(t))).toBe('failed');
-    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
-    expect(t.running.has('app-notes-green')).toBe(false);
-    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
+    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.running.has('app-notes-web-green')).toBe(false);
+    expect(t.state().apps.notes).toEqual({
+      active: expect.objectContaining({ slot: 'blue' }),
+    });
 
     // With the registry away the gateway stays on the new version, so stopping it would take the app down.
     const set = t.calls.calls.setUpstream;
@@ -245,68 +573,68 @@ describe('the app runner', () => {
       if (url?.includes('blue')) throw new Error('it couldn’t be reached');
       await set(app, url);
     };
-    expect(await t.runner.run(install('1.1.0', 'b'), failingReport(t))).toBe('failed');
-    expect(t.reports.at(-1)?.message).toMatch(/Going back to 1\.0\.0 didn’t work either, so app-notes-green is still running/);
-    expect(t.running.has('app-notes-green')).toBe(true);
+    // The job isn't ended: the next turn finds it running and goes back from the state.
+    await expect(t.runner.run(install('1.1.0', 'b'), failingReport(t))).rejects.toThrow(/Going back to 1\.0\.0 didn’t work either, so app-notes-web-green, app-notes-worker-green, app-notes-migrate-green are still running/);
+    expect(t.running.has('app-notes-web-green')).toBe(true);
     expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'green' });
     expect(t.state().apps.notes.retiring?.until).toBeUndefined();
+    t.calls.calls.setUpstream = set;
+    expect(await t.run({ ...install('1.1.0', 'b'), state: 'running' })).toBe('failed');
+    expect(t.running.has('app-notes-web-green')).toBe(false);
+    expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-web-blue:8080');
+    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
   });
 
   it('takes a backup before the first release from another repository, and not for the next ones', async () => {
-    const own = { signer: { repository: 'o/notes', workflow: '.github/workflows/release.yml' } };
-    const t = setup(`${ENV}APP_PUBLISHERS=o/notes/.github/workflows/release.yml\n`);
-    t.versions.set(image('c'), '1.2.0');
-    t.versions.set(image('d'), '1.3.0');
+    const own = {
+      signer: {
+        repository: 'o/notes',
+        workflow: '.github/workflows/release.yml',
+      },
+    };
+    const t = setup(`${ENV.replace('APP_PUBLISHERS=o/r', 'APP_PUBLISHERS=o/r o/notes')}`);
+    versionOf(t, 'c', '1.2.0');
+    versionOf(t, 'd', '1.3.0');
     expect(await t.run(install('1.0.0'))).toBe('done');
     expect(t.did).not.toContain('backup');
 
-    // Notes moves to its own repository: its data passes to that repository's release, so a backup comes first.
+    // Notes moves to another repository: its data passes to that repository's release, so a backup comes first.
     expect(await t.run(install('1.2.0', 'c', own))).toBe('done');
     expect(t.did.filter((d) => d === 'backup')).toHaveLength(1);
     expect(t.reports.find((r) => r.step === 'verify' && r.state === 'done' && r.message)?.message).toBe(
       'Signed in o/notes, where notes now comes from. Backup platform-20261030-0100.sql.gz taken first.',
     );
-    expect(t.state().apps.notes.active).toMatchObject({ version: '1.2.0', repository: 'o/notes' });
+    expect(t.state().apps.notes.active).toMatchObject({
+      version: '1.2.0',
+      repository: 'o/notes',
+    });
 
     // From then on it's an ordinary update.
     expect(await t.run(install('1.3.0', 'd', own))).toBe('done');
     expect(t.did.filter((d) => d === 'backup')).toHaveLength(1);
   });
 
-  it('trusts an app in its own repository from there, and only for that app', async () => {
-    const own = { signer: { repository: 'o/notes', workflow: '.github/workflows/release.yml' } };
-    const t = setup(ENV, undefined, { notes: 'o/notes' });
-    expect(await t.run(install('1.0.0', 'a', own))).toBe('done');
-    // The platform's own release workflow no longer publishes it, nor does any other repository.
-    const moved = setup(ENV, undefined, { notes: 'o/notes' });
-    expect(await moved.run(install('1.0.0'))).toBe('failed');
-    expect(moved.reports.at(-1)?.message).toBe('notes is published from o/notes, so a release signed in o/r isn’t taken.');
-    // Another app's repository can't publish this one.
-    const other = setup(ENV, undefined, { other: 'o/notes' });
-    expect(await other.run(install('1.0.0', 'a', own))).toBe('failed');
-  });
-
-  it('reads which repository publishes each app, leaving out anything else', () => {
-    expect(appReposFrom({ apps: { notes: 'o/notes', Bad: 'o/x', ok: 'no-slash', 'team-notes': 'o/team.notes' } })).toEqual({ notes: 'o/notes', 'team-notes': 'o/team.notes' });
-    expect(appReposFrom(null)).toEqual({});
-    expect(appReposFrom({ apps: [] })).toEqual({});
-  });
-
-  it('runs only what a trusted publisher signed', async () => {
+  it('runs only what a publisher in APP_PUBLISHERS signed, every part’s image', async () => {
     const t = setup();
-    const stranger = install('1.0.0', 'a', { signer: { repository: 'x/y', workflow: '.github/workflows/release.yml' } });
+    const stranger = install('1.0.0', 'a', {
+      signer: { repository: 'x/y', workflow: '.github/workflows/release.yml' },
+    });
     expect(await t.run(stranger)).toBe('failed');
     expect(t.reports.at(-1)?.message).toBe('x/y/.github/workflows/release.yml isn’t trusted to publish apps on this server. Add it to APP_PUBLISHERS in .env to trust it.');
-    t.unsigned.add(image('a'));
+    t.unsigned.add(image('a', 'worker'));
     expect(await t.run(install('1.0.0'))).toBe('failed');
-    expect(t.reports.at(-1)?.message).toMatch(/isn’t signed by o\/r/);
-    expect(t.did.some((d) => d.startsWith('start'))).toBe(false);
+    expect(t.reports.at(-1)?.message).toMatch(/^worker’s image isn’t signed by o\/r/);
+    expect(t.did.some((d) => d.startsWith('start') || d.startsWith('storage'))).toBe(false);
     const trusting = setup(`${ENV}APP_PUBLISHERS=x/y\n`);
     expect(await trusting.run(stranger)).toBe('done');
+    // Without APP_PUBLISHERS nobody is trusted.
+    const none = setup(ENV.replace('APP_PUBLISHERS=o/r\n', ''));
+    expect(await none.run(install('1.0.0'))).toBe('failed');
+    expect(none.reports.at(-1)?.message).toMatch(/isn’t trusted to publish apps on this server/);
   });
 
   it('needs APP_SECRETS_KEY', async () => {
-    const t = setup('PLATFORM_URL=https://augur.example\n');
+    const t = setup('PLATFORM_URL=https://augur.example\nAPP_PUBLISHERS=o/r\n');
     expect(await t.run(install('1.0.0'))).toBe('failed');
     expect(t.reports.at(-1)?.message).toMatch(/APP_SECRETS_KEY is not set/);
   });
@@ -314,32 +642,76 @@ describe('the app runner', () => {
   it('removes an app’s containers and forgets where it was', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
-    expect(await t.run({ id: 'r', app: 'notes', action: 'remove', state: 'requested' })).toBe('done');
+    expect(
+      await t.run({
+        id: 'r',
+        app: 'notes',
+        action: 'remove',
+        state: 'requested',
+      }),
+    ).toBe('done');
     expect(t.running.size).toBe(0);
     expect(t.state().apps).toEqual({});
     expect(t.calls.did.at(-1)).toBe('upstream notes null');
   });
 
-  it('cleans up after a job it was partway through when it restarted', async () => {
+  it('goes back from the state when it can’t go back after the watch, and never stops the version serving', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
-    // As if it had started green and then stopped.
-    await t.host.writeProject({ apps: { notes: { ...t.state().apps.notes, retiring: { slot: 'green', version: '1.1.0', image: image('b'), storage: { database: true, bucket: false } } } } }, {}, {});
-    t.running.set('app-notes-green', '1.1.0');
+    const wait = t.host.wait;
+    t.host.wait = async (ms) => {
+      await wait(ms);
+      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-web-green');
+    };
+    const set = t.calls.calls.setUpstream;
+    t.calls.calls.setUpstream = async (app, url) => {
+      if (url?.includes('blue')) throw new Error('it couldn’t be reached');
+      await set(app, url);
+    };
+    await expect(t.run(install('1.1.0', 'b'))).rejects.toThrow(/Going back to 1\.0\.0 didn’t work yet/);
+    // Written as a switch not finished: the old version active, the new one retiring with no end, so nothing stops the old.
+    expect(t.state().apps.notes.active).toMatchObject({ slot: 'blue' });
+    expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'green' });
+    expect(t.state().apps.notes.retiring?.until).toBeUndefined();
+    t.later(RETIRE_MS * 2);
+    await t.runner.retireDue();
+    expect(t.running.has('app-notes-web-blue')).toBe(true);
+    t.calls.calls.setUpstream = set;
     expect(await t.run({ ...install('1.1.0', 'b'), state: 'running' })).toBe('failed');
-    expect(t.running.has('app-notes-green')).toBe(false);
-    expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
+    expect(t.calls.did.slice(-2)).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+    expect(t.running.has('app-notes-worker-green')).toBe(false);
+  });
+
+  it('says what serves when it restarted while watching', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    await t.run(install('1.1.0', 'b'));
+    const now = t.state();
+    now.apps.notes.retiring!.until = '2026-10-27T12:15:00.000Z';
+    await t.host.writeProject(now, {}, {});
+    t.calls.did.length = 0;
+    expect(await t.run({ ...install('1.1.0', 'b'), state: 'running' })).toBe('failed');
+    expect(t.reports.at(-1)?.message).toBe('The app runner restarted while watching 1.1.0. 1.1.0 is serving, without the rest of its watch; 1.0.0 keeps running until 12:15 UTC, and Admin → Apps can go back to it.');
+    expect(t.calls.did).toEqual([]);
+    expect(t.running.has('app-notes-web-green')).toBe(true);
   });
 
   describe('restarting around a switch', () => {
-    const candidate = { slot: 'green', version: '1.1.0', image: image('b'), storage: { database: true, bucket: false } } as const;
     /** As if it had started green, and may or may not have switched to it, before it stopped. */
     const stopped = async (t: ReturnType<typeof setup>) => {
+      const candidate: RunningApp = {
+        slot: 'green',
+        version: '1.1.0',
+        parts: release('1.1.0', 'b').parts,
+        manifest: release('1.1.0', 'b').manifest,
+        repository: 'o/r',
+      };
       await t.host.writeProject({ apps: { notes: { ...t.state().apps.notes, retiring: candidate } } }, {}, {});
-      t.running.set('app-notes-green', '1.1.0');
+      t.running.set('app-notes-web-green', '1.1.0');
+      t.running.set('app-notes-worker-green', '1.1.0');
       t.calls.did.length = 0;
     };
-    const again = { ...install('1.1.0', 'b'), state: 'running' as const };
+    const again: AppJob = { ...install('1.1.0', 'b'), state: 'running' };
 
     it('puts the old version’s manifest and upstream back before it stops the new one', async () => {
       const t = setup();
@@ -347,13 +719,16 @@ describe('the app runner', () => {
       await stopped(t);
       const set = t.calls.calls.setUpstream;
       t.calls.calls.setUpstream = async (app, url) => {
-        expect(t.running.has('app-notes-green')).toBe(true);
+        expect(t.running.has('app-notes-web-green')).toBe(true);
         await set(app, url);
       };
       expect(await t.run(again)).toBe('failed');
-      expect(t.calls.did).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-blue:8080']);
-      expect(t.running.has('app-notes-green')).toBe(false);
-      expect(t.state().apps.notes).toEqual({ active: expect.objectContaining({ slot: 'blue' }) });
+      expect(t.calls.did).toEqual(['register notes 1.0.0', 'upstream notes http://app-notes-web-blue:8080']);
+      expect(t.running.has('app-notes-web-green')).toBe(false);
+      expect(t.running.has('app-notes-worker-green')).toBe(false);
+      expect(t.state().apps.notes).toEqual({
+        active: expect.objectContaining({ slot: 'blue' }),
+      });
     });
 
     it('forgets the upstream of a first install, which has nothing to go back to', async () => {
@@ -361,7 +736,7 @@ describe('the app runner', () => {
       await stopped(t);
       expect(await t.run(again)).toBe('failed');
       expect(t.calls.did).toEqual(['upstream notes null']);
-      expect(t.running.has('app-notes-green')).toBe(false);
+      expect(t.running.size).toBe(0);
       expect(t.state().apps).toEqual({});
     });
 
@@ -374,45 +749,39 @@ describe('the app runner', () => {
         throw new Error('it couldn’t be reached');
       };
       await expect(t.run(again)).rejects.toThrow('it couldn’t be reached');
-      expect(t.running.has('app-notes-green')).toBe(true);
+      expect(t.running.has('app-notes-web-green')).toBe(true);
       expect(t.state().apps.notes.retiring).toMatchObject({ slot: 'green' });
       expect(t.reports.at(-1)?.outcome).toBe('done');
 
       t.calls.calls.setUpstream = set;
       expect(await t.run(again)).toBe('failed');
-      expect(t.running.has('app-notes-green')).toBe(false);
-      expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-blue:8080');
+      expect(t.running.has('app-notes-web-green')).toBe(false);
+      expect(t.calls.did.at(-1)).toBe('upstream notes http://app-notes-web-blue:8080');
     });
   });
 });
 
-describe('settings', () => {
+describe('settings and previews', () => {
   it('reads APP_PUBLISHERS as repositories or workflows', () => {
     expect(publishersFrom('o/r, a/b/.github/workflows/ship.yml')).toEqual(['o/r/.github/workflows/release.yml', 'a/b/.github/workflows/ship.yml']);
   });
 
-  it('prefers secrets named in .env, as the storage container does', () => {
-    const env = containerEnv(`${ENV}TEAM_NOTES_BUCKET_SECRET=${'b'.repeat(64)}\n`, 'team-notes', { database: false, bucket: true });
-    expect(env.S3_SECRET_ACCESS_KEY).toBe('b'.repeat(64));
-    expect(env.S3_BUCKET).toBe('team-notes');
-    expect(env.DATABASE_URL).toBeUndefined();
-    expect(env.OIDC_ISSUER).toBe('https://augur.example/sso/realms/platform');
+  it('prefers secrets named in .env, as the storage container does', async () => {
+    const t = setup(`${ENV}NOTES_DATABASE_PASSWORD=named-password\n`);
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    expect(t.files()['files/app-notes-web-blue/1']).toBe('named-password');
   });
 
-  it('runs apps in production, so their service checks the gateway\u2019s signed caller', () => {
-    const env = containerEnv(ENV, 'team-notes', { database: false, bucket: false });
-    expect(env.NODE_ENV).toBe('production');
-    expect(env.GATEWAY_URL).toBe('http://gateway:8080');
-    expect(env.AUGUR_INSECURE_DEV_CALLERS).toBeUndefined();
+  it('caps the database login at APP_DATABASE_CONNECTIONS, and refuses parts that ask for more between them', async () => {
+    const t = setup(`${ENV}APP_DATABASE_CONNECTIONS=12\n`);
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    expect(t.did).toContain('storage notes (12 connections)');
+    const greedy = setup(`${ENV}APP_DATABASE_CONNECTIONS=12\n`);
+    expect(await greedy.run(install('1.0.0', 'a', {}, (p) => (p[2]!.resources!.db!.params = { connections: 5 })))).toBe('failed');
+    expect(greedy.reports.at(-1)?.message).toBe('The parts ask for 15 database connections between them (web 10, migrate 5), above this deployment’s 12 per app (APP_DATABASE_CONNECTIONS in .env).');
   });
 
-  it('puts every container on the platform’s network with no added powers', () => {
-    const project = appsProject({ apps: { notes: { active: { slot: 'blue', version: '1.0.0', image: image('a'), storage: { database: false, bucket: false } } } } }, 'net');
-    expect(project.networks).toEqual({ platform: { external: true, name: 'net' } });
-    expect(project.services['app-notes-blue']).toMatchObject({ image: image('a'), cap_drop: ['ALL'], security_opt: ['no-new-privileges:true'], env_file: ['./app-notes-blue.env'] });
-  });
-
-  it('puts apps on the network the platform is on, unless APPS_NETWORK names one', async () => {
+  it('puts parts on the network the platform is on, unless APPS_NETWORK names one', async () => {
     const asked = setup(ENV, 'augur_default');
     await asked.run(install('1.0.0'));
     expect(asked.project()!.networks.platform.name).toBe('augur_default');
@@ -424,6 +793,9 @@ describe('settings', () => {
     const unknown = setup();
     await unknown.run(install('1.0.0'));
     expect(unknown.project()!.networks.platform.name).toBe('platform_default');
+    expect(appsProject({ apps: {} }, ENV, 'net').project.networks).toEqual({
+      platform: { external: true, name: 'net' },
+    });
   });
 
   it('runs a pull request’s build beside the app, signed in as it with scratch storage, and replaces it in place', async () => {
@@ -431,81 +803,166 @@ describe('settings', () => {
     await t.run(install('1.0.0'));
     t.did.length = 0;
     t.calls.did.length = 0;
-    t.versions.set(image('d'), '1.1.0-pr.12.1');
-    t.versions.set(image('e'), '1.1.0-pr.12.2');
-    const signer = { signer: { repository: 'o/r', workflow: '.github/workflows/app-preview.yml' } };
-    const preview = (version: string, c: string): AppJob => ({ id: `p-${version}`, app: 'notes', action: 'preview', pr: 12, release: release(version, c, signer), state: 'requested' });
+    versionOf(t, 'd', '1.1.0-pr.12.1');
+    versionOf(t, 'e', '1.1.0-pr.12.2');
+    const signer = {
+      signer: {
+        repository: 'o/r',
+        workflow: '.github/workflows/app-preview.yml',
+      },
+    };
+    const preview = (version: string, c: string): AppJob => ({
+      id: `p-${version}`,
+      app: 'notes',
+      action: 'preview',
+      pr: 12,
+      release: release(version, c, signer),
+      state: 'requested',
+    });
     // The app's release workflow doesn't make previews.
-    expect(await t.run({ ...preview('1.1.0-pr.12.1', 'd'), release: release('1.1.0-pr.12.1', 'd') })).toBe('failed');
+    expect(
+      await t.run({
+        ...preview('1.1.0-pr.12.1', 'd'),
+        release: release('1.1.0-pr.12.1', 'd'),
+      }),
+    ).toBe('failed');
     t.did.length = 0;
     expect(await t.run(preview('1.1.0-pr.12.1', 'd'))).toBe('done');
-    expect(t.did).toEqual(['verify https://github.com/o/r/.github/workflows/app-preview.yml@refs/pull/12/merge', 'storage notes-pr12', 'start app-notes-pr12']);
+    const verify = 'verify https://github.com/o/r/.github/workflows/app-preview.yml@refs/pull/12/merge';
+    expect(t.did).toEqual([verify, verify, 'storage notes-pr12 (30 connections)', 'job app-notes-migrate-pr12', 'start app-notes-web-pr12', 'start app-notes-worker-pr12']);
     // Never registered, never the app's upstream: the registry sends only its developers to it.
     expect(t.calls.did).toEqual([]);
-    expect(t.reports.at(-1)).toMatchObject({ step: 'switch', outcome: 'done', upstream: 'http://app-notes-pr12:8080' });
-    const env = t.envFiles()['app-notes-pr12'];
-    expect(env).toContain(`SERVICE_CLIENT_SECRET=${appSecretFor(KEY, 'notes', 'sign-in')}`);
-    expect(env).toContain(`DATABASE_URL=postgres://app_notes_pr12:${appSecretFor(KEY, 'notes-pr12', 'database')}@postgres:5432/platform`);
-    expect(env).toContain('APP_PREVIEW=pr-12');
-    expect(t.project()!.services['app-notes-pr12']).toMatchObject({ image: image('d'), cap_drop: ['ALL'], labels: { 'augur.preview': '12' } });
-    expect(t.running.has('app-notes-blue')).toBe(true);
+    expect(t.reports.at(-1)).toMatchObject({
+      step: 'switch',
+      outcome: 'done',
+      upstream: 'http://app-notes-web-pr12:8080',
+    });
+    // Signed in as the app, with storage of its own.
+    expect(t.files()['files/app-notes-web-pr12/0']).toBe(SECRET);
+    expect(t.files()['files/app-notes-web-pr12/1']).toBe(appSecretFor(KEY, 'notes-pr12', 'database'));
+    expect(t.project()!.services['app-notes-web-pr12']).toMatchObject({
+      image: image('d'),
+      cap_drop: ['ALL'],
+      labels: { 'augur.preview': '12' },
+      environment: expect.objectContaining({
+        DATABASE_USER: 'app_notes_pr12',
+        CLIENT_ID: 'app-notes',
+      }),
+    });
+    expect(t.project()!.services['app-notes-web-pr12']!.volumes).toEqual([
+      {
+        type: 'volume',
+        source: 'app-notes-pr12-web-scratch',
+        target: '/scratch',
+        read_only: false,
+      },
+    ]);
+    expect(t.running.has('app-notes-web-blue')).toBe(true);
 
     t.did.length = 0;
     expect(await t.run(preview('1.1.0-pr.12.2', 'e'))).toBe('done');
-    expect(t.did).toEqual(['verify https://github.com/o/r/.github/workflows/app-preview.yml@refs/pull/12/merge', 'storage notes-pr12', 'stop app-notes-pr12', 'start app-notes-pr12']);
-    expect(t.state().previews?.['notes-pr12']).toMatchObject({ version: '1.1.0-pr.12.2', image: image('e') });
+    expect(t.did.slice(2, 6)).toEqual(['storage notes-pr12 (30 connections)', 'stop app-notes-web-pr12', 'stop app-notes-worker-pr12', 'stop app-notes-migrate-pr12']);
+    expect(t.state().previews?.['notes-pr12']).toMatchObject({
+      version: '1.1.0-pr.12.2',
+    });
 
     t.did.length = 0;
-    expect(await t.run({ id: 'r-1', app: 'notes', action: 'preview-remove', pr: 12, state: 'requested' })).toBe('done');
-    expect(t.did).toEqual(['stop app-notes-pr12', 'drop notes-pr12']);
+    expect(
+      await t.run({
+        id: 'r-1',
+        app: 'notes',
+        action: 'preview-remove',
+        pr: 12,
+        state: 'requested',
+      }),
+    ).toBe('done');
+    expect(t.did).toEqual(['stop app-notes-web-pr12', 'stop app-notes-worker-pr12', 'stop app-notes-migrate-pr12', 'drop notes-pr12', 'remove volumes app-notes-pr12-web-scratch app-notes-pr12-worker-maps']);
     expect(t.state().previews).toEqual({});
-    expect(Object.keys(t.project()!.services)).toEqual(['app-notes-blue']);
+    expect(Object.keys(t.project()!.services)).toEqual(['app-notes-web-blue', 'app-notes-worker-blue', 'app-notes-migrate-blue']);
   });
 
   it('takes a preview that doesn’t come up away again, leaving the app alone', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
-    t.versions.set(image('f'), '0.0.1');
-    const signer = { signer: { repository: 'o/r', workflow: '.github/workflows/app-preview.yml' } };
-    expect(await t.run({ id: 'p-1', app: 'notes', action: 'preview', pr: 3, release: release('1.1.0-pr.3.1', 'f', signer), state: 'requested' })).toBe('failed');
-    expect(t.reports.at(-1)).toMatchObject({ step: 'health', outcome: 'failed', message: 'Notes came up on 0.0.1, not 1.1.0-pr.3.1.' });
-    expect(t.running.has('app-notes-pr3')).toBe(false);
-    expect(t.running.has('app-notes-blue')).toBe(true);
+    versionOf(t, 'f', '0.0.1');
+    const signer = {
+      signer: {
+        repository: 'o/r',
+        workflow: '.github/workflows/app-preview.yml',
+      },
+    };
+    expect(
+      await t.run({
+        id: 'p-1',
+        app: 'notes',
+        action: 'preview',
+        pr: 3,
+        release: release('1.1.0-pr.3.1', 'f', signer),
+        state: 'requested',
+      }),
+    ).toBe('failed');
+    expect(t.reports.at(-1)).toMatchObject({
+      step: 'health',
+      outcome: 'failed',
+      message: 'The web part of Notes came up on 0.0.1, not 1.1.0-pr.3.1.',
+    });
+    expect(t.running.has('app-notes-web-pr3')).toBe(false);
+    expect(t.running.has('app-notes-web-blue')).toBe(true);
     expect(t.state().previews).toEqual({});
   });
 
   it('keeps a preview through the app’s installs, however they end, so it can still be taken away', async () => {
     const t = setup();
     await t.run(install('1.0.0'));
-    t.versions.set(image('d'), '1.1.0-pr.12.1');
-    t.versions.set(image('c'), '1.0.9');
-    const signer = { signer: { repository: 'o/r', workflow: '.github/workflows/app-preview.yml' } };
-    await t.run({ id: 'p-1', app: 'notes', action: 'preview', pr: 12, release: release('1.1.0-pr.12.1', 'd', signer), state: 'requested' });
+    versionOf(t, 'd', '1.1.0-pr.12.1');
+    versionOf(t, 'c', '1.0.9');
+    const signer = {
+      signer: {
+        repository: 'o/r',
+        workflow: '.github/workflows/app-preview.yml',
+      },
+    };
+    await t.run({
+      id: 'p-1',
+      app: 'notes',
+      action: 'preview',
+      pr: 12,
+      release: release('1.1.0-pr.12.1', 'd', signer),
+      state: 'requested',
+    });
 
     expect(await t.run(install('1.1.0', 'b'))).toBe('done');
     expect(t.state().previews).toHaveProperty(['notes-pr12']);
-    expect(t.project()!.services).toHaveProperty(['app-notes-pr12']);
+    expect(t.project()!.services).toHaveProperty(['app-notes-web-pr12']);
 
     // A version that doesn't come up, undone.
     expect(await t.run(install('1.2.0', 'c'))).toBe('failed');
     expect(t.state().previews).toHaveProperty(['notes-pr12']);
-    expect(t.project()!.services).toHaveProperty(['app-notes-pr12']);
+    expect(t.project()!.services).toHaveProperty(['app-notes-web-pr12']);
 
     // A version that falls over after the switch, gone back from.
-    t.versions.set(image('e'), '1.3.0');
+    versionOf(t, 'e', '1.3.0');
     const wait = t.host.wait;
     t.host.wait = async (ms) => {
       await wait(ms);
-      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-blue');
+      if (ms === APP_WATCH_EVERY_MS) t.running.delete('app-notes-web-blue');
     };
     expect(await t.run(install('1.3.0', 'e'))).toBe('failed');
     expect(t.state().apps.notes.active?.version).toBe('1.1.0');
     expect(t.state().previews).toHaveProperty(['notes-pr12']);
-    expect(t.project()!.services).toHaveProperty(['app-notes-pr12']);
+    expect(t.project()!.services).toHaveProperty(['app-notes-web-pr12']);
 
     t.did.length = 0;
-    expect(await t.run({ id: 'r-1', app: 'notes', action: 'preview-remove', pr: 12, state: 'requested' })).toBe('done');
-    expect(t.did).toEqual(['stop app-notes-pr12', 'drop notes-pr12']);
+    expect(
+      await t.run({
+        id: 'r-1',
+        app: 'notes',
+        action: 'preview-remove',
+        pr: 12,
+        state: 'requested',
+      }),
+    ).toBe('done');
+    expect(t.did.slice(-2)).toEqual(['drop notes-pr12', 'remove volumes app-notes-pr12-web-scratch app-notes-pr12-worker-maps']);
   });
 
   it('finishes taking away a preview the state doesn’t name, without asking Compose to stop it', async () => {
@@ -513,8 +970,19 @@ describe('settings', () => {
     t.host.stop = async (services) => {
       throw new Error(`no such service: ${services.join(' ')}`);
     };
-    expect(await t.run({ id: 'r-1', app: 'notes', action: 'preview-remove', pr: 3, state: 'requested' })).toBe('done');
+    expect(
+      await t.run({
+        id: 'r-1',
+        app: 'notes',
+        action: 'preview-remove',
+        pr: 3,
+        state: 'requested',
+      }),
+    ).toBe('done');
     expect(t.did).toEqual(['drop notes-pr3']);
-    expect(t.reports.at(-1)).toMatchObject({ outcome: 'done', message: 'Nothing of pull request 3 was running.' });
+    expect(t.reports.at(-1)).toMatchObject({
+      outcome: 'done',
+      message: 'Nothing of pull request 3 was running.',
+    });
   });
 });
