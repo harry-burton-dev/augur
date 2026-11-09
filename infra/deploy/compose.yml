@@ -626,7 +626,8 @@ services:
       PYROSCOPE_EXTRA_ARGS: -server.http-listen-address=127.0.0.1
     ports:
       - 127.0.0.1:3001:3000
-    # Not on the compose network, so apps the runner installs can't reach it: only what sends telemetry can.
+    # Not on the compose network: only what sends telemetry reaches it, AUGUR's services and the apps that ask
+    # for augur-telemetry (their networks join it). Its stores answer on 127.0.0.1 only; Grafana needs its password.
     # The rendition worker reaches it on its own network, so it never shares one with the services.
     networks: [telemetry, grafana]
     volumes:

@@ -160,7 +160,7 @@ case "$*" in
   *"com.docker.compose.service="*) ;;
   *com.docker.compose.project*) echo platform ;;
   "network inspect --format {{json .Containers}} app-notes") echo '{"gw":{}}' ;;
-  "network inspect --format {{json .Containers}} app-old") echo '{"left":{}}' ;;
+  "ps --all --no-trunc --filter network=app-old --format {{.ID}}") echo left ;;
 esac
 `,
     );

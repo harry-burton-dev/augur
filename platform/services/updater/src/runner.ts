@@ -558,7 +558,8 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
   const save = async (state: RunnerState, env: string) => {
     const { project, files } = appsProject(state, env, await network(env));
     await host.writeProject(state, project, files);
-    await host.appNetworks(appNetworksOf(state, env));
+    // Best effort here: keepNetworks puts it right every turn, and a part about to start checks for itself (startUnit).
+    await host.appNetworks(appNetworksOf(state, env)).catch(() => undefined);
   };
   /** Joins the gateway and stores to the apps' networks again: an upgrade of AUGUR gives them new containers, which aren't on them. */
   const keepNetworks = async () => host.appNetworks(appNetworksOf(await host.readState(), await host.readEnv()));
@@ -829,6 +830,8 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     try {
       // Written as retiring with no end, so a runner that restarts now still knows the containers are there.
       await save(withCandidate, env);
+      // A part can't start on a network that isn't there, nor reach what it was given without it.
+      await host.appNetworks(appNetworksOf(withCandidate, env));
       await startUnit(unit, env, report);
     } catch (err) {
       await undo();
@@ -967,6 +970,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     };
     try {
       await save(next, env);
+      await host.appNetworks(appNetworksOf(next, env));
       await startUnit(unit, env, report);
     } catch (err) {
       await undo();

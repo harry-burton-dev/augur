@@ -17,7 +17,7 @@ export const collectorOf = (env: string) => {
  * Where an app's parts may send telemetry: AUGUR's own collector, which joins the app's network, or none.
  * A collector elsewhere is outside, which an app's network doesn't reach (spec 4.8), so the parts send nothing.
  */
-export const appCollectorOf = (env: string) => (collectorOf(env) === OWN_COLLECTOR ? OWN_COLLECTOR : '');
+export const appCollectorOf = (env: string) => (collectorOf(env).replace(/\/+$/, '') === OWN_COLLECTOR ? OWN_COLLECTOR : '');
 
 export const telemetry: Provisioner = {
   type: 'augur-telemetry',
