@@ -529,6 +529,18 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect((await app.inject({ method: 'GET', url: '/v1/apps/nope/grants', headers: as('platform-events') })).statusCode).toBe(404);
     });
 
+    it('gives AUGUR’s own frontends their platform scopes, and no app from anywhere else', async () => {
+      const app = await db.app({ verifyService, floors });
+      const grants = async (id: string) => (await app.inject({ method: 'GET', url: `/v1/apps/${id}/grants?workspace=w1`, headers: callerHeaders(GATEWAY_CALLER) })).json();
+      expect(await grants('upgrades')).toMatchObject({ app: 'upgrades', on: true, scopes: [], platformScopes: ['deployment:upgrade', 'deployment:apps', 'deployment:health', 'deployment:settings'] });
+      expect((await grants('admin')).platformScopes).toEqual(['people:manage', 'apps:manage', 'org:manage', 'audit:read']);
+      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
+      expect(await grants('library')).not.toHaveProperty('platformScopes');
+      // An app can't even ask for one: it isn't a scope AUGUR offers apps.
+      const asked = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['deployment:upgrade'] } });
+      expect(asked.statusCode).toBe(400);
+    });
+
     it('tells platform services the role an app needs, for the services a person reaches it through', async () => {
       const app = await db.app({ verifyService, floors });
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, requiredRole: 'analyst' } });

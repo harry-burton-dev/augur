@@ -53,7 +53,7 @@ describe('an app token at the gateway (spec 8.2, 8.3)', () => {
     // A route no app calls is refused too, in words.
     const other = await app.inject({ method: 'GET', url: '/api/identity/v1/admin/people', headers: { authorization: `Bearer ${await signApp('notes')}` } });
     expect(other.statusCode).toBe(403);
-    expect(other.json().message).toBe('Notes isn’t allowed to call /api/identity/v1/admin/people.');
+    expect(other.json().message).toBe('Notes isn’t allowed to manage people and teams (people:manage).');
   });
 
   it('carries the floor the call is for to the service, as the registry checked it (8.3)', async () => {

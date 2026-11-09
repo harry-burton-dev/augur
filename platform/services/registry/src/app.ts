@@ -15,6 +15,7 @@ import {
   packageVersion,
   recordAudit,
   ruleChain,
+  PLATFORM_SCOPES,
   SCOPES,
   ServiceAuthUnavailable,
   problemDetails,
@@ -64,6 +65,7 @@ import {
   MAX_UPLOAD_MB,
   menuWarnings,
   parseOrigin,
+  PLATFORM_APP_SCOPES,
   platformApps,
   settingsProblem,
   surfaceProblem,
@@ -673,6 +675,11 @@ export const buildApp = async ({
                   on: Type.Boolean({ description: 'Whether the app is on where the call is for: enabled, for that kind of floor, and not blocked or turned off there (contract 3, spec 8.2)' }),
                   floorKind: Type.Optional(Type.String({ description: 'The kind of the floor the call is for (personal, team or org), when it exists, so the gateway can name the floor to the service' })),
                   scopes: Type.Array(ref(ScopeSchema)),
+                  platformScopes: Type.Optional(
+                    Type.Array(Type.Enum([...PLATFORM_SCOPES]), {
+                      description: "AUGUR's own admin scopes (ADR 0083), only ever for one of AUGUR's own frontends, which its release gives them; never for an app from a feed",
+                    }),
+                  ),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
                   notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
                   requiredRole: Type.Union([Type.String(), Type.Null()], {
@@ -693,6 +700,21 @@ export const buildApp = async ({
           if (service === undefined) return reply;
           // The gateway asks as itself (its signed caller), to admit an app's own token and hold it to its grant (spec 8.2, 8.3).
           if (service?.kind !== 'platform' && !isGatewayCaller(callerFromHeaders(req.headers) ?? undefined)) return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can read what an app is granted.' });
+          // One of AUGUR's own frontends: on everywhere, with the platform scopes its release gives it and no others (ADR 0083).
+          const own = platformApps.find((a) => a.id === req.params.id && !unbuiltApps.has(a.id));
+          if (own) {
+            return {
+              app: own.id,
+              name: own.name,
+              ...(req.query.workspace ? { workspace: req.query.workspace } : {}),
+              on: true,
+              scopes: [],
+              platformScopes: [...(PLATFORM_APP_SCOPES[own.id] ?? [])],
+              inboxKinds: (own.inbox?.kinds ?? []).map((k) => k.id),
+              notificationKinds: (own.notifications?.kinds ?? []).map((k) => k.id),
+              requiredRole: own.requiredRole ?? null,
+            };
+          }
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const { workspace } = req.query;

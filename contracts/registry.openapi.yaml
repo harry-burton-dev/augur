@@ -2657,6 +2657,19 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Scope"
+                  platformScopes:
+                    type: array
+                    items:
+                      enum:
+                        - people:manage
+                        - apps:manage
+                        - org:manage
+                        - audit:read
+                        - deployment:upgrade
+                        - deployment:apps
+                        - deployment:health
+                        - deployment:settings
+                    description: AUGUR's own admin scopes (ADR 0083), only ever for one of AUGUR's own frontends, which its release gives them; never for an app from a feed
                   inboxKinds:
                     type: array
                     items:
