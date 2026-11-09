@@ -33,7 +33,7 @@ import {
   type CallerSigner,
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig, type Authenticated } from './auth.ts';
-import { AppGrantsUnavailable, notAllowed, registryGrantsFor, scopeFor, type AppGrant, type AppGrants } from './grants.ts';
+import { AppGrantsUnavailable, holds, notAllowed, registryGrantsFor, scopeFor, type AppGrant, type AppGrants } from './grants.ts';
 import { appFailure, appLimitsFromEnv, InFlight, poolOptions, type AppLimits } from './limits.ts';
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
@@ -583,9 +583,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
           return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
         }
         const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
-        if (scope === undefined || (scope !== null && !grant.scopes.includes(scope))) return refuse(403, 'forbidden', notAllowed(appName(id, grant), scope, req.url));
+        if (scope === undefined || (scope !== null && !holds(grant, scope))) return refuse(403, 'forbidden', notAllowed(appName(id, grant), scope, req.url));
         // The service sees the person with the app and its scopes beside them, and applies the smaller access.
-        req.signedCaller = await signedCallerHeaders(signer, { ...req.caller, app: id, scopes: [...grant.scopes] }, name);
+        req.signedCaller = await signedCallerHeaders(signer, { ...req.caller, app: id, scopes: [...grant.scopes, ...(grant.platformScopes ?? [])] }, name);
       } else {
         // The part receives the delegated caller, which it carries on its own calls for the person.
         req.signedCaller = { [CALLER_TOKEN_HEADER]: await signDelegation(signer, req.caller, { app: id, scopes: grant.scopes, lifetimeSeconds: delegationSeconds }) };
