@@ -10,9 +10,9 @@ import { BatchingRemoteConnection, RemoteRootElement } from '@remote-dom/core/el
 import { Channel, type Port } from './channel.js';
 import type { AppContext, FrameRoot, FrameState, Notice, PlaceItem, Start } from './context.js';
 import type { Intent } from '../contract.js';
-import { fromWire, toWire, type WireResponse } from './fetch.js';
+import { fromWire, pathProblem, toWire, type WireResponse } from './fetch.js';
 import { reconcile } from './tree.js';
-import { CARD_ROOT, SCREEN_ROOT, aboutRoot, type StartInit } from './runtime-names.js';
+import { CARD_ROOT, SCREEN_ROOT, aboutRoot, type StartInit, type WireFile } from './runtime-names.js';
 
 export { CARD_ROOT, SCREEN_ROOT, aboutRoot, type StartInit };
 
@@ -38,6 +38,7 @@ export function runWorker(scope: Port & Record<string, unknown> = globalThis as 
   const roots = new Map<string, RemoteRootElement>();
   const navigated = new Set<(path: string) => void>();
   const commands = new Map<string, (detail?: unknown) => void | Promise<void>>();
+  const drops = new Set<(files: File[]) => void | Promise<void>>();
   let stop: (() => void) | undefined;
   let ctx: AppContext | undefined;
 
@@ -62,6 +63,12 @@ export function runWorker(scope: Port & Record<string, unknown> = globalThis as 
       const fn = commands.get(String(args[0]));
       if (!fn) throw new Error('The app has no handler for that command now.');
       return fn(args[1]);
+    }
+    // Files dropped on the pane (spec 6.10): the host read them, and they reach every handler.
+    if (method === 'drop') {
+      const files = (Array.isArray(args[0]) ? (args[0] as WireFile[]) : []).map((f) => new File([f.bytes], String(f.name), { type: String(f.type ?? ''), lastModified: Number(f.lastModified) || 0 }));
+      for (const fn of [...drops]) await fn(files);
+      return;
     }
     // The host asks now and then, to know the app still answers (spec 6.13).
     if (method === 'ping') return;
@@ -90,7 +97,6 @@ export function runWorker(scope: Port & Record<string, unknown> = globalThis as 
 
   function contextFor(init: StartInit): AppContext {
     const previews = new Set(init.previewsOn);
-    const unavailable = (what: string) => () => Promise.reject(new Error(`${what} arrives with a later release of AUGUR.`));
     return {
       person: Object.freeze({ ...init.person }),
       workspace: Object.freeze({ ...init.workspace }),
@@ -118,7 +124,26 @@ export function runWorker(scope: Port & Record<string, unknown> = globalThis as 
           };
         },
       },
-      files: { upload: unavailable('Uploading files'), download: unavailable('Downloading files'), onDrop: () => () => undefined },
+      files: {
+        upload: async (blob, path) => fromWire((await channel.call('files.upload', await toWire(path, { method: 'POST', body: blob }))) as WireResponse),
+        async download(path, options) {
+          const problem = pathProblem(path);
+          if (problem) throw new TypeError(problem);
+          if (options?.save) return void (await channel.call('files.download', path, { save: true }));
+          const res = fromWire((await channel.call('files.download', path)) as WireResponse);
+          if (!res.ok) throw new Error(await refusal(res, path));
+          return res.blob();
+        },
+        onDrop(fn) {
+          drops.add(fn);
+          if (drops.size === 1) channel.post('files.drops', true);
+          return () => {
+            if (!drops.delete(fn) || drops.size) return;
+            channel.post('files.drops', false);
+          };
+        },
+      },
+      ...(init.canvas ? { canvas: { open: async (entry: string) => (await channel.call('canvas.open', String(entry))) as MessagePort, close: () => channel.post('canvas.close') } } : {}),
       raise: async (intent) => void (await channel.call('raise', plain(intent))),
       request: async <T>(intent: Intent) => (await channel.call('request', plain(intent))) as T,
       notify: (notice: Notice) => channel.post('notify', plain(notice)),
@@ -160,4 +185,16 @@ function plain<T>(value: T): T {
   } catch {
     throw new TypeError('That can’t cross to the shell: send plain data (text, numbers, lists and objects).');
   }
+}
+
+/** Why a download couldn't be had, in the service's own words where it gave them. */
+async function refusal(res: Response, path: string) {
+  try {
+    const body = (await res.json()) as { message?: unknown; detail?: unknown };
+    const said = typeof body.detail === 'string' ? body.detail : typeof body.message === 'string' ? body.message : undefined;
+    if (said) return said;
+  } catch {
+    // Not JSON: say what failed.
+  }
+  return `${path} couldn’t be downloaded (${res.status}).`;
 }

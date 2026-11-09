@@ -194,11 +194,17 @@ export class Channel {
 /** Sets a key as the object's own, so one named `__proto__` stays data. */
 const own = (out: Record<string, unknown>, key: string, value: unknown) => Object.defineProperty(out, key, { value, enumerable: true, writable: true, configurable: true });
 
-/** The ArrayBuffers a message carries at its top levels (a call's arguments or answer), to transfer rather than copy. */
+/** A message port, from whichever realm made it (a test's, a worker's). */
+const isPort = (v: unknown): v is MessagePort => !!v && typeof v === 'object' && ((typeof MessagePort !== 'undefined' && v instanceof MessagePort) || v.constructor?.name === 'MessagePort');
+
+/**
+ * The ArrayBuffers a message carries at its top levels (a call's arguments or answer), to transfer rather
+ * than copy, and a message port (the canvas's, spec 6.11), which can only be transferred.
+ */
 function collectBuffers(m: Message, into: Transferable[]) {
   const values = 'args' in m ? m.args : m.kind === 'answer' && m.ok ? [m.value] : [];
   for (const v of values) {
-    if (v instanceof ArrayBuffer) into.push(v);
+    if (v instanceof ArrayBuffer || isPort(v)) into.push(v);
     else if (v && typeof v === 'object' && isPlain(v)) for (const x of Object.values(v)) if (x instanceof ArrayBuffer && !into.includes(x)) into.push(x);
   }
 }

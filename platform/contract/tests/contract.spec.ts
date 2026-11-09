@@ -76,6 +76,42 @@ test('ctx.fetch reaches the gateway with the person’s token, the floor and the
   await expect(check(page, 'fetched')).toContainText('refused: TypeError');
 });
 
+test('ctx.files.upload hands the bytes to the host, which sends them to the gateway with the token, intact', async ({ page }) => {
+  let seen: { headers: Record<string, string>; body: number[] } | undefined;
+  await page.route(`**/api/${id}/v1/files`, (route) => {
+    seen = { headers: route.request().headers(), body: [...(route.request().postDataBuffer() ?? [])] };
+    return route.fulfill({ body: 'kept', contentType: 'text/plain' });
+  });
+  await page.goto(`/${id}`);
+  await press(page, 'Upload');
+  await expect(check(page, 'uploaded')).toContainText('200 kept');
+  expect(seen?.body).toEqual([0, 1, 2, 253, 254, 255]);
+  expect(seen?.headers.authorization).toBe('Bearer dev-token');
+  expect(seen?.headers['x-augur-app']).toBe(id);
+});
+
+test('an upload past the app’s maxUpload gets the gateway’s 413 words, and is never sent', async ({ page }) => {
+  let sent = false;
+  await page.route(`**/api/${id}/v1/files`, (route) => {
+    sent = true;
+    return route.fulfill({ body: 'kept' });
+  });
+  await page.goto(`/${id}`);
+  await press(page, 'Upload too much');
+  await expect(check(page, 'uploaded')).toContainText(`413 This is more than ${name} takes at once (1 MB).`);
+  expect(sent).toBe(false);
+});
+
+test('the canvas is a frame with an opaque origin and no network, and talks to its app only over the port', async ({ page }) => {
+  await page.goto(`/${id}`);
+  await press(page, 'Open canvas');
+  const frame = pane(page).locator('iframe.app-canvas');
+  await expect(frame).toHaveAttribute('sandbox', 'allow-scripts');
+  await expect(check(page, 'canvas')).toContainText('heard hello canvas; origin null; fetch refused');
+  // While it is open the canvas takes the screen's place; the app's heading stays the shell's.
+  await expect(pane(page).getByRole('heading', { name: 'Reference on the contract' })).toBeVisible();
+});
+
 test('notify puts a notification on the shell’s stream', async ({ page }) => {
   await page.goto(`/${id}`);
   await press(page, 'Notify');
