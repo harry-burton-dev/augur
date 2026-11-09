@@ -61,7 +61,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 **From** unreleased
 
-Installing an app on the app contract (contract 3) now brings its frontend too: the app runner checks the bundle's signature, pulls it by the digest the release names and gives it to the registry, which serves it at `/apps/<id>/<version>/`. That needs the frontends bucket ([Apps' frontends by version](#apps-frontends-by-version)): a server without `FRONTENDS_BUCKET_SECRET` can't install such an app, and the install says so and goes back. A private bundle is pulled with the same read key as the images, so there is nothing else to set.
+Installing an app on the app contract (contract 3) now brings its frontend too: the app runner checks the bundle's signature, pulls it by the digest the release names and gives it to the registry, which serves it at `/apps/<id>/<version>/`. That needs the frontends bucket ([Apps' frontends by version](#apps-frontends-by-version)): a server without `FRONTENDS_BUCKET_SECRET` can't install such an app, and the install says so before anything of it runs. A private bundle is pulled with the same read key as the images, so there is nothing else to set.
 
 ### App feeds are a list, APP_FEEDS
 
