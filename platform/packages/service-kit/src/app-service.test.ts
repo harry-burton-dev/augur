@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
-import { appServer, auditFor, floorCaller, notifyFor, peopleFor, readManifest, standInPeople, startAppService, type AppAuditEntry, type AppNotice } from './app-service.js';
+import { appServer, auditFor, callerAudienceOf, floorCaller, notifyFor, peopleFor, readManifest, standInPeople, startAppService, type AppAuditEntry, type AppNotice } from './app-service.js';
+import { appDatabaseFromEnv } from './app-database.js';
 import { callerHeaders } from './caller.js';
 import { createJobs } from './jobs.js';
 import { registerApp } from './registration.js';
@@ -60,6 +61,11 @@ describe('appServer', () => {
     expect(signed.json()).toEqual({ floor: 'w1' });
     const forOther = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: await signedCallerHeaders(gateway, onFloor, 'notes') });
     expect(forOther.statusCode).toBe(401);
+  });
+
+  it('expects the gateway to sign for the app’s client on the app contract, and for its id on contract 2', () => {
+    expect(callerAudienceOf({ id: 'notes' })).toBe('notes');
+    expect(callerAudienceOf({ id: 'notes', contract: 3 })).toBe('app-notes');
     const forged = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: callerHeaders(onFloor) });
     expect(forged.statusCode).toBe(401);
   });
@@ -127,7 +133,7 @@ describe('startAppService', () => {
           return app;
         },
       });
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setImmediate(r));
       await app.close();
     };
     vi.mocked(registerApp).mockClear();
@@ -155,5 +161,19 @@ describe('startAppService', () => {
     };
     expect(await start({})).toBe('team_notes_jobs');
     expect(await start({ APP_PREVIEW: 'pr-12' })).toBe('team_notes_pr12_jobs');
+  });
+});
+
+describe('appDatabaseFromEnv', () => {
+  it('gives nothing without DATABASE_HOST, wants the schema, and reads the password from its file', () => {
+    expect(appDatabaseFromEnv('notes', {})).toBeUndefined();
+    const file = join(mkdtempSync(join(tmpdir(), 'db-')), 'password');
+    writeFileSync(file, 'pw-1\n');
+    const env = { DATABASE_HOST: 'db', DATABASE_PORT: '5433', DATABASE_NAME: 'platform', DATABASE_USER: 'app_notes', DATABASE_CONNECTIONS: '5', DATABASE_PASSWORD_FILE: file };
+    expect(() => appDatabaseFromEnv('notes', { ...env })).toThrow(/DATABASE_SCHEMA is not set: name it in the part’s Score file/);
+    const db = appDatabaseFromEnv('notes', { ...env, DATABASE_SCHEMA: 'notes' })!;
+    expect(db.schema).toBe('notes');
+    const options = (db.pool as unknown as { options: Record<string, unknown> }).options;
+    expect(options).toMatchObject({ host: 'db', port: 5433, database: 'platform', user: 'app_notes', password: 'pw-1', max: 5 });
   });
 });

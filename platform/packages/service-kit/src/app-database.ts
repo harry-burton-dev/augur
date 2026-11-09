@@ -1,8 +1,10 @@
 /**
- * An app's own database, as the app runner hands it to a part on the app contract (the `augur-database`
- * resource in its Score file, spec 4.3): DATABASE_HOST, DATABASE_PORT, DATABASE_NAME, DATABASE_USER,
- * DATABASE_SCHEMA, DATABASE_CONNECTIONS, and the password only as a file, DATABASE_PASSWORD_FILE. The login
- * `app_<id>` has the app's schema as its search_path, so unqualified tables land there.
+ * An app's own database, as a part on the app contract asks for it: the `augur-database` resource in its
+ * Score file (spec 4.3), whose outputs the part's variables name as DATABASE_HOST, DATABASE_PORT,
+ * DATABASE_NAME, DATABASE_USER, DATABASE_SCHEMA and DATABASE_CONNECTIONS, with the password written to a
+ * file that DATABASE_PASSWORD_FILE points at (the template's score/web.score.yaml shows the lines). The
+ * app runner fills them in. The login `app_<id>` has the app's schema as its search_path, so unqualified
+ * tables land there.
  */
 import pg from 'pg';
 import { loadConfig } from './config.js';
@@ -41,7 +43,7 @@ export const appDatabaseFromEnv = (service: string, env: NodeJS.ProcessEnv = pro
   if (!env.DATABASE_HOST) return undefined;
   loadConfig(service, [{ name: 'DATABASE_PASSWORD', about: 'the app’s database password, as a file', required: true, secret: true }], env);
   const schema = env.DATABASE_SCHEMA;
-  if (!schema) throw new Error('DATABASE_SCHEMA is not set: the app runner gives it with the database.');
+  if (!schema) throw new Error('DATABASE_SCHEMA is not set: name it in the part’s Score file as ${resources.db.schema}, and the app runner fills it in.');
   const pool = steadyPool(
     new pg.Pool({
       host: env.DATABASE_HOST,
@@ -54,5 +56,5 @@ export const appDatabaseFromEnv = (service: string, env: NodeJS.ProcessEnv = pro
     undefined,
     statementTimeoutMs(env),
   );
-  return { pool: pool as unknown as DatabasePool, schema };
+  return { pool, schema };
 };

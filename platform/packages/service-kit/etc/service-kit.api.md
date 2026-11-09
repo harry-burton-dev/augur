@@ -108,7 +108,7 @@ export const appSecretFor: (key: string, app: string, purpose: AppSecretPurpose)
 // @public
 export type AppSecretPurpose = 'database' | 'bucket' | 'sign-in';
 
-// @public
+// @public (undocumented)
 export const appServer: (app: FastifyInstance, input: AppServerOptions) => Promise<void>;
 
 // @public (undocumented)
@@ -262,6 +262,9 @@ export const CALLER_LIFETIME_SECONDS = 60;
 
 // @public
 export const CALLER_TOKEN_HEADER = "x-augur-caller";
+
+// @public
+export const callerAudienceOf: (manifest: Pick<AppManifest, "id" | "contract">) => string;
 
 // @public
 export type CallerCheck = (token: string) => Promise<Caller>;

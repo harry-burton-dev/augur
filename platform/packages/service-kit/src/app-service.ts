@@ -73,7 +73,7 @@ export interface AppServerOptions {
   version?: string;
   /** The major version of the API it serves, its route prefix. */
   api?: string;
-  /** Checks the caller the gateway signed for this app, for its client `app-<id>`. On by default; off only under `pnpm dev:app` and tests (callerCheckFromEnv). */
+  /** Checks the caller the gateway signed for this app (`callerAudienceOf`). On by default; off only under `pnpm dev:app` and tests (callerCheckFromEnv). */
   callers?: CallerCheck;
 }
 
@@ -81,7 +81,13 @@ export interface AppServerOptions {
  * What every app's Fastify instance starts with: only the gateway's signed caller is believed,
  * every error is RFC 9457 problem details, and GET /healthz says what is running.
  */
-export const appServer = async (app: FastifyInstance, { manifest, version = manifest.version, api = 'v1', callers = callerCheckFromEnv(appClientId(manifest.id)) }: AppServerOptions) => {
+/**
+ * Who the gateway signs a part's callers for: on the app contract its client, `app-<id>` (the delegated
+ * caller, spec 8.5); on contract 2 the app's id, as it always has.
+ */
+export const callerAudienceOf = (manifest: Pick<AppManifest, 'id' | 'contract'>): string => (manifest.contract !== undefined ? appClientId(manifest.id) : manifest.id);
+
+export const appServer = async (app: FastifyInstance, { manifest, version = manifest.version, api = 'v1', callers = callerCheckFromEnv(callerAudienceOf(manifest)) }: AppServerOptions) => {
   app.addHook('onRequest', signedCallers(callers));
   await app.register(problemDetails());
   app.get('/healthz', async () => health(manifest.id, version, api));

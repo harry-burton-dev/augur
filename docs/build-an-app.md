@@ -146,7 +146,7 @@ const manifest = readManifest(import.meta.url);
 await startAppService({ manifest, buildApp: ({ jobs }) => buildApp({ manifest, jobs }) });
 ```
 
-`service/src/app.ts` registers `appServer` first. It serves `/healthz` for operators, answers every error as problem details (below), and believes only the caller the gateway signed for your app's client, `app-<id>` (see [Signed caller](signed-caller.md)). The app's API goes under `/v1`. `floorCaller(manifest)` gives the caller and the floor they're on, or answers 401 or 400 for you; `signedInCaller(manifest)` only needs someone signed in:
+`service/src/app.ts` registers `appServer` first. It serves `/healthz` for operators, answers every error as problem details (below), and believes only the caller the gateway signed for your app (`callerAudienceOf(manifest)`: its client `app-<id>` on the app contract, its id on contract 2; see [Signed caller](signed-caller.md)). The app's API goes under `/v1`. `floorCaller(manifest)` gives the caller and the floor they're on, or answers 401 or 400 for you; `signedInCaller(manifest)` only needs someone signed in:
 
 ```ts
 import Fastify from 'fastify';
@@ -162,7 +162,7 @@ app.get('/v1/claims', async (req) => {
 });
 ```
 
-On the app contract, a part's Score file asks for the app's database as an `augur-database` resource, and the runner hands it over as `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_SCHEMA`, `DATABASE_CONNECTIONS` and the password as a file, `DATABASE_PASSWORD_FILE`. `appDatabaseFromEnv(appId)` reads them into a pool whose login already has the app's schema as its search path, and gives nothing under `pnpm dev:app`, where there is no `DATABASE_HOST`.
+On the app contract, a part's Score file asks for the app's database as an `augur-database` resource and names its outputs in the part's variables, as the template's `score/web.score.yaml` does: `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_SCHEMA`, `DATABASE_CONNECTIONS`, and the password written to a file that `DATABASE_PASSWORD_FILE` points at. The runner fills them in, and `appDatabaseFromEnv(appId)` reads them into a pool whose login already has the app's schema as its search path, and gives nothing under `pnpm dev:app`, where there is no `DATABASE_HOST`.
 
 `auditFor(appId, log)`, `notifyFor(appId, log)` and `peopleFor(appId)` reach the audit log, people's streams and identity's directory as the app, and fall back to the log and stand-ins under `pnpm dev:app`. `startAppService` gives `buildApp` the first two ready made.
 

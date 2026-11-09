@@ -41,7 +41,7 @@ export function appCatalog({ manifest: m, parts, repo }) {
   // and what it handles is under contributes.intents.
   const facts = {
     'augur.dev/app-id': m.id,
-    'augur.dev/route': m.route ?? `/${m.id}`,
+    'augur.dev/route': m.contract !== undefined ? `/${m.id}` : m.route,
     ...(m.contract !== undefined ? { 'augur.dev/contract': String(m.contract) } : { 'augur.dev/sdk-range': m.sdk }),
     ...(m.category ? { 'augur.dev/category': m.category } : {}),
     'augur.dev/floors': (m.floors ?? []).join(','),

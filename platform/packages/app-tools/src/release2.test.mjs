@@ -11,7 +11,7 @@ import { readCheckout, releaseOf2 } from './release2.mjs';
 const fixture = fileURLToPath(new URL('../fixtures/notes/', import.meta.url));
 const fs = { readdirSync, existsSync, join };
 const digest = (c) => `sha256:${c.repeat(64)}`;
-const bundle = { service: `ghcr.io/o/notes@${digest('a')}`, frontend: { artifact: `ghcr.io/o/notes-frontend@${digest('b')}`, digest: digest('c') }, channel: 'beta' };
+const bundle = { service: null, frontend: { artifact: `ghcr.io/o/notes-frontend@${digest('b')}`, digest: digest('c') }, channel: 'beta' };
 const signer = { repository: 'o/notes', workflow: '.github/workflows/release.yml' };
 
 test('reads a checkout with its jobs first, and pins every part built here to the image the build pushed', () => {
@@ -32,6 +32,10 @@ test('a preview carries its pull request, and a bundle without the image its par
   assert.throws(() => releaseOf2({ ...checkout, bundle: { ...bundle, channel: 'preview' }, signer, env: {} }), /PR_NUMBER/);
   const built = { ...checkout, parts: checkout.parts.map((p) => ({ ...p, containers: Object.fromEntries(Object.entries(p.containers).map(([k, c]) => [k, { ...c, image: '.' }])) })) };
   assert.throws(() => releaseOf2({ ...built, bundle: { ...bundle, service: null }, signer }), /built from this repository's image/);
+  const pinned = releaseOf2({ ...built, bundle: { ...bundle, service: `ghcr.io/o/notes@${digest('a')}` }, signer });
+  for (const part of pinned.parts) for (const c of Object.values(part.containers)) assert.equal(c.image, `ghcr.io/o/notes@${digest('a')}`);
+  // An image nothing runs is a mistake to say, not to drop.
+  assert.throws(() => releaseOf2({ ...checkout, bundle: { ...bundle, service: `ghcr.io/o/notes@${digest('a')}` }, signer }), /no part's Score file says/);
 });
 
 test('augur-app describe writes release v2 for an app on contract 3, and release describe says the same', () => {
