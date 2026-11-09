@@ -225,8 +225,9 @@ jobs:
       - run: pnpm --filter @augur/contract-tests exec playwright install --only-shell chromium
       - run: pnpm --filter @augur/contract-tests test:contract
 
-  # The docs site builds: every page has its front matter and every internal link resolves. Its own pnpm
-  # project and lockfile (docs/README.md), public packages only, so it needs no token and no turbo cache.
+  # The docs site builds: every page has its front matter, and the reference is generated afresh from the
+  # schemas and OpenAPI files. Its own pnpm project and lockfile (docs/README.md), public packages only, so it
+  # needs no token and no turbo cache.
   docs:
     needs: changes
     if: needs.changes.outputs.docs == 'true'
@@ -243,6 +244,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: docs/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
+      - run: pnpm test
       - run: pnpm build
 
   # The server setup in infra/deploy: the compose file is valid and the images build.

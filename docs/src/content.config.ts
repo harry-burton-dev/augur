@@ -8,8 +8,9 @@ export const collections = {
     loader: docsLoader(),
     schema: docsSchema({
       extend: z.object({
-        // Every page says how far along what it describes is. A page can't build without one.
-        status: z.enum(STATUSES),
+        // How far along what the page describes is. Every page written in src/content/docs must say
+        // (src/lib/status-badges.ts fails the build without it); pages generated from the code have none.
+        status: z.enum(STATUSES).optional(),
         // The AUGUR release the page was last checked against, such as `0.24.0`. A Planned page has none.
         checkedAgainst: z.string().optional(),
       }),

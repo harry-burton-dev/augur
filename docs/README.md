@@ -17,6 +17,11 @@ pnpm dev     # http://localhost:4321, reloads as you edit
 pnpm build   # what CI runs on any change under docs/
 ```
 
+`pnpm build` and `pnpm dev` first generate the schema and settings reference into
+`src/content/docs/reference/schemas/` (`scripts/reference.mjs`, git-ignored); the API reference comes from
+the OpenAPI files in `contracts/` through starlight-openapi. Neither is ever edited by hand. `pnpm test` runs
+the generator's tests.
+
 `DOCS_SITE_URL` (the site's origin) and `DOCS_BASE` (the path it's served under, `/` unless set) come from
 the build's environment.
 

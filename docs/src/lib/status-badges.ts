@@ -11,7 +11,12 @@ const slug = (href: string, base: string) =>
 let statuses: Map<string, Status> | undefined;
 
 export const onRequest = defineRouteMiddleware(async (context) => {
-  statuses ??= new Map((await getCollection('docs')).map((page) => [page.id, page.data.status as Status]));
+  if (!statuses) {
+    const pages = await getCollection('docs');
+    const missing = pages.filter((page) => !page.data.status).map((page) => page.filePath ?? page.id);
+    if (missing.length) throw new Error(`Every page needs a status (stable, beta or planned) in its front matter: ${missing.join(', ')}`);
+    statuses = new Map(pages.map((page) => [page.id, page.data.status as Status]));
+  }
   const base = import.meta.env.BASE_URL;
   type Entry = (typeof context.locals.starlightRoute.sidebar)[number];
   const mark = (entries: Entry[]) => {
