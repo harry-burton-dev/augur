@@ -456,7 +456,7 @@ export const appRunnerRoutes =
         // The same record as the desired state (ADR 0020), so the same gate (ADR 0022): a deployment admin who signed in just now.
         const caller = deploymentAdmin(req, reply, 'change how an app takes new releases');
         if (!caller) return reply;
-        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how an app takes new releases. It’s asked for anything this drastic.' });
         }
         if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
@@ -665,7 +665,7 @@ export const appRunnerRoutes =
         // The same record as the desired state (ADR 0020), so the same gate (ADR 0022): a deployment admin who signed in just now.
         const caller = deploymentAdmin(req, reply, 'change how an app takes new releases');
         if (!caller) return reply;
-        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how an app takes new releases. It’s asked for anything this drastic.' });
         }
         if (!(await store.installedApps()).some((i) => i.app === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `${req.params.id} isn’t installed by the app runner.` });
@@ -719,7 +719,7 @@ export const appRunnerRoutes =
       async (req, reply) => {
         const caller = deploymentAdmin(req, reply, 'let an app reach the internet');
         if (!caller) return reply;
-        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change what an app can reach. It’s asked for anything this drastic.' });
         }
         const { id } = req.params;
@@ -782,7 +782,7 @@ export const appRunnerRoutes =
         const setting = declared.find((s) => s.id === settingId);
         if (!setting) return reply.code(404).send({ error: 'not_found', message: `${name} has no setting ${settingId}.` });
         const { value } = req.body;
-        if (setting.type === 'secret' && value !== null && !signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+        if (setting.type === 'secret' && value !== null && !signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: `Enter your password again to give ${name} its ${setting.label}. It’s asked for any secret.` });
         }
         const versions = [setting, ...live.filter((d) => d.id === setting.id)];
@@ -937,7 +937,7 @@ export const appRunnerRoutes =
         if (!caller) return reply;
         // A default app stays while the deployment names it (ADR 0075 "pillar").
         if (req.body.action === 'remove' && defaultApps.includes(req.body.app)) return reply.code(409).send({ error: 'conflict', message: defaultRemoveProblem(req.body.app) });
-        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install or remove an app. It’s asked for anything this drastic.' });
         }
         const body = req.body;
@@ -1042,7 +1042,7 @@ export const appRunnerRoutes =
       async (req, reply) => {
         const caller = deploymentAdmin(req, reply, 'read a release file to install');
         if (!caller) return reply;
-        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install an app. It’s asked for anything this drastic.' });
         }
         const { url } = req.body;
