@@ -117,7 +117,8 @@ export const settingsView = (declared: DeclaredSetting[], stored: StoredSettingV
       ...(s.default !== undefined ? { default: s.default } : {}),
       required: s.required === true,
       set: Boolean(kept),
-      ...(kept && s.type !== 'secret' ? { value: typed(s, kept.value) } : {}),
+      // Never a secret's, by its type now or by how it was kept.
+      ...(kept && s.type !== 'secret' && !kept.secret ? { value: typed(s, kept.value) } : {}),
       ...(kept ? { setBy: kept.setBy, setAt: kept.setAt } : {}),
     };
   });

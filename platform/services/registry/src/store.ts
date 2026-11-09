@@ -380,6 +380,8 @@ export interface AppStore {
   setSettingValue(app: string, setting: string, value: string | null, secret: boolean, by: string): Promise<void>;
   /** Marks the app's values its release no longer declares as removed from now, and the ones it declares as kept. */
   keepDeclaredSettings(app: string, declared: string[]): Promise<void>;
+  /** Keeps these of the app's values again, removed or not: a release that declares them is being installed. */
+  restoreSettings(app: string, ids: string[]): Promise<void>;
   /** Forgets values removed before `before`; how many it forgot. */
   dropRemovedSettings(before: Date): Promise<number>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
@@ -1305,6 +1307,10 @@ export class PgAppStore implements AppStore {
       `update registry.app_setting_values set removed_at = case when setting = any($2) then null else coalesce(removed_at, now()) end where app_id = $1`,
       [app, declared],
     );
+  }
+
+  async restoreSettings(app: string, ids: string[]) {
+    await this.pool.query('update registry.app_setting_values set removed_at = null where app_id = $1 and setting = any($2)', [app, ids]);
   }
 
   async dropRemovedSettings(before: Date) {

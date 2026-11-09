@@ -254,7 +254,9 @@ export const appRunnerRoutes =
       const releases = [pending, running, ...listed].filter((r): r is AppRelease => Boolean(r) && isRelease2(r));
       const byId = new Map<string, DeclaredSetting>();
       for (const r of releases) for (const d of declaredSettings(r.manifest)) if (!byId.has(d.id)) byId.set(d.id, d);
-      return { known: releases.length > 0, name: releases[0]?.manifest.name ?? app, declared: [...byId.values()], installed: Boolean(running) };
+      // What runs or is about to: a value must suit each of them, as the runner hands it to all.
+      const live = [pending, running].filter((r): r is AppRelease => Boolean(r) && isRelease2(r)).flatMap((r) => declaredSettings(r.manifest));
+      return { known: releases.length > 0, name: releases[0]?.manifest.name ?? app, declared: [...byId.values()], live, inUse: Boolean(pending || running) };
     };
 
     /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
@@ -711,7 +713,7 @@ export const appRunnerRoutes =
         const caller = deploymentAdmin(req, reply, 'change an app’s settings');
         if (!caller) return reply;
         const { id, setting: settingId } = req.params;
-        const { known, name, declared } = await declaredFor(id);
+        const { known, name, declared, live, inUse } = await declaredFor(id);
         if (!known) return reply.code(404).send({ error: 'not_found', message: `${id} is neither installed nor in the app feed.` });
         const setting = declared.find((s) => s.id === settingId);
         if (!setting) return reply.code(404).send({ error: 'not_found', message: `${name} has no setting ${settingId}.` });
@@ -719,13 +721,17 @@ export const appRunnerRoutes =
         if (setting.type === 'secret' && value !== null && !signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: `Enter your password again to give ${name} its ${setting.label}. It’s asked for any secret.` });
         }
+        const versions = [setting, ...live.filter((d) => d.id === setting.id)];
         if (value === null) {
-          if (missingRequired([setting], () => false).length) return reply.code(409).send({ error: 'conflict', message: `${name} needs its ${setting.label}, so it can’t go back to nothing: give it another value instead.` });
+          if (missingRequired(versions, () => false).length) return reply.code(409).send({ error: 'conflict', message: `${name} needs its ${setting.label}, so it can’t go back to nothing: give it another value instead.` });
         } else {
-          const problem = settingValueProblem(setting, value);
+          const problem = versions.map((d) => settingValueProblem(d, value)).find(Boolean);
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         }
-        await store.setSettingValue(id, setting.id, value === null ? null : asText(value), setting.type === 'secret', caller.id);
+        const secret = versions.some((d) => d.type === 'secret');
+        await store.setSettingValue(id, setting.id, value === null ? null : asText(value), secret, caller.id);
+        // For an app not installed or being installed, kept only as long as a value whose setting went: an install brings it back.
+        if (!inUse) await store.keepDeclaredSettings(id, []);
         await record(req, {
           actor: { id: caller.id, kind: 'user' },
           app: 'registry',
@@ -900,13 +906,16 @@ export const appRunnerRoutes =
           if (missing.length) return reply.code(400).send({ error: 'bad_request', message: missingMessage(release.manifest.name, missing) });
         } else if (Object.keys(given).length) return reply.code(400).send({ error: 'bad_request', message: 'Only an app on contract 3 takes settings with its install.' });
         const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: caller.id };
-        if (!(await store.requestAppJob(job))) return reply.code(409).send({ error: 'conflict', message: `Something is already waiting or under way for ${target}.` });
+        // The values first, so the runner has them whenever it takes the job; kept even if the job is refused below,
+        // as values an admin gave this app.
         if (release && isRelease2(release)) {
           for (const [settingId, value] of Object.entries(given)) {
             const setting = declaredSettings(release.manifest).find((s) => s.id === settingId)!;
             await store.setSettingValue(target, settingId, asText(value), setting.type === 'secret', caller.id);
           }
+          await store.restoreSettings(target, declaredSettings(release.manifest).map((d) => d.id));
         }
+        if (!(await store.requestAppJob(job))) return reply.code(409).send({ error: 'conflict', message: `Something is already waiting or under way for ${target}.` });
         // Going back to an older version: held there, or Automatic would take it straight up again.
         const current = release && (await store.installedApps()).find((i) => i.app === target)?.release;
         if (release && current && semver.lt(release.version, current.version)) {
@@ -1126,6 +1135,8 @@ export const appRunnerRoutes =
         if (outcome === 'done' && job.action === 'install' && job.release && isRelease2(job.release)) {
           await store.keepDeclaredSettings(job.app, declaredSettings(job.release.manifest).map((d) => d.id));
         }
+        // Removed from the server, its settings' values are kept 30 days from now, in case it's installed again (spec 5.5).
+        if (outcome === 'done' && job.action === 'remove') await store.keepDeclaredSettings(job.app, []);
         // Removed from the server, it gives up the internet: installed again, an admin decides again (spec 10.4).
         if (outcome === 'done' && job.action === 'remove' && (await store.internetAllowed()).some((a) => a.app === job.app)) {
           await store.setInternet(job.app, null);

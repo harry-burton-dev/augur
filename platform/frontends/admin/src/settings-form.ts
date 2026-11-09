@@ -3,8 +3,8 @@ import type { AppSettingDecl, AppSettingView, GivenSettings } from './api.js';
 
 /** A field's name in the form: its setting's id, kept apart from any other field the dialog has. */
 export const fieldName = (id: string) => `setting:${id}`;
-/** The choice that puts a setting back to its default. */
-export const DEFAULT_CHOICE = 'default';
+/** The choice that puts a setting back to its default: no option's name, which is never empty. */
+export const DEFAULT_CHOICE = '';
 
 export const valueWords = (s: AppSettingDecl, v: string | number | boolean) => (s.type === 'boolean' ? (v === true ? 'On' : 'Off') : `${v}${s.unit ? ` ${s.unit}` : ''}`);
 
@@ -48,7 +48,7 @@ export const settingChanges = (settings: AppSettingView[], values: Record<string
       if (text) out.push({ id: s.id, value: text });
       continue;
     }
-    if (text === '' || text === DEFAULT_CHOICE) {
+    if (text === DEFAULT_CHOICE) {
       if (s.set) out.push({ id: s.id, value: null });
       continue;
     }

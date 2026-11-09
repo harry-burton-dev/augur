@@ -853,7 +853,7 @@ export class AdminApi {
   installApp = (app: string, version: string, settings?: GivenSettings) =>
     this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', app, version, ...(settings && Object.keys(settings).length ? { settings } : {}) });
   /** Gives one of an app's settings a value, or with null puts it back to its default. A secret needs the password just entered. */
-  setAppSetting = (app: string, setting: string, value: string | number | boolean | null) =>
+  setRunnerSetting = (app: string, setting: string, value: string | number | boolean | null) =>
     this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/settings/${encodeURIComponent(setting)}`, { value });
   /** Reads a release file from an address an admin pasted, for one no feed lists. Needs the password just entered too. */
   readRelease = (url: string) => this.call<PastedRelease>('POST', '/api/registry/v1/app-runner/releases/read', { url });

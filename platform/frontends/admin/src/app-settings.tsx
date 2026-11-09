@@ -8,14 +8,16 @@ export function SettingFields({ settings }: { settings: (AppSettingDecl & Partia
     <>
       {settings.map((s) => {
         const name = fieldName(s.id);
-        const needed = s.required && s.default === undefined;
+        // A setting only a newer version asks for doesn't hold up a change to the version that runs.
+        const needed = s.required && s.default === undefined && !s.newIn;
         const hint = [s.detail, s.newIn ? `Version ${s.newIn} needs it before it installs` : undefined].filter(Boolean).join('. ') || undefined;
         if (s.type === 'boolean' || s.type === 'enum') {
           const options = [
             ...(s.default !== undefined ? [{ value: DEFAULT_CHOICE, label: `Its default (${valueWords(s, s.default)})` }] : []),
             ...(s.type === 'boolean' ? [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }] : (s.options ?? []).map((o) => ({ value: o, label: o }))),
           ];
-          return <Select key={s.id} name={name} label={s.label} hint={hint} options={options} defaultValue={s.set && s.value !== undefined ? String(s.value) : DEFAULT_CHOICE} />;
+          const now = s.set && s.value !== undefined ? String(s.value) : s.default !== undefined ? DEFAULT_CHOICE : null;
+          return <Select key={s.id} name={name} label={s.label} hint={hint} options={options} required={needed} optional={!needed} defaultValue={now} />;
         }
         if (s.type === 'secret')
           return (

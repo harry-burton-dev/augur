@@ -176,7 +176,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
     let last: AppInstalls | undefined;
     for (const change of settingChanges(app.settings ?? [], values)) {
       try {
-        last = await api.setAppSetting(app.app, change.id, change.value);
+        last = await api.setRunnerSetting(app.app, change.id, change.value);
       } catch (err) {
         if (err instanceof ApiError && err.code === 'sign_in_again') {
           signInAgain(`settings=${encodeURIComponent(app.app)}`);

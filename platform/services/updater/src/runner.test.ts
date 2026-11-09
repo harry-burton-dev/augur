@@ -895,7 +895,7 @@ describe('settings and previews', () => {
   it('hands parts the values admins gave their settings, and starts again only the parts whose values changed (spec 5.3, 5.4)', async () => {
     const t = setup();
     // The registry's values arrive before the job: the install takes them.
-    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-1' } })).toEqual({ restarted: [] });
+    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-1' } })).toEqual({ restarted: [], refused: [] });
     await t.run(install('1.0.0'));
     const web = () => t.project()!.services['app-notes-web-blue']! as { environment: Record<string, string>; labels: Record<string, string> };
     expect(web().environment.RETENTION_DAYS).toBe('30');
@@ -907,17 +907,46 @@ describe('settings and previews', () => {
     // The worker reads no settings: it has no mark, and isn't started again for any.
     expect((t.project()!.services['app-notes-worker-blue'] as { labels: Record<string, string> }).labels).not.toHaveProperty('augur.settings');
     t.did.length = 0;
-    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-1' } })).toEqual({ restarted: [] });
+    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-1' } })).toEqual({ restarted: [], refused: [] });
     expect(t.did).toEqual([]);
     // The secret rotated: its file changes and web starts again with it; nothing else does.
-    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-2' } })).toEqual({ restarted: ['app-notes-web-blue'] });
+    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-2' } })).toEqual({ restarted: ['app-notes-web-blue'], refused: [] });
     expect(t.files()['files/app-notes-web-blue/2']).toBe('x-2');
     expect(web().labels['augur.settings']).not.toBe(mark);
     expect(t.did.filter((d) => d.startsWith('start'))).toEqual(['start app-notes-web-blue']);
     // A value web doesn't read (theme) changes nothing that runs.
     t.did.length = 0;
-    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-2', theme: 'warm' } })).toEqual({ restarted: [] });
+    expect(await t.runner.keepSettings({ notes: { retentionDays: '30', exportKey: 'x-2', theme: 'warm' } })).toEqual({ restarted: [], refused: [] });
     expect(t.did.filter((d) => d.startsWith('start'))).toEqual([]);
+    // A file holds a value as given: Compose never reads it, so a `$` stays one.
+    await t.runner.keepSettings({ notes: { exportKey: 'ab$cd' } });
+    expect(t.files()['files/app-notes-web-blue/2']).toBe('ab$cd');
+    // A start that fails leaves the state as it was, so the next turn tries again.
+    const start = t.host.start;
+    t.host.start = async () => {
+      throw new Error('docker is busy');
+    };
+    await expect(t.runner.keepSettings({ notes: { exportKey: 'ef$gh' } })).rejects.toThrow('docker is busy');
+    t.host.start = start;
+    expect(await t.runner.keepSettings({ notes: { exportKey: 'ef$gh' } })).toEqual({ restarted: ['app-notes-web-blue'], refused: [] });
+  });
+
+  it('keeps an app’s settings as they were when its running parts can’t start with the new ones, and gives previews no secret', async () => {
+    const t = setup();
+    const r = release('1.0.0');
+    const settings = r.manifest.contributes!.settings!.map((x) => (x.id === 'exportKey' ? { ...x, required: true } : x));
+    const job = install('1.0.0', 'a', { manifest: { ...r.manifest, contributes: { ...r.manifest.contributes, settings } } });
+    await t.runner.keepSettings({ notes: { exportKey: 'x-1' } });
+    await t.run(job);
+    expect(t.files()['files/app-notes-web-blue/2']).toBe('x-1');
+    // The required secret taken away: the old value stays for notes, and another app's still go through.
+    expect(await t.runner.keepSettings({ other: { a: '1' } })).toEqual({ restarted: [], refused: ['notes'] });
+    expect(t.state().settings).toEqual({ notes: { exportKey: 'x-1' }, other: { a: '1' } });
+    // A pull request's build gets the secret empty, though the app requires it.
+    const p = release('1.1.0-pr.12.1', 'd');
+    const withPreview: RunnerState = { ...t.state(), previews: { 'notes-pr12': { app: 'notes', pr: 12, version: p.version, parts: p.parts, manifest: job.release!.manifest } } };
+    const { files } = appsProject(withPreview, ENV);
+    expect(files['files/app-notes-web-pr12/2']).toBe('');
   });
 
   it('keeps containers from before contract 3 on the platform’s network, unless APPS_NETWORK names one', () => {

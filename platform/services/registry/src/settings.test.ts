@@ -125,6 +125,26 @@ describe.runIf(DATABASE_URL)('an app’s settings, as Admin gives them (spec 5.2
     expect((await said()).apps.notes).toEqual({ archiveKey: 'k-1' });
   });
 
+  it('refuses taking away a value the version that runs requires, though the one being installed doesn’t', async () => {
+    const { ask, finish, set } = await setup();
+    await finish((await ask({ action: 'install', release: withKey(), settings: { archiveKey: 'k-1' } })).json().id);
+    const m = exampleManifest();
+    const optional = releaseOf('notes', '1.3.0', { contributes: { ...m.contributes, settings: [{ ...archiveKey, required: false }] } });
+    expect((await ask({ action: 'install', release: optional })).statusCode).toBe(202);
+    expect((await set('archiveKey', null)).statusCode).toBe(409);
+  });
+
+  it('keeps an uninstalled app’s values 30 days, then forgets them', async () => {
+    const { server, ask, finish, said } = await setup();
+    await finish((await ask({ action: 'install', release: withKey(), settings: { archiveKey: 'k-1' } })).json().id);
+    const removing = (await ask({ action: 'remove', app: 'notes' })).json();
+    await server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner });
+    await server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${removing.id}/progress`, headers: runner, payload: { step: 'remove', state: 'done', outcome: 'done' } });
+    expect((await said()).apps.notes).toEqual({ archiveKey: 'k-1' });
+    await db.pool.query(`update registry.app_setting_values set removed_at = now() - interval '31 days'`);
+    expect((await said()).apps).toEqual({});
+  });
+
   it('gives the values to the runner alone', async () => {
     const { server } = await setup();
     expect((await server.inject({ method: 'GET', url: '/v1/runner/settings', headers: { authorization: 'Bearer platform-gateway' } })).statusCode).toBe(403);

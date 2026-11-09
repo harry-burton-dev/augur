@@ -189,10 +189,19 @@ const appsOnce = async () => {
   await apps
     .settingValues()
     .then((values) => runner.keepSettings(values))
-    .then(({ restarted }) => restarted.length && log('apps’ settings changed', { restarted }))
+    .then(({ restarted, refused }) => {
+      if (restarted.length) log('apps’ settings changed', { restarted });
+      if (refused.length) log('kept apps’ settings as they were: their running parts can’t start with the new ones', { refused });
+    })
     .catch((err) => log('couldn’t give apps the settings admins gave them', { error: (err as Error).message }));
   const job = await apps.next();
   if (!job) return;
+  // An install takes the values given with it: they may have arrived since the look above.
+  if (job.action === 'install' || job.action === 'preview')
+    await apps
+      .settingValues()
+      .then((values) => runner.keepSettings(values))
+      .catch((err) => log('couldn’t give apps the settings admins gave them', { error: (err as Error).message }));
   log('app job', { app: job.app, action: job.action, version: job.release?.version });
   await signIn();
   const outcome = await runner.run(job, apps.reporter(job.id));

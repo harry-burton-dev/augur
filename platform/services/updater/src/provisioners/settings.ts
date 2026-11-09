@@ -26,11 +26,15 @@ export const settings: Provisioner = {
     return unknown.length ? [`${unknown.join(', ')} ${unknown.length === 1 ? 'isn’t a setting' : 'aren’t settings'} the manifest declares.`] : [];
   },
   needs: [],
-  outputs: ({ manifest, params, settings: values = {} }) => {
+  outputs: ({ manifest, params, settings: values = {}, withholdSecrets }) => {
     const all = (manifest.contributes?.settings ?? []) as Setting[];
     const ids = Array.isArray(params.ids) ? (params.ids as string[]) : all.map((s) => s.id);
     const out: Record<string, { value: string; secret?: boolean }> = {};
     for (const s of all.filter((x) => ids.includes(x.id))) {
+      if (withholdSecrets && s.type === 'secret') {
+        out[s.id] = { value: '', secret: true };
+        continue;
+      }
       const value = values[s.id] ?? (s.default === undefined ? undefined : String(s.default));
       if (value === undefined && s.required) throw new Error(`${manifest.name} needs ${s.label} before it can start. A deployment admin fills it in under Admin → Apps.`);
       out[s.id] = {

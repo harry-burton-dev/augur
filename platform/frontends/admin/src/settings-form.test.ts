@@ -18,9 +18,9 @@ describe('an app’s settings in Admin', () => {
 
   it('sends only what the form changed, secrets last, and an emptied one back to its default', () => {
     const all = [key, retention, theme, sharing];
-    expect(settingChanges(all, { 'setting:exportKey': '', 'setting:retentionDays': '', 'setting:theme': 'warm', 'setting:allowSharing': 'default' })).toEqual([]);
+    expect(settingChanges(all, { 'setting:exportKey': '', 'setting:retentionDays': '', 'setting:theme': 'warm', 'setting:allowSharing': '' })).toEqual([]);
     expect(
-      settingChanges(all, { 'setting:exportKey': 'new-key', 'setting:retentionDays': '30', 'setting:theme': 'default', 'setting:allowSharing': 'true' }),
+      settingChanges(all, { 'setting:exportKey': 'new-key', 'setting:retentionDays': '30', 'setting:theme': '', 'setting:allowSharing': 'true' }),
     ).toEqual([
       { id: 'retentionDays', value: 30 },
       { id: 'theme', value: null },

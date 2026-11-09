@@ -39,6 +39,8 @@ export interface AppUnit {
   env: string;
   secrets: AppSecrets;
   settings?: Record<string, string>;
+  /** For a pull request's preview: secret settings arrive empty, required or not. */
+  withholdSecrets?: boolean;
 }
 
 /** Every part's outputs and volumes; throws PartRefused with every reason at once when anything is refused. */
@@ -68,6 +70,7 @@ export const provisionParts = (unit: AppUnit): Provisioned => {
         manifest: unit.manifest,
         secrets: unit.secrets,
         settings: unit.settings,
+        ...(unit.withholdSecrets ? { withholdSecrets: true } : {}),
       };
       const unknown = Object.keys(params).filter((k) => !p.params.includes(k));
       if (unknown.length) problems.push(`${name}’s ${resource} (${p.type}) doesn’t take ${unknown.join(', ')}${p.params.length ? `; it takes ${p.params.join(', ')}` : '; it takes no params'}.`);

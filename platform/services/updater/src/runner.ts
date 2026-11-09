@@ -295,6 +295,8 @@ const provisioned = (unit: Unit, env: string) =>
     env,
     secrets: unitSecrets(env, unit),
     settings: unit.settings ?? {},
+    // A pull request's build isn't what the admin gave the secrets to: its secret settings arrive empty.
+    withholdSecrets: unit.slot.startsWith('pr'),
   });
 
 /**
@@ -335,7 +337,11 @@ const renderUnit = (unit: Unit, env: string) => {
     const service = partService(unit.app, name, unit.slot);
     const { spec } = containerOf(part);
     if (service.length > MAX_HOST_NAME) throw new PartRefused(`${service} is longer than the ${MAX_HOST_NAME} characters a host name may be: give the app or the ${name} part a shorter name.`);
-    const fill = (text: unknown, where: Parameters<typeof substitute>[3], label: string) => composeLiteral(substitute(String(text), name, p.outputs[name] ?? {}, where, label));
+    // Compose reads the project's strings, so a `$` in one is written `$$`; a file is written as it is, which Compose never reads.
+    const fill = (text: unknown, where: Parameters<typeof substitute>[3], label: string) => {
+      const filled = substitute(String(text), name, p.outputs[name] ?? {}, where, label);
+      return where === 'file' ? filled : composeLiteral(filled);
+    };
     const environment = Object.fromEntries(Object.entries(spec.variables ?? {}).map(([k, v]) => [k, fill(v, 'variable', `the variable ${k}`)]));
     const mounts: object[] = [];
     let n = 0;
@@ -634,8 +640,10 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
    */
   const keepSettings = async (values: Record<string, Record<string, string>>) => {
     const state = await host.readState();
-    const tidy = (v: Record<string, Record<string, string>>) => JSON.stringify(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)).map(([app, s]) => [app, Object.entries(s).sort(([a], [b]) => a.localeCompare(b))]));
-    if (tidy(state.settings ?? {}) === tidy(values)) return { restarted: [] as string[] };
+    const tidy = (v: Record<string, string> | undefined) => JSON.stringify(Object.entries(v ?? {}).sort(([a], [b]) => a.localeCompare(b)));
+    const had = state.settings ?? {};
+    const apps = [...new Set([...Object.keys(had), ...Object.keys(values)])].filter((app) => tidy(had[app]) !== tidy(values[app]));
+    if (!apps.length) return { restarted: [] as string[], refused: [] as string[] };
     const env = await host.readEnv();
     const marks = (s: RunnerState) =>
       new Map(
@@ -644,12 +652,35 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
           .map(([name, svc]) => [name, svc.labels?.['augur.settings']]),
       );
     const before = marks(state);
-    const next = { ...state, settings: values };
+    // One app at a time: values its running parts can't start with (a required one taken away) stay as they were
+    // for that app alone, so they never hold up the others'.
+    let settings = { ...had };
+    const refused: string[] = [];
+    for (const app of apps) {
+      const tried = { ...settings };
+      if (values[app]) tried[app] = values[app]!;
+      else delete tried[app];
+      try {
+        appsProject({ ...state, settings: tried }, env);
+        settings = tried;
+      } catch {
+        refused.push(app);
+      }
+    }
+    const next = { ...state, settings };
     const after = marks(next);
     await save(next, env);
     const restarted = [...after].filter(([name, mark]) => before.has(name) && before.get(name) !== mark).map(([name]) => name);
-    if (restarted.length) await host.start(restarted);
-    return { restarted };
+    if (restarted.length) {
+      try {
+        await host.start(restarted);
+      } catch (err) {
+        // Not started: the state goes back, so the next turn sees the change again and tries again.
+        await save(state, env).catch(() => undefined);
+        throw err;
+      }
+    }
+    return { restarted, refused };
   };
   /** Joins the gateway and stores to the apps' networks again: an upgrade of AUGUR gives them new containers, which aren't on them. */
   const keepNetworks = async () => host.appNetworks(appNetworksOf(await host.readState(), await host.readEnv()));
