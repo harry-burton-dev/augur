@@ -23,8 +23,31 @@ export const SCOPE_WORDS: Record<Scope, string> = {
   'people:read': 'look people up',
   'inbox:write': 'write to inboxes',
 };
+/**
+ * AUGUR's own admin APIs, as scopes of their own (ADR 0083): the registry grants them only to AUGUR's own
+ * frontends, which arrive in its signed release, never to an app from a feed, whatever an admin agrees to.
+ * They are not in `SCOPES`, so no app can ask for one. A platform scope only lets the frontend ask: the
+ * service still checks the person's roles.
+ */
+export const PLATFORM_SCOPES = ['people:manage', 'apps:manage', 'org:manage', 'audit:read', 'deployment:upgrade', 'deployment:apps', 'deployment:health', 'deployment:settings'] as const;
+export type PlatformScope = (typeof PLATFORM_SCOPES)[number];
+
+export const PLATFORM_SCOPE_WORDS: Record<PlatformScope, string> = {
+  'people:manage': 'manage people and teams',
+  'apps:manage': 'manage who may use apps',
+  'org:manage': 'change the organisation’s settings',
+  'audit:read': 'read the audit log',
+  'deployment:upgrade': 'upgrade AUGUR or take it back',
+  'deployment:apps': 'install and remove apps',
+  'deployment:health': 'read how the deployment is running',
+  'deployment:settings': 'read the deployment’s settings',
+};
+
+/** Whether a scope is one of AUGUR's own, which only its own frontends are granted. */
+export const isPlatformScope = (s: string): s is PlatformScope => (PLATFORM_SCOPES as readonly string[]).includes(s);
+
 /** The words for a scope, or "do that" for one this kit doesn't know. */
-export const scopeWords = (scope: string): string => (SCOPE_WORDS as Record<string, string>)[scope] ?? 'do that';
+export const scopeWords = (scope: string): string => (SCOPE_WORDS as Record<string, string>)[scope] ?? (PLATFORM_SCOPE_WORDS as Record<string, string>)[scope] ?? 'do that';
 
 /** The shape of a scope's name, `<api>:<verb>` (contract 3, spec 3.6); which names AUGUR offers is `SCOPES`. */
 export const SCOPE_PATTERN = /^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*$/;

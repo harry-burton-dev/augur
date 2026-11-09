@@ -6,7 +6,7 @@
 import Type, { type Static } from 'typebox';
 import semver from 'semver';
 import { APP_CATEGORIES, type AppCategory } from '@augur/mfe-sdk';
-import { reservedIdProblem, SCOPES } from '@augur/service-kit';
+import { reservedIdProblem, SCOPES, type PlatformScope } from '@augur/service-kit';
 import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
 /** How many settings one app may offer. */
@@ -427,6 +427,17 @@ export const platformApps: AppEntry[] = [
     ],
   },
 ];
+
+/**
+ * The platform scopes each of AUGUR's own frontends holds (ADR 0083). They come only from here, in AUGUR's own
+ * release: no feed app can ask for one (they aren't in SCOPES) and no admin can grant one. Admin holds who and what
+ * is allowed; the Upgrade Centre what runs and changing it. Each only lets the frontend ask: the service still
+ * checks the person's roles.
+ */
+export const PLATFORM_APP_SCOPES: Readonly<Record<string, readonly PlatformScope[]>> = {
+  admin: ['people:manage', 'apps:manage', 'org:manage', 'audit:read'],
+  upgrades: ['deployment:upgrade', 'deployment:apps', 'deployment:health', 'deployment:settings'],
+};
 
 /** Why an app's own claim to a kind isn't used. */
 export const CATEGORY_REFUSED = 'Only apps that come from AUGUR\'s app feed can be a platform or pillar app.';
