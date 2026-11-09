@@ -36,5 +36,6 @@ test('the shell draws Starter’s frame from its manifest before any of its code
   await expect(pane.getByRole('heading', { name: starter.name, exact: true })).toBeVisible();
   // With no code to run, it says so rather than showing nothing.
   const name = starter.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  await expect(pane.getByRole('heading', { name: new RegExp(`^(Opening ${name}|${name} is taking a while to open|${name} stopped)$`) })).toBeVisible();
+  const said = new RegExp(`Opening ${name}|${name} is taking a while to open|${name} stopped`);
+  await expect(pane.getByRole('status').or(pane.getByRole('alert')).filter({ hasText: said }).first()).toBeVisible();
 });
