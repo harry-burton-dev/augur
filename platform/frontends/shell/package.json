@@ -14,10 +14,10 @@
     "build:shared": "vite build -c vite.shared.config.ts"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.17.0",
-    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.15.0",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.18.0",
+    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.15.1",
     "@augur/mfe-sdk": "workspace:*",
-    "@augur/shell-kit": "npm:@harry-burton-dev/augur-shell-kit@^0.10.2",
+    "@augur/shell-kit": "npm:@harry-burton-dev/augur-shell-kit@^0.10.3",
     "@grafana/faro-transport-otlp-http": "^2.13.0",
     "@grafana/faro-web-sdk": "^2.13.0",
     "@grafana/faro-web-tracing": "^2.13.0",
@@ -27,7 +27,7 @@
     "semver": "catalog:"
   },
   "devDependencies": {
-    "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.5.13",
+    "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.5.14",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
