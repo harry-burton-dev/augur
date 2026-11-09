@@ -487,6 +487,8 @@ services:
       ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
       # How long an app removed from the server keeps its data, in days (30 when unset).
       APP_DATA_GRACE_DAYS: ${APP_DATA_GRACE_DAYS:-}
+      # The apps this deployment installs from the feed by default (none when unset).
+      DEFAULT_APPS: ${DEFAULT_APPS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEEDS: ${APP_FEEDS:-}
       APP_FEED_URL: ${APP_FEED_URL:-}

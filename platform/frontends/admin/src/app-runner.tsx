@@ -385,8 +385,19 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
         </Section>
       ) : null}
       <Problem>{ins.error}</Problem>
+      {installed.default ? (
+        <div data-default>
+          <Quiet>A default app of this deployment (DEFAULT_APPS): what it asks for was agreed by the deployment, apart from the internet, which a deployment admin allows.</Quiet>
+        </div>
+      ) : null}
       <div>
-        <Button kind="tertiary" size="sm" disabled={open} reason={WAIT} onPress={() => ins.remove(installed)}>
+        <Button
+          kind="tertiary"
+          size="sm"
+          disabled={open || installed.default}
+          reason={installed.default ? 'It’s one of this deployment’s default apps: take it out of DEFAULT_APPS in .env and run pc up -d first' : WAIT}
+          onPress={() => ins.remove(installed)}
+        >
           Remove from the server
         </Button>
       </div>
@@ -406,6 +417,20 @@ export function InstallsSection({ ins }: { ins: Installs }) {
         <Status status="warning" label="No app runner has asked for work since the registry started, so nothing below can be installed yet. It’s the updater with APP_SECRETS_KEY set: see docs/upgrade.md, The app runner." />
       ) : null}
       {i.problem ? <Status status="warning" label={`Not every app release could be read. ${i.problem}`} /> : null}
+      {i.defaultApps?.some((d) => d.state === 'waiting') ? (
+        <Section label="Default apps waiting" count={-1} limit={0}>
+          <div data-default-waiting>
+            {i.defaultApps
+              .filter((d) => d.state === 'waiting')
+              .map((d) => (
+                <Line key={d.app} end="Not installed yet">
+                  {d.app}
+                  <Quiet> · {d.problem}</Quiet>
+                </Line>
+              ))}
+          </div>
+        </Section>
+      ) : null}
       {i.removed?.length ? (
         <Section label="Removed, data kept" count={-1} limit={0}>
           <div data-removed>

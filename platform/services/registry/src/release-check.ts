@@ -50,9 +50,23 @@ export interface ReleaseCheck {
   warnings: string[];
 }
 
-/** What a release file says it is, for one on a contract this AUGUR doesn't serve. */
-export const contractMessage = (contract: unknown, served: readonly number[] = SERVED_CONTRACTS) =>
-  `This release is on contract ${String(contract)}; this AUGUR serves ${served.join(' and ')}.`;
+/** Names as a person says them, joined by `word`: "3", "3 and 4", "3, 4 and 5". */
+const listed = (items: readonly number[], word: string) => (items.length < 2 ? String(items[0] ?? '') : `${items.slice(0, -1).join(', ')} ${word} ${items.at(-1)}`);
+
+/**
+ * Why a release on a contract major this AUGUR doesn't serve can't install, in the words of spec 11.5: "Notes 1.4.0
+ * speaks contract 2, and this AUGUR serves 3 and 4; the app needs a release on contract 3 or 4".
+ */
+export const contractMessage = (contract: unknown, served: readonly number[] = SERVED_CONTRACTS, release?: { name?: unknown; version?: unknown }) => {
+  const named = typeof release?.name === 'string' && release.name ? `${release.name}${typeof release.version === 'string' ? ` ${release.version}` : ''}` : 'This release';
+  return `${named} speaks contract ${String(contract)}, and this AUGUR serves ${listed(served, 'and')}; the app needs a release on contract ${listed(served, 'or')}.`;
+};
+
+/** The name and version a release file gives, of any contract, for its refusal. */
+const namedIn = (release: Record<string, unknown>) => {
+  const manifest = (release.manifest ?? {}) as { name?: unknown; version?: unknown };
+  return { name: manifest.name, version: release.version ?? manifest.version };
+};
 
 /** The contract a release file speaks: 2 for a v1 file, the manifest's `contract` for a v2 one. */
 const contractOf = (release: Record<string, unknown>): unknown => {
@@ -168,7 +182,7 @@ export const checkRelease = (release: unknown, offered: Offered = {}): ReleaseCh
   const served = offered.contracts ?? SERVED_CONTRACTS;
   const file = (typeof release === 'object' && release !== null ? release : {}) as Record<string, unknown>;
   const contract = contractOf(file);
-  if (typeof contract === 'number' && !served.includes(contract)) return { refusals: [contractMessage(contract, served)], warnings: [] };
+  if (typeof contract === 'number' && !served.includes(contract)) return { refusals: [contractMessage(contract, served, namedIn(file))], warnings: [] };
   if (file.schema !== undefined && file.schema !== APP_RELEASE_2_SCHEMA) return { refusals: [`This is a ${String(file.schema)} file; this AUGUR installs ${APP_RELEASE_2_SCHEMA}.`], warnings: [] };
   const v = contractValidators();
   const schema = v.release(release);

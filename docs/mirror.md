@@ -67,7 +67,7 @@ node scripts/mirror-release.mjs apps --to registry.example.org/augur --feed ./au
 node scripts/mirror-release.mjs apps --to registry.example.org/augur --feed ./augur-mirror --app notes   # just one app
 ```
 
-For each app it copies its newest 3 releases, stable or beta (never pull requests' previews or drafts): its service's image to `registry.example.org/augur/apps/<id>` and its frontend to `…/apps/<id>-frontend`, by the same digests, with their signatures, each checked again from your registry. It writes `augur-mirror/apps.json`, the apps' feed, with the release files pointing at your copies, and keeps releases it mirrored before.
+For each app it copies its newest 3 releases, stable or beta (never pull requests' previews or drafts): each part's image to `registry.example.org/augur/apps/<image name>` (an older release's one service to `…/apps/<id>`) and its frontend to `…/apps/<id>-frontend`, by the same digests, with their signatures, each checked again from your registry. It writes `augur-mirror/apps.json`, the apps' feed, with the release files pointing at your copies, and keeps releases it mirrored before.
 
 Then point the registry at it in `infra/deploy/.env`, as for AUGUR's feed:
 
@@ -78,3 +78,5 @@ APP_FEEDS=file:///run/augur/releases/apps.json
 ```
 
 Without `APP_FEEDS` (or `APP_FEED_URL`, its name before), a server whose `RELEASE_FEED_URL` is a mirror reads no app releases at all. Previews of pull requests aren't mirrored: they're for servers that can reach GitHub ([app-previews.md](app-previews.md)).
+
+Default apps (`DEFAULT_APPS`, [upgrade.md](upgrade.md#the-app-runner)) come from the feed too, so mirror each one's stable releases before naming it: until the mirror's `apps.json` has a stable release of it, Admin → Apps says it's waiting for one.

@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { asksOf2 } from '@augur/app-tools/release2';
-import { checkRelease, SERVED_CONTRACTS } from './release-check.ts';
+import { checkRelease, contractMessage, SERVED_CONTRACTS } from './release-check.ts';
 import { exampleRelease, examplePart, releaseOf } from './release3.testing.ts';
 
 const withoutFrontend = (over: Record<string, unknown> = {}, manifest: Record<string, unknown> = {}) => {
@@ -67,6 +67,8 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
     expect(await refused(await withManifest((m) => m.contributes.settings.push({ ...m.contributes.settings[0] })))).toEqual([expect.stringMatching(/retentionDays/)]);
     expect((await refused(withoutFrontend({ parts: [] }, { api: undefined }))).join()).toMatch(/neither|frontend.*part/i);
     expect((await refused(await withManifest((m) => (m.contract = 2)))).join()).toMatch(/contract 2.*serves 3/);
+    // The wording of spec 11.5, for a deployment serving more than one major.
+    expect(contractMessage(2, [3, 4], { name: 'Notes', version: '1.4.0' })).toBe('Notes 1.4.0 speaks contract 2, and this AUGUR serves 3 and 4; the app needs a release on contract 3 or 4.');
   });
 
   it('refuses asks that aren’t what the parts ask for, a secret in the arguments and two parts of one name', async () => {

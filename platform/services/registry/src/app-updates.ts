@@ -71,7 +71,7 @@ const isOldRelease = (x: unknown): x is OldRelease => {
   const r = x as Partial<OldRelease> | null;
   return !!r && typeof r === 'object' && r.schema === 'augur.app-release/v1' && typeof r.id === 'string' && TAG.test(`app/${r.id}@x`) && typeof r.version === 'string' && semver.valid(r.version) !== null;
 };
-const refusedOld = (r: OldRelease) => ({ refused: contractMessage(2), ...(typeof r.manifest?.name === 'string' ? { name: r.manifest.name } : {}) });
+const refusedOld = (r: OldRelease) => ({ refused: contractMessage(2, undefined, { name: r.manifest?.name, version: r.version }), ...(typeof r.manifest?.name === 'string' ? { name: r.manifest.name } : {}) });
 
 /**
  * Reads app releases from `url`: GitHub's releases API (the `app/<id>@<version>` ones, with their
@@ -92,7 +92,20 @@ export const appFeed =
         if (isOldRelease(r)) return [{ app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...refusedOld(r) }];
         if (!isAppRelease(r)) return [];
         const halted = haltOf(r);
-        return [{ app: r.id, version: r.version, ...channelOf(r.version, r.channel !== 'stable'), ...(r.releasedAt ? { released: r.releasedAt } : {}), release: r, ...(halted ? { halted } : {}) }];
+        // A mirror keeps its notes link and the publisher's halt beside the release file's own fields: they are the
+        // feed's, not the file's, which takes nothing it doesn't define.
+        const { notesUrl, halted: _halt, ...file } = r as AppRelease & { notesUrl?: unknown; halted?: unknown };
+        return [
+          {
+            app: r.id,
+            version: r.version,
+            ...channelOf(r.version, r.channel !== 'stable'),
+            ...(r.releasedAt ? { released: r.releasedAt } : {}),
+            ...(typeof notesUrl === 'string' && notesUrl.startsWith('https://') ? { notesUrl } : {}),
+            release: file,
+            ...(halted ? { halted } : {}),
+          },
+        ];
       });
       return { releases, trust };
     }

@@ -145,7 +145,7 @@ describe('a contract 3 release in the app runner', async () => {
     expect((await ask({ action: 'install', release: await exampleRelease() })).statusCode).toBe(202);
     const v1 = await ask({ action: 'install', release: v1Release });
     expect(v1.statusCode).toBe(400);
-    expect(v1.json().message).toBe('This release is on contract 2; this AUGUR serves 3.');
+    expect(v1.json().message).toBe('Notes 1.2.0 speaks contract 2, and this AUGUR serves 3; the app needs a release on contract 3.');
   });
 });
 

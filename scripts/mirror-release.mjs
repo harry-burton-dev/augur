@@ -87,12 +87,33 @@ export const appReleasesToMirror = (releases, only = [], kept = APP_RELEASES_KEP
 /** Where an app's part goes in the mirror: <to>/apps/<id> or <to>/apps/<id>-frontend. */
 const mirrorRepo = (to, ref) => `${to.replace(/\/$/, '')}/apps/${ref.slice(ref.lastIndexOf('/') + 1, ref.lastIndexOf('@'))}`;
 
-/** The release file as the mirror serves it: each part named in the mirror, by the same digest. */
+/** A reference named in the mirror, by the same digest. */
+const inMirror = (to, ref) => `${mirrorRepo(to, ref)}${ref.slice(ref.lastIndexOf('@'))}`;
+
+/**
+ * The release file as the mirror serves it: each part named in the mirror, by the same digest. A contract 3 file
+ * (augur.app-release/v2) has a Score workload per part, each container's image pinned by digest; an older one has one service.
+ */
 export const mirroredAppRelease = (file, to) => ({
   ...file,
-  service: file.service ? { ...file.service, image: `${mirrorRepo(to, file.service.image)}${file.service.image.slice(file.service.image.lastIndexOf('@'))}` } : null,
-  frontend: file.frontend ? { ...file.frontend, artifact: `${mirrorRepo(to, file.frontend.artifact)}${file.frontend.artifact.slice(file.frontend.artifact.lastIndexOf('@'))}` } : null,
+  ...(Array.isArray(file.parts)
+    ? {
+        parts: file.parts.map((part) => ({
+          ...part,
+          containers: Object.fromEntries(Object.entries(part.containers ?? {}).map(([name, c]) => [name, { ...c, image: inMirror(to, c.image) }])),
+        })),
+      }
+    : { service: file.service ? { ...file.service, image: inMirror(to, file.service.image) } : null }),
+  frontend: file.frontend ? { ...file.frontend, artifact: inMirror(to, file.frontend.artifact) } : null,
 });
+
+/** Each image or artifact of a release file, with where the mirror keeps it. */
+export const appCopies = (file, mirrored) => [
+  ...(Array.isArray(file.parts)
+    ? file.parts.flatMap((part, i) => Object.entries(part.containers ?? {}).map(([name, c]) => [c.image, mirrored.parts[i].containers[name].image]))
+    : [[file.service?.image, mirrored.service?.image]]),
+  [file.frontend?.artifact, mirrored.frontend?.artifact],
+];
 
 /** The apps feed with these release files in it, replacing earlier copies of the same versions. */
 export const withAppReleases = (feed, files) => {
@@ -151,10 +172,7 @@ const mirrorApps = async ({ to, feedDir, only, cosign }) => {
     }
     const file = await github(asset.url, 'application/octet-stream');
     const mirrored = mirroredAppRelease(file, to);
-    for (const [from, ref] of [
-      [file.service?.image, mirrored.service?.image],
-      [file.frontend?.artifact, mirrored.frontend?.artifact],
-    ]) {
+    for (const [from, ref] of appCopies(file, mirrored)) {
       if (!from) continue;
       const tagged = `${ref.slice(0, ref.lastIndexOf('@'))}:${version}`;
       console.log(`${app} ${version}: ${from} → ${tagged}`);

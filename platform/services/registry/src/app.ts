@@ -1,3 +1,4 @@
+import { defaultRemoveProblem } from './defaults.ts';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
@@ -129,6 +130,8 @@ export interface RegistryOptions {
   platformUrl?: string;
   /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS, 30 by default). */
   dataGraceDays?: number;
+  /** The apps this deployment installs by default (DEFAULT_APPS, spec 9.7). */
+  defaultApps?: string[];
   /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
   pipeline?: PipelineReader;
   /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to and the deployment reports to. */
@@ -210,6 +213,7 @@ export const buildApp = async ({
   releaseFetch,
   platformUrl,
   dataGraceDays,
+  defaultApps,
   allowPrPreviews = true,
   pipeline,
   portalUrl,
@@ -800,7 +804,7 @@ export const buildApp = async ({
           }
         : undefined;
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
-      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}) }));
+      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}), ...(defaultApps ? { defaultApps } : {}) }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
       const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });
@@ -1445,12 +1449,14 @@ export const buildApp = async ({
               204: empty('Removed'),
               403: refused('Not an admin'),
               404: refused('No such app'),
+              409: refused('One of the deployment’s default apps (DEFAULT_APPS), which stays while it is named'),
             },
           },
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
           if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
+          if (defaultApps?.includes(req.params.id)) return reply.code(409).send({ error: 'conflict', message: defaultRemoveProblem(req.params.id) });
           if (!(await store.remove(req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.removed', target: req.params.id });

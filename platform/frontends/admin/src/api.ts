@@ -528,6 +528,8 @@ export interface InstalledApp {
   name: string;
   version: string;
   installedAt: string;
+  /** One of the deployment's default apps (DEFAULT_APPS): its asks were agreed by the deployment, and it can't be removed while named. */
+  default?: boolean;
   channel: AppChannel;
   policy: AppPolicy;
   /** The newest release on its channel, when newer; `needs` says why it waits for an admin. */
@@ -652,6 +654,8 @@ export interface AppInstalls {
   channelNote?: string;
   /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS). */
   dataGraceDays?: number;
+  /** The deployment's default apps (DEFAULT_APPS) and where each stands: a waiting one says why. */
+  defaultApps?: { app: string; state: 'installed' | 'asked' | 'waiting'; problem?: string }[];
   /** Apps removed from the server whose data is still kept, and until when. */
   removed?: { app: string; name: string; removedAt: string; deleteAt: string; failures?: number; problem?: string }[];
   installed: InstalledApp[];
