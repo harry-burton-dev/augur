@@ -1522,6 +1522,15 @@ components:
                   id:
                     type: string
                 description: The result to mark looked at
+        you:
+          type: object
+          required:
+            - deploymentAdmin
+          properties:
+            deploymentAdmin:
+              type: boolean
+              description: Whether the caller holds deployment-admin, which upgrading, going back and changing settings need (ADR 0022, 0084)
+          description: What the caller may do here, for a frontend that is never told their roles (contract 3). Absent in what Backstage is sent
     UnitResult:
       type: object
       required:

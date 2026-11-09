@@ -240,6 +240,9 @@ export const overviewRoutes =
     // Whether Backstage sees what this server runs (ADR 0019), so the Upgrade Centre can say when it doesn't.
     const overview = async (): Promise<Overview> => ({ ...(await built()), ...(reporting ? { reporting: { mode: reporting.mode, why: reporting.why } } : {}) });
 
+    /** The overview for a person in AUGUR's own frontend, saying what they may change, since a contract 3 frontend never sees their roles. */
+    const forCaller = async (req: FastifyRequest) => ({ ...(await overview()), you: { deploymentAdmin: Boolean(callerFromHeaders(req.headers)?.roles.includes(DEPLOYMENT_ADMIN)) } });
+
     /** Every unit at once: what it runs, what it follows, what's next and what needs an admin. */
     app.get(
       '/platform/overview',
@@ -261,7 +264,7 @@ export const overviewRoutes =
       },
       async (req, reply) => {
         if (!adminOf(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
-        return overview();
+        return forCaller(req);
       },
     );
 
@@ -324,7 +327,7 @@ export const overviewRoutes =
         });
         req.log.info({ unit, by: caller.id, policy: set.policy }, 'desired state set');
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.desired-state-set', target: unit, detail: { record: set, ...(before ? { before } : {}) } });
-        return overview();
+        return forCaller(req);
       },
     );
 
@@ -369,7 +372,7 @@ export const overviewRoutes =
         if (!caller) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can mark a result looked at.' });
         if (!(await store.markSeen(req.params.kind, req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: 'There’s no finished upgrade or install with that id.' });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.result-seen', target: req.params.id, detail: { kind: req.params.kind } });
-        return overview();
+        return forCaller(req);
       },
     );
   };
