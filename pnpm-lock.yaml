@@ -166,8 +166,8 @@ importers:
   platform/frontends/admin:
     dependencies:
       '@augur/app-kit':
-        specifier: npm:@harry-burton-dev/augur-app-kit@^0.16.0
-        version: '@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-app-kit@^0.17.0
+        version: '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
@@ -215,8 +215,8 @@ importers:
   platform/frontends/home:
     dependencies:
       '@augur/app-kit':
-        specifier: npm:@harry-burton-dev/augur-app-kit@^0.16.0
-        version: '@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-app-kit@^0.17.0
+        version: '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
@@ -258,17 +258,17 @@ importers:
   platform/frontends/shell:
     dependencies:
       '@augur/app-kit':
-        specifier: npm:@harry-burton-dev/augur-app-kit@^0.16.0
-        version: '@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-app-kit@^0.17.0
+        version: '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@augur/kit-common':
-        specifier: npm:@harry-burton-dev/augur-kit-common@^0.14.0
-        version: '@harry-burton-dev/augur-kit-common@0.14.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-kit-common@^0.15.0
+        version: '@harry-burton-dev/augur-kit-common@0.15.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
       '@augur/shell-kit':
-        specifier: npm:@harry-burton-dev/augur-shell-kit@^0.10.1
-        version: '@harry-burton-dev/augur-shell-kit@0.10.1(@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-shell-kit@^0.10.2
+        version: '@harry-burton-dev/augur-shell-kit@0.10.2(@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@grafana/faro-transport-otlp-http':
         specifier: ^2.13.0
         version: 2.13.0(@opentelemetry/api@1.10.0)
@@ -292,8 +292,8 @@ importers:
         version: 7.8.5
     devDependencies:
       '@augur/kit-bundle':
-        specifier: npm:@harry-burton-dev/augur-kit-bundle@0.5.12
-        version: '@harry-burton-dev/augur-kit-bundle@0.5.12(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-kit-bundle@0.5.13
+        version: '@harry-burton-dev/augur-kit-bundle@0.5.13(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@types/node':
         specifier: 'catalog:'
         version: 22.20.5
@@ -365,8 +365,8 @@ importers:
   platform/frontends/upgrades:
     dependencies:
       '@augur/app-kit':
-        specifier: npm:@harry-burton-dev/augur-app-kit@^0.16.0
-        version: '@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-app-kit@^0.17.0
+        version: '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@augur/mfe-sdk':
         specifier: workspace:*
         version: link:../../packages/mfe-sdk
@@ -1376,17 +1376,17 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@harry-burton-dev/augur-app-kit@0.16.0':
-    resolution: {integrity: sha512-DCDGUB1xTHF1Fq//eMS5CSVnpzydpDs+arsLRFbg/FfVimUNqMMAag4CsFLCeo4YMgODxlojW1of2x6c1t07Dg==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-app-kit/0.16.0/6686ccb23196d7f3fe711013e5e0e1c76ce940dd}
+  '@harry-burton-dev/augur-app-kit@0.17.0':
+    resolution: {integrity: sha512-Homzyzd0LCWV+qxxEkuSExsmq+JuzKvXanFUhtr1h5hGEHHYGLKwf5RNqd0O/ibfc3wqX25Dk2GSPQ1Hskc8Dw==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-app-kit/0.17.0/f4e2ae6c2688fa737acc9c421efb669abbdd4bcb}
     peerDependencies:
       react: ^19.3.1
       react-dom: ^19.3.1
 
-  '@harry-burton-dev/augur-kit-bundle@0.5.12':
-    resolution: {integrity: sha512-rs/c2jNdTsPp8a9Apbw5qn/Y+f4wdiGA23UA7YNo6TnfEOsIl0A/HwqYNJsHrVmkVnbeaXzwjTN6bTe5SVVXag==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-bundle/0.5.12/38434479292d82c0cd4bb4a5be33b3b65687296d}
+  '@harry-burton-dev/augur-kit-bundle@0.5.13':
+    resolution: {integrity: sha512-Xq/WZelbc4nBZ2pcqMmEiWpfB5hE+4x1L5/wqyV+TgiKHqkRRpfpsdhoEzG9refnSCFFNmnF36QXnDkCkkMbjg==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-bundle/0.5.13/3b76ee176c70a01afab5a4d6ce5574dfd22881ed}
 
-  '@harry-burton-dev/augur-kit-common@0.14.0':
-    resolution: {integrity: sha512-WhF/HED8ix6RWv8rZENjLcxF4RnO+tzIigjzZ7dUCk26+uKGBNWagdpN4gPnNLxpf1uET7H8/JJALmLOvGsAyA==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-common/0.14.0/aeea096450c492f36b1cf679b18c7829fcba60ee}
+  '@harry-burton-dev/augur-kit-common@0.15.0':
+    resolution: {integrity: sha512-cC8w7dwcOb66VSiQ5FlXvQxlqyTn2qyx7mv3NQwtHO7wzfbhz8bL3m8DFh0+4i/VLcsp9i7ZCK58T+Ng4x/vwQ==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-common/0.15.0/3df1042adea084808882479a5b1905f3cee4874d}
     peerDependencies:
       react: ^19.3.1
       react-dom: ^19.3.1
@@ -1397,8 +1397,8 @@ packages:
       react: ^19.3.1
       react-dom: ^19.3.1
 
-  '@harry-burton-dev/augur-shell-kit@0.10.1':
-    resolution: {integrity: sha512-iC8lcZ/epvk15YExTumOscYoAKXPTfjHtqlcWfnpppaVClBiRKS4yKP+RVM0UOs3fPHZ6z7W31pFUhxbiH5h+g==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-shell-kit/0.10.1/c5e67c935b3069b99fe676cb32b143ca4d7bd6f0}
+  '@harry-burton-dev/augur-shell-kit@0.10.2':
+    resolution: {integrity: sha512-+ZRugfOGKmgpXDolvpcrYxcstDNp4SfIeBwsejT4WCK00mf5BbfQpSibYh7At1oUOozIFm3FwFyH8gtVZtJw/A==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-shell-kit/0.10.2/5e505531ba14cb53fb1af6ad4e37921b2f89b141}
     peerDependencies:
       '@augur/app-kit': npm:@harry-burton-dev/augur-app-kit@>=0.14.1 <1
       react: ^19.3.1
@@ -5571,9 +5571,9 @@ snapshots:
       protobufjs: 7.6.6
       yargs: 17.7.3
 
-  '@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@augur/kit-common': '@harry-burton-dev/augur-kit-common@0.14.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+      '@augur/kit-common': '@harry-burton-dev/augur-kit-common@0.15.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@internationalized/date': 3.12.4
       '@remote-dom/core': 1.12.1
       '@tanstack/react-query': 5.104.4(@types/react@19.3.0)(react@19.3.1)
@@ -5606,10 +5606,10 @@ snapshots:
       - '@types/react-dom'
       - preact
 
-  '@harry-burton-dev/augur-kit-bundle@0.5.12(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@harry-burton-dev/augur-kit-bundle@0.5.13(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@augur/app-kit': '@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
-      '@augur/kit-common': '@harry-burton-dev/augur-kit-common@0.14.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+      '@augur/app-kit': '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+      '@augur/kit-common': '@harry-burton-dev/augur-kit-common@0.15.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
     transitivePeerDependencies:
       - '@floating-ui/dom'
       - '@preact/signals-core'
@@ -5619,7 +5619,7 @@ snapshots:
       - react
       - react-dom
 
-  '@harry-burton-dev/augur-kit-common@0.14.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@harry-burton-dev/augur-kit-common@0.15.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@fontsource/ibm-plex-mono': 5.2.7
       '@fontsource/instrument-sans': 5.2.8
@@ -5640,10 +5640,10 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@harry-burton-dev/augur-shell-kit@0.10.1(@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@harry-burton-dev/augur-shell-kit@0.10.2(@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@augur/app-kit': '@harry-burton-dev/augur-app-kit@0.16.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
-      '@augur/kit-common': '@harry-burton-dev/augur-kit-common@0.14.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+      '@augur/app-kit': '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+      '@augur/kit-common': '@harry-burton-dev/augur-kit-common@0.15.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
     transitivePeerDependencies:

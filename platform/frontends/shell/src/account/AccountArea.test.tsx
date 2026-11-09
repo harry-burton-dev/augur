@@ -93,7 +93,8 @@ const open = async (section: AccountSection, over: Partial<AccountAreaProps> = {
   root = createRoot(host);
   await act(async () => root!.render(<AccountArea {...props} />));
   await act(async () => new Promise((r) => setTimeout(r, 0)));
-  return { props, calls, text: () => host!.textContent ?? '', button: (name: string) => [...host!.querySelectorAll('button')].find((b) => b.textContent?.trim() === name) };
+  // The dialog draws in a layer of its own, outside `host`.
+  return { props, calls, text: () => document.body.textContent ?? '', button: (name: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === name) };
 };
 
 describe('the Account area', () => {
@@ -162,8 +163,11 @@ describe('the Account area', () => {
     });
     const { props, text, button } = await open('apps', { prefs: { pinned: ['gone'], recent: ['board'] }, appSettings: [{ id: 'board', name: 'Board' }], mountSettings });
     expect(text()).toContain('One pinned app isn’t on this floor');
+    await act(async () => button('Open')!.click());
     expect(text()).toContain('Board’s own choices');
+    expect(text()).toContain('Home and apps › Board');
     expect(mountSettings).toHaveBeenCalledWith(expect.any(HTMLElement), 'board');
+    await act(async () => button('Back to Home and apps')!.click());
     await act(async () => document.querySelector<HTMLElement>('[role="switch"], input[type="checkbox"]')!.click());
     expect(props.onPreference).toHaveBeenCalledWith('pinned', ['gone', 'board']);
     await act(async () => button('Clear recent apps')!.click());
@@ -199,7 +203,7 @@ describe('the Account area', () => {
     expect(text()).toContain('Saved my-data.json.');
     await act(async () => button('Ask to leave')!.click());
     expect(calls.some((c) => c.method === 'POST' && c.path === '/me/leave')).toBe(false);
-    await act(async () => [...host!.querySelectorAll('button')].find((b) => b.textContent?.includes('Press again'))!.click());
+    await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Press again'))!.click());
     expect(calls.some((c) => c.method === 'POST' && c.path === '/me/leave')).toBe(true);
     expect(text()).toContain('You said: “Friday”');
     await act(async () => button('Take it back')!.click());
@@ -211,7 +215,7 @@ describe('the Account area', () => {
     const { text } = await open('region', { prefs: { dateFormat: 'en-US', clock: '24' } });
     expect(text()).toContain('Your organisation offers only English. A deployment admin can offer more.');
     expect(text()).toContain('Write dates as in');
-    expect(text()).toContain('12-hour');
+    expect(text()).toContain('Clock');
     expect(text()).toContain('Time zone');
   });
 
@@ -233,9 +237,58 @@ describe('the Account area', () => {
     expect(text()).toContain('Skein');
   });
 
-  it('closes on Escape', async () => {
-    const { props } = await open('about', { version: 'AUGUR 0.15.0' });
-    await act(async () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
-    expect(props.onClose).toHaveBeenCalled();
+  it('closes back to the menu on Escape, and from its own button', async () => {
+    const { props, button } = await open('about', { version: 'AUGUR 0.15.0' });
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    await act(async () => dialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    await act(async () => [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('Back to the menu'))!.click());
+    expect(props.onClose).toHaveBeenCalledTimes(2);
+    expect(button('Sign out')).toBeUndefined();
+  });
+
+  it('opens on Overview with every section as a tab, and checks the account', async () => {
+    const { text, button, props } = await open('overview');
+    const tabs = [...document.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
+    expect(tabs[0]).toBe('Overview');
+    expect(tabs).toHaveLength(9);
+    expect(text()).toContain('Alex Rivera');
+    expect(text()).toContain('This browser and 1 other place');
+    expect(text()).toContain('Failed sign-ins');
+    // The role's two-step sign-in is set up, so nothing needs them.
+    expect(document.querySelector('[data-needs]')).toBeNull();
+    await act(async () => [...document.querySelectorAll('[role="tab"]')].find((t) => t.textContent === 'Profile')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    await act(async () => button('Sign out')!.click());
+    expect(props.onSignOut).toHaveBeenCalled();
+  });
+
+  it('lights Overview and Sign-in and security when the role needs two-step sign-in that isn’t set up', async () => {
+    const security = answers['GET /me/security'] as { twoStep: object };
+    const was = security.twoStep;
+    try {
+      security.twoStep = { required: true, set: false, reason: 'Leads must add a code app.' };
+      const { text, button, props } = await open('overview');
+      const lit = [...document.querySelectorAll('[role="tab"][data-needs]')].map((t) => t.textContent);
+      expect(lit).toEqual(['Overview(needs you)', 'Sign-in and security(needs you)'].map((s) => s.replace('(', ' (')));
+      expect(text()).toContain('Leads must add a code app.');
+      await act(async () => button('Set up')!.click());
+      expect(props.onSection).toHaveBeenCalledWith('security');
+    } finally {
+      security.twoStep = was;
+    }
+  });
+
+  it('walks through securing the account when something’s wrong, and pages all sign-ins', async () => {
+    const { text, button, calls } = await open('overview');
+    await act(async () => button('Secure your account')!.click());
+    expect(text()).toContain('Overview › Secure your account');
+    expect([...document.querySelectorAll('.augur-step-item')]).toHaveLength(5);
+    await act(async () => button('Sign out everywhere else')!.click());
+    expect(calls.some((c) => c.method === 'DELETE' && c.path.startsWith('/me/sessions?keep=s-here'))).toBe(true);
+    await act(async () => button('All sign-ins')!.click());
+    expect(text()).toContain('Overview › All sign-ins');
+    expect(text()).toContain('Sign-in failed: wrong password');
+    await act(async () => button('Back to Overview')!.click());
+    expect(text()).toContain('Account check');
   });
 });

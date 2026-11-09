@@ -181,10 +181,14 @@ export function Host({
   /** Apps' feature previews, and whether each is on for this person (SDK 1.7). */
   const [featureApps, setFeatureApps] = useState<FeaturePreviewApp[]>([]);
   const [previewsOpen, setPreviewsOpen] = useState(false);
-  /** The Account area's open section, from `?account=`; null when it's closed. */
+  /**
+   * The Account dialog's open section; null when it's closed. It opens only from the menu's Account, or
+   * on coming back from one of Keycloak's screens (`?account=<section>` with `kc_action_status`).
+   */
   const [accountSection, setAccountSection] = useState<AccountSection | null>(() => {
-    const s = new URLSearchParams(window.location.search).get(ACCOUNT_PARAM);
-    return isAccountSection(s) ? s : null;
+    const q = new URLSearchParams(window.location.search);
+    const s = q.get(ACCOUNT_PARAM);
+    return isAccountSection(s) && q.has(ACTION_STATUS) ? s : null;
   });
   /** How the last of Keycloak's screens went, said once in the Account area. */
   const [actionStatus] = useState(() => new URLSearchParams(window.location.search).get(ACTION_STATUS));
@@ -335,26 +339,38 @@ export function Host({
     [],
   );
 
-  /** Opens the Account area at a section, or closes it (null), keeping the address in step. */
-  const showAccount = useCallback((section: AccountSection | null) => {
+  /** Opens the Account dialog at a section, or closes it (null). The address doesn't change: Account isn't a place. */
+  const showAccount = useCallback((section: AccountSection | null) => setAccountSection(section), []);
+
+  // Back from one of Keycloak's screens: the menu and the dialog open again where they were, and the
+  // address loses the return's words, so a reload doesn't open them again.
+  useEffect(() => {
     const url = new URL(window.location.href);
-    if (section) url.searchParams.set(ACCOUNT_PARAM, section);
-    else url.searchParams.delete(ACCOUNT_PARAM);
+    if (!url.searchParams.has(ACCOUNT_PARAM) && !url.searchParams.has(ACTION_STATUS)) return;
+    if (accountSection) shellRef.current?.open();
+    url.searchParams.delete(ACCOUNT_PARAM);
     url.searchParams.delete(ACTION_STATUS);
-    const next = `${url.pathname}${url.search}${url.hash}`;
-    if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) window.history.pushState(null, '', next);
-    setAccountSection(section);
+    window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arriving
   }, []);
 
   useEffect(() => {
-    const onPop = () => {
-      const s = new URLSearchParams(window.location.search).get(ACCOUNT_PARAM);
-      setAccountSection(isAccountSection(s) ? s : null);
-      setPathname(settled());
-    };
+    const onPop = () => setPathname(settled());
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, [settled]);
+
+  // While the Account dialog is open, the keys that summon the menu don't reach it: the dialog is over the
+  // menu, and Esc or Back to the menu is the way back to it.
+  useEffect(() => {
+    if (!accountSection) return;
+    const hold = (e: KeyboardEvent) => {
+      const summon = (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k');
+      if (summon) e.stopPropagation();
+    };
+    window.addEventListener('keydown', hold, { capture: true });
+    return () => window.removeEventListener('keydown', hold, { capture: true });
+  }, [accountSection]);
 
   // The catalogue: which apps this person can open on this floor. Another floor may have other apps.
   useEffect(() => {
@@ -888,10 +904,8 @@ export function Host({
       if (id === 'sign-out') void session.signOut();
       else if (id === 'previews') setPreviewsOpen(true);
       else if (id === 'inbox') setInboxOpen(true);
-      else if (id === ACCOUNT_AREA) {
-        shell.close();
-        showAccount('profile');
-      }
+      // Account opens over the menu, which stays open behind it to come back to.
+      else if (id === ACCOUNT_AREA) showAccount('overview');
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
