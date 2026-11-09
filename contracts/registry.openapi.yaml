@@ -2415,11 +2415,11 @@ paths:
       summary: The apps granted a scope (platform services)
       description: Apps whose manifest asks for the scope and that an admin has granted it, each with whether an admin has it on. The events service asks for events:subscribe to know whose parts to push events to, and holds a turned-off app’s events for it. Since 1.39.
       parameters:
-        - in: path
+        - schema:
+            $ref: "#/components/schemas/Scope"
+          in: path
           name: scope
           required: true
-          schema:
-            $ref: "#/components/schemas/Scope"
       responses:
         "200":
           description: The apps granted the scope, by id
