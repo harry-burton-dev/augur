@@ -1,5 +1,20 @@
 # @augur/mfe-sdk
 
+## 3.0.0
+
+### Major Changes
+
+- a4f9905: SDK 3: installed apps run only on the app contract (ADR 0075 point 10). An installed app that names an SDK 2 range no longer opens: opening it, and its card on Home, say it was made for an older version of AUGUR, and intents and Find pass it by. The shell's own frontends (Home, Admin, the Upgrade Centre) keep the in-page mount from the same SDK and name `^2.0.0 || ^3.0.0`. An app on the contract that declares `contributes.card` gets its card on Home, drawn by the app into `ctx.frame.card` from a worker of its own (`ctx.surface` is `'card'` there, and a card moves the person or opens another app only just after a press in it); Find asks an app on the contract as itself (`x-augur-app`). The contract tests run against a reference app on the contract.
+
+### Minor Changes
+
+- 3e2ff05: The interfaces of the app contract (contract 3, ADR 0075), ahead of the gateway, registry, runner and shell that use them. `@augur/app-tools` ships the contract's schemas (`urn:augur:app-manifest:3`, `urn:augur:score-part:1`, `urn:augur:app-release:2`, with Score's own `score-v1b1.json`), `augur-app validate` for an app's `manifest.json` and `score/*.score.yaml`, and `@augur/app-tools/release2`, which writes `augur.app-release/v2` with each part's image pinned by digest and the app's asks written out; the v1 writer stays for apps on contract 2. The service kit's caller can carry the app acting for the person and its scopes (a delegated caller, audience `app-<id>`, `APP_DELEGATION_SECONDS`), checked with `delegationCheck` when a part sends it back in `x-augur-delegation`; `isScopeName` and `isOfferedScope` say what a scope looks like and which AUGUR offers. `@augur/mfe-sdk/sdk3` holds the SDK 3 `AppContext` types (`start(ctx)`, `ctx.frame`, `ctx.files`, `ctx.canvas`); SDK 2 apps see no change.
+
+  Not breaking: `CallerSigner.sign` gains an optional third argument (the token's lifetime); existing signers and callers build and run as before.
+
+- 40a331c: Apps on the app contract move files over the bridge and can draw on a canvas. `ctx.files.upload` and `ctx.files.download` carry the bytes to and from the host, which calls the gateway with the person's token and answers a body past the app's `maxUpload` as the gateway would, without sending it; a download can be saved for the person; files dropped on the pane reach `ctx.files.onDrop`. With `contributes.canvas`, `ctx.canvas.open(entry)` shows a canvas in the pane in place of the screen: the shell's own page in a frame sandboxed to scripts, with an opaque origin and no network, which talks to the app only over the port `open` resolves to, and stops with the app.
+- f01d0c4: The shell runs apps on the app contract (contract 3, ADR 0076) in a web worker each. The SDK's worker runtime (`@augur/mfe-sdk/sdk3/runtime`, run by the shell's bootstrap) gives the app `start(ctx)`: `ctx.frame.screen.render` draws Quill's remote vocabulary, which the shell draws with the kit; `ctx.fetch` takes a path under `/api/` and the shell makes the call with the person's token, `X-Workspace-Id` and `x-augur-app`; `ctx.navigate` and `ctx.onNavigate` leave the address to the shell; `ctx.frame.set` gives the pane its heading and actions. The worker has no network, none of the page's storage and no token, under its own policy (`default-src 'none'; script-src 'self'`, served with the bootstrap under `/sandbox/`). The pane says when the app is opening, slow (5 s) or failed (30 s, or the worker threw), and stops an app that draws more than 2,000 nodes at once or keeps more than 50,000, each with Try again; the rest of the shell keeps working. A new floor starts the worker again. The catalogue's contract 3 rows (the manifest in force) become entries the app bar, rail, Find and intents already take; the shell's own frontends stay on SDK 2. `sandbox` is now a reserved app id.
+
 ## 2.1.0
 
 ### Minor Changes

@@ -1,21 +1,43 @@
 {
-  "version": "0.23.1",
-  "name": "Jacana",
+  "version": "0.24.0",
+  "name": "Kestrel",
   "channel": "beta",
-  "released": "2026-11-05",
-  "upgradeFrom": ">=0.19.0",
+  "released": "2026-11-09",
+  "upgradeFrom": ">=0.23.1",
   "changed": [
+    "@augur/app-kit",
+    "@augur/kit-common",
+    "@augur/shell-kit",
+    "@augur/kit-bundle",
     "@augur/app-tools",
+    "@augur/clients",
+    "@augur/mfe-sdk",
     "@augur/service-kit",
     "@augur/events",
     "@augur/gateway",
     "@augur/identity",
+    "@augur/knowledge",
     "@augur/models",
     "@augur/registry",
     "@augur/storage",
-    "@augur/updater"
+    "@augur/updater",
+    "@augur/admin",
+    "@augur/home",
+    "@augur/shell",
+    "@augur/sign-in-theme",
+    "@augur/upgrades"
   ],
-  "breaking": [],
+  "breaking": [
+    "@augur/mfe-sdk 2.1.0 → 3.0.0",
+    "@apps/folio-frontend removed",
+    "@apps/folio removed",
+    "@apps/auspex-frontend removed",
+    "@apps/auspex removed",
+    "@apps/atlas-frontend removed",
+    "@apps/atlas removed",
+    "@apps/mandate-frontend removed",
+    "@apps/mandate removed"
+  ],
   "settings": {
     "all": [
       "PLATFORM_VERSION",
@@ -40,16 +62,6 @@
       "REGISTRY_CLIENT_SECRET",
       "EVENTS_CLIENT_SECRET",
       "MODELS_CLIENT_SECRET",
-      "FOLIO_CLIENT_SECRET",
-      "FOLIO_DATABASE_PASSWORD",
-      "FOLIO_BUCKET_SECRET",
-      "AUSPEX_CLIENT_SECRET",
-      "ATLAS_CLIENT_SECRET",
-      "ATLAS_DATABASE_PASSWORD",
-      "ATLAS_BUCKET_SECRET",
-      "MANDATE_CLIENT_SECRET",
-      "MANDATE_DATABASE_PASSWORD",
-      "MANDATE_BUCKET_SECRET",
       "PLATFORM_ADMIN_USER",
       "PLATFORM_ADMIN_PASSWORD",
       "PLATFORM_ADMIN_EMAIL",
@@ -74,6 +86,9 @@
       "SMTP_REPLY_TO",
       "SMTP_USER",
       "SMTP_PASSWORD",
+      "ENTRA_TENANT_ID",
+      "ENTRA_CLIENT_ID",
+      "ENTRA_CLIENT_SECRET",
       "BACKUP_HOUR_UTC",
       "BACKUP_KEEP_DAYS",
       "RESTORE_TEST_WEEKDAY",
@@ -93,6 +108,13 @@
       "APP_STORAGE",
       "NOTES_DATABASE_PASSWORD",
       "NOTES_BUCKET_SECRET",
+      "APP_DATABASE_CONNECTIONS",
+      "APP_PART_MEMORY_CEILING",
+      "APP_PART_CPU_CEILING",
+      "APP_MEMORY_CEILING",
+      "APP_CPU_CEILING",
+      "APP_SCRATCH_CEILING",
+      "APP_READY_SECONDS",
       "API_RATE_PER_SECOND",
       "API_RATE_BURST",
       "SSO_RATE_PER_SECOND",
@@ -102,7 +124,6 @@
       "LOG_MAX_SIZE",
       "LOG_MAX_FILES",
       "KEYCLOAK_MEM_LIMIT",
-      "FOLIO_WORKER_MEM_LIMIT",
       "OTEL_LGTM_MEM_LIMIT",
       "APP_ORIGINS",
       "KIT_URL",
@@ -110,6 +131,7 @@
       "SEED_ALLOWED",
       "GITHUB_READ_USER",
       "RELEASE_FEED_URL",
+      "APP_FEEDS",
       "APP_FEED_URL",
       "SERVER_RING",
       "RELEASE_CHANNEL",
@@ -119,6 +141,8 @@
       "DEPLOYMENT_ID",
       "DEPLOYMENT_REPORTING",
       "ALLOW_PR_PREVIEWS",
+      "APP_DATA_GRACE_DAYS",
+      "DEFAULT_APPS",
       "FEED_SIGNER",
       "IMAGE_SIGNER",
       "IMAGE_SIGNER_ISSUER",
@@ -127,6 +151,10 @@
       "INBOX_KEEP_DAYS",
       "INBOX_DONE_DAYS",
       "CALLER_SIGNING_KEY",
+      "APP_DELEGATION_SECONDS",
+      "APP_CONNECT_TIMEOUT_MS",
+      "APP_RESPONSE_TIMEOUT_MS",
+      "APP_CONCURRENT_CALLS",
       "COMPOSE_PROFILES",
       "PLATFORM_DIR",
       "UPDATER_CLIENT_SECRET",
@@ -140,9 +168,7 @@
       "SERVICE_CALL_TIMEOUT_SECONDS",
       "DATABASE_STATEMENT_TIMEOUT_SECONDS",
       "GRAFANA_ADMIN_PASSWORD",
-      "ALERT_WEBHOOK_TOKEN",
-      "ATLAS_MAP_TILES",
-      "ATLAS_MAP_ATTRIBUTION"
+      "ALERT_WEBHOOK_TOKEN"
     ],
     "required": [
       "PLATFORM_VERSION",
@@ -163,16 +189,6 @@
       "REGISTRY_CLIENT_SECRET",
       "EVENTS_CLIENT_SECRET",
       "MODELS_CLIENT_SECRET",
-      "FOLIO_CLIENT_SECRET",
-      "FOLIO_DATABASE_PASSWORD",
-      "FOLIO_BUCKET_SECRET",
-      "AUSPEX_CLIENT_SECRET",
-      "ATLAS_CLIENT_SECRET",
-      "ATLAS_DATABASE_PASSWORD",
-      "ATLAS_BUCKET_SECRET",
-      "MANDATE_CLIENT_SECRET",
-      "MANDATE_DATABASE_PASSWORD",
-      "MANDATE_BUCKET_SECRET",
       "PLATFORM_ADMIN_USER",
       "PLATFORM_ADMIN_PASSWORD",
       "PLATFORM_ADMIN_EMAIL",
@@ -183,96 +199,107 @@
       "GRAFANA_ADMIN_PASSWORD",
       "ALERT_WEBHOOK_TOKEN"
     ],
-    "added": [],
-    "removed": []
+    "added": [
+      "ENTRA_TENANT_ID",
+      "ENTRA_CLIENT_ID",
+      "ENTRA_CLIENT_SECRET",
+      "APP_DATABASE_CONNECTIONS",
+      "APP_PART_MEMORY_CEILING",
+      "APP_PART_CPU_CEILING",
+      "APP_MEMORY_CEILING",
+      "APP_CPU_CEILING",
+      "APP_SCRATCH_CEILING",
+      "APP_READY_SECONDS",
+      "APP_FEEDS",
+      "APP_DATA_GRACE_DAYS",
+      "DEFAULT_APPS",
+      "APP_DELEGATION_SECONDS",
+      "APP_CONNECT_TIMEOUT_MS",
+      "APP_RESPONSE_TIMEOUT_MS",
+      "APP_CONCURRENT_CALLS"
+    ],
+    "removed": [
+      "FOLIO_CLIENT_SECRET",
+      "FOLIO_DATABASE_PASSWORD",
+      "FOLIO_BUCKET_SECRET",
+      "AUSPEX_CLIENT_SECRET",
+      "ATLAS_CLIENT_SECRET",
+      "ATLAS_DATABASE_PASSWORD",
+      "ATLAS_BUCKET_SECRET",
+      "MANDATE_CLIENT_SECRET",
+      "MANDATE_DATABASE_PASSWORD",
+      "MANDATE_BUCKET_SECRET",
+      "FOLIO_WORKER_MEM_LIMIT",
+      "ATLAS_MAP_TILES",
+      "ATLAS_MAP_ATTRIBUTION"
+    ]
   },
   "parts": {
     "@augur/app-kit": {
-      "version": "0.11.0"
+      "version": "0.15.0"
     },
     "@augur/kit-common": {
-      "version": "0.9.0"
+      "version": "0.13.0"
     },
     "@augur/shell-kit": {
-      "version": "0.7.0"
+      "version": "0.10.0"
     },
     "@augur/kit-bundle": {
-      "version": "0.5.6"
+      "version": "0.5.11"
     },
     "@augur/app-tools": {
-      "version": "0.4.3"
+      "version": "0.5.0"
     },
     "@augur/clients": {
-      "version": "0.1.0"
+      "version": "0.1.1"
     },
     "@augur/mfe-sdk": {
-      "version": "2.1.0"
+      "version": "3.0.0"
     },
     "@augur/records": {
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.17.1"
-    },
-    "@augur/events": {
-      "version": "0.10.1"
-    },
-    "@augur/gateway": {
-      "version": "0.12.2"
-    },
-    "@augur/identity": {
-      "version": "1.5.1"
-    },
-    "@augur/models": {
-      "version": "0.3.9"
-    },
-    "@augur/registry": {
-      "version": "0.19.2"
-    },
-    "@augur/storage": {
-      "version": "0.5.1"
-    },
-    "@augur/updater": {
-      "version": "0.9.5"
-    },
-    "@augur/admin": {
       "version": "0.18.0"
     },
-    "@augur/home": {
-      "version": "0.4.1"
+    "@augur/events": {
+      "version": "0.11.0"
     },
-    "@augur/shell": {
-      "version": "0.19.0"
+    "@augur/gateway": {
+      "version": "0.13.0"
     },
-    "@augur/sign-in-theme": {
+    "@augur/identity": {
+      "version": "1.6.0"
+    },
+    "@augur/knowledge": {
       "version": "0.1.0"
     },
+    "@augur/models": {
+      "version": "0.4.0"
+    },
+    "@augur/registry": {
+      "version": "0.20.0"
+    },
+    "@augur/storage": {
+      "version": "0.6.0"
+    },
+    "@augur/updater": {
+      "version": "0.10.0"
+    },
+    "@augur/admin": {
+      "version": "0.19.0"
+    },
+    "@augur/home": {
+      "version": "0.4.2"
+    },
+    "@augur/shell": {
+      "version": "0.20.0"
+    },
+    "@augur/sign-in-theme": {
+      "version": "0.1.1"
+    },
     "@augur/upgrades": {
-      "version": "0.1.6"
-    },
-    "@apps/folio-frontend": {
-      "version": "0.8.0"
-    },
-    "@apps/folio": {
-      "version": "0.8.0"
-    },
-    "@apps/auspex-frontend": {
-      "version": "0.3.3"
-    },
-    "@apps/auspex": {
-      "version": "0.3.3"
-    },
-    "@apps/atlas-frontend": {
-      "version": "0.4.0"
-    },
-    "@apps/atlas": {
-      "version": "0.4.0"
-    },
-    "@apps/mandate-frontend": {
-      "version": "0.2.3"
-    },
-    "@apps/mandate": {
-      "version": "0.2.3"
+      "version": "0.1.7"
     }
   }
 }
