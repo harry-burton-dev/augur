@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.15.0",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.16.0",
     "@augur/mfe-sdk": "workspace:*",
     "react": "catalog:",
     "react-dom": "catalog:"

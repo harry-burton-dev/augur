@@ -34,7 +34,7 @@ const posted: [string, unknown[]][] = [];
 const drawn: { root: string; records: unknown[] }[] = [];
 const canvasPorts = new MessageChannel();
 const host = new Channel(asPort(port2), (method, args) => {
-  if (method === 'files.drops' || method === 'canvas.close') posted.push([method, args]);
+  if (method === 'files.drops' || method === 'canvas.close' || method === 'signInAgain') posted.push([method, args]);
   if (method === 'files.download') {
     downloads.push(args as [string, { save?: boolean }?]);
     if ((args[1] as { save?: boolean } | undefined)?.save) return undefined;
@@ -160,6 +160,12 @@ describe('the worker runtime', () => {
     ctx.canvas!.close();
     await new Promise((r) => setTimeout(r, 10));
     expect(posted).toContainEqual(['canvas.close', []]);
+  });
+
+  it('asks the host for a fresh sign-in', async () => {
+    ctx.signInAgain();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(posted).toContainEqual(['signInAgain', []]);
   });
 
   it('runs what start returned when the host stops the app', async () => {
