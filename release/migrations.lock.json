@@ -33,6 +33,11 @@
     "lifecycle_005_deletion": "6c2ec71d580ce4ba",
     "lifecycle_006_carry_on": "ec8894dd106095e1"
   },
+  "@augur/knowledge": {
+    "001-store": "0fc93833d19a7f62",
+    "002-base-ontology": "6052dcdd48e8f357",
+    "003-fence": "0e6ad3fb92bfaf69"
+  },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"
   },

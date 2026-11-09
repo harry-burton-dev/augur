@@ -1,0 +1,26 @@
+{
+  "name": "@augur/knowledge",
+  "version": "0.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@augur/service-kit": "workspace:*",
+    "pg": "catalog:"
+  },
+  "devDependencies": {
+    "@types/n3": "^1.26.6",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "fast-check": "^4.10.2",
+    "n3": "^2.13.12",
+    "rdf-validate-shacl": "^0.6.5",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
