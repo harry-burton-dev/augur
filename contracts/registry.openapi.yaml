@@ -3217,7 +3217,7 @@ paths:
   /app-runner/releases/read:
     post:
       summary: Read a release file from a pasted address, to review before installing (deployment admins only)
-      description: Fetches an https address (never AUGUR itself, this machine or the deployment’s own networks), at most 1 MB in 10 seconds, and checks the file as the feed’s are checked (spec 9.1 to 9.3). The file comes back with its asks and signer for the review, and its refusals and warnings; install it with POST /app-runner/jobs.
+      description: Fetches an https address (never AUGUR itself, this machine or the deployment’s own networks, by every address its name resolves to), at most 1 MB, in 10 seconds, and checks the file as the feed’s are checked (spec 9.1 to 9.3). The file comes back with its asks and signer for the review, and its refusals and warnings; install it with POST /app-runner/jobs.
       requestBody:
         required: true
         content:
