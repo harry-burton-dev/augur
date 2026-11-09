@@ -1,0 +1,39 @@
+---
+title: AUGUR
+description: Run AUGUR on your own servers, administer it, and build apps for it.
+status: beta
+checkedAgainst: 0.24.0
+template: splash
+hero:
+  tagline: An app platform you run yourself. One shell in the browser, one gateway, and apps that plug into both.
+  actions:
+    - text: Get started
+      link: get-started/
+      icon: right-arrow
+    - text: Build an app
+      link: build/
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## Choose your path
+
+<CardGrid>
+  <Card title="Run AUGUR" icon="setting">
+    Install AUGUR on a server, configure it, back it up and upgrade it.
+    <LinkCard title="Run AUGUR" href="run/" />
+  </Card>
+  <Card title="Administer" icon="approve-check">
+    Add people, set up floors and teams, and choose which apps each floor can open.
+    <LinkCard title="Administer" href="administer/" />
+  </Card>
+  <Card title="Build apps" icon="puzzle">
+    Make an app from the template, test it locally, and ship it to any AUGUR deployment.
+    <LinkCard title="Build apps" href="build/" />
+  </Card>
+  <Card title="Reference" icon="open-book">
+    The APIs, the app manifest, the deployment settings and the event topics, generated from the code.
+    <LinkCard title="Reference" href="reference/" />
+  </Card>
+</CardGrid>
