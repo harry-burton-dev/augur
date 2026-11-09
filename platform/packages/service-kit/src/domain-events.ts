@@ -188,6 +188,19 @@ export const outboxRelay = ({ pool, eventsUrl, credentials, fetchImpl, batch = 1
 };
 
 /**
+ * Where an app's inbound part takes the events pushed to it (contract 3, spec 8.6): `POST /augur/events` under
+ * the app's `/api/<id>` prefix, one DomainEvent at a time, with the events service's signed caller
+ * (`isServiceCaller`, `serviceOfCaller(caller) === 'events'`) and an `Idempotency-Key` that is the same each
+ * time one event is sent. The part answers 2xx once it has kept or handled the event; a non-2xx or no answer is
+ * retried with backoff, in order, for up to a day.
+ */
+export const PART_EVENTS_PATH = '/augur/events';
+/** The header that carries the idempotency key on an event pushed to a part. */
+export const IDEMPOTENCY_KEY_HEADER = 'idempotency-key';
+/** The idempotency key the events service sends with an event: the same for every attempt. */
+export const eventDeliveryKey = (event: Pick<DomainEvent, 'seq'>): string => `events-${event.seq}`;
+
+/**
  * Follows topics: reads new events in order and hands each to `handle`, saving the cursor
  * after each one, then at where the events service read to, so a rare topic doesn't read the same
  * stretch every time. If `handle` throws, the same event comes again next time, so handle each

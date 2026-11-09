@@ -31,8 +31,9 @@ import {
   type CallerCheck,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
+import { deliveryStatus, type PushingState } from './deliver.ts';
 import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
-import { AuditEntry, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
+import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** Filters the audit log and its download share, beyond time and floor. */
@@ -96,6 +97,8 @@ export interface EventsOptions {
   streamLifetimeMs?: number;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
+  /** Whether events are being pushed to apps' parts, and if not why; shown in Admin beside each subscribing app. */
+  pushing?: () => PushingState;
 }
 
 /** An action's payload is the app's own; it only has to stay small, since each notification travels whole to every open stream. */
@@ -174,7 +177,7 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers }: EventsOptions) => {
+export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }) }: EventsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -694,6 +697,35 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         // Kept with the entry, so one that fails here is carried on by the sweep (index.ts).
         if (release) await finishRelease(store, release).catch((err: unknown) => req.log.error({ err }, 'could not give back a leaver’s inbox items yet'));
         return reply.code(201).send(entry);
+        },
+      );
+
+      // ---- events pushed to apps' parts (contract 3, spec 8.6) ----
+
+      app.get(
+        '/deliveries',
+        {
+          schema: {
+            summary: 'How each subscribing app is taking the events pushed to its part (admins)',
+            description: [
+              'One row per app the registry says holds events:subscribe: the last event its part took, how many',
+              'attempts at the next one have failed, what went wrong last, and since when. An app that has taken',
+              'nothing for an hour is stalled, and Admin → Apps says so with the reason. `pushing` says whether events are',
+              'being pushed at all, and why not when they aren’t. Since 1.17.',
+            ].join(' '),
+            response: {
+              200: Type.Object({ deliveries: Type.Array(ref(DeliverySchema)), pushing: ref(PushingSchema) }, { description: 'Each subscribing app’s deliveries, and whether pushing is on' }),
+              401: refused('No signed-in caller'),
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          if (!caller.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how apps take events.' });
+          const now = Date.now();
+          return { deliveries: (await store.deliveries.list()).map((d) => ({ ...d, ...deliveryStatus(d, now) })), pushing: pushing() };
         },
       );
 

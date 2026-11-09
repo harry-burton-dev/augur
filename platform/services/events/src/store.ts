@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
+import { deliveriesMigration, PgDeliveryStore, type DeliveryStore } from './deliveries.ts';
 import { digestMigration, PgDigestStore, type DigestStore } from './digests.ts';
 import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
@@ -132,7 +133,7 @@ export interface NewDomainEvent {
 }
 
 export interface EventsQuery {
-  /** Topic names, or a family such as "folio.*". */
+  /** Topic names, or a family such as "folio.*"; "*" alone is every topic (the deliverer's read). */
   topics: string[];
   /** Only events after this `seq`. */
   after?: string;
@@ -168,6 +169,8 @@ export interface EventStore {
   readonly emails: EmailOutbox;
   /** Each person's last daily and weekly digest. */
   readonly digests: DigestStore;
+  /** Where each subscribing app has got to in the events pushed to its part (contract 3, spec 8.6). */
+  readonly deliveries: DeliveryStore;
   /**
    * Adds one notification per recipient and tells every listener, on every instance.
    * With a key, skips anyone who already has one from that app with that key.
@@ -356,6 +359,7 @@ export const migrations: Migration[] = [
       delete from events.notifications n
       where exists (select 1 from events.audit r where r.action = 'audit.redacted' and starts_with(n.key, 'leave:' || (r.detail->>'person') || ':'));`,
   },
+  deliveriesMigration,
 ];
 
 /** Each new notification, by id. The channels carry ids only: see `refIn`. */
@@ -422,6 +426,7 @@ export class PgEventStore implements EventStore {
   readonly inbox: PgInboxStore;
   readonly emails: PgEmailOutbox;
   readonly digests: PgDigestStore;
+  readonly deliveries: PgDeliveryStore;
 
   constructor(
     private readonly pool: pg.Pool,
@@ -430,6 +435,7 @@ export class PgEventStore implements EventStore {
     this.inbox = new PgInboxStore(pool, options.inboxDoneDays);
     this.emails = new PgEmailOutbox(pool);
     this.digests = new PgDigestStore(pool);
+    this.deliveries = new PgDeliveryStore(pool);
   }
 
   static async connect(connectionString: string, options: { inboxDoneDays?: number } = {}) {
@@ -684,15 +690,16 @@ export class PgEventStore implements EventStore {
   }
 
   async readEvents({ topics, after, upTo, limit }: EventsQuery) {
+    const every = topics.includes('*');
     const exact = topics.filter((t) => !t.endsWith('.*'));
     const families = topics.filter((t) => t.endsWith('.*')).map((t) => `${t.slice(0, -1)}%`);
     // Seq order is commit order (`insertEvents`), so a seq not visible yet can only ever land above these. Waiting
     // on the transactions still running isn't needed, and would let any login on the database stall every follower.
     const { rows } = await this.pool.query<DomainEventRow>(
       `select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events
-       where seq > $1 and ($5::bigint is null or seq <= $5) and (topic = any($2::text[]) or topic like any($3::text[]))
+       where seq > $1 and ($5::bigint is null or seq <= $5) and ($6 or topic = any($2::text[]) or topic like any($3::text[]))
        order by seq limit $4`,
-      [after ?? '0', exact, families, limit, upTo ?? null],
+      [after ?? '0', exact, families, limit, upTo ?? null, every],
     );
     return rows.map(fromEventRow);
   }

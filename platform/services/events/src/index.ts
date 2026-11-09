@@ -1,6 +1,7 @@
-import { callerCheckFromEnv, commonSettings, createJobs, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, createJobs, DEFAULT_GATEWAY_URL, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { Mailer, mailRelayFromEnv, organisationSender } from '@augur/service-kit/mail';
 import { buildApp } from './app.ts';
+import { eventDeliverer, sendThroughGateway, type PushingState } from './deliver.ts';
 import { finishReleases } from './inbox-routes.ts';
 import { identityDigestPeople, sendDigests } from './digests.ts';
 import { identityNoticeSettings, sendDueEmails } from './notice-emails.ts';
@@ -59,8 +60,29 @@ const audience = credentials ? identityAudience({ identityUrl: IDENTITY_URL, cre
 // An inbox item's owner must be someone who can sign in (the directory lists only them), and a person's teams decide which team items they see.
 const directory = credentials ? identityDirectory({ identityUrl: IDENTITY_URL, credentials }) : undefined;
 const principals = credentials ? identityPrincipals({ identityUrl: IDENTITY_URL, credentials }) : undefined;
-const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds });
+
+// Events are pushed to each subscribing app's inbound part through the gateway (contract 3, spec 8.6); the
+// gateway signs the call as events, and the part checks that caller. GATEWAY_URL is where the gateway is.
+const granted = credentials ? registryGrantedApps({ registryUrl: REGISTRY_URL, credentials }) : undefined;
+// The deliverer logs through the app once it is up; until then, with the start-up log.
+const deliveryLog = { info: (o: object, m: string) => log.info(m, o as Record<string, unknown>), warn: (o: object, m: string) => log.warn(m, o as Record<string, unknown>), error: (o: object, m: string) => log.error(m, o as Record<string, unknown>) };
+const deliverer =
+  credentials && granted && grants
+    ? eventDeliverer({
+        store,
+        subscribers: () => granted('events:subscribe'),
+        grants,
+        send: sendThroughGateway({ gatewayUrl: process.env.GATEWAY_URL || DEFAULT_GATEWAY_URL, credentials }),
+        audit: async (entry, key) => void (await store.appendAudit(entry, undefined, 'events', { key })),
+        log: deliveryLog,
+      })
+    : undefined;
+const notPushing = 'SERVICE_CLIENT_SECRET is not set, so the events service can’t sign in to reach apps’ parts.';
+if (!deliverer) log.warn(`${notPushing} Events aren’t pushed to apps; they can still be pulled from /v1/domain-events.`);
+const pushing = (): PushingState => (deliverer ? { on: true, ...(deliverer.problem ? { problem: deliverer.problem } : {}) } : { on: false, why: notPushing, whoCanChange: 'Whoever runs this deployment sets it in .env.' });
+const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, pushing });
 await app.listen({ port, host: '0.0.0.0' });
+deliverer?.start();
 
 // Domain events are for followers to catch up on, not a record: they're kept DOMAIN_EVENTS_KEEP_DAYS (30) days.
 const keepDays = Number(process.env.DOMAIN_EVENTS_KEEP_DAYS || 30);

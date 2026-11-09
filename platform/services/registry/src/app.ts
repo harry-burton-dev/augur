@@ -712,6 +712,33 @@ export const buildApp = async ({
       );
 
       /**
+       * The apps granted a scope, for a platform service that acts on each of them: the events service
+       * pushes events to the parts of every app granted events:subscribe (contract 3, spec 8.6). Each says
+       * whether it is on, so a turned-off app keeps its place in line rather than being forgotten.
+       */
+      app.get(
+        '/scopes/:scope/apps',
+        {
+          schema: {
+            summary: 'The apps granted a scope (platform services)',
+            description: 'Apps whose manifest asks for the scope and that an admin has granted it, each with whether an admin has it on. The events service asks for events:subscribe to know whose parts to push events to, and holds a turned-off app’s events for it. Since 1.39.',
+            params: Type.Object({ scope: ref(ScopeSchema) }),
+            response: {
+              200: Type.Array(Type.Object({ app: Type.String(), name: Type.String({ description: 'What the app is called' }), enabled: Type.Boolean({ description: 'Whether an admin has the app on' }) }), { description: 'The apps granted the scope, by id' }),
+              403: refused('Not a platform service'),
+              503: refused("The sign-in service that checks the caller's token can't be reached right now"),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can list the apps granted a scope.' });
+          return (await store.records()).filter((r) => usableScopes(r).includes(req.params.scope)).map((r) => ({ app: r.entry.id, name: r.entry.name, enabled: r.enabled }));
+        },
+      );
+
+      /**
        * The apps that link their things to entities (manifest links.entities, SDK 2.1) and the types
        * they bind, so a follower such as the entity catalogue subscribes to exactly those topics
        * (`<app>.<type>.entity-bound` and `-unbound`, ADR 0066) rather than every event each app sends.

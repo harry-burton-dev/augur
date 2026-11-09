@@ -225,6 +225,24 @@ export interface ComponentStatus {
   problem?: string;
 }
 
+/** How one app's part is taking the events pushed to it (the events service's GET /deliveries, contract 3). */
+export interface EventDelivery {
+  app: string;
+  cursor: string;
+  failures: number;
+  nextAt: string | null;
+  lastError: string | null;
+  failingSince: string | null;
+  deliveredAt: string | null;
+  dropped: number;
+  droppedAt: string | null;
+  state: 'ok' | 'retrying' | 'stalled';
+  words: string;
+}
+
+/** Whether events are being pushed to apps' parts at all, and when not, why and who can change that. */
+export type EventPushing = { on: true; problem?: string } | { on: false; why: string; whoCanChange: string };
+
 /** One entry in the audit log (see contracts/events.openapi.yaml). */
 export interface AuditEntry {
   id: string;
@@ -755,6 +773,9 @@ export class AdminApi {
   };
   audit = (query: AuditQuery) =>
     this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
+
+  /** How each subscribing app's part is taking the events pushed to it (admins). */
+  deliveries = () => this.call<{ deliveries: EventDelivery[]; pushing: EventPushing }>('GET', '/api/events/v1/deliveries');
 
   origins = () => this.call<AllowedOrigin[]>('GET', '/api/registry/v1/origins');
   allowOrigin = (origin: string) => this.call<AllowedOrigin>('POST', '/api/registry/v1/origins', { origin });

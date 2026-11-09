@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GrantsUnavailable, registryBindingApps, registryGrants, registryInboxKinds, registryNotificationKinds, registryRequiredRole } from './grants.js';
+import { GrantsUnavailable, registryBindingApps, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, registryRequiredRole } from './grants.js';
 
 describe('registry grants', () => {
   it('asks once per app and floor while the answer is fresh, as a platform service', async () => {
@@ -17,6 +17,26 @@ describe('registry grants', () => {
     t = 30_001;
     await grants('library', 'w-1');
     expect(fetchImpl).toHaveBeenCalledTimes(3);
+  });
+
+  it('lists the apps granted a scope as the registry answers them (a list, with whether each is on), kept 30 s', async () => {
+    let t = 0;
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect((init?.headers as Record<string, string>).authorization).toBe('Bearer events-token');
+      expect(String(url)).toBe('http://registry/v1/scopes/events%3Asubscribe/apps');
+      return Response.json([{ app: 'library', name: 'Library', enabled: true }, { app: 'atlas', name: 'Atlas', enabled: false }]);
+    });
+    const granted = registryGrantedApps({ registryUrl: 'http://registry', credentials: { name: 'events', getToken: async () => 'events-token' }, fetchImpl: fetchImpl as typeof fetch, now: () => t });
+    expect(await granted('events:subscribe')).toEqual([{ app: 'library', name: 'Library', enabled: true }, { app: 'atlas', name: 'Atlas', enabled: false }]);
+    await granted('events:subscribe');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    t = 30_001;
+    await granted('events:subscribe');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const wrong = registryGrantedApps({ registryUrl: 'http://registry', credentials: { name: 'events', getToken: async () => 'events-token' }, fetchImpl: (async () => Response.json({ apps: [] })) as typeof fetch });
+    await expect(wrong('events:subscribe')).rejects.toBeInstanceOf(GrantsUnavailable);
+    const down = registryGrantedApps({ registryUrl: 'http://registry', credentials: { name: 'events', getToken: async () => 'events-token' }, fetchImpl: (async () => new Response(null, { status: 503 })) as typeof fetch });
+    await expect(down('events:subscribe')).rejects.toBeInstanceOf(GrantsUnavailable);
   });
 
   it('grants nothing to an app it doesn’t know, and fails when it can’t say', async () => {

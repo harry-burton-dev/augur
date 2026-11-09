@@ -286,6 +286,9 @@ export const callerHeaders: (caller: Caller) => Record<string, string>;
 export class CallerKeysUnavailable extends Error {
 }
 
+// @public
+export const callerOfService: (service: string) => Caller;
+
 // @public (undocumented)
 export interface CallerSigner {
     keys(): Promise<JSONWebKeySet>;
@@ -424,6 +427,9 @@ export const DEFAULT_CACHE_ENTRIES = 5000;
 
 // @public
 export const DEFAULT_DELEGATION_SECONDS = 300;
+
+// @public
+export const DEFAULT_GATEWAY_URL = "http://gateway:8080";
 
 // @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
@@ -572,6 +578,9 @@ export const eventCursor: (db: Queryable, follower?: string) => {
 };
 
 // @public
+export const eventDeliveryKey: (event: Pick<DomainEvent, "seq">) => string;
+
+// @public
 export const floorCaller: (manifest: Pick<AppManifest, "name">) => (req: Pick<FastifyRequest, "headers">) => OnFloor;
 
 // @public
@@ -683,6 +692,16 @@ export function getInboxItem(o: InboxOptions): Promise<InboxItem & {
 }>;
 
 // @public
+export interface GrantedApp {
+    app: string;
+    enabled: boolean;
+    name: string;
+}
+
+// @public
+export type GrantedAppsLookup = (scope: Scope) => Promise<GrantedApp[]>;
+
+// @public
 export type GrantLookup = (app: string, workspace?: string) => Promise<readonly Scope[]>;
 
 // @public (undocumented)
@@ -713,6 +732,9 @@ export interface Health {
 
 // @public
 export const health: (service: string, version: string, api?: string) => Health;
+
+// @public
+export const IDEMPOTENCY_KEY_HEADER = "idempotency-key";
 
 // @public
 export const identifyService: (headers: Record<string, string | string[] | undefined>, verify: ServiceVerifier | undefined) => Promise<ServiceIdentity | undefined>;
@@ -888,6 +910,9 @@ export const isOfferedScope: (s: string) => s is Scope;
 
 // @public
 export const isScopeName: (s: string) => boolean;
+
+// @public
+export const isServiceCaller: (caller?: Pick<Caller, "id">) => boolean;
 
 // @public
 export interface Job<Input = void> {
@@ -1208,6 +1233,9 @@ export const packageVersion: (moduleUrl: string) => string;
 export const packFrontend: (files: FrontendFile[]) => Buffer;
 
 // @public
+export const PART_EVENTS_PATH = "/augur/events";
+
+// @public
 export const peopleFor: (app: string, input?: {
     fallback?: AppPeople;
     env?: Record<string, string | undefined>;
@@ -1418,6 +1446,9 @@ export interface RegisterOptions {
 export const registryBindingApps: (input: GrantsOptions) => (() => Promise<BindingApp[]>);
 
 // @public
+export const registryGrantedApps: (input: GrantsOptions) => GrantedAppsLookup;
+
+// @public
 export const registryGrants: (input: GrantsOptions) => GrantLookup;
 
 // @public
@@ -1504,6 +1535,9 @@ export type ServiceCaller = ServiceIdentity & {
     person?: Caller;
 };
 
+// @public
+export const serviceCallerId: (service: string) => string;
+
 // @public (undocumented)
 export class ServiceCallError extends Error {
 }
@@ -1550,6 +1584,9 @@ export const serviceLogging: (env?: NodeJS.ProcessEnv) => {
 
 // @public
 export const serviceName: (who: ServiceIdentity) => string;
+
+// @public
+export const serviceOfCaller: (caller?: Pick<Caller, "id">) => string | undefined;
 
 // @public
 export const SERVICES_AUDIENCE = "platform-services";
