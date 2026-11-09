@@ -417,6 +417,15 @@
       ],
       "x-docs": "docs/deploy.md#logs-memory-and-health"
     },
+    "KNOWLEDGE_SUBGRAPH_DEPTH": {
+      "type": "string",
+      "description": "The most hops a knowledge graph subgraph read goes from its entity, whatever the caller asks for.",
+      "default": "3",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
     "UPDATER_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,

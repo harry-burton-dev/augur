@@ -8,6 +8,8 @@ const db = registryDb();
 
 const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0 || ^2.0.0', handles: ['document.open'] };
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
+/** The same person holding deployment-admin too, which removing apps, pinning and choosing origins need (ADR 0084). */
+const deployAdmin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
 // Stands in for Keycloak: "Bearer app-<id>" is that app's token, "Bearer platform-<name>" a platform service's.
 const verifyService = async (headers: Record<string, string | string[] | undefined>) => {
@@ -196,7 +198,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const entries: unknown[] = [];
     const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
-    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
+    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
     expect(entries).toEqual([
       { actor: { id: 'library', kind: 'service' }, app: 'registry', action: 'app.registered', target: 'library', detail: { version: '0.1.0' } },
       { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.removed', target: 'library' },
@@ -214,11 +216,11 @@ describe.runIf(DATABASE_URL)('registry', () => {
       ['0.2.0', true],
       ['0.1.0', false],
     ]);
-    const back = await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } });
+    const back = await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: deployAdmin, payload: { version: '0.1.0' } });
     expect(back.json()).toMatchObject({ version: '0.1.0', pinnedVersion: '0.1.0', platform: false });
     await register('0.3.0');
     expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library').version).toBe('0.1.0');
-    const free = await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: admin });
+    const free = await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: deployAdmin });
     expect(free.json()).toMatchObject({ version: '0.3.0' });
     expect(free.json().pinnedVersion).toBeUndefined();
     expect(entries.map((e) => [e.action, e.detail])).toEqual([
@@ -235,8 +237,8 @@ describe.runIf(DATABASE_URL)('registry', () => {
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     expect((await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: editor })).statusCode).toBe(403);
     expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: editor, payload: { version: '0.1.0' } })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '7.0.0' } })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'PUT', url: '/v1/apps/home/pin', headers: admin, payload: { version: '0.1.0' } })).statusCode).toBe(409);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: deployAdmin, payload: { version: '7.0.0' } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/home/pin', headers: deployAdmin, payload: { version: '0.1.0' } })).statusCode).toBe(409);
     expect((await app.inject({ method: 'GET', url: '/v1/apps/nothing/versions', headers: admin })).statusCode).toBe(404);
   });
 
@@ -246,10 +248,27 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(res.statusCode).toBe(201);
   });
 
+  it('keeps removing apps, pinning and choosing origins to deployment admins, and says so to a plain admin (ADR 0084)', async () => {
+    const app = await db.app({ verifyService });
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
+    const origin = encodeURIComponent('https://apps.example.org');
+    for (const call of [
+      { method: 'DELETE', url: '/v1/apps/library' },
+      { method: 'PUT', url: '/v1/apps/library/pin', payload: { version: '0.1.0' } },
+      { method: 'DELETE', url: '/v1/apps/library/pin' },
+      { method: 'POST', url: '/v1/origins', payload: { origin: 'https://apps.example.org' } },
+      { method: 'DELETE', url: `/v1/origins/${origin}` },
+    ] as const) {
+      const res = await app.inject({ ...call, headers: admin });
+      expect(res.statusCode, `${call.method} ${call.url}`).toBe(403);
+      expect(res.json()).toMatchObject({ requiredRole: 'deployment-admin', message: expect.stringMatching(/^Only a deployment admin can/) });
+    }
+  });
+
   it('refuses a frontend from an app an admin removed, whose sign-in outlives it', async () => {
     const app = await db.app({ verifyService, frontendFiles: new MemoryFrontendFiles() });
     expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
-    expect((await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin })).statusCode).toBe(204);
+    expect((await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin })).statusCode).toBe(204);
     const body = packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]);
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.2.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: body });
     expect(res.statusCode).toBe(403);
@@ -259,7 +278,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
   it('lets a reinstall an admin asked for register the app and publish its frontend, with its own sign-in', async () => {
     const app = await db.app({ verifyService, frontendFiles: new MemoryFrontendFiles() });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
-    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
+    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
     const release = { id: 'library', version: '0.1.0', image: 'ghcr.io/x/library@sha256:aa', manifest: library };
     expect(await db.store.requestAppJob({ id: 'j1', app: 'library', action: 'install', release: release as never, requestedBy: 'u-1' })).toBe(true);
     // The container comes up and publishes first; the runner registers once it's healthy.
@@ -320,13 +339,13 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect((await served()).entry).toBe(`${two}entry.js`);
 
     // Holding the app at an older version now holds its code too, and admins see each version's address.
-    await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: admin, payload: { version: '0.1.0' } });
+    await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: deployAdmin, payload: { version: '0.1.0' } });
     expect((await served()).entry).toBe(`${changed}entry.js`);
     const versions = (await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: admin })).json();
     expect(versions.map((v: { entry: { entry: string } }) => v.entry.entry)).toEqual([`${two}entry.js`, `${changed}entry.js`]);
 
     // An entry that isn't in the frontend it gave is served as registered.
-    await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: admin });
+    await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: deployAdmin });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', entry: '/apps/library/main.js' } });
     expect((await served()).entry).toBe('/apps/library/main.js');
     expect(entries.filter((e) => e.action === 'app.frontend-published')).toHaveLength(3);
@@ -379,8 +398,8 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const app = await db.app({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
     const byService = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: service });
-    const byAdmin = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
-    const gone = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
+    const byAdmin = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
+    const gone = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
     expect([byService.statusCode, byAdmin.statusCode, gone.statusCode]).toEqual([403, 204, 404]);
   });
 
@@ -388,7 +407,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const app = await db.app({ verifyService });
     const register = (headers: Record<string, string>) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers, payload: library });
     expect((await register(service)).statusCode).toBe(201);
-    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: admin });
+    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
     const refused = await register(service);
     expect(refused.statusCode).toBe(403);
     expect(refused.json().message).toMatch(/An admin removed Library/);
@@ -400,7 +419,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
   describe('where apps may load from', () => {
     const elsewhere = { ...library, entry: 'https://apps.example.org/library/entry.js' };
     const register = (app: Awaited<ReturnType<typeof buildApp>>, payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
-    const allow = (app: Awaited<ReturnType<typeof buildApp>>, origin: string, headers = admin) => app.inject({ method: 'POST', url: '/v1/origins', headers, payload: { origin } });
+    const allow = (app: Awaited<ReturnType<typeof buildApp>>, origin: string, headers = deployAdmin) => app.inject({ method: 'POST', url: '/v1/origins', headers, payload: { origin } });
 
     it('takes an entry on the platform itself, and refuses one from an origin nobody allowed', async () => {
       const app = await db.app({ verifyService });
@@ -434,12 +453,12 @@ describe.runIf(DATABASE_URL)('registry', () => {
       const app = await db.app({ verifyService });
       await allow(app, 'https://apps.example.org');
       await register(app, elsewhere);
-      const removed = await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: admin });
+      const removed = await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: deployAdmin });
       expect(removed.statusCode).toBe(204);
       expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('library');
       const catalogue = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
       expect(catalogue.find((a: { id: string }) => a.id === 'library').blocked).toMatch(/isn't a place apps are allowed/);
-      expect((await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: admin })).statusCode).toBe(404);
+      expect((await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: deployAdmin })).statusCode).toBe(404);
     });
   });
 

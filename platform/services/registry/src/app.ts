@@ -67,6 +67,7 @@ import {
   parseOrigin,
   PLATFORM_APP_SCOPES,
   platformApps,
+  platformManifests3,
   settingsProblem,
   surfaceProblem,
   floorKindsOf,
@@ -76,6 +77,7 @@ import {
   type CategoryInForce,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
+import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { LiveOverrides } from './live.ts';
 import type { PipelineReader } from './pipeline.ts';
 import { UpdateChecker } from './updates.ts';
@@ -83,7 +85,7 @@ import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './fro
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { SERVED_CONTRACTS } from './release-check.ts';
-import { AppManifest3Body, entryOf3, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -346,7 +348,7 @@ export const buildApp = async ({
             .filter((a) => !unbuiltApps.has(a.id))
             .map((a) => {
               const on = a.previews?.length ? previewsOnFor(platformRecord(a), optIns, updates.ring, at) : [];
-              return on.length ? { ...a, previewsOn: on } : a;
+              return ownServed(a, platformManifests3[a.id], { maxUpload: a.maxUpload ?? DEFAULT_UPLOAD_MB, previewsOn: on });
             });
           const apps = [...platform, ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
@@ -518,7 +520,7 @@ export const buildApp = async ({
       /** Serve one kept version and hold the app there, whatever registers next; or let go and serve the newest. */
       const pin = async (req: FastifyRequest, reply: FastifyReply, id: string, version: string | null) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose an app’s version.' });
+        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('choose an app’s version'));
         if (platformApps.some((a) => a.id === id)) {
           return reply.code(409).send({ error: 'conflict', message: 'AUGUR’s own apps change with AUGUR’s own release.' });
         }
@@ -545,7 +547,7 @@ export const buildApp = async ({
         '/apps/:id/pin',
         {
           schema: {
-            summary: 'Serve one kept version and hold the app there (admins only)',
+            summary: 'Serve one kept version and hold the app there (deployment admins only)',
             description: [
               'Rolls an app back, or holds it at its current version. Registrations',
               'after this are kept in its history but not served until it is',
@@ -558,7 +560,7 @@ export const buildApp = async ({
             body: Type.Object({ version: Type.String({ minLength: 1, maxLength: 64 }) }, { additionalProperties: false }),
             response: {
               200: pinned,
-              403: refused('Not an admin'),
+              403: refused('Not a deployment admin'),
               404: refused('No such app, or no such version kept'),
               409: refused('One of AUGUR\'s own apps, or another app now has that version\'s route'),
             },
@@ -570,12 +572,12 @@ export const buildApp = async ({
         '/apps/:id/pin',
         {
           schema: {
-            summary: 'Let go of a pin and serve the newest version (admins only)',
+            summary: 'Let go of a pin and serve the newest version (deployment admins only)',
             description: 'Audited as app.unpinned.',
             params: params('id'),
             response: {
               200: pinned,
-              403: refused('Not an admin'),
+              403: refused('Not a deployment admin'),
               404: refused('No such app'),
               409: refused('One of AUGUR\'s own apps'),
             },
@@ -1407,19 +1409,19 @@ export const buildApp = async ({
         '/origins',
         {
           schema: {
-            summary: 'Allow apps to load from an origin (admins only)',
+            summary: 'Allow apps to load from an origin (deployment admins only)',
             description: 'HTTPS only, except http://localhost for development. Audited as origin.allowed.',
             body: Type.Object({ origin: Type.String({ minLength: 1, maxLength: 200, examples: ['https://apps.example.org'] }) }, { additionalProperties: false }),
             response: {
               201: { ...ref(AllowedOrigin), description: 'Allowed (also when it already was)' },
               400: refused('Not an HTTPS origin, or has a path'),
-              403: refused('Not an admin'),
+              403: refused('Not a deployment admin'),
             },
           },
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where apps may load from.' });
+          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('choose where apps may load from'));
           const parsed = parseOrigin(req.body.origin);
           if ('problem' in parsed) return reply.code(400).send({ error: 'bad_request', message: parsed.problem });
           if (await store.allowOrigin(parsed.origin, caller.id)) {
@@ -1434,7 +1436,7 @@ export const buildApp = async ({
         '/origins/:origin',
         {
           schema: {
-            summary: 'Stop allowing an origin (admins only)',
+            summary: 'Stop allowing an origin (deployment admins only)',
             description: [
               'Apps already registered from it stay in the catalogue, marked blocked,',
               'and are left out of the manifest until it is allowed again. Audited as origin.removed.',
@@ -1442,14 +1444,14 @@ export const buildApp = async ({
             params: Type.Object({ origin: Type.String({ description: 'The origin, URL-encoded' }) }),
             response: {
               204: empty('Removed'),
-              403: refused('Not an admin'),
+              403: refused('Not a deployment admin'),
               404: refused('Not an allowed origin'),
             },
           },
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where apps may load from.' });
+          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('choose where apps may load from'));
           if (!(await store.removeOrigin(req.params.origin))) return reply.code(404).send({ error: 'not_found', message: `${req.params.origin} isn't allowed.` });
           req.log.info({ origin: req.params.origin, by: caller.id }, 'origin removed');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.removed', target: req.params.origin });
@@ -1464,12 +1466,12 @@ export const buildApp = async ({
         '/apps/:id',
         {
           schema: {
-            summary: 'Remove an app (admins only)',
+            summary: 'Remove an app (deployment admins only)',
             description: "Audited as app.removed. Its own service can't register it again afterwards: only an admin or the app runner can.",
             params: params('id'),
             response: {
               204: empty('Removed'),
-              403: refused('Not an admin'),
+              403: refused('Not a deployment admin'),
               404: refused('No such app'),
               409: refused('One of the deployment’s default apps (DEFAULT_APPS), which stays while it is named'),
             },
@@ -1477,7 +1479,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can remove apps.' });
+          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('remove apps'));
           if (defaultApps?.includes(req.params.id)) return reply.code(409).send({ error: 'conflict', message: defaultRemoveProblem(req.params.id) });
           if (!(await store.remove(req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, by: caller.id }, 'app removed');

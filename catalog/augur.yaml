@@ -514,7 +514,7 @@ metadata:
     Version 1 grows while the seam fills in: draft 4 of the spec is its target, and paths are added until it is met.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.1.0
+    augur.dev/contract-version: 1.2.0
 spec:
   type: openapi
   lifecycle: production

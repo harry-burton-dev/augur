@@ -7,26 +7,31 @@ import { DATABASE_URL, identityDb } from './db.testing.ts';
 const db = identityDb();
 
 const admin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] });
+/** Issuing an app's sign-in needs deployment-admin (ADR 0084). */
+const deployAdmin = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'] });
 const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'] });
 
 describe.runIf(DATABASE_URL)('apps’ sign-ins', () => {
-  it('lets an admin issue one, audited without the secret', async () => {
+  it('lets a deployment admin issue one, audited without the secret', async () => {
     const entries: unknown[] = [];
     const appClients = new MemoryAppClients();
     const app = await db.app({ appClients, audit: async (e) => void entries.push(e) });
-    const res = await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: admin });
+    const res = await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: deployAdmin });
     expect(res.statusCode).toBe(201);
     expect(res.json()).toEqual({ clientId: 'app-library', secret: appClients.secrets.get('app-library') });
     expect(entries).toEqual([{ actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'app.credential-issued', target: 'library' }]);
     expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: editor })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/Not_An_App/credential', headers: admin })).statusCode).toBe(400);
+    const plain = await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: admin });
+    expect(plain.statusCode).toBe(403);
+    expect(plain.json()).toMatchObject({ requiredRole: 'deployment-admin' });
+    expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/Not_An_App/credential', headers: deployAdmin })).statusCode).toBe(400);
   });
 
   it('refuses an id AUGUR keeps for itself, so no app signs in as a part of AUGUR', async () => {
     const appClients = new MemoryAppClients();
     const app = await db.app({ appClients, verifyService: async () => ({ kind: 'platform' as const, name: 'updater' }) });
     for (const id of ['registry', 'augur-notes']) {
-      const issued = await app.inject({ method: 'POST', url: `/v1/admin/apps/${id}/credential`, headers: admin });
+      const issued = await app.inject({ method: 'POST', url: `/v1/admin/apps/${id}/credential`, headers: deployAdmin });
       expect(issued.statusCode).toBe(400);
       expect(issued.json().message).toMatch(/kept for/);
       const set = await app.inject({ method: 'PUT', url: `/v1/admin/apps/${id}/credential`, headers: { authorization: 'Bearer x' }, payload: { secret: 'a'.repeat(64) } });
@@ -72,7 +77,7 @@ describe.runIf(DATABASE_URL)('apps’ sign-ins', () => {
 
   it('answers 503 without the sign-in service', async () => {
     const app = await db.app();
-    expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: admin })).statusCode).toBe(503);
+    expect((await app.inject({ method: 'POST', url: '/v1/admin/apps/library/credential', headers: deployAdmin })).statusCode).toBe(503);
   });
 
   it('makes a client that can only get short tokens for the platform’s services, or replaces its secret', async () => {
