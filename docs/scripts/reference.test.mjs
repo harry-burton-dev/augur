@@ -53,7 +53,7 @@ test('the settings page lists what a deployment sets, not what compose sets for 
       INTERNAL_THING: { 'x-internal': true, description: 'Set by compose.' },
     },
   });
-  assert.match(md, /\| `PLATFORM_URL` \| Yes \|  \|/);
-  assert.match(md, /\| `POSTGRES_PASSWORD` \|  \| Yes \|/);
+  assert.ok(md.includes('| `PLATFORM_URL` | Yes |  |'));
+  assert.ok(md.includes('| `POSTGRES_PASSWORD` |  | Yes |'));
   assert.doesNotMatch(md, /INTERNAL_THING/);
 });
