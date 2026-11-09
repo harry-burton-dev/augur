@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -143,6 +143,46 @@ describe('the apps’ project folder', () => {
     await host.writeProject({ apps: {} }, { name: 'augur-apps' }, { 'files/app-notes-web-blue/0': 'new' });
     expect(await readFile(join(dir, 'apps/files/app-notes-web-blue/0'), 'utf8')).toBe('new');
     expect(await readdir(join(dir, 'apps/files'))).toEqual(['app-notes-web-blue']);
+  });
+
+  it('makes an app’s network internal, joins the runner and the platform’s parts it names by their names, and takes away a network no app needs', async () => {
+    const bin = join(dir, 'bin');
+    const log = join(dir, 'docker.log');
+    await writeFile(
+      join(dir, 'fake-docker'),
+      `#!/bin/sh
+echo "$*" >> ${log}
+case "$*" in
+  "container inspect --format {{.Id}} "*) echo self ;;
+  "network ls --filter label=augur.network=app "*) echo app-old ;;
+  *"com.docker.compose.service=gateway"*) echo gw ;;
+  *"com.docker.compose.service=postgres"*) echo pg ;;
+  *"com.docker.compose.service="*) ;;
+  *com.docker.compose.project*) echo platform ;;
+  "network inspect --format {{json .Containers}} app-notes") echo '{"gw":{}}' ;;
+  "ps --all --no-trunc --filter network=app-old --format {{.ID}}") echo left ;;
+esac
+`,
+    );
+    await mkdir(bin);
+    await rename(join(dir, 'fake-docker'), join(bin, 'docker'));
+    await chmod(join(bin, 'docker'), 0o755);
+    vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
+    try {
+      const host = composeAppHost({ dir, dockerHost: 'tcp://nowhere:2375', dockerConfig: dir, signer: { identity: 'i', issuer: 'x' } });
+      await host.appNetworks([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres'] }]);
+      const said = (await readFile(log, 'utf8')).trim().split('\n');
+      expect(said).toContain('network create --internal --label augur.network=app --label augur.app=notes app-notes');
+      expect(said).toContain('network connect app-notes self');
+      expect(said).toContain('network connect --alias postgres app-notes pg');
+      // Already on it: nothing to do.
+      expect(said.some((l) => l.includes('--alias gateway'))).toBe(false);
+      expect(said).toContain('network disconnect --force app-old left');
+      expect(said).toContain('network rm app-old');
+      expect(said.some((l) => l === 'network rm app-notes')).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('runs a job to its end and says how it ended: its exit code, or that its time ran out', async () => {

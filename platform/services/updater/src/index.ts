@@ -187,6 +187,22 @@ const appsOnce = async () => {
   log('app job ended', { app: job.app, action: job.action, outcome });
 };
 
+/**
+ * An upgrade of AUGUR, or going back from one, gives the gateway and the stores new containers, which aren't on
+ * the apps' networks. So they're joined again on a clock of their own, which the upgrade's long waits don't hold up.
+ */
+const NETWORKS_EVERY_MS = 15_000;
+let keeping = false;
+setInterval(() => {
+  if (keeping) return;
+  keeping = true;
+  void (async () => {
+    if (envValue(await server.readEnv(), 'APP_SECRETS_KEY')) await runner.keepNetworks();
+  })()
+    .catch((err) => log('couldn’t keep the apps’ networks joined', { error: (err as Error).message }))
+    .finally(() => (keeping = false));
+}, NETWORKS_EVERY_MS).unref();
+
 log('watching for upgrades', { registry: REGISTRY_URL, dir: PLATFORM_DIR });
 for (;;) {
   try {
