@@ -1,5 +1,39 @@
 # @augur/identity
 
+## 1.6.0
+
+### Minor Changes
+
+- 57ebab2: The app bar replaces Title and Orbit (PDR-020), on kit 0.5.8 (Common 0.11, Quill 0.13, Aerie 0.8.1). On the desktop the bar runs across the still horizon with a tile per group of apps, from each app's manifest category: Platform, Pillars, then Apps. With an app open it docks as the rail beside it, with Home, Apps, the app and its pages, one per item of its manifest menu; an app with one page or none shows no page list. Esc no longer leaves an app: it closes a start menu, and Home in the rail goes back to the desktop. The groups' names are the shell's words, not the kit's. Where the bar rests is kept in the person's preferences: Identity takes `barStop` (0 to 3) in `PUT /v1/me/preferences` (contract 1.31.0). The manifest's `areas` and `orbit` are still read but no longer drawn. The contract tests check the desktop bar, a start menu, the rail, Esc, Home and an address with no app.
+
+  The kit is the Horizon look Harry picked on 6 Nov 2026, for the shell's own pages and every app that takes the kit from `KIT_URL`: square corners, buttons as keys, fields, checks, toggles and selects as wells with one focus ring, solid sheets for dialogs, notices, toasts, menus and tips, and the needs-you colour and the typefaces (Instrument Sans, IBM Plex Mono) as tokens. Nothing an app uses is removed.
+
+- 23117fe: Removing an app from the server takes its sign-in away at once and keeps its data, settings and floors for APP_DATA_GRACE_DAYS (30), then deletes them after a backup; installing it again before then keeps them. A deletion that fails waits longer each time, up to a day, and Admin shows why.
+- 656f2d1: Leavers' accounts are deleted once the organisation's leaver retention has passed (ADR 0072). Identity checks every five minutes and, in an order it can resume, has Activity remove their personal values, forgets their preferences and teams, and deletes the Keycloak account; then it records `person.deleted`, which followers hear as `platform.person.deleted` (`PLATFORM_TOPICS.personDeleted`). A deployment admin who just entered their password can delete a leaver's account at once (`DELETE /v1/admin/people/{id}`). People shows when a leaver's account goes (contract 1.30.0, migration `lifecycle_005_deletion`).
+- 69bad0d: People can sign in with the organisation's Entra account. With `ENTRA_TENANT_ID`, `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` in `.env`, the realm job adds the organisation's single-tenant Entra as a sign-in, whose first sign-in links to the account with the same email, or makes one when nobody has it, with no password asked for. Taking the settings out turns it off and keeps the links. An account made this way is recorded as joined (`person.added` with `method: 'federated'`, so `platform.person.joined`), and a person shows `source: 'federated'` (contract 1.28.0, migration `lifecycle_004_federated`). Admin says how each person signs in.
+- 699af61: Followers can't miss an event, and leavers can't be lost. Publishers take turns on a lock only the events login can touch, so seq order is commit order and a long transaction elsewhere no longer stalls followers. An audit entry, its domain event, and each inbox step are one transaction, and `recordAudit` sends an `Idempotency-Key`, so a retry keeps one entry (contract 1.15.0, migrations `013_one_write_each`, `014_forget_notes`). The events channels carry ids only and ignore anything else. A night identity can't give Activity's retention removes nothing. A leaver's team items that couldn't go back are retried. Leaving now and Delete now answer 503 when Activity can't be reached and carry on within five minutes, and a heir who can't sign in any more is passed over and admins told. Deletion also takes a leaver's note (`note` is in `PERSONAL_DETAIL_KEYS`), the notice that they asked to leave, their inbox notes and open items, and, in the registry, their name on upgrades (`GET /v1/people/{id}/data`, contract 1.36.0, migrations `022_followed_events`, `lifecycle_006_carry_on`). Entra's first sign-in no longer links an account holding a two-step role, and a flow that isn't whole is rebuilt. A removed app can't publish a frontend. Gateway refusals use an app's name, not its id. The service kit adds `followLeavers`, `readPersonLeft`, `readPersonDeleted`, `eventCursor`, `EVENT_CURSOR_TABLE_SQL` and `leaveNoticeKey`; the outbox keeps `refused_at` and `refused_why`. Followers keep their place past events they don't follow (`next`). No app has to change.
+- f3fa13d: People shows who is **Locked** after repeated wrong passwords (and an admin can unlock them), who is **Leaving** on a last day an admin set (the leaver flow then runs on its own once that day is over, and can be cancelled until then), and who is **Idle**. A person's dialog lists their account's facts: state, last sign-in, invite, lockout, when an idle sign-in is warned and turned off or why it never is, and their last day. Identity: `POST /admin/people/{id}/unlock`, `lastDay` on the leaver flow and `DELETE /admin/people/{id}/leave`, `locked`, `leaving` and `idle` on a person (contract 1.27.0), migration `lifecycle_003_locked_leaving`.
+- 7723745: Admin → Organisation's settings grow (ADR 0042): the organisation's logo (a PNG, served to sign-in pages without a sign-in), a sign-in notice shown as Keycloak's Terms and Conditions step with "ask everyone again", the languages offered and the default, and, for a deployment admin who just entered their password, two steps for everyone and how long leavers and Activity are kept. AUGUR's own services read the retention at `GET /v1/organisation/policy`. The realm job applies the notice, languages, two steps for everyone and the organisation's name to Keycloak; the sign-in pages show the name and logo kept in Admin.
+
+  Admin → Organisation shows and changes them: a Logo section (drop a PNG), Sign-in notice, Languages, and Security and retention, which says who can change it and asks for the password again when it's needed. Activity says what changed in words.
+
+- 832458f: AUGUR's services apply the smaller of a person's access and an app's scopes when an app acts for the person (contract 3, spec 8.5). The service kit's `identifyServiceCaller` tells a service who is calling, a service by its own token or an app acting for a person by the delegated caller the gateway signed, and `delegationRefusal` says in words when the delegation's scopes don't cover the call. Events (notifications, domain events, the Inbox), identity (people) and models (chat, to the app's own agent only) now take an app's call made for a person within the app's grant and the delegation's scopes, and refuse outside them naming the app, the scope and the person.
+
+### Patch Changes
+
+- 10d85b6: A half-built two-step sign-in flow is rebuilt rather than installed. Leaver, deletion and turn-off steps can be retried after a failed audit, a stale read can't turn a sign-in back on, unknown roles and departments are refused before anything is created, and moving a last day keeps the agreed note.
+- Updated dependencies [3e2ff05]
+- Updated dependencies [e2089a3]
+- Updated dependencies [656f2d1]
+- Updated dependencies [0e4e55f]
+- Updated dependencies [6c0abe4]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [f01d0c4]
+- Updated dependencies [832458f]
+- Updated dependencies [1ce4194]
+  - @augur/service-kit@0.18.0
+
 ## 1.5.1
 
 ### Patch Changes

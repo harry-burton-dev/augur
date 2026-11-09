@@ -1,5 +1,37 @@
 # @augur/updater
 
+## 0.10.0
+
+### Minor Changes
+
+- 1aa37dc: Installing an app on the app contract brings its frontend: the app runner checks the bundle's signature, pulls it by the digest the release names and gives it to the registry, which keeps it at `/apps/<id>/<version>/`, where the shell loads the app from. Previews get theirs the same way. The registry is on contract 1.42.0.
+- db7ec72: An app that asks for the internet (augur-outbound) reaches it only once a deployment admin allows it in Admin → Apps; then only its parts that ask for it do.
+- 73eed92: Each app on the app contract runs on a network of its own, which the gateway joins, and Postgres, the object store and the collector only for an app granted them; nothing on it reaches the internet.
+- ec63a74: An app's own settings (text, number, on or off, a choice, or a secret) are filled in by a deployment admin in Admin → Apps and reach its parts through augur-settings; a changed value starts again only the parts that read it.
+- 23117fe: Removing an app from the server takes its sign-in away at once and keeps its data, settings and floors for APP_DATA_GRACE_DAYS (30), then deletes them after a backup; installing it again before then keeps them. A deletion that fails waits longer each time, up to a day, and Admin shows why.
+- be9a894: The app runner runs app contract 3 releases: one container per Score part, `app-<id>-<part>-<slot>`, given only what its resources' provisioners hand it (the gateway, a database login, a bucket, scratch and files folders, telemetry, the floor graphs, settings), its secrets as files mounted as Compose secrets, its memory and CPU limits applied within the deployment's new ceilings, a read-only root with `/tmp`, and refused when its image runs as root. Job parts run to the end before the switch; every service part must answer `/healthz` on the new version. Only `APP_PUBLISHERS` says who may publish apps, and the runner tells the registry the deployment's own networks at start.
+
+### Patch Changes
+
+- c8584cd: The backup container runs the database's own image, with pgvector, so the restore test brings back apps' vector columns (Data Atlas's `atlas.entity_vectors`) instead of failing on them and stopping every upgrade. When an upgrade doesn't go ahead, the updater's log now says why.
+- bd8ff7e: The last of the machinery for apps that ship with AUGUR (ADR 0049) is gone, now that none does (ADR 0075). The release no longer takes apps' releases into AUGUR's images, the updater no longer restarts shipped apps or hands runner-installed apps over to AUGUR, and the registry no longer reads `PILLAR_APPS`: a platform or pillar app's kind is honoured when the app runner installed it from the signed feed. Registry API 1.36.1 marks `ships` and `pillar` deprecated; neither is ever set.
+- dfc36c1: The app runner keeps its record of previews through installs and undoes a failed switch fully. A tarball with a negative size is refused, ids that collide with platform secrets or jobs schemas are reserved, previews use their own jobs schema, and one refused outbox row no longer holds up the rest.
+- 683062a: Upgrades and backups hold up when things go wrong. The updater writes .env whole, refuses an upgrade on a nearly full disk or one whose settings would change what the server trusts, never goes back by itself past a breaking release once a part has restarted, and goes back after a restart partway through. Backups are readable by root alone and the gateway sees only their results; the off-server copy carries .env and secrets, encrypted, and refuses an empty or another server's dump; and the lost-server guide restores before anything is copied. Telemetry and Artifacts' rendition worker get networks of their own. Feed, promote, halt and Lockfile workflows refuse to run outside main or to leak their token, and a beta that fails its deploy test is listed halted.
+- 57b8fee: The updater no longer rolls back a release that moves a running part onto AUGUR's own image (Keycloak in 0.19.0). It used to pull that part before writing the new compose.yml, so it fetched the old image (Keycloak's own) and stopped with "The keycloak image pulled for … isn't the one the release names". Such a part is now pulled once the new compose.yml names AUGUR's image, and going back puts it on the old image again.
+- Updated dependencies [3e2ff05]
+- Updated dependencies [e2089a3]
+- Updated dependencies [656f2d1]
+- Updated dependencies [b2c7a81]
+- Updated dependencies [0e4e55f]
+- Updated dependencies [6c0abe4]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [f01d0c4]
+- Updated dependencies [832458f]
+- Updated dependencies [1ce4194]
+  - @augur/app-tools@0.5.0
+  - @augur/service-kit@0.18.0
+
 ## 0.9.5
 
 ### Patch Changes

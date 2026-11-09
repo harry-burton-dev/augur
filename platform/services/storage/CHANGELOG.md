@@ -1,5 +1,27 @@
 # @augur/storage
 
+## 0.6.0
+
+### Minor Changes
+
+- 23117fe: Removing an app from the server takes its sign-in away at once and keeps its data, settings and floors for APP_DATA_GRACE_DAYS (30), then deletes them after a backup; installing it again before then keeps them. A deletion that fails waits longer each time, up to a day, and Admin shows why.
+- 203eaaf: An app can't stop AUGUR starting or turn back its upgrade (ADR 0073). The storage job sets up the platform's own logins first and skips an app it can't set up, saying why, instead of failing; Compose no longer refuses the whole file over one app's missing secret. Each app's database login holds at most `APP_DATABASE_CONNECTIONS` (30) connections. The restore test passes or fails on AUGUR's own data; an app's schema that doesn't come back is listed under `appsNotRestored`, which Status shows (gateway API 1.9.0). The deploy test takes a backup and runs the restore test on every release.
+- 3c995b6: No app ships with AUGUR any more (ADR 0075): Artifacts, Explorer, Data Atlas and Mandate are taken out of the compose files, the release and the contract tests, to be redesigned under the app contract and installed from the app feed. Their data goes with them, after the upgrade's backup: the storage job takes away the schemas, logins and buckets of the apps in `RETIRED_APPS`, once on each server, keeping any that `APP_STORAGE` still names, and the registry's migration `023_retire_shipped_apps` forgets them. Their guides and settings are gone; docs/upgrade.md says what an admin can tidy up.
+
+### Patch Changes
+
+- Updated dependencies [3e2ff05]
+- Updated dependencies [e2089a3]
+- Updated dependencies [656f2d1]
+- Updated dependencies [0e4e55f]
+- Updated dependencies [6c0abe4]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [f01d0c4]
+- Updated dependencies [832458f]
+- Updated dependencies [1ce4194]
+  - @augur/service-kit@0.18.0
+
 ## 0.5.1
 
 ### Patch Changes

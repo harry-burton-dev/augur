@@ -1,5 +1,25 @@
 # @augur/models
 
+## 0.4.0
+
+### Minor Changes
+
+- 832458f: AUGUR's services apply the smaller of a person's access and an app's scopes when an app acts for the person (contract 3, spec 8.5). The service kit's `identifyServiceCaller` tells a service who is calling, a service by its own token or an app acting for a person by the delegated caller the gateway signed, and `delegationRefusal` says in words when the delegation's scopes don't cover the call. Events (notifications, domain events, the Inbox), identity (people) and models (chat, to the app's own agent only) now take an app's call made for a person within the app's grant and the delegation's scopes, and refuse outside them naming the app, the scope and the person.
+
+### Patch Changes
+
+- Updated dependencies [3e2ff05]
+- Updated dependencies [e2089a3]
+- Updated dependencies [656f2d1]
+- Updated dependencies [0e4e55f]
+- Updated dependencies [6c0abe4]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [f01d0c4]
+- Updated dependencies [832458f]
+- Updated dependencies [1ce4194]
+  - @augur/service-kit@0.18.0
+
 ## 0.3.9
 
 ### Patch Changes

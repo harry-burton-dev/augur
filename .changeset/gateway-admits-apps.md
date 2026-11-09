@@ -1,6 +1,0 @@
----
-"@augur/gateway": minor
-"@augur/registry": minor
----
-
-The gateway admits apps (contract 3, ADR 0075, spec section 8). An app's part signs in as itself at `POST /api/identity/v1/token` (a client-credentials grant, the only one passed on to the sign-in service) and its token, audience `platform-services` (`OIDC_SERVICE_AUDIENCE`), is accepted for an app the registry knows and has on, held to the scopes it is granted where the call is for, with a refusal that names the scope it lacks. A call the shell's host makes for an app (`x-augur-app`) gets a delegated caller: signed for the app's own client `app-<id>`, carrying the app and its scopes and lasting `APP_DELEGATION_SECONDS` (default 300), which the part sends back in `x-augur-delegation` on its own calls for the person and the gateway turns into a fresh caller for the target. Calls to apps' parts have brakes (`APP_CONNECT_TIMEOUT_MS` 5000, `APP_RESPONSE_TIMEOUT_MS` 60000, `APP_CONCURRENT_CALLS` 64) that answer 502, 504 and 503 in words naming the app and never hold AUGUR's own routes. The registry's `/v1/apps/:id/grants` now says the app's `name` and whether it is `on` where the call is for, and answers the gateway as well as the platform's services.

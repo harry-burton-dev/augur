@@ -1,5 +1,32 @@
 # @augur/events
 
+## 0.11.0
+
+### Minor Changes
+
+- 656f2d1: Leavers' accounts are deleted once the organisation's leaver retention has passed (ADR 0072). Identity checks every five minutes and, in an order it can resume, has Activity remove their personal values, forgets their preferences and teams, and deletes the Keycloak account; then it records `person.deleted`, which followers hear as `platform.person.deleted` (`PLATFORM_TOPICS.personDeleted`). A deployment admin who just entered their password can delete a leaver's account at once (`DELETE /v1/admin/people/{id}`). People shows when a leaver's account goes (contract 1.30.0, migration `lifecycle_005_deletion`).
+- 0e4e55f: AUGUR pushes each domain event to the inbound part of every app granted `events:subscribe` (contract 3, spec 8.6): `POST /augur/events` through the gateway, in order per app, with `Idempotency-Key: events-<seq>`, retried with a backoff from a second to ten minutes, passed over and recorded after a day. An app's own events and events on floors where it lacks the scope are not sent. The gateway now takes a platform service's token, but only to an app's part, signing the caller `augur:<service>` for the part to check (`isServiceCaller`, `serviceOfCaller`); the registry lists the apps granted a scope (`GET /v1/scopes/{scope}/apps`, platform services); events shows how each app is taking its events (`GET /v1/deliveries`, admins), which Admin → Apps shows, saying since when and why an app is stalled.
+- 699af61: Followers can't miss an event, and leavers can't be lost. Publishers take turns on a lock only the events login can touch, so seq order is commit order and a long transaction elsewhere no longer stalls followers. An audit entry, its domain event, and each inbox step are one transaction, and `recordAudit` sends an `Idempotency-Key`, so a retry keeps one entry (contract 1.15.0, migrations `013_one_write_each`, `014_forget_notes`). The events channels carry ids only and ignore anything else. A night identity can't give Activity's retention removes nothing. A leaver's team items that couldn't go back are retried. Leaving now and Delete now answer 503 when Activity can't be reached and carry on within five minutes, and a heir who can't sign in any more is passed over and admins told. Deletion also takes a leaver's note (`note` is in `PERSONAL_DETAIL_KEYS`), the notice that they asked to leave, their inbox notes and open items, and, in the registry, their name on upgrades (`GET /v1/people/{id}/data`, contract 1.36.0, migrations `022_followed_events`, `lifecycle_006_carry_on`). Entra's first sign-in no longer links an account holding a two-step role, and a flow that isn't whole is rebuilt. A removed app can't publish a frontend. Gateway refusals use an app's name, not its id. The service kit adds `followLeavers`, `readPersonLeft`, `readPersonDeleted`, `eventCursor`, `EVENT_CURSOR_TABLE_SQL` and `leaveNoticeKey`; the outbox keeps `refused_at` and `refused_why`. Followers keep their place past events they don't follow (`next`). No app has to change.
+- 832458f: AUGUR's services apply the smaller of a person's access and an app's scopes when an app acts for the person (contract 3, spec 8.5). The service kit's `identifyServiceCaller` tells a service who is calling, a service by its own token or an app acting for a person by the delegated caller the gateway signed, and `delegationRefusal` says in words when the delegation's scopes don't cover the call. Events (notifications, domain events, the Inbox), identity (people) and models (chat, to the app's own agent only) now take an app's call made for a person within the app's grant and the delegation's scopes, and refuse outside them naming the app, the scope and the person.
+- 1ce4194: Urgent news (ADR 0044 D3, PER-283). A notification can be `urgent`, from AUGUR's own services only (an app's is refused, 403). The Upgrade Centre marks a halted release and a go-back that didn't finish urgent, and offers a feature preview, `urgent-letterbox`: with it on, the shell opens urgent news in a see-through letterbox over the work, one at a time with the rest in its queue, and steps it back to the edge rule until someone opens it. Events contract 1.14.0.
+
+  Not breaking: `NewNotification.urgent` in `@augur/service-kit` is a new optional field, so existing callers build and send as before.
+
+### Patch Changes
+
+- c58df31: Domain-event streams end after a few minutes so the gateway checks the person again. Inbox actions are refused when the item changed since it was checked, overlapping email runs no longer send twice, and each published event is checked against the floor it names.
+- Updated dependencies [3e2ff05]
+- Updated dependencies [e2089a3]
+- Updated dependencies [656f2d1]
+- Updated dependencies [0e4e55f]
+- Updated dependencies [6c0abe4]
+- Updated dependencies [699af61]
+- Updated dependencies [dfc36c1]
+- Updated dependencies [f01d0c4]
+- Updated dependencies [832458f]
+- Updated dependencies [1ce4194]
+  - @augur/service-kit@0.18.0
+
 ## 0.10.1
 
 ### Patch Changes
