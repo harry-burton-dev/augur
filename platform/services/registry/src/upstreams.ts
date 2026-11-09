@@ -113,6 +113,40 @@ const ipProblem = (host: string): string | undefined => {
 };
 
 /**
+ * Why the registry won't read a release file from `url`, an address an admin pasted (spec 9.4); undefined
+ * when it will. Only https, and never AUGUR itself, this machine or the deployment's own networks: the
+ * address is one an admin typed, and the registry fetches it from inside.
+ */
+export const releaseAddressProblem = (url: string, own: OwnNetworks = { networks: [] }, platformUrl?: string): string | undefined => {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return `"${url}" isn’t an address. Paste the release file’s address, such as https://github.com/owner/repo/releases/download/app%2Fnotes%401.0.0/app-release.json.`;
+  }
+  if (parsed.protocol !== 'https:') return 'A release file is read only over https.';
+  if (parsed.username || parsed.password) return 'The address can’t carry a user name or password.';
+  const host = parsed.hostname.toLowerCase().replace(/\.+$/, '');
+  const inside = `The registry doesn’t read release files from ${host}: it is AUGUR itself, this machine or one of this deployment’s own networks.`;
+  if (PLATFORM_HOSTS.includes(host) || host.endsWith('.localhost') || !host.includes('.') || ipProblem(host)) return inside;
+  if (ownNetworkOf(host, own.setAt ? own.networks : [...own.networks, DOCKER_DEFAULT])) return inside;
+  if (platformUrl && URL.canParse(platformUrl) && new URL(platformUrl).hostname.toLowerCase() === host) return inside;
+  return undefined;
+};
+
+/**
+ * Why a resolved address (as DNS gives it: dotted IPv4, or IPv6 without brackets) is one the registry won't
+ * connect to for a pasted address: this machine, link-local, or one of the deployment's own networks.
+ */
+export const addressProblem = (address: string, own: OwnNetworks = { networks: [] }): string | undefined => {
+  // As URL writes it, which is what the checks read: ::ffff:127.0.0.1 becomes [::ffff:7f00:1].
+  const host = address.includes(':') && URL.canParse(`https://[${address}]`) ? new URL(`https://[${address}]`).hostname : address;
+  const why = `it points at ${address}, which is this machine or one of this deployment’s own networks`;
+  if (ipProblem(host) || ownNetworkOf(host, own.setAt ? own.networks : [...own.networks, DOCKER_DEFAULT])) return why;
+  return undefined;
+};
+
+/**
  * Why `url` can't be where an app's service is: plain http(s) to a host and port, nothing else, and not
  * on one of the deployment's own networks (`own`, from the runner). Undefined when it can.
  */

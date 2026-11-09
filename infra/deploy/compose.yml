@@ -486,6 +486,7 @@ services:
       PLATFORM_URL: ${PLATFORM_URL}
       ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
+      APP_FEEDS: ${APP_FEEDS:-}
       APP_FEED_URL: ${APP_FEED_URL:-}
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}

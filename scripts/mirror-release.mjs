@@ -8,7 +8,7 @@
 //               (needs this checkout to have the augur@<version> tag: git fetch --tags)
 //   node scripts/mirror-release.mjs apps --to <registry/path> [--feed <dir>] [--app <id>]...
 //               copies apps' releases (each app's newest few, stable and beta, never previews) to
-//               <registry/path>/apps/, and writes apps.json, which servers read through APP_FEED_URL
+//               <registry/path>/apps/, and writes apps.json, which servers read through APP_FEEDS
 // Each image is copied by digest with its signature (cosign copy), then checked against the workflow
 // that signed it from the mirror, so a server's updater can check it the same way. Either way the feed
 // folder also gets trusted_root.json, Sigstore's trust root, so a server with no network at all can
@@ -169,7 +169,7 @@ const mirrorApps = async ({ to, feedDir, only, cosign }) => {
   writeFileSync(feedFile, `${JSON.stringify(feed, null, 2)}\n`);
   console.log(`${feedFile} now lists ${feed.apps.map((f) => `${f.id} ${f.version}`).join(', ')}.`);
   writeTrustedRoot(feedDir, cosign);
-  console.log(`Mirrored apps. Servers: APP_FEED_URL pointing at apps.json (docs/mirror.md).`);
+  console.log(`Mirrored apps. Servers: APP_FEEDS pointing at apps.json (docs/mirror.md).`);
 };
 
 const main = async () => {

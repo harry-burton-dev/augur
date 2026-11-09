@@ -328,6 +328,8 @@ export interface AppStore {
   setAfterWatch(id: string, afterWatch: AfterWatch): Promise<boolean>;
   /** The app runner's latest jobs, newest first: one app's, or every app's. */
   appJobs(app?: string): Promise<AppJob[]>;
+  /** Every install job of `app` (no previews) that is under way or finished, newest first, however many there are. */
+  installJobs(app: string): Promise<AppJob[]>;
   /** The oldest job not yet finished, for the app runner to do next. */
   nextAppJob(): Promise<AppJob | undefined>;
   /** Records a job for the app runner; false when that app already has one waiting or under way. */
@@ -1038,6 +1040,14 @@ export class PgAppStore implements AppStore {
     const { rows } = await this.pool.query<AppJobRow>(
       'select * from registry.app_jobs where $1::text is null or app_id = $1 order by requested_at desc limit $2',
       [app ?? null, APP_JOBS_LISTED],
+    );
+    return rows.map(fromAppJobRow);
+  }
+
+  async installJobs(app: string) {
+    const { rows } = await this.pool.query<AppJobRow>(
+      "select * from registry.app_jobs where app_id = $1 and action = 'install' and pr is null and state in ('running', 'done') order by requested_at desc",
+      [app],
     );
     return rows.map(fromAppJobRow);
   }

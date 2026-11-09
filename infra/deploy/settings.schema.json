@@ -838,9 +838,18 @@
       ],
       "x-docs": "docs/upgrade.md#the-updates-page"
     },
+    "APP_FEEDS": {
+      "type": "string",
+      "description": "The feeds apps are installed from, each an https://, oci:// or file:/// address, split by commas or spaces; or off. Default: the feed AUGUR's releases come from, or none when RELEASE_FEED_URL is a mirror.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/upgrade.md#the-app-runner"
+    },
     "APP_FEED_URL": {
       "type": "string",
-      "description": "Where new versions of apps are listed, or off.",
+      "description": "The name APP_FEEDS had before contract 3, read only when APP_FEEDS isn't set.",
+      "deprecated": true,
       "x-services": [
         "registry"
       ],
