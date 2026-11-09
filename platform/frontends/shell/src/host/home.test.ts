@@ -1,4 +1,5 @@
 import { createEventBus, type AppManifestEntry, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { CURRENT_SDK } from '../current-sdk.js';
 import type { ShellNotification } from '@augur/shell-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { cardOf, cardsFor, needsFor, settingsOf, SurfaceMounter } from './home.js';
@@ -10,7 +11,7 @@ const app = (id: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntr
   route: `/${id}`,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
-  sdk: '^1.0.0 || ^2.0.0',
+  sdk: CURRENT_SDK,
   ...extra,
 });
 const card = (floor: 'personal' | 'team' | 'org', role?: 'member' | 'lead', module = './Card') => ({ floor, slot: 'card' as const, module, ...(role ? { role } : {}) });

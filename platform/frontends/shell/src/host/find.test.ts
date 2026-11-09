@@ -1,4 +1,5 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
+import { CURRENT_SDK } from '../current-sdk.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AppSearch, readAnswer, type FindUpdate } from './find.js';
 import { fromCatalogue3 } from './apps3.js';
@@ -9,7 +10,7 @@ const app = (id: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntr
   route: `/${id}`,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
-  sdk: '^1.0.0 || ^2.0.0',
+  sdk: CURRENT_SDK,
   search: true,
   ...extra,
 });

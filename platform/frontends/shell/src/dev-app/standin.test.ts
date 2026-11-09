@@ -1,8 +1,9 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
+import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it, vi } from 'vitest';
 import { DEV_EVENT, DEV_INBOX, devHome, devUser, standInFetch } from './standin.js';
 
-const app: AppManifestEntry = { id: 'hello', name: 'Hello', route: '/hello', entry: '/@fs/apps/hello/frontend/src/entry.ts', version: '0.0.0', sdk: '^1.0.0 || ^2.0.0', requiredRole: 'editor' };
+const app: AppManifestEntry = { id: 'hello', name: 'Hello', route: '/hello', entry: '/@fs/apps/hello/frontend/src/entry.ts', version: '0.0.0', sdk: CURRENT_SDK, requiredRole: 'editor' };
 
 describe('the stand-in platform', () => {
   it('signs in a person who has the role the app needs, and any extra', () => {
@@ -17,7 +18,7 @@ describe('the stand-in platform', () => {
   });
 
   it('lists the other apps it was given beside them', async () => {
-    const folio: AppManifestEntry = { id: 'folio', name: 'Folio', route: '/folio', entry: '/apps/folio/entry.js', version: '0.1.0', sdk: '^1.1.0 || ^2.0.0' };
+    const folio: AppManifestEntry = { id: 'folio', name: 'Folio', route: '/folio', entry: '/apps/folio/entry.js', version: '0.1.0', sdk: CURRENT_SDK };
     const res = await standInFetch(app, undefined, [folio, app])('/api/registry/v1/manifest');
     expect(await res.json()).toEqual([devHome, app, folio]);
   });
