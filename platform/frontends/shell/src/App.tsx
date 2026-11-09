@@ -590,7 +590,14 @@ export function Host({
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
-    mounter.current ??= new StageMounter(stage, importEntry, { navigate: (app, path) => navigate(hrefFor(app, path)) });
+    mounter.current ??= new StageMounter(stage, importEntry, {
+      navigate: (app, path) => navigate(hrefFor(app, path)),
+      // What the open app put under its places goes to the rail, kept by app so one never lands under another's.
+      onUnder: (id, under) => {
+        const shell = shellRef.current;
+        if (shell) shell.under = { ...shell.under, [id]: under };
+      },
+    });
     // On the way to another floor: the app comes off until that floor's catalogue says what's there.
     if (!manifest) {
       void mounter.current.unmount();
@@ -663,6 +670,8 @@ export function Host({
     if (!shell) return;
     shell.running = screen?.kind === 'app' ? [screen.app.id] : [];
     shell.page = screen?.kind === 'app' ? pageAt(screen.app, screen.path) : '';
+    // The thing marked under a place is the one chosen there, until the app moves somewhere else.
+    if (shell.path && (screen?.kind !== 'app' || screen.path !== shell.path)) shell.path = '';
   }, [screen]);
 
   // The band names the area the open page is in, and the tab says the page, app and floor.
@@ -899,6 +908,11 @@ export function Host({
       const entry = byId(app);
       if (entry) navigate(hrefFor(entry, id));
     };
+    const onPath = (e: Event) => {
+      const { app, path } = (e as CustomEvent<{ app: string; path: string }>).detail;
+      const entry = byId(app);
+      if (entry) navigate(hrefFor(entry, path));
+    };
     const onCloseApp = (e: Event) => {
       if (screen?.kind === 'app' && screen.app.id === (e as CustomEvent<{ id: string }>).detail.id) navigate('/');
     };
@@ -942,6 +956,7 @@ export function Host({
     shell.addEventListener('ui-floor', onFloor);
     shell.addEventListener('ui-home', onHome);
     shell.addEventListener('ui-page', onPage);
+    shell.addEventListener('ui-path', onPath);
     shell.addEventListener('ui-close-app', onCloseApp);
     shell.addEventListener('ui-pick', onPick);
     shell.addEventListener('ui-notification-action', onAction);
@@ -963,6 +978,7 @@ export function Host({
       shell.removeEventListener('ui-floor', onFloor);
       shell.removeEventListener('ui-home', onHome);
       shell.removeEventListener('ui-page', onPage);
+      shell.removeEventListener('ui-path', onPath);
       shell.removeEventListener('ui-close-app', onCloseApp);
       shell.removeEventListener('ui-pick', onPick);
     };

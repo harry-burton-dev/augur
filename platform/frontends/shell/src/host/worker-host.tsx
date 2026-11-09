@@ -55,6 +55,8 @@ export interface WorkerHostOptions {
   /** Makes the app's worker; the shell's bootstrap by default. Tests stand in for it. */
   createWorker?: (app: WorkerApp) => Worker;
   budgets?: Partial<Budgets>;
+  /** What the open app put under its places, by place id, each time it changes: for the rail. */
+  onUnder?: (app: string, under: Record<string, PlaceItem[]>) => void;
 }
 
 const defaultWorker = (app: WorkerApp) => new Worker(new URL('../sandbox/worker.ts', import.meta.url), { type: 'module', name: `app ${app.id}` });
@@ -601,7 +603,20 @@ export class WorkerMounter {
   }
 
   #session(app: WorkerApp, ctx: WorkerContext) {
-    return new AppSession(app, ctx, this.options.createWorker, this.options.budgets);
+    const session = new AppSession(app, ctx, this.options.createWorker, this.options.budgets);
+    const onUnder = this.options.onUnder;
+    if (onUnder) {
+      // A new run starts with nothing under its places; the rail hears each change after.
+      let last = session.state.under;
+      onUnder(app.id, {});
+      session.subscribe(() => {
+        const { under } = session.state;
+        if (under === last) return;
+        last = under;
+        onUnder(app.id, Object.fromEntries(under));
+      });
+    }
+    return session;
   }
 
   unmount() {

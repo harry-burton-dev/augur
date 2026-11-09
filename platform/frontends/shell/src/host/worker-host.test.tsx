@@ -349,6 +349,21 @@ describe('the worker host', () => {
     expect(under.get('notebooks')!.map((i) => i.label)).toEqual(['Work']);
   });
 
+  it('tells the rail what sits under each place, for the app it is', async () => {
+    let self!: Channel;
+    const seen: [string, Record<string, unknown[]>][] = [];
+    const stub = stubApp((app, method) => {
+      self = app;
+      if (method === 'start') app.mutate('screen', [notice('n1', 'Ready')]);
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker, onUnder: (id, under) => seen.push([id, under]) });
+    act(() => void mounter.mount(app, ctxFor()));
+    await flush();
+    self.post('frame.under', 'notebooks', [{ label: 'Work', path: '/notebooks/1' }]);
+    await flush();
+    expect(seen.at(-1)).toEqual(['notes', { notebooks: [{ label: 'Work', path: '/notebooks/1' }] }]);
+  });
+
   it('answers a stopping app nothing', async () => {
     let self!: Channel;
     const stub = stubApp((app, method) => {
@@ -441,10 +456,10 @@ describe('the frame round an app’s pane', () => {
     await flush();
     self().post('commands', ['note.pin']);
     await flush();
-    // What Quill's receiver draws for a marked item: the kind, the app's id and its name.
-    const thing = Object.assign(document.createElement('div'), { textContent: 'Shopping list' });
-    Object.assign(thing.dataset, { thing: 'note', thingId: 'n7', thingLabel: 'Shopping list' });
-    stage.querySelector('.aerie-frame-pane')!.append(thing);
+    // The app marks a list item as a note; Quill's receiver draws its kind, id and name on the row.
+    self().mutate('screen', [[0, '~', { id: 'l1', type: 1, element: 'quill-list', properties: { label: 'Notes', items: [{ id: 'n7', title: 'Shopping list', thing: { kind: 'note' } }] }, attributes: {}, eventListeners: {}, children: [] }, 1]]);
+    await flush();
+    const thing = stage.querySelector<HTMLElement>('[data-thing="note"]')!;
     act(() => void thing.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })));
     await flush();
     const pin = [...document.querySelectorAll('button, [role="menuitem"]')].find((b) => b.textContent?.includes('Pin note')) as HTMLElement;
