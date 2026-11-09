@@ -13,7 +13,8 @@
     "011_digests": "0fdd27773ffaa592",
     "012_urgent_notifications": "9929126422bfbecd",
     "013_one_write_each": "bc5a54d4d61ebdd2",
-    "014_forget_notes": "0cac794f806dba79"
+    "014_forget_notes": "0cac794f806dba79",
+    "015_deliveries": "829e243f80ba63e0"
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",

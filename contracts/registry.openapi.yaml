@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.38.0
+  version: 1.39.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -2406,6 +2406,51 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: Floors, or the sign-in service that checks the caller's token, can't be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /scopes/{scope}/apps:
+    get:
+      summary: The apps granted a scope (platform services)
+      description: Apps whose manifest asks for the scope and that an admin has granted it, each with whether an admin has it on. The events service asks for events:subscribe to know whose parts to push events to, and holds a turned-off app’s events for it. Since 1.39.
+      parameters:
+        - schema:
+            $ref: "#/components/schemas/Scope"
+          in: path
+          name: scope
+          required: true
+      responses:
+        "200":
+          description: The apps granted the scope, by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - app
+                    - name
+                    - enabled
+                  properties:
+                    app:
+                      type: string
+                    name:
+                      type: string
+                      description: What the app is called
+                    enabled:
+                      type: boolean
+                      description: Whether an admin has the app on
+                description: The apps granted the scope, by id
+        "403":
+          description: Not a platform service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service that checks the caller's token can't be reached right now
           content:
             application/problem+json:
               schema:
