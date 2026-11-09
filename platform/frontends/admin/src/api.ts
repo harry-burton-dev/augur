@@ -576,9 +576,12 @@ export interface AvailableApp {
   version: string;
   channel: AppChannel;
   notesUrl?: string;
-  signer: { repository: string; workflow: string };
-  /** What its release asks for, as the file carries it (contract 3, spec 9.4). */
-  asks: AppAsks;
+  /** The feed it is listed in, one of APP_FEEDS. */
+  feed?: string;
+  /** Missing for a release that can't install here, such as one on contract 2. */
+  signer?: { repository: string; workflow: string };
+  /** What its release asks for, as the file carries it (contract 3, spec 9.4); missing for one that can't install here. */
+  asks?: AppAsks;
   /** Why it can't open in this AUGUR. */
   problem?: string;
   job?: AppJob;

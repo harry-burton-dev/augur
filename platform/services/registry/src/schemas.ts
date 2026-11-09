@@ -117,6 +117,7 @@ export const CatalogueEntry = Type.Intersect(
     ref(AppManifestEntry),
     Type.Object({
       platform: Type.Boolean({ description: "One of AUGUR's own apps, always on" }),
+      contract: Type.Optional(Type.Integer({ description: 'The app contract major it is on; missing for one registered on contract 2' })),
       category: Type.Optional(Type.Enum([...APP_CATEGORIES], { description: 'The kind in force (ADR 0032)' })),
       categoryRefused: Type.Optional(
         Type.Object(

@@ -35,7 +35,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
 
   const ask = useCallback((app: string, version: string, i = latest.current) => {
     const offered = i?.available.find((a) => a.app === app && a.version === version);
-    if (offered) setConfirmInstall({ app, name: offered.name, version, notes: [...asksWords(offered.asks, scopeWords), ...(offered.problem ? [offered.problem] : [])] });
+    if (offered) setConfirmInstall({ app, name: offered.name, version, notes: [...(offered.asks ? asksWords(offered.asks, scopeWords) : []), ...(offered.problem ? [offered.problem] : [])] });
   }, []);
 
   /** Back from entering the password again (`?install=<app>@<version>` or `?uninstall=<app>`): ask once more. */
@@ -247,7 +247,7 @@ export function InstallsSection({ ins }: { ins: Installs }) {
       {!i.runnerSeenAt ? (
         <Status status="warning" label="No app runner has asked for work since the registry started, so nothing below can be installed yet. It’s the updater with APP_SECRETS_KEY set: see docs/upgrade.md, The app runner." />
       ) : null}
-      {i.problem ? <Status status="warning" label={`The app feed couldn’t be read: ${i.problem}`} /> : null}
+      {i.problem ? <Status status="warning" label={`Not every app release could be read. ${i.problem}`} /> : null}
       {busy.length ? (
         <Section label="Under way" limit={0}>
           {busy.map((a) => (
@@ -259,7 +259,7 @@ export function InstallsSection({ ins }: { ins: Installs }) {
       ) : null}
       <Section label="Install from releases" count={-1} limit={0}>
         {i.feed === 'off' ? (
-          <p className="admin-flat">This server doesn’t read app releases: APP_FEED_URL is off, or the release feed is a mirror.</p>
+          <p className="admin-flat">This server doesn’t read app releases: APP_FEEDS is off, or the release feed is a mirror and APP_FEEDS names none.</p>
         ) : (
           <>
             <div data-available>

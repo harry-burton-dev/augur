@@ -640,7 +640,8 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
     // Apps that register themselves run in the new shell only if it speaks their SDK.
     const sdk = target.parts['@augur/mfe-sdk']?.version;
     if (sdk) {
-      for (const { entry } of apps.filter((a) => a.enabled)) {
+      // Apps on the app contract name no SDK range: they open in any shell serving their contract (spec 11).
+      for (const { entry } of apps.filter((a) => a.enabled && !(a.entry as { manifest3?: unknown }).manifest3)) {
         if (!semver.satisfies(sdk, entry.sdk, { includePrerelease: true })) {
           needsYou.push({ kind: 'app', app: entry.id, message: `${entry.name} needs SDK ${entry.sdk}, and ${next.version} has ${sdk}: it won’t open until it’s rebuilt.` });
         }

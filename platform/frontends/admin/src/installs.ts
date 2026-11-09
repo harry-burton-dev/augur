@@ -46,7 +46,7 @@ export const featureHint = (preview: FeaturePreviews['previews'][number], floorN
     .join(' ');
 
 /** One resource a part asks for, in words (spec 4.6, 9.4). */
-const resourceWords = ({ type, params = {} }: AvailableApp['asks']['resources'][number]): string => {
+const resourceWords = ({ type, params = {} }: NonNullable<AvailableApp['asks']>['resources'][number]): string => {
   const list = (v: unknown) => (Array.isArray(v) ? listWords(v.map(String)) : '');
   switch (type) {
     case 'augur-gateway':
@@ -73,7 +73,7 @@ const resourceWords = ({ type, params = {} }: AvailableApp['asks']['resources'][
 };
 
 /** What a release asks to be allowed, in words: one line for its scopes, one per part, then the rest (spec 9.4). */
-export const asksWords = (asks: AvailableApp['asks'], scopeWords: (s: string[]) => string) => {
+export const asksWords = (asks: NonNullable<AvailableApp['asks']>, scopeWords: (s: string[]) => string) => {
   const parts = Object.keys(asks.limits);
   return [
     `May: ${scopeWords(asks.scopes)}`,

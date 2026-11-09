@@ -72,9 +72,9 @@ For each app it copies its newest 3 releases, stable or beta (never pull request
 Then point the registry at it in `infra/deploy/.env`, as for AUGUR's feed:
 
 ```sh
-APP_FEED_URL=https://mirror.example.org/augur/apps.json
+APP_FEEDS=https://mirror.example.org/augur/apps.json
 # or, kept on the server in infra/deploy/releases/:
-APP_FEED_URL=file:///run/augur/releases/apps.json
+APP_FEEDS=file:///run/augur/releases/apps.json
 ```
 
-Without `APP_FEED_URL`, a server whose `RELEASE_FEED_URL` is a mirror reads no app releases at all. Previews of pull requests aren't mirrored: they're for servers that can reach GitHub ([app-previews.md](app-previews.md)).
+Without `APP_FEEDS` (or `APP_FEED_URL`, its name before), a server whose `RELEASE_FEED_URL` is a mirror reads no app releases at all. Previews of pull requests aren't mirrored: they're for servers that can reach GitHub ([app-previews.md](app-previews.md)).
