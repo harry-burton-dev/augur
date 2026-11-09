@@ -125,6 +125,8 @@ export interface AppNetwork {
   join: PlatformPart[];
   /** The app's way out, for its parts that ask for augur-outbound once an admin allows it: not internal. */
   internet?: true;
+  /** On the way out: the services of the app's own versions whose parts ask for it (never a preview's), joined as they run. */
+  members?: string[];
 }
 
 /** What the runner does to the server. The real one drives Docker Compose (server.ts); tests use a fake. */
@@ -423,6 +425,17 @@ const previewUnitOf = (id: string, p: RunningPreview): Unit | undefined =>
       }
     : undefined;
 
+/**
+ * The services an admin's allowance gives the internet: the parts of the app's own versions that ask for it.
+ * Never a preview's: the admin agreed to what the installed release says it needs, not to a pull request's code.
+ */
+const internetServices = (state: RunnerState, app: string) => {
+  const { active, retiring } = state.apps[app] ?? {};
+  return [active, retiring].flatMap((r) =>
+    r?.parts ? r.parts.filter((p) => asksInternet(p) && partKind(p) !== 'job').map((p) => partService(app, p.metadata.name, r.slot)) : [],
+  );
+};
+
 /** Every version of an app on contract 3 the state names, by app: its active and retiring versions and its previews. */
 const unitsOf = (state: RunnerState): Unit[] => [
   ...Object.entries(state.apps).flatMap(([app, { active, retiring }]) => [active, retiring].flatMap((r) => (r && unitOf(app, r) ? [unitOf(app, r)!] : []))),
@@ -447,8 +460,10 @@ export const appNetworksOf = (state: RunnerState, env: string): AppNetwork[] => 
   }
   const order: PlatformPart[] = ['gateway', 'postgres', 'garage', 'otel-lgtm'];
   const out: AppNetwork[] = [...byApp].map(([app, join]) => ({ app, name: appNetwork(app), join: order.filter((p) => join.has(p)) }));
-  const outbound = new Set(unitsOf(state).filter((u) => u.parts.some(asksInternet)).map((u) => u.app));
-  for (const app of state.internet ?? []) if (outbound.has(app)) out.push({ app, name: internetNetwork(app), join: [], internet: true });
+  for (const app of state.internet ?? []) {
+    const members = internetServices(state, app);
+    if (members.length) out.push({ app, name: internetNetwork(app), join: [], internet: true, members });
+  }
   return out;
 };
 
@@ -462,8 +477,8 @@ export const appsProject = (state: RunnerState, env: string, network = DEFAULT_N
   const volumes: Record<string, object> = {};
   const secrets: Record<string, object> = {};
   const files: Record<string, string | Uint8Array> = {};
-  const add = (unit: Unit) => {
-    const r = renderUnit({ ...unit, internet: state.internet?.includes(unit.app) ?? false }, env);
+  const add = (unit: Unit, preview = false) => {
+    const r = renderUnit({ ...unit, internet: !preview && (state.internet?.includes(unit.app) ?? false) }, env);
     Object.assign(services, r.services);
     Object.assign(volumes, r.volumes);
     Object.assign(secrets, r.secrets);
@@ -479,7 +494,7 @@ export const appsProject = (state: RunnerState, env: string, network = DEFAULT_N
   }
   for (const [id, p] of Object.entries(state.previews ?? {})) {
     const unit = previewUnitOf(id, p);
-    if (unit) add(unit);
+    if (unit) add(unit, true);
     else if (p.image)
       services[`app-${id}`] = legacyContainer(p.image, `app-${id}`, {
         'augur.app': p.app,
@@ -576,27 +591,17 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
   };
   /**
    * Gives the internet to the apps a deployment admin allowed (the registry's list), and takes it from the
-   * others: their parts that ask for augur-outbound start again on, or off, the app's way out. Says which
-   * apps it turned on and off; nothing when nothing changed.
+   * others (spec 4.6, 10.4): the project names the way out for their parts that ask, and the running parts are
+   * joined to it or taken off it as they run, with no restart. keepNetworks makes it so again every turn, so a
+   * step that fails here is put right. Says which apps it turned on and off.
    */
   const keepInternet = async (allowed: string[]) => {
     const state = await host.readState();
-    const has = (app: string) => Boolean(state.apps[app]) || Object.values(state.previews ?? {}).some((p) => p.app === app);
     const was = new Set(state.internet ?? []);
-    const now = new Set(allowed.filter(has));
+    const now = new Set(allowed.filter((app) => Boolean(state.apps[app])));
     const on = [...now].filter((a) => !was.has(a)).sort();
     const off = [...was].filter((a) => !now.has(a)).sort();
-    if (!on.length && !off.length) return { on, off };
-    const env = await host.readEnv();
-    const next: RunnerState = { ...state, internet: [...now].sort() };
-    await save(next, env);
-    const changed = new Set([...on, ...off]);
-    const services = unitsOf(next)
-      .filter((u) => changed.has(u.app))
-      .flatMap((u) => u.parts.filter((p) => asksInternet(p) && partKind(p) !== 'job').map((p) => partService(u.app, p.metadata.name, u.slot)));
-    // The way out must be there before a part starts on it.
-    if (on.length) await host.appNetworks(appNetworksOf(next, env));
-    if (services.length) await host.start(services);
+    if (on.length || off.length) await save({ ...state, internet: [...now].sort() }, await host.readEnv());
     return { on, off };
   };
   /** Joins the gateway and stores to the apps' networks again: an upgrade of AUGUR gives them new containers, which aren't on them. */

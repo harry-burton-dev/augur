@@ -210,10 +210,11 @@ export function useInstalls(api: AdminApi, then: () => void) {
           heading={confirmInternet.internet.allowed ? `Take the internet from ${confirmInternet.name}?` : `Let ${confirmInternet.name} reach the internet?`}
           summary={
             confirmInternet.internet.allowed
-              ? 'Its parts that ask for it start again without it, within half a minute. What they fetch from outside stops.'
-              : `Its parts that ask for it start again able to reach any host on the internet, within half a minute: ${internetWords(confirmInternet.internet)}`
+              ? 'Its parts that ask for it lose it within a minute, without restarting. What they fetch from outside stops.'
+              : `Its parts that ask for it can reach any host on the internet within a minute, without restarting; its previews never can. ${internetWords(confirmInternet.internet)}`
           }
           actionLabel={confirmInternet.internet.allowed ? 'Turn it off' : 'Allow it'}
+          danger={!confirmInternet.internet.allowed}
           busyLabel="Asking…"
           cancelLabel="Not now"
           onSubmit={() => stepUp(() => api.setInternet(confirmInternet.app, !confirmInternet.internet!.allowed), `internet=${encodeURIComponent(confirmInternet.app)}`)}
@@ -286,7 +287,7 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
               : `Asks to reach the internet, which is off until a deployment admin allows it: ${internetWords(installed.internet)}`}
           </p>
           <div>
-            <Button kind="tertiary" size="sm" onPress={() => ins.internet(installed)}>
+            <Button kind="tertiary" size="sm" disabled={open} reason={WAIT} onPress={() => ins.internet(installed)}>
               {installed.internet.allowed ? 'Take the internet away' : 'Allow the internet'}
             </Button>
           </div>

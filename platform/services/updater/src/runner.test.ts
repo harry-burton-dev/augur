@@ -872,8 +872,9 @@ describe('settings and previews', () => {
     // The example's worker asks for augur-outbound; web doesn't.
     expect(t.project()!.services['app-notes-worker-blue']!.networks).toEqual(['app-notes', 'app-notes_internet']);
     expect(t.project()!.services['app-notes-web-blue']!.networks).toEqual(['app-notes']);
-    expect(t.networks()).toContainEqual({ app: 'notes', name: 'app-notes_internet', join: [], internet: true });
-    expect(t.did).toEqual(['start app-notes-worker-blue']);
+    expect(t.networks()).toContainEqual({ app: 'notes', name: 'app-notes_internet', join: [], internet: true, members: ['app-notes-worker-blue'] });
+    // Joined as it runs: nothing restarts.
+    expect(t.did).toEqual([]);
     // Nothing changed, nothing done.
     t.did.length = 0;
     expect(await t.runner.keepInternet(['notes'])).toEqual({ on: [], off: [] });
@@ -884,6 +885,11 @@ describe('settings and previews', () => {
     expect(await t.runner.keepInternet([])).toEqual({ on: [], off: ['notes'] });
     expect(t.project()!.services['app-notes-worker-green']!.networks).toEqual(['app-notes']);
     expect(t.networks().some((n) => n.internet)).toBe(false);
+    // A preview never gets it: the admin agreed to the installed release, not to a pull request's code.
+    const r = release('1.1.0-pr.12.1', 'd');
+    const withPreview: RunnerState = { ...t.state(), internet: ['notes'], previews: { 'notes-pr12': { app: 'notes', pr: 12, version: r.version, parts: r.parts, manifest: r.manifest } } };
+    expect(appsProject(withPreview, ENV).project.services['app-notes-worker-pr12']!.networks).toEqual(['app-notes']);
+    expect(appNetworksOf(withPreview, ENV).find((n) => n.internet)?.members).toEqual(['app-notes-worker-green', 'app-notes-worker-blue']);
   });
 
   it('keeps containers from before contract 3 on the platform’s network, unless APPS_NETWORK names one', () => {

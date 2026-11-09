@@ -3172,7 +3172,7 @@ paths:
   /app-runner/apps/{id}/internet:
     put:
       summary: Let an installed app reach the internet, or take that away (deployment admins only)
-      description: "Only its parts that ask for augur-outbound reach it, and any host on it: the hosts they name are what they say they need, not a limit. The app runner joins them to it, or takes them off it, within half a minute. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Audited as app.internet-set."
+      description: "Only its parts that ask for augur-outbound reach it, and any host on it: the hosts they name are what they say they need, not a limit; never a preview. The app runner joins them to it, or takes them off it, within a minute. Removing the app from the server takes it away. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Audited as app.internet-set."
       requestBody:
         required: true
         content:

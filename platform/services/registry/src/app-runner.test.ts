@@ -171,6 +171,12 @@ describe.runIf(DATABASE_URL)('internet for an app that asks for it (spec 4.6, 10
     expect((await allow(false)).statusCode).toBe(200);
     expect((await said()).json()).toEqual({ apps: [] });
     expect(entries.filter((e) => e.action === 'app.internet-set')).toHaveLength(2);
+    // Removed from the server, it gives the internet up: installed again, an admin decides again.
+    await allow(true);
+    const removing = (await ask({ action: 'remove', app: r.id })).json();
+    await server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner });
+    await server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${removing.id}/progress`, headers: runner, payload: { step: 'remove', state: 'done', outcome: 'done' } });
+    expect((await said()).json()).toEqual({ apps: [] });
     // Not for an app that isn't installed.
     expect((await server.inject({ method: 'PUT', url: '/v1/app-runner/apps/nothing/internet', headers: fresh(), payload: { allowed: true } })).statusCode).toBe(404);
   });

@@ -12,6 +12,8 @@ import { parseRef, pullArtifactLayer, type ArtifactAuth } from './oci.ts';
 import { partsFor } from './parts.ts';
 import type { AppHost, PlatformPart, RunnerState } from './runner.ts';
 
+/** The apps' Compose project, as the runner runs it. */
+const APPS_PROJECT = 'augur-apps';
 /** The label the runner marks the apps' own networks with: `augur.network=app`. */
 const APP_NETWORK_LABEL = 'augur.network';
 /** A command's output, one entry a line. */
@@ -505,6 +507,16 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
           // The runner sees parts' health on the app's own network; its way out is the parts' alone.
           const joins: [string, string[]][] = want.internet ? [] : [[self, []]];
           for (const part of want.join) for (const id of await containersOf(part)) joins.push([id, ['--alias', part]]);
+          if (want.internet) {
+            // The parts it's for, as they run: joined without a restart, and anything else on it taken off.
+            const members = new Set<string>();
+            for (const service of want.members ?? [])
+              for (const id of lines(await docker(['ps', '--no-trunc', '--filter', `label=com.docker.compose.project=${APPS_PROJECT}`, '--filter', `label=com.docker.compose.service=${service}`, '--format', '{{.ID}}']))) {
+                members.add(id);
+                joins.push([id, []]);
+              }
+            for (const id of on) if (!members.has(id)) await attempt(`taking a container off ${want.name}`, () => docker(['network', 'disconnect', '--force', want.name, id]));
+          }
           for (const [id, alias] of joins)
             if (!on.has(id))
               await attempt(`joining ${alias[1] ?? 'the app runner'} to ${want.name}`, async () => {

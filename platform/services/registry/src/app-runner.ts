@@ -602,8 +602,9 @@ export const appRunnerRoutes =
           summary: 'Let an installed app reach the internet, or take that away (deployment admins only)',
           description: [
             'Only its parts that ask for augur-outbound reach it, and any host on it: the hosts they name are',
-            'what they say they need, not a limit. The app runner joins them to it, or takes them off it,',
-            'within half a minute. Needs a deployment admin who entered their password in the last 10 minutes,',
+            'what they say they need, not a limit; never a preview. The app runner joins them to it, or takes',
+            'them off it, within a minute. Removing the app from the server takes it away. Needs a deployment',
+            'admin who entered their password in the last 10 minutes,',
             'or it answers 401 sign_in_again. Audited as app.internet-set.',
           ].join(' '),
           params: appParams,
@@ -982,6 +983,11 @@ export const appRunnerRoutes =
             target: job.app,
             detail: { requestedBy: job.requestedBy, ...(job.pr !== undefined ? { pr: job.pr } : {}), ...(job.release ? { version: job.release.version } : {}), ...(message ? { message } : {}) },
           });
+        }
+        // Removed from the server, it gives up the internet: installed again, an admin decides again (spec 10.4).
+        if (outcome === 'done' && job.action === 'remove' && (await store.internetAllowed()).some((a) => a.app === job.app)) {
+          await store.setInternet(job.app, null);
+          await record(req, { actor: { id: RUNNER, kind: 'service' }, app: 'registry', action: 'app.internet-set', target: job.app, detail: { allowed: false, because: 'removed from the server' } });
         }
         return job;
       },
