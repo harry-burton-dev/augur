@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { appReleasesToMirror, asMirrored, augurHaltOf, destinations, mirroredAppRelease, withAppReleases, withHalt, withRelease } from './mirror-release.mjs';
+import { appCopies, appReleasesToMirror, asMirrored, augurHaltOf, destinations, mirroredAppRelease, withAppReleases, withHalt, withRelease } from './mirror-release.mjs';
 
 const manifest = (version, more = {}) => ({ version, channel: 'beta', parts: {}, ...more });
 
@@ -40,6 +40,17 @@ test('apps are mirrored a few releases each, never previews or drafts', () => {
   ]);
   assert.deepEqual(chosen.map((c) => `${c.app} ${c.version}`), ['notes 1.2.0-beta.1', 'notes 1.1.0', 'notes 1.0.0', 'tasks 2.0.0']);
   assert.deepEqual(appReleasesToMirror([gh('app/notes@1.0.0'), gh('app/tasks@2.0.0')], ['tasks']).map((c) => c.app), ['tasks']);
+});
+
+test('a contract 3 release has each part’s image named in the mirror, by the same digest', () => {
+  const d = (c) => `sha256:${c.repeat(64)}`;
+  const part = (name, c) => ({ apiVersion: 'score.dev/v1b1', metadata: { name }, containers: { main: { image: `ghcr.io/o/r/apps/notes-${name}@${d(c)}` } } });
+  const file = { schema: 'augur.app-release/v2', id: 'notes', version: '1.0.0', parts: [part('api', 'a'), part('worker', 'b')], frontend: { artifact: `ghcr.io/o/r/apps/notes-frontend@${d('c')}`, digest: d('e') } };
+  const mirrored = mirroredAppRelease(file, 'registry.example.org/augur');
+  assert.deepEqual(mirrored.parts.map((p) => p.containers.main.image), [`registry.example.org/augur/apps/notes-api@${d('a')}`, `registry.example.org/augur/apps/notes-worker@${d('b')}`]);
+  assert.equal(mirrored.service, undefined);
+  assert.equal(mirrored.parts[0].metadata.name, 'api');
+  assert.deepEqual(appCopies(file, mirrored).map(([from]) => from), [file.parts[0].containers.main.image, file.parts[1].containers.main.image, file.frontend.artifact]);
 });
 
 test('a mirrored app release names its parts in the mirror, by the same digest', () => {

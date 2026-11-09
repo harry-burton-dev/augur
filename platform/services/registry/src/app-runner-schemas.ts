@@ -84,6 +84,16 @@ export const AppInstalls = Type.Object(
       Type.Boolean({ description: "Whether pull requests' builds run beside apps for their developers: always on a preview server, with ALLOW_PR_PREVIEWS=on on a production one" }),
     ),
     channelNote: Type.Optional(Type.String({ description: 'Why apps here follow stable only, on a production server' })),
+    defaultApps: Type.Optional(
+      Type.Array(
+        Type.Object({
+          app: Type.String(),
+          state: Type.Union([Type.Literal('installed'), Type.Literal('asked'), Type.Literal('waiting')], { description: 'installed; asked for once (its job says how that went); or waiting, and why' }),
+          problem: Type.Optional(Type.String({ description: 'Why it isn’t installed yet' })),
+        }),
+        { description: 'The deployment’s default apps (DEFAULT_APPS, spec 9.7), installed from the feed on their first chance' },
+      ),
+    ),
     dataGraceDays: Type.Optional(Type.Integer({ description: 'How long an app removed from the server keeps its data, in days (APP_DATA_GRACE_DAYS)' })),
     removed: Type.Optional(
       Type.Array(
@@ -104,6 +114,7 @@ export const AppInstalls = Type.Object(
         name: Type.String(),
         version: Type.String(),
         installedAt: dateTime(),
+        default: Type.Optional(Type.Boolean({ description: 'One of the deployment’s default apps (DEFAULT_APPS): its asks were agreed by the deployment, and it can’t be removed while named' })),
         channel: Type.Enum(CHANNELS),
         policy: Type.Enum(POLICIES),
         update: Type.Optional(

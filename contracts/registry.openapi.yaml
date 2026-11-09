@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.46.0
+  version: 1.47.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -79,6 +79,32 @@ components:
         channelNote:
           type: string
           description: Why apps here follow stable only, on a production server
+        defaultApps:
+          type: array
+          items:
+            type: object
+            required:
+              - app
+              - state
+            properties:
+              app:
+                type: string
+              state:
+                anyOf:
+                  - type: string
+                    enum:
+                      - installed
+                  - type: string
+                    enum:
+                      - asked
+                  - type: string
+                    enum:
+                      - waiting
+                description: installed; asked for once (its job says how that went); or waiting, and why
+              problem:
+                type: string
+                description: Why it isn’t installed yet
+          description: The deployment’s default apps (DEFAULT_APPS, spec 9.7), installed from the feed on their first chance
         dataGraceDays:
           type: integer
           description: How long an app removed from the server keeps its data, in days (APP_DATA_GRACE_DAYS)
@@ -131,6 +157,9 @@ components:
               installedAt:
                 type: string
                 format: date-time
+              default:
+                type: boolean
+                description: "One of the deployment’s default apps (DEFAULT_APPS): its asks were agreed by the deployment, and it can’t be removed while named"
               channel:
                 enum:
                   - stable
@@ -3668,7 +3697,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "409":
-          description: Its publisher halted that release, or it already has a job waiting or under way
+          description: Its publisher halted that release, it already has a job waiting or under way, or it is a default app (DEFAULT_APPS), which can’t be removed
           content:
             application/problem+json:
               schema:

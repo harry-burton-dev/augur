@@ -20,6 +20,7 @@ import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.t
 import { ReviewSchema, reviewOf } from './apps3.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
+import { defaultRemoveProblem, defaultsPlan } from './defaults.ts';
 import { asText, declaredSettings, KEEP_REMOVED_MS, missingMessage, missingRequired, settingValueProblem, settingsView, SettingValueBody, type DeclaredSetting } from './settings.ts';
 
 
@@ -132,6 +133,8 @@ export interface AppRunnerRouteOptions {
   platformUrl?: string;
   /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS). */
   dataGraceDays?: number;
+  /** The apps this deployment installs by default (DEFAULT_APPS, spec 9.7). */
+  defaultApps?: string[];
 }
 
 /** The largest release file the registry reads from a pasted address. */
@@ -146,7 +149,7 @@ const RELEASE_SCHEMA = /^augur\.app-release\/v\d+$/;
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = releaseFileFetch({ bytes: RELEASE_FILE_BYTES, ms: RELEASE_FILE_MS }), platformUrl, dataGraceDays = DATA_GRACE_DAYS }: AppRunnerRouteOptions) =>
+  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = releaseFileFetch({ bytes: RELEASE_FILE_BYTES, ms: RELEASE_FILE_MS }), platformUrl, dataGraceDays = DATA_GRACE_DAYS, defaultApps = [] }: AppRunnerRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** When the runner last asked what to do; it lives only as long as this process. */
@@ -231,7 +234,32 @@ export const appRunnerRoutes =
         }
       }
     };
+    /** Where each default app stands, and what to install now (spec 9.7). */
+    const defaultsNow = async () => {
+      const [installed, asked, values] = await Promise.all([store.installedApps(), store.defaultAppsAsked(), store.settingValues()]);
+      return defaultsPlan({
+        defaults: defaultApps,
+        releases: updates.result.releases,
+        installed: installed.map((i) => i.app),
+        asked,
+        problemOf: (release, listed) => releaseProblem(release) ?? ringProblem(release, ring, listed),
+        hasValue: (id, setting) => values.some((v) => v.app === id && v.setting === setting && !v.removedAt),
+        feedUsable: !feedHeld(updates.result, now()),
+      });
+    };
+
+    /** Installs each default app not yet asked for, its asks agreed by the deployment rather than an admin (spec 9.7). */
+    const installDefaults = async () => {
+      if (!defaultApps.length) return;
+      for (const { app: id, release } of (await defaultsNow()).install) {
+        if (!(await store.markDefaultAsked(id, release.version))) continue;
+        if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'install', release, requestedBy: 'deployment' }))) continue;
+        await byRegistry('app.install-requested', id, { version: release.version, default: true, agreedBy: 'this deployment' });
+      }
+    };
+
     updates.onChecked(async () => {
+      await installDefaults();
       await autoUpdate();
       await syncPreviews();
     });
@@ -304,6 +332,7 @@ export const appRunnerRoutes =
         previewsAllowed: allowPrPreviews,
         ...(takesPreview(ring) ? {} : { channelNote: PRODUCTION_ONLY }),
         dataGraceDays,
+        ...(defaultApps.length ? { defaultApps: (await defaultsNow()).states } : {}),
         removed: deletions
           .filter((d) => !installed.some((i) => i.app === d.app))
           .map((d) => ({
@@ -322,9 +351,10 @@ export const appRunnerRoutes =
             name: release.manifest.name,
             version: release.version,
             installedAt,
+            ...(defaultApps.includes(id) ? { default: true } : {}),
             ...follow,
             ...(newest?.release && semver.gt(newest.version, release.version)
-              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2)], ...(releaseProblem(newest.release) ? {} : { review: reviewOf(newest.release) }), changes: changesIn(newest.release.notes ?? '', id) } }
+              ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2, undefined, { name: (release as AppRelease).manifest.name, version: (release as AppRelease).version })], ...(releaseProblem(newest.release) ? {} : { review: reviewOf(newest.release) }), changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
             ...internetOf(release, internet.find((x) => x.app === id)),
@@ -893,13 +923,15 @@ export const appRunnerRoutes =
             401: signInAgain,
             403: notDeploymentAdmin,
             404: refused('The app feed has no release file for that app and version'),
-            409: refused('Its publisher halted that release, or it already has a job waiting or under way'),
+            409: refused('Its publisher halted that release, it already has a job waiting or under way, or it is a default app (DEFAULT_APPS), which can’t be removed'),
           },
         },
       },
       async (req, reply) => {
         const caller = deploymentAdmin(req, reply, req.body.action === 'remove' ? 'remove an app from the server' : 'install an app or change its version');
         if (!caller) return reply;
+        // A default app stays while the deployment names it (ADR 0075 "pillar").
+        if (req.body.action === 'remove' && defaultApps.includes(req.body.app)) return reply.code(409).send({ error: 'conflict', message: defaultRemoveProblem(req.body.app) });
         if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install or remove an app. It’s asked for anything this drastic.' });
         }

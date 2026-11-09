@@ -1,5 +1,6 @@
 import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
+import { parseDefaultApps } from './defaults.ts';
 import { appFeed, appFeeds, appFeedUrls, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
@@ -41,6 +42,7 @@ loadConfigOrExit('registry', [
   { name: 'FEED_SIGNER', about: 'who must sign the release feed, for a fork (default: this repository’s Release feed workflow).' },
   { name: 'FRONTENDS_BUCKET_SECRET', about: 'the registry’s key to the bucket apps’ frontends are kept in by version.', secret: true },
   { name: 'FRONTENDS_S3_URL', about: 'where that bucket is.' },
+  { name: 'DEFAULT_APPS', about: 'the apps this deployment installs from the feed by default, by id, split by commas or spaces: their asks are agreed by the deployment, and they can’t be removed while named (optional).' },
   { name: 'APP_DATA_GRACE_DAYS', about: 'how many days an app removed from the server keeps its data, settings and grants before they go (default 30, from 1 to 365).' },
   { name: 'ALERT_WEBHOOK_TOKEN', about: 'what the deployment’s Grafana sends with its alerts, so they reach deployment admins as notices (ADR 0059).', secret: true },
 ]);
@@ -80,6 +82,8 @@ const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 
 // How long a removed app's data is kept, in case it's installed again.
 const dataGraceDays = process.env.APP_DATA_GRACE_DAYS ? Number(process.env.APP_DATA_GRACE_DAYS) : undefined;
 if (dataGraceDays !== undefined && (!Number.isInteger(dataGraceDays) || dataGraceDays < 1 || dataGraceDays > 365)) throw new Error('APP_DATA_GRACE_DAYS is a whole number of days from 1 to 365 (30 when empty).');
+const defaults = parseDefaultApps(process.env.DEFAULT_APPS);
+if (defaults.problems.length) throw new Error(defaults.problems.join(' '));
 // The publisher's feed is signed by its Release feed workflow (ADR 0017); FEED_SIGNER names another
 // signer, for a fork. Checked offline when the deployment has Sigstore's trust root (docs/mirror.md).
 const signer = process.env.FEED_SIGNER || feedSigner(repoOfFeed(feedUrl) ?? repoOfFeed(DEFAULT_OCI_FEED_URL)!);
@@ -125,7 +129,7 @@ const frontendFiles = frontendFilesFromEnv();
 if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ frontends are served from where their manifests say, not kept by version.');
 
 // Apps and platform services sign in as themselves (their Keycloak clients).
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, defaultApps: defaults.apps, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
 await app.listen({ port, host: '0.0.0.0' });
 
 // A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.

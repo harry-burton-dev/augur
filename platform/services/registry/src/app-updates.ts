@@ -71,7 +71,7 @@ const isOldRelease = (x: unknown): x is OldRelease => {
   const r = x as Partial<OldRelease> | null;
   return !!r && typeof r === 'object' && r.schema === 'augur.app-release/v1' && typeof r.id === 'string' && TAG.test(`app/${r.id}@x`) && typeof r.version === 'string' && semver.valid(r.version) !== null;
 };
-const refusedOld = (r: OldRelease) => ({ refused: contractMessage(2), ...(typeof r.manifest?.name === 'string' ? { name: r.manifest.name } : {}) });
+const refusedOld = (r: OldRelease) => ({ refused: contractMessage(2, undefined, { name: r.manifest?.name, version: r.version }), ...(typeof r.manifest?.name === 'string' ? { name: r.manifest.name } : {}) });
 
 /**
  * Reads app releases from `url`: GitHub's releases API (the `app/<id>@<version>` ones, with their

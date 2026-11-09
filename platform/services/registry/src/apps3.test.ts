@@ -178,7 +178,7 @@ describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', ()
   });
 
   it('says why a file can’t install: on contract 2, not a release file, or not there', async () => {
-    expect((await read('https://apps.example.org/old/app-release.json')).json()).toMatchObject({ refusals: ['This release is on contract 2; this AUGUR serves 3.'] });
+    expect((await read('https://apps.example.org/old/app-release.json')).json()).toMatchObject({ refusals: ['Old 1.0.0 speaks contract 2, and this AUGUR serves 3; the app needs a release on contract 3.'] });
     expect((await read('https://apps.example.org/page')).json().message).toBe('https://apps.example.org/page isn’t a release file: it isn’t JSON.');
     expect((await read('https://apps.example.org/gone')).json().message).toBe('https://apps.example.org/gone couldn’t be read: it answered 404.');
     // Any other JSON isn't echoed back: the route reads release files and nothing else.
