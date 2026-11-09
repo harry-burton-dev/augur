@@ -48,8 +48,6 @@ COPY --from=build /out .
 # This release's deploy files: the updater of the release before writes them onto the server when it
 # upgrades to this one, and this updater compares the server's with them (platform/services/updater).
 COPY infra/deploy /augur/deploy
-# Which repositories publish the apps that live in their own (ADR 0047): the runner trusts each for its app.
-COPY release/app-repos.json /augur/app-repos.json
 ENV NODE_ENV=production
 USER node
 CMD ["node", "dist/index.js"]

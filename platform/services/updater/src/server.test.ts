@@ -2,7 +2,7 @@ import { chmod, mkdtemp, open, readdir, readFile, rm, stat, writeFile } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { verifyArgs, writeSettings } from './server.ts';
+import { composeAppHost, runToEnd, verifyArgs, writeSettings } from './server.ts';
 
 describe('signature checks', () => {
   it('check against Sigstore online, or offline against a mirrored trust root', () => {
@@ -121,5 +121,34 @@ describe('writing .env', () => {
     });
     await expect(write).rejects.toThrow(/\.env\.before-upgrade holds it as it was: copy it over \.env/);
     expect(await readFile(join(dir, '.env.before-upgrade'), 'utf8')).toBe('PLATFORM_VERSION=0.2.0\n');
+  });
+});
+
+describe('the apps’ project folder', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'updater-apps-'));
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  it('writes each part’s files readable inside its container, keeps settings files private, and drops files no version names', async () => {
+    const host = composeAppHost({ dir, dockerHost: 'tcp://nowhere:2375', dockerConfig: dir, signer: { identity: 'i', issuer: 'x' } });
+    await host.writeProject({ apps: {} }, { name: 'augur-apps' }, { 'files/app-notes-web-blue/0': 'secret', 'files/app-notes-web-green/0': 'old', 'app-notes-blue.env': 'A=1\n' });
+    expect(await readFile(join(dir, 'apps/files/app-notes-web-blue/0'), 'utf8')).toBe('secret');
+    expect((await stat(join(dir, 'apps/files/app-notes-web-blue/0'))).mode & 0o777).toBe(0o444);
+    expect((await stat(join(dir, 'apps/app-notes-blue.env'))).mode & 0o777).toBe(0o600);
+    expect((await stat(join(dir, 'apps'))).mode & 0o777).toBe(0o700);
+    expect(await readFile(join(dir, 'apps/compose.yml'), 'utf8')).toContain('"name": "augur-apps"');
+
+    await host.writeProject({ apps: {} }, { name: 'augur-apps' }, { 'files/app-notes-web-blue/0': 'new' });
+    expect(await readFile(join(dir, 'apps/files/app-notes-web-blue/0'), 'utf8')).toBe('new');
+    expect(await readdir(join(dir, 'apps/files'))).toEqual(['app-notes-web-blue']);
+  });
+
+  it('runs a job to its end and says how it ended: its exit code, or that its time ran out', async () => {
+    const env = { PATH: process.env.PATH ?? '/usr/bin:/bin' };
+    expect(await runToEnd('sh', ['-c', 'echo migrated; exit 0'], env, 5_000)).toEqual({ code: 0, logs: 'migrated\n' });
+    expect(await runToEnd('sh', ['-c', 'echo half; echo broke >&2; exit 3'], env, 5_000)).toEqual({ code: 3, logs: 'half\nbroke\n' });
+    expect((await runToEnd('sh', ['-c', 'sleep 5'], env, 100)).code).toBe('timeout');
   });
 });

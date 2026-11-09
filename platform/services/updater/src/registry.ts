@@ -126,5 +126,8 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
     setUpstream: (app, url) => call(registry(`/apps/${encodeURIComponent(app)}/upstream`), 'PUT', { url }, `The registry didn’t take where ${app} is`),
   };
 
-  return { next, reporter, calls };
+  /** Tells the registry the deployment's own networks (PUT /v1/runner/networks), which no app's address may be on. */
+  const setOwnNetworks = (networks: string[]) => call(registry('/runner/networks'), 'PUT', { networks }, 'The registry didn’t take the deployment’s own networks');
+
+  return { next, reporter, calls, setOwnNetworks };
 };

@@ -260,7 +260,7 @@
     },
     "APP_PUBLISHERS": {
       "type": "string",
-      "description": "Who else may sign the apps the app runner installs: owner/repo or owner/repo/.github/workflows/<file>, space separated.",
+      "description": "Who may sign the apps the app runner installs, and nobody else: owner/repo or owner/repo/.github/workflows/<file>, space separated. List each app's repository, the template's among them, before installing it.",
       "x-via": {
         "updater": ".env"
       },
@@ -273,6 +273,66 @@
         "updater": ".env"
       },
       "x-docs": "docs/upgrade.md#the-app-runner"
+    },
+    "APP_PART_MEMORY_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|K|M|G|T)?)?$",
+      "default": "2Gi",
+      "description": "The most memory one part of an app may ask for (resources.limits.memory in its Score file), such as 2Gi.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_PART_CPU_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?m?)?$",
+      "default": "2",
+      "description": "The most CPU one part of an app may ask for (resources.limits.cpu), such as 2 or 500m.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_MEMORY_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|K|M|G|T)?)?$",
+      "default": "4Gi",
+      "description": "The most memory an app's parts may ask for together.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_CPU_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?m?)?$",
+      "default": "4",
+      "description": "The most CPU an app's parts may ask for together.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_SCRATCH_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|K|M|G|T)?)?$",
+      "default": "1Gi",
+      "description": "The most scratch space (augur-scratch) an app's parts may ask for together.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_READY_SECONDS": {
+      "type": "string",
+      "pattern": "^[0-9]*$",
+      "default": "180",
+      "description": "How long the app runner waits for a part to answer, or a job to finish, when the part doesn't say (augur.dev/ready-seconds); never more than 600.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
     },
     "IDENTITY_CLIENT_SECRET": {
       "type": "string",
@@ -671,7 +731,10 @@
       "x-services": [
         "storage"
       ],
-      "x-docs": "docs/app-storage.md#what-an-app-gets"
+      "x-docs": "docs/app-storage.md#what-an-app-gets",
+      "x-via": {
+        "updater": ".env"
+      }
     },
     "API_RATE_PER_SECOND": {
       "type": "string",
@@ -1650,7 +1713,10 @@
       "x-services": [
         "compose"
       ],
-      "x-docs": "docs/observability.md#turn-it-off"
+      "x-docs": "docs/observability.md#turn-it-off",
+      "x-via": {
+        "updater": ".env"
+      }
     }
   }
 }

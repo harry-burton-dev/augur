@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@augur/app-tools": "workspace:*",
     "@augur/service-kit": "workspace:*"
   },
   "devDependencies": {

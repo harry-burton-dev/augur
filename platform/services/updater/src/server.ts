@@ -5,7 +5,7 @@
  */
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, chmod, mkdir, mkdtemp, open, readFile, rename, rm, stat, statfs, writeFile, type FileHandle } from 'node:fs/promises';
+import { access, chmod, mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, statfs, writeFile, type FileHandle } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { partsFor } from './parts.ts';
@@ -86,6 +86,22 @@ const trustedRootIn = (dir: string) => access(join(dir, TRUSTED_ROOT)).then(
   () => join(dir, TRUSTED_ROOT),
   () => undefined,
 );
+
+/** Where a part's files are kept in the apps folder: files/<service>/<n>. */
+export const PART_FILES = 'files';
+
+/** Runs a command to its end within `ms`, whatever its exit code: what it said, out and error output together. */
+export const runToEnd = (file: string, args: string[], env: Record<string, string>, ms: number) =>
+  new Promise<{ code: number | 'timeout'; logs: string }>((resolve) => {
+    execFile(file, args, { env, timeout: ms, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+      const logs = `${stdout}${stderr}`;
+      if (!err) return resolve({ code: 0, logs });
+      const e = err as NodeJS.ErrnoException & { killed?: boolean; code?: number | string };
+      // Too much output stops it as surely as running out of time, but isn't that.
+      if (e.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return resolve({ code: -1, logs: `${logs.slice(-4000)}\n(it said more than the runner keeps, and was stopped)` });
+      resolve({ code: e.killed ? 'timeout' : typeof e.code === 'number' ? e.code : -1, logs: logs || e.message });
+    });
+  });
 
 /** Runs a command and gives back its output; its error output becomes the error's message. */
 export const command = (file: string, args: string[], env: Record<string, string>, input?: string) =>
@@ -252,7 +268,7 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
 };
 
 /** Writes a file and makes sure it's on the disk before going on. */
-const writeSynced = async (path: string, text: string, mode: number, more?: (file: FileHandle) => Promise<void>) => {
+const writeSynced = async (path: string, text: string | Uint8Array, mode: number, more?: (file: FileHandle) => Promise<void>) => {
   const file = await open(path, 'w', mode);
   try {
     await file.writeFile(text);
@@ -287,7 +303,9 @@ const syncFolder = async (path: string) => {
 };
 
 /** Writes a file whole or not at all: to a temporary name first, then renamed over the old one. */
-const writeWhole = async (path: string, text: string, mode = 0o600) => {
+const writeWhole = async (path: string, text: string | Uint8Array, mode = 0o600) => {
+  // One left by a write cut short may be read-only (a part's file), which a new write couldn't open.
+  await rm(`${path}.tmp`, { force: true });
   await writeSynced(`${path}.tmp`, text, mode);
   await rename(`${path}.tmp`, path);
   await syncFolder(path);
@@ -381,10 +399,26 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
       const text = await readFile(join(appsDir, 'state.json'), 'utf8').catch(() => undefined);
       return text ? (JSON.parse(text) as RunnerState) : { apps: {} };
     },
-    async writeProject(state, project, envFiles) {
+    async writeProject(state, project, files) {
       await mkdir(appsDir, { recursive: true, mode: 0o700 });
-      // Each container's settings hold its secrets: readable by the updater alone, like .env.
-      for (const [name, text] of Object.entries(envFiles)) await writeWhole(join(appsDir, `${name}.env`), text);
+      // A version from before contract 3 has its settings file (secrets and all): readable by the updater alone, like .env.
+      // A part's files are mounted into its container as Compose secrets, so the part's own user must read them; the
+      // apps folder itself stays the updater's alone.
+      const wanted = new Set<string>();
+      for (const [path, text] of Object.entries(files)) {
+        await mkdir(dirname(join(appsDir, path)), { recursive: true, mode: 0o700 });
+        await writeWhole(join(appsDir, path), text, path.endsWith('.env') ? 0o600 : 0o444);
+        wanted.add(path);
+      }
+      // A part's files that no version names any more go.
+      for (const service of await readdir(join(appsDir, PART_FILES)).catch(() => [] as string[])) {
+        for (const n of await readdir(join(appsDir, PART_FILES, service)).catch(() => [] as string[])) {
+          if (!wanted.has(`${PART_FILES}/${service}/${n}`)) await rm(join(appsDir, PART_FILES, service, n), { force: true });
+        }
+        if (!(await readdir(join(appsDir, PART_FILES, service)).catch(() => [])).length) await rm(join(appsDir, PART_FILES, service), { recursive: true, force: true });
+      }
+      // So do the settings files of versions from before contract 3 that have gone: they hold secrets.
+      for (const name of await readdir(appsDir)) if (name.endsWith('.env') && !wanted.has(name)) await rm(join(appsDir, name), { force: true });
       const header = '# Written by the app runner (the updater) from state.json. Don’t edit it: it is rewritten on every install.\n';
       // JSON is YAML, which Compose reads.
       await writeWhole(join(appsDir, 'compose.yml'), header + JSON.stringify(project, null, 2) + '\n', 0o644);
@@ -399,8 +433,34 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer }: Omit<S
       if (!file) throw new CommandFailed('The backup container didn’t say where it wrote the backup.');
       return file;
     },
-    async provisionStorage(app) {
-      await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, 'storage']);
+    async provisionStorage(app, options) {
+      const connections = options?.connections ? ['-e', `APP_DATABASE_CONNECTIONS=${options.connections}`] : [];
+      await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, ...connections, 'storage']);
+    },
+    async ownNetworks() {
+      // The networks the updater's own container is on are the deployment's: their address ranges.
+      const networks = Object.keys(JSON.parse(await docker(['container', 'inspect', '--format', '{{json .NetworkSettings.Networks}}', hostname()])) as object);
+      const ranges: string[] = [];
+      for (const name of networks) {
+        const said = await docker(['network', 'inspect', '--format', '{{range .IPAM.Config}}{{.Subnet}} {{end}}', name]);
+        ranges.push(...said.split(/\s+/).filter(Boolean));
+      }
+      return [...new Set(ranges)];
+    },
+    async imageUser(ref) {
+      await docker(['pull', '--quiet', ref]);
+      return (await docker(['image', 'inspect', '--format', '{{.Config.User}}', ref])).trim();
+    },
+    async runJob(service, ms) {
+      // Named, so a run whose time is up is stopped and taken away: killing `compose run` leaves its container running.
+      const name = `${service}-run`;
+      await docker(['rm', '--force', name]).catch(() => undefined);
+      const run = await runToEnd('docker', ['compose', '-p', 'augur-apps', '-f', join(appsDir, 'compose.yml'), 'run', '--rm', '--no-deps', '-T', '--name', name, service], env(), ms);
+      if (run.code !== 0) await docker(['rm', '--force', name]).catch(() => undefined);
+      return run;
+    },
+    async removeVolumes(names) {
+      if (names.length) await docker(['volume', 'rm', '--force', ...names]);
     },
     async dropStorage(previewId) {
       await platform(['run', '--rm', '--no-deps', '-e', 'APP_STORAGE=', '-e', `APP_STORAGE_DROP=${previewId}`, 'storage']);
