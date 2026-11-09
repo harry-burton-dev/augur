@@ -178,9 +178,9 @@ describe('provisioners (spec 4.6, 10.2)', () => {
     expect(PROVISIONERS['augur-telemetry']!.outputs(ctx('augur-telemetry', {})).otlp_endpoint).toEqual({ value: 'http://otel-lgtm:4318' });
     expect(PROVISIONERS['augur-telemetry']!.outputs(ctx('augur-telemetry', {}, { env: `${ENV}OTEL_SDK_DISABLED=true\n` })).otlp_endpoint).toEqual({ value: '' });
     expect(PROVISIONERS['augur-telemetry']!.outputs(ctx('augur-telemetry', {}, { env: `${ENV}OTEL_LGTM_REPLICAS=0\n` })).otlp_endpoint).toEqual({ value: '' });
-    expect(PROVISIONERS['augur-telemetry']!.outputs(ctx('augur-telemetry', {}, { env: `${ENV}OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n` })).otlp_endpoint).toEqual({
-      value: 'http://collector:4318',
-    });
+    // A collector elsewhere is outside, which an app's own network doesn't reach (spec 4.8).
+    expect(PROVISIONERS['augur-telemetry']!.outputs(ctx('augur-telemetry', {}, { env: `${ENV}OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318\n` })).otlp_endpoint).toEqual({ value: '' });
+    expect(PROVISIONERS['augur-telemetry']!.outputs(ctx('augur-telemetry', {}, { env: `${ENV}OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-lgtm:4318\n` })).otlp_endpoint).toEqual({ value: 'http://otel-lgtm:4318' });
   });
 });
 

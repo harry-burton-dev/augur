@@ -27,6 +27,7 @@ import type { AppManifest3 } from '@augur/app-tools/validate';
 import { envValue } from './env-file.ts';
 import { ceilingProblems, PROVISIONERS, provisionParts, type AppSecrets, type Provisioned } from './provisioners/index.ts';
 import { volumeName } from './provisioners/scratch.ts';
+import { appCollectorOf } from './provisioners/telemetry.ts';
 import {
   bytesOf,
   containerOf,
@@ -112,6 +113,16 @@ export interface JobRun {
   logs: string;
 }
 
+/** The platform's parts an app's network may be joined by: each under its own name, which is how parts reach it. */
+export type PlatformPart = 'gateway' | 'postgres' | 'garage' | 'otel-lgtm';
+
+/** One app's own network (spec 3.1, 4.8): every part of every version of the app is on it, and the platform's parts it names. */
+export interface AppNetwork {
+  app: string;
+  name: string;
+  join: PlatformPart[];
+}
+
 /** What the runner does to the server. The real one drives Docker Compose (server.ts); tests use a fake. */
 export interface AppHost {
   /** The deployment's settings file, .env. */
@@ -139,6 +150,12 @@ export interface AppHost {
   dropStorage(previewId: string): Promise<void>;
   /** Removes these volumes, and what is in them; one that isn't there is no matter. */
   removeVolumes(names: string[]): Promise<void>;
+  /**
+   * Makes each app's network, internal so nothing on it reaches the internet, and joins to it the runner
+   * itself (to see the parts' health) and the platform's parts it names; takes away the app networks not
+   * named, once nothing of theirs is on them (spec 4.8, 10.4). Joining a part already on it changes nothing.
+   */
+  appNetworks(wants: AppNetwork[]): Promise<void>;
   /** Pulls and starts these services of the apps' project, leaving the others alone. */
   start(services: string[]): Promise<void>;
   /** Runs one of the project's job services to its end, within `ms`, and says how it ended. */
@@ -166,7 +183,7 @@ export interface RunnerOptions {
   now?: () => Date;
 }
 
-/** The network the platform's project makes, when it's named `platform` and the updater can't ask: parts join it to reach the gateway, Postgres and Garage (P3b gives each app its own). */
+/** The network the platform's project makes, when it's named `platform` and the updater can't ask: containers from before contract 3 are on it. */
 export const DEFAULT_NETWORK = 'platform_default';
 /** How long the old version keeps running after the switch, for shells still holding the old manifest. */
 export const RETIRE_MS = 10 * 60_000;
@@ -183,6 +200,12 @@ const APP_WATCH_MISSES = 2;
 const LOG_TAIL_LINES = 10;
 /** Where every container may write besides its scratch folders (spec 4.13). */
 const TMP = '/tmp';
+
+/** An app's own network (spec 3.1). */
+export const appNetwork = (app: string) => `app-${app}`;
+
+/** The platform part a resource type brings onto the app's network (spec 4.6, last column); the gateway is always there. */
+const JOINED_BY: Record<string, PlatformPart> = { 'augur-database': 'postgres', 'augur-bucket': 'garage', 'augur-telemetry': 'otel-lgtm' };
 
 /** One part's Compose service: app-<id>-<part>-<slot>, the slot being blue, green or a preview's pr<n>. */
 export const partService = (app: string, part: string, slot: string) => `app-${app}-${part}-${slot}`;
@@ -331,7 +354,8 @@ const renderUnit = (unit: Unit, env: string) => {
       environment,
       ...(mounts.length ? { secrets: mounts } : {}),
       ...(volumeMounts.length ? { volumes: volumeMounts } : {}),
-      networks: ['platform'],
+      // Only its app's own network: what it asked for joins that network, never the other way round (spec 4.7, 4.8).
+      networks: [appNetwork(unit.app)],
       mem_limit: bytesOf(limits.memory),
       cpus: milliCpuOf(limits.cpu)! / 1000,
       // Never privileged, no host folders, no added powers, nothing written but scratch and /tmp (spec 4.13, 10.5).
@@ -385,9 +409,36 @@ const previewUnitOf = (id: string, p: RunningPreview): Unit | undefined =>
       }
     : undefined;
 
+/** Every version of an app on contract 3 the state names, by app: its active and retiring versions and its previews. */
+const unitsOf = (state: RunnerState): Unit[] => [
+  ...Object.entries(state.apps).flatMap(([app, { active, retiring }]) => [active, retiring].flatMap((r) => (r && unitOf(app, r) ? [unitOf(app, r)!] : []))),
+  ...Object.entries(state.previews ?? {}).flatMap(([id, p]) => (previewUnitOf(id, p) ? [previewUnitOf(id, p)!] : [])),
+];
+
 /**
- * The apps' Compose project: every part of every version the state names, on the platform's network,
- * with nothing more than it asked for; and the files its parts read, by path in the apps folder.
+ * Each app's network, and who joins it (spec 4.8): the gateway always; Postgres, the object store and the
+ * collector only when a part of some version of the app asks for them. The collector only when it's
+ * AUGUR's own: one elsewhere is outside, which an app's network doesn't reach.
+ */
+export const appNetworksOf = (state: RunnerState, env: string): AppNetwork[] => {
+  const byApp = new Map<string, Set<PlatformPart>>();
+  for (const unit of unitsOf(state)) {
+    const join = byApp.get(unit.app) ?? new Set<PlatformPart>(['gateway']);
+    for (const part of unit.parts)
+      for (const r of Object.values(part.resources ?? {})) {
+        const p = JOINED_BY[r.type];
+        if (p && (p !== 'otel-lgtm' || appCollectorOf(env))) join.add(p);
+      }
+    byApp.set(unit.app, join);
+  }
+  const order: PlatformPart[] = ['gateway', 'postgres', 'garage', 'otel-lgtm'];
+  return [...byApp].map(([app, join]) => ({ app, name: appNetwork(app), join: order.filter((p) => join.has(p)) }));
+};
+
+/**
+ * The apps' Compose project: every part of every version the state names, each app's on its own network,
+ * with nothing more than it asked for; and the files its parts read, by path in the apps folder. Containers
+ * from before contract 3 stay on the platform's network until they're replaced.
  */
 export const appsProject = (state: RunnerState, env: string, network = DEFAULT_NETWORK) => {
   const services: Record<string, object> = {};
@@ -419,10 +470,13 @@ export const appsProject = (state: RunnerState, env: string, network = DEFAULT_N
         'augur.preview': String(p.pr),
       });
   }
+  // The runner makes the apps' networks itself (AppHost.appNetworks), so Compose only names them.
+  const networks: Record<string, { external: true; name: string }> = {};
+  for (const s of Object.values(services) as { networks?: string[] }[]) for (const n of s.networks ?? []) networks[n] = { external: true, name: n === 'platform' ? network : n };
   const project = {
     name: 'augur-apps',
     services,
-    networks: { platform: { external: true, name: network } },
+    ...(Object.keys(networks).length ? { networks } : {}),
     ...(Object.keys(volumes).length ? { volumes } : {}),
     ...(Object.keys(secrets).length ? { secrets } : {}),
   };
@@ -500,7 +554,10 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
   const save = async (state: RunnerState, env: string) => {
     const { project, files } = appsProject(state, env, await network(env));
     await host.writeProject(state, project, files);
+    await host.appNetworks(appNetworksOf(state, env));
   };
+  /** Joins the gateway and stores to the apps' networks again: an upgrade of AUGUR gives them new containers, which aren't on them. */
+  const keepNetworks = async () => host.appNetworks(appNetworksOf(await host.readState(), await host.readEnv()));
   const readyDefault = (env: string) => Number(envValue(env, 'APP_READY_SECONDS')) || DEFAULT_READY_SECONDS;
 
   /** Stops old versions whose time is up. */
@@ -732,8 +789,6 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       ...state,
       apps: { ...state.apps, [app]: { ...current, retiring: candidate } },
     };
-    // Written as retiring with no end, so a runner that restarts now still knows the containers are there.
-    await save(withCandidate, env);
     const names = servicesOf(app, candidate);
     /** Takes the new containers away again, leaving the old ones serving. */
     const undo = async () => {
@@ -745,6 +800,8 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     };
     const stillServing = current.active ? ` ${current.active.version} is still serving.` : '';
     try {
+      // Written as retiring with no end, so a runner that restarts now still knows the containers are there.
+      await save(withCandidate, env);
       await startUnit(unit, env, report);
     } catch (err) {
       await undo();
@@ -875,7 +932,6 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
         },
       },
     };
-    await save(next, env);
     /** Takes the containers away; the pull request has no preview until its next build. */
     const undo = async () => {
       await host.stop(previewServices(id, next.previews![id]!)).catch(() => undefined);
@@ -883,6 +939,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       await save({ ...next, previews: others }, env).catch(() => undefined);
     };
     try {
+      await save(next, env);
       await startUnit(unit, env, report);
     } catch (err) {
       await undo();
@@ -1008,5 +1065,5 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     }
   };
 
-  return { run, retireDue };
+  return { run, retireDue, keepNetworks };
 };

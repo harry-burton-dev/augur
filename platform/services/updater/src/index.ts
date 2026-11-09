@@ -166,10 +166,12 @@ const sayNetworks = async () => {
   log('told the registry the deployment’s own networks');
 };
 
-/** One turn of the app runner: stops old versions whose time is up, then does the next job, if any. Off without APP_SECRETS_KEY. */
+/** One turn of the app runner: keeps the apps' networks joined, stops old versions whose time is up, then does the next job, if any. Off without APP_SECRETS_KEY. */
 const appsOnce = async () => {
   if (!envValue(await server.readEnv(), 'APP_SECRETS_KEY')) return;
   await sayNetworks().catch((err) => log('couldn’t tell the registry the deployment’s own networks', { error: (err as Error).message }));
+  // An upgrade of AUGUR gives the gateway and the stores new containers, which aren't on the apps' networks yet.
+  await runner.keepNetworks().catch((err) => log('couldn’t keep the apps’ networks joined', { error: (err as Error).message }));
   await runner.retireDue();
   const job = await apps.next();
   if (!job) return;

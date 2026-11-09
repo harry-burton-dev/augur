@@ -1,7 +1,7 @@
 /**
  * augur-outbound: the internet, once the admin allows it for the app (spec 4.6, D4-A). It gives the part
- * nothing to read. Until each app has a network of its own (P3b), parts share the platform's network,
- * so this provisioner only checks the ask; Admin shows it in the review.
+ * nothing to read. An app's network is internal, so until an admin can allow it the part reaches no
+ * further than its app's network and what joins it; Admin shows the ask in the review.
  */
 import type { Provisioner } from './types.ts';
 

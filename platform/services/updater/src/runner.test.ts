@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { appSecretFor } from '@augur/service-kit';
-import { APP_WATCH_EVERY_MS, appsProject, publishersFrom, RETIRE_MS, runsAsRoot, type AppJob, type JobReport, type RunningApp } from './runner.ts';
+import type { ScorePart } from '@augur/app-tools/validate';
+import { APP_WATCH_EVERY_MS, appNetworksOf, appsProject, publishersFrom, RETIRE_MS, runsAsRoot, type AppJob, type JobReport, type RunnerState, type RunningApp } from './runner.ts';
 import { examplePart, ENV, image, install, KEY, release, setup } from './runner.testing.ts';
 import { releaseIdentity } from './signers.ts';
 
@@ -35,7 +36,7 @@ describe('running Score parts (spec 4, 10)', () => {
         tmpfs: ['/tmp'],
         cap_drop: ['ALL'],
         security_opt: ['no-new-privileges:true'],
-        networks: ['platform'],
+        networks: ['app-notes'],
       });
       expect(s).not.toHaveProperty('ports');
       expect(s).not.toHaveProperty('privileged');
@@ -781,21 +782,50 @@ describe('settings and previews', () => {
     expect(greedy.reports.at(-1)?.message).toBe('The parts ask for 15 database connections between them (web 10, migrate 5), above this deployment’s 12 per app (APP_DATABASE_CONNECTIONS in .env).');
   });
 
-  it('puts parts on the network the platform is on, unless APPS_NETWORK names one', async () => {
-    const asked = setup(ENV, 'augur_default');
-    await asked.run(install('1.0.0'));
-    expect(asked.project()!.networks.platform.name).toBe('augur_default');
+  it('puts an app’s parts on a network of its own, which the gateway joins, and the stores only for an app granted them (spec 4.8, 10.4)', async () => {
+    const t = setup();
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    expect(t.project()!.networks).toEqual({ 'app-notes': { external: true, name: 'app-notes' } });
+    // The example asks for the database, the bucket and telemetry; the network was there before any part ran.
+    expect(t.networks()).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres', 'garage', 'otel-lgtm'] }]);
+    expect(t.missing()).toEqual([]);
 
-    const named = setup(`${ENV}APPS_NETWORK=mine\n`, 'augur_default');
-    await named.run(install('1.0.0'));
-    expect(named.project()!.networks.platform.name).toBe('mine');
+    // Parts that ask only for the gateway get the gateway and nothing else.
+    const r = release('1.0.0');
+    const bare: ScorePart[] = r.parts.map((p) => ({ ...p, resources: Object.fromEntries(Object.entries(p.resources ?? {}).filter(([, x]) => x.type === 'augur-gateway')) }));
+    expect(appNetworksOf({ apps: { notes: { active: { slot: 'blue', version: '1.0.0', parts: bare, manifest: r.manifest } } } }, ENV)).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway'] }]);
+  });
 
-    const unknown = setup();
-    await unknown.run(install('1.0.0'));
-    expect(unknown.project()!.networks.platform.name).toBe('platform_default');
-    expect(appsProject({ apps: {} }, ENV, 'net').project.networks).toEqual({
-      platform: { external: true, name: 'net' },
-    });
+  it('leaves the collector off an app’s network when the deployment sends telemetry elsewhere, and says nothing to send to', async () => {
+    const t = setup(`${ENV}OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example:4318\n`);
+    expect(await t.run(install('1.0.0'))).toBe('done');
+    expect(t.networks()[0]!.join).toEqual(['gateway', 'postgres', 'garage']);
+    expect(t.project()!.services['app-notes-web-blue']!.environment).toMatchObject({ OTEL_EXPORTER_OTLP_ENDPOINT: '' });
+  });
+
+  it('takes an app’s network away with its last version, and keeps it while a preview runs', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    expect(await t.run({ id: 'r', app: 'notes', action: 'remove', state: 'requested' })).toBe('done');
+    expect(t.networks()).toEqual([]);
+    const r = release('1.1.0-pr.12.1', 'd');
+    const previewOnly: RunnerState = { apps: {}, previews: { 'notes-pr12': { app: 'notes', pr: 12, version: r.version, parts: r.parts, manifest: r.manifest } } };
+    expect(appNetworksOf(previewOnly, ENV)).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres', 'garage', 'otel-lgtm'] }]);
+  });
+
+  it('keeps the gateway and stores on the apps’ networks every turn, as a platform upgrade gives them new containers', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    const before = t.networkCalls();
+    await t.runner.keepNetworks();
+    expect(t.networkCalls()).toBe(before + 1);
+    expect(t.networks()).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres', 'garage', 'otel-lgtm'] }]);
+  });
+
+  it('keeps containers from before contract 3 on the platform’s network, unless APPS_NETWORK names one', () => {
+    const legacy: RunnerState = { apps: { old: { active: { slot: 'blue', version: '1.0.0', image: 'ghcr.io/o/old@sha256:' + 'a'.repeat(64) } } } };
+    expect(appsProject(legacy, ENV, 'net').project.networks).toEqual({ platform: { external: true, name: 'net' } });
+    expect(appsProject({ apps: {} }, ENV, 'net').project.networks).toBeUndefined();
   });
 
   it('runs a pull request’s build beside the app, signed in as it with scratch storage, and replaces it in place', async () => {

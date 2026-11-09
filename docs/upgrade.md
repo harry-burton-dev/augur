@@ -57,6 +57,12 @@ Each note starts with the release it came in (**From**). If your server already 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
 
+### Each app on a network of its own
+
+**From** unreleased
+
+Each app on the app contract now runs on a network of its own, `app-<id>`, which the app runner makes. Nothing on it reaches the internet. The gateway joins every app's network, and Postgres, Garage and otel-lgtm join only the networks of apps that ask for them, so one app can't reach another app or a store it wasn't given. An app already installed moves onto its network the next time it's installed or updated. An app's telemetry goes only to AUGUR's own otel-lgtm: when `OTEL_EXPORTER_OTLP_ENDPOINT` names a collector elsewhere, apps send none. Docker's default address pools hold about 30 networks, so a server with more apps than that needs larger `default-address-pools` in `/etc/docker/daemon.json`.
+
 ### App feeds are a list, APP_FEEDS
 
 **From** unreleased
@@ -608,7 +614,7 @@ curl -X POST https://<platform>/api/registry/v1/app-runner/jobs -H "authorizatio
 
 Pull requests that change an app can run as previews beside it, for the app's developers alone, each with scratch storage of its own: see [app-previews.md](app-previews.md).
 
-Apps' parts join the platform's network: the one the updater itself is on, usually `platform_default` (`APPS_NETWORK` in `.env` names another). So `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
+Each app's parts are on the app's own network, `app-<id>`, which the app runner makes internal (nothing on it reaches the internet) and joins to the gateway, and to Postgres, Garage and otel-lgtm only for an app that asks for them. The runner rejoins them on every turn, so after an upgrade of AUGUR gives them new containers, apps answer again within a minute. An app's network goes when its last version and preview do. Containers from before the app contract stay on the platform's network, the one the updater itself is on, usually `platform_default` (`APPS_NETWORK` in `.env` names another), so `pc down` can't remove that network while they run: stop them first with `docker compose -p augur-apps -f infra/deploy/apps/compose.yml down`. They restart by themselves with Docker, like the platform.
 
 ### Images from releases (the first `augur@` release)
 

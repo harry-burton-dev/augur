@@ -13,6 +13,12 @@ export const collectorOf = (env: string) => {
   return envValue(env, 'OTEL_LGTM_REPLICAS') === '0' ? '' : OWN_COLLECTOR;
 };
 
+/**
+ * Where an app's parts may send telemetry: AUGUR's own collector, which joins the app's network, or none.
+ * A collector elsewhere is outside, which an app's network doesn't reach (spec 4.8), so the parts send nothing.
+ */
+export const appCollectorOf = (env: string) => (collectorOf(env) === OWN_COLLECTOR ? OWN_COLLECTOR : '');
+
 export const telemetry: Provisioner = {
   type: 'augur-telemetry',
   uri: 'template://augur/telemetry',
@@ -20,7 +26,7 @@ export const telemetry: Provisioner = {
   check: () => [],
   needs: [],
   outputs: ({ app, part, env }) => ({
-    otlp_endpoint: { value: collectorOf(env) },
+    otlp_endpoint: { value: appCollectorOf(env) },
     service_name: { value: `${app}-${part}` },
   }),
   compose: () => ({}),
