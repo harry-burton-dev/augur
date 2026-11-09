@@ -188,13 +188,35 @@ restore_keycloak() {
   pc exec -T postgres pg_restore -U platform -d keycloak --no-owner --role=keycloak < "$work/keycloak.dump"
 }
 
-# What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's left out.
+# The apps whose data the release under test takes away, once, on upgrade (RETIRED_APPS on the storage job,
+# ADR 0075): their schemas go, and the registry forgets them. Read from this checkout's compose file.
+retired_apps() {
+  local was=$dir
+  dir=$deploy
+  pc config --format json | jq -r '.services.storage.environment.RETIRED_APPS // ""' | tr -s ' ,' '  '
+  dir=$was
+}
+
+# What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's
+# left out, and so is what the release takes away on purpose ($1, app ids): those apps' schemas, and their rows
+# in any table that names apps (a text app_id column, or the registry's apps table), so that what is counted
+# before the upgrade is what must still be there after it.
 tables() {
-  pc exec -T postgres psql -U platform -d platform -At -F' ' -c "
-    select table_schema || '.' || table_name,
-      (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', table_schema, table_name), false, true, '')))[1]::text
-    from information_schema.tables
-    where table_type = 'BASE TABLE' and table_schema not in ('pg_catalog', 'information_schema')" | sort
+  local arr="{$(echo $1 | tr ' ' ',')}"
+  pc exec -T postgres psql -U platform -d platform -At -F' ' -v ON_ERROR_STOP=1 -c "
+    select t.table_schema || '.' || t.table_name,
+      (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I where %s', t.table_schema, t.table_name,
+        case
+          when exists (select 1 from information_schema.columns c
+                       where c.table_schema = t.table_schema and c.table_name = t.table_name
+                         and c.column_name = 'app_id' and c.data_type in ('text', 'character varying'))
+            then format('app_id <> all (%L::text[])', '$arr')
+          when t.table_schema = 'registry' and t.table_name = 'apps' then format('id <> all (%L::text[])', '$arr')
+          else 'true'
+        end), false, true, '')))[1]::text
+    from information_schema.tables t
+    where t.table_type = 'BASE TABLE' and t.table_schema not in ('pg_catalog', 'information_schema')
+      and t.table_schema <> all ('$arr'::text[])" | sort
 }
 
 # Nothing that was there before may be gone or emptied.
@@ -321,7 +343,9 @@ case "$mode" in
       not_running >&2
     fi
     on_version "$from"
-    tables > "$work/before"
+    retired=$(retired_apps)
+    if [ -n "$retired" ]; then echo "This checkout takes the data of $(echo $retired) away on upgrade (RETIRED_APPS), so their schemas and the registry's rows for them are expected to go." >&2; fi
+    tables "$retired" > "$work/before"
     keycloak_from=$(keycloak_version)
     save_keycloak
 
@@ -330,7 +354,7 @@ case "$mode" in
     keycloak_to=$(keycloak_version)
     new=$(wait_ready "Upgrade from augur@$from to this checkout")
     no_restarts
-    tables > "$work/after"
+    tables "$retired" > "$work/after"
     kept "$work/before" "$work/after"
     on_version "$local_tag"
     backup_restores "Upgrade from augur@$from to this checkout"
@@ -345,7 +369,7 @@ case "$mode" in
     # shellcheck disable=SC2086 # one service name per word
     no_restarts $broken_before
     on_version "$from"
-    tables > "$work/back"
+    tables "$retired" > "$work/back"
     kept "$work/after" "$work/back"
     ;;
   broken)
