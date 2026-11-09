@@ -1,7 +1,7 @@
 // The release file an app on contract 3 attaches, from its checkout and what the build pushed.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -49,4 +49,19 @@ test('augur-app describe writes release v2 for an app on contract 3, and release
   assert.match(described.frontend.artifact, /notes-frontend@sha256:0{64}$/);
   const spelt = JSON.parse(execFileSync('node', [bin, 'release', 'describe'], { cwd: dir, env, encoding: 'utf8' }));
   assert.deepEqual(spelt.parts, described.parts);
+});
+
+test('augur-app describe with no bundle stands in for the image of a part built here, named where the build would push it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'app3-repo-'));
+  cpSync(fixture, dir, { recursive: true });
+  // The part built from this repository, as an app's checkout has it (and as the template does).
+  const web = join(dir, 'score', 'web.score.yaml');
+  writeFileSync(web, readFileSync(web, 'utf8').replace(/image: ghcr\.io\/[^\n]+/, 'image: .'));
+  const bin = fileURLToPath(new URL('../bin/augur-app.mjs', import.meta.url));
+  const describe = (env) => JSON.parse(execFileSync('node', [bin, 'describe'], { cwd: dir, env: { ...process.env, ...env }, encoding: 'utf8' }));
+  const named = describe({ GITHUB_REPOSITORY: 'o/notes', GITHUB_WORKFLOW_REF: 'o/notes/.github/workflows/release.yml@refs/heads/main' });
+  const image = (release, part) => Object.values(release.parts.find((p) => p.metadata.name === part).containers)[0].image;
+  assert.equal(image(named, 'web'), `ghcr.io/o/notes/notes@${'sha256:' + '0'.repeat(64)}`);
+  // The other parts keep the images their Score files name.
+  assert.match(image(named, 'worker'), /^ghcr\.io\/example-org\/augur-notes-worker@sha256:/);
 });

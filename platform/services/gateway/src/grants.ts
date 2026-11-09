@@ -14,6 +14,8 @@ export interface AppGrant {
   scopes: readonly string[];
   /** The kind of the floor the grant was read on, when the registry knows it, so the call carries that floor to the service. */
   floorKind?: 'personal' | 'team' | 'org';
+  /** The app contract the app is on (3); absent for an app on contract 2, whose part checks callers for its bare id. */
+  contract?: number;
 }
 
 /** An app's grant on a floor (or on the organisation's, with none); `undefined` for an app the registry doesn't know. */
@@ -53,9 +55,9 @@ export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
     let grant: AppGrant | undefined;
     if (res.status === 404) grant = undefined;
     else if (res.ok) {
-      const body = (await res.json()) as { name?: string; on?: boolean; scopes?: string[]; floorKind?: AppGrant['floorKind'] };
+      const body = (await res.json()) as { name?: string; on?: boolean; scopes?: string[]; floorKind?: AppGrant['floorKind']; contract?: number };
       // A registry from before contract 3 doesn't say whether the app is on; it isn't said off, and its scopes still bound the call.
-      grant = { ...(body.name ? { name: body.name } : {}), on: body.on ?? true, scopes: body.scopes ?? [], ...(body.floorKind ? { floorKind: body.floorKind } : {}) };
+      grant = { ...(body.name ? { name: body.name } : {}), on: body.on ?? true, scopes: body.scopes ?? [], ...(body.floorKind ? { floorKind: body.floorKind } : {}), ...(typeof body.contract === 'number' ? { contract: body.contract } : {}) };
     } else throw new AppGrantsUnavailable(`the registry answered ${res.status}`);
     cache.delete(key);
     cache.set(key, { grant, at: now() });

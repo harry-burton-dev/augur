@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.42.0
+  version: 1.43.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -2487,6 +2487,9 @@ paths:
                       - type: string
                       - type: "null"
                     description: The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.
+                  contract:
+                    type: integer
+                    description: The app contract the app is on (3), so the gateway signs a plain call to its part for the app's client `app-<id>`, as its part checks; absent for an app on contract 2, whose part checks for its id
                 description: The app's grants
         "403":
           description: Not a platform service or the gateway
