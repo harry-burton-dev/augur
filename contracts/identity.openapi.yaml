@@ -1478,7 +1478,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
-      summary: Issue an app's own sign-in, or replace its secret (admins only)
+      summary: Issue an app's own sign-in, or replace its secret (deployment admins only)
       description: "Makes the app's Keycloak client (app-<id>: client credentials only, 5-minute tokens for the audience platform-services), or gives it a new secret, after which the old one stops working. The secret is in this answer only; the app's service is given it as SERVICE_CLIENT_SECRET. Audited as app.credential-issued, without the secret."
       parameters:
         - schema:
@@ -1518,7 +1518,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not an admin
+          description: Not a deployment admin
           content:
             application/problem+json:
               schema:
