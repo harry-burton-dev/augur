@@ -9,8 +9,9 @@
 //   augur-app bundle <channel>         builds, pushes and signs the service image (with its SBOM and provenance attested)
 //                                      and the built frontend, and prints
 //                                      where each landed, by digest, as JSON (needs docker buildx, oras and cosign)
-//   augur-app describe [bundle.json]   prints the app-release.json it would attach
+//   augur-app describe [bundle.json]   prints the app-release.json it would attach (v2 from score/ for an app on contract 3)
 //   augur-app publish <bundle.json>    makes the GitHub release app/<id>@<version> with app-release.json attached
+//   augur-app release describe|publish the same two, spelt for contract 3
 //   augur-app clean-devs [<tag>...]    deletes all but the newest few dev builds, and those named
 //   augur-app clean-previews <pr> [<tag>...]
 //                                      deletes a pull request's previews, but those named
@@ -26,6 +27,7 @@ import { join } from 'node:path';
 import { appCatalog, CATALOG_FILE, catalogText, repoSlug } from '../src/catalog.mjs';
 import { readApp, validateApp } from '../src/validate.mjs';
 import { appRelease, appTag, changelogSection, channelOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion, releaseNotes, signerOf } from '../src/release.mjs';
+import { readCheckout, releaseOf2 } from '../src/release2.mjs';
 
 const root = process.cwd();
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
@@ -104,7 +106,13 @@ const bundle = async (channel) => {
   return { service, frontend, channel };
 };
 
+/** The release file: v2 from the Score files for an app on contract 3 (ADR 0075), else v1. */
 const releaseFile = (bundleJson) => {
+  if (manifest().contract !== undefined) {
+    const checkout = readCheckout(root, { readdirSync, existsSync, join });
+    const quiet = bundleJson.channel === 'preview' || bundleJson.channel === 'dev';
+    return releaseOf2({ ...checkout, bundle: bundleJson, signer: signerOf(), notes: quiet ? '' : notesFor(checkout.manifest.version), env: process.env });
+  }
   const preview =
     bundleJson.channel === 'preview' && process.env.PR_NUMBER
       ? { pr: Number(process.env.PR_NUMBER), ...(process.env.PR_TITLE ? { title: process.env.PR_TITLE.slice(0, 300) } : {}), ...(process.env.PR_URL ? { url: process.env.PR_URL } : {}) }
@@ -115,6 +123,11 @@ const releaseFile = (bundleJson) => {
 };
 
 const main = async ([mode, ...args]) => {
+  if (mode === 'release') {
+    if (!['describe', 'publish'].includes(args[0])) throw new Error('Usage: augur-app release describe [bundle.json] | publish <bundle.json>');
+    if (manifest().contract === undefined) throw new Error('manifest.json names no contract: augur-app release is for an app on contract 3 (augur-app validate says what it needs).');
+    return main(args);
+  }
   if (mode === 'pending') {
     const { id, version } = manifest();
     const released = run('git', ['ls-remote', '--tags', 'origin', `refs/tags/${appTag(id, version)}`]).trim();
@@ -128,9 +141,12 @@ const main = async ([mode, ...args]) => {
     console.log(JSON.stringify(await bundle(args[0])));
   } else if (mode === 'describe' || mode === 'publish') {
     const zero = `sha256:${'0'.repeat(64)}`;
+    // Without a bundle, placeholders: on contract 3 the manifest says whether there is a frontend; before it, the folders do.
+    const hasFrontend = manifest().contract !== undefined ? Boolean(manifest().frontend) : parts.includes('frontend');
+    const hasService = manifest().contract !== undefined || parts.includes('service');
     const bundleJson = args[0]
       ? JSON.parse(readFileSync(args[0], 'utf8'))
-      : { service: parts.includes('service') ? `ghcr.io/<repo>/${manifest().id}@${zero}` : null, frontend: parts.includes('frontend') ? { artifact: `ghcr.io/<repo>/${manifest().id}-frontend@${zero}`, digest: zero } : null };
+      : { service: hasService ? `ghcr.io/<repo>/${manifest().id}@${zero}` : null, frontend: hasFrontend ? { artifact: `ghcr.io/<repo>/${manifest().id}-frontend@${zero}`, digest: zero } : null };
     const release = releaseFile(bundleJson);
     if (mode === 'describe') return console.log(JSON.stringify(release, null, 2));
     if (!args[0]) throw new Error('publish needs the bundle.json that augur-app bundle printed.');
@@ -174,7 +190,7 @@ const main = async ([mode, ...args]) => {
       console.log(`Wrote ${CATALOG_FILE}`);
     }
   } else {
-    console.error('Usage: augur-app pending | dev <run> | preview <pr> <run> | bundle <channel> | describe [bundle.json] | publish <bundle.json> | clean-devs [<tag>...] | clean-previews <pr> [<tag>...] | validate | catalog [--check]');
+    console.error('Usage: augur-app pending | dev <run> | preview <pr> <run> | bundle <channel> | describe [bundle.json] | publish <bundle.json> | release describe|publish … | clean-devs [<tag>...] | clean-previews <pr> [<tag>...] | validate | catalog [--check]');
     process.exit(2);
   }
 };

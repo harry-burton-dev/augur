@@ -68,3 +68,14 @@ test('augur-app catalog writes the file, and --check fails once the manifest mov
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ ...manifest, version: '0.5.0' }));
   assert.throws(() => cli('catalog', '--check'), /out of date/);
 });
+
+test('an app on contract 3 is at /<id>, names its contract, and its intents come from what it contributes', () => {
+  const m3 = { id: 'notes', name: 'Notes', version: '1.0.0', contract: 3, floors: ['org'], scopes: ['events:publish'], contributes: { intents: { handles: ['note.open'] } } };
+  const entities = appCatalog({ manifest: m3, parts, repo: 'acme/notes' });
+  const system = entities.find((e) => e.kind === 'System');
+  assert.equal(system.metadata.annotations['augur.dev/route'], '/notes');
+  assert.equal(system.metadata.annotations['augur.dev/contract'], '3');
+  assert.equal('augur.dev/sdk-range' in system.metadata.annotations, false);
+  const api = entities.find((e) => e.kind === 'API');
+  assert.deepEqual(JSON.parse(api.spec.definition), { intents: ['note.open'] });
+});

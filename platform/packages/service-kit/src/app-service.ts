@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { appCredentialsFromEnv } from './apps.js';
+import { appCredentialsFromEnv, appClientId } from './apps.js';
 import { callerFromHeaders, type Caller, type CallerWorkspace } from './caller.js';
 import { notify, previewOf, recordAudit, type NotificationAction, type NotificationLevel } from './events.js';
 import { publishFrontend } from './frontend.js';
@@ -26,6 +26,8 @@ export interface AppManifest {
   id: string;
   name: string;
   version: string;
+  /** The app contract the manifest is written to (3, ADR 0075); a contract 2 manifest has none. */
+  contract?: number;
   [key: string]: unknown;
 }
 
@@ -71,7 +73,7 @@ export interface AppServerOptions {
   version?: string;
   /** The major version of the API it serves, its route prefix. */
   api?: string;
-  /** Checks the caller the gateway signed for this app. On by default; off only under `pnpm dev:app` and tests (callerCheckFromEnv). */
+  /** Checks the caller the gateway signed for this app, for its client `app-<id>`. On by default; off only under `pnpm dev:app` and tests (callerCheckFromEnv). */
   callers?: CallerCheck;
 }
 
@@ -79,7 +81,7 @@ export interface AppServerOptions {
  * What every app's Fastify instance starts with: only the gateway's signed caller is believed,
  * every error is RFC 9457 problem details, and GET /healthz says what is running.
  */
-export const appServer = async (app: FastifyInstance, { manifest, version = manifest.version, api = 'v1', callers = callerCheckFromEnv(manifest.id) }: AppServerOptions) => {
+export const appServer = async (app: FastifyInstance, { manifest, version = manifest.version, api = 'v1', callers = callerCheckFromEnv(appClientId(manifest.id)) }: AppServerOptions) => {
   app.addHook('onRequest', signedCallers(callers));
   await app.register(problemDetails());
   app.get('/healthz', async () => health(manifest.id, version, api));
@@ -219,7 +221,10 @@ export async function startAppService({ manifest, buildApp, jobs: defineJobs, po
   process.once('SIGTERM', (s) => void stop(s));
   process.once('SIGINT', (s) => void stop(s));
 
-  void register(manifest, app, env);
+  // On the app contract the runner registers the release it installed and keeps its frontend; a part that
+  // registered itself would be refused, as any manifest the runner wasn't given is.
+  if (manifest.contract !== undefined) app.log.info({ app: manifest.id, version: manifest.version, contract: manifest.contract }, 'on the app contract: the app runner registers the app, not this part');
+  else void register(manifest, app, env);
   return app;
 }
 

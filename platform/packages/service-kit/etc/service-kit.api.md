@@ -49,10 +49,21 @@ export const appCredentialsFromEnv: (app: string, env?: NodeJS.ProcessEnv) => {
     getToken: TokenSource;
 } | undefined;
 
+// @public (undocumented)
+export interface AppDatabase {
+    // (undocumented)
+    pool: DatabasePool;
+    schema: string;
+}
+
+// @public
+export const appDatabaseFromEnv: (service: string, env?: NodeJS.ProcessEnv) => AppDatabase | undefined;
+
 // @public
 export interface AppManifest {
     // (undocumented)
     [key: string]: unknown;
+    contract?: number;
     // (undocumented)
     id: string;
     // (undocumented)
@@ -421,6 +432,35 @@ export interface ConnectionPool {
 
 // @public
 export const createJobs: (options: JobsOptions) => Jobs;
+
+// @public
+export interface DatabaseClient {
+    // (undocumented)
+    query<R extends DatabaseRow = DatabaseRow>(text: string, values?: unknown[]): Promise<DatabaseResult<R>>;
+    // (undocumented)
+    release(err?: Error | boolean): void;
+}
+
+// @public
+export interface DatabasePool {
+    // (undocumented)
+    connect(): Promise<DatabaseClient>;
+    // (undocumented)
+    end(): Promise<void>;
+    // (undocumented)
+    query<R extends DatabaseRow = DatabaseRow>(text: string, values?: unknown[]): Promise<DatabaseResult<R>>;
+}
+
+// @public
+export interface DatabaseResult<R extends DatabaseRow = DatabaseRow> {
+    // (undocumented)
+    rowCount: number | null;
+    // (undocumented)
+    rows: R[];
+}
+
+// @public
+export type DatabaseRow = Record<string, unknown>;
 
 // @public
 export const DEFAULT_CACHE_ENTRIES = 5000;
