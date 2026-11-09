@@ -662,6 +662,9 @@ importers:
       fastify:
         specifier: 'catalog:'
         version: 5.12.7
+      n3:
+        specifier: ^2.13.12
+        version: 2.13.12
       pg:
         specifier: 'catalog:'
         version: 8.23.1
@@ -672,6 +675,9 @@ importers:
         specifier: ^3.0.2
         version: 3.0.2
     devDependencies:
+      '@augur/clients':
+        specifier: workspace:*
+        version: link:../../packages/clients
       '@types/n3':
         specifier: ^1.26.6
         version: 1.26.6
@@ -684,9 +690,6 @@ importers:
       fast-check:
         specifier: ^4.10.2
         version: 4.10.2
-      n3:
-        specifier: ^2.13.12
-        version: 2.13.12
       rdf-validate-shacl:
         specifier: ^0.6.5
         version: 0.6.5

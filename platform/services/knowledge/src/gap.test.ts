@@ -31,7 +31,7 @@ const surface = (doc: Doc) => [
 ];
 
 describe('the seam against draft 4', () => {
-  it('lacks only what PR 3 adds', async () => {
+  it('lacks only the inputs of actions still to come', async () => {
     const app = await buildApp({ store: {} as never });
     await app.ready();
     const made = app.swagger() as unknown as Doc;
@@ -43,8 +43,8 @@ describe('the seam against draft 4', () => {
   });
 });
 
-/** The gap, as of PR 3b. Export goes with PR 3c, and then the list is empty. */
-const GAP = ['get /floors/{floor}/export'];
+/** The gap: empty since PR 3c. Every path draft 4 asks for is served; from here oasdiff guards the contract. */
+const GAP: string[] = [];
 
 /** The inputs of the actions that come with their own pull requests: publish to undo in PR 6, reflect in 7, adopt and dismiss in 8. */
 const LATER = [

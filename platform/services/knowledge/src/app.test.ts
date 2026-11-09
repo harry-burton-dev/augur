@@ -49,7 +49,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
         kind: 'property',
         value: { v: 1200, unit: 'TEU' },
         state: 'memory',
-        evidence: { observations: 1, sources: 1, unseen: 0, byFloor: [{ floor: own.alice, floorKind: 'personal', observations: 1 }] },
+        evidence: { observations: 1, sources: 1, unseen: 0, byFloor: [{ floor: own.alice, floorKind: 'personal', observations: 1 }], seen: effects.observations },
       }),
     ]);
   });

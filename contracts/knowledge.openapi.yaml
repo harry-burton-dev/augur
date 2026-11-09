@@ -5,11 +5,11 @@
 openapi: 3.1.0
 info:
   title: Knowledge
-  version: 1.2.0
+  version: 1.3.0
   description: |-
     The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
     A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. Apps reach it through its client in a later release.
-    Version 1 grows while the seam fills in: draft 4 of the spec is its target, and paths are added until it is met.
+    Every read draft 4 of the spec asks for is served. Actions are added as their releases come; within version 1 the API only adds, and a change that would break a caller is served as /v2 beside it.
 components:
   schemas:
     Problem:
@@ -435,6 +435,11 @@ components:
               observations:
                 type: integer
           description: The ones you can see, by floor.
+        seen:
+          type: array
+          items:
+            type: string
+          description: "The ids of the observations behind it that you can see: each reads back with its quote and source."
       description: Structure, not a score.
     Dispute:
       type: object
@@ -2241,6 +2246,70 @@ paths:
           description: Identity can’t be asked where you stand
           content:
             application/json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /floors/{floor}/export:
+    get:
+      summary: The beliefs held in sight from this floor as RDF with PROV-O provenance, for a reasoner or triple store beside the service
+      description: Turtle gives one graph. TriG puts the beliefs in a named graph for the floor, and the entities, observations and sources they rest on in the default graph. Evidence on floors out of sight is a count, never a node. Ask with format, or with Accept.
+      parameters:
+        - schema:
+            anyOf:
+              - type: string
+                enum:
+                  - turtle
+              - type: string
+                enum:
+                  - trig
+          in: query
+          name: format
+          required: false
+          description: Wins over Accept. Turtle when neither says.
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 120
+          in: path
+          name: floor
+          required: true
+          description: A floor id as identity gives it.
+      responses:
+        "200":
+          description: Turtle or TriG.
+          content:
+            text/turtle:
+              schema:
+                type: string
+                description: Turtle or TriG.
+            application/trig:
+              schema:
+                type: string
+                description: Turtle or TriG.
+        "401":
+          description: No signed-in caller
+          content:
+            text/turtle:
+              schema:
+                $ref: "#/components/schemas/Problem"
+            application/trig:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "403":
+          description: Not on that floor
+          content:
+            text/turtle:
+              schema:
+                $ref: "#/components/schemas/Problem"
+            application/trig:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        "503":
+          description: Identity can’t be asked where you stand
+          content:
+            text/turtle:
+              schema:
+                $ref: "#/components/schemas/Problem"
+            application/trig:
               schema:
                 $ref: "#/components/schemas/Problem"
   /ontology:
