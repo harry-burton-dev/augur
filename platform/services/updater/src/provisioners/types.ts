@@ -32,8 +32,10 @@ export interface ProvisionContext {
   manifest: AppManifest3;
   /** The app's sign-in, with the storage secrets of `storageId`. */
   secrets: AppSecrets;
-  /** The values an admin gave the app's settings, by id (P4 fills them in; none until then). */
+  /** The values an admin gave the app's settings, by id, as the registry last said. */
   settings?: Record<string, string>;
+  /** For a pull request's preview: its secret settings arrive empty, as the admin gave them to the app's own releases. */
+  withholdSecrets?: boolean;
 }
 
 /** Platform work a resource needs before any part starts, done once per app: its storage, its sign-in. */

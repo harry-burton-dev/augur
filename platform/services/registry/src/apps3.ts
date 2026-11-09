@@ -102,7 +102,21 @@ export const served3 = (m: AppManifest3, filled: { maxUpload: number; previewsOn
  */
 export const reviewOf = (release: { manifest: AppManifest3; parts: { metadata: { name: string; annotations?: Record<string, string> } }[] }) => ({
   kinds: Object.fromEntries(release.parts.map((p) => [p.metadata.name, p.metadata.annotations?.['augur.dev/part'] ?? 'service'])),
-  settings: (release.manifest.contributes?.settings ?? []).map((s) => ({ id: s.id, label: s.label, type: s.type, required: s.required === true })),
+  settings: (release.manifest.contributes?.settings ?? []).map((s) => {
+    const { detail, unit, min, max, options, default: given } = s as { detail?: string; unit?: string; min?: number; max?: number; options?: string[]; default?: string | number | boolean };
+    return {
+      id: s.id,
+      label: s.label,
+      type: s.type,
+      required: s.required === true,
+      ...(detail ? { detail } : {}),
+      ...(unit ? { unit } : {}),
+      ...(min !== undefined ? { min } : {}),
+      ...(max !== undefined ? { max } : {}),
+      ...(options ? { options } : {}),
+      ...(given !== undefined ? { default: given } : {}),
+    };
+  }),
 });
 
 /** The review's schema, beside the asks in Admin → Apps' lists and the pasted release's read. */
@@ -110,7 +124,18 @@ export const ReviewSchema = Type.Object(
   {
     kinds: Type.Record(Type.String(), Type.String(), { description: 'Each part’s kind (service, worker or job), by part name' }),
     settings: Type.Array(
-      Type.Object({ id: Type.String(), label: Type.String(), type: Type.String({ description: 'string, number, boolean, enum or secret' }), required: Type.Boolean() }),
+      Type.Object({
+        id: Type.String(),
+        label: Type.String(),
+        type: Type.String({ description: 'string, number, boolean, enum or secret' }),
+        required: Type.Boolean(),
+        detail: Type.Optional(Type.String()),
+        unit: Type.Optional(Type.String()),
+        min: Type.Optional(Type.Number()),
+        max: Type.Optional(Type.Number()),
+        options: Type.Optional(Type.Array(Type.String())),
+        default: Type.Optional(Type.Union([Type.String(), Type.Number(), Type.Boolean()], { description: 'What it is until an admin gives it a value; a secret has none' })),
+      }),
       { description: 'Each setting it offers admins' },
     ),
   },

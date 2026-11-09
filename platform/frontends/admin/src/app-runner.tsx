@@ -1,13 +1,15 @@
 import { Button, Dialog, Section, Status, TagPicker, TextField } from '@augur/app-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, fullName, type AdminApi, type AppInstalls, type InstalledApp, type PastedRelease, type Person } from './api.js';
+import { ApiError, fullName, type AdminApi, type AppInstalls, type AppSettingDecl, type InstalledApp, type PastedRelease, type Person } from './api.js';
+import { SettingFields } from './app-settings.js';
+import { givenSettings, mustFill, settingChanges, settingNow } from './settings-form.js';
 import { scopeWords } from './apps-model.js';
 import { JobSteps } from './changes.js';
 import { asksWords, JOB_REFRESH_MS, jobOpen, jobWords } from './installs.js';
 import { Line, Problem, Quiet } from './parts.js';
 
 /** A release about to be installed, while the admin confirms: with what it asks, or why it waited. */
-export type InstallAsk = { app: string; name: string; version: string; notes: string[]; release?: PastedRelease['release']; from?: string };
+export type InstallAsk = { app: string; name: string; version: string; notes: string[]; release?: PastedRelease['release']; from?: string; fill?: AppSettingDecl[] };
 
 /** Where the password is entered again before anything is installed or removed; back here after. */
 const signInAgain = (query: string) => {
@@ -30,6 +32,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
   const [confirmRemove, setConfirmRemove] = useState<InstalledApp>();
   const [pasting, setPasting] = useState<string>();
   const [confirmInternet, setConfirmInternet] = useState<InstalledApp>();
+  const [editing, setEditing] = useState<InstalledApp>();
   const [people, setPeople] = useState<Person[]>();
   const resumed = useRef(false);
   const latest = useRef(installs);
@@ -38,7 +41,13 @@ export function useInstalls(api: AdminApi, then: () => void) {
   const ask = useCallback((app: string, version: string, i = latest.current) => {
     const offered = i?.available.find((a) => a.app === app && a.version === version);
     if (offered)
-      setConfirmInstall({ app, name: offered.name, version, notes: [...(offered.asks ? asksWords(offered.asks, scopeWords, offered.review, offered.signer) : []), ...(offered.problem ? [offered.problem] : [])] });
+      setConfirmInstall({
+        app,
+        name: offered.name,
+        version,
+        notes: [...(offered.asks ? asksWords(offered.asks, scopeWords, offered.review, offered.signer) : []), ...(offered.problem ? [offered.problem] : [])],
+        fill: mustFill(offered.review?.settings ?? []),
+      });
   }, []);
 
   /** Back from entering the password again (`?install=<app>@<version>` or `?uninstall=<app>`): ask once more. */
@@ -51,11 +60,13 @@ export function useInstalls(api: AdminApi, then: () => void) {
       const uninstall = params.get('uninstall');
       const paste = params.get('paste');
       const internet = params.get('internet');
-      if (!install && !uninstall && !paste && !internet) return;
+      const settings = params.get('settings');
+      if (!install && !uninstall && !paste && !internet && !settings) return;
       params.delete('install');
       params.delete('uninstall');
       params.delete('paste');
       params.delete('internet');
+      params.delete('settings');
       const rest = params.toString();
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
       const at = install?.lastIndexOf('@') ?? -1;
@@ -63,6 +74,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
       if (uninstall) setConfirmRemove(i.installed.find((x) => x.app === uninstall));
       if (paste) setPasting(paste);
       if (internet) setConfirmInternet(i.installed.find((x) => x.app === internet && x.internet));
+      if (settings) setEditing(i.installed.find((x) => x.app === settings && x.settings?.length));
     },
     [ask],
   );
@@ -141,6 +153,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
       release,
       from: url,
       notes: [...(read.asks ? asksWords(read.asks, scopeWords, read.review, read.signer) : []), ...read.warnings, 'No feed lists it: later versions are installed the same way, from their address.'],
+      fill: mustFill(read.review?.settings ?? []),
     });
   };
 
@@ -158,6 +171,23 @@ export function useInstalls(api: AdminApi, then: () => void) {
     }
   };
 
+  /** Sends what the settings form changed, one setting at a time; a secret may ask for the password again first. */
+  const saveSettings = async (app: InstalledApp, values: Record<string, string>) => {
+    let last: AppInstalls | undefined;
+    for (const change of settingChanges(app.settings ?? [], values)) {
+      try {
+        last = await api.setRunnerSetting(app.app, change.id, change.value);
+      } catch (err) {
+        if (err instanceof ApiError && err.code === 'sign_in_again') {
+          signInAgain(`settings=${encodeURIComponent(app.app)}`);
+          return false as const;
+        }
+        throw err;
+      }
+    }
+    if (last) setInstalls(last);
+  };
+
   const dialogs = (
     <>
       {confirmInstall ? (
@@ -170,12 +200,14 @@ export function useInstalls(api: AdminApi, then: () => void) {
           actionLabel="Install"
           busyLabel="Asking…"
           cancelLabel="Not now"
-          onSubmit={() =>
-            confirmInstall.release
-              ? stepUp(() => api.installRelease(confirmInstall.release!), `paste=${encodeURIComponent(confirmInstall.from ?? '')}`)
-              : stepUp(() => api.installApp(confirmInstall.app, confirmInstall.version), `install=${encodeURIComponent(`${confirmInstall.app}@${confirmInstall.version}`)}`)
-          }
+          onSubmit={(values) => {
+            const given = givenSettings(confirmInstall.fill ?? [], values);
+            return confirmInstall.release
+              ? stepUp(() => api.installRelease(confirmInstall.release!, given), `paste=${encodeURIComponent(confirmInstall.from ?? '')}`)
+              : stepUp(() => api.installApp(confirmInstall.app, confirmInstall.version, given), `install=${encodeURIComponent(`${confirmInstall.app}@${confirmInstall.version}`)}`);
+          }}
           onClose={() => setConfirmInstall(undefined)}
+          fields={confirmInstall.fill?.length ? <SettingFields settings={confirmInstall.fill} /> : undefined}
         >
           {confirmInstall.notes.length ? (
             <ul className="admin-notes">
@@ -221,6 +253,21 @@ export function useInstalls(api: AdminApi, then: () => void) {
           onClose={() => setConfirmInternet(undefined)}
         />
       ) : null}
+      {editing?.settings?.length ? (
+        <Dialog
+          open
+          size="glance"
+          eyebrow={editing.name}
+          heading="Its settings"
+          summary="The parts that read a setting you change start again with it within a minute; the others keep running. A secret is never shown again once given."
+          actionLabel="Save"
+          busyLabel="Saving…"
+          cancelLabel="Not now"
+          onSubmit={(values) => saveSettings(editing, values)}
+          onClose={() => setEditing(undefined)}
+          fields={<SettingFields settings={editing.settings} />}
+        />
+      ) : null}
       {confirmRemove ? (
         <Dialog
           open
@@ -239,7 +286,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
     </>
   );
 
-  return { installs, error, checking, check, ask, paste: () => setPasting(''), people, loadPeople, setDevelopers, remove: setConfirmRemove, internet: setConfirmInternet, dialogs };
+  return { installs, error, checking, check, ask, paste: () => setPasting(''), people, loadPeople, setDevelopers, remove: setConfirmRemove, internet: setConfirmInternet, editSettings: setEditing, dialogs };
 }
 
 export type Installs = ReturnType<typeof useInstalls>;
@@ -289,6 +336,23 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
           <div>
             <Button kind="tertiary" size="sm" disabled={open} reason={WAIT} onPress={() => ins.internet(installed)}>
               {installed.internet.allowed ? 'Take the internet away' : 'Allow the internet'}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {installed.settings?.length ? (
+        <div data-settings className="admin-stack">
+          <Section label="Settings" count={-1} limit={0}>
+            {installed.settings.map((s) => (
+              <Line key={s.id} end={settingNow(s)}>
+                {s.label}
+                {s.newIn ? <Quiet> · version {s.newIn} needs it</Quiet> : null}
+              </Line>
+            ))}
+          </Section>
+          <div>
+            <Button kind="tertiary" size="sm" onPress={() => ins.editSettings(installed)}>
+              Change its settings
             </Button>
           </div>
         </div>

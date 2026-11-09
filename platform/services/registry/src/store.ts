@@ -4,6 +4,9 @@ import { runMigrations, steadyPool, type Migration, type Scope } from '@augur/se
 import type { AppEntry } from './manifest.ts';
 import type { AfterWatch } from './after-watch.ts';
 import { AUGUR_UNIT, defaultDesiredState, type StoredDesiredState } from './desired-state.ts';
+import type { StoredSettingValue } from './settings.ts';
+
+export type { StoredSettingValue };
 
 /** Another app took the route first (two registrations racing). */
 export class RouteTakenError extends Error {}
@@ -371,6 +374,16 @@ export interface AppStore {
   internetAllowed(): Promise<InternetAllowed[]>;
   /** Lets an app reach the internet, or (by null) takes that away. */
   setInternet(app: string, allowedBy: string | null): Promise<void>;
+  /** The values deployment admins gave apps' settings on contract 3: of one app, or of every app. */
+  settingValues(app?: string): Promise<StoredSettingValue[]>;
+  /** Gives one of an app's settings a value, or (by null) takes the admin's value away. */
+  setSettingValue(app: string, setting: string, value: string | null, secret: boolean, by: string): Promise<void>;
+  /** Marks the app's values its release no longer declares as removed from now, and the ones it declares as kept. */
+  keepDeclaredSettings(app: string, declared: string[]): Promise<void>;
+  /** Keeps these of the app's values again, removed or not: a release that declares them is being installed. */
+  restoreSettings(app: string, ids: string[]): Promise<void>;
+  /** Forgets values removed before `before`; how many it forgot. */
+  dropRemovedSettings(before: Date): Promise<number>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
   markSeen(kind: 'upgrade' | 'app-job', id: string, by: string): Promise<boolean>;
   /** The previews running now: each pull request's last finished preview job, unless it was a removal. */
@@ -739,6 +752,22 @@ export const migrations: Migration[] = [
         app_id text primary key,
         allowed_by text not null,
         allowed_at timestamptz not null default now()
+      );`,
+  },
+  {
+    id: '026_app_setting_values',
+    sql: `
+      -- What deployment admins gave contract 3 apps' settings (spec 5.2 to 5.5), as text. A secret's value goes only
+      -- to the app runner. removed_at: since when the release the app runs stopped declaring it; kept 30 days from then.
+      create table registry.app_setting_values (
+        app_id text not null,
+        setting text not null,
+        value text not null,
+        secret boolean not null,
+        set_by text not null,
+        set_at timestamptz not null default now(),
+        removed_at timestamptz,
+        primary key (app_id, setting)
       );`,
   },
 ];
@@ -1245,6 +1274,48 @@ export class PgAppStore implements AppStore {
          on conflict (app_id) do update set allowed_by = excluded.allowed_by, allowed_at = now()`,
         [app, allowedBy],
       );
+  }
+
+  async settingValues(app?: string) {
+    const { rows } = await this.pool.query<{ app_id: string; setting: string; value: string; secret: boolean; set_by: string; set_at: Date; removed_at: Date | null }>(
+      `select * from registry.app_setting_values ${app === undefined ? '' : 'where app_id = $1'} order by app_id, setting`,
+      app === undefined ? [] : [app],
+    );
+    return rows.map((r) => ({
+      app: r.app_id,
+      setting: r.setting,
+      value: r.value,
+      secret: r.secret,
+      setBy: r.set_by,
+      setAt: r.set_at.toISOString(),
+      ...(r.removed_at ? { removedAt: r.removed_at.toISOString() } : {}),
+    }));
+  }
+
+  async setSettingValue(app: string, setting: string, value: string | null, secret: boolean, by: string) {
+    if (value === null) await this.pool.query('delete from registry.app_setting_values where app_id = $1 and setting = $2', [app, setting]);
+    else
+      await this.pool.query(
+        `insert into registry.app_setting_values (app_id, setting, value, secret, set_by) values ($1, $2, $3, $4, $5)
+         on conflict (app_id, setting) do update set value = excluded.value, secret = excluded.secret, set_by = excluded.set_by, set_at = now(), removed_at = null`,
+        [app, setting, value, secret, by],
+      );
+  }
+
+  async keepDeclaredSettings(app: string, declared: string[]) {
+    await this.pool.query(
+      `update registry.app_setting_values set removed_at = case when setting = any($2) then null else coalesce(removed_at, now()) end where app_id = $1`,
+      [app, declared],
+    );
+  }
+
+  async restoreSettings(app: string, ids: string[]) {
+    await this.pool.query('update registry.app_setting_values set removed_at = null where app_id = $1 and setting = any($2)', [app, ids]);
+  }
+
+  async dropRemovedSettings(before: Date) {
+    const { rowCount } = await this.pool.query('delete from registry.app_setting_values where removed_at < $1', [before]);
+    return rowCount ?? 0;
   }
 
   async setOwnNetworks(networks: string[]) {

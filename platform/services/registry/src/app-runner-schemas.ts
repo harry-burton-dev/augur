@@ -7,6 +7,7 @@ import { APP_JOB_STEPS, type AppRelease as AppReleaseFile } from './store.ts';
 import { ref, ServerRing } from './schemas.ts';
 import { Change } from './update-schemas.ts';
 import { ReviewSchema } from './apps3.ts';
+import { GivenSettings, SettingView } from './settings.ts';
 
 const APP_ID = '^[a-z][a-z0-9-]{1,39}$';
 const dateTime = (description?: string) => Type.String({ format: 'date-time', ...(description ? { description } : {}) });
@@ -117,6 +118,9 @@ export const AppInstalls = Type.Object(
             { description: 'For a version that asks for augur-outbound: whether a deployment admin let it reach the internet (off until one does)' },
           ),
         ),
+        settings: Type.Optional(
+          Type.Array(SettingView, { description: 'Its own settings (contract 3), each with the admin’s value if given; and any a newer version needs first' }),
+        ),
         changes: Type.Optional(Type.Array(ref(Change), { description: 'What changed in the version it runs' })),
         older: Type.Optional(
           Type.Array(Type.Object({ version: Type.String(), channel: Type.Enum(['stable', 'beta']) }), {
@@ -181,11 +185,12 @@ export const AppInstalls = Type.Object(
 );
 
 /** What an admin asks the runner to do: install a release (given whole, or from the feed by version), or remove an app. */
-export const JobRequest = Type.Unsafe<{ action: 'install'; release: Static<typeof AppRelease> } | { action: 'install'; app: string; version: string } | { action: 'remove'; app: string }>({
+type Given = { settings?: Record<string, string | number | boolean> };
+export const JobRequest = Type.Unsafe<({ action: 'install'; release: Static<typeof AppRelease> } & Given) | ({ action: 'install'; app: string; version: string } & Given) | { action: 'remove'; app: string }>({
   oneOf: [
-    Type.Object({ action: Type.Literal('install'), release: ref(AppRelease) }, { additionalProperties: false }),
+    Type.Object({ action: Type.Literal('install'), release: ref(AppRelease), settings: Type.Optional(GivenSettings) }, { additionalProperties: false }),
     Type.Object(
-      { action: Type.Literal('install'), app: Type.String({ pattern: APP_ID }), version: Type.String({ minLength: 1, maxLength: 40 }) },
+      { action: Type.Literal('install'), app: Type.String({ pattern: APP_ID }), version: Type.String({ minLength: 1, maxLength: 40 }), settings: Type.Optional(GivenSettings) },
       { additionalProperties: false, description: 'A release from the app feed, by version' },
     ),
     Type.Object({ action: Type.Literal('remove'), app: Type.String({ pattern: APP_ID }) }, { additionalProperties: false }),

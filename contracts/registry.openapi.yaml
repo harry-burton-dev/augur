@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.44.0
+  version: 1.45.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -161,6 +161,24 @@ components:
                               description: string, number, boolean, enum or secret
                             required:
                               type: boolean
+                            detail:
+                              type: string
+                            unit:
+                              type: string
+                            min:
+                              type: number
+                            max:
+                              type: number
+                            options:
+                              type: array
+                              items:
+                                type: string
+                            default:
+                              anyOf:
+                                - type: string
+                                - type: number
+                                - type: boolean
+                              description: What it is until an admin gives it a value; a secret has none
                         description: Each setting it offers admins
                     description: What the review shows beyond the asks (spec 5.6, 9.4)
                   changes:
@@ -195,6 +213,68 @@ components:
                     type: string
                     format: date-time
                 description: "For a version that asks for augur-outbound: whether a deployment admin let it reach the internet (off until one does)"
+              settings:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - id
+                    - label
+                    - type
+                    - required
+                    - set
+                  properties:
+                    id:
+                      type: string
+                    label:
+                      type: string
+                    type:
+                      enum:
+                        - string
+                        - number
+                        - boolean
+                        - enum
+                        - secret
+                    detail:
+                      type: string
+                    unit:
+                      type: string
+                    min:
+                      type: number
+                    max:
+                      type: number
+                    options:
+                      type: array
+                      items:
+                        type: string
+                    default:
+                      anyOf:
+                        - type: string
+                        - type: number
+                        - type: boolean
+                    required:
+                      type: boolean
+                      description: The app doesn’t start until it has a value
+                    set:
+                      type: boolean
+                      description: Whether an admin gave it a value; otherwise its default is in force
+                    value:
+                      anyOf:
+                        - anyOf:
+                            - type: string
+                            - type: number
+                            - type: boolean
+                      description: The admin’s value; never given for a secret
+                    setBy:
+                      type: string
+                    setAt:
+                      type: string
+                      format: date-time
+                    newIn:
+                      type: string
+                      description: Asked for only by this newer version, which needs it before it installs
+                  description: One of the app’s settings, as its form shows it
+                description: Its own settings (contract 3), each with the admin’s value if given; and any a newer version needs first
               changes:
                 type: array
                 items:
@@ -381,6 +461,24 @@ components:
                           description: string, number, boolean, enum or secret
                         required:
                           type: boolean
+                        detail:
+                          type: string
+                        unit:
+                          type: string
+                        min:
+                          type: number
+                        max:
+                          type: number
+                        options:
+                          type: array
+                          items:
+                            type: string
+                        default:
+                          anyOf:
+                            - type: string
+                            - type: number
+                            - type: boolean
+                          description: What it is until an admin gives it a value; a secret has none
                     description: Each setting it offers admins
                 description: What the review shows beyond the asks (spec 5.6, 9.4)
               problem:
@@ -3251,6 +3349,103 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /app-runner/apps/{id}/settings/{setting}:
+    put:
+      summary: Set one of an app's own settings, or put it back to its default (deployment admins only)
+      description: "The value is of the setting’s own type: text, a number within its bounds, true or false, or one of its options. A secret’s value is never shown again, only that it was set; giving it needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. The runner hands the value to the parts that read it and starts them again. Audited as app.setting-set (never with a secret’s value)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - value
+              properties:
+                value:
+                  description: Text, a number, true or false, or null for the default
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: setting
+          required: true
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "400":
+          description: "Not a value the setting takes: the message names its bounds or options"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: Neither installed nor in the feed, or no version of it has that setting
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A required setting with no default can’t go back to nothing
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /runner/settings:
+    get:
+      summary: The values admins gave apps' settings, secrets included (the deployment's app runner only)
+      responses:
+        "200":
+          description: The values
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apps
+                properties:
+                  apps:
+                    type: object
+                    description: "By app id, then setting id: the value as text"
+                    additionalProperties:
+                      type: object
+                      additionalProperties:
+                        type: string
+                description: The values
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /runner/networks:
     put:
       summary: Say the deployment's own networks (the deployment's app runner only)
@@ -3363,6 +3558,12 @@ paths:
                         - install
                     release:
                       $ref: "#/components/schemas/AppRelease"
+                    settings:
+                      type: object
+                      maxProperties: 20
+                      description: "Values for the release’s settings, by id: each of its own type. A required setting with no default needs one here unless an admin already gave it"
+                      additionalProperties:
+                        description: Of the setting’s own type
                   additionalProperties: false
                 - type: object
                   required:
@@ -3381,6 +3582,12 @@ paths:
                       type: string
                       minLength: 1
                       maxLength: 40
+                    settings:
+                      type: object
+                      maxProperties: 20
+                      description: "Values for the release’s settings, by id: each of its own type. A required setting with no default needs one here unless an admin already gave it"
+                      additionalProperties:
+                        description: Of the setting’s own type
                   additionalProperties: false
                   description: A release from the app feed, by version
                 - type: object
@@ -3522,6 +3729,24 @@ paths:
                               description: string, number, boolean, enum or secret
                             required:
                               type: boolean
+                            detail:
+                              type: string
+                            unit:
+                              type: string
+                            min:
+                              type: number
+                            max:
+                              type: number
+                            options:
+                              type: array
+                              items:
+                                type: string
+                            default:
+                              anyOf:
+                                - type: string
+                                - type: number
+                                - type: boolean
+                              description: What it is until an admin gives it a value; a secret has none
                         description: Each setting it offers admins
                     description: What the review shows beyond the asks (spec 5.6, 9.4)
                 description: The file, checked

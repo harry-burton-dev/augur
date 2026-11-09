@@ -16,7 +16,7 @@ On app contract 3 each part of an app says what it needs in its Score file's `re
 | `augur-telemetry` | none | `otlp_endpoint` (where AUGUR's own services send telemetry; empty without a collector), `service_name` |
 | `augur-floor-graphs` | none | `url`, the floor graphs API through the gateway |
 | `augur-outbound` | `hosts`, `why` | nothing; Admin shows the ask |
-| `augur-settings` | `ids` | one output per setting: the admin's value, else the manifest's default, else empty (secret for a `secret` setting); a required setting with neither stops the install |
+| `augur-settings` | `ids` | one output per setting: the value a deployment admin gave it in Admin → Apps, else the manifest's default, else empty (secret for a `secret` setting, read only in `files`); a required setting with neither stops the install. A changed value starts again the parts that read it |
 
 A secret output may be read only in `files`: the runner refuses a part that reads one in a variable, its command or its arguments. Each file a part names is written in `infra/deploy/apps/files/` and mounted into its container as a Compose secret; the Compose project and `state.json` hold no secret. Score's `$${` is a literal `${`.
 

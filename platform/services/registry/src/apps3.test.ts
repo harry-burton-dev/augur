@@ -166,11 +166,12 @@ describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', ()
     expect(res.json().review).toEqual({
       kinds: { web: 'service', worker: 'worker', migrate: 'job' },
       settings: [
-        { id: 'retentionDays', label: 'Keep archived notes for', type: 'number', required: false },
-        { id: 'allowSharing', label: 'Notes can be shared outside the floor', type: 'boolean', required: false },
-        { id: 'defaultNotebook', label: 'Default notebook name', type: 'string', required: false },
-        { id: 'theme', label: 'Note colour', type: 'enum', required: false },
-        { id: 'exportKey', label: 'Export service key', type: 'secret', required: false },
+        { id: 'retentionDays', label: 'Keep archived notes for', type: 'number', required: false, unit: 'days', min: 7, max: 3650, default: 365 },
+        { id: 'allowSharing', label: 'Notes can be shared outside the floor', type: 'boolean', required: false, default: false },
+        { id: 'defaultNotebook', label: 'Default notebook name', type: 'string', required: false, default: 'General' },
+        { id: 'theme', label: 'Note colour', type: 'enum', required: false, options: ['plain', 'warm', 'cool'], default: 'plain' },
+        // A form for it, but never a default: a secret has none.
+        { id: 'exportKey', label: 'Export service key', type: 'secret', required: false, detail: 'The key used when notes are exported to the archive service' },
       ],
     });
     expect(res.json().warnings).toEqual(expect.any(Array));
