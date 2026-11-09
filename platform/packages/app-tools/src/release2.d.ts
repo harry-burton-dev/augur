@@ -62,3 +62,15 @@ export function appRelease2(input: {
   preview?: AppRelease2['preview'];
 }): AppRelease2;
 export function isRelease2(release: unknown): release is AppRelease2;
+
+/** The manifest and parts of a contract 3 checkout, jobs first; `fs` is node:fs and node:path's readdirSync, existsSync and join. */
+export function readCheckout(root: string, fs: { readdirSync: (dir: string) => string[]; existsSync: (path: string) => boolean; join: (...parts: string[]) => string }): { manifest: AppManifest3; parts: ScorePart[] };
+/** A release on contract 3 from what `augur-app bundle` printed. */
+export function releaseOf2(input: {
+  manifest: AppManifest3;
+  parts: ScorePart[];
+  bundle: { service?: string | null; frontend?: FrontendBundle | null; channel?: Bundle2['channel'] };
+  signer: Signer;
+  notes?: string;
+  env?: Record<string, string | undefined>;
+}): AppRelease2;

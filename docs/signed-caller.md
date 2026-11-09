@@ -13,7 +13,7 @@ import Fastify from 'fastify';
 import { callerCheckFromEnv, callerFromHeaders, signedCallers } from '@augur/service-kit';
 
 const app = Fastify();
-app.addHook('onRequest', signedCallers(callerCheckFromEnv('expenses')));
+app.addHook('onRequest', signedCallers(callerCheckFromEnv('expenses'))); // on the app contract, 'app-expenses': callerAudienceOf(manifest)
 
 app.get('/v1/claims', async (req, reply) => {
   const caller = callerFromHeaders(req.headers); // only ever the person the gateway signed

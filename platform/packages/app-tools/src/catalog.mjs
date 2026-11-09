@@ -37,18 +37,21 @@ export function appCatalog({ manifest: m, parts, repo }) {
   const source = (dir) => ({ 'backstage.io/source-location': `url:https://github.com/${repo}/tree/main/${dir ? `${dir}/` : ''}` });
   const github = { 'github.com/project-slug': repo };
   const unit = `app/${m.id}`;
+  // A contract 3 manifest (ADR 0075) has no route or SDK range: the app is at /<id>, on the contract it names,
+  // and what it handles is under contributes.intents.
   const facts = {
     'augur.dev/app-id': m.id,
-    'augur.dev/route': m.route,
-    'augur.dev/sdk-range': m.sdk,
+    'augur.dev/route': m.contract !== undefined ? `/${m.id}` : m.route,
+    ...(m.contract !== undefined ? { 'augur.dev/contract': String(m.contract) } : { 'augur.dev/sdk-range': m.sdk }),
     ...(m.category ? { 'augur.dev/category': m.category } : {}),
     'augur.dev/floors': (m.floors ?? []).join(','),
     'augur.dev/scopes': (m.scopes ?? []).join(','),
   };
+  const handles = m.handles ?? m.contributes?.intents?.handles;
   const resources = [];
   if (m.storage?.database) resources.push({ name: `${m.id}-db`, type: 'database', description: `${m.name}'s schema in Postgres` });
   if (m.storage?.bucket) resources.push({ name: `${m.id}-bucket`, type: 's3-bucket', description: `${m.name}'s bucket in Garage` });
-  const intents = m.handles?.length ? `${m.id}-intents` : null;
+  const intents = handles?.length ? `${m.id}-intents` : null;
 
   const entities = [
     {
@@ -92,7 +95,7 @@ export function appCatalog({ manifest: m, parts, repo }) {
       apiVersion: 'backstage.io/v1alpha1',
       kind: 'API',
       metadata: { name: intents, title: `${m.name} intents`, description: `What other apps can ask ${m.name} for, through ctx.raise or ctx.request` },
-      spec: { type: 'augur-intent', lifecycle: lifecycle(m.version), owner: OWNER, system: m.id, definition: JSON.stringify({ intents: m.handles }, null, 2) },
+      spec: { type: 'augur-intent', lifecycle: lifecycle(m.version), owner: OWNER, system: m.id, definition: JSON.stringify({ intents: handles }, null, 2) },
     });
   }
   for (const r of resources) {

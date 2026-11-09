@@ -49,10 +49,21 @@ export const appCredentialsFromEnv: (app: string, env?: NodeJS.ProcessEnv) => {
     getToken: TokenSource;
 } | undefined;
 
+// @public (undocumented)
+export interface AppDatabase {
+    // (undocumented)
+    pool: DatabasePool;
+    schema: string;
+}
+
+// @public
+export const appDatabaseFromEnv: (service: string, env?: NodeJS.ProcessEnv) => AppDatabase | undefined;
+
 // @public
 export interface AppManifest {
     // (undocumented)
     [key: string]: unknown;
+    contract?: number;
     // (undocumented)
     id: string;
     // (undocumented)
@@ -97,7 +108,7 @@ export const appSecretFor: (key: string, app: string, purpose: AppSecretPurpose)
 // @public
 export type AppSecretPurpose = 'database' | 'bucket' | 'sign-in';
 
-// @public
+// @public (undocumented)
 export const appServer: (app: FastifyInstance, input: AppServerOptions) => Promise<void>;
 
 // @public (undocumented)
@@ -251,6 +262,9 @@ export const CALLER_LIFETIME_SECONDS = 60;
 
 // @public
 export const CALLER_TOKEN_HEADER = "x-augur-caller";
+
+// @public
+export const callerAudienceOf: (manifest: Pick<AppManifest, "id" | "contract">) => string;
 
 // @public
 export type CallerCheck = (token: string) => Promise<Caller>;
@@ -421,6 +435,35 @@ export interface ConnectionPool {
 
 // @public
 export const createJobs: (options: JobsOptions) => Jobs;
+
+// @public
+export interface DatabaseClient {
+    // (undocumented)
+    query<R extends DatabaseRow = DatabaseRow>(text: string, values?: unknown[]): Promise<DatabaseResult<R>>;
+    // (undocumented)
+    release(err?: Error | boolean): void;
+}
+
+// @public
+export interface DatabasePool {
+    // (undocumented)
+    connect(): Promise<DatabaseClient>;
+    // (undocumented)
+    end(): Promise<void>;
+    // (undocumented)
+    query<R extends DatabaseRow = DatabaseRow>(text: string, values?: unknown[]): Promise<DatabaseResult<R>>;
+}
+
+// @public
+export interface DatabaseResult<R extends DatabaseRow = DatabaseRow> {
+    // (undocumented)
+    rowCount: number | null;
+    // (undocumented)
+    rows: R[];
+}
+
+// @public
+export type DatabaseRow = Record<string, unknown>;
 
 // @public
 export const DEFAULT_CACHE_ENTRIES = 5000;

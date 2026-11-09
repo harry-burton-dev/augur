@@ -26,5 +26,6 @@ export * from './migrate.js';
 export * from './problems.js';
 export * from './reserved.js';
 export * from './app-service.js';
+export * from './app-database.js';
 export * from './mail-relay.js';
 export * from './personal.js';
