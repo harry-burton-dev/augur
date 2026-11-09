@@ -130,6 +130,7 @@ export interface BeliefRow {
   sources_behind: string;
   evidence_unseen: string;
   by_floor: { floor: string; floorKind: FloorKind; observations: number }[];
+  seen: string[];
 }
 export const BELIEF_COLUMNS = `b.id, b.home_floor, array(select r.floor from kg.belief_reach r where r.belief = b.id order by r.raised_at) as reach,
   b.subject, b.predicate, b.value, b.object, b.modality, lower(b.valid) as valid_from, upper(b.valid) as valid_to,
@@ -138,7 +139,8 @@ export const BELIEF_COLUMNS = `b.id, b.home_floor, array(select r.floor from kg.
   kg.stands(b.id) as stands, kg.sources_behind(b.id) as sources_behind, kg.evidence_unseen(b.id) as evidence_unseen,
   coalesce((select jsonb_agg(jsonb_build_object('floor', x.floor, 'floorKind', x.kind, 'observations', x.n) order by x.floor)
             from (select o.floor, f.kind, count(*)::int as n from kg.belief_evidence be join kg.observations o on o.id = be.observation
-                  join kg.floors f on f.id = o.floor where be.belief = b.id group by o.floor, f.kind) x), '[]') as by_floor`;
+                  join kg.floors f on f.id = o.floor where be.belief = b.id group by o.floor, f.kind) x), '[]') as by_floor,
+  array(select be.observation::text from kg.belief_evidence be where be.belief = b.id order by 1) as seen`;
 /** Believed now: neither superseded nor ended, and still standing on some evidence. */
 export const LIVE = 'b.superseded_at is null and b.ended_at is null and kg.stands(b.id)';
 
@@ -201,7 +203,7 @@ export const toBelief = (b: BeliefRow, { at, known }: Clocks = {}) => {
     supersededBy: b.superseded_by ?? undefined,
     state,
     heldBy: b.held_by,
-    evidence: { observations: seen + Number(b.evidence_unseen), sources: Number(b.sources_behind), unseen: Number(b.evidence_unseen), byFloor: b.by_floor },
+    evidence: { observations: seen + Number(b.evidence_unseen), sources: Number(b.sources_behind), unseen: Number(b.evidence_unseen), byFloor: b.by_floor, seen: b.seen },
   });
 };
 

@@ -17,16 +17,17 @@
     "@fastify/swagger": "catalog:",
     "@fastify/type-provider-typebox": "catalog:",
     "fastify": "catalog:",
+    "n3": "^2.13.12",
     "pg": "catalog:",
     "typebox": "catalog:",
     "ulid": "^3.0.2"
   },
   "devDependencies": {
+    "@augur/clients": "workspace:*",
     "@types/n3": "^1.26.6",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "fast-check": "^4.10.2",
-    "n3": "^2.13.12",
     "rdf-validate-shacl": "^0.6.5",
     "typescript": "catalog:",
     "vitest": "catalog:",
