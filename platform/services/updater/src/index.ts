@@ -179,6 +179,12 @@ const appsOnce = async () => {
   if (!envValue(await server.readEnv(), 'APP_SECRETS_KEY')) return;
   await sayNetworks().catch((err) => log('couldn’t tell the registry the deployment’s own networks', { error: (err as Error).message }));
   await runner.retireDue();
+  // Between jobs, never during one: it starts the parts that ask for the internet again, on or off the app's way out.
+  await apps
+    .internetApps()
+    .then((allowed) => runner.keepInternet(allowed))
+    .then(({ on, off }) => (on.length || off.length) && log('apps’ internet changed', { on, off }))
+    .catch((err) => log('couldn’t give apps the internet an admin allowed', { error: (err as Error).message }));
   const job = await apps.next();
   if (!job) return;
   log('app job', { app: job.app, action: job.action, version: job.release?.version });

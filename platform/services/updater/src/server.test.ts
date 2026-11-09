@@ -155,6 +155,7 @@ echo "$*" >> ${log}
 case "$*" in
   "container inspect --format {{.Id}} "*) echo self ;;
   "network ls --filter label=augur.network=app "*) echo app-old ;;
+  *"com.docker.compose.service=app-notes-worker-blue"*) echo worker ;;
   *"com.docker.compose.service=gateway"*) echo gw ;;
   *"com.docker.compose.service=postgres"*) echo pg ;;
   *"com.docker.compose.service="*) ;;
@@ -170,10 +171,17 @@ esac
     vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
     try {
       const host = composeAppHost({ dir, dockerHost: 'tcp://nowhere:2375', dockerConfig: dir, signer: { identity: 'i', issuer: 'x' } });
-      await host.appNetworks([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres'] }]);
+      await host.appNetworks([
+        { app: 'notes', name: 'app-notes', join: ['gateway', 'postgres'] },
+        { app: 'notes', name: 'app-notes_internet', join: [], internet: true, members: ['app-notes-worker-blue'] },
+      ]);
       const said = (await readFile(log, 'utf8')).trim().split('\n');
       expect(said).toContain('network create --internal --label augur.network=app --label augur.app=notes app-notes');
       expect(said).toContain('network connect app-notes self');
+      // The way out isn't internal, and only the parts that ask for it join it.
+      expect(said).toContain('network create --label augur.network=app --label augur.app=notes app-notes_internet');
+      expect(said).not.toContain('network connect app-notes_internet self');
+      expect(said).toContain('network connect app-notes_internet worker');
       expect(said).toContain('network connect --alias postgres app-notes pg');
       // Already on it: nothing to do.
       expect(said.some((l) => l.includes('--alias gateway'))).toBe(false);

@@ -219,6 +219,13 @@ export interface AppFollow {
   setAt: string;
 }
 
+/** An app a deployment admin let reach the internet. */
+export interface InternetAllowed {
+  app: string;
+  allowedBy: string;
+  allowedAt: string;
+}
+
 /** An app the runner installed, and the release it's on. */
 export interface InstalledApp {
   app: string;
@@ -360,6 +367,10 @@ export interface AppStore {
   ownNetworks(): Promise<{ networks: string[]; setAt?: string }>;
   /** Keeps the deployment's own networks, as the app runner says them. */
   setOwnNetworks(networks: string[]): Promise<{ networks: string[]; setAt: string }>;
+  /** The apps a deployment admin let reach the internet (spec 4.6, augur-outbound), with who and when. */
+  internetAllowed(): Promise<InternetAllowed[]>;
+  /** Lets an app reach the internet, or (by null) takes that away. */
+  setInternet(app: string, allowedBy: string | null): Promise<void>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
   markSeen(kind: 'upgrade' | 'app-job', id: string, by: string): Promise<boolean>;
   /** The previews running now: each pull request's last finished preview job, unless it was a removal. */
@@ -720,6 +731,16 @@ export const migrations: Migration[] = [
         set_at timestamptz not null default now()
       );`,
   },
+  {
+    id: '025_app_internet',
+    sql: `
+      -- The apps a deployment admin let reach the internet (spec 4.6, augur-outbound): none until one does.
+      create table registry.app_internet (
+        app_id text primary key,
+        allowed_by text not null,
+        allowed_at timestamptz not null default now()
+      );`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -893,6 +914,7 @@ export class PgAppStore implements AppStore {
       const { rowCount } = await client.query('delete from registry.apps where id = $1', [id]);
       await client.query('delete from registry.app_frontends where app_id = $1', [id]);
       await client.query('delete from registry.feature_opt_ins where app_id = $1', [id]);
+      await client.query('delete from registry.app_internet where app_id = $1', [id]);
       if (rowCount === 1) await client.query('insert into registry.removed_apps (app_id, removed_by) values ($1, $2) on conflict (app_id) do nothing', [id, removedBy]);
       return rowCount === 1;
     });
@@ -1208,6 +1230,21 @@ export class PgAppStore implements AppStore {
   async ownNetworks() {
     const { rows } = await this.pool.query<{ networks: string[]; set_at: Date }>('select networks, set_at from registry.runner_networks');
     return rows[0] ? { networks: rows[0].networks, setAt: rows[0].set_at.toISOString() } : { networks: [] };
+  }
+
+  async internetAllowed() {
+    const { rows } = await this.pool.query<{ app_id: string; allowed_by: string; allowed_at: Date }>('select * from registry.app_internet order by app_id');
+    return rows.map((r) => ({ app: r.app_id, allowedBy: r.allowed_by, allowedAt: r.allowed_at.toISOString() }));
+  }
+
+  async setInternet(app: string, allowedBy: string | null) {
+    if (allowedBy === null) await this.pool.query('delete from registry.app_internet where app_id = $1', [app]);
+    else
+      await this.pool.query(
+        `insert into registry.app_internet (app_id, allowed_by) values ($1, $2)
+         on conflict (app_id) do update set allowed_by = excluded.allowed_by, allowed_at = now()`,
+        [app, allowedBy],
+      );
   }
 
   async setOwnNetworks(networks: string[]) {

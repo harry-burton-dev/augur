@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.43.0
+  version: 1.44.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -170,6 +170,31 @@ components:
                 description: The newest release on its channel, when newer than what runs
               job:
                 $ref: "#/components/schemas/AppJob"
+              internet:
+                type: object
+                required:
+                  - allowed
+                  - why
+                  - hosts
+                properties:
+                  allowed:
+                    type: boolean
+                  why:
+                    type: array
+                    items:
+                      type: string
+                    description: What each part that asks says it fetches
+                  hosts:
+                    type: array
+                    items:
+                      type: string
+                    description: The hosts its parts name; any host is reachable once allowed
+                  allowedBy:
+                    type: string
+                  allowedAt:
+                    type: string
+                    format: date-time
+                description: "For a version that asks for augur-outbound: whether a deployment admin let it reach the internet (off until one does)"
               changes:
                 type: array
                 items:
@@ -3140,6 +3165,88 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "409":
           description: "This is a production server: it follows stable releases only (error production_server)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/apps/{id}/internet:
+    put:
+      summary: Let an installed app reach the internet, or take that away (deployment admins only)
+      description: "Only its parts that ask for augur-outbound reach it, and any host on it: the hosts they name are what they say they need, not a limit; never a preview. The app runner joins them to it, or takes them off it, within a minute. Removing the app from the server takes it away. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Audited as app.internet-set."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - allowed
+              properties:
+                allowed:
+                  type: boolean
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The app runner hasn't installed that app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The version it runs doesn't ask for the internet
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /runner/internet:
+    get:
+      summary: The apps a deployment admin let reach the internet (the deployment’s app runner only)
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apps
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: string
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
           content:
             application/problem+json:
               schema:

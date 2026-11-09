@@ -105,6 +105,18 @@ export const AppInstalls = Type.Object(
           ),
         ),
         job: Type.Optional(ref(AppJob)),
+        internet: Type.Optional(
+          Type.Object(
+            {
+              allowed: Type.Boolean(),
+              why: Type.Array(Type.String(), { description: 'What each part that asks says it fetches' }),
+              hosts: Type.Array(Type.String(), { description: 'The hosts its parts name; any host is reachable once allowed' }),
+              allowedBy: Type.Optional(Type.String()),
+              allowedAt: Type.Optional(Type.String({ format: 'date-time' })),
+            },
+            { description: 'For a version that asks for augur-outbound: whether a deployment admin let it reach the internet (off until one does)' },
+          ),
+        ),
         changes: Type.Optional(Type.Array(ref(Change), { description: 'What changed in the version it runs' })),
         older: Type.Optional(
           Type.Array(Type.Object({ version: Type.String(), channel: Type.Enum(['stable', 'beta']) }), {

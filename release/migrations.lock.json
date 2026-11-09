@@ -60,6 +60,7 @@
     "021_removed_apps": "086a452c72835c9f",
     "022_followed_events": "b4c30986b8b48ff3",
     "023_retire_shipped_apps": "3da21d6be888ebf2",
-    "024_runner_networks": "2719e26d22daa5ab"
+    "024_runner_networks": "2719e26d22daa5ab",
+    "025_app_internet": "97b8f75745392bd7"
   }
 }

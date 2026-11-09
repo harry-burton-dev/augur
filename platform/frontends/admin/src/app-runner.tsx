@@ -29,6 +29,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
   const [confirmInstall, setConfirmInstall] = useState<InstallAsk>();
   const [confirmRemove, setConfirmRemove] = useState<InstalledApp>();
   const [pasting, setPasting] = useState<string>();
+  const [confirmInternet, setConfirmInternet] = useState<InstalledApp>();
   const [people, setPeople] = useState<Person[]>();
   const resumed = useRef(false);
   const latest = useRef(installs);
@@ -49,16 +50,19 @@ export function useInstalls(api: AdminApi, then: () => void) {
       const install = params.get('install');
       const uninstall = params.get('uninstall');
       const paste = params.get('paste');
-      if (!install && !uninstall && !paste) return;
+      const internet = params.get('internet');
+      if (!install && !uninstall && !paste && !internet) return;
       params.delete('install');
       params.delete('uninstall');
       params.delete('paste');
+      params.delete('internet');
       const rest = params.toString();
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
       const at = install?.lastIndexOf('@') ?? -1;
       if (install && at > 0) ask(install.slice(0, at), install.slice(at + 1), i);
       if (uninstall) setConfirmRemove(i.installed.find((x) => x.app === uninstall));
       if (paste) setPasting(paste);
+      if (internet) setConfirmInternet(i.installed.find((x) => x.app === internet && x.internet));
     },
     [ask],
   );
@@ -198,6 +202,25 @@ export function useInstalls(api: AdminApi, then: () => void) {
           fields={<TextField name="url" label="Release file address" placeholder="https://github.com/owner/repo/releases/download/…/app-release.json" defaultValue={pasting} required />}
         />
       ) : null}
+      {confirmInternet?.internet ? (
+        <Dialog
+          open
+          size="glance"
+          eyebrow={confirmInternet.name}
+          heading={confirmInternet.internet.allowed ? `Take the internet from ${confirmInternet.name}?` : `Let ${confirmInternet.name} reach the internet?`}
+          summary={
+            confirmInternet.internet.allowed
+              ? 'Its parts that ask for it lose it within a minute, without restarting. What they fetch from outside stops.'
+              : `Its parts that ask for it can reach any host on the internet within a minute, without restarting; its previews never can. ${internetWords(confirmInternet.internet)}`
+          }
+          actionLabel={confirmInternet.internet.allowed ? 'Turn it off' : 'Allow it'}
+          danger={!confirmInternet.internet.allowed}
+          busyLabel="Asking…"
+          cancelLabel="Not now"
+          onSubmit={() => stepUp(() => api.setInternet(confirmInternet.app, !confirmInternet.internet!.allowed), `internet=${encodeURIComponent(confirmInternet.app)}`)}
+          onClose={() => setConfirmInternet(undefined)}
+        />
+      ) : null}
       {confirmRemove ? (
         <Dialog
           open
@@ -216,12 +239,16 @@ export function useInstalls(api: AdminApi, then: () => void) {
     </>
   );
 
-  return { installs, error, checking, check, ask, paste: () => setPasting(''), people, loadPeople, setDevelopers, remove: setConfirmRemove, dialogs };
+  return { installs, error, checking, check, ask, paste: () => setPasting(''), people, loadPeople, setDevelopers, remove: setConfirmRemove, internet: setConfirmInternet, dialogs };
 }
 
 export type Installs = ReturnType<typeof useInstalls>;
 
 const WAIT = 'Wait for the server to finish its current job with this app.';
+
+/** What an app says it fetches from the internet, and from where. */
+const internetWords = (i: NonNullable<InstalledApp['internet']>) =>
+  `${i.why.length ? i.why.join('; ') : 'it doesn’t say what for'}${i.hosts.length ? ` (it names ${i.hosts.join(', ')})` : ''}.`;
 
 /**
  * For an app the app runner installed: what the runner is doing, its developers and previews, and
@@ -251,6 +278,20 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
           </p>
           {open || installed.job.state === 'failed' ? <JobSteps job={installed.job} /> : null}
         </>
+      ) : null}
+      {installed.internet ? (
+        <div data-internet className="admin-stack">
+          <p className="admin-flat">
+            {installed.internet.allowed
+              ? `Reaches the internet, allowed${installed.internet.allowedAt ? ` on ${new Date(installed.internet.allowedAt).toLocaleDateString()}` : ''}: ${internetWords(installed.internet)}`
+              : `Asks to reach the internet, which is off until a deployment admin allows it: ${internetWords(installed.internet)}`}
+          </p>
+          <div>
+            <Button kind="tertiary" size="sm" disabled={open} reason={WAIT} onPress={() => ins.internet(installed)}>
+              {installed.internet.allowed ? 'Take the internet away' : 'Allow the internet'}
+            </Button>
+          </div>
+        </div>
       ) : null}
       <div data-developers>
         <TagPicker

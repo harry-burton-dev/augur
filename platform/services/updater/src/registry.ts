@@ -141,5 +141,12 @@ export const appRunnerClient = ({ registryUrl, identityUrl, credentials, oidc, r
   /** Tells the registry the deployment's own networks (PUT /v1/runner/networks), which no app's address may be on. */
   const setOwnNetworks = (networks: string[]) => call(registry('/runner/networks'), 'PUT', { networks }, 'The registry didn’t take the deployment’s own networks');
 
-  return { next, reporter, calls, setOwnNetworks };
+  /** The apps a deployment admin let reach the internet (GET /v1/runner/internet). */
+  const internetApps = async (): Promise<string[]> => {
+    const res = await withDeadline(fetchImpl)(registry('/runner/internet'), { headers: await serviceHeaders(credentials) });
+    if (!res.ok) throw new Error(`The registry answered ${res.status} when asked which apps may reach the internet.`);
+    return ((await res.json()) as { apps: string[] }).apps;
+  };
+
+  return { next, reporter, calls, setOwnNetworks, internetApps };
 };
