@@ -311,6 +311,8 @@ spec:
   lifecycle: experimental
   owner: group:default/augur-core
   system: augur-platform
+  providesApis:
+    - api:default/knowledge-api
   consumesApis:
     - api:default/events-api
     - api:default/gateway-api
@@ -481,6 +483,26 @@ spec:
   system: augur-platform
   definition:
     $text: ../contracts/identity.openapi.yaml
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: knowledge-api
+  title: Knowledge API
+  description: |-
+    The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
+    A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. Apps reach it through its client in a later release.
+    Version 1 grows while the seam fills in: draft 4 of the spec is its target, and paths are added until it is met.
+  annotations:
+    github.com/project-slug: harry-burton-dev/augur
+    augur.dev/contract-version: 1.0.0
+spec:
+  type: openapi
+  lifecycle: production
+  owner: group:default/augur-core
+  system: augur-platform
+  definition:
+    $text: ../contracts/knowledge.openapi.yaml
 ---
 apiVersion: backstage.io/v1alpha1
 kind: API

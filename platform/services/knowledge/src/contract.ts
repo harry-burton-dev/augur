@@ -11,7 +11,7 @@ const paragraph = (...lines: string[]) => lines.join(' ');
 
 export const info = {
   title: 'Knowledge',
-  version: '0.1.0',
+  version: '1.0.0',
   description: [
     paragraph(
       'The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor',
@@ -25,7 +25,7 @@ export const info = {
       'Idempotency-Key; reads answer as the person on the floor they name. Apps reach it through its',
       'client in a later release.',
     ),
-    paragraph('0.x while the seam fills in: draft 4 of the spec is its target, and paths are added until it is met.'),
+    paragraph('Version 1 grows while the seam fills in: draft 4 of the spec is its target, and paths are added until it is met.'),
   ].join('\n'),
 };
 
