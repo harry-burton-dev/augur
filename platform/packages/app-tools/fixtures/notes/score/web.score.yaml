@@ -20,6 +20,9 @@ containers:
       DATABASE_NAME: ${resources.db.name}
       DATABASE_USER: ${resources.db.user}
       DATABASE_SCHEMA: ${resources.db.schema}
+      DATABASE_PORT: ${resources.db.port}
+      DATABASE_CONNECTIONS: ${resources.db.connections}
+      DATABASE_PASSWORD_FILE: /run/augur/database-password
       OTEL_EXPORTER_OTLP_ENDPOINT: ${resources.telemetry.otlp_endpoint}
       OTEL_SERVICE_NAME: ${resources.telemetry.service_name}
       RETENTION_DAYS: ${resources.settings.retentionDays}

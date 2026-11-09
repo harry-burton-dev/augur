@@ -12,6 +12,9 @@ containers:
       DATABASE_NAME: ${resources.db.name}
       DATABASE_USER: ${resources.db.user}
       DATABASE_SCHEMA: ${resources.db.schema}
+      DATABASE_PORT: ${resources.db.port}
+      DATABASE_CONNECTIONS: ${resources.db.connections}
+      DATABASE_PASSWORD_FILE: /run/augur/database-password
     files:
       /run/augur/database-password:
         mode: "0400"

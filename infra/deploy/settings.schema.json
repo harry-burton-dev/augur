@@ -1588,6 +1588,42 @@
       "description": "runner when the app runner registers an app, set by the app runner.",
       "x-internal": "updater"
     },
+    "DATABASE_HOST": {
+      "type": "string",
+      "description": "Where an app part's own database is, from its Score file's augur-database resource, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_PORT": {
+      "type": "string",
+      "description": "The port of an app part's own database (default 5432), set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_NAME": {
+      "type": "string",
+      "description": "The database an app part's schema is in, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_USER": {
+      "type": "string",
+      "description": "An app part's database login, app_<id>, whose search path is the app's schema, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_SCHEMA": {
+      "type": "string",
+      "description": "An app part's own schema, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_CONNECTIONS": {
+      "type": "string",
+      "description": "How many connections an app part's pool may open, from its Score file, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "An app part's database password, given only as a file (DATABASE_PASSWORD_FILE), set by the app runner.",
+      "x-internal": "updater"
+    },
     "OTEL_RESOURCE_ATTRIBUTES": {
       "type": "string",
       "description": "deployment.environment.name, from SERVER_RING.",

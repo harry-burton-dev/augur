@@ -4,7 +4,7 @@
 // it, and `asks`: what an admin agrees to, written out so a runner compares two versions without reading
 // the Score files.
 import { FRONTEND_MEDIA_TYPE, channelOf } from './release.mjs';
-import { contractValidators, partProblems } from './validate.mjs';
+import { contractValidators, partProblems, readApp } from './validate.mjs';
 
 /** What an app-release.json on contract 3 says it is. */
 export const APP_RELEASE_2_SCHEMA = 'augur.app-release/v2';
@@ -91,3 +91,37 @@ export const appRelease2 = ({ manifest, parts, bundle = {}, signer, notes = '', 
 
 /** Whether a release file is on contract 3 (v2) rather than contract 2 (v1). */
 export const isRelease2 = (release) => release?.schema === APP_RELEASE_2_SCHEMA;
+
+/** Whether a Score part is a job (`augur.dev/part: job`): the runner runs jobs before the switch. */
+const isJob = (part) => part.metadata?.annotations?.['augur.dev/part'] === 'job';
+
+/**
+ * The manifest and the parts of a contract 3 checkout (manifest.json and score/*.score.yaml), the parts in the
+ * order the runner runs them: jobs first. `fs` is node:fs and node:path's readdirSync, existsSync and join.
+ */
+export const readCheckout = (root, fs) => {
+  const { manifest, parts } = readApp(root, fs);
+  const workloads = Object.values(parts);
+  return { manifest, parts: [...workloads.filter(isJob), ...workloads.filter((p) => !isJob(p))] };
+};
+
+/**
+ * A release on contract 3 from what `augur-app bundle` printed: `service` is the image every part whose Score
+ * file says `image: .` is built from, `frontend` the bundle, `channel` the channel. A preview names its pull
+ * request from PR_NUMBER, PR_TITLE and PR_URL in `env`.
+ */
+export const releaseOf2 = ({ manifest, parts, bundle, signer, notes = '', env = {} }) => {
+  const built = parts.filter((p) => Object.values(p.containers ?? {}).some((c) => c.image === '.'));
+  if (built.length && !bundle.service) throw new Error(`${built.map((p) => p.metadata.name).join(', ')} ${built.length === 1 ? 'is' : 'are'} built from this repository's image, and the bundle has no image.`);
+  if (!built.length && bundle.service) throw new Error(`The bundle has an image, but no part's Score file says \`image: .\`, so nothing would run it; pin the image in the Score file or build a part from it.`);
+  const preview = bundle.channel === 'preview' && env.PR_NUMBER ? { pr: Number(env.PR_NUMBER), ...(env.PR_TITLE ? { title: env.PR_TITLE.slice(0, 300) } : {}), ...(env.PR_URL ? { url: env.PR_URL } : {}) } : undefined;
+  if (bundle.channel === 'preview' && !preview) throw new Error('A preview is released from a pull request: PR_NUMBER is not set.');
+  return appRelease2({
+    manifest,
+    parts,
+    bundle: { ...(bundle.frontend ? { frontend: bundle.frontend } : {}), images: Object.fromEntries(built.map((p) => [p.metadata.name, bundle.service])), ...(bundle.channel ? { channel: bundle.channel } : {}) },
+    signer,
+    notes,
+    ...(preview ? { preview } : {}),
+  });
+};

@@ -4,15 +4,18 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
-import { appServer, auditFor, floorCaller, notifyFor, peopleFor, readManifest, standInPeople, startAppService, type AppAuditEntry, type AppNotice } from './app-service.js';
+import { appServer, auditFor, callerAudienceOf, floorCaller, notifyFor, peopleFor, readManifest, standInPeople, startAppService, type AppAuditEntry, type AppNotice } from './app-service.js';
+import { appDatabaseFromEnv } from './app-database.js';
 import { callerHeaders } from './caller.js';
 import { createJobs } from './jobs.js';
+import { registerApp } from './registration.js';
 import { callerCheckFor, callerSigner, signedCallerHeaders } from './signed-caller.js';
 
 vi.mock('./jobs.js', async (actual) => {
   const jobs = await actual<typeof import('./jobs.js')>();
   return { ...jobs, createJobs: vi.fn(jobs.createJobs) };
 });
+vi.mock('./registration.js', () => ({ registerApp: vi.fn(async () => true) }));
 
 const manifest = { id: 'notes', name: 'Team notes', version: '1.2.3' };
 const sam = { id: 'u1', name: 'Sam Okafor', departments: [], roles: [] };
@@ -51,12 +54,20 @@ describe('appServer', () => {
 
   it('believes only the caller the gateway signed for this app', async () => {
     const gateway = callerSigner();
-    const app = await build(callerCheckFor(gateway, 'notes'));
+    // The gateway signs for the app's client, app-<id>, which is what appServer checks for by default.
+    const app = await build(callerCheckFor(gateway, 'app-notes'));
     const onFloor = { ...sam, workspace: { id: 'w1', kind: 'team' as const, role: 'member' as const } };
-    const signed = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: await signedCallerHeaders(gateway, onFloor, 'notes') });
+    const signed = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: await signedCallerHeaders(gateway, onFloor, 'app-notes') });
     expect(signed.json()).toEqual({ floor: 'w1' });
+    const forOther = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: await signedCallerHeaders(gateway, onFloor, 'notes') });
+    expect(forOther.statusCode).toBe(401);
     const forged = await app.inject({ remoteAddress: '172.18.0.9', method: 'GET', url: '/v1/here', headers: callerHeaders(onFloor) });
     expect(forged.statusCode).toBe(401);
+  });
+
+  it('expects the gateway to sign for the app’s client on the app contract, and for its id on contract 2', () => {
+    expect(callerAudienceOf({ id: 'notes' })).toBe('notes');
+    expect(callerAudienceOf({ id: 'notes', contract: 3 })).toBe('app-notes');
   });
 });
 
@@ -110,6 +121,28 @@ describe('startAppService', () => {
     }
   });
 
+  it('registers the app itself on contract 2, and leaves that to the app runner on the app contract', async () => {
+    const start = async (m: typeof manifest & { contract?: number }) => {
+      const app = await startAppService({
+        manifest: m,
+        port: 0,
+        env: { NODE_ENV: 'test', REGISTRY_URL: 'http://registry.test', SERVICE_CLIENT_SECRET: 's3cret' },
+        buildApp: async () => {
+          const app = Fastify({ logger: false });
+          await appServer(app, { manifest: m });
+          return app;
+        },
+      });
+      await new Promise((r) => setImmediate(r));
+      await app.close();
+    };
+    vi.mocked(registerApp).mockClear();
+    await start(manifest);
+    expect(vi.mocked(registerApp)).toHaveBeenCalledTimes(1);
+    await start({ ...manifest, contract: 3 });
+    expect(vi.mocked(registerApp)).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps a preview’s jobs in the schema its login owns, not the app’s', async () => {
     const start = async (env: Record<string, string>) => {
       const teamNotes = { ...manifest, id: 'team-notes' };
@@ -128,5 +161,19 @@ describe('startAppService', () => {
     };
     expect(await start({})).toBe('team_notes_jobs');
     expect(await start({ APP_PREVIEW: 'pr-12' })).toBe('team_notes_pr12_jobs');
+  });
+});
+
+describe('appDatabaseFromEnv', () => {
+  it('gives nothing without DATABASE_HOST, wants the schema, and reads the password from its file', () => {
+    expect(appDatabaseFromEnv('notes', {})).toBeUndefined();
+    const file = join(mkdtempSync(join(tmpdir(), 'db-')), 'password');
+    writeFileSync(file, 'pw-1\n');
+    const env = { DATABASE_HOST: 'db', DATABASE_PORT: '5433', DATABASE_NAME: 'platform', DATABASE_USER: 'app_notes', DATABASE_CONNECTIONS: '5', DATABASE_PASSWORD_FILE: file };
+    expect(() => appDatabaseFromEnv('notes', { ...env })).toThrow(/DATABASE_SCHEMA is not set: name it in the part’s Score file/);
+    const db = appDatabaseFromEnv('notes', { ...env, DATABASE_SCHEMA: 'notes' })!;
+    expect(db.schema).toBe('notes');
+    const options = (db.pool as unknown as { options: Record<string, unknown> }).options;
+    expect(options).toMatchObject({ host: 'db', port: 5433, database: 'platform', user: 'app_notes', password: 'pw-1', max: 5 });
   });
 });
