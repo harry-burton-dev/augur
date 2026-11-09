@@ -189,6 +189,8 @@ export interface Overview {
   needsYou: { kind: 'halted' | 'failed' | 'went-back' | 'first-upgrade' | 'after-watch'; unit: string; message: string; result?: { kind: 'upgrade' | 'app-job'; id: string } }[];
   /** Whether this deployment tells Backstage what it runs (ADR 0019), and why. Absent from an older registry. */
   reporting?: { mode: ReportingMode; why: string };
+  /** What the caller may do here, for a frontend that is never told their roles (contract 3). */
+  you?: { deploymentAdmin: boolean };
 }
 
 export type ReportingMode = 'send' | 'file' | 'off';
