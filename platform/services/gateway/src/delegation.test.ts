@@ -111,7 +111,29 @@ describe('a call made for an app', () => {
     const app = await gateway(async () => { throw new AppGrantsUnavailable('down'); });
     const res = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, 'x-workspace-id': 'w1' } });
     expect(res.statusCode).toBe(503);
-    expect(res.json().message).toBe('Which contract this app is on can’t be checked right now. Try again in a moment.');
+    expect(res.json().message).toBe('Whether this app can be reached can’t be checked right now: AUGUR’s registry isn’t answering. Try again in a moment.');
+  });
+
+  it('signs a plain call for the bare id for an app on contract 2, one the registry doesn’t know, or with no registry to ask', async () => {
+    const plain = { authorization: `Bearer ${await signPerson()}`, 'x-workspace-id': 'w1' };
+    const two = await (await gateway()).inject({ method: 'GET', url: '/api/notes/v1/items', headers: plain });
+    expect(two.statusCode).toBe(200);
+    expect((await callerIn(two, 'notes')).id).toBe('u-1');
+    await expect(callerIn(two, appClientId('notes'))).rejects.toThrow();
+    const unknown = await (await gateway(async () => undefined)).inject({ method: 'GET', url: '/api/notes/v1/items', headers: plain });
+    expect(unknown.statusCode).toBe(200);
+    expect((await callerIn(unknown, 'notes')).id).toBe('u-1');
+    const noRegistry = await buildApp({ upstreams: { notes: url }, auth, signer, floors, access, monitor: new HealthMonitor({ probes: [] }) });
+    const alone = await noRegistry.inject({ method: 'GET', url: '/api/notes/v1/items', headers: plain });
+    expect(alone.statusCode).toBe(200);
+    expect((await callerIn(alone, 'notes')).id).toBe('u-1');
+  });
+
+  it('refuses a plain call to an app turned off on the floor, naming the app, rather than signing it on', async () => {
+    const app = await gateway(appGrants3);
+    const res = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, 'x-workspace-id': 'off-floor' } });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().message).toBe('Notes is turned off on this floor.');
   });
 
   it('turns a part’s onward call with a valid delegation into a fresh one-minute caller for the target (8.5)', async () => {

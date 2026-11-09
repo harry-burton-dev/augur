@@ -703,6 +703,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     it('checks a call that names no floor on the organisation’s', async () => {
       const { app, set } = await setup({ ...library, scopes: ['notifications:send'] });
       const unnamed = async () => (await app.inject({ method: 'GET', url: '/v1/apps/library/grants', headers: as('platform-events') })).json();
+      // No `contract`: the gateway signs a plain call to a contract 2 app's part for its id, keyed on the absence.
       expect(await unnamed()).toEqual({ app: 'library', name: 'Library', on: true, workspace: 'o', floorKind: 'org', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
       // Off for the organisation but on for one team: naming no floor no longer gets it through.
       await set('o', 'off');
