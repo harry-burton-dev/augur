@@ -149,6 +149,33 @@ describe('a contract 3 release in the app runner', async () => {
   });
 });
 
+describe.runIf(DATABASE_URL)('internet for an app that asks for it (spec 4.6, 10.4)', () => {
+  it('is off until a deployment admin who just entered their password allows it, and the runner reads which apps have it', async () => {
+    const { server, ask, entries } = await setup();
+    const r = await exampleRelease();
+    const job = (await ask({ action: 'install', release: r })).json();
+    await server.inject({ method: 'GET', url: '/v1/app-runner/next', headers: runner });
+    await server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${job.id}/progress`, headers: runner, payload: { step: 'retire', state: 'done', outcome: 'done' } });
+    const view = async () => (await server.inject({ method: 'GET', url: '/v1/app-runner/apps', headers: fresh() })).json().installed.find((i: { app: string }) => i.app === r.id);
+    // The example's worker asks for the internet, saying why.
+    expect((await view()).internet).toMatchObject({ allowed: false, why: [expect.any(String)] });
+    const allow = (allowed: boolean, headers = fresh()) => server.inject({ method: 'PUT', url: `/v1/app-runner/apps/${r.id}/internet`, headers, payload: { allowed } });
+    const said = () => server.inject({ method: 'GET', url: '/v1/runner/internet', headers: runner });
+    expect((await allow(true, editor)).statusCode).toBe(403);
+    expect((await allow(true, fresh(new Date(Date.now() - 11 * 60_000)))).json()).toMatchObject({ error: 'sign_in_again' });
+    expect((await said()).json()).toEqual({ apps: [] });
+    expect((await allow(true)).statusCode).toBe(200);
+    expect((await view()).internet).toMatchObject({ allowed: true, allowedBy: 'u-1' });
+    expect((await said()).json()).toEqual({ apps: [r.id] });
+    expect((await server.inject({ method: 'GET', url: '/v1/runner/internet', headers: { authorization: 'Bearer platform-gateway' } })).statusCode).toBe(403);
+    expect((await allow(false)).statusCode).toBe(200);
+    expect((await said()).json()).toEqual({ apps: [] });
+    expect(entries.filter((e) => e.action === 'app.internet-set')).toHaveLength(2);
+    // Not for an app that isn't installed.
+    expect((await server.inject({ method: 'PUT', url: '/v1/app-runner/apps/nothing/internet', headers: fresh(), payload: { allowed: true } })).statusCode).toBe(404);
+  });
+});
+
 describe.runIf(DATABASE_URL)('the deployment’s own networks and contract (9.8, 11.1)', () => {
   it('takes its own networks from the runner alone, and refuses a preview answering on one', async () => {
     const { server, ask } = await setup();

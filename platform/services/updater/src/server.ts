@@ -489,19 +489,21 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
       for (const want of wants) {
         await attempt(want.name, async () => {
           if (!have.includes(want.name)) {
-            // Internal: nothing on it reaches beyond it (spec 10.4). Made here, not by Compose, as the platform's parts join it too.
-            const made = await docker(['network', 'create', '--internal', '--label', `${APP_NETWORK_LABEL}=app`, '--label', `augur.app=${want.app}`, want.name]).then(
+            // Internal: nothing on it reaches beyond it (spec 10.4), but for an app's way out. Made here, not by Compose, as the platform's parts join it too.
+            const made = await docker(['network', 'create', ...(want.internet ? [] : ['--internal']), '--label', `${APP_NETWORK_LABEL}=app`, '--label', `augur.app=${want.app}`, want.name]).then(
               () => true,
               () => false,
             );
             if (!made) {
               // Made meanwhile by another turn, or there already under that name: only the runner's own, internal network will do.
               const said = (await docker(['network', 'inspect', '--format', `{{.Internal}}|{{index .Labels "${APP_NETWORK_LABEL}"}}`, want.name])).trim();
-              if (said !== 'true|app') throw new Error(`a network called ${want.name} is already there, and isn’t one the app runner made (internal, labelled ${APP_NETWORK_LABEL}=app): remove it with docker network rm ${want.name}`);
+              if (said !== `${!want.internet}|app`)
+                throw new Error(`a network called ${want.name} is already there, and isn’t one the app runner made (${want.internet ? 'not internal' : 'internal'}, labelled ${APP_NETWORK_LABEL}=app): remove it with docker network rm ${want.name}`);
             }
           }
           const on = new Set(await membersOf(want.name));
-          const joins: [string, string[]][] = [[self, []]];
+          // The runner sees parts' health on the app's own network; its way out is the parts' alone.
+          const joins: [string, string[]][] = want.internet ? [] : [[self, []]];
           for (const part of want.join) for (const id of await containersOf(part)) joins.push([id, ['--alias', part]]);
           for (const [id, alias] of joins)
             if (!on.has(id))

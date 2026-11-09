@@ -14,7 +14,7 @@ import { checkRelease, contractMessage } from './release-check.ts';
 import { isRelease2 } from '@augur/app-tools/release2';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
-import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, RunningPreview } from './store.ts';
+import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, InternetAllowed, RunningPreview } from './store.ts';
 import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
 import { ReviewSchema, reviewOf } from './apps3.ts';
@@ -62,6 +62,25 @@ const MAX_OWN_NETWORKS = 512;
 
 /** The most developers one app has. */
 const MAX_DEVELOPERS = 50;
+
+/**
+ * What Admin → Apps shows of a version that asks for the internet (augur-outbound): what its parts say they
+ * fetch and from where, and whether an admin allowed it. Nothing for a version that doesn't ask.
+ */
+const internetOf = (release: AppRelease, allowed: InternetAllowed | undefined) => {
+  if (!isRelease2(release)) return {};
+  const asks = release.parts.flatMap((p) => Object.values(p.resources ?? {}).filter((r) => r.type === 'augur-outbound'));
+  if (!asks.length) return {};
+  const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : typeof v === 'string' ? [v] : []);
+  return {
+    internet: {
+      allowed: Boolean(allowed),
+      why: [...new Set(asks.flatMap((r) => strings(r.params?.why)))],
+      hosts: [...new Set(asks.flatMap((r) => strings(r.params?.hosts)))],
+      ...(allowed ? { allowedBy: allowed.allowedBy, allowedAt: allowed.allowedAt } : {}),
+    },
+  };
+};
 
 /** Why a release can't be installed (spec 9.1, 9.2), in plain words; undefined when it can. */
 export const releaseProblem = (release: unknown): string | undefined => {
@@ -210,7 +229,14 @@ export const appRunnerRoutes =
 
     /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
     const appsView = async () => {
-      const [installed, follows, jobs, running, developers] = await Promise.all([store.installedApps(), store.follows(), store.appJobs(), store.runningPreviews(), store.developers()]);
+      const [installed, follows, jobs, running, developers, internet] = await Promise.all([
+        store.installedApps(),
+        store.follows(),
+        store.appJobs(),
+        store.runningPreviews(),
+        store.developers(),
+        store.internetAllowed(),
+      ]);
       const { checkedAt, problem, releases } = updates.result;
       const installedIds = new Set(installed.map((i) => i.app));
       const latestJob = (id: string) => jobs.find((j) => j.app === id && j.pr === undefined);
@@ -237,6 +263,7 @@ export const appRunnerRoutes =
               ? { update: { version: newest.version, channel: newest.channel, ...(newest.notesUrl ? { notesUrl: newest.notesUrl } : {}), needs: isRelease2(release) ? updateNeeds(release, newest.release) : [contractMessage(2)], ...(releaseProblem(newest.release) ? {} : { review: reviewOf(newest.release) }), changes: changesIn(newest.release.notes ?? '', id) } }
               : {}),
             ...(job ? { job } : {}),
+            ...internetOf(release, internet.find((x) => x.app === id)),
             changes: changesIn(release.notes ?? '', id),
             // Earlier versions to go back to, newest first.
             older: releases
@@ -566,6 +593,62 @@ export const appRunnerRoutes =
       void reply.code(403).send(needsDeploymentAdmin(doing));
       return undefined;
     };
+
+    /** Lets an installed app that asks for it reach the internet, or takes that away (spec 4.6, 10.4). */
+    app.put(
+      '/app-runner/apps/:id/internet',
+      {
+        schema: {
+          summary: 'Let an installed app reach the internet, or take that away (deployment admins only)',
+          description: [
+            'Only its parts that ask for augur-outbound reach it, and any host on it: the hosts they name are',
+            'what they say they need, not a limit. The app runner joins them to it, or takes them off it,',
+            'within half a minute. Needs a deployment admin who entered their password in the last 10 minutes,',
+            'or it answers 401 sign_in_again. Audited as app.internet-set.',
+          ].join(' '),
+          params: appParams,
+          body: Type.Object({ allowed: Type.Boolean() }, { additionalProperties: false }),
+          response: {
+            200: installs("Admin → Apps' installs"),
+            401: signInAgain,
+            403: notDeploymentAdmin,
+            404: refused("The app runner hasn't installed that app"),
+            409: refused("The version it runs doesn't ask for the internet"),
+          },
+        },
+      },
+      async (req, reply) => {
+        const caller = deploymentAdmin(req, reply, 'let an app reach the internet');
+        if (!caller) return reply;
+        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS)) {
+          return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change what an app can reach. It’s asked for anything this drastic.' });
+        }
+        const { id } = req.params;
+        const installed = (await store.installedApps()).find((i) => i.app === id);
+        if (!installed) return reply.code(404).send({ error: 'not_found', message: `${id} isn’t installed by the app runner.` });
+        if (req.body.allowed && !internetOf(installed.release, undefined).internet) {
+          return reply.code(409).send({ error: 'conflict', message: `${installed.release.manifest.name} ${installed.release.version} doesn’t ask for the internet: none of its parts asks for augur-outbound.` });
+        }
+        await store.setInternet(id, req.body.allowed ? caller.id : null);
+        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.internet-set', target: id, detail: { allowed: req.body.allowed } });
+        return appsView();
+      },
+    );
+
+    /** The apps the runner gives the internet: those a deployment admin allowed (the runner only). */
+    app.get(
+      '/runner/internet',
+      {
+        schema: {
+          summary: 'The apps a deployment admin let reach the internet (the deployment’s app runner only)',
+          response: { 200: Type.Object({ apps: Type.Array(Type.String()) }), 403: refused('Not the app runner'), 503: runnerUnreachable },
+        },
+      },
+      async (req, reply) => {
+        if (!(await isRunner(req, reply))) return reply;
+        return { apps: (await store.internetAllowed()).map((a) => a.app) };
+      },
+    );
 
     const isRunner = async (req: FastifyRequest, reply: FastifyReply) => {
       const service = await serviceOf(req, reply);

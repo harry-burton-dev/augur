@@ -542,6 +542,8 @@ export interface InstalledApp {
   /** Who may try its pull requests' previews, by person id. */
   developers?: string[];
   previews?: AppPreview[];
+  /** For a version that asks for the internet: what for, from where, and whether a deployment admin allowed it. */
+  internet?: { allowed: boolean; why: string[]; hosts: string[]; allowedBy?: string; allowedAt?: string };
 }
 
 /** A pull request's build of an installed app, running beside it for its developers. */
@@ -824,6 +826,8 @@ export class AdminApi {
   installRelease = (release: PastedRelease['release']) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', release });
   /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
   uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
+  /** Lets an app's parts that ask for it reach the internet, or takes that away. Needs the password just entered too. */
+  setInternet = (app: string, allowed: boolean) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/internet`, { allowed });
   setDevelopers = (app: string, people: string[]) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/developers`, { people });
   /** Takes back an upgrade the updater hasn't started. */
   cancelUpgrade = () => this.call<PlatformUpdates>('DELETE', '/api/registry/v1/platform/upgrade');

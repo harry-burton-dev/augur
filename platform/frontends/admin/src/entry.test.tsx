@@ -692,6 +692,29 @@ describe('Apps', () => {
       expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', release } });
     });
 
+    it('says an app asks for the internet, off until a deployment admin allows it, and allows it on confirming', async () => {
+      const notes = { ...library, id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js' };
+      const asking: AppInstalls = { ...installs, installed: [{ ...installs.installed[0]!, update: undefined, internet: { allowed: false, why: ['Fetches map tiles'], hosts: ['tiles.example.org'] } }] };
+      const { sent } = gateway((method, url) =>
+        url === '/api/registry/v1/apps'
+          ? Response.json([notes])
+          : url.startsWith('/api/registry/v1/app-runner/') && method === 'GET'
+            ? Response.json(asking)
+            : url.endsWith('/internet')
+              ? Response.json(asking)
+              : url.endsWith('/versions') || url.endsWith('/floors')
+                ? Response.json([])
+                : undefined,
+      );
+      const el = await open('/apps');
+      await openRow(el, 'Notes');
+      const said = document.querySelector('[data-internet]');
+      expect(said?.textContent).toContain('Asks to reach the internet, which is off until a deployment admin allows it: Fetches map tiles (it names tiles.example.org).');
+      await press(button('Allow the internet', said!));
+      await press(button('Allow it', document.querySelectorAll('.augur-dialog')[1] ?? document));
+      expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/internet', body: { allowed: true } });
+    });
+
     it('says why a pasted release can’t install, and keeps its address', async () => {
       gateway((method, url, body) =>
         url === '/api/registry/v1/app-runner/releases/read'

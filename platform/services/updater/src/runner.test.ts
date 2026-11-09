@@ -863,6 +863,29 @@ describe('settings and previews', () => {
     expect(t.networks()).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres', 'garage', 'otel-lgtm'] }]);
   });
 
+  it('gives the internet only to the parts that ask for it, once an admin allows it, and takes it away again (spec 4.6, 10.4)', async () => {
+    const t = setup();
+    await t.run(install('1.0.0'));
+    expect(t.networks().some((n) => n.internet)).toBe(false);
+    t.did.length = 0;
+    expect(await t.runner.keepInternet(['notes', 'gone'])).toEqual({ on: ['notes'], off: [] });
+    // The example's worker asks for augur-outbound; web doesn't.
+    expect(t.project()!.services['app-notes-worker-blue']!.networks).toEqual(['app-notes', 'app-notes_internet']);
+    expect(t.project()!.services['app-notes-web-blue']!.networks).toEqual(['app-notes']);
+    expect(t.networks()).toContainEqual({ app: 'notes', name: 'app-notes_internet', join: [], internet: true });
+    expect(t.did).toEqual(['start app-notes-worker-blue']);
+    // Nothing changed, nothing done.
+    t.did.length = 0;
+    expect(await t.runner.keepInternet(['notes'])).toEqual({ on: [], off: [] });
+    expect(t.did).toEqual([]);
+    // An upgrade keeps it.
+    await t.run(install('1.1.0', 'b'));
+    expect(t.project()!.services['app-notes-worker-green']!.networks).toEqual(['app-notes', 'app-notes_internet']);
+    expect(await t.runner.keepInternet([])).toEqual({ on: [], off: ['notes'] });
+    expect(t.project()!.services['app-notes-worker-green']!.networks).toEqual(['app-notes']);
+    expect(t.networks().some((n) => n.internet)).toBe(false);
+  });
+
   it('keeps containers from before contract 3 on the platform’s network, unless APPS_NETWORK names one', () => {
     const legacy: RunnerState = { apps: { old: { active: { slot: 'blue', version: '1.0.0', image: 'ghcr.io/o/old@sha256:' + 'a'.repeat(64) } } } };
     expect(appsProject(legacy, ENV, 'net').project.networks).toEqual({ platform: { external: true, name: 'net' } });
