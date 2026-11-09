@@ -162,6 +162,17 @@ describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', ()
     const res = await read('https://apps.example.org/maps/app-release.json');
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ release: { id: 'maps', version: '2.0.0' }, refusals: [], asks: release.asks, signer: release.signer });
+    // What the asks don't say, from the manifest and parts, so the review reads no Score (spec 5.6, 9.4).
+    expect(res.json().review).toEqual({
+      kinds: { web: 'service', worker: 'worker', migrate: 'job' },
+      settings: [
+        { id: 'retentionDays', label: 'Keep archived notes for', type: 'number', required: false },
+        { id: 'allowSharing', label: 'Notes can be shared outside the floor', type: 'boolean', required: false },
+        { id: 'defaultNotebook', label: 'Default notebook name', type: 'string', required: false },
+        { id: 'theme', label: 'Note colour', type: 'enum', required: false },
+        { id: 'exportKey', label: 'Export service key', type: 'secret', required: false },
+      ],
+    });
     expect(res.json().warnings).toEqual(expect.any(Array));
   });
 

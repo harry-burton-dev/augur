@@ -663,6 +663,48 @@ describe('Apps', () => {
         Object.defineProperty(window, 'location', { configurable: true, value: location });
       }
     });
+
+    it('reads a pasted release file’s address, shows what it asks for, and installs it whole', async () => {
+      const address = 'https://example.org/maps/app-release.json';
+      const release = { schema: 'augur.app-release/v2', id: 'maps', version: '2.0.0', manifest: { name: 'Maps' } };
+      const { sent } = gateway((method, url, body) =>
+        url === '/api/registry/v1/app-runner/releases/read'
+          ? Response.json({
+              release,
+              refusals: [],
+              warnings: [],
+              asks: { scopes: [], resources: [], limits: { web: { memory: '256Mi', cpu: '500m' } }, floors: [], maxUpload: 10, settings: ['key'], canvas: false },
+              signer: { repository: 'o/maps', workflow: 'release.yml' },
+              review: { kinds: { web: 'service' }, settings: [{ id: 'key', label: 'Map key', type: 'secret', required: true }] },
+            })
+          : runner(method, url, body),
+      );
+      const el = await open('/apps');
+      await press(button('Install from an address', el));
+      await type(fieldNamed('Release file address'), address);
+      await press(button('Read it', document.querySelector('.augur-dialog')!));
+      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/releases/read', body: { url: address } });
+      const confirm = document.querySelector('.augur-dialog')!;
+      expect(confirm.textContent).toContain('Its web part (a service; 256Mi of memory, 500m CPU)');
+      expect(confirm.textContent).toContain('Map key (secret, required)');
+      expect(confirm.textContent).toContain('Signed by o/maps’s release.yml');
+      await press(button('Install', confirm));
+      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', release } });
+    });
+
+    it('says why a pasted release can’t install, and keeps its address', async () => {
+      gateway((method, url, body) =>
+        url === '/api/registry/v1/app-runner/releases/read'
+          ? Response.json({ release: { id: 'maps', version: '2.0.0' }, refusals: ['Its signature doesn’t match.'], warnings: [] })
+          : runner(method, url, body),
+      );
+      const el = await open('/apps');
+      await press(button('Install from an address', el));
+      await type(fieldNamed('Release file address'), 'https://example.org/app-release.json');
+      await press(button('Read it', document.querySelector('.augur-dialog')!));
+      expect(document.querySelector('.augur-dialog')!.textContent).toContain('It can’t install here: Its signature doesn’t match.');
+      expect(fieldNamed('Release file address').value).toBe('https://example.org/app-release.json');
+    });
   });
 });
 
