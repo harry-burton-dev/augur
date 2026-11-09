@@ -349,6 +349,21 @@ describe('the worker host', () => {
     expect(under.get('notebooks')!.map((i) => i.label)).toEqual(['Work']);
   });
 
+  it('tells the rail what sits under each place, for the app it is', async () => {
+    let self!: Channel;
+    const seen: [string, Record<string, unknown[]>][] = [];
+    const stub = stubApp((app, method) => {
+      self = app;
+      if (method === 'start') app.mutate('screen', [notice('n1', 'Ready')]);
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker, onUnder: (id, under) => seen.push([id, under]) });
+    act(() => void mounter.mount(app, ctxFor()));
+    await flush();
+    self.post('frame.under', 'notebooks', [{ label: 'Work', path: '/notebooks/1' }]);
+    await flush();
+    expect(seen.at(-1)).toEqual(['notes', { notebooks: [{ label: 'Work', path: '/notebooks/1' }] }]);
+  });
+
   it('answers a stopping app nothing', async () => {
     let self!: Channel;
     const stub = stubApp((app, method) => {
@@ -366,6 +381,114 @@ describe('the worker host', () => {
     await flush();
     expect(ctx.navigate).not.toHaveBeenCalled();
     expect(ctx.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('the frame round an app’s pane', () => {
+  const framed: WorkerApp = fromCatalogue3({
+    ...manifest,
+    contributes: {
+      ...manifest.contributes,
+      commands: [{ id: 'note.new', label: 'New note' }, { id: 'note.pin', label: 'Pin note' }],
+      radial: [{ command: 'note.pin', on: 'note' }],
+      about: [{ id: 'details', label: 'Details' }, { id: 'history', label: 'History' }],
+    },
+  });
+  const run = (onCommand: (id: string, detail: unknown) => void = () => undefined) => {
+    let self!: Channel;
+    const stub = stubApp((app, method, args) => {
+      self = app;
+      if (method === 'start') app.mutate('screen', [notice('n1', 'Ready')]);
+      if (method === 'command') onCommand(String(args[0]), args[1]);
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(framed, ctxFor()));
+    return () => self;
+  };
+  const press = (init: KeyboardEventInit) => act(() => void window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...init })));
+  const option = (label: string) => [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes(label)) as HTMLElement | undefined;
+
+  it('opens the command palette on its key, keeping a command the app hasn’t loaded locked with why, and runs one it has', async () => {
+    const ran: string[] = [];
+    const self = run((id) => ran.push(id));
+    await flush();
+    press({ key: 'P', ctrlKey: true, shiftKey: true });
+    await flush();
+    expect(option('New note')?.textContent).toContain('Notes hasn’t loaded this yet');
+    self().post('commands', ['note.new']);
+    await flush();
+    expect(option('New note')?.textContent).not.toContain('hasn’t loaded');
+    act(() => option('New note')!.click());
+    await flush();
+    expect(ran).toEqual(['note.new']);
+    expect(option('New note')).toBeUndefined();
+  });
+
+  it('takes the palette key only in the pane in front, and the second key by its place, as a Mac’s Option changes the letter', async () => {
+    run();
+    await flush();
+    stage.setAttribute('aria-hidden', 'true');
+    press({ key: 'P', ctrlKey: true, shiftKey: true });
+    await flush();
+    expect(option('New note')).toBeUndefined();
+    stage.removeAttribute('aria-hidden');
+    press({ key: '∏', code: 'KeyP', altKey: true, shiftKey: true });
+    await flush();
+    expect(option('New note')).toBeDefined();
+  });
+
+  it('offers no palette for an app that stopped: its pane says why and offers Try again', async () => {
+    const stub = stubApp((_, method) => {
+      if (method === 'start') throw new Error('Broken.');
+    });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(framed, ctxFor()));
+    await flush();
+    expect(stage.querySelector('[data-phase]')?.getAttribute('data-phase')).toBe('failed');
+    press({ key: 'P', ctrlKey: true, shiftKey: true });
+    await flush();
+    expect(option('New note')).toBeUndefined();
+  });
+
+  it('opens the radial menu on a thing the app marked, and sends the command with the thing', async () => {
+    const ran: [string, unknown][] = [];
+    const self = run((id, detail) => ran.push([id, detail]));
+    await flush();
+    self().post('commands', ['note.pin']);
+    await flush();
+    // The app marks a list item as a note; Quill's receiver draws its kind, id and name on the row.
+    self().mutate('screen', [[0, '~', { id: 'l1', type: 1, element: 'quill-list', properties: { label: 'Notes', items: [{ id: 'n7', title: 'Shopping list', thing: { kind: 'note' } }] }, attributes: {}, eventListeners: {}, children: [] }, 1]]);
+    await flush();
+    const thing = stage.querySelector<HTMLElement>('[data-thing="note"]')!;
+    act(() => void thing.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 })));
+    await flush();
+    const pin = [...document.querySelectorAll('button, [role="menuitem"]')].find((b) => b.textContent?.includes('Pin note')) as HTMLElement;
+    act(() => pin.click());
+    // The ring leaves before the command goes.
+    await act(async () => void (await new Promise((r) => setTimeout(r, 500))));
+    expect(ran).toEqual([['note.pin', { thing: { kind: 'note', id: 'n7', label: 'Shopping list' } }]]);
+  });
+
+  it('draws the About panel’s sections, each saying so until the app fills it', async () => {
+    const self = run();
+    await flush();
+    const open = [...stage.querySelectorAll('button')].find((b) => b.textContent?.includes('About'))!;
+    act(() => open.click());
+    await flush();
+    expect(stage.textContent).toContain('Details');
+    expect(stage.textContent).toContain('History');
+    expect(stage.textContent).toContain('Nothing here yet');
+    self().mutate('about:details', [notice('d1', 'Made by Ada')]);
+    await flush();
+    expect(stage.textContent).toContain('Made by Ada');
+  });
+
+  it('has no About panel for an app that declares no sections', async () => {
+    const stub = stubApp((self, method) => method === 'start' && self.mutate('screen', [notice('n1', 'Ready')]));
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(app, ctxFor()));
+    await flush();
+    expect(stage.querySelector('.aerie-about, .aerie-about-open')).toBeNull();
   });
 });
 
