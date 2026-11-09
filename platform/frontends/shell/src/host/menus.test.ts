@@ -1,5 +1,6 @@
 import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
+import { fromCatalogue3 } from './apps3.js';
 import { areaOf, findPages, groupOf, groupsFor, pageAt, pagesOf, productName, screenFor, titleFor, toShellApp } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
@@ -120,5 +121,18 @@ describe('findPages', () => {
     expect(findPages([home, board], 'board').length).toBe(4);
     expect(findPages([home, board], '  ')).toEqual([]);
     expect(findPages([home, board], 'nothing like it')).toEqual([]);
+  });
+});
+
+describe('an app on the contract’s places in the rail', () => {
+  const notes = (places: { id: string; label: string; fills?: boolean; path?: string }[]) => fromCatalogue3({ contract: 3, id: 'notes', name: 'Notes', version: '1.0.0', frontend: { entry: 'sandbox.js' }, contributes: { places } });
+
+  it('says which places the app fills, and keeps one place that fills, since what is under it is the list', () => {
+    expect(pagesOf(notes([{ id: 'notebooks', label: 'Notebooks', fills: true }]))).toEqual([{ id: '/notebooks', name: 'Notebooks', icon: 'arrow', path: '/notebooks', fills: true }]);
+    expect(pagesOf(notes([{ id: 'home', label: 'Home', path: '/' }, { id: 'all', label: 'All' }]))).toEqual([
+      { id: '/', name: 'Home', icon: 'arrow', path: '/' },
+      { id: '/all', name: 'All', icon: 'arrow', path: '/all' },
+    ]);
+    expect(pagesOf(notes([{ id: 'home', label: 'Home' }]))).toEqual([]);
   });
 });

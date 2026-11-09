@@ -1,5 +1,6 @@
 import type { AppArea, AppCategory, AppManifestEntry } from '@augur/mfe-sdk';
 import type { ShellApp, ShellAppGroup, ShellFindResult, ShellPage } from '@augur/shell-kit';
+import { isWorkerApp, placePath } from './apps3.js';
 import { hrefFor, matchRoute } from './routes.js';
 import { BAR_WORDS } from './words.js';
 
@@ -37,6 +38,18 @@ export const groupsFor = (manifest: AppManifestEntry[], product = productName())
  * named by the path it opens. An app with one page or none shows no page list.
  */
 export function pagesOf(app: AppManifestEntry): ShellPage[] {
+  // An app on the contract: its places, each saying where it opens and whether the app fills what sits under it (spec 6.3).
+  // One place that fills is a list, since what is under it is the list.
+  if (isWorkerApp(app)) {
+    const seen = new Set<string>();
+    const places = (app.manifest.contributes?.places ?? []).flatMap((p) => {
+      const path = placePath(p);
+      if (seen.has(path)) return [];
+      seen.add(path);
+      return [{ id: path, name: p.label, icon: p.icon ?? 'arrow', path, ...(p.fills ? { fills: true } : {}) }];
+    });
+    return places.length >= 2 || places.some((p) => p.fills) ? places : [];
+  }
   const seen = new Set<string>();
   const pages = (app.menu ?? []).flatMap((g) =>
     g.items.flatMap((it) => {
