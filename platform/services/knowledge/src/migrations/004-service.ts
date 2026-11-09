@@ -35,6 +35,8 @@ begin
     insert into kg.floors (id, kind, owner) values (p_personal, 'personal', p_person) on conflict (id) do nothing;
     perform kg.require((select owner from kg.floors where id = p_personal) = p_person, 'that floor is someone else''s');
   end if;
+  -- This runs on each call, not at migration, and drops only the memberships identity no longer gives.
+  -- squawk-ignore augur-delete-rows
   delete from kg.floor_members where person = p_person and not (floor = any (coalesce(p_member_of, '{}')));
   insert into kg.floor_members (floor, person) select m, p_person from unnest(coalesce(p_member_of, '{}')) m on conflict do nothing;
 end $$;
