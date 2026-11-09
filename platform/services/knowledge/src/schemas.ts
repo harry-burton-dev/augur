@@ -183,7 +183,16 @@ export const Belief = Type.Object(
   },
   { $id: 'Belief' },
 );
-export const BeliefList = Type.Object({ floor: Type.String(), seeing: Type.Array(Type.String()), beliefs: Type.Array(ref(Belief)) }, { $id: 'BeliefList' });
+export const BeliefList = Type.Object(
+  {
+    floor: Type.String(),
+    seeing: Type.Array(Type.String()),
+    beliefs: Type.Array(ref(Belief)),
+    at: Type.Optional(When('The valid clock it was read on, when one was asked for.')),
+    known: Type.Optional(When('The recorded clock it was read on, when one was asked for.')),
+  },
+  { $id: 'BeliefList' },
+);
 
 export const SourceRef = Type.Object(
   {
@@ -276,7 +285,116 @@ export const Candidate = Type.Object(
   { $id: 'Candidate', description: 'A term extraction asked for that the ontology lacks.' },
 );
 
+export const Summary = Type.Object(
+  {
+    entity: Type.String(),
+    floor: Type.String(),
+    state: Type.Union([Type.Literal('current'), Type.Literal('older-than-beliefs'), Type.Literal('none'), Type.Literal('unavailable')]),
+    text: Type.Optional(Type.String()),
+    writtenAt: Type.Optional(When()),
+    beliefsChangedAt: Type.Optional(When()),
+    cites: Type.Optional(Type.Array(Type.String(), { description: 'Belief ids the summary rests on.' })),
+    why: Type.Optional(Type.String({ description: 'When it is older than its beliefs, or there is none: why, and what writes one.' })),
+  },
+  { $id: 'Summary', description: 'What a floor’s reflection wrote about an entity.' },
+);
+export const SummaryList = Type.Object({ floor: Type.String(), summaries: Type.Array(ref(Summary), { description: 'This floor’s and the floors above, nearest first.' }) }, { $id: 'SummaryList' });
+
+export const Subgraph = Type.Object(
+  {
+    nodes: Type.Array(ref(Entity)),
+    edges: Type.Array(ref(Belief), { description: 'Live link beliefs in sight between the nodes.' }),
+    unseen: Type.Optional(Type.Array(ref(UnseenObject), { description: 'Entities an edge in sight reaches that no floor in sight names.' })),
+    depthApplied: Type.Optional(Type.Integer({ description: 'The deployment’s ceiling, when it cut the depth you asked for.' })),
+    limitApplied: Type.Optional(Type.Integer({ description: 'The most nodes a page gives, when it cut the graph.' })),
+  },
+  { $id: 'Subgraph' },
+);
+
+export const QueueItem = Type.Object(
+  {
+    kind: Type.Union([Type.Literal('to-confirm'), Type.Literal('to-hold'), Type.Literal('to-settle'), Type.Literal('to-keep')]),
+    id: Type.String({ description: 'The observation, or for to-settle the dispute.' }),
+    can: Type.Unsafe<Record<string, boolean | string>>({
+      type: 'object',
+      additionalProperties: true,
+      description: 'What you can do about it (confirm, hold, settle, withdraw, keep), and when you can’t, why and whoCanChange.',
+    }),
+  },
+  { $id: 'QueueItem' },
+);
+export const Queue = Type.Object({ floor: Type.String(), items: Type.Array(ref(QueueItem)) }, { $id: 'Queue', description: 'What waits on this floor for you.' });
+
+export const ConflictList = Type.Object(
+  {
+    floor: Type.String(),
+    conflicts: Type.Array(
+      Type.Object({
+        subject: Type.String(),
+        predicate: Type.String(),
+        beliefs: Type.Array(Type.String()),
+        overlapFrom: Type.Optional(When()),
+        overlapTo: Type.Optional(When()),
+      }),
+      { description: 'Live beliefs in sight with the same subject and single-valued predicate, modality and overlapping valid time, and a different value.' },
+    ),
+    possibleDuplicates: Type.Array(Type.Object({ entity: Type.String(), predicate: Type.String() }), { description: 'Continuants whose identity-bearing links conflict: perhaps two things taken for one.' }),
+  },
+  { $id: 'ConflictList' },
+);
+
+export const Query = Type.Object(
+  {
+    class: Type.Optional(Type.String({ maxLength: 200, description: 'A class IRI or label; subclasses come too.' })),
+    kind: Type.Optional(Type.Union([Type.Literal('continuant'), Type.Literal('occurrent')])),
+    text: Type.Optional(Type.String({ maxLength: 200, description: 'Matches labels and aliases on the floors in sight.' })),
+    where: Type.Optional(
+      Type.Array(
+        Type.Object(
+          { predicate: Type.String({ maxLength: 200 }), equals: Type.Optional(ref(Value)), object: Type.Optional(Type.String({ maxLength: 80 })), modality: Type.Optional(Modality) },
+          { additionalProperties: false },
+        ),
+        { maxItems: 20, description: 'Each is a belief the entity must have, on the clocks given.' },
+      ),
+    ),
+    at: Type.Optional(When('Valid clock: so in the world at this moment. Without it, whatever time it is about.')),
+    known: Type.Optional(When('Recorded clock: as the floors had it recorded by this moment. Default now.')),
+    cursor: Type.Optional(Type.String({ maxLength: 80 })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, description: 'The deployment sets the ceiling; the answer says when it applied.' })),
+  },
+  { $id: 'Query', additionalProperties: false },
+);
+export const QueryResult = Type.Object(
+  {
+    entities: Type.Array(ref(Entity)),
+    beliefs: Type.Optional(Type.Array(ref(Belief), { description: 'With a where: the beliefs that made each entity fit.' })),
+    next: Type.Optional(Type.String({ description: 'Pass as cursor for the next page.' })),
+    limitApplied: Type.Optional(Type.Integer()),
+  },
+  { $id: 'QueryResult' },
+);
+
+export const Recall = Type.Object(
+  {
+    text: Type.String({ minLength: 1, maxLength: 2000 }),
+    at: Type.Optional(When('Valid clock: what was so at this moment.')),
+    limit: Type.Optional(Type.Integer({ minimum: 1 })),
+    tokenBudget: Type.Optional(Type.Integer({ minimum: 1, description: 'The most the answer may cost an agent caller, in tokens; the answer says when it was cut.' })),
+  },
+  { $id: 'Recall', additionalProperties: false },
+);
+const Why = Type.Union([Type.Literal('text'), Type.Literal('semantic'), Type.Literal('link'), Type.Literal('time')]);
+export const RecallResult = Type.Object(
+  {
+    hits: Type.Array(Type.Object({ belief: Type.Optional(ref(Belief)), summary: Type.Optional(ref(Summary)), why: Type.Array(Why) }), { description: 'Best first. Each says why it matched.' }),
+    ranWithout: Type.Optional(Type.Array(Type.String(), { description: 'The retrievals this deployment can’t run yet, so the answer was made without them.' })),
+    cutAt: Type.Optional(Type.Integer({ description: 'Tokens, when a tokenBudget cut the answer.' })),
+    limitApplied: Type.Optional(Type.Integer()),
+  },
+  { $id: 'RecallResult' },
+);
+
 export const SCHEMAS = [
   Problem, Meta, Floor, ActionDecl, Catalogue, ActionResult, ActionRecord, Unseen, UnseenObject, Entity, EntityPage, Value, Evidence, Dispute, Belief, BeliefList,
-  SourceRef, Observation, Class, Predicate, Ontology, Candidate,
+  SourceRef, Observation, Class, Predicate, Ontology, Candidate, Summary, SummaryList, Subgraph, QueueItem, Queue, ConflictList, Query, QueryResult, Recall, RecallResult,
 ];

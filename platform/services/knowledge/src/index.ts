@@ -16,6 +16,7 @@ loadConfigOrExit('knowledge', [
   commonSettings.clientSecret,
   commonSettings.gateway,
   { name: 'KNOWLEDGE_PAGE_LIMIT', about: 'the most one page of a read gives, such as 100.' },
+  { name: 'KNOWLEDGE_SUBGRAPH_DEPTH', about: 'the most hops a subgraph read goes from its entity, such as 3.' },
 ]);
 
 const port = Number(process.env.PORT ?? 8086);
@@ -30,8 +31,16 @@ const credentials = platformCredentialsFromEnv('knowledge');
 if (!credentials) log.warn('SERVICE_CLIENT_SECRET is not set: identity can’t be asked where people stand, so every read and action is refused for now.');
 const standing = credentials ? identityStanding({ principals: identityPrincipals({ identityUrl: IDENTITY_URL, credentials }), places: floorPlaces({ identityUrl: IDENTITY_URL, credentials }) }) : undefined;
 
-const pageLimit = process.env.KNOWLEDGE_PAGE_LIMIT ? Number(process.env.KNOWLEDGE_PAGE_LIMIT) : undefined;
-if (pageLimit !== undefined && !(Number.isInteger(pageLimit) && pageLimit > 0)) throw new Error('KNOWLEDGE_PAGE_LIMIT must be a whole number above 0, such as 100.');
-const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), pageLimit });
+/** A whole number above 0 from the environment, or undefined for the service's default. */
+const positive = (name: string, example: number) => {
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  const n = Number(raw);
+  if (!(Number.isInteger(n) && n > 0)) throw new Error(`${name} must be a whole number above 0, such as ${example}.`);
+  return n;
+};
+const pageLimit = positive('KNOWLEDGE_PAGE_LIMIT', 100);
+const subgraphDepth = positive('KNOWLEDGE_SUBGRAPH_DEPTH', 3);
+const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), pageLimit, subgraphDepth });
 await app.listen({ port, host: '0.0.0.0' });
 if (credentials) outboxRelay({ pool: store, eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err }, 'the outbox could not be sent') }).start();
