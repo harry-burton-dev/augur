@@ -688,8 +688,12 @@ describe('Apps', () => {
       expect(confirm.textContent).toContain('Its web part (a service; 256Mi of memory, 500m CPU)');
       expect(confirm.textContent).toContain('Map key (secret, required)');
       expect(confirm.textContent).toContain('Signed by o/maps’s release.yml');
+      // A required secret with no default is asked for here: the app can't start without it.
       await press(button('Install', confirm));
-      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', release } });
+      expect(sent.some((r) => r.url === '/api/registry/v1/app-runner/jobs')).toBe(false);
+      await type(fieldNamed('Map key'), 'k-1');
+      await press(button('Install', confirm));
+      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', release, settings: { key: 'k-1' } } });
     });
 
     it('says an app asks for the internet, off until a deployment admin allows it, and allows it on confirming', async () => {
