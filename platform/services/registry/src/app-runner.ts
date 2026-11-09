@@ -20,7 +20,7 @@ import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.t
 import { ReviewSchema, reviewOf } from './apps3.ts';
 import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
 import { sameRepository } from './feed-trust.ts';
-import { defaultRemoveProblem, defaultsPlan } from './defaults.ts';
+import { DEPLOYMENT, defaultRemoveProblem, defaultsPlan } from './defaults.ts';
 import { asText, declaredSettings, KEEP_REMOVED_MS, missingMessage, missingRequired, settingValueProblem, settingsView, SettingValueBody, type DeclaredSetting } from './settings.ts';
 
 
@@ -236,14 +236,15 @@ export const appRunnerRoutes =
     };
     /** Where each default app stands, and what to install now (spec 9.7). */
     const defaultsNow = async () => {
-      const [installed, asked, values] = await Promise.all([store.installedApps(), store.defaultAppsAsked(), store.settingValues()]);
+      const [installed, jobs, values] = await Promise.all([store.installedApps(), store.appJobs(), store.settingValues()]);
       return defaultsPlan({
         defaults: defaultApps,
         releases: updates.result.releases,
         installed: installed.map((i) => i.app),
-        asked,
+        jobs: jobs.filter((j) => j.pr === undefined).map((j) => ({ ...j, ...(j.release ? { version: j.release.version } : {}) })),
         problemOf: (release, listed) => releaseProblem(release) ?? ringProblem(release, ring, listed),
-        hasValue: (id, setting) => values.some((v) => v.app === id && v.setting === setting && !v.removedAt),
+        // A value an admin gave counts whether or not a running release declares it: the install keeps it again.
+        hasValue: (id, setting) => values.some((v) => v.app === id && v.setting === setting),
         feedUsable: !feedHeld(updates.result, now()),
       });
     };
@@ -252,14 +253,16 @@ export const appRunnerRoutes =
     const installDefaults = async () => {
       if (!defaultApps.length) return;
       for (const { app: id, release } of (await defaultsNow()).install) {
-        if (!(await store.markDefaultAsked(id, release.version))) continue;
-        if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'install', release, requestedBy: 'deployment' }))) continue;
+        // The values an admin gave it are handed over with it, as with an admin's install.
+        await store.restoreSettings(id, declaredSettings(release.manifest).map((d) => d.id));
+        if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'install', release, requestedBy: DEPLOYMENT }))) continue;
         await byRegistry('app.install-requested', id, { version: release.version, default: true, agreedBy: 'this deployment' });
       }
     };
+    const installDefaultsLogged = (log: { warn: (o: object, m: string) => void }) => installDefaults().catch((err) => log.warn({ err }, 'default apps couldn’t be asked for'));
 
     updates.onChecked(async () => {
-      await installDefaults();
+      await installDefaultsLogged(plain.log);
       await autoUpdate();
       await syncPreviews();
     });
@@ -800,6 +803,8 @@ export const appRunnerRoutes =
           target: id,
           detail: { setting: setting.id, ...(value === null ? { cleared: true } : setting.type === 'secret' ? {} : { value }) },
         });
+        // A default app waiting for this value is asked for now, not at the next check of the feed.
+        if (!inUse && defaultApps.includes(id)) await installDefaultsLogged(req.log);
         return appsView();
       },
     );

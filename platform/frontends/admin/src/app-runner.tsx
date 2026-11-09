@@ -387,7 +387,7 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
       <Problem>{ins.error}</Problem>
       {installed.default ? (
         <div data-default>
-          <Quiet>A default app of this deployment (DEFAULT_APPS): what it asks for was agreed by the deployment.</Quiet>
+          <Quiet>A default app of this deployment (DEFAULT_APPS): what it asks for was agreed by the deployment, apart from the internet, which a deployment admin allows.</Quiet>
         </div>
       ) : null}
       <div>

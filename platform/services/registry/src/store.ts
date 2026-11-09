@@ -401,10 +401,6 @@ export interface AppStore {
   cancelDataDeletion(app: string): Promise<boolean>;
   /** A try that failed: counts it, keeps why, and moves the deletion to `after(failures)`. Undefined when none is scheduled. */
   deferDataDeletion(app: string, after: (failures: number) => Date, problem: string): Promise<{ failures: number; dueAt: Date } | undefined>;
-  /** The default apps (DEFAULT_APPS) whose install was asked for. */
-  defaultAppsAsked(): Promise<string[]>;
-  /** Notes that a default app's install was asked for, at `version`; false when it was already. */
-  markDefaultAsked(app: string, version: string): Promise<boolean>;
   /** Forgets everything the registry kept of an app whose data went: its settings' values, developers, follow, deletion and its catalogue entry with its floors' grants. */
   forgetApp(app: string, by: string): Promise<void>;
   /** Forgets values removed before `before`; how many it forgot. */
@@ -808,16 +804,6 @@ export const migrations: Migration[] = [
         -- Tries that failed in a row, and why the last one did: each waits longer, up to a day.
         failures integer not null default 0,
         problem text
-      );`,
-  },
-  {
-    id: '028_default_apps',
-    sql: `
-      -- The default apps (DEFAULT_APPS) whose install the registry asked for, once each (spec 9.7).
-      create table registry.default_apps_asked (
-        app_id text primary key,
-        version text not null,
-        asked_at timestamptz not null default now()
       );`,
   },
 ];
@@ -1400,19 +1386,9 @@ export class PgAppStore implements AppStore {
     return rowCount === 1;
   }
 
-  async defaultAppsAsked() {
-    const { rows } = await this.pool.query<{ app_id: string }>('select app_id from registry.default_apps_asked order by app_id');
-    return rows.map((r) => r.app_id);
-  }
-
-  async markDefaultAsked(app: string, version: string) {
-    const { rowCount } = await this.pool.query('insert into registry.default_apps_asked (app_id, version) values ($1, $2) on conflict (app_id) do nothing', [app, version]);
-    return rowCount === 1;
-  }
-
   async forgetApp(app: string, by: string) {
     await this.transaction(async (client) => {
-      for (const table of ['app_setting_values', 'app_developers', 'preview_choices', 'app_follows', 'app_internet', 'app_data_deletions', 'default_apps_asked'])
+      for (const table of ['app_setting_values', 'app_developers', 'preview_choices', 'app_follows', 'app_internet', 'app_data_deletions'])
         await client.query(`delete from registry.${table} where app_id = $1`, [app]);
       // How it followed updates (channel, policy, pin, windows) and the history of that go too: installed again, it starts afresh.
       for (const table of ['desired_states', 'desired_state_history']) await client.query(`delete from registry.${table} where unit = $1`, [app]);

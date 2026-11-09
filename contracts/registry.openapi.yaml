@@ -379,7 +379,7 @@ components:
                       type: string
                     requestedBy:
                       type: string
-                      description: A person's id, or automatic
+                      description: A person's id; automatic, for an update or a preview the registry asked for; or deployment, for a default app (DEFAULT_APPS)
                     requestedAt:
                       type: string
                       format: date-time
@@ -4390,6 +4390,12 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of the deployment’s default apps (DEFAULT_APPS), which stays while it is named
           content:
             application/problem+json:
               schema:

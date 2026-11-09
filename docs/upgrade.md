@@ -73,7 +73,7 @@ The sign-ins of the apps that used to ship with AUGUR are left as they are: inst
 
 **From** unreleased
 
-A deployment can name the apps it installs by default in `.env`, split by commas or spaces: `DEFAULT_APPS=notes maps`. On its next check of the app feed the registry asks for each one's newest stable release once, its asks agreed by the deployment rather than an admin, and Admin → Apps marks it a default app. While it's named it can't be removed; take it out of `DEFAULT_APPS` and run `pc up -d` first. Nothing ships inside AUGUR: an app the feed doesn't have yet, or one that needs a setting filled in first, waits, and Admin → Apps says why. Empty, the default, installs nothing.
+A deployment can name the apps it installs by default in `.env`, split by commas or spaces: `DEFAULT_APPS=notes maps`. On its next check of the app feed the registry installs each one that isn't installed from its newest stable release, its asks agreed by the deployment rather than an admin, and Admin → Apps marks it a default app. Reaching the internet (`augur-outbound`) still needs a deployment admin to allow it. While it's named it can't be removed; take it out of `DEFAULT_APPS` and run `pc up -d` first. Nothing ships inside AUGUR: an app the feed doesn't have yet, or one that needs a setting filled in first, waits, and Admin → Apps says why; filling the setting in asks for it at once. A release whose install failed isn't tried again by itself: a newer one is, or install it by hand. Empty, the default, installs nothing.
 
 
 ### A removed app's data goes after a grace period
@@ -649,7 +649,7 @@ curl -X POST https://<platform>/api/registry/v1/app-runner/jobs -H "authorizatio
   -H 'content-type: application/json' -d "{\"action\":\"install\",\"release\":$(cat app-release.json)}"
 ```
 
-A deployment's default apps (`DEFAULT_APPS` in `.env`, ids split by commas or spaces) are installed this way by the registry itself, once each, from the newest stable release in the feed, with their asks agreed by the deployment; they can't be removed while they're named. One the feed doesn't have yet, or that needs a required setting first, waits, and Admin → Apps says why. An install of one that fails isn't asked for again: install it by hand.
+A deployment's default apps (`DEFAULT_APPS` in `.env`, ids split by commas or spaces) are installed this way by the registry itself whenever one isn't installed, from the newest stable release in the feed, with their asks agreed by the deployment (the internet still needs a deployment admin); they can't be removed while they're named. One the feed doesn't have yet, or that needs a required setting first, waits, and Admin → Apps says why. A release whose install failed isn't tried again by itself: a newer one is, or install it by hand.
 
 Pull requests that change an app can run as previews beside it, for the app's developers alone, each with scratch storage of its own: see [app-previews.md](app-previews.md).
 

@@ -5,6 +5,7 @@ import { PgAppStore, type AppRelease } from './store.ts';
 import { FeedProblem, UpdateChecker } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import { releaseOf } from './release3.testing.ts';
+import { releaseProblem } from './app-runner.ts';
 
 const db = registryDb();
 
@@ -35,6 +36,19 @@ describe('the app feed', () => {
   it('reads a mirror’s list of release files', async () => {
     const fetchImpl = (async () => json({ apps: [release('1.0.0'), { nonsense: true }] })) as unknown as typeof fetch;
     expect(listOf(await appFeed({ url: 'https://mirror/apps.json', fetchImpl })()).map((r) => r.version)).toEqual(['1.0.0']);
+  });
+
+  it('keeps a mirror’s notes link and halt beside the release file, which then installs (docs/mirror.md)', async () => {
+    const mirrored = { ...release('1.0.0'), notesUrl: 'https://github.com/o/r/releases/tag/app/notes@1.0.0' };
+    const fetchImpl = (async () => json({ apps: [mirrored, { ...release('1.1.0'), notesUrl: 'https://x', halted: { reason: 'Loses notes' } }] })) as unknown as typeof fetch;
+    const releases = listOf(await appFeed({ url: 'https://mirror/apps.json', fetchImpl })());
+    const ok = releases.find((r) => r.version === '1.0.0')!;
+    expect(ok.notesUrl).toBe(mirrored.notesUrl);
+    expect(ok.release).not.toHaveProperty('notesUrl');
+    expect(releaseProblem(ok.release)).toBeUndefined();
+    const held = releases.find((r) => r.version === '1.1.0')!;
+    expect(held.halted).toEqual({ reason: 'Loses notes' });
+    expect(releaseProblem(held.release)).toBeUndefined();
   });
 
   it('lists a halted release as halted, and never takes it', async () => {
