@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Removing apps, pinning, sites and app sign-ins need a deployment admin
+
+**From** unreleased
+
+Removing an app, holding it at a version or letting go of that hold, allowing or stopping a site apps load from, and issuing an app's sign-in now need the `deployment-admin` role, not just `admin` (ADR 0084). They change what the server runs and trusts. A plain admin still sees these buttons in Admin, turned off, saying a deployment admin can do it. Before you upgrade, check that whoever does these jobs holds `deployment-admin` (Admin, People); the first admin already does.
+
 ### A way back that works when the screens don't
 
 **From** unreleased

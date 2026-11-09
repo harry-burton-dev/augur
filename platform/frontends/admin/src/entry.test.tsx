@@ -47,8 +47,8 @@ const gateway = (more: Answer = () => undefined) => {
 };
 
 const own = { id: 'w-me', kind: 'personal' as const, name: 'You', slug: 'me', path: [], role: 'lead' as const };
-const ctx = (path: string): MountContext => ({
-  user: { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] },
+const ctx = (path: string, roles = ['admin']): MountContext => ({
+  user: { id: 'u-1', name: 'Alex', departments: [], roles },
   getToken: async () => 'token',
   bus: createEventBus(),
   raise: vi.fn(),
@@ -66,10 +66,10 @@ const settle = async (rounds = 8) => {
   for (let i = 0; i < rounds; i++) await act(async () => new Promise((r) => setTimeout(r, 5)));
 };
 let mounts: HTMLElement[] = [];
-const open = async (path: string) => {
+const open = async (path: string, roles?: string[]) => {
   window.history.replaceState(null, '', `/admin${path}`);
   const el = document.body.appendChild(document.createElement('div'));
-  await act(async () => void (await admin.mount(el, ctx(path))));
+  await act(async () => void (await admin.mount(el, ctx(path, roles))));
   await settle();
   mounts.push(el);
   return el;
@@ -618,13 +618,22 @@ describe('Apps', () => {
             ? Response.json([])
             : undefined,
     );
-    const el = await open('/apps');
+    const el = await open('/apps', ['admin', 'deployment-admin']);
     await openRow(el, 'Library');
     expect(document.querySelector('.augur-dialog')!.textContent).toContain('Notify people');
     await press(button('Issue a new sign-in'));
     await press(button('Issue a new sign-in', document.querySelectorAll('.augur-dialog')[1] ?? document));
     expect(sent).toContainEqual({ method: 'POST', url: '/api/identity/v1/admin/apps/library/credential', body: undefined });
     expect(document.querySelector('[data-secret]')?.textContent).toBe('s3cret-value');
+  });
+
+  it('leaves issuing a sign-in to deployment admins, and says who can (ADR 0084)', async () => {
+    gateway((_m, url) => (url === '/api/registry/v1/apps' ? Response.json([library]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
+    const el = await open('/apps');
+    await openRow(el, 'Library');
+    const issue = button('Issue a new sign-in');
+    expect(shut(issue)).toBe(true);
+    expect(reasonOf(issue)).toContain('Only a deployment admin can do this.');
   });
 
   describe('installs from releases', () => {
