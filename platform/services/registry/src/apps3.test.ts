@@ -1,11 +1,13 @@
 // P2b's acceptance (spec 3.3, 9.4, 9.6): the registry takes a contract 3 manifest only from a release it handed
 // the runner, serves it to the shell as the manifest in force, and reads a release file an admin pastes.
 import { describe, expect, it } from 'vitest';
-import { callerHeaders, type FloorPlace } from '@augur/service-kit';
+import { callerHeaders, frontendDigest, packFrontend, type FloorPlace } from '@augur/service-kit';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { addressProblem } from './upstreams.ts';
-import { releaseOf } from './release3.testing.ts';
+import { frontendHandedOver } from './apps3.ts';
+import { MemoryFrontendFiles } from './frontends.ts';
+import { exampleRelease, releaseOf } from './release3.testing.ts';
 
 const db = registryDb();
 
@@ -185,5 +187,37 @@ describe.runIf(DATABASE_URL)('a release file an admin pastes the address of', ()
     expect(addressProblem('10.1.2.3', { networks: ['10.1.0.0/16'], setAt: '2026-11-09T00:00:00Z' })).toMatch(/own networks/);
     expect(addressProblem('10.20.30.40', { networks: ['10.1.0.0/16'], setAt: '2026-11-09T00:00:00Z' })).toBeUndefined();
     expect(addressProblem('140.82.121.4')).toBeUndefined();
+  });
+});
+
+describe.runIf(DATABASE_URL)('a frontend bundle on contract 3', () => {
+  it('is kept at /apps/<id>/<version>/, where the shell loads it from, once its digest is the one a release the runner has names', async () => {
+    const frontendFiles = new MemoryFrontendFiles();
+    const t = await setup({ frontendFiles });
+    const bundle = packFrontend([{ path: 'sandbox.js', data: Buffer.from('export default function start() {}') }]);
+    const release = releaseOf('notes', '1.2.0', {}, { frontend: { ...exampleRelease().frontend!, digest: frontendDigest(bundle) } });
+    const give = (body: Buffer) =>
+      t.server.inject({ method: 'PUT', url: '/v1/apps/notes/versions/1.2.0/frontend', headers: { ...runner, 'content-type': 'application/gzip' }, payload: body });
+    const own = /^1\.2\.0_[0-9a-f]{12}$/;
+    // Until the runner has the release, it is a build like any other, in a folder of its own.
+    expect((await give(packFrontend([{ path: 'sandbox.js', data: Buffer.from('other') }]))).json().folder).toMatch(own);
+    await t.install(release);
+    const kept = await give(bundle);
+    expect(kept.statusCode).toBe(201);
+    expect(kept.json().folder).toBe('1.2.0');
+    expect(frontendFiles.objects.get('apps/notes/1.2.0/sandbox.js')?.toString()).toBe('export default function start() {}');
+    // Any other build of the version isn't the release's, and never takes that folder.
+    expect((await give(packFrontend([{ path: 'sandbox.js', data: Buffer.from('else') }]))).json().folder).toMatch(own);
+  });
+
+  it('is a preview’s too, at the preview’s own version, but never a job that failed or was cancelled', () => {
+    const job = (version: string, action: 'install' | 'preview', state: 'running' | 'done' | 'failed' | 'cancelled', digest = 'sha256:' + 'f'.repeat(64)) =>
+      ({ id: `j-${version}`, app: 'notes', action, state, release: releaseOf('notes', version, {}, { frontend: { ...exampleRelease().frontend!, digest } }), requestedBy: 'u-1', requestedAt: '', steps: [] }) as never;
+    const d = 'sha256:' + 'f'.repeat(64);
+    expect(frontendHandedOver([job('1.3.0-pr.7.1', 'preview', 'running')], 'notes', '1.3.0-pr.7.1', d)?.id).toBe('j-1.3.0-pr.7.1');
+    expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'notes', '1.3.0', d)?.id).toBe('j-1.3.0');
+    expect(frontendHandedOver([job('1.3.0', 'install', 'failed'), job('1.3.0', 'install', 'cancelled')], 'notes', '1.3.0', d)).toBeUndefined();
+    expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'notes', '1.3.0', 'sha256:' + 'e'.repeat(64))).toBeUndefined();
+    expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'other', '1.3.0', d)).toBeUndefined();
   });
 });

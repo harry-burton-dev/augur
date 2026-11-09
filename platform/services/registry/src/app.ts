@@ -80,7 +80,7 @@ import { frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts'
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { SERVED_CONTRACTS } from './release-check.ts';
-import { AppManifest3Body, entryOf3, handedOver, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, frontendHandedOver, handedOver, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -929,7 +929,9 @@ export const buildApp = async ({
        * own service gives it before registering that version, or a platform service or an admin does.
        * The same files again (every restart) change nothing. Other files for the same version are a new
        * build of it (a dev build, or a pillar app rebuilt with a newer kit): they take the old build's
-       * place, in a folder of their own, so no browser goes on running the build it kept.
+       * place, in a folder of their own, so no browser goes on running the build it kept. A release on the
+       * app contract names its bundle by digest, and the shell loads it from /apps/<id>/<version>/: that one
+       * is kept at the version's own folder (spec 3.3).
        */
       app.put(
         '/apps/:id/versions/:version/frontend',
@@ -944,8 +946,10 @@ export const buildApp = async ({
               'the tarball holds it. The same tarball again answers 200 and changes',
               'nothing. A different one for the same version is a new build of it: it',
               "takes the old build's place, in a folder of its own, so no browser goes",
-              'on running the build it kept. At most 2000 files and 50 MB. Audited as',
-              'app.frontend-published.',
+              'on running the build it kept. The bundle of a release on the app contract',
+              '(one the app runner is installing or has installed, or a preview), told by',
+              'its digest, is kept at /apps/{id}/{version}/ itself, where the shell loads',
+              'it from. At most 2000 files and 50 MB. Audited as app.frontend-published.',
             ].join(' '),
             params: Type.Object({ id: Type.String(), version: Type.String({ description: "The release the frontend belongs to, its manifest's version" }) }),
             consumes: ['application/gzip'],
@@ -982,7 +986,9 @@ export const buildApp = async ({
           if (err instanceof FrontendProblem) return reply.code(400).send({ error: 'bad_request', message: err.message });
           throw err;
         }
-        const folder = frontendFolder(version, digest);
+        // A contract 3 release names its bundle by digest, and the shell loads it from /apps/<id>/<version>/ (spec 3.3):
+        // that build is the version, so it's kept at the version's own folder. Any other build gets one of its own.
+        const folder = frontendHandedOver(await store.appJobs(id), id, version, digest) ? version : frontendFolder(version, digest);
         await frontendFiles.put(id, folder, files);
         const stored = await store.putFrontend({ app: id, version, digest, folder, files: files.map((f) => f.path), bytes: files.reduce((n, f) => n + f.data.length, 0), publishedBy: by.id });
         req.log.info({ app: id, version, folder, files: files.length, bytes: stored.bytes, by: by.id, replaced: had?.digest }, had ? 'app frontend rebuilt' : 'app frontend kept');
