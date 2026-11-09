@@ -4,8 +4,8 @@ export const sql = String.raw`
 -- Every object these statements change is made by migration 001 in the same release, so no release before
 -- runs on them: revoking and replacing here changes nothing a rollback could meet.
 -- squawk-ignore-file ban-revoke, ban-replace-view-function
--- T1. Security definer functions ran as whoever ran the migration, which on a deployment is the platform
--- login, a superuser. Everything in kg is now owned by kg_owner: no login, not a superuser, no BYPASSRLS. As the
+-- T1. Security definer functions ran as whoever ran the migration, which on a deployment is the shared
+-- migrating login, a superuser. Everything in kg is now owned by kg_owner: no login, not a superuser, no BYPASSRLS. As the
 -- tables' owner it is not fenced by row security, which is what the act_* functions rely on; kg_app owns nothing.
 grant usage on schema kg to kg_owner;
 do $$ declare r record; begin
