@@ -38,7 +38,7 @@ A notification that needs someone (`needs`) is also emailed to them (ADR 0044, D
 - **Sent** through the organisation's relay with `@augur/service-kit/mail`, from the organisation's sender (Admin, Organisation). The subject is the notification's title and the body its detail. Its link (`PLATFORM_URL/?notice=<id>`) opens the notification in the shell as clicking it there would, on its floor, read or not (`GET /v1/notifications/{id}`); one that isn't theirs, or has gone, says so. The words around it are in the person's language, falling back to English (`EMAIL_WORDS` in the events service).
 - **Tried again** in 5 minutes when the relay refuses it, and skipped after 5 tries.
 
-Each notification keeps how its email ended (`emailed_at`, or `email_skipped` and why), for anyone looking into one that didn't arrive. The events service needs `PLATFORM_URL` and the `SMTP_*` settings (docs/deploy.md, Email); without a relay it logs that no notice is emailed. Other levels aren't emailed one by one; the digests gather them.
+Each notification keeps how its email ended (`emailed_at`, or `email_skipped` and why), for anyone looking into one that didn't arrive. The events service needs `PLATFORM_URL` and the `SMTP_*` settings ([Set up email](src/content/docs/run/email.md)); without a relay it logs that no notice is emailed. Other levels aren't emailed one by one; the digests gather them.
 
 ### Digests
 

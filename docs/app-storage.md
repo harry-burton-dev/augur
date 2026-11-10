@@ -117,7 +117,7 @@ The folders an admin fills for an app (`augur-files`) are not deleted: they are 
 
 ## Backups
 
-The nightly backup takes apps' schemas with the rest of the database, and apps' files as `objects-YYYY-MM-DD.tar.gz` beside it (see [Running AUGUR on your own server](deploy.md#backups)).
+The nightly backup takes apps' schemas with the rest of the database, and apps' files as `objects-YYYY-MM-DD.tar.gz` beside it (see [Backups](src/content/docs/run/backups.md)).
 
 ## Locally
 

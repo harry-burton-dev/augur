@@ -686,7 +686,7 @@ export const realmEntraFromEnv = (env: Record<string, string | undefined>, warn:
   const clientSecret = env.ENTRA_CLIENT_SECRET?.trim();
   if (!tenantId && !clientId && !clientSecret) return undefined;
   if (!tenantId || !clientId || !clientSecret) {
-    warn('Entra needs all of ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET; one is missing, so people sign in with a password only (docs/deploy.md, Entra).');
+    warn('Entra needs all of ENTRA_TENANT_ID, ENTRA_CLIENT_ID and ENTRA_CLIENT_SECRET; one is missing, so people sign in with a password only (AUGUR’s docs, Sign in with Entra).');
     return undefined;
   }
   if (!/^[0-9a-f-]{36}$/i.test(tenantId)) {

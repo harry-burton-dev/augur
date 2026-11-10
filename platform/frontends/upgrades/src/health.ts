@@ -150,7 +150,7 @@ export const backupsPage = (v: View): RemoteNode => {
     return quill('quill-state', {
       kind: 'empty',
       heading: 'Backups aren’t reported here',
-      body: 'The gateway isn’t told where the backup container writes its results. See docs/deploy.md, Backups.',
+      body: 'The gateway isn’t told where the backup container writes its results. See AUGUR’s docs, Backups.',
       size: 'region',
     });
   const pit = b.pointInTime;
@@ -176,7 +176,7 @@ export const backupsPage = (v: View): RemoteNode => {
               ? b.offsite.ok
                 ? `${when(v, b.offsite.at)} · kept ${b.offsite.keepDays ?? 30} days`
                 : (b.offsite.problem ?? 'Failed')
-              : 'Not set up: backups stay on this server. Set OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key in .env (docs/deploy.md, Off-server copy).',
+              : 'Not set up: backups stay on this server. Set OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key in .env (AUGUR’s docs, Backups, Off-server copy).',
             tone: b.offsite ? okTone(b.offsite.ok) : 'needs',
           },
           pit
@@ -186,7 +186,7 @@ export const backupsPage = (v: View): RemoteNode => {
                 detail: !pit.ok ? (pit.problem ?? 'Needs a look') : pit.earliest ? `Any moment since ${when(v, pit.earliest)}` : 'Not yet: the first base backup is still to come',
                 tone: pit.ok ? (pit.earliest ? 'ok' : 'info') : 'problem',
               }
-            : { id: 'pit', title: 'Point in time', detail: 'Off: Postgres doesn’t archive its changes on this deployment (docs/deploy.md, Restore to a point in time).', tone: 'info' },
+            : { id: 'pit', title: 'Point in time', detail: 'Off: Postgres doesn’t archive its changes on this deployment (AUGUR’s docs, Restore to a point in time).', tone: 'info' },
           ...(pit ? [{ id: 'replay', title: 'Last replay test', detail: pit.lastTest ? `${when(v, pit.lastTest.at)}${pit.lastTest.ok ? '' : ', failed'}` : 'Never', tone: okTone(pit.lastTest?.ok) }] : []),
           {
             id: 'restore',
@@ -207,7 +207,7 @@ export const backupsPage = (v: View): RemoteNode => {
       quill(
         'quill-notice',
         { tone: 'info' },
-        'Restoring is done on the server, by hand: from a backup, to a point in time, or onto a new server (docs/deploy.md, Backups). Deployment can’t start a restore yet.',
+        'Restoring is done on the server, by hand: from a backup, to a point in time, or onto a new server (AUGUR’s docs, Backups). Deployment can’t start a restore yet.',
       ),
     ),
     quill(

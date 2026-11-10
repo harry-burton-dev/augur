@@ -83,14 +83,33 @@ An app's `manifest.json`: what the shell draws for the app before its code runs.
 
 One container of an app, described by a Score file: its service, a worker, or a job.
 
+### `pc`
+
+The alias for `docker compose` with a deployment's own files, made in
+[Install AUGUR, step 1](../../run/install/#1-get-the-release).
+
 ### Pillar app, platform app
 
 The two kinds of app. Platform apps help people use and manage AUGUR; pillar apps are the foundation of what
 the organisation produces with it.
 
+### Point-in-time restore
+
+Putting the database back as it was at any moment in the last 7 days, from a nightly **base backup** and the
+**WAL**, Postgres's record of every change. See [Restore to a point in time](../../run/restore-to-a-point-in-time/).
+
 ### Preflight
 
 The check run before an install or an upgrade (`scripts/preflight.mjs`).
+
+### Read key
+
+The GitHub token a deployment uses to see and pull releases that aren't public to it.
+
+### Realm job
+
+The `keycloak-config` container, which applies AUGUR's sign-in rules to Keycloak on every start. See
+[Settings and secrets](../../run/settings/#the-realm-job).
 
 ### Release
 

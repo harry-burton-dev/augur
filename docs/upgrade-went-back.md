@@ -32,7 +32,7 @@ All four hold → write the hand-off (below) and stop.
 
 | You see | Do | Don't |
 |---|---|---|
-| The address doesn't answer | `pc logs tailscale`; then [deploy.md, If something's wrong](deploy.md#if-somethings-wrong) | Restart the stack: it hides what you'd read |
+| The address doesn't answer | `pc logs tailscale`; then [If something's wrong](src/content/docs/run/troubleshooting.md) | Restart the stack: it hides what you'd read |
 | The page loads, sign-in fails | `pc ps keycloak identity`; `pc logs --since 1h keycloak identity` | Go back to a release before 0.18.0: Keycloak 26.8's database can't go back ([upgrade.md](upgrade.md#keycloak-268-and-the-realm-job)) |
 | Anything else | Stop. Hand off with what you saw | |
 
@@ -49,7 +49,7 @@ All four hold → write the hand-off (below) and stop.
 
 The code went back, and the data stayed as the new release left it ([upgrade.md, Going back](upgrade.md#going-back), step 2). Only a restore fixes that. **A restore loses everything saved since the backup, in every app and in sign-in, and more each hour people work.** First do check 4: restore only a file that's there and tested.
 
-**A way back that loses less, if it's there.** When Admin → Status shows *Point in time* reaching back before the upgrade started (its start time is in History) and `cat infra/deploy/backups/status/pitr-test.json` says `"ok":true`, go back to a moment just before that start instead of loading the file: [deploy.md, Restore to a point in time](deploy.md#restore-to-a-point-in-time). It loses only what was saved after that moment, and it keeps the current data first, so it can be undone. The same pause point comes first. It arrives with the release after 0.18 (ADR 0064) and hasn't been tried on a real night yet.
+**A way back that loses less, if it's there.** When Admin → Status shows *Point in time* reaching back before the upgrade started (its start time is in History) and `cat infra/deploy/backups/status/pitr-test.json` says `"ok":true`, go back to a moment just before that start instead of loading the file: [Restore to a point in time](src/content/docs/run/restore-to-a-point-in-time.md). It loses only what was saved after that moment, and it keeps the current data first, so it can be undone. The same pause point comes first. It arrives with the release after 0.18 (ADR 0064) and hasn't been tried on a real night yet.
 
 | You see | Do |
 |---|---|

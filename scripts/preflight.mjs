@@ -8,7 +8,7 @@
 //   - every setting this release needs is set
 // and it lists what this release breaks and the settings it no longer reads.
 //
-// A fresh install (--install; docs/deploy.md, "First start") checks the .env against
+// A fresh install (--install; AUGUR’s docs, Install AUGUR) checks the .env against
 // infra/deploy/settings.schema.json, as a list: the release checked out is the one PLATFORM_VERSION names;
 // every required setting is set and each value fits its pattern, length or choices; no two secrets are the
 // same; PLATFORM_URL is this machine's address on the tailnet; the read key is complete; and the host's
@@ -125,7 +125,7 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   const missing = required.filter((key) => !env[key]);
   const generated = missing.filter((key) => props[key]?.['x-generate']);
   const byHand = missing.filter((key) => !props[key]?.['x-generate']);
-  if (byHand.length) stop(`Set ${byHand.join(', ')} in .env (docs/deploy.md, First start).`);
+  if (byHand.length) stop(`Set ${byHand.join(', ')} in .env (AUGUR’s docs, Install AUGUR).`);
   if (generated.length) stop(`${generated.length} secret${generated.length === 1 ? '' : 's'} still blank (${generated.join(', ')}): run this again with --fill-secrets.`);
   if (!missing.length) pass(`Settings: all ${required.length} required settings are set.`);
   const misfits = Object.entries(env)
@@ -164,15 +164,15 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   else note('No read key (GITHUB_READ_USER): fine while the release\u2019s packages are public; the Upgrade Centre can\u2019t see private ones without it (docs/upgrade.md, The read key).');
 
   // Later, but worth knowing now.
-  if (!env.DEPLOYMENT_ID) note(`Not reporting to Backstage yet (DEPLOYMENT_ID${env.PORTAL_URL ? '' : ', PORTAL_URL'}): set it up after the first start (docs/deploy.md, Finish setting up).`);
-  if (!env.OFFSITE_REPOSITORY) note('Backups stay on this server until the off-server copy is set up (docs/deploy.md, Off-server copy).');
-  if (!env.SMTP_HOST) note('No email relay (SMTP_HOST): nobody can reset a forgotten password; admins pass on one-time passwords (docs/deploy.md, Email).');
+  if (!env.DEPLOYMENT_ID) note(`Not reporting to Backstage yet (DEPLOYMENT_ID${env.PORTAL_URL ? '' : ', PORTAL_URL'}): set it up after the first start (AUGUR’s docs, Install AUGUR, step 6).`);
+  if (!env.OFFSITE_REPOSITORY) note('Backups stay on this server until the off-server copy is set up (AUGUR’s docs, Backups, Off-server copy).');
+  if (!env.SMTP_HOST) note('No email relay (SMTP_HOST): nobody can reset a forgotten password; admins pass on one-time passwords (AUGUR’s docs, Set up email).');
 
   // The host.
   if (host.envReadableByOthers) stop('.env can be read by every user on this server: chmod 600 infra/deploy/.env.');
   if (host.memoryBytes !== undefined) {
     const gb = host.memoryBytes / GB;
-    if (gb < HOST_SIZE.memoryGB * 0.9) note(`Memory: ${gb.toFixed(1)} GB, under the ${HOST_SIZE.memoryGB} GB AUGUR's limits are sized for; lower them in .env (docs/deploy.md, Logs, memory and health).`);
+    if (gb < HOST_SIZE.memoryGB * 0.9) note(`Memory: ${gb.toFixed(1)} GB, under the ${HOST_SIZE.memoryGB} GB AUGUR's limits are sized for; lower them in .env (AUGUR’s docs, Limits and health).`);
     else pass(`Memory: ${gb.toFixed(0)} GB.`);
   }
   if (host.freeDiskBytes !== undefined) {
@@ -233,7 +233,7 @@ const main = () => {
       console.error('Not ready: fix each ✗, then run this again.');
       process.exit(1);
     }
-    console.log('✓ Ready: start AUGUR (docs/deploy.md, First start, step 5).');
+    console.log('✓ Ready: start AUGUR (AUGUR’s docs, Install AUGUR, step 5).');
     return;
   }
 
