@@ -82,8 +82,9 @@ function main() {
       console.log(`${path}: nothing breaks.\n${out}`);
     } catch (err) {
       const out = `${err.stdout ?? ''}${err.stderr ?? ''}`;
-      // oasdiff exits 1 for a break, and so does Docker when it can't run it: only a report of changes is a break.
-      if (err.status !== 1 || !/\d+ changes?: \d+ error/.test(out)) throw new Error(`oasdiff didn't run on ${path}:\n${out || err.message}`, { cause: err });
+      // oasdiff exits 1 for a break, and so does Docker when it can't run it: only a report of changes is a break,
+      // as a summary ("1 changes: 1 error") or, in GitHub Actions, as ::error annotations.
+      if (err.status !== 1 || !/\d+ changes?: \d+ error|^::error /m.test(out)) throw new Error(`oasdiff didn't run on ${path}:\n${out || err.message}`, { cause: err });
       console.log(out);
       if (v.allowed) console.log(`${path}: oasdiff calls this breaking; a changeset says why it isn't.`);
       else failed.push(`${path} breaks its callers within major ${majorOf(head)}. Serve the change under a new major, or, if no caller can break, add a line "Not breaking: ${file} <why>" to the changeset.`);
