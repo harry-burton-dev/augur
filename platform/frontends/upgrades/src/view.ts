@@ -51,6 +51,10 @@ export interface View {
 /** History entries on each page of a history list. */
 export const HISTORY_STEP = 10;
 
+/** Rows a table shows a page at a time, and offers a filter beyond: a deployment may run dozens of apps. */
+export const TABLE_PAGE = 10;
+export const paged = (rows: number) => (rows > TABLE_PAGE ? { pageSize: TABLE_PAGE, filterable: true } : {});
+
 export const when = (v: Pick<View, 'zone' | 'now'>, at?: string | Date) => (at ? formatWhen(at, v.zone, v.now) : 'Not yet');
 
 const level = (running: string, to: string) => ({ patch: 'Patch', minor: 'Minor', major: 'Major' })[levelFrom(running, to)];
@@ -162,6 +166,7 @@ export const installedTable = (v: View, label: string, rows: UnitRow[], empty: s
       status: statusOf(v, r, units.find((x) => x.unit === r.id)),
     })),
     empty,
+    ...paged(rows.length),
     onOpen: (id: string) => v.on.go(unitPath(id, AUGUR)),
   });
 };
