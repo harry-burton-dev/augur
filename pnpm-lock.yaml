@@ -325,11 +325,8 @@ importers:
   platform/frontends/sign-in-theme:
     dependencies:
       '@augur/kit-common':
-        specifier: npm:@harry-burton-dev/augur-kit-common@^0.2.0
-        version: '@harry-burton-dev/augur-kit-common@0.2.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
-      '@fontsource/jost':
-        specifier: 5.2.8
-        version: 5.2.8
+        specifier: npm:@harry-burton-dev/augur-kit-common@^0.16.0
+        version: '@harry-burton-dev/augur-kit-common@0.16.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       keycloakify:
         specifier: 11.16.4
         version: 11.16.4
@@ -1350,9 +1347,6 @@ packages:
   '@fontsource/instrument-sans@5.2.8':
     resolution: {integrity: sha512-TJRYVbjZPx4DGMMU5lb5eFKrP3iLe9h7rz8Pk+dP958IZKiyHjYGXXwQZapVbBXcQN+YOiviVhAWxrjv8g6Z6g==}
 
-  '@fontsource/jost@5.2.8':
-    resolution: {integrity: sha512-PEK7oGJL8r+YZm6BriWhmCql9DhVYTMt0iEQbZHo8mqfIPIZo67Tm68xEIaRA0yB3wsHA7Tm66yMQDIxq3Bjqw==}
-
   '@fontsource/nunito@5.2.7':
     resolution: {integrity: sha512-pmtBq0H9ex9nk+RtJYEJOD9pag393iHETnl/PVKleF4i06cd0ttngK5ZCTgYb5eOqR3Xdlrjtev8m7bmgYprew==}
 
@@ -1388,12 +1382,6 @@ packages:
 
   '@harry-burton-dev/augur-kit-common@0.16.0':
     resolution: {integrity: sha512-h+yAvBFtoIDFKSJkRxk1+ycQCUkr1eVPTi6vyX/smkLZ4LKCSSS0Dn3kWGToFIBnOvqmBD2ixUKqX+hwLgNgGg==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-common/0.16.0/8dc2d942b698d869a8e37143e5bed84f01571cfd}
-    peerDependencies:
-      react: ^19.3.1
-      react-dom: ^19.3.1
-
-  '@harry-burton-dev/augur-kit-common@0.2.0':
-    resolution: {integrity: sha512-AqpeL98AHlkVfhPfmSmwXGR1NrxN/YfkUVrvvPlqp5110OSYAm7vz2vmnj9Bp+lzUgmLF4p08y5FMzCFSYZjJg==, tarball: https://npm.pkg.github.com/download/@harry-burton-dev/augur-kit-common/0.2.0/e40370119beaab39ecb5248bd85de45a59cebcc8}
     peerDependencies:
       react: ^19.3.1
       react-dom: ^19.3.1
@@ -5521,8 +5509,6 @@ snapshots:
 
   '@fontsource/instrument-sans@5.2.8': {}
 
-  '@fontsource/jost@5.2.8': {}
-
   '@fontsource/nunito@5.2.7': {}
 
   '@grafana/faro-core@2.13.0':
@@ -5625,15 +5611,6 @@ snapshots:
       '@fontsource/ibm-plex-mono': 5.2.7
       '@fontsource/instrument-sans': 5.2.8
       '@fontsource/nunito': 5.2.7
-      lucide-react: 1.62.0(@types/react@19.3.0)(react@19.3.1)
-      react: 19.3.1
-      react-aria-components: 1.22.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      react-dom: 19.3.1(react@19.3.1)
-    transitivePeerDependencies:
-      - '@types/react'
-
-  '@harry-burton-dev/augur-kit-common@0.2.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
-    dependencies:
       lucide-react: 1.62.0(@types/react@19.3.0)(react@19.3.1)
       react: 19.3.1
       react-aria-components: 1.22.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DirectoryError, KeycloakDirectory } from './directory.ts';
-import { applyEntra, ENTRA_FIRST_SIGN_IN, ENTRA_LINK_STEP, ENTRA_REFUSE_STEP, realmEntraFromEnv, applyOrganisation, applyTwoStepForAll, NOTICE_KEYS, applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
+import { applyEntra, ENTRA_FIRST_SIGN_IN, ENTRA_LINK_STEP, ENTRA_REFUSE_STEP, realmEntraFromEnv, applyOrganisation, applyRoles, applyTwoStepForAll, NOTICE_KEYS, applyIdleWorkflow, idleWorkflow, IDLE_WORKFLOW, applyLook, applyMail, withSender, applyRealmSettings, MAIL_FINGERPRINT, realmMailFromEnv, DEFAULT_PRODUCT_NAME, productNameFromEnv, applyServiceAccountRights, applySignInFlow, IDENTITY_RIGHTS, passwordPolicy, REALM_FLOORS, realmLookFromEnv, realmSettingsFromEnv, SIGN_IN_THEME, TWO_STEP_STEP } from './realm.ts';
 
 type Call = { method: string; path: string; body?: unknown };
 
@@ -495,7 +495,28 @@ describe('Admin → Organisation in the realm (PER-196)', () => {
     await applyTwoStepForAll(kc, false, changes);
     await applyTwoStepForAll(kc, undefined, changes);
     expect(calls.filter((c) => c.method !== 'GET').map((c) => c.method)).toEqual(['POST', 'DELETE']);
-    expect(changes).toEqual(['everyone now signs in with two steps', 'two steps for the admin roles only']);
+    expect(changes).toEqual(['everyone now signs in with two steps', 'two steps are optional for everyone']);
+  });
+});
+
+describe('the platform’s roles', () => {
+  it('take the two-step role out of the admin roles an older release put it in, then change nothing', async () => {
+    const twoStep = { id: 'r2', name: 'two-step-sign-in' };
+    const inside: Record<string, { id: string; name: string }[]> = { admin: [twoStep, { id: 'r3', name: 'other' }], 'deployment-admin': [] };
+    const { kc, calls } = keycloak((method, path, body) => {
+      if (path.startsWith('/roles?')) return ['publisher', 'deployment-admin', 'two-step-sign-in', 'admin'].map((name) => ({ name }));
+      const role = /^\/roles\/([^/]+)\/composites$/.exec(path)?.[1];
+      if (!role) return undefined;
+      if (method === 'GET') return inside[decodeURIComponent(role)];
+      if (method === 'DELETE') inside[decodeURIComponent(role)] = inside[decodeURIComponent(role)]!.filter((r) => !(body as { name: string }[]).some((b) => b.name === r.name));
+      return undefined;
+    });
+    const changes: string[] = [];
+    await applyRoles(kc, changes);
+    await applyRoles(kc, changes);
+    expect(calls.filter((c) => c.method !== 'GET')).toEqual([{ method: 'DELETE', path: '/roles/admin/composites', body: [twoStep] }]);
+    expect(inside.admin).toEqual([{ id: 'r3', name: 'other' }]);
+    expect(changes).toEqual(['admin no longer needs two-step sign-in']);
   });
 });
 

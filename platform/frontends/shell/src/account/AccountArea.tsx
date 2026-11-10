@@ -323,7 +323,7 @@ function AccountCheck({ known, onSection, open }: SectionProps) {
     <>
       <CheckList label="Account check">
         {s.twoStep.required && !s.twoStep.set ? (
-          <CheckRow title="Two-step sign-in" tone="needs" detail={s.twoStep.reason ?? 'Your role needs it, and it isn’t set up.'} action={{ label: 'Set up', onPress: () => onSection('security') }} />
+          <CheckRow title="Two-step sign-in" tone="needs" detail={s.twoStep.reason ?? 'Your organisation asks for it, and it isn’t set up.'} action={{ label: 'Set up', onPress: () => onSection('security') }} />
         ) : (
           <CheckRow
             title="Two-step sign-in"
@@ -571,7 +571,7 @@ function TwoStep({ known, onAction }: SectionProps) {
   const held = [...s.codeApps, ...s.passkeys];
   return (
     <>
-      {s.twoStep.required && !s.twoStep.set ? <Notice tone="needs" heading="Your role needs two-step sign-in.">{s.twoStep.reason}</Notice> : null}
+      {s.twoStep.required && !s.twoStep.set ? <Notice tone="needs" heading="You need two-step sign-in.">{s.twoStep.reason}</Notice> : null}
       <Credentials items={held} onAction={onAction} />
       <Line detail={s.codeApps.length ? undefined : 'No code app yet.'}>
         <ActionButton act={action('code-app')} label={s.codeApps.length ? 'Add another code app' : 'Add a code app'} onAction={onAction} />

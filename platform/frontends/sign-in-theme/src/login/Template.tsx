@@ -4,7 +4,7 @@ import { useInitialize } from 'keycloakify/login/Template.useInitialize';
 import type { TemplateProps } from 'keycloakify/login/TemplateProps';
 import { getKcClsx } from 'keycloakify/login/lib/kcClsx';
 import { useSetClassName } from 'keycloakify/tools/useSetClassName';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type { I18n } from './i18n';
 import type { KcContext } from './KcContext';
 
@@ -21,10 +21,19 @@ const MESSAGE_ICON: Record<'success' | 'warning' | 'error' | 'info', IconName> =
   info: 'info',
 };
 
+/** The still horizon's rules, as the shell's desktop draws them: where each sits, and how strong it is. */
+const RULES = [
+  { side: 'above', at: '18%', rule: '10%' },
+  { side: 'above', at: '24%', rule: '16%' },
+  { side: 'below', at: '74%', rule: '55%' },
+  { side: 'below', at: '82%', rule: '35%' },
+] as const;
+
 /**
- * Every sign-in page's frame: the organisation, the page's title, Keycloak's message for it, the page
- * itself, and the product's name with the languages underneath. Keycloakify's own pages (DefaultPage) fill
- * it; sign-in.css gives their forms Common's look.
+ * Every sign-in page's frame, in the Endstate look: the still horizon behind; the band along the top, with
+ * the organisation, the product's name and the languages; and one panel in front, with the page's title,
+ * Keycloak's message for it, and the page itself. Keycloakify's own pages (DefaultPage) fill the panel;
+ * sign-in.css gives their forms Common's Keycap and Well.
  */
 export default function Template(props: TemplateProps<KcContext, I18n>) {
   const { displayInfo = false, displayMessage = true, headerNode, socialProvidersNode = null, infoNode = null, documentTitle, kcContext, i18n, doUseDefaultCss, classes, children } = props;
@@ -54,15 +63,46 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
 
   return (
     <div className="augur-signin">
+      <div className="augur-signin-ground" aria-hidden="true">
+        {RULES.map(({ side, at, rule }) => (
+          <i key={at} className={`augur-signin-${side}`} style={{ '--at': at, '--rule': rule } as CSSProperties} />
+        ))}
+        <i className="augur-signin-line" />
+      </div>
+
+      <header className="augur-signin-band">
+        <p className="augur-signin-where">
+          {/* The organisation's name stands beside its logo, so the logo itself says nothing more. */}
+          {logo && !logoMissing ? <img className="augur-signin-logo" src={logo} alt="" onError={() => setLogoMissing(true)} /> : null}
+          {org ? <span className="augur-signin-org">{org}</span> : null}
+        </p>
+        <span className="augur-signin-product">{product}</span>
+        <div className="augur-signin-tools">
+          {enabledLanguages.length > 1 ? (
+            <details className="augur-signin-languages" id="kc-locale">
+              <summary aria-label={msgStr('languages')}>
+                {currentLanguage.label}
+                <Icon name="chevron-down" size={14} />
+              </summary>
+              <ul>
+                {enabledLanguages.map(({ languageTag, label, href }) => (
+                  <li key={languageTag}>
+                    <a href={href} lang={languageTag} aria-current={languageTag === currentLanguage.languageTag ? 'true' : undefined}>
+                      {label}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
+        </div>
+      </header>
+
       <main className="augur-signin-card">
         <header className="augur-signin-head">
-          {logo && !logoMissing ? <img className="augur-signin-logo" src={logo} alt={org} onError={() => setLogoMissing(true)} /> : null}
-          <div className="augur-heading" data-size="s">
-            {org ? <div className="augur-eyebrow">{org}</div> : null}
-            <h1 className="augur-title" id="kc-page-title">
-              {headerNode}
-            </h1>
-          </div>
+          <h1 className="augur-signin-title" id="kc-page-title">
+            {headerNode}
+          </h1>
           {showUsername ? (
             <div id="kc-username" className="augur-signin-username">
               <span id="kc-attempted-username">{auth.attemptedUsername}</span>
@@ -99,27 +139,6 @@ export default function Template(props: TemplateProps<KcContext, I18n>) {
           ) : null}
         </div>
       </main>
-
-      <footer className="augur-signin-foot">
-        <span className="augur-signin-product">{product}</span>
-        {enabledLanguages.length > 1 ? (
-          <details className="augur-signin-languages" id="kc-locale">
-            <summary aria-label={msgStr('languages')}>
-              {currentLanguage.label}
-              <Icon name="chevron-down" size={14} />
-            </summary>
-            <ul>
-              {enabledLanguages.map(({ languageTag, label, href }) => (
-                <li key={languageTag}>
-                  <a href={href} lang={languageTag} aria-current={languageTag === currentLanguage.languageTag ? 'true' : undefined}>
-                    {label}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </details>
-        ) : null}
-      </footer>
     </div>
   );
 }

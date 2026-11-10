@@ -9,7 +9,7 @@ Identity serves the account under `/v1/me/*`, behind the gateway, for the signed
 | Path | What it does |
 | --- | --- |
 | `GET /me/profile`, `PATCH /me/profile` | Name, job title, phone, pronouns, picture and language (`locale`, one of the `languages` the deployment offers, from `REALM_LANGUAGES`). Fields an organisation sign-in sets at every sign-in (one whose sync mode is `FORCE`) are listed in `managed` and refused with 409 and the sign-in's name. |
-| `GET /me/security` | Password, code apps, passkeys, recovery codes, whether their role needs two-step sign-in, linked organisation sign-ins, and the `kc_action` for each change. |
+| `GET /me/security` | Password, code apps, passkeys, recovery codes, whether they must sign in with a second step, linked organisation sign-ins, and the `kc_action` for each change. |
 | `GET /me/sessions`, `DELETE /me/sessions/{id}`, `DELETE /me/sessions?keep=` | Where they're signed in, and signing out of one, everywhere else, or everywhere. A session that isn't theirs is not found. |
 | `GET /me/sign-ins` | Recent sign-ins, failed sign-ins and changes to how they sign in, from Keycloak's events (kept for `REALM_SIGN_IN_EVENT_DAYS`). |
 | `GET /me/preferences`, `PUT /me/preferences` | Motion, density, away (with a message and an end), time zone, notification choices, pinned apps and the floor to start on. |
@@ -22,7 +22,7 @@ Without a connected Keycloak, everything but preferences answers 503 and says a 
 
 Identity never changes a password, a code app, a passkey, recovery codes or the email address itself. `GET /me/security` names Keycloak's application-initiated action for each (`UPDATE_PASSWORD`, `CONFIGURE_TOTP`, `webauthn-register-passwordless`, `CONFIGURE_RECOVERY_AUTHN_CODES`, `UPDATE_EMAIL`, `delete_credential:<id>`, `idp_link:<alias>`). The shell signs in again with `kc_action` set to it; Keycloak shows its own screen (in AUGUR's sign-in theme) and returns with `kc_action_status`. The realm job turns each of these actions on.
 
-Someone whose role needs two-step sign-in (ADR 0038) can't remove their last code app or passkey: the summary marks it, with the reason. Someone who signs in through their organisation and has no password here is told their password is changed there.
+Someone who must sign in with two steps (when the organisation asks everyone) can't remove their last code app or passkey: the summary marks it, with the reason. Someone who signs in through their organisation and has no password here is told their password is changed there.
 
 ## The Account dialog in the shell
 
@@ -32,7 +32,7 @@ It is built from Common's parts for a place to work in that never scrolls: `Sect
 
 | Section | What's in it |
 | --- | --- |
-| Overview | Who you are, away and sign out; and the account check: two-step sign-in (lit when the role needs it and it isn't set up, as is the tab), recovery codes, email, where you're signed in and failed sign-ins in the last 7 days, each with a way to it. Something's wrong? walks through securing the account: change the password, sign out everywhere else, check how you sign in, read the sign-ins, tell an administrator. |
+| Overview | Who you are, away and sign out; and the account check: two-step sign-in (lit when the organisation asks for it and it isn't set up, as is the tab), recovery codes, email, where you're signed in and failed sign-ins in the last 7 days, each with a way to it. Something's wrong? walks through securing the account: change the password, sign out everywhere else, check how you sign in, read the sign-ins, tell an administrator. |
 | Profile | Name, job title, phone and pronouns, saved as each field is left; the email address, changed on Keycloak's screen; away, with what it says and when it ends; sign out. |
 | Sign-in and security | Password, code apps, passkeys and recovery codes, each changed on Keycloak's screen; the organisation sign-ins to link; where you're signed in, with sign out there or everywhere else (the shell knows its own session by the `sid` claim in its token); recent sign-ins, with every one a page at a time; and whether changes to how they sign in are emailed, and where (Keycloak's email listener, on whenever the deployment has a relay). |
 | Notifications | Email for things that need you, a digest, quiet hours, and On Home or Quiet for each app and each kind of notification it names. It says whether email reaches them: where it goes, or why not (no mail relay on the deployment, no address yet, or an address not checked yet) and who can change it. Email itself is in [notifications.md](notifications.md#email). |
