@@ -1303,7 +1303,8 @@
         "models",
         "storage",
         "knowledge",
-        "knowledge-migrate"
+        "knowledge-migrate",
+        "permissions"
       ]
     },
     "IDENTITY_URL": {
@@ -1960,6 +1961,24 @@
       "type": "string",
       "description": "How often the permissions service copies floors, positions and who holds them whole from identity, in seconds, to put right anything an event missed. Each change identity announces is copied as it happens.",
       "default": "300",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/deploy.md#whats-in-it"
+    },
+    "PERSONA_DEPLOYMENT_ADMIN_MINUTES": {
+      "type": "string",
+      "description": "The longest someone may act as a deployment admin persona at a time, in minutes. They sign in again and give a reason each time (ADR 0086).",
+      "default": "60",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/deploy.md#whats-in-it"
+    },
+    "PERSONA_ORG_ADMIN_MINUTES": {
+      "type": "string",
+      "description": "The longest someone may act as an org admin persona at a time, in minutes. They sign in again and give a reason each time (ADR 0086).",
+      "default": "480",
       "x-services": [
         "permissions"
       ],
