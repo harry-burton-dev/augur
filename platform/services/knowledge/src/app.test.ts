@@ -75,7 +75,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     const noKey = await app.inject({ method: 'POST', url: '/v1/actions/retain', headers: as('alice', own.alice), payload: report('R4') });
     expect(noKey.json()).toMatchObject({ status: 400, reason: 'idempotency_key_required' });
     const unknown = await act('alice', own.alice, 'teleport', {});
-    expect(unknown.json()).toMatchObject({ status: 404, reason: 'unknown_action', problems: ['retain', 'hold', 'keep', 'confirm-faithful', 'publish', 'dispute', 'settle', 'retract', 'raise', 'end', 'forget'] });
+    expect(unknown.json()).toMatchObject({ status: 404, reason: 'unknown_action', problems: ['retain', 'hold', 'keep', 'confirm-faithful', 'publish', 'dispute', 'settle', 'retract', 'raise', 'end', 'forget', 'merge', 'split', 'retire', 'undo'] });
     const bad = await act('alice', own.alice, 'retain', { ...report('R4'), confidence: 0.9 });
     expect(bad.json()).toMatchObject({ status: 422, reason: 'invalid_input', problems: expect.arrayContaining([expect.stringMatching(/additional properties/)]) });
     const dangling = await act('alice', own.alice, 'retain', { ...report('R4'), observations: [{ ...report('R4').observations[0], subject: 'nobody' }] });
@@ -162,7 +162,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
 
   it('serves its catalogue and versions', async () => {
     const catalogue = (await app.inject({ url: '/v1/actions' })).json();
-    expect(catalogue.actions.map((a: { name: string }) => a.name)).toEqual(['retain', 'hold', 'keep', 'confirm-faithful', 'publish', 'dispute', 'settle', 'retract', 'raise', 'end', 'forget']);
+    expect(catalogue.actions.map((a: { name: string }) => a.name)).toEqual(['retain', 'hold', 'keep', 'confirm-faithful', 'publish', 'dispute', 'settle', 'retract', 'raise', 'end', 'forget', 'merge', 'split', 'retire', 'undo']);
     expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: ['source'], properties: { text: expect.any(Object) } });
     expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '1', classes: expect.arrayContaining(['kg:Ship']) }, speaks: { knowledge: [1] } });
   });

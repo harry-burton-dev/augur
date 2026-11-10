@@ -384,7 +384,8 @@ export const readObservation = async (db: pg.PoolClient, uuid: string) => {
 export const readRun = async (db: pg.PoolClient, person: string, actionId: string) => {
   const r = (await db.query<{ action: string; answer: { effects?: Record<string, string[]> }; at: Date }>('select * from kg.my_run($1)', [actionId])).rows[0];
   if (!r) throw new Problem(404, 'not_found', 'You took no action with that id.');
-  return { actionId, action: r.action, by: person, at: r.at.toISOString(), effects: r.answer.effects ?? {}, undone: false };
+  const undone = (await db.query<{ t: Date | null }>('select kg.run_undone($1) as t', [actionId])).rows[0]?.t;
+  return { actionId, action: r.action, by: person, at: r.at.toISOString(), effects: r.answer.effects ?? {}, undone: !!undone };
 };
 
 // ---- The ontology: the same for every floor

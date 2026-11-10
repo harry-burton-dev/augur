@@ -271,7 +271,7 @@ const hold: ActionDecl<typeof HoldInput> = {
       (input.supersedes ?? []).map((b) => uuidOf(b, 'A superseded belief')),
       input.into ? uuidOf(input.into, 'The belief to add to') : null,
     ]);
-    return { beliefs: [rows[0]!.id] };
+    return { beliefs: [rows[0]!.id], observations: input.observations };
   },
 };
 
@@ -467,8 +467,105 @@ const forget: ActionDecl<typeof ForgetInput> = {
   },
 };
 
+const MergeInput = Type.Object({ senior: Id('The entity that stays'), junior: Id('The entity that is the same real thing'), why: Why() }, { additionalProperties: false });
+const merge: ActionDecl<typeof MergeInput> = {
+  name: 'merge',
+  since: '1.9',
+  summary: 'Say two entities are one real thing: the junior points to the senior, and nothing moves',
+  input: MergeInput,
+  who: 'The floor’s settler.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    const senior = entityOf(input.senior, new Map(), 'The senior');
+    const junior = entityOf(input.junior, new Map(), 'The junior');
+    if (senior === junior) throw new InvalidInput(['An entity can’t be merged into itself.']);
+    const { rows } = await db.query<{ id: string }>('select kg.act_merge($1, $2, $3) as id', [senior, junior, input.why]);
+    return { merges: [rows[0]!.id], entities: [entityId(senior), entityId(junior)] };
+  },
+};
+
+const SplitInput = Type.Object({ merge: Id('A merge'), why: Why() }, { additionalProperties: false });
+const split: ActionDecl<typeof SplitInput> = {
+  name: 'split',
+  since: '1.9',
+  summary: 'Undo a merge exactly: the junior is its own entity again',
+  input: SplitInput,
+  who: 'The settler of the floor that merged them.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    const id = uuidOf(input.merge, 'The merge');
+    await db.query('select kg.act_split($1, $2)', [id, input.why]);
+    return { merges: [id] };
+  },
+};
+
+const RetireInput = Type.Object({ entity: Id('An active entity'), why: Why() }, { additionalProperties: false });
+const retire: ActionDecl<typeof RetireInput> = {
+  name: 'retire',
+  since: '1.9',
+  summary: 'Take an entity out of use; it stays, with everything said of it',
+  input: RetireInput,
+  who: 'The floor’s settler.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    await db.query('select kg.act_retire($1, $2)', [entityOf(input.entity, new Map(), 'The entity'), input.why]);
+    return { entities: [input.entity] };
+  },
+};
+
+const UndoInput = Type.Object({ action: Id('One of your own actions, by the actionId its answer gave'), why: Why() }, { additionalProperties: false });
+const undo: ActionDecl<typeof UndoInput> = {
+  name: 'undo',
+  since: '1.9',
+  summary: 'Undo one of your own actions that can be undone: retain, hold or keep',
+  input: UndoInput,
+  who: 'Whoever took the action, while they may still take it.',
+  scope: 'knowledge:act',
+  role: 'author',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  // Undoing retain retracts what it kept; undoing hold withdraws the belief, or only the evidence it added;
+  // undoing keep flags the observation again. Each goes through the store, which checks you may.
+  async run(db, input) {
+    const run = (await db.query<{ action: string; answer: { effects?: Effects } }>('select action, answer from kg.my_run($1)', [input.action])).rows[0];
+    if (!run) throw new InvalidInput(['You took no action with that id.']);
+    if ((await db.query<{ t: Date | null }>('select kg.run_undone($1) as t', [input.action])).rows[0]!.t) throw new InvalidInput(['That action was already undone.']);
+    const effects = run.answer.effects ?? {};
+    const observations = effects.observations ?? [];
+    switch (run.action) {
+      case 'retain':
+        for (const o of observations) await db.query('select kg.act_retract($1, $2)', [o, `undone: ${input.why}`]);
+        break;
+      case 'hold':
+        if (!observations.length) throw new InvalidInput(['That hold was taken before holds could be undone: retract its evidence instead.']);
+        for (const b of effects.beliefs ?? []) await db.query('select kg.act_unhold($1, $2::uuid[], $3)', [b, observations, input.why]);
+        break;
+      case 'keep':
+        for (const o of observations) await db.query('select kg.act_unkeep($1, $2)', [o, input.why]);
+        break;
+      default:
+        throw new InvalidInput([`${run.action} can’t be undone.`]);
+    }
+    await db.query('select kg.act_mark_undone($1, $2)', [input.action, input.why]);
+    return { actions: [input.action], ...(observations.length ? { observations } : {}), ...(effects.beliefs?.length && run.action !== 'retain' ? { beliefs: effects.beliefs } : {}) };
+  },
+};
+
 /** Every action, by name. */
-export const CATALOGUE: ActionDecl[] = [retain, hold, keep, confirmFaithful, publish, dispute, settle, retract, raise, end, forget] as ActionDecl[];
+export const CATALOGUE: ActionDecl[] = [retain, hold, keep, confirmFaithful, publish, dispute, settle, retract, raise, end, forget, merge, split, retire, undo] as ActionDecl[];
 export const actionNamed = (name: string) => CATALOGUE.find((a) => a.name === name);
 
 const checkers = new Map(CATALOGUE.map((a) => [a.name, Compile(a.input)]));

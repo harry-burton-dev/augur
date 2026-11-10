@@ -47,12 +47,8 @@ describe('the seam against draft 4', () => {
 /** The gap: empty since PR 3c. Every path draft 4 asks for is served; from here oasdiff guards the contract. */
 const GAP: string[] = [];
 
-/** The inputs of the actions that come with their own pull requests: merge to undo in PR 6, reflect in 7, adopt and dismiss in 8. */
+/** The inputs of the actions that come with their own pull requests: reflect in PR 7, adopt and dismiss in 8. */
 const LATER = [
-  'MergeInput.senior', 'MergeInput.junior', 'MergeInput.why',
-  'SplitInput.merge', 'SplitInput.why',
-  'RetireInput.entity', 'RetireInput.why',
-  'UndoInput.action', 'UndoInput.why',
   'AdoptInput.term', 'AdoptInput.kind', 'AdoptInput.iri', 'AdoptInput.label',
   'DismissInput.term', 'DismissInput.kind', 'DismissInput.why',
   'ReflectInput.entity',
