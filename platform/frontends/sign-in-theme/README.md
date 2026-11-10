@@ -1,13 +1,15 @@
 # AUGUR's sign-in and email theme
 
 The pages Keycloak shows at sign-in (sign in, set up a code app or passkey, change a password, choose
-another way in) and the emails it sends, in AUGUR's look (ADR 0041).
+another way in) and the emails it sends, in AUGUR's Endstate look (ADR 0041).
 Built with [Keycloakify](https://www.keycloakify.dev) from Common's tokens and parts (`@augur/kit-common`),
 and shipped as a jar in AUGUR's Keycloak image (`infra/service.Dockerfile`, target `keycloak`).
 
 - **Pages** (`src/login`): every page is Keycloakify's own, so every page Keycloak can show is covered and
-  follows Keycloak's behaviour. `Template.tsx` is the frame (the organisation, the page's title, Keycloak's
-  message, the product and the languages) and `sign-in.css` gives the pages Common's fields and buttons.
+  follows Keycloak's behaviour. `Template.tsx` is the frame: the shell's still horizon behind, the band along the top (the
+  organisation, the product and the languages) and one solid panel in front (the page's title, Keycloak's
+  message and the page). `sign-in.css` gives the pages Common's Keycap buttons and Well fields, in the
+  horizon greys, and `@augur/kit-common/fonts.css` brings Common's typefaces, served from the jar.
   Keycloak's own stylesheet isn't loaded.
 - **Emails** (`src/email`): Keycloak's own emails, in AUGUR's layout. `email-layout.ftl` is the layout;
   `scripts/email-layout.mjs` fills in Common's values (email clients don't read CSS variables) and writes

@@ -16,10 +16,6 @@ body { background: var(--slate-deep); color: var(--ink); font-family: var(--font
 }
 .loading { color: var(--ink-muted); }
 /* A person's own Reduce motion: preferences.ts puts data-motion="reduce" on <html>. Bringing the motion and travel tokens to nothing under it, and under the system setting, was the Lit kit's base.css; it belongs in Common's tokens, and until a kit release has it only the parts that check it themselves keep still. */
-/* Compact: the larger steps of the spacing scale come down one notch, so more fits on screen. */
-html[data-density='compact'] {
-  --space-5: 20px; --space-6: 28px; --space-7: 44px; --space-8: 72px;
-}
 /* A developer on a pull request's preview of the open app: always said, with the way back. */
 .preview-badge {
   position: fixed;
@@ -94,10 +90,9 @@ html[data-density='compact'] {
 .inbox-actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .inbox-empty, .inbox-stale { color: var(--ink-muted); margin: var(--space-4) 0; }
 .inbox-found { list-style: none; margin: var(--space-2) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-/* An app on the contract: its pane in the main column and, when it declares sections, the About panel beside it on the right. */
-.app-pane-host, .app-frame { display: flex; min-height: 0; height: 100%; }
-.app-frame > .app-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.app-pane-screen { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
-.aerie-frame-pane { display: contents; }
+/* An app on the contract: its pane in the layout it chose, drawn by Aerie's PaneLayout, which keeps the inset contract. */
+.app-pane-host { display: flex; min-height: 0; height: 100%; }
+/* The pane is a size container (its inset follows its own width), so it has no width of its own: the frame takes the host's. */
+.app-pane-host > .app-frame { flex: 1; min-width: 0; }
 /* An app's canvas fills the main column where its screen would be (spec 6.11). */
 .app-canvas { flex: 1; min-height: 0; width: 100%; border: 0; display: block; background: var(--surface-pane); }

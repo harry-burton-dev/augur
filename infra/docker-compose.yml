@@ -197,12 +197,14 @@ services:
       PORT: 8086
       DATABASE_URL: postgres://kg_app:platform-local-only-knowledge@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-knowledge
+      # Not connected to the models service in this phase of design (see infra/deploy/compose.yml).
+      MODELS_URL: ""
       <<: *internal
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
 
   # Permissions (ADR 0085): OpenFGA holds the relationships, in memory here, so they go with the
-  # container; the permissions service copies floors and positions in from identity every 30 seconds.
+  # container; the permissions service copies floors and positions in from identity as each changes.
   openfga:
     image: openfga/openfga:v1.11.2
     command: ["run"]

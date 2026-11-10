@@ -7,7 +7,9 @@ import { DATABASE_URL, identityDb } from './db.testing.ts';
 const db = identityDb();
 
 const alex = { id: 'u-1', name: 'Alex Rivera', departments: [], roles: [] };
+// Someone the organisation asks for two steps holds the two-step role, whatever else they hold.
 const admin = { ...alex, roles: ['admin', TWO_STEP_ROLE.name] };
+const plainAdmin = { ...alex, roles: ['admin'] };
 
 const accountsWithAlex = () => {
   const accounts = new MemoryAccounts();
@@ -93,10 +95,15 @@ describe.runIf(DATABASE_URL)('the caller’s account', () => {
     const security = (await app.inject({ method: 'GET', url: '/v1/me/security', headers: callerHeaders(admin) })).json();
     expect(security.password).toEqual({ set: true });
     expect(security.twoStep).toMatchObject({ required: true, set: true });
-    // their only code app stays while their role needs one
+    // their only code app stays while they must have one
     expect(security.codeApps).toEqual([expect.objectContaining({ id: 'c-otp', removeAction: 'delete_credential:c-otp', removable: false, reason: expect.stringContaining('Add another') })]);
     expect(security.actions.find((a: { id: string }) => a.id === 'password')).toEqual({ id: 'password', action: 'UPDATE_PASSWORD', available: true });
-    // someone whose role doesn't need it may remove it
+    expect(security.twoStep.reason).toBe('Your organisation asks everyone to sign in with a second step.');
+    // an admin needs no second step of their own, so may remove it
+    const adminOnly = (await app.inject({ method: 'GET', url: '/v1/me/security', headers: callerHeaders(plainAdmin) })).json();
+    expect(adminOnly.twoStep.required).toBe(false);
+    expect(adminOnly.codeApps[0]).toMatchObject({ removable: true });
+    // nor may anyone else
     const plain = (await app.inject({ method: 'GET', url: '/v1/me/security', headers: callerHeaders(alex) })).json();
     expect(plain.codeApps[0]).toMatchObject({ removable: true });
     expect(plain.twoStep.required).toBe(false);

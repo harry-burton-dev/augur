@@ -9,6 +9,7 @@ import { backupsPage, healthPage } from './health.js';
 import { quill } from './quill.js';
 import { pathOf, PLACES, routeFor, type Route } from './routes.js';
 import { draftOf, settingsPage, type Draft, type SettingsData, type SettingsView } from './settings.js';
+import { givenFrom } from './install.js';
 import { appPage, augurPage } from './unit-page.js';
 import { appsPage, overviewPage, rowsOf, staleNotice, type Actions, type Ui } from './view.js';
 
@@ -39,6 +40,7 @@ const titleOf = (route: Route, data: Data): string => {
     case 'settings':
       return 'Settings';
     case 'app':
+      if (route.install && !data.installs?.installed.some((a) => a.app === route.app)) return 'Apps';
       return data.overview?.units.find((u) => u.unit === route.app)?.name ?? data.installs?.installed.find((a) => a.app === route.app)?.name ?? route.app;
   }
 };
@@ -64,7 +66,10 @@ export const screen = (v: SettingsView): RemoteNode => {
                 ? channelPage(v)
                 : r.page === 'settings'
                   ? settingsPage(v, r.edit)
-                  : appPage(v, r.app, r.install);
+                  : // An app that isn't installed yet is installed over Apps.
+                    r.install && !v.data.installs?.installed.some((a) => a.app === r.app) && !v.data.overview.units.some((u) => u.unit === r.app)
+                    ? appsPage(v)
+                    : appPage(v, r.app, r.install);
   return [staleNotice(v), page];
 };
 
@@ -158,6 +163,7 @@ export default defineApp((ctx: AppContext) => {
     ui.problem = undefined;
     quick = undefined;
     const now = routeFor(to);
+    if (now.page !== 'apps' || now.address === undefined) ui.pasted = undefined;
     if (now.page !== 'settings' || now.edit !== (was.page === 'settings' ? was.edit : undefined)) {
       draft = undefined;
       saving = undefined;
@@ -233,7 +239,77 @@ export default defineApp((ctx: AppContext) => {
       }
       void answer(augur, () => api.installHalted(version, reason.trim()));
     },
-    install: (app, version) => void answer(pathOf({ page: 'app', app }), async () => void (await api.install(app, version))),
+    install: (app, version, fill = [], values = {}) => {
+      const given = givenFrom(fill, values);
+      if ('problem' in given) {
+        ui.dialog = { error: given.problem };
+        draw();
+        return;
+      }
+      const installed = data.data.installs?.installed.some((a) => a.app === app);
+      void answer(installed ? pathOf({ page: 'app', app }) : pathOf({ page: 'apps' }), async () => void (await api.install(app, version, given.given)));
+    },
+    checkApps: () => {
+      ui.checkingApps = true;
+      draw();
+      void press('apps', async () => data.took({ installs: await api.checkApps() })).finally(() => {
+        ui.checkingApps = false;
+        draw();
+      });
+    },
+    readAddress: (url) => {
+      if (!/^https:\/\//.test(url)) {
+        ui.dialog = { error: 'Give the release file’s https address.' };
+        draw();
+        return;
+      }
+      ui.dialog = { busy: true };
+      draw();
+      api.readRelease(url).then(
+        (read) => {
+          if (read.refusals.length) {
+            ui.dialog = { error: `It can’t install here: ${read.refusals.join(' ')}` };
+          } else {
+            ui.pasted = { url, read };
+            ui.dialog = {};
+          }
+          // The address is in the path, so signing in again comes back to it.
+          const to = pathOf({ page: 'apps', address: url });
+          if (to !== path) {
+            ctx.navigate(to);
+            path = to;
+          }
+          draw();
+        },
+        (e: unknown) => {
+          if (e instanceof ApiError && e.code === 'sign_in_again') {
+            const to = pathOf({ page: 'apps', address: url });
+            ctx.navigate(to);
+            path = to;
+            ui.dialog = {};
+            draw();
+            ctx.signInAgain();
+            return;
+          }
+          ui.dialog = { error: words(e) };
+          draw();
+        },
+      );
+    },
+    installPasted: (fill, values) => {
+      const pasted = ui.pasted;
+      if (!pasted) return;
+      const given = givenFrom(fill, values);
+      if ('problem' in given) {
+        ui.dialog = { error: given.problem };
+        draw();
+        return;
+      }
+      void answer(pathOf({ page: 'apps' }), async () => {
+        await api.installRelease(pasted.read.release, given.given);
+        ui.pasted = undefined;
+      });
+    },
     closeDialog: (back) => go(back),
   };
 

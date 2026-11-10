@@ -50,6 +50,8 @@ const positive = (name: string, example: number) => {
 };
 const pageLimit = positive('KNOWLEDGE_PAGE_LIMIT', 100);
 const subgraphDepth = positive('KNOWLEDGE_SUBGRAPH_DEPTH', 3);
+// The two places the knowledge service would use a model: extraction (retain from raw text) here, and reflect
+// below. Both stay off while MODELS_URL is empty, as Compose leaves it in this phase of design.
 const { MODELS_URL } = process.env;
 if (!MODELS_URL) log.warn('MODELS_URL is not set: retain takes only what was already extracted, not text to read.');
 // The model reads for the floor the text is retained on, so the floor's model rules and its record apply.

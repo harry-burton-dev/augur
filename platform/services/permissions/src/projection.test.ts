@@ -106,4 +106,34 @@ describe('the copy of identity', () => {
     expect(runs[0]).toMatchObject({ error: 'Identity answered 503 when asked for its relationships.' });
     expect(copy.last()).toEqual({ at: 'now', added: 0, removed: 0 });
   });
+
+  it('copies again soon after identity announces changes, once for several close together', async () => {
+    let runs = 0;
+    let release: () => void = () => {};
+    const copy = keepProjecting(
+      async () => {
+        runs += 1;
+        if (runs === 2) await new Promise<void>((r) => (release = r));
+        return { at: 'now', added: 0, removed: 0 };
+      },
+      60_000,
+      () => {},
+      5,
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    expect(runs).toBe(1);
+    copy.request();
+    copy.request();
+    copy.request();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(runs).toBe(2);
+    // A change heard during a run makes one more run after it, never two at once.
+    copy.request();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(runs).toBe(2);
+    release();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(runs).toBe(3);
+    copy.stop();
+  });
 });

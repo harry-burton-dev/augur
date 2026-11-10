@@ -27,8 +27,12 @@ export const IDENTITY_RIGHTS = ['view-realm', 'view-users', 'query-users', 'mana
 
 export { TWO_STEP_ROLE };
 
-/** The roles that need two-step sign-in (ADR 0038). App admin roles join them when apps have their own. */
-export const TWO_STEP_ROLES = ['admin', DEPLOYMENT_ADMIN_ROLE.name] as const;
+/**
+ * The roles that needed two-step sign-in under ADR 0038. No role needs it now: everyone may add a code app or a
+ * passkey, and Admin → Organisation can ask everyone for one (`applyTwoStepForAll`). The realm job takes
+ * `TWO_STEP_ROLE` back out of these roles in a realm an older release set up (`applyRoles`).
+ */
+export const FORMER_TWO_STEP_ROLES = ['admin', DEPLOYMENT_ADMIN_ROLE.name] as const;
 
 /** The name of the step in the sign-in flow that asks holders of `TWO_STEP_ROLE` for their code. */
 export const TWO_STEP_STEP = `${TWO_STEP_ROLE.name} code`;
@@ -143,7 +147,7 @@ export const realmSettings = (s: RealmSettings, displayName?: string) => ({
   eventsExpiration: s.signInEventDays * DAY,
   adminEventsEnabled: true,
   adminEventsDetailsEnabled: true,
-  // Passkeys: offered in the sign-in form, and counted as the second step for admin roles.
+  // Passkeys: offered in the sign-in form, and counted as the second step where one is asked for.
   webAuthnPolicyPasswordlessPasskeysEnabled: true,
   webAuthnPolicyPasswordlessResidentKey: 'Required',
   webAuthnPolicyPasswordlessUserVerificationRequirement: 'required',
@@ -277,17 +281,17 @@ export const applyRequiredActions = async (kc: KeycloakDirectory, changes: Chang
   }
 };
 
-/** Makes the platform's roles and `TWO_STEP_ROLE`, and puts `TWO_STEP_ROLE` inside each of `TWO_STEP_ROLES`. */
+/** Makes the platform's roles and `TWO_STEP_ROLE`, and takes `TWO_STEP_ROLE` out of each of `FORMER_TWO_STEP_ROLES`. */
 export const applyRoles = async (kc: KeycloakDirectory, changes: Changes) => {
   const made = await kc.ensureRoles([...PLATFORM_ROLES, TWO_STEP_ROLE, { name: 'admin', description: 'Runs AUGUR; sees the Admin app' }]);
   if (made.length) changes.push(`roles made: ${made.join(', ')}`);
-  const { data: twoStep } = await kc.call<{ id: string; name: string }>('GET', `/roles/${encodeURIComponent(TWO_STEP_ROLE.name)}`);
-  for (const role of TWO_STEP_ROLES) {
+  for (const role of FORMER_TWO_STEP_ROLES) {
     const path = `/roles/${encodeURIComponent(role)}/composites`;
-    const { data: inside } = await kc.call<{ name: string }[]>('GET', path);
-    if (inside.some((r) => r.name === TWO_STEP_ROLE.name)) continue;
-    await kc.call('POST', path, [twoStep]);
-    changes.push(`${role} now needs two-step sign-in`);
+    const { data: inside } = await kc.call<{ id: string; name: string }[]>('GET', path);
+    const twoStep = inside.filter((r) => r.name === TWO_STEP_ROLE.name);
+    if (!twoStep.length) continue;
+    await kc.call('DELETE', path, twoStep);
+    changes.push(`${role} no longer needs two-step sign-in`);
   }
 };
 
@@ -325,7 +329,9 @@ const twoStepIsBuilt = (all: Execution[]) => {
 /**
  * The realm's sign-in flow (`SIGN_IN_FLOW`): Keycloak's browser flow, with a step of its own that asks
  * everyone holding `TWO_STEP_ROLE` for a one-time code, setting one up the first time, unless they
- * signed in with a passkey. Everyone else keeps Keycloak's own optional second step. A flow from an
+ * signed in with a passkey. Nobody holds it unless Admin → Organisation asks everyone for two steps
+ * (`applyTwoStepForAll`). Everyone else keeps Keycloak's own optional second step: a code only for
+ * someone who set up a code app. A flow from an
  * older release (one step per role), or one a failed run left half-built, is rebuilt from Keycloak's
  * current browser flow.
  */
@@ -389,7 +395,7 @@ export const applySignInFlow = async (kc: KeycloakDirectory, changes: Changes) =
   if (passkeyConfig) await addExecution(TWO_STEP_STEP, 'conditional-credential', 'REQUIRED', { alias: `${TWO_STEP_ROLE.name} passkey`, config: passkeyConfig });
   await addExecution(TWO_STEP_STEP, 'auth-otp-form', 'REQUIRED');
   await kc.call('PUT', '', { browserFlow: SIGN_IN_FLOW });
-  changes.push(`sign-in flow: ${SIGN_IN_FLOW} asks the admin roles for a second step`);
+  changes.push(`sign-in flow: ${SIGN_IN_FLOW} asks holders of ${TWO_STEP_ROLE.name} for a second step`);
 };
 
 /** Realm-management roles of a client's service account, set to exactly `rights`. */
@@ -625,7 +631,7 @@ export const applyOrganisation = async (kc: KeycloakDirectory, org: RealmOrganis
 
 /**
  * Two steps for everyone: `TWO_STEP_ROLE` inside the realm's default roles, which every account holds, so the
- * sign-in flow asks everyone for a code app or a passkey. Off, only the admin roles hold it (`applyRoles`).
+ * sign-in flow asks everyone for a code app or a passkey. Off, nobody holds it and the second step is optional.
  */
 export const applyTwoStepForAll = async (kc: KeycloakDirectory, on: boolean | undefined, changes: Changes) => {
   if (on === undefined) return;
@@ -638,7 +644,7 @@ export const applyTwoStepForAll = async (kc: KeycloakDirectory, on: boolean | un
   if (has === on) return;
   const { data: role } = await kc.call<{ id: string; name: string }>('GET', `/roles/${encodeURIComponent(TWO_STEP_ROLE.name)}`);
   await kc.call(on ? 'POST' : 'DELETE', path, [role]);
-  changes.push(on ? 'everyone now signs in with two steps' : 'two steps for the admin roles only');
+  changes.push(on ? 'everyone now signs in with two steps' : 'two steps are optional for everyone');
 };
 
 /**

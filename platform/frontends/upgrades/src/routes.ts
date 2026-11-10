@@ -7,7 +7,8 @@ export type Ask = { kind: 'upgrade' | 'roll-back' | 'test'; version: string };
 export type Route =
   | { page: 'overview' }
   | { page: 'augur'; ask?: Ask }
-  | { page: 'apps' }
+  /** `address` opens installing from a release file's address: empty asks for one. */
+  | { page: 'apps'; address?: string }
   | { page: 'app'; app: string; install?: string }
   | { page: 'health' }
   | { page: 'backups' }
@@ -16,6 +17,9 @@ export type Route =
 
 /** The places the manifest declares, by id; each is a path below `/<id>`. */
 export const PLACES = { overview: '/', augur: '/augur', apps: '/apps', health: '/health', backups: '/backups', channel: '/release-channel', settings: '/settings' } as const;
+
+/** Where installing from an address lives: beside Apps, as an app may be called anything. */
+const FROM_ADDRESS = 'install-from-address';
 
 const ASKS = new Set<Ask['kind']>(['upgrade', 'roll-back', 'test']);
 
@@ -40,6 +44,7 @@ export const routeFor = (path: string): Route => {
     if (!second) return { page: 'apps' };
     return third === 'install' && fourth ? { page: 'app', app: second, install: fourth } : { page: 'app', app: second };
   }
+  if (first === FROM_ADDRESS) return { page: 'apps', address: second ?? '' };
   if (first === 'health') return { page: 'health' };
   if (first === 'backups') return { page: 'backups' };
   if (first === 'release-channel') return { page: 'channel' };
@@ -56,7 +61,7 @@ export const pathOf = (r: Route): string => {
     case 'augur':
       return r.ask ? `/augur/${r.ask.kind}/${e(r.ask.version)}` : PLACES.augur;
     case 'apps':
-      return PLACES.apps;
+      return r.address === undefined ? PLACES.apps : `/${FROM_ADDRESS}${r.address ? `/${e(r.address)}` : ''}`;
     case 'app':
       return r.install ? `/apps/${e(r.app)}/install/${e(r.install)}` : `/apps/${e(r.app)}`;
     case 'health':
