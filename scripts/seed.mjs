@@ -68,7 +68,7 @@ export const castProblems = (cast) => {
   for (const lib of cast.documents ?? []) {
     const where = `Documents for "${lib.floor}"`;
     if (!floorKeys.has(lib.floor)) problems.push(`${where}: that isn't a floor in the cast.`);
-    if (lib.library !== undefined && !text(lib.library, 120)) problems.push(`${where}: "library" names one library, up to 120 characters.`);
+    if (lib.library !== undefined && !text(lib.library, 120)) problems.push(`${where}: "library" names one collection in that floor's library, up to 120 characters.`);
     for (const d of lib.items ?? []) {
       if (!text(d.title, 200)) problems.push(`${where}: every document needs a title of up to 200 characters.`);
       if (!/^[\w .()-]{1,120}\.(md|txt)$/.test(d.filename ?? '')) problems.push(`${where}: "${d.title}" needs a filename ending .md or .txt.`);
@@ -210,7 +210,8 @@ export const seed = async ({ cast, api, ledger = {}, log = () => {}, checkpoint 
   const standOn = (key) => (key === ORG ? workspaces.find((w) => w.kind === 'org') : workspaces.find((w) => w.id === deptId[key]));
   const floorName = (key) => (key === ORG ? 'the organisation' : floorsOf(cast).find((f) => f.key === key)?.name ?? key);
 
-  // Documents go into a library already on their floor: making one is for that floor's leads.
+  // Documents go into a collection already in their floor's library: making one is for that floor's leads.
+  // The cast's "library" names the collection; without it, the floor's first collection takes them.
   for (const group of cast.documents ?? []) {
     const floor = standOn(group.floor);
     const items = group.items ?? [];
@@ -218,25 +219,27 @@ export const seed = async ({ cast, api, ledger = {}, log = () => {}, checkpoint 
       skip(`${items.length} documents on ${floorName(group.floor)}`, 'you aren’t on that floor, so the seed can’t add to it as you. Its people add them once they can sign in (the run suite).');
       continue;
     }
-    let libraries;
+    let collections;
     try {
-      ({ libraries } = await api.get(`${FOLIO}/libraries`, { floor: floor.id }));
+      ({ collections } = await api.get(`${FOLIO}/library`, { floor: floor.id }));
     } catch (err) {
       if (!(err instanceof ApiError)) throw err;
       skip(`${items.length} documents on ${floor.name}`, `Artifacts couldn't be reached there (${err.message}).`);
       continue;
     }
-    const library = group.library ? libraries.find((l) => l.name === group.library) : libraries[0];
-    if (!library) {
+    const collection = group.library ? collections.find((c) => c.name === group.library) : collections[0];
+    if (!collection) {
       skip(
         `${items.length} documents on ${floor.name}`,
-        group.library ? `Artifacts has no library called “${group.library}” there; one of the floor’s leads makes it.` : 'Artifacts has no library there yet; one of the floor’s leads makes it.',
+        group.library
+          ? `Artifacts has no collection called “${group.library}” in that floor’s library; one of the floor’s leads makes it.`
+          : 'That floor’s library has no collection yet; one of the floor’s leads makes it.',
       );
       continue;
     }
     const titles = new Set();
     for (let offset = 0, total = Infinity; offset < total; ) {
-      const page = await api.get(`${FOLIO}/libraries/${encodeURIComponent(library.id)}/documents?limit=100&offset=${offset}`, { floor: floor.id });
+      const page = await api.get(`${FOLIO}/folders/${encodeURIComponent(collection.id)}/documents?limit=100&offset=${offset}`, { floor: floor.id });
       for (const d of page.documents) titles.add(d.title);
       total = page.total ?? 0;
       offset += Math.max(page.documents.length, 1);
@@ -247,9 +250,9 @@ export const seed = async ({ cast, api, ledger = {}, log = () => {}, checkpoint 
       if (titles.has(d.title)) continue;
       const type = d.filename.endsWith('.md') ? 'text/markdown' : 'text/plain';
       const q = new URLSearchParams({ filename: d.filename, title: d.title });
-      const made = await api.upload(`${FOLIO}/libraries/${encodeURIComponent(library.id)}/documents?${q}`, marked(cast, d.text), type, { floor: floor.id });
-      out.documents[key] = { id: made.id, library: library.id };
-      log(`+ document ${d.title} (${floor.name}, ${library.name})`);
+      const made = await api.upload(`${FOLIO}/folders/${encodeURIComponent(collection.id)}/documents?${q}`, marked(cast, d.text), type, { floor: floor.id });
+      out.documents[key] = { id: made.id, library: collection.id };
+      log(`+ document ${d.title} (${floor.name}, ${collection.name})`);
     }
   }
 
