@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryRequiredRole, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryRequiredRole, serviceVerifierFromEnv, shadowFromEnv, startupLog } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { providerFromEnv } from './config.ts';
 import { PgModelStore } from './store.ts';
@@ -14,6 +14,7 @@ loadConfigOrExit('models', [
   commonSettings.issuerInside,
   { ...commonSettings.clientSecret, required: false },
   commonSettings.gateway,
+  commonSettings.permissions,
   { name: 'MODEL_API_URL', about: 'an OpenAI-style API for the model behind Agents; without it models stay off.' },
   { name: 'MODEL_API_KEY', about: 'the key to MODEL_API_URL.', secret: true },
   { name: 'MODEL_NAME', about: 'which model MODEL_API_URL serves.' },
@@ -41,5 +42,5 @@ const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credent
 const requiredRole = credentials ? registryRequiredRole({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 const audit = credentials ? auditTo(EVENTS_URL, credentials) : undefined;
 
-const app = await buildApp({ callers: callerCheckFromEnv('models'), store, provider, verifyService: serviceVerifierFromEnv(), grants, requiredRole, audit });
+const app = await buildApp({ callers: callerCheckFromEnv('models'), store, provider, verifyService: serviceVerifierFromEnv(), grants, requiredRole, audit, shadow: shadowFromEnv(credentials, log) });
 await app.listen({ port, host: '0.0.0.0' });
