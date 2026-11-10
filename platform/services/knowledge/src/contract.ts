@@ -11,7 +11,7 @@ const paragraph = (...lines: string[]) => lines.join(' ');
 
 export const info = {
   title: 'Knowledge',
-  version: '1.6.0',
+  version: '1.7.0',
   description: [
     paragraph(
       'The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor',
@@ -24,6 +24,12 @@ export const info = {
       'action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an',
       'Idempotency-Key; reads answer as the person on the floor they name. An app acting for a person reaches',
       'it the same way, through its client, held to the scopes it is granted (knowledge:read, an action’s own).',
+    ),
+    paragraph(
+      'Retain takes either what was extracted from a source or the source’s text. Given text, the service asks',
+      'the model what it claims, through the models service, for the floor it is retained on: what fits is kept',
+      'as observations, never as belief, a term the ontology lacks becomes a candidate, text that speaks to the',
+      'system is kept only flagged, and the answer says what was dropped and why.',
     ),
     paragraph(
       'Every read draft 4 of the spec asks for is served. Actions are added as their releases come; within',

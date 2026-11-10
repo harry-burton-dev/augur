@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { callerCheckFromEnv, commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog } from '@augur/service-kit';
+import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { outboxRelay } from './outbox.ts';
 import { identityStanding } from './standing.ts';
@@ -15,6 +15,7 @@ loadConfigOrExit('knowledge', [
   commonSettings.issuerInside,
   commonSettings.clientSecret,
   commonSettings.gateway,
+  { ...commonSettings.models, required: false, about: 'where the model gateway is, such as http://models:8085. Without it, retain takes no text to extract from.' },
   { name: 'KNOWLEDGE_PAGE_LIMIT', about: 'the most one page of a read gives, such as 100.' },
   { name: 'KNOWLEDGE_SUBGRAPH_DEPTH', about: 'the most hops a subgraph read goes from its entity, such as 3.' },
 ]);
@@ -41,6 +42,14 @@ const positive = (name: string, example: number) => {
 };
 const pageLimit = positive('KNOWLEDGE_PAGE_LIMIT', 100);
 const subgraphDepth = positive('KNOWLEDGE_SUBGRAPH_DEPTH', 3);
-const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), pageLimit, subgraphDepth });
+const { MODELS_URL } = process.env;
+if (!MODELS_URL) log.warn('MODELS_URL is not set: retain takes only what was already extracted, not text to read.');
+// The model reads for the floor the text is retained on, so the floor's model rules and its record apply.
+const extract =
+  MODELS_URL && credentials
+    ? async (messages: { role: 'system' | 'user'; content: string }[], floor: string | undefined) =>
+        (await askModel({ modelsUrl: MODELS_URL, credentials, workspace: floor, messages })).message.content
+    : undefined;
+const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, pageLimit, subgraphDepth });
 await app.listen({ port, host: '0.0.0.0' });
 if (credentials) outboxRelay({ pool: store, eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err }, 'the outbox could not be sent') }).start();

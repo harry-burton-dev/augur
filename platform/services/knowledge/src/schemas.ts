@@ -90,6 +90,16 @@ export const ActionResult = Type.Object(
     dryRun: Type.Optional(Type.Boolean()),
     wouldSucceed: Type.Optional(Type.Boolean()),
     why: Type.Optional(Type.String({ description: 'On a dry run that would be refused, why.' })),
+    extraction: Type.Optional(
+      Type.Object(
+        {
+          promptVersion: Type.String(),
+          flagged: Type.Integer({ minimum: 0, description: 'Observations kept flagged, because their text speaks to the system: none is believed until its owner keeps it.' }),
+          dropped: Type.Array(Type.Object({ item: Type.String(), why: Type.String() }), { description: 'What the model said that didn’t fit, each with why. Nothing of it was kept.' }),
+        },
+        { description: 'When retain was sent text: what the extraction kept back.' },
+      ),
+    ),
   },
   { $id: 'ActionResult' },
 );
