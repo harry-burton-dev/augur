@@ -36,11 +36,9 @@ export const Relationships = Type.Object(
 );
 
 /** The Keycloak roles today's checks read (`caller.roles.includes(...)`), which shadow mode compares against. */
-const COPIED_ROLES = ['admin', DEPLOYMENT_ADMIN_ROLE.name, PUBLISHER_ROLE.name] as const;
-
 const withRoles = (people: { id: string; roles: string[] }[]) => {
-  const holding = (role: (typeof COPIED_ROLES)[number]) => people.filter((p) => p.roles.includes(role)).map((p) => p.id);
-  return { people: people.map((p) => p.id), roles: { admin: holding('admin'), 'deployment-admin': holding('deployment-admin'), publisher: holding('publisher') } };
+  const holding = (role: string) => people.filter((p) => p.roles.includes(role)).map((p) => p.id);
+  return { people: people.map((p) => p.id), roles: { admin: holding('admin'), 'deployment-admin': holding(DEPLOYMENT_ADMIN_ROLE.name), publisher: holding(PUBLISHER_ROLE.name) } };
 };
 
 export interface RelationshipOptions {
