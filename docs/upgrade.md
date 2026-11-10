@@ -62,6 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Installing a new app moved from Admin → Apps to Deployment → Apps (`/upgrades/apps`): what the app feed offers, **Check for new apps**, **Install from an address**, what's in progress, default apps waiting and apps removed with their data kept. The install asks for the settings an app can't start without, as before. Admin → Apps keeps each installed app's settings, internet, developers, previews and **Remove from the server**, and links to Deployment for installing. An app's own settings are now fields right on the app, each saved as soon as it changes, with no **Change its settings** dialog. Nothing to do on the server.
 
+### Going back from 0.24.0 needs new bucket secrets
+
+**From** unreleased
+
+augur@0.24.0 took the retired apps' buckets away with their keys. Garage never takes a deleted key's id back, and an app's key id comes from its bucket secret, so a server that has run 0.24.0 can't go back to 0.23.1 as it is: 0.23.1's storage job stops at the Artifacts key with `KeyAlreadyExists`, and everything waits on it. To go back, set new `FOLIO_BUCKET_SECRET`, `ATLAS_BUCKET_SECRET` and `MANDATE_BUCKET_SECRET` values in `.env` (`openssl rand -hex 32` each) first; those apps' data is gone unless you restore the backup the upgrade took. From this release on, taking a bucket away leaves the app's keys, so going back works without this, and the storage job says in words when a secret's key was deleted before.
+
 ### Who settles and raises on a floor comes from the permissions service
 
 **From** unreleased
