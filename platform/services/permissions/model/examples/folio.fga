@@ -1,13 +1,14 @@
 module folio
 
-# An app's own module: Artifacts (Folio) brings its document type and how it is shared.
+# An app's own module: Artifacts (Folio) brings its document type and how it is shared. A document made in a
+# position is owned by the position (ADR 0089), so it stays with the job when its holder changes.
 
 type document
   relations
     define floor: [floor]
-    define owner: [person]
-    define editor: [person, person with not_expired, role#assignee] or owner or lead from floor
-    define viewer: [person, person with not_expired, role#assignee] or editor or stands from floor
+    define owner: [person, persona#holder]
+    define editor: [person, person with not_expired, persona#holder, persona#holder with not_expired, role#assignee] or owner or lead from floor
+    define viewer: [person, person with not_expired, persona#holder, persona#holder with not_expired, role#assignee] or editor or stands from floor
     define blocked: [person]
     define can_view: viewer but not blocked
     define can_edit: editor but not blocked
