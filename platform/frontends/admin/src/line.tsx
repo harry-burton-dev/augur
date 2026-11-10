@@ -114,7 +114,7 @@ export function Pipeline({ api, openUpgrades }: { api: AdminApi; openUpgrades: (
   }, [api]);
   return (
     <Page heading="From dev to production" summary="Where each part of AUGUR is between dev, preview and production, and what this server runs.">
-      <Notice tone="info" heading="Upgrading moved to the Upgrade Centre." action="Open the Upgrade Centre" onAction={openUpgrades}>
+      <Notice tone="info" heading="Upgrading moved to Deployment." action="Open Deployment" onAction={() => openUpgrades()}>
         <span data-moved>Upgrade, hold or go back there, for AUGUR and each app, and see every upgrade asked for.</span>
       </Notice>
       <Problem>{error}</Problem>

@@ -11,6 +11,7 @@ import { mapFor } from './map.ts';
 import { noticeSettingsRoutes } from './notice-settings.ts';
 import { offeredLanguages, organisationRoutes, organisationSettings, type OrganisationStore } from './organisation.ts';
 import { meRoutes, type AccountSource, type MeOptions } from './me.ts';
+import { relationshipRoutes } from './relationships.ts';
 import { DirectoryAnswer, DirectoryQuery, findInDirectory, peopleRoutes, principalsOf, signedInPeople } from './people.ts';
 import { Caller, choice, Floor, IdParams, PersonMap, ref, refused } from './schemas.ts';
 import type { PreferenceStore } from './store.ts';
@@ -168,6 +169,7 @@ export const buildApp = async ({ store, workspaces, directory, accounts, appClie
       );
 
       await app.register(peopleRoutes({ workspaces, teams, verifyService, grants }));
+      await app.register(relationshipRoutes({ workspaces, directory, verifyService }));
       await app.register(appRunnerRoutes({ clients: appClients, audit, verifyService }), { prefix: '/admin/apps' });
       await app.register(
         organisationRoutes({ workspaces, store: organisation, audit, verifyService, languages, askEveryone: directory?.askEveryone ? () => directory.askEveryone!(TERMS_ACTION) : undefined }),

@@ -25,6 +25,7 @@
     "EVENTS_CLIENT_SECRET",
     "OPENFGA_TOKEN",
     "KNOWLEDGE_CLIENT_SECRET",
+    "PERMISSIONS_CLIENT_SECRET",
     "PLATFORM_ADMIN_USER",
     "PLATFORM_ADMIN_PASSWORD",
     "PLATFORM_ADMIN_EMAIL",
@@ -419,6 +420,18 @@
       "x-services": [
         "keycloak-config",
         "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "PERMISSIONS_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The permissions service's own sign-in, to copy floors, positions and who holds them from identity.",
+      "x-services": [
+        "keycloak-config",
+        "permissions"
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
@@ -1301,7 +1314,8 @@
         "gateway",
         "registry",
         "events",
-        "knowledge"
+        "knowledge",
+        "permissions"
       ],
       "x-via": {
         "updater": "default"
@@ -1328,7 +1342,8 @@
         "identity",
         "registry",
         "models",
-        "knowledge"
+        "knowledge",
+        "permissions"
       ]
     },
     "MODELS_URL": {
@@ -1337,6 +1352,14 @@
       "x-internal": "compose",
       "x-services": [
         "gateway",
+        "knowledge"
+      ]
+    },
+    "PERMISSIONS_URL": {
+      "type": "string",
+      "description": "Where the permissions service is, for who settles and raises on each floor.",
+      "x-internal": "compose",
+      "x-services": [
         "knowledge"
       ]
     },
@@ -1438,7 +1461,8 @@
         "registry",
         "events",
         "models",
-        "updater"
+        "updater",
+        "permissions"
       ]
     },
     "SERVICE_CLIENT_SECRETS": {
@@ -1927,6 +1951,15 @@
       "x-via": {
         "permissions": "infra/docker-compose.yml"
       }
+    },
+    "PERMISSIONS_COPY_SECONDS": {
+      "type": "string",
+      "description": "How often the permissions service copies floors, positions and who holds them whole from identity, in seconds, to put right anything an event missed. Each change identity announces is copied as it happens.",
+      "default": "300",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/deploy.md#whats-in-it"
     }
   }
 }

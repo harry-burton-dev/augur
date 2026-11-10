@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { garageAdmin, keyIdFor } from './garage.ts';
 
 /** A Garage that remembers what it was asked, with one node and whatever buckets and keys it's given. */
-const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; keys: { id: string; name: string }[] }) => {
+const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; keys: { id: string; name: string }[]; deleted?: string[] }) => {
   const calls: string[] = [];
+  const deleted = (state.deleted ??= []);
   const fetchImpl = (async (input: string, init?: RequestInit) => {
     const url = new URL(input);
     const path = url.pathname.replace('/v2/', '') + url.search;
@@ -21,7 +22,11 @@ const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; 
     }
     if (path === 'CreateBucket') return json(200, { id: (state.buckets[body.globalAlias] = `b-${body.globalAlias}`) });
     if (path === 'ListKeys') return json(200, state.keys);
-    if (path === 'ImportKey') return json(200, state.keys.push({ id: body.accessKeyId, name: body.name }));
+    // As Garage does: a deleted key's id is never taken again.
+    if (path === 'ImportKey') {
+      if (deleted.includes(body.accessKeyId)) return json(409, { code: 'KeyAlreadyExists', message: `Key ${body.accessKeyId} already exists in data store. Even if it is deleted, we can't let you create a new key with the same ID. Sorry.` });
+      return json(200, state.keys.push({ id: body.accessKeyId, name: body.name }));
+    }
     if (path === 'AllowBucketKey') return json(200, {});
     if (path.startsWith('UpdateBucket')) return json(200, { id: url.searchParams.get('id'), websiteAccess: body.websiteAccess.enabled });
     if (path.startsWith('DeleteBucket')) {
@@ -29,7 +34,10 @@ const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; 
       if (alias) delete state.buckets[alias];
       return json(200, {});
     }
-    if (path.startsWith('DeleteKey')) return json(200, (state.keys = state.keys.filter((k) => k.id !== url.searchParams.get('id'))));
+    if (path.startsWith('DeleteKey')) {
+      deleted.push(url.searchParams.get('id')!);
+      return json(200, (state.keys = state.keys.filter((k) => k.id !== url.searchParams.get('id'))));
+    }
     return json(500, { message: `unexpected ${path}` });
   }) as typeof fetch;
   return { calls, garage: garageAdmin({ url: 'http://garage:3903/', token: 'tok', fetchImpl }), state };
@@ -68,25 +76,50 @@ describe('garageAdmin', () => {
     expect(state.keys).toEqual([{ id, name: 'platform-frontends' }]);
   });
 
-  it('takes a preview’s bucket away once it’s empty, with its keys', async () => {
+  it('takes a preview’s bucket away once it’s empty, and leaves every key alone', async () => {
     const { garage, state, calls } = fakeGarage({ roles: [], buckets: { 'notes-pr12': 'b-1', notes: 'b-2' }, keys: [{ id: 'GK1', name: 'app-notes-pr12' }, { id: 'GK2', name: 'app-notes' }] });
     const emptied: string[] = [];
     expect(await garage.removeBucket('notes-pr12', async () => void emptied.push(calls.at(-1)!))).toBe(true);
     // Emptied after it was found, before it was deleted.
     expect(emptied).toEqual(['GetBucketInfo?globalAlias=notes-pr12']);
     expect(state.buckets).toEqual({ notes: 'b-2' });
-    expect(state.keys).toEqual([{ id: 'GK2', name: 'app-notes' }]);
+    expect(state.keys).toEqual([{ id: 'GK1', name: 'app-notes-pr12' }, { id: 'GK2', name: 'app-notes' }]);
     expect(await garage.removeBucket('notes-pr12', async () => void emptied.push('again'))).toBe(false);
     expect(emptied).toHaveLength(1);
   });
 
-  it('gives a bucket a key of its own for a while, which taking the bucket away deletes', async () => {
+  it('gives a bucket a key of its own for a while, which deleteKey takes away for good', async () => {
     const { garage, state } = fakeGarage({ roles: [], buckets: { notes: 'b-notes' }, keys: [] });
-    let secret = '';
-    expect(await garage.removeBucket('notes', async (id) => void (secret = await garage.temporaryKey(id, 'app-notes')))).toBe(true);
-    expect(secret).toMatch(/^[0-9a-f]{64}$/);
+    let key = { id: '', secret: '' };
+    expect(await garage.removeBucket('notes', async (id) => void (key = await garage.temporaryKey(id, 'app-notes:retire')))).toBe(true);
+    expect(key.secret).toMatch(/^[0-9a-f]{64}$/);
+    expect(key.id).toBe(keyIdFor(key.secret));
+    expect(state.keys).toEqual([{ id: key.id, name: 'app-notes:retire' }]);
+    await garage.deleteKey(key.id);
     expect(state.keys).toEqual([]);
     expect(state.buckets).toEqual({});
+  });
+
+  it('sets an app’s storage up again with the same secret after its bucket was taken away', async () => {
+    // Going back to the release before, or installing the app again: the key's id comes from the secret, and Garage
+    // never takes a deleted id back, so the key has to have been kept.
+    const secret = 'c'.repeat(64);
+    const { garage, state } = fakeGarage({ roles: [], buckets: {}, keys: [] });
+    await garage.ensureKey('notes', secret, await garage.ensureBucket('notes'));
+    await garage.removeBucket('notes', async () => {});
+    expect(state.buckets).toEqual({});
+    await expect(garage.ensureKey('notes', secret, await garage.ensureBucket('notes'))).resolves.toBe(keyIdFor(secret));
+    expect(state.keys).toEqual([{ id: keyIdFor(secret), name: 'app-notes' }]);
+  });
+
+  it('says in words when a deleted key’s secret is used again', async () => {
+    // A server that ran a release which deleted the key (0.24.0's retire) and goes back, or an admin putting an old secret back.
+    const secret = 'd'.repeat(64);
+    const { garage } = fakeGarage({ roles: [], buckets: { notes: 'b-notes' }, keys: [], deleted: [keyIdFor(secret)] });
+    await expect(garage.ensureKey('notes', secret, 'b-notes')).rejects.toMatchObject({
+      code: 'KeyAlreadyExists',
+      message: expect.stringMatching(new RegExp(`^key ${keyIdFor(secret)} was deleted from the object store before, and a deleted key's id can't be used again: a new secret makes a new key\\. \\(Garage ImportKey: 409 Key ${keyIdFor(secret)} already exists`)),
+    });
   });
 
   it('serves a bucket on the web endpoint', async () => {

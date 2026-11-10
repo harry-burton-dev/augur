@@ -66,6 +66,36 @@ Admins and deployment admins no longer have to sign in with a code app or a pass
 - An admin account is now protected by its password alone. On a deployment where real people work, turn on two steps for everyone, or have every admin add a passkey.
 - With Entra set up, admins are no longer refused a link by email at their first sign-in through Entra, unless two steps for everyone is on.
 
+### The knowledge graph isn't connected to models yet
+
+**From** unreleased
+
+Compose leaves the knowledge service's `MODELS_URL` empty for now. So retain takes only claims an app has already extracted, never raw text to read, and entities show their beliefs without written summaries. Each refusal says so. Nothing for you to do: when models are connected to it, a note here will say how.
+
+### Apps are installed from Deployment
+
+**From** unreleased
+
+Installing a new app moved from Admin → Apps to Deployment → Apps (`/upgrades/apps`): what the app feed offers, **Check for new apps**, **Install from an address**, what's in progress, default apps waiting and apps removed with their data kept. The install asks for the settings an app can't start without, as before. Admin → Apps keeps each installed app's settings, internet, developers, previews and **Remove from the server**, and links to Deployment for installing. An app's own settings are now fields right on the app, each saved as soon as it changes, with no **Change its settings** dialog. Nothing to do on the server.
+
+### Going back from 0.24.0 needs new bucket secrets
+
+**From** unreleased
+
+augur@0.24.0 took the retired apps' buckets away with their keys. Garage never takes a deleted key's id back, and an app's key id comes from its bucket secret, so a server that has run 0.24.0 can't go back to 0.23.1 as it is: 0.23.1's storage job stops at the Artifacts key with `KeyAlreadyExists`, and everything waits on it. To go back, set new `FOLIO_BUCKET_SECRET`, `ATLAS_BUCKET_SECRET` and `MANDATE_BUCKET_SECRET` values in `.env` (`openssl rand -hex 32` each) first; those apps' data is gone unless you restore the backup the upgrade took. From this release on, taking a bucket away leaves the app's keys, so going back works without this, and the storage job says in words when a secret's key was deleted before.
+
+### Who settles and raises on a floor comes from the permissions service
+
+**From** unreleased
+
+The knowledge graph now asks the permissions service who settles a floor's disputes and holds what its people retained, and who raises its beliefs to the floor above. A position or a person holds each, as set for the floor. Nothing is carried over: until someone is set, nobody on a team floor can hold, settle, retract, raise, end, merge, split or retire there. Retaining, confirming, disputing and personal floors are unchanged. While the permissions service can't answer, nobody holds either role; the knowledge service's log says so on each request. Set `PERMISSIONS_CLIENT_SECRET` (the permissions service's own sign-in note) before upgrading.
+
+### The permissions service's own sign-in
+
+**From** unreleased
+
+The permissions service now copies floors, positions and who holds them from identity, so it signs in as itself. It needs one new setting, `PERMISSIONS_CLIENT_SECRET`, which the realm job turns into its Keycloak client. The Upgrade Centre makes it up for you. If you upgrade by hand, add it to `.env` first (`openssl rand -hex 32`). Once it starts, `pc logs permissions` says how many relationships it copied in.
+
 ### The knowledge graph's forget ledger
 
 **From** unreleased
@@ -84,7 +114,7 @@ On the first `up`, the storage job makes the login and its `permissions` schema.
 
 **From** unreleased
 
-The Upgrade Centre is now called **Deployment** and runs on the app contract, in a worker of its own, like any installed app. Its address stays `/upgrades`. Its pages are Overview, AUGUR, Apps and Settings, and each keeps its own history, so there is no History page. Nothing to do on the server: the web image serves the new page. If Deployment won't open after upgrading, `/recover/` still goes back.
+The Upgrade Centre is now called **Deployment** and runs on the app contract, in a worker of its own, like any installed app. Its address stays `/upgrades`. Its pages are Overview, AUGUR, Apps, Health, Backups, Release channel and Settings, and each keeps its own history, so there is no History page. Nothing to do on the server: the web image serves the new page. If Deployment won't open after upgrading, `/recover/` still goes back.
 
 ### Removing apps, pinning, sites and app sign-ins need a deployment admin
 

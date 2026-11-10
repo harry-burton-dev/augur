@@ -8,7 +8,7 @@ import { channelsFor, RING_WORDS } from './model/words.js';
 import { AUGUR } from './units.js';
 import { quill } from './quill.js';
 import { pathOf } from './routes.js';
-import { HISTORY_STEP, paged, when, type View } from './view.js';
+import { HISTORY_STEP, when, type View } from './view.js';
 import { CHANNEL, NEEDS_DEPLOYMENT_ADMIN, POLICY } from './words.js';
 
 /** What the Settings page reads beyond the overview, when it opens: each unit's settings history and the reporting view. */
@@ -27,6 +27,8 @@ export type Draft = DesiredStateInput & { timeZone: string };
 export interface SettingsActions {
   edit: (draft: Draft) => void;
   save: (unit: string, draft: Draft) => void;
+  /** Saves one inline change, such as the release channel, straight away. */
+  quick: (unit: OverviewUnit, patch: Partial<Draft>) => void;
   exportRecord: () => void;
 }
 
@@ -38,6 +40,8 @@ export interface SettingsView extends View {
   /** Whether the last save went through, for the unit's line. */
   saved?: string;
   exporting?: { busy?: boolean; error?: string };
+  /** An inline change being saved, or why it wasn't. */
+  quick?: { unit: string; busy?: boolean; error?: string };
   act: SettingsActions;
 }
 
@@ -206,27 +210,59 @@ const editor = (v: SettingsView, unit: OverviewUnit, ring: Ring, draft: Draft): 
   ];
 };
 
-/** Every component's settings in one table, however many apps there are; opening a row changes that component's. */
-const unitsTable = (v: SettingsView, units: OverviewUnit[]): RemoteNode =>
-  quill('quill-table', {
-    label: 'Each component’s settings',
-    noun: 'component',
-    columns: [
-      { key: 'component', label: 'Component' },
-      { key: 'channel', label: 'Release channel' },
-      { key: 'policy', label: 'Update policy', wrap: true },
-      { key: 'set', label: 'Set by', wrap: true },
-    ],
-    rows: units.map((u) => ({
-      id: u.unit,
-      component: u.name,
-      channel: CHANNEL[u.desired.channel],
-      policy: u.policy,
-      set: u.desired.isDefault ? 'The defaults' : `${v.nameOf(u.desired.setBy)}, ${when(v, u.desired.setAt)}`,
-    })),
-    ...paged(units.length),
-    ...(v.may ? { onOpen: (id: string) => v.on.go(pathOf({ page: 'settings', edit: id })) } : {}),
+/**
+ * A component's release channel as one inline select, saved as soon as it changes. AUGUR's own channel
+ * comes from RELEASE_CHANNEL in .env, so it shows and says so, and can't be picked here.
+ */
+export const channelSelect = (v: SettingsView, unit: OverviewUnit, ring: Ring, label = 'Release channel'): RemoteNode => {
+  const isAugur = unit.unit === AUGUR;
+  const busy = v.quick?.unit === unit.unit && v.quick.busy;
+  return quill('quill-select', {
+    label,
+    name: `channel-${unit.unit}`,
+    value: unit.desired.channel,
+    options: channelsFor(ring).map((c) => ({ value: c.channel, label: CHANNEL[c.channel], ...(c.allowed || c.channel === unit.desired.channel ? {} : { disabled: true }) })),
+    ...(isAugur ? { readOnly: true, hint: 'Set by RELEASE_CHANNEL in the server’s .env (docs/upgrade.md).' } : {}),
+    ...(!v.may ? { disabled: true, reason: NEEDS_DEPLOYMENT_ADMIN } : {}),
+    busy,
+    onChange: (value: string) => value !== unit.desired.channel && v.act.quick(unit, { channel: value as Channel }),
   });
+};
+
+/** A component's update policy as one inline select, saved as soon as it changes. */
+const policySelect = (v: SettingsView, unit: OverviewUnit): RemoteNode =>
+  quill('quill-select', {
+    label: 'Update policy',
+    name: `policy-${unit.unit}`,
+    value: unit.desired.policy,
+    options: (['automatic', 'ask', 'hold'] as Policy[]).map((p) => ({ value: p, label: POLICY[p], detail: POLICY_DETAIL[p] })),
+    ...(!v.may ? { disabled: true, reason: NEEDS_DEPLOYMENT_ADMIN } : {}),
+    busy: v.quick?.unit === unit.unit && v.quick.busy,
+    onChange: (value: string) => value !== unit.desired.policy && v.act.quick(unit, { policy: value as Policy }),
+  });
+
+/** One component: its channel and policy inline, what that means now, and the way into its windows and pin. */
+const unitSettings = (v: SettingsView, unit: OverviewUnit, ring: Ring): RemoteNode =>
+  quill('quill-section', { label: unit.name }, [
+    channelSelect(v, unit, ring),
+    policySelect(v, unit),
+    quill('quill-details', {
+      items: [
+        { label: 'Now', value: unit.policy, ...(unit.automatic?.takes || unit.automatic?.waits ? { note: unit.automatic.takes ?? unit.automatic.waits } : {}) },
+        unit.desired.isDefault ? { label: 'Set by', value: 'The defaults' } : { label: 'Set by', value: v.nameOf(unit.desired.setBy), note: when(v, unit.desired.setAt) },
+      ],
+    }),
+    v.quick?.unit === unit.unit && v.quick.error ? quill('quill-notice', { tone: 'refused' }, v.quick.error) : null,
+    v.saved === unit.unit ? quill('quill-notice', { tone: 'info' }, 'Saved. The updater follows the new settings from its next check.') : null,
+    quill('quill-button', {
+      label: 'Maintenance windows and version pin',
+      kind: 'tertiary',
+      size: 'sm',
+      disabled: !v.may,
+      ...(v.may ? {} : { reason: NEEDS_DEPLOYMENT_ADMIN }),
+      onPress: () => v.on.go(pathOf({ page: 'settings', edit: unit.unit })),
+    }),
+  ]);
 
 const MODE: Record<ReportingView['mode'], string> = { send: 'Sent to Backstage', file: 'Exported by hand', off: 'Off' };
 const REASON: Record<NonNullable<ReportingView['last']>['reason'], string> = {
@@ -306,14 +342,8 @@ export const settingsPage = (v: SettingsView, edit?: string): RemoteNode => {
   return [
     edit && !v.may ? quill('quill-notice', { tone: 'refused', heading: 'Settings can’t be changed here' }, NEEDS_DEPLOYMENT_ADMIN) : null,
     quill('quill-details', { items: [{ label: 'Server', value: RING_WORDS[o.ring], note: 'SERVER_RING in .env decides which release channels it may track.' }, { label: 'Time zone', value: o.timeZone }] }),
-    quill('quill-section', { label: 'Components' }, [
-      v.may
-        ? quill('quill-notice', { tone: 'info' }, 'Open a component to change its release channel, update policy, version pin and maintenance windows.')
-        : quill('quill-notice', { tone: 'refused' }, NEEDS_DEPLOYMENT_ADMIN),
-      v.saved ? quill('quill-notice', { tone: 'info' }, `Saved ${o.units.find((u) => u.unit === v.saved)?.name ?? v.saved}. The updater follows the new settings from its next check.`) : null,
-      unitsTable(v, o.units),
-    ]),
-    ...o.units.filter((u) => u.unit === editing && v.draft).map((u) => quill('quill-section', { label: `Change ${u.name}’s settings` }, editor(v, u, o.ring, v.draft!))),
+    !v.may ? quill('quill-notice', { tone: 'refused' }, NEEDS_DEPLOYMENT_ADMIN) : null,
+    ...o.units.map((u) => (u.unit === editing && v.draft ? quill('quill-section', { label: u.name }, editor(v, u, o.ring, v.draft)) : unitSettings(v, u, o.ring))),
     reporting(v),
     settingsHistory(v),
   ];

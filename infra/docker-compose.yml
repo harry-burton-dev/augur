@@ -83,7 +83,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       IDENTITY_CLIENT_SECRET: platform-local-only-identity
       # The clients for the platform's services, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,platform-knowledge=platform-local-only-knowledge
+      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,platform-knowledge=platform-local-only-knowledge,platform-permissions=platform-local-only-permissions
       PLATFORM_ADMIN_USER: alex
       REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
@@ -197,12 +197,14 @@ services:
       PORT: 8086
       DATABASE_URL: postgres://kg_app:platform-local-only-knowledge@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-knowledge
+      # Not connected to the models service in this phase of design (see infra/deploy/compose.yml).
+      MODELS_URL: ""
       <<: *internal
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
 
   # Permissions (ADR 0085): OpenFGA holds the relationships, in memory here, so they go with the
-  # container until identity's events fill them in; the permissions service answers from them.
+  # container; the permissions service copies floors and positions in from identity as each changes.
   openfga:
     image: openfga/openfga:v1.11.2
     command: ["run"]
@@ -214,8 +216,9 @@ services:
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
       PERMISSIONS_STORE: augur
+      SERVICE_CLIENT_SECRET: platform-local-only-permissions
       <<: *internal
-    depends_on: [openfga]
+    depends_on: [openfga, identity]
 
 volumes:
   pgdata:

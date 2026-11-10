@@ -1405,6 +1405,95 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /relationships:
+    get:
+      summary: Floors, positions and who holds them, for the permissions service (platform services only)
+      description: Everything the permissions service copies into OpenFGA, as it is now. It asks for it whole and writes what changed.
+      responses:
+        "200":
+          description: Who and what the permissions service copies from identity
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - org
+                  - teams
+                  - personal
+                  - positions
+                properties:
+                  org:
+                    type: string
+                    description: The organisation floor
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - parent
+                      properties:
+                        id:
+                          type: string
+                        parent:
+                          type: string
+                          description: The team or the org right above it
+                    description: Live teams, parents first
+                  personal:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - owner
+                      properties:
+                        id:
+                          type: string
+                        owner:
+                          type: string
+                    description: Live personal floors
+                  positions:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - team
+                        - role
+                      properties:
+                        id:
+                          type: string
+                        team:
+                          type: string
+                        role:
+                          anyOf:
+                            - type: string
+                              enum:
+                                - member
+                            - type: string
+                              enum:
+                                - lead
+                        holder:
+                          type: string
+                    description: Positions on live teams; a vacant one has no holder
+                  people:
+                    type: array
+                    items:
+                      type: string
+                    description: Everyone whose sign-in is on. Absent where identity has no directory to ask.
+                description: Who and what the permissions service copies from identity
+        "403":
+          description: Not one of AUGUR’s own services
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Service sign-in can’t be checked now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /admin/apps/{id}/credential:
     put:
       summary: Set an app's sign-in to a given secret (the app runner only)
