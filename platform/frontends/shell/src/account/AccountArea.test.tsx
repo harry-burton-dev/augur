@@ -123,6 +123,21 @@ describe('the Account area', () => {
     expect([...document.querySelectorAll('button')].filter((b) => b.textContent === 'Sign out there')).toHaveLength(1);
   });
 
+  it('offers “Act as” only to someone holding an admin persona, and says while they act as it', async () => {
+    const stop = vi.fn(async () => undefined);
+    const actAs = { personas: [{ id: 'duty-planner', actAs: false }], start: vi.fn(async () => undefined), stop, signInAgain: vi.fn() };
+    const everyday = await open('security', { actAs });
+    expect(everyday.text()).not.toContain('Act as');
+    act(() => root?.unmount());
+    const acting = await open('security', {
+      actAs: { ...actAs, personas: [{ id: 'admin.alex', actAs: true, longestMinutes: 60 }], session: { id: 'p-1', persona: 'admin.alex', reason: 'Upgrade', startedAt: '2026-11-05T09:00:00Z', endsAt: '2026-11-05T10:00:00Z' } },
+    });
+    expect(acting.text()).toContain('You’re acting as admin.alex');
+    expect(acting.text()).toContain('“Upgrade”');
+    await act(async () => acting.button('Stop acting as admin.alex')!.click());
+    expect(stop).toHaveBeenCalled();
+  });
+
   it('signs out of one other place', async () => {
     const { button, calls } = await open('security');
     await act(async () => button('Sign out there')!.click());
