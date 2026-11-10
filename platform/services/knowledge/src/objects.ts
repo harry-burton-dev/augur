@@ -155,8 +155,17 @@ export interface Clocks {
  * it is LIVE: what is believed now, whatever time it is about. `at` keeps what is so at that moment, and
  * `known` what had been recorded by then and stood on its evidence then (what was forgotten never stood).
  */
+/**
+ * A clock's moment as Postgres takes it: in UTC, since an RFC 3339 offset can be wider than Postgres allows,
+ * and before year 1 (Postgres has no year 0) as the start of time, before anything was recorded.
+ */
+export const instant = (v: string) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) || d.getUTCFullYear() < 1 ? '-infinity' : d.toISOString();
+};
+
 export const onClocks = ({ at, known, includeSuperseded = false }: Clocks, params: unknown[]) => {
-  const p = (v: unknown) => `$${params.push(v)}::timestamptz`;
+  const p = (v: string) => `$${params.push(instant(v))}::timestamptz`;
   const k = known === undefined ? undefined : p(known);
   const a = at === undefined ? undefined : p(at);
   return [

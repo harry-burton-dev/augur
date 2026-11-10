@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { knowledgeDb } from './db.testing.ts';
 import { as, client, type Client, ORG, own, people, report } from './http.testing.ts';
+import { instant } from './objects.ts';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const db = knowledgeDb(DATABASE_URL);
@@ -141,5 +142,13 @@ describe.skipIf(!DATABASE_URL)('the object reads over HTTP', () => {
     expect((await get('alice', '/v1/ontology/candidates', 'team-a')).json()).toEqual({ candidates: [{ term: 'Tug', kind: 'class', why: 'a kind of ship', askedBy: 2, status: 'proposed' }] });
     expect((await get('bob', '/v1/ontology/candidates', 'team-b')).json()).toEqual({ candidates: [] });
     expect((await get('alice', '/v1/ontology/candidates', ORG)).json()).toEqual({ candidates: [] });
+  });
+});
+
+describe('a clock’s moment', () => {
+  it('reaches Postgres in UTC, and before year 1 as the start of time', () => {
+    expect(instant('0359-02-20T16:48:07.4688+19:49')).toBe('0359-02-19T20:59:07.468Z');
+    expect(instant('2026-11-09T12:00:00+01:00')).toBe('2026-11-09T11:00:00.000Z');
+    expect(instant('0000-06-01T00:00:00Z')).toBe('-infinity');
   });
 });

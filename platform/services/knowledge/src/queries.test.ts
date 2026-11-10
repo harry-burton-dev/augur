@@ -66,6 +66,9 @@ describe.skipIf(!DATABASE_URL)('the query reads over HTTP', () => {
     // Without a text, all of them, cut at the deployment's ceiling (3 here).
     expect((await get('alice', '/v1/floors/team-a/known-entities?limit=10', 'team-a')).json()).toMatchObject({ limitApplied: 3, entities: expect.any(Array) });
     expect((await get('bob', `/v1/floors/team-b/known-entities?text=${encodeURIComponent(text)}`, 'team-b')).json()).toEqual({ entities: [] });
+    // A whole source text goes in a body: longer than any URL takes, and the same answer.
+    const long = `${text} ${'More of the report. '.repeat(900)}`;
+    expect((await post('alice', '/v1/floors/team-a/known-entities', 'team-a', { text: long })).json().entities.slice(0, 2)).toEqual(found.entities.slice(0, 2));
   });
 
   it('gives what links to an entity, to the depth the deployment allows', async () => {
