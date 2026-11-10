@@ -8,7 +8,7 @@ import { channelsFor, RING_WORDS } from './model/words.js';
 import { AUGUR } from './units.js';
 import { quill } from './quill.js';
 import { pathOf } from './routes.js';
-import { HISTORY_STEP, when, type View } from './view.js';
+import { HISTORY_STEP, paged, when, type View } from './view.js';
 import { CHANNEL, NEEDS_DEPLOYMENT_ADMIN, POLICY } from './words.js';
 
 /** What the Settings page reads beyond the overview, when it opens: each unit's settings history and the reporting view. */
@@ -206,31 +206,27 @@ const editor = (v: SettingsView, unit: OverviewUnit, ring: Ring, draft: Draft): 
   ];
 };
 
-/** One component's settings: the sentence, who set it, and the way into changing it. */
-const unitSettings = (v: SettingsView, unit: OverviewUnit, ring: Ring, editing: boolean): RemoteNode =>
-  quill(
-    'quill-section',
-    { label: unit.name },
-    editing && v.draft
-      ? editor(v, unit, ring, v.draft)
-      : [
-          quill('quill-details', {
-            items: [
-              { label: 'Release channel', value: CHANNEL[unit.desired.channel] },
-              { label: 'Update policy', value: unit.policy, ...(unit.automatic?.takes || unit.automatic?.waits ? { note: unit.automatic.takes ?? unit.automatic.waits } : {}) },
-              unit.desired.isDefault ? { label: 'Set by', value: 'The defaults: nobody has changed them on this server.' } : { label: 'Set by', value: v.nameOf(unit.desired.setBy), note: when(v, unit.desired.setAt) },
-            ],
-          }),
-          v.saved === unit.unit ? quill('quill-notice', { tone: 'info' }, 'Saved. The updater follows the new settings from its next check.') : null,
-          quill('quill-button', {
-            label: 'Change settings',
-            kind: 'secondary',
-            disabled: !v.may,
-            ...(v.may ? {} : { reason: NEEDS_DEPLOYMENT_ADMIN }),
-            onPress: () => v.on.go(pathOf({ page: 'settings', edit: unit.unit })),
-          }),
-        ],
-  );
+/** Every component's settings in one table, however many apps there are; opening a row changes that component's. */
+const unitsTable = (v: SettingsView, units: OverviewUnit[]): RemoteNode =>
+  quill('quill-table', {
+    label: 'Each component’s settings',
+    noun: 'component',
+    columns: [
+      { key: 'component', label: 'Component' },
+      { key: 'channel', label: 'Release channel' },
+      { key: 'policy', label: 'Update policy', wrap: true },
+      { key: 'set', label: 'Set by', wrap: true },
+    ],
+    rows: units.map((u) => ({
+      id: u.unit,
+      component: u.name,
+      channel: CHANNEL[u.desired.channel],
+      policy: u.policy,
+      set: u.desired.isDefault ? 'The defaults' : `${v.nameOf(u.desired.setBy)}, ${when(v, u.desired.setAt)}`,
+    })),
+    ...paged(units.length),
+    ...(v.may ? { onOpen: (id: string) => v.on.go(pathOf({ page: 'settings', edit: id })) } : {}),
+  });
 
 const MODE: Record<ReportingView['mode'], string> = { send: 'Sent to Backstage', file: 'Exported by hand', off: 'Off' };
 const REASON: Record<NonNullable<ReportingView['last']>['reason'], string> = {
@@ -310,7 +306,14 @@ export const settingsPage = (v: SettingsView, edit?: string): RemoteNode => {
   return [
     edit && !v.may ? quill('quill-notice', { tone: 'refused', heading: 'Settings can’t be changed here' }, NEEDS_DEPLOYMENT_ADMIN) : null,
     quill('quill-details', { items: [{ label: 'Server', value: RING_WORDS[o.ring], note: 'SERVER_RING in .env decides which release channels it may track.' }, { label: 'Time zone', value: o.timeZone }] }),
-    ...o.units.map((u) => unitSettings(v, u, o.ring, editing === u.unit)),
+    quill('quill-section', { label: 'Components' }, [
+      v.may
+        ? quill('quill-notice', { tone: 'info' }, 'Open a component to change its release channel, update policy, version pin and maintenance windows.')
+        : quill('quill-notice', { tone: 'refused' }, NEEDS_DEPLOYMENT_ADMIN),
+      v.saved ? quill('quill-notice', { tone: 'info' }, `Saved ${o.units.find((u) => u.unit === v.saved)?.name ?? v.saved}. The updater follows the new settings from its next check.`) : null,
+      unitsTable(v, o.units),
+    ]),
+    ...o.units.filter((u) => u.unit === editing && v.draft).map((u) => quill('quill-section', { label: `Change ${u.name}’s settings` }, editor(v, u, o.ring, v.draft!))),
     reporting(v),
     settingsHistory(v),
   ];
