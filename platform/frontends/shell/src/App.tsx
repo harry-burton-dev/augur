@@ -13,7 +13,7 @@ import {
   type ShellFindResult,
   type ShellNotification,
 } from '@augur/shell-kit';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   StageMounter,
   incompatibility,
@@ -79,7 +79,9 @@ import { currentFormats, formatsFrom, languageOf, loadOrgTimeZone, setFormats } 
 import { URGENT_PREVIEW, UrgentNotices, urgentQueue } from './urgent/UrgentNotices.js';
 import { AccountArea, isAccountSection, type AccountSection } from './account/AccountArea.js';
 import { DomainEventStream, topicsFor } from './host/domain-events.js';
-import { ACTION_STATUS } from './host/session.js';
+import { ACTION_STATUS, SIGN_IN_AGAIN_PATH } from './host/session.js';
+import { ActingAs, PersonaClient, withPersona, type HeldPersona } from './host/personas.js';
+import { dayAndTime } from './account/words.js';
 import { productName } from './host/menus.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
@@ -123,6 +125,8 @@ export const AGENTS_WHY =
 export const ACCOUNT_AREA = 'account-area';
 /** Where the Account area is in the address: `?account=<section>`, so a reload and Keycloak's screens come back to it. */
 export const ACCOUNT_PARAM = 'account';
+/** Back from entering the password again to start "Act as" (PDR-024): `?account=security&acting=again` reopens it. */
+export const ACTING_PARAM = 'acting';
 /** What a notice email links to: `?notice=<id>` opens that notification as clicking it in the Shell would (ADR 0044, D7). */
 export const NOTICE_PARAM = 'notice';
 /** What the Shell offers; floors replace Switch workspace. */
@@ -188,11 +192,39 @@ export function Host({
   const [accountSection, setAccountSection] = useState<AccountSection | null>(() => {
     const q = new URLSearchParams(window.location.search);
     const s = q.get(ACCOUNT_PARAM);
-    return isAccountSection(s) && q.has(ACTION_STATUS) ? s : null;
+    return isAccountSection(s) && (q.has(ACTION_STATUS) || q.has(ACTING_PARAM)) ? s : null;
   });
   /** How the last of Keycloak's screens went, said once in the Account area. */
   const [actionStatus] = useState(() => new URLSearchParams(window.location.search).get(ACTION_STATUS));
   const accountApi = useMemo(() => new AccountApi({ getToken: session.getToken, fetchImpl }), [session, fetchImpl]);
+  /**
+   * "Act as" (PDR-024): the admin personas they hold and the session they act in. Only AUGUR's own frontends (apps
+   * in the platform category) send the persona, through `platformFetch`; the gateway refuses it for any other app.
+   */
+  const acting = useMemo(() => new ActingAs(), []);
+  const actingSession = useSyncExternalStore(acting.subscribe, acting.current);
+  const personaClient = useMemo(() => new PersonaClient({ getToken: session.getToken, fetchImpl }), [session, fetchImpl]);
+  const [heldPersonas, setHeldPersonas] = useState<HeldPersona[]>([]);
+  useEffect(() => {
+    let live = true;
+    // A deployment without the permissions service, or one that can't answer now: there's no "Act as" to offer.
+    personaClient.list().then(
+      (p) => {
+        if (!live) return;
+        setHeldPersonas(p.personas);
+        acting.set(p.session);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [personaClient, acting]);
+  const platformFetch = useMemo(() => withPersona(fetchImpl, acting), [fetchImpl, acting]);
+  const stopActing = useCallback(async () => {
+    await personaClient.stop();
+    acting.ended();
+  }, [personaClient, acting]);
   /** The preferences the Account area shows; the shell's own copy is in `prefs`. */
   const [chosen, setChosen] = useState<Preferences>({});
   const pinned = chosen.pinned;
@@ -350,6 +382,7 @@ export function Host({
     if (accountSection) shellRef.current?.open();
     url.searchParams.delete(ACCOUNT_PARAM);
     url.searchParams.delete(ACTION_STATUS);
+    url.searchParams.delete(ACTING_PARAM);
     window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, on arriving
   }, []);
@@ -555,7 +588,7 @@ export function Host({
       },
       workspace: floor ?? home,
       getWorkspace: () => floorRef.current,
-      fetch: floorFetch(session.getToken, () => floorRef.current, fetchImpl),
+      fetch: floorFetch(session.getToken, () => floorRef.current, app.category === 'platform' ? platformFetch : fetchImpl),
       path,
       intent,
       reply,
@@ -565,7 +598,7 @@ export function Host({
         return currentFormats();
       },
     }),
-    [session, bus, raise, request, floor, home, fetchImpl, tell],
+    [session, bus, raise, request, floor, home, fetchImpl, platformFetch, tell],
   );
 
   /** Apps' own settings in Account's Home and apps, mounted like Home's cards (ADR 0036). */
@@ -1028,6 +1061,16 @@ export function Host({
 
   return (
     <Shell model={shellModel}>
+      {actingSession ? (
+        <aside className="preview-badge" role="status" data-acting>
+          <span>
+            Acting as {actingSession.persona} until {dayAndTime(actingSession.endsAt)}
+          </span>
+          <Button kind="tertiary" size="sm" onPress={() => void stopActing().catch((err: Error) => tell({ id: 'acting', app: 'shell', level: 'info', title: 'Acting as couldn’t be stopped', detail: err.message, time: Date.now() }))}>
+            Stop
+          </Button>
+        </aside>
+      ) : null}
       {previewOf !== undefined ? (
         <aside className="preview-badge" role="status">
           <span>
@@ -1090,6 +1133,13 @@ export function Host({
           product={productName()}
           version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
           actionStatus={actionStatus}
+          actAs={{
+            personas: heldPersonas,
+            ...(actingSession ? { session: actingSession } : {}),
+            start: async (persona, reason, minutes) => acting.set(await personaClient.start(persona, reason, minutes)),
+            stop: stopActing,
+            signInAgain: () => window.location.assign(`${SIGN_IN_AGAIN_PATH}?return=${encodeURIComponent(`${window.location.pathname}?${ACCOUNT_PARAM}=security&${ACTING_PARAM}=again`)}`),
+          }}
         />
       ) : null}
       {problem && (
