@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { holds, registryGrantsFor, scopeFor } from './grants.ts';
 
-const platform = ['identity', 'registry', 'events', 'models', 'knowledge'];
+const platform = ['identity', 'registry', 'events', 'models', 'knowledge', 'permissions'];
 
 describe('what an app’s call needs', () => {
   it('maps AUGUR’s admin APIs to platform scopes, and keeps an app’s own registry entry free', () => {
@@ -13,6 +13,14 @@ describe('what an app’s call needs', () => {
     expect(scopeFor('GET', '/api/events/v1/audit', 'admin', platform)).toBe('audit:read');
     expect(scopeFor('PUT', '/api/registry/v1/apps/notes', 'notes', platform)).toBeNull();
     expect(scopeFor('GET', '/api/registry/v1/manifest', 'notes', platform)).toBeUndefined();
+  });
+
+  it('lets Admin manage roles and grants with people:manage, and never start “Act as”', () => {
+    expect(scopeFor('POST', '/api/permissions/v1/roles', 'admin', platform)).toBe('people:manage');
+    expect(scopeFor('GET', '/api/permissions/v1/roles?scope=org:this', 'admin', platform)).toBe('people:manage');
+    expect(scopeFor('DELETE', '/api/permissions/v1/grants/g-1?reason=Done', 'admin', platform)).toBe('people:manage');
+    expect(scopeFor('POST', '/api/permissions/v1/personas/admin.amara/sessions', 'admin', platform)).toBeUndefined();
+    expect(scopeFor('POST', '/access/v1/evaluation', 'admin', platform)).toBeUndefined();
   });
 
   it('maps the knowledge graph’s reads and actions to its scopes, retain to extract', () => {
