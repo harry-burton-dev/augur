@@ -87,41 +87,54 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
     async ensureKey(app: string, secret: string, bucketId: string, name = keyNameFor(app)): Promise<string> {
       const id = keyIdFor(secret);
       const keys = await call<{ id: string; name: string }[]>('GET', 'ListKeys');
-      if (!keys.some((k) => k.id === id)) await call('POST', 'ImportKey', { name, accessKeyId: id, secretAccessKey: secret });
+      if (!keys.some((k) => k.id === id)) {
+        try {
+          await call('POST', 'ImportKey', { name, accessKeyId: id, secretAccessKey: secret });
+        } catch (err) {
+          // Garage never takes back the id of a key that was deleted, and the id comes from the secret.
+          if (!(err instanceof GarageError) || err.code !== 'KeyAlreadyExists') throw err;
+          throw new GarageError(err.status, err.code, `key ${id} was deleted from the object store before, and a deleted key's id can't be used again: a new secret makes a new key.`);
+        }
+      }
       await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: id, permissions: { read: true, write: true, owner: false } });
       for (const old of keys.filter((k) => k.name === name && k.id !== id)) await call('POST', `DeleteKey?id=${encodeURIComponent(old.id)}`);
       return id;
     },
 
     /**
-     * Takes a bucket away, after `empty` has emptied it (Garage only deletes an empty bucket), with
-     * the app's keys. False when there was no such bucket.
+     * Takes a bucket away, after `empty` has emptied it (Garage only deletes an empty bucket). False when there was
+     * no such bucket. The app's keys stay: Garage never takes back a deleted key's id, and the app's id comes from
+     * its secret, so deleting them would stop the app's storage being set up again with the same secret (going
+     * back to the release before, or installing the app again). A key with no bucket opens nothing.
      */
-    async removeBucket(alias: string, empty: (bucketId: string) => Promise<void>, name = keyNameFor(alias)): Promise<boolean> {
+    async removeBucket(alias: string, empty: (bucketId: string) => Promise<void>): Promise<boolean> {
       let id: string | undefined;
       try {
         id = (await call<{ id: string }>('GET', `GetBucketInfo?globalAlias=${encodeURIComponent(alias)}`)).id;
       } catch (err) {
         if (!(err instanceof GarageError) || err.status !== 404) throw err;
       }
-      if (id) {
-        await empty(id);
-        await call('POST', `DeleteBucket?id=${encodeURIComponent(id)}`);
-      }
-      const keys = await call<{ id: string; name: string }[]>('GET', 'ListKeys');
-      for (const key of keys.filter((k) => k.name === name)) await call('POST', `DeleteKey?id=${encodeURIComponent(key.id)}`);
-      return Boolean(id);
+      if (!id) return false;
+      await empty(id);
+      await call('POST', `DeleteBucket?id=${encodeURIComponent(id)}`);
+      return true;
     },
 
     /**
      * A new key named `name` that may read and write the bucket, for when the app's own secret isn't known (an app
-     * retired after its secrets left .env). Returns its secret; removeBucket deletes it with the app's other keys.
+     * retired after its secrets left .env). Its id is random, so deleting it afterwards (deleteKey) costs nothing.
      */
-    async temporaryKey(bucketId: string, name: string): Promise<string> {
+    async temporaryKey(bucketId: string, name: string): Promise<{ id: string; secret: string }> {
       const secret = randomBytes(32).toString('hex');
-      await call('POST', 'ImportKey', { name, accessKeyId: keyIdFor(secret), secretAccessKey: secret });
-      await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: keyIdFor(secret), permissions: { read: true, write: true, owner: false } });
-      return secret;
+      const id = keyIdFor(secret);
+      await call('POST', 'ImportKey', { name, accessKeyId: id, secretAccessKey: secret });
+      await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: id, permissions: { read: true, write: true, owner: false } });
+      return { id, secret };
+    },
+
+    /** Deletes a key for good: Garage keeps its id as taken for ever. Only for a key whose secret nobody holds. */
+    async deleteKey(id: string): Promise<void> {
+      await call('POST', `DeleteKey?id=${encodeURIComponent(id)}`);
     },
 
     /**
