@@ -56,6 +56,14 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The permissions service and OpenFGA
+
+**From** unreleased
+
+This release adds the permissions service (`permissions`) and OpenFGA (`openfga`), which holds the relationships it answers from (ADR 0085). Nothing asks the service yet, so nothing changes for people. It needs two new settings. `PERMISSIONS_DATABASE_PASSWORD` is the service's own Postgres login, `platform_permissions`, which the storage job makes. `OPENFGA_TOKEN` is the key the service sends OpenFGA. Deployment makes both up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`).
+
+On the first `up`, the storage job makes the login and its `permissions` schema. OpenFGA then makes its tables there and starts, and the service makes its store and model. Going back to an earlier release stops both, and leaves the `permissions` schema and its login in place, unused.
+
 ### The Upgrade Centre is now Deployment
 
 **From** unreleased

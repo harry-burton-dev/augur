@@ -15,6 +15,7 @@
     "REGISTRY_DATABASE_PASSWORD",
     "EVENTS_DATABASE_PASSWORD",
     "MODELS_DATABASE_PASSWORD",
+    "PERMISSIONS_DATABASE_PASSWORD",
     "KNOWLEDGE_DATABASE_PASSWORD",
     "KEYCLOAK_DATABASE_PASSWORD",
     "GARAGE_RPC_SECRET",
@@ -22,6 +23,7 @@
     "IDENTITY_CLIENT_SECRET",
     "REGISTRY_CLIENT_SECRET",
     "EVENTS_CLIENT_SECRET",
+    "OPENFGA_TOKEN",
     "KNOWLEDGE_CLIENT_SECRET",
     "PLATFORM_ADMIN_USER",
     "PLATFORM_ADMIN_PASSWORD",
@@ -198,6 +200,18 @@
       "x-services": [
         "models",
         "storage"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "PERMISSIONS_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The permissions service's own database login (platform_permissions), which the storage job makes and OpenFGA keeps its tables under.",
+      "x-services": [
+        "storage",
+        "openfga"
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
@@ -1221,11 +1235,11 @@
         "registry",
         "events",
         "models",
-        "knowledge"
+        "knowledge",
+        "permissions"
       ],
       "x-via": {
-        "gateway": "default",
-        "permissions": "infra/docker-compose.yml"
+        "gateway": "default"
       }
     },
     "DATABASE_URL": {
@@ -1858,11 +1872,14 @@
     "OPENFGA_TOKEN": {
       "type": "string",
       "writeOnly": true,
-      "description": "OpenFGA's preshared key, which the permissions service sends when OpenFGA is set to need one.",
-      "x-internal": "compose",
-      "x-via": {
-        "permissions": "default"
-      }
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The key the permissions service sends OpenFGA, which OpenFGA needs on every call (ADR 0085).",
+      "x-services": [
+        "openfga",
+        "permissions"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
     },
     "PERMISSIONS_STORE": {
       "type": "string",

@@ -254,7 +254,7 @@ services:
       RETIRED_APPS: folio atlas mandate auspex
       # The platform's services that get a login owning only their own schema, each with its
       # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
-      PLATFORM_DATABASE_LOGINS: identity registry events models
+      PLATFORM_DATABASE_LOGINS: identity registry events models permissions
       # The most connections each app's login may hold at once (30 when empty), so one app can't take AUGUR's (ADR 0073).
       APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
     depends_on:
@@ -600,6 +600,54 @@ services:
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
       identity: { condition: service_healthy }
+
+  # OpenFGA (ADR 0085): it holds who may do what to what, as relationships, and answers the permissions
+  # service's checks. AUGUR's image of it brings its tables up to date before it serves. They live in the
+  # permissions schema, which the storage job gives the permissions login (PLATFORM_DATABASE_LOGINS). Only
+  # the permissions service calls it, with OPENFGA_TOKEN. A check may be answered from its cache for up to
+  # 10 seconds; the service asks for a fresh answer where a revoke must land at once (ADR 0085, D8).
+  openfga:
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/openfga:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=127.0.0.1:8081"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_LOG_FORMAT: json
+      OPENFGA_CHECK_QUERY_CACHE_ENABLED: "true"
+      OPENFGA_CHECK_QUERY_CACHE_TTL: 10s
+    depends_on: *own-login
+
+  # The permissions service (ADR 0085): it answers whether a person, through the positions they hold, or an
+  # admin persona may do something, from what OpenFGA holds. Only the gateway and AUGUR's own services ask it.
+  # Nothing asks it yet: this release runs it so its store and model are in place.
+  permissions:
+    logging: *logging
+    <<: *service
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/permissions:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      <<: *env
+      PORT: 8087
+      OPENFGA_URL: http://openfga:8080
+      OPENFGA_TOKEN: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+    depends_on:
+      openfga: { condition: service_healthy }
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
   # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with
