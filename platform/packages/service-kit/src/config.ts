@@ -85,6 +85,7 @@ export const commonSettings = {
   registry: { name: 'REGISTRY_URL', about: 'where the registry is, such as http://registry:8082.', required: true },
   events: { name: 'EVENTS_URL', about: 'where the events service is, such as http://events:8084.', required: true },
   models: { name: 'MODELS_URL', about: 'where the model gateway is, such as http://models:8085.', required: true },
+  permissions: { name: 'PERMISSIONS_URL', about: 'where the permissions service is, such as http://permissions:8087, asked beside each admin and lead check to compare its answer (shadow mode). Without it nothing is compared.' },
   gateway: { name: 'GATEWAY_URL', about: 'where the gateway is, to fetch the key it signs callers with (default http://gateway:8080).' },
 } satisfies Record<string, Setting>;
 

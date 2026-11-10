@@ -16,7 +16,20 @@ export interface IdentityRelationships {
   positions: { id: string; team: string; role: 'member' | 'lead'; holder?: string }[];
   /** Everyone whose sign-in is on; absent where identity can't say, and then the org's members are left alone. */
   people?: string[];
+  /** Who holds the Keycloak roles today's checks read, among those whose sign-in is on. Comes with `people`. */
+  roles?: { admin: string[]; 'deployment-admin': string[]; publisher: string[] };
 }
+
+/** This deployment, as the model names it: one store answers for one deployment. */
+export const DEPLOYMENT = 'deployment:this';
+
+/**
+ * The admin persona each holder of Keycloak's admin or deployment-admin role has, until admins are given
+ * personas in Admin (ADR 0086, PR 5). Only personas can be admins in the model, so today's admins are copied as
+ * one persona each, which they alone hold.
+ */
+export const ADMIN_PERSONA = 'admin.';
+export const adminPersonaOf = (person: string) => `persona:${ADMIN_PERSONA}${person}`;
 
 /** The relationships identity's answer means. */
 export const relationshipsFrom = (r: IdentityRelationships): CheckKey[] => {
@@ -34,6 +47,15 @@ export const relationshipsFrom = (r: IdentityRelationships): CheckKey[] => {
     if (p.holder) out.push({ user: `person:${p.holder}`, relation: 'holder', object: `persona:${p.id}` });
   }
   for (const person of r.people ?? []) out.push({ user: `person:${person}`, relation: 'member', object: org });
+  out.push({ user: org, relation: 'org', object: DEPLOYMENT });
+  const roles = r.roles;
+  if (roles) {
+    const admins = new Set([...roles.admin, ...roles['deployment-admin']]);
+    for (const person of admins) out.push({ user: `person:${person}`, relation: 'holder', object: adminPersonaOf(person) });
+    for (const person of roles.admin) out.push({ user: adminPersonaOf(person), relation: 'admin', object: org });
+    for (const person of roles['deployment-admin']) out.push({ user: adminPersonaOf(person), relation: 'admin', object: DEPLOYMENT });
+    for (const person of roles.publisher) out.push({ user: `person:${person}`, relation: 'publisher', object: org });
+  }
   return out;
 };
 
@@ -43,12 +65,19 @@ export const relationshipsFrom = (r: IdentityRelationships): CheckKey[] => {
  */
 export const isCopied = (key: CheckKey, withPeople: boolean): boolean => {
   const [type] = key.object.split(':');
-  if (type === 'persona') return key.relation === 'holder';
+  const fromRoles = key.user.startsWith(`persona:${ADMIN_PERSONA}`);
+  if (type === 'persona') return key.relation === 'holder' && (withPeople || !key.object.startsWith(`persona:${ADMIN_PERSONA}`));
   if (type === 'floor') {
     if (['parent', 'child', 'owner'].includes(key.relation)) return true;
     return (key.relation === 'lead' || key.relation === 'member') && /^persona:[^#]+#holder$/.test(key.user);
   }
-  if (type === 'org') return key.relation === 'child' || (withPeople && key.relation === 'member' && key.user.startsWith('person:'));
+  if (type === 'org') {
+    if (key.relation === 'child') return true;
+    if (!withPeople) return false;
+    // Until the roles API (PR 5) gives publishers and admins, every one is a copy of a Keycloak role.
+    return (key.user.startsWith('person:') && (key.relation === 'member' || key.relation === 'publisher')) || (key.relation === 'admin' && fromRoles);
+  }
+  if (key.object === DEPLOYMENT) return key.relation === 'org' || (withPeople && key.relation === 'admin' && fromRoles);
   return false;
 };
 

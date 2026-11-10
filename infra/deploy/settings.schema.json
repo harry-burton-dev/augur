@@ -1357,9 +1357,10 @@
     },
     "PERMISSIONS_URL": {
       "type": "string",
-      "description": "Where the permissions service is, for who settles and raises on each floor.",
+      "description": "Where the permissions service is: for who settles and raises on each floor, and asked beside other services' admin and lead checks to compare answers (shadow mode).",
       "x-internal": "compose",
       "x-services": [
+        "events",
         "knowledge"
       ]
     },

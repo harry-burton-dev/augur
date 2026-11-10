@@ -376,6 +376,28 @@ describe.runIf(DATABASE_URL)('events', () => {
       const log = (await app.inject({ method: 'GET', url: '/v1/audit?workspace=w-finance', headers: alex })).json();
       expect(log[0]).toMatchObject({ action: 'team-notices.on', actor: { id: 'u-3' }, workspace: { id: 'w-finance' } });
     });
+
+    it('asks the permissions service each admin and lead check too, and still answers as it always has', async () => {
+      const asked: { site: string; caller: string; question: unknown; today: boolean }[] = [];
+      const shadow = { check: (site: string, caller: { id: string }, question: unknown, today: boolean) => void asked.push({ site, caller: caller.id, question, today }), settled: async () => {} };
+      const app = await db.app({ verifyService, floors, shadow });
+      expect((await app.inject({ method: 'GET', url: '/v1/team-notices/w-finance', headers: on('w-finance') })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/audit/export', headers: alex })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'GET', url: '/v1/audit?workspace=w-finance', headers: on('w-finance', 'lead') })).statusCode).toBe(200);
+      expect(asked).toEqual([
+        {
+          site: 'events.team-notices.read',
+          caller: expect.any(String),
+          question: [
+            { action: 'can_act_as_lead', resource: { type: 'floor', id: 'w-finance' } },
+            { action: 'admin', resource: { type: 'floor', id: 'w-finance' }, as: 'persona' },
+          ],
+          today: false,
+        },
+        { site: 'events.audit.export', caller: 'u-1', question: { action: 'can_read_audit', resource: { type: 'org', id: 'this' }, as: 'persona' }, today: true },
+        { site: 'events.audit.read', caller: expect.any(String), question: [expect.objectContaining({ action: 'can_read_audit' }), expect.objectContaining({ action: 'can_act_as_lead' }), expect.objectContaining({ action: 'admin' })], today: true },
+      ]);
+    });
   });
 
   describe('domain events', () => {

@@ -1481,6 +1481,26 @@ paths:
                     items:
                       type: string
                     description: Everyone whose sign-in is on. Absent where identity has no directory to ask.
+                  roles:
+                    type: object
+                    required:
+                      - admin
+                      - deployment-admin
+                      - publisher
+                    properties:
+                      admin:
+                        type: array
+                        items:
+                          type: string
+                      deployment-admin:
+                        type: array
+                        items:
+                          type: string
+                      publisher:
+                        type: array
+                        items:
+                          type: string
+                    description: Who holds each of the Keycloak roles AUGUR still checks today, among those whose sign-in is on. Copied until each check moves to the permissions service (ADR 0085). Absent with people.
                 description: Who and what the permissions service copies from identity
         "403":
           description: Not one of AUGUR’s own services

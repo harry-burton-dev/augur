@@ -14,6 +14,7 @@ const identity: IdentityRelationships = {
     { id: 'harbour-master', team: 'port', role: 'member' },
   ],
   people: ['amara', 'tomas'],
+  roles: { admin: ['amara'], 'deployment-admin': ['amara'], publisher: ['tomas'] },
 };
 
 /** A store as OpenFGA keeps it, for runs to read and write. */
@@ -43,6 +44,12 @@ describe('the copy of identity', () => {
       { user: 'persona:harbour-master#holder', relation: 'member', object: 'floor:port' },
       { user: 'person:amara', relation: 'member', object: 'org:o' },
       { user: 'person:tomas', relation: 'member', object: 'org:o' },
+      { user: 'org:o', relation: 'org', object: 'deployment:this' },
+      // Today's Keycloak admins: one admin persona each, which only they hold (ADR 0086).
+      { user: 'person:amara', relation: 'holder', object: 'persona:admin.amara' },
+      { user: 'persona:admin.amara', relation: 'admin', object: 'org:o' },
+      { user: 'persona:admin.amara', relation: 'admin', object: 'deployment:this' },
+      { user: 'person:tomas', relation: 'publisher', object: 'org:o' },
     ]);
   });
 
@@ -54,6 +61,15 @@ describe('the copy of identity', () => {
     expect(isCopied({ user: 'person:p', relation: 'member', object: 'org:o' }, false)).toBe(false);
     expect(isCopied({ user: 'person:p', relation: 'member', object: 'org:o' }, true)).toBe(true);
     expect(isCopied({ user: 'persona:x#holder', relation: 'lead', object: 'floor:port' }, true)).toBe(true);
+    // Admins copied from Keycloak's roles are this copy's; an admin persona given some other way isn't.
+    expect(isCopied({ user: 'persona:admin.amara', relation: 'admin', object: 'org:o' }, true)).toBe(true);
+    expect(isCopied({ user: 'persona:admin.amara', relation: 'admin', object: 'deployment:this' }, true)).toBe(true);
+    expect(isCopied({ user: 'persona:it-head', relation: 'admin', object: 'deployment:this' }, true)).toBe(false);
+    // Without people, nothing that comes from Keycloak is touched.
+    expect(isCopied({ user: 'person:amara', relation: 'holder', object: 'persona:admin.amara' }, false)).toBe(false);
+    expect(isCopied({ user: 'persona:admin.amara', relation: 'admin', object: 'org:o' }, false)).toBe(false);
+    expect(isCopied({ user: 'person:tomas', relation: 'publisher', object: 'org:o' }, false)).toBe(false);
+    expect(isCopied({ user: 'org:o', relation: 'org', object: 'deployment:this' }, false)).toBe(true);
   });
 
   it('writes only what changed, and puts right what was changed by hand', async () => {
@@ -62,7 +78,7 @@ describe('the copy of identity', () => {
       { user: 'person:ghost', relation: 'holder', object: 'persona:ops-head' },
     ]);
     const first = await project({ engine, store: 's', modelId: 'm', relationships: async () => identity, now: () => new Date('2026-11-10T00:00:00Z') });
-    expect(first).toEqual({ at: '2026-11-10T00:00:00.000Z', added: 10, removed: 1 });
+    expect(first).toEqual({ at: '2026-11-10T00:00:00.000Z', added: 15, removed: 1 });
     expect(engine.held()).toContainEqual({ user: 'role:clerks#assignee', relation: 'member', object: 'floor:port' });
     expect(engine.held()).not.toContainEqual({ user: 'person:ghost', relation: 'holder', object: 'persona:ops-head' });
     expect(await project({ engine, store: 's', modelId: 'm', relationships: async () => identity })).toMatchObject({ added: 0, removed: 0 });
@@ -76,7 +92,7 @@ describe('the copy of identity', () => {
   it('leaves the org’s people alone when identity can’t say who they are', async () => {
     const engine = fakeEngine();
     await project({ engine, store: 's', modelId: 'm', relationships: async () => identity });
-    const { people: _, ...noPeople } = identity;
+    const { people: _, roles: __, ...noPeople } = identity;
     expect(await project({ engine, store: 's', modelId: 'm', relationships: async () => noPeople })).toMatchObject({ removed: 0 });
   });
 
@@ -85,8 +101,8 @@ describe('the copy of identity', () => {
     const engine = fakeEngine();
     await project({ engine, store: 's', modelId: 'm', relationships: async () => many });
     const run = await project({ engine, store: 's', modelId: 'm', relationships: async () => ({ org: 'o', teams: [], personal: [], positions: [], people: [] }) });
-    expect(run).toMatchObject({ removed: 0, heldBack: 48 });
-    expect(engine.held()).toHaveLength(48);
+    expect(run).toMatchObject({ removed: 0, heldBack: 52 });
+    expect(engine.held()).toHaveLength(53);
   });
 
   it('keeps going after a run fails, and says why', async () => {

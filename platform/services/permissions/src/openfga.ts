@@ -127,6 +127,17 @@ export class OpenFga {
     });
   }
 
+  /** The objects of `type` that `user` has `relation` to (OpenFGA's ListObjects), as `type:id`. */
+  async listObjects(store: string, model: string, ask: { user: string; relation: string; type: string }, context: Record<string, unknown>, consistency: Consistency): Promise<string[]> {
+    const { objects = [] } = await this.call<{ objects?: string[] }>('POST', `/stores/${store}/list-objects`, {
+      authorization_model_id: model,
+      ...ask,
+      context,
+      consistency,
+    });
+    return objects;
+  }
+
   /** Every relationship in the store, page by page (OpenFGA's Read with no filter). */
   async readAll(store: string, pageSize = 100): Promise<CheckKey[]> {
     const all: CheckKey[] = [];

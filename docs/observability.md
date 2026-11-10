@@ -63,6 +63,13 @@ The gateway records, as metrics:
 - `augur_gateway_requests_total`: the calls it answered, by `part` (`platform` or `apps`) and `status_class` (`2xx`, `4xx`, `5xx`).
 - `augur_backup_ok`: 1 when the last backup and restore test can be relied on, 0 when not. Only when the gateway is told where backups are (`BACKUP_DIR`).
 
+While admin and lead checks move to the permissions service (ADR 0085), each service that still makes its own also asks the permissions service the same question after it has answered, and records:
+
+- `augur_permissions_shadow_checks_total`: the checks compared, by `site` (such as `events.audit.export`) and `outcome`: `agree`, `disagree`, `unanswered` (the permissions service couldn't say) or `skipped` (too many in flight).
+- `augur_permissions_shadow_disagreements_total`: the checks where the two answers differed, by `site`. Each one is also logged as a warning that starts `permissions shadow:`, with both answers and what was asked.
+
+The service's own answer still decides. A site moves over once it has shown no disagreement for 7 days. Today's Keycloak admins are copied in as one admin persona each, so an admin check is asked of the personas the person holds.
+
 ## Activity
 
 Activity is AUGUR's record of who did what, kept by the events service (`events.audit`) and read in Admin.

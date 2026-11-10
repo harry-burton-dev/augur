@@ -15,7 +15,9 @@ import {
 } from '@augur/service-kit';
 import { relationsOf, type AuthorizationModel, type CheckKey, type Consistency, type OpenFga } from './openfga.ts';
 import type { ProjectionRun } from './projection.ts';
-import { Decision, Decisions, Evaluation, Evaluations } from './schemas.ts';
+import { Decision, Decisions, Evaluation, Evaluations, ResourceResults, ResourceSearch } from './schemas.ts';
+
+class OrgUnknown extends Error {}
 
 /** The major version of the evaluation API, as AuthZEN names it: /access/v1. */
 export const API_VERSION = 'v1';
@@ -34,8 +36,13 @@ export interface PermissionsOptions {
   callers?: CallerCheck;
   /** How the copy of identity's floors and positions last went, for Status (projection.ts). */
   projection?: () => ProjectionRun | undefined;
+  /** The org's id, once identity has been asked: `org:this` means it, since a caller rarely knows it. */
+  org?: () => string | undefined;
   now?: () => Date;
 }
+
+/** The id that means this deployment, or its org, so callers needn't know the org's id (`deployment:this` is the model's own). */
+export const THIS = 'this';
 
 /**
  * Which checks skip OpenFGA's caches (ADR 0085, D8): anything a persona asks, anything about the deployment
@@ -52,7 +59,7 @@ export const consistencyFor = (key: CheckKey): Consistency =>
  * the relationships OpenFGA holds. Only the gateway and AUGUR's own services may ask; a person never calls
  * it directly. When OpenFGA can't answer, the answer is a refusal that says so (D9), never a yes.
  */
-export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, projection, now = () => new Date() }: PermissionsOptions) => {
+export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, projection, org = () => undefined, now = () => new Date() }: PermissionsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   app.addHook('onRequest', signedCallers(callers));
@@ -75,12 +82,18 @@ export const buildApp = async ({ engine, store, modelId, model, verifyService, c
   };
 
   /** The check OpenFGA is asked, or why the question can't be asked of this model. */
-  const keyOf = (e: Evaluation): CheckKey | string => {
+  const keyOf = (e: Evaluation): CheckKey | string | OrgUnknown => {
     if (!relations.has(e.subject.type)) return `The model has no type ${e.subject.type}.`;
     const of = relations.get(e.resource.type);
     if (!of) return `The model has no type ${e.resource.type}.`;
     if (!of.has(e.action.name)) return `${e.resource.type} has no ${e.action.name} in the model.`;
-    return { user: `${e.subject.type}:${e.subject.id}`, relation: e.action.name, object: `${e.resource.type}:${e.resource.id}` };
+    let id = e.resource.id;
+    if (e.resource.type === 'org' && id === THIS) {
+      const known = org();
+      if (!known) return new OrgUnknown('The org isn’t known yet: floors haven’t been copied from identity.');
+      id = known;
+    }
+    return { user: `${e.subject.type}:${e.subject.id}`, relation: e.action.name, object: `${e.resource.type}:${id}` };
   };
 
   /**
@@ -104,6 +117,7 @@ export const buildApp = async ({ engine, store, modelId, model, verifyService, c
         async (req, reply) => {
           if (!(await mayAsk(req, reply))) return reply;
           const key = keyOf(req.body);
+          if (key instanceof OrgUnknown) return unavailable(reply, key);
           if (typeof key === 'string') return sendProblem(reply, 400, 'invalid', key);
           try {
             return { decision: await engine.check(store, modelId, key, contextNow(), consistencyFor(key)) };
@@ -126,6 +140,7 @@ export const buildApp = async ({ engine, store, modelId, model, verifyService, c
             const resource = partial.resource ?? defaults.resource;
             if (!subject || !action || !resource) return sendProblem(reply, 400, 'invalid', `Evaluation ${i + 1} has no subject, action or resource, and there is no default for it.`);
             const key = keyOf({ subject, action, resource });
+            if (key instanceof OrgUnknown) return unavailable(reply, key);
             if (typeof key === 'string') return sendProblem(reply, 400, 'invalid', `Evaluation ${i + 1}: ${key}`);
             keys.push(key);
           }
@@ -145,6 +160,25 @@ export const buildApp = async ({ engine, store, modelId, model, verifyService, c
           // AUGUR asks every check in one call, so the short-circuit semantics only cut the answer short.
           const stopAt = decisions.findIndex((d) => d.decision === (semantic === 'permit_on_first_permit'));
           return { evaluations: stopAt === -1 ? decisions : decisions.slice(0, stopAt + 1) };
+        },
+      );
+
+      access.post(
+        '/search/resource',
+        { schema: { summary: 'Which resources of a type may this subject do this to?', body: ResourceSearch, response: { 200: ResourceResults } } },
+        async (req, reply) => {
+          if (!(await mayAsk(req, reply))) return reply;
+          const { subject, action, resource } = req.body;
+          // The type and relation are checked as for an evaluation, with a stand-in id.
+          const key = keyOf({ subject, action, resource: { type: resource.type, id: '_' } });
+          if (key instanceof OrgUnknown) return unavailable(reply, key);
+          if (typeof key === 'string') return sendProblem(reply, 400, 'invalid', key);
+          try {
+            const found = await engine.listObjects(store, modelId, { user: key.user, relation: key.relation, type: resource.type }, contextNow(), consistencyFor(key));
+            return { results: found.map((o) => ({ type: resource.type, id: o.slice(resource.type.length + 1) })) };
+          } catch (err) {
+            return unavailable(reply, err);
+          }
         },
       );
     },
