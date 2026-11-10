@@ -325,10 +325,8 @@ describe('Deployment', () => {
     const { shell } = await open(registry({ overview: overview({ reporting: { mode: 'file', why: 'Exported by hand.' } }) }), '/settings');
     await settle();
     expect(shell.pane.title).toBe('Settings');
-    expect(find(shell.screen, 'quill-table', (p) => p.label === 'Each component’s settings')?.props?.rows).toMatchObject([
-      { id: 'augur', component: 'AUGUR', channel: 'Beta', set: 'The defaults' },
-      { id: 'mandate', component: 'Mandate' },
-    ]);
+    expect(find(shell.screen, 'quill-select', (p) => p.name === 'channel-augur')?.props).toMatchObject({ value: 'beta', readOnly: true });
+    expect(find(find(shell.screen, 'quill-section', (p) => p.label === 'Mandate')?.children, 'quill-select', (p) => p.label === 'Update policy')).toBeDefined();
     expect(find(shell.screen, 'quill-text-field', (p) => p.label === 'Public key')?.props).toMatchObject({ value: 'ssh-ed25519 AAAA', readOnly: true });
     const history = find(shell.screen, 'quill-paged-list', (p) => p.label === 'Settings history');
     expect(history?.props?.items).toMatchObject([{ title: 'AUGUR: settings changed', meta: expect.stringContaining('Sam Admin') }]);
@@ -342,9 +340,6 @@ describe('Deployment', () => {
     const many = overview({ units: [unit(), ...Array.from({ length: 30 }, (_, i) => unit({ unit: `app-${i}`, name: `App ${i}`, running: '1.0.0', available: '1.0.0' }))] });
     const apps = await open(registry({ overview: many }), '/apps');
     expect(find(apps.shell.screen, 'quill-table')?.props).toMatchObject({ pageSize: 10, filterable: true });
-    const settings = await open(registry({ overview: many }), '/settings');
-    expect(find(settings.shell.screen, 'quill-table', (p) => p.label === 'Each component’s settings')?.props).toMatchObject({ pageSize: 10, filterable: true });
-    expect(elements(settings.shell.screen).filter((e) => e.type === 'quill-section').length).toBeLessThan(6);
   });
 
   it('shows every part’s health, email and how apps take their events', async () => {
@@ -398,9 +393,8 @@ describe('Deployment', () => {
 
   it('changes a component’s settings, showing the effect before saving', async () => {
     const { shell } = await open(registry({ change: () => [200, overview()] }), '/settings');
-    handler(find(shell.screen, 'quill-table', (p) => p.label === 'Each component’s settings'), 'onOpen')('mandate');
+    handler(find(find(shell.screen, 'quill-section', (p) => p.label === 'Mandate')?.children, 'quill-button', (p) => p.label === 'Maintenance windows and version pin'), 'onPress')();
     expect(shell.moved.at(-1)).toBe('/settings/mandate');
-    expect(find(shell.screen, 'quill-section', (p) => p.label === 'Change Mandate’s settings')).toBeDefined();
     expect(find(shell.screen, 'quill-button', (p) => p.label === 'Save settings')?.props).toMatchObject({ disabled: true, reason: 'Nothing has changed yet.' });
     handler(find(shell.screen, 'quill-choice', (p) => p.name === 'policy'), 'onChange')('hold');
     expect(text(find(shell.screen, 'quill-details', (p) => JSON.stringify(p).includes('After you save')))).toContain('On hold: nothing new is offered.');
@@ -410,7 +404,18 @@ describe('Deployment', () => {
     expect(put?.path).toBe('/api/registry/v1/platform/units/mandate/desired-state');
     expect(put?.body).toMatchObject({ policy: 'hold', channel: 'beta' });
     expect(shell.moved.at(-1)).toBe('/settings');
-    expect(text(shell.screen)).toContain('Saved Mandate. The updater follows the new settings');
+    expect(text(shell.screen)).toContain('Saved. The updater follows the new settings');
+  });
+
+  it('changes a release channel inline, saving it straight away, on Settings and on Release channel', async () => {
+    for (const path of ['/settings', '/release-channel']) {
+      const { shell } = await open(registry({ change: () => [200, overview()] }), path);
+      handler(find(shell.screen, 'quill-select', (p) => p.name === 'channel-mandate'), 'onChange')('stable');
+      await settle();
+      const put = shell.calls.find((c) => c.method === 'PUT');
+      expect(put?.path).toBe('/api/registry/v1/platform/units/mandate/desired-state');
+      expect(put?.body).toMatchObject({ channel: 'stable' });
+    }
   });
 
   it('keeps settings visible but unchangeable for a plain admin, with the role named', async () => {

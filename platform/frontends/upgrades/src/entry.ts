@@ -86,6 +86,7 @@ export default defineApp((ctx: AppContext) => {
   let saving: SettingsView['saving'];
   let saved: string | undefined;
   let exporting: SettingsView['exporting'];
+  let quick: SettingsView['quick'];
 
   const view = (): SettingsView => ({
     route: routeFor(path),
@@ -101,6 +102,7 @@ export default defineApp((ctx: AppContext) => {
     saving,
     saved,
     exporting,
+    quick,
     act,
   });
 
@@ -154,6 +156,7 @@ export default defineApp((ctx: AppContext) => {
     path = to;
     ui.dialog = {};
     ui.problem = undefined;
+    quick = undefined;
     const now = routeFor(to);
     if (now.page !== 'settings' || now.edit !== (was.page === 'settings' ? was.edit : undefined)) {
       draft = undefined;
@@ -255,6 +258,27 @@ export default defineApp((ctx: AppContext) => {
         (e: unknown) => {
           if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
           saving = { error: words(e) };
+          draw();
+        },
+      );
+    },
+    quick: (unit, patch) => {
+      quick = { unit: unit.unit, busy: true };
+      saved = undefined;
+      draw();
+      const { pin, ...rest } = { ...draftOf(unit), ...patch };
+      api.setDesired(unit.unit, pin ? { ...rest, pin } : rest).then(
+        (overview) => {
+          quick = undefined;
+          saved = unit.unit;
+          data.took({ overview });
+          settingsRead = false;
+          void readSettings();
+        },
+        (e: unknown) => {
+          // Signing in again comes back to this page; the choice is made again there.
+          if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
+          quick = { unit: unit.unit, error: `${unit.name} wasn’t changed: ${words(e)}` };
           draw();
         },
       );
