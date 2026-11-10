@@ -131,6 +131,14 @@ const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntr
   'identity department.renamed': { topic: 'platform.team.renamed', payload: (e) => ({ team: e.target, name: e.detail?.to }) },
   'identity department.member-added': { topic: 'platform.team.member-added', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
   'identity department.member-removed': { topic: 'platform.team.member-removed', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
+  // Positions (ADR 0089): the jobs on a team. A handover gives the next holder what the position has, at once.
+  'identity position.created': { topic: 'platform.position.created', payload: (e) => ({ position: e.target, ...(typeof e.detail?.department === 'string' ? { team: e.detail.department } : {}) }) },
+  'identity position.changed': { topic: 'platform.position.changed', payload: (e) => ({ position: e.target }) },
+  'identity position.handed-over': {
+    topic: 'platform.position.handed-over',
+    payload: (e) => ({ position: e.target, ...(typeof e.detail?.from === 'string' ? { from: e.detail.from } : {}), ...(typeof e.detail?.to === 'string' ? { to: e.detail.to } : {}) }),
+  },
+  'identity position.retired': { topic: 'platform.position.retired', payload: (e) => ({ position: e.target }) },
   'registry app.disabled': { topic: 'platform.app.turned-off', payload: (e) => ({ app: e.target }) },
   'registry app.enabled': { topic: 'platform.app.turned-on', payload: (e) => ({ app: e.target }) },
   'registry app.removed': { topic: 'platform.app.removed', payload: (e) => ({ app: e.target }) },

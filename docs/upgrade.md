@@ -72,7 +72,7 @@ The knowledge graph now asks the permissions service who settles a floor's dispu
 
 **From** unreleased
 
-The permissions service now copies floors, positions and who holds them from identity, so it signs in as itself. It needs one new setting, `PERMISSIONS_CLIENT_SECRET`, which the realm job turns into its Keycloak client. The Upgrade Centre makes it up for you. If you upgrade by hand, add it to `.env` first (`openssl rand -hex 32`). Within 30 seconds of starting, `pc logs permissions` says how many relationships it copied in.
+The permissions service now copies floors, positions and who holds them from identity, so it signs in as itself. It needs one new setting, `PERMISSIONS_CLIENT_SECRET`, which the realm job turns into its Keycloak client. The Upgrade Centre makes it up for you. If you upgrade by hand, add it to `.env` first (`openssl rand -hex 32`). Once it starts, `pc logs permissions` says how many relationships it copied in.
 
 ### The knowledge graph's forget ledger
 
