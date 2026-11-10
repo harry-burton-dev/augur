@@ -15,7 +15,7 @@
     "semver": "catalog:"
   },
   "devDependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.20.0",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.20.1",
     "@types/semver": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
