@@ -100,7 +100,7 @@ A line starting `✗` stops the install: fix it and run the command again (witho
 pc up -d
 ```
 
-The first pull takes a minute or two. Keycloak needs about a minute to start, and Tailscale fetches its certificate on the first request, so the first page can be slow. `pc ps` shows each container `healthy` when it's ready, and the jobs that run once (`storage`, `keycloak-config`, `backup-tools`) as exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
+The first pull takes a minute or two. Keycloak needs about a minute to start, and Tailscale fetches its certificate on the first request, so the first page can be slow. `pc ps` shows each container `healthy` when it's ready, and the jobs that run once (`storage`, `keycloak-config`, `backup-tools`, `knowledge-migrate`) as exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
 
 ### 5. Sign in and check it
 
