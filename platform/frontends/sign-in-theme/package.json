@@ -4,7 +4,7 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "AUGUR's sign-in and email theme for Keycloak (ADR 0041), built with Keycloakify from Common's tokens and parts. Shipped as a jar in AUGUR's Keycloak image.",
+  "description": "AUGUR's sign-in and email theme for Keycloak (ADR 0041), built with Keycloakify from Common's tokens, typefaces and parts, in the Endstate look. Shipped as a jar in AUGUR's Keycloak image.",
   "scripts": {
     "build": "tsc -p tsconfig.json --noEmit && vite build",
     "jar": "node scripts/email-layout.mjs && vite build && keycloakify build",
@@ -12,8 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.2.0",
-    "@fontsource/jost": "5.2.8",
+    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.15.1",
     "keycloakify": "11.16.4",
     "react": "catalog:",
     "react-dom": "catalog:"

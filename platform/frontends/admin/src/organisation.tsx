@@ -305,7 +305,7 @@ export function Organisation({ api, roles = [] }: { api: AdminApi; roles?: strin
           <Section label="Security and retention" count={-1} limit={0} {...(deploymentAdmin ? { action: 'Change rules', onAction: () => setEditing('security') } : {})}>
             <Details
               items={[
-                { label: 'Two steps', value: settings.security.twoStepForAll ? 'Everyone' : 'Admin roles only', note: 'A code app or a passkey' },
+                { label: 'Two steps', value: settings.security.twoStepForAll ? 'Everyone' : 'Optional', note: 'A code app or a passkey' },
                 { label: 'Leavers', value: `Kept ${settings.security.leaverRetentionDays} days after they leave` },
                 { label: 'Activity', value: `Kept ${settings.security.activityRetentionDays} days` },
               ]}
@@ -467,7 +467,7 @@ export function Organisation({ api, roles = [] }: { api: AdminApi; roles?: strin
                 label="Two steps"
                 required
                 options={[
-                  { value: 'off', label: 'Admin roles only' },
+                  { value: 'off', label: 'Optional: anyone may add one' },
                   { value: 'on', label: 'Everyone' },
                 ]}
                 defaultValue={draft?.twoStepForAll ?? (settings.security.twoStepForAll ? 'on' : 'off')}

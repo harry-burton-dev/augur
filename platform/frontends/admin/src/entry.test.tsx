@@ -359,7 +359,7 @@ describe('Organisation', () => {
     const el = await open('/organisation');
     expect(el.textContent).toContain('Only a deployment admin can change these.');
     expect(button('Change rules', el)).toBeFalsy();
-    expect(el.textContent).toContain('Admin roles only');
+    expect(el.textContent).toContain('Optional');
     expect(el.textContent).toContain('No logo yet');
   });
 

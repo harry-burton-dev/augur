@@ -928,7 +928,7 @@ components:
           properties:
             required:
               type: boolean
-              description: Their role signs in with a second step
+              description: They must sign in with a second step, as the organisation asks everyone for one
             set:
               type: boolean
               description: They have a code app or a passkey
@@ -2361,7 +2361,7 @@ paths:
   /me/security:
     get:
       summary: How the caller signs in
-      description: Their password, code apps, passkeys and recovery codes, whether their role needs two-step sign-in, the organisation sign-ins their account is linked to, and the kc_action that changes each.
+      description: Their password, code apps, passkeys and recovery codes, whether they must sign in with a second step, the organisation sign-ins their account is linked to, and the kc_action that changes each.
       responses:
         "200":
           description: How they sign in
