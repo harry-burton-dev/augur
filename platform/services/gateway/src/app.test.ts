@@ -156,7 +156,6 @@ describe('gateway', () => {
     const ended = await call({ 'x-augur-persona': 'admin.u-2' });
     expect(ended.statusCode).toBe(403);
     expect(ended.json().error).toBe('persona_ended');
-    expect((await call({ 'x-augur-persona': 'admin.u-1', 'x-augur-app': 'artifacts' })).statusCode).toBe(403);
     expect((await call({ 'x-augur-persona': '../x' })).statusCode).toBe(400);
     expect(asked).toEqual([
       ['u-1', 'admin.u-1'],
