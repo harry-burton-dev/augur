@@ -113,6 +113,36 @@ export interface PlatformUpdates {
   feedTrust?: FeedTrust;
   /** Whether a halted release may be installed here for a test (ADR 0051), and why not. Absent from an older registry. */
   haltedInstall?: HaltedInstall;
+  /** Each unit on its way from main to stable, from the pipeline feed, with what this server runs of it. */
+  line?: PipelineLine;
+}
+
+/** A pipeline stage: dev is main, preview each unit's newest release, production its newest stable one. */
+export type Stage = 'dev' | 'preview' | 'production';
+export interface PipelinePull {
+  number: number;
+  title: string;
+  url: string;
+}
+
+/** The pipeline feed (docs/release-channels.md, The pipeline feed), as the registry passes it on. */
+export interface PipelineLine {
+  feed: 'on' | 'off';
+  checkedAt?: string;
+  problem?: string;
+  generatedAt?: string;
+  repository?: string;
+  units: {
+    id: string;
+    name: string;
+    versions: Record<Stage, string | null>;
+    devBuild?: { version: string; released?: string };
+    waiting: string[];
+    previews: { pr: number; version: string }[];
+    running?: string;
+  }[];
+  steps: { from: Stage; to: Stage; merged: number; pulls: { number: number; title: string; mergedAt?: string }[] }[];
+  pulls?: { versionPackages?: PipelinePull; promoteToPreview?: PipelinePull; promoteToProduction: (PipelinePull & { unit: string; version: string })[] };
 }
 
 /** Only dev and preview servers install a halted release, on request, to test going back (ADR 0051). */
