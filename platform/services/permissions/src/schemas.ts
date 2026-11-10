@@ -12,7 +12,7 @@ const Name = Type.String({ minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9_
 
 export const Subject = Type.Object(
   { type: Name, id: Id, properties: Type.Optional(Type.Record(Type.String(), Type.Unknown())) },
-  { description: 'Who is asking: a person, or a persona they are acting as (ADR 0086).' },
+  { description: 'Who is asking: a person (with the positions they hold, ADR 0089), or an admin persona they are acting as (ADR 0086).' },
 );
 export const Action = Type.Object(
   { name: Name, properties: Type.Optional(Type.Record(Type.String(), Type.Unknown())) },
