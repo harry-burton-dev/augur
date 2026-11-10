@@ -3,6 +3,7 @@ import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrinc
 import { buildApp } from './app.ts';
 import { fileLedger } from './ledger.ts';
 import { outboxRelay } from './outbox.ts';
+import { DEFAULT_BUDGETS, reflectScheduler } from './reflect.ts';
 import { identityStanding } from './standing.ts';
 
 const log = startupLog('knowledge');
@@ -19,6 +20,9 @@ loadConfigOrExit('knowledge', [
   { ...commonSettings.models, required: false, about: 'where the model gateway is, such as http://models:8085. Without it, retain takes no text to extract from.' },
   { name: 'KNOWLEDGE_PAGE_LIMIT', about: 'the most one page of a read gives, such as 100.' },
   { name: 'KNOWLEDGE_SUBGRAPH_DEPTH', about: 'the most hops a subgraph read goes from its entity, such as 3.' },
+  { name: 'KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS', about: 'how long an entity’s beliefs must be quiet before reflect summarises it, such as 600.' },
+  { name: 'KNOWLEDGE_REFLECT_DAILY_BUDGET', about: 'the most summaries reflect writes a day for the whole deployment, such as 400; keep it under the models service’s daily limit, with room for extraction.' },
+  { name: 'KNOWLEDGE_REFLECT_FLOOR_BUDGET', about: 'the most summaries reflect writes a day on any one floor, such as 100.' },
   { name: 'KNOWLEDGE_LEDGER_DIR', about: 'the folder, on a volume of its own, where each forget is written so a restore from backup forgets it again.', required: true },
 ]);
 
@@ -57,4 +61,23 @@ if (!KNOWLEDGE_LEDGER_DIR) log.warn('KNOWLEDGE_LEDGER_DIR is not set: what peopl
 const ledger = KNOWLEDGE_LEDGER_DIR ? fileLedger(KNOWLEDGE_LEDGER_DIR) : undefined;
 const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, ledger, pageLimit, subgraphDepth });
 await app.listen({ port, host: '0.0.0.0' });
+// Reflect writes each floor's summaries from its own beliefs, through the models service, within its budgets.
+if (MODELS_URL && credentials) {
+  const budgets = {
+    debounceSeconds: positive('KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS', DEFAULT_BUDGETS.debounceSeconds) ?? DEFAULT_BUDGETS.debounceSeconds,
+    daily: positive('KNOWLEDGE_REFLECT_DAILY_BUDGET', DEFAULT_BUDGETS.daily) ?? DEFAULT_BUDGETS.daily,
+    perFloor: positive('KNOWLEDGE_REFLECT_FLOOR_BUDGET', DEFAULT_BUDGETS.perFloor) ?? DEFAULT_BUDGETS.perFloor,
+  };
+  reflectScheduler({
+    pool: store,
+    budgets,
+    ask: async (messages, floor) => {
+      const answer = await askModel({ modelsUrl: MODELS_URL, credentials, workspace: floor, messages });
+      return { content: answer.message.content, model: answer.model };
+    },
+    log: (msg, detail) => app.log.info(detail ?? {}, msg),
+  }).start();
+} else {
+  log.warn('Reflect is off: without MODELS_URL and the service’s sign-in, entities show their beliefs without summaries.');
+}
 if (credentials) outboxRelay({ pool: store, eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err }, 'the outbox could not be sent') }).start();
