@@ -1,13 +1,13 @@
 import { defineApp, type AppContext, type RemoteNode } from '@augur/mfe-sdk/sdk3';
-import { ApiError, upgradesApi } from '../api.js';
-import { reasonProblem } from '../model/halted.js';
-import type { DesiredState, PlatformUpdates } from '../model/types.js';
-import { AUGUR } from '../units.js';
+import { ApiError, upgradesApi } from './api.js';
+import { reasonProblem } from './model/halted.js';
+import type { DesiredState, PlatformUpdates } from './model/types.js';
+import { AUGUR } from './units.js';
 import { reader, type Data } from './data.js';
 import { quill } from './quill.js';
 import { pathOf, PLACES, routeFor, type Route } from './routes.js';
 import { draftOf, settingsPage, type Draft, type SettingsData, type SettingsView } from './settings.js';
-import { appPage, augurPage } from './unit.js';
+import { appPage, augurPage } from './unit-page.js';
 import { appsPage, HISTORY_STEP, overviewPage, rowsOf, staleNotice, type Actions, type Ui } from './view.js';
 
 /** The commands and places Deployment handles: each is declared in its manifest, which the shell draws from. */
@@ -118,7 +118,7 @@ export default defineApp((ctx: AppContext) => {
     // Each installed app sits under Apps in the rail.
     const items = rowsOf(v)
       .filter((r) => r.id !== AUGUR)
-      .map((r) => ({ label: r.name, icon: 'blocks', detail: r.state === 'up-to-date' ? r.running : `${r.running} · ${r.offered ?? ''}`.replace(/ · $/, ''), path: pathOf({ page: 'app', app: r.id }) }));
+      .map((r) => ({ label: r.name, icon: 'apps', detail: r.state === 'up-to-date' ? r.running : `${r.running} · ${r.offered ?? ''}`.replace(/ · $/, ''), path: pathOf({ page: 'app', app: r.id }) }));
     const key = JSON.stringify(items);
     if (key !== under) {
       under = key;

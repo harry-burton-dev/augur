@@ -1,6 +1,6 @@
 import type { AppContext, FrameState, PlaceItem, RemoteElement, RemoteNode } from '@augur/mfe-sdk/sdk3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppInstalls, AppJob, Overview, OverviewUnit, PlatformUpdates } from '../model/types.js';
+import type { AppInstalls, AppJob, Overview, OverviewUnit, PlatformUpdates } from './model/types.js';
 import start, { COMMANDS, PLACE_APPS } from './entry.js';
 import { pathOf, routeFor } from './routes.js';
 

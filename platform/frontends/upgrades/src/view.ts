@@ -1,11 +1,11 @@
 import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
-import { historyOf, tookWords, type HistoryEntry } from '../model/history.js';
-import { levelFrom } from '../model/levels.js';
-import { needsYou } from '../model/needs-you.js';
-import { formatWhen } from '../model/time.js';
-import type { OverviewUnit } from '../model/types.js';
-import { RING_WORDS } from '../model/words.js';
-import { AUGUR, rowOf, type UnitRow } from '../units.js';
+import { historyOf, tookWords, type HistoryEntry } from './model/history.js';
+import { levelFrom } from './model/levels.js';
+import { needsYou } from './model/needs-you.js';
+import { formatWhen } from './model/time.js';
+import type { OverviewUnit } from './model/types.js';
+import { RING_WORDS } from './model/words.js';
+import { AUGUR, rowOf, type UnitRow } from './units.js';
 import type { Data } from './data.js';
 import { quill } from './quill.js';
 import { pathOf, unitPath, type Route } from './routes.js';

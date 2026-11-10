@@ -1,76 +1,86 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
 import { pollEvery, type UpgradesApi } from './api.js';
-import type { AppInstalls, Overview, PlatformUpdates } from './model/types.js';
+import type { AppInstalls, AppJob, Overview, PlatformUpdates } from './model/types.js';
 
-export interface UpgradesData {
-  /** Every unit and what needs an admin, from the registry (the source Backstage reads too). */
+/** Everything Deployment shows, as last read from the registry. Earlier data stays when a read fails. */
+export interface Data {
+  /** Every unit and what needs an admin (the same source Backstage reads), and whether the caller may change things. */
   overview?: Overview;
-  /** AUGUR's releases, go-back targets and history. */
+  /** AUGUR's releases, roll-back targets and upgrade history. */
   updates?: PlatformUpdates;
   /** Installed apps' releases and jobs. */
   installs?: AppInstalls;
-  /** Why the last read failed, in words. Earlier data stays on screen. */
+  /** Every app's installs and removals, newest first, for each app's history. */
+  jobs?: AppJob[];
+  /** Why the last read failed, in words. */
   error?: string;
+  /** The app jobs couldn't be read, so each app's history says so. */
+  jobsError?: string;
   loading: boolean;
   readAt?: Date;
 }
 
+const words = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const open = (state?: string) => state === 'requested' || state === 'running';
+
+/** Whether something is under way, so the next read comes sooner. */
+export const isRunning = (d: Data): boolean =>
+  Boolean(d.overview?.units.some((u) => u.open) || open(d.updates?.upgrade?.state) || d.installs?.installed.some((a) => open(a.job?.state)));
+
 /**
- * Everything the Upgrade Centre shows, read from the registry and read again on a
- * timer: every 2 s while a job runs, every 30 s otherwise. A job keeps going on the
- * server whatever this page does, so a reload or another admin sees the same.
+ * Reads the registry, and again on a timer: every 2 s while something runs, every 30 s otherwise. A job
+ * keeps going on the server whatever this app does, so another admin, or this one after a reload,
+ * sees the same. `changed` runs after every read. `stop` ends the timer.
  */
-const wordsFor = (e: unknown) => (e instanceof Error ? e.message : String(e));
+export const reader = (api: UpgradesApi, changed: (d: Data) => void, timers: { set: typeof setTimeout; clear: typeof clearTimeout } = { set: setTimeout, clear: clearTimeout }) => {
+  let data: Data = { loading: true };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
 
-export const useUpgrades = (api: UpgradesApi) => {
-  const [data, setData] = useState<UpgradesData>({ loading: true });
-  const alive = useRef(true);
+  const put = (next: Data) => {
+    data = next;
+    if (!stopped) changed(data);
+  };
 
-  const read = useCallback(async () => {
+  const read = async () => {
     try {
-      const [overview, updates, installs] = await Promise.all([api.overview(), api.updates(), api.installs().catch(wordsFor)]);
+      const [overview, updates, installs, jobs] = await Promise.all([api.overview(), api.updates(), api.installs().catch(words), api.appJobs().catch(words)]);
       // Installs that can't be read keep the ones last read: an app's page would otherwise say it's up to date.
-      if (alive.current) setData((d) => (typeof installs === 'string' ? { ...d, overview, updates, loading: false, error: installs } : { overview, updates, installs, loading: false, readAt: new Date() }));
+      put({
+        overview,
+        updates,
+        installs: typeof installs === 'string' ? data.installs : installs,
+        jobs: typeof jobs === 'string' ? data.jobs : jobs,
+        ...(typeof installs === 'string' ? { error: `The apps’ versions couldn’t be read: ${installs}` } : {}),
+        ...(typeof jobs === 'string' ? { jobsError: jobs } : {}),
+        loading: false,
+        readAt: new Date(),
+      });
     } catch (e) {
-      if (alive.current) setData((d) => ({ ...d, loading: false, error: wordsFor(e) }));
+      put({ ...data, loading: false, error: words(e) });
     }
-  }, [api]);
+  };
 
-  const open = (state?: string) => state === 'requested' || state === 'running';
-  const running = Boolean(data.overview?.units.some((u) => u.open) || open(data.updates?.upgrade?.state) || data.installs?.installed.some((a) => open(a.job?.state)));
+  const schedule = () => {
+    if (stopped) return;
+    timers.clear(timer);
+    timer = timers.set(() => void read().then(schedule), pollEvery(isRunning(data)));
+  };
 
-  useEffect(() => {
-    alive.current = true;
-    void read();
-    return () => {
-      alive.current = false;
-    };
-  }, [read]);
-
-  useEffect(() => {
-    const timer = setInterval(() => void read(), pollEvery(running));
-    return () => clearInterval(timer);
-  }, [read, running]);
-
-  /** Takes the overview a change answered with, so the page shows it at once. */
-  const took = useCallback((overview: Overview) => {
-    if (alive.current) setData((d) => ({ ...d, overview, error: undefined, readAt: new Date() }));
-  }, []);
-
-  /** Takes AUGUR's updates a change answered with (an upgrade asked for, cancelled or going back), then reads the rest again. */
-  const tookUpdates = useCallback(
-    (updates: PlatformUpdates) => {
-      if (alive.current) setData((d) => ({ ...d, updates, error: undefined, readAt: new Date() }));
-      void read();
+  return {
+    get data() {
+      return data;
     },
-    [read],
-  );
-
-  const checkNow = useCallback(async () => {
-    const updates = await api.checkNow();
-    if (alive.current) setData((d) => ({ ...d, updates, error: undefined, readAt: new Date() }));
-    void read();
-  }, [api, read]);
-
-  return { data, running, reload: read, checkNow, took, tookUpdates };
+    /** Reads now, then keeps reading. */
+    start: () => read().then(schedule),
+    /** Reads now: after a change, so the page shows it at once. */
+    again: () => read().then(schedule),
+    /** Takes what a change answered with, so the page shows it before the next read. */
+    took: (patch: Partial<Pick<Data, 'overview' | 'updates'>>) => put({ ...data, ...patch, error: undefined, readAt: new Date() }),
+    stop: () => {
+      stopped = true;
+      timers.clear(timer);
+    },
+  };
 };
+
+export type Reader = ReturnType<typeof reader>;

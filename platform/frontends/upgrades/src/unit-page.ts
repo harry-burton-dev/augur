@@ -1,17 +1,16 @@
 import type { RemoteListItem } from '@augur/app-kit/remote';
 import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
-import { endingOf, flowSteps } from '../model/flow.js';
-import { haltedInstallWhyNot, REASON_MAX } from '../model/halted.js';
-import { levelFrom } from '../model/levels.js';
-import type { Gate } from '../model/roles.js';
-import type { AppJob, GoBackTarget, InstalledApp, OverviewUnit, Upgrade } from '../model/types.js';
-import { AUGUR } from '../units.js';
+import { endingOf, flowSteps } from './model/flow.js';
+import { haltedInstallWhyNot, REASON_MAX } from './model/halted.js';
+import { levelFrom } from './model/levels.js';
+import { gateFor } from './model/roles.js';
+import type { AppJob, GoBackTarget, InstalledApp, OverviewUnit, Upgrade } from './model/types.js';
+import { AUGUR } from './units.js';
 import { quill } from './quill.js';
 import { pathOf, type Ask } from './routes.js';
 import { entriesOf, historyList, rowsOf, statusOf, when, type View } from './view.js';
 import { CHANNEL, NEEDS_DEPLOYMENT_ADMIN, STEP } from './words.js';
 
-const gateOf = (v: View): Gate => (v.may ? { allowed: true } : { allowed: false, requiredRole: 'deployment-admin', reason: NEEDS_DEPLOYMENT_ADMIN });
 const busy = (state?: string) => state === 'requested' || state === 'running';
 const levelWord = (running: string, to: string) => ({ patch: 'Patch', minor: 'Minor', major: 'Major' })[levelFrom(running, to)];
 
@@ -93,7 +92,7 @@ export const augurPage = (v: View, ask?: Ask): RemoteNode => {
   const u = v.data.updates!;
   const unit = v.data.overview!.units.find((x) => x.unit === AUGUR);
   if (!unit) return quill('quill-state', { kind: 'error', heading: 'The registry didn’t list AUGUR', body: 'Check it with `pc logs registry`.' });
-  const gate = gateOf(v);
+  const gate = gateFor(v.may);
   const running = u.running.version;
   const underWay = busy(u.upgrade?.state);
   const releases = [...(u.available ? [u.available] : []), ...u.newer.filter((r) => r.version !== u.available?.version)];

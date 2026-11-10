@@ -114,7 +114,7 @@ kind: Component
 metadata:
   name: augur-upgrades
   title: "@augur/upgrades"
-  description: "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL."
+  description: "Deployment (at /upgrades): what this deployment runs, what's available, and upgrading, rolling back and the update policy, for AUGUR and each app. A contract 3 app: one ES module the shell runs in a web worker."
   annotations:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/upgrades/
