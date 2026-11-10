@@ -118,7 +118,7 @@ describe('garageAdmin', () => {
     const { garage } = fakeGarage({ roles: [], buckets: { notes: 'b-notes' }, keys: [], deleted: [keyIdFor(secret)] });
     await expect(garage.ensureKey('notes', secret, 'b-notes')).rejects.toMatchObject({
       code: 'KeyAlreadyExists',
-      message: `key ${keyIdFor(secret)} was deleted from the object store before, and a deleted key's id can't be used again: a new secret makes a new key.`,
+      message: expect.stringMatching(new RegExp(`^key ${keyIdFor(secret)} was deleted from the object store before, and a deleted key's id can't be used again: a new secret makes a new key\\. \\(Garage ImportKey: 409 Key ${keyIdFor(secret)} already exists`)),
     });
   });
 
