@@ -8,6 +8,7 @@ import { callerFromHeaders, health, packageVersion, Problem, problemDetails, ser
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type Effects } from './actions.ts';
 import { describeApi } from './contract.ts';
 import { EXPORT_TYPES, exportFloor, type ExportFormat } from './export.ts';
+import { BASE_CLASSES } from './profile.ts';
 import {
   entityBeliefs,
   entityEvents,
@@ -157,7 +158,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
 
       app.get('/meta', { schema: { summary: 'The majors this service speaks, its version and the ontology version', response: { 200: ref(Meta) } } }, async () => {
         const { rows } = await store.query<{ v: number }>('select max(version)::int as v from kg.ontology_versions');
-        return { apiMajor: 1 as const, version, ontology: { base: BASE_PROFILE, version: String(rows[0]?.v ?? 1) }, speaks: { knowledge: [1] } };
+        return { apiMajor: 1 as const, version, ontology: { base: BASE_PROFILE, version: String(rows[0]?.v ?? 1), baseClasses: [...BASE_CLASSES] }, speaks: { knowledge: [1] } };
       });
 
       app.get(
@@ -201,7 +202,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
             params: ActionParams,
             querystring: Type.Object({ dryRun: Type.Optional(Type.Boolean({ default: false })) }),
             headers: Type.Object({ 'idempotency-key': Type.Optional(Type.String({ description: '8 to 200 characters, unique per intended change.' })) }),
-            body: Type.Unsafe<unknown>({ type: 'object', description: 'The input schema of the action in GET /actions.' }),
+            body: Type.Unsafe<unknown>({ type: 'object', additionalProperties: true, description: 'The input schema of the action in GET /actions.' }),
             response: {
               200: ref(ActionResult),
               400: problem('The Idempotency-Key header is missing or malformed, or no floor is named'),
