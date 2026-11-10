@@ -463,6 +463,44 @@ describe('files and the canvas', () => {
     expect(new TextDecoder().decode((dropped[0] as { bytes: ArrayBuffer }).bytes)).toBe('A');
   });
 
+  it('hands a file button’s files to the app as a drop, and says it can’t take them before the app has a handler', async () => {
+    const { self, dropped } = start();
+    await flush();
+    self().mutate('screen', [[0, '~', { id: 'b1', type: 1, element: 'quill-file-button', properties: { label: 'Add a document' }, attributes: {}, eventListeners: {}, children: [] }, 1]]);
+    await flush();
+    expect(stage.textContent).toContain('This screen can’t take files from here.');
+    self().post('files.drops', true);
+    await flush();
+    expect(stage.textContent).not.toContain('This screen can’t take files from here.');
+    const input = stage.querySelector<HTMLInputElement>('.quill-file-button input[type="file"]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['B'], 'berth.pdf', { type: 'application/pdf' })], configurable: true });
+    act(() => void input.dispatchEvent(new Event('change', { bubbles: true })));
+    await flush();
+    await flush();
+    expect(dropped).toMatchObject([{ name: 'berth.pdf', type: 'application/pdf' }]);
+  });
+
+  it('fetches a reader’s pictures itself, only under the app’s own API, and frees them when the app stops', async () => {
+    const fetchImpl = vi.fn(async () => new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } })) as unknown as typeof fetch;
+    const made: string[] = [];
+    const freed: string[] = [];
+    Object.assign(URL, { createObjectURL: () => (made.push(`blob:p${made.length}`), made[made.length - 1]!), revokeObjectURL: (u: string) => void freed.push(u) });
+    const { self, ctx } = start(filer, { fetchImpl });
+    await flush();
+    const markdown = 'Text.\n\n![Plan](documents/d1/pictures/plan.png)\n\n![Away](https://evil.example/x.png)\n\n![Up](../admin/x.png)';
+    self().mutate('screen', [[0, '~', { id: 'r1', type: 1, element: 'quill-reader', properties: { markdown }, attributes: {}, eventListeners: {}, children: [] }, 1]]);
+    for (let i = 0; i < 20 && stage.querySelectorAll('.quill-reader-missing').length < 2; i++) await act(async () => void (await new Promise((r) => setTimeout(r, 10))));
+    const calls = fetched(ctx);
+    expect(calls.map(([path]) => path)).toEqual(['/api/notes/documents/d1/pictures/plan.png']);
+    expect(new Headers(calls[0]![1].headers).get('authorization')).toBe('Bearer the-token');
+    expect(new Headers(calls[0]![1].headers).get('x-augur-app')).toBe('notes');
+    expect(stage.querySelector('.quill-reader img')?.getAttribute('src')).toBe('blob:p0');
+    expect(stage.querySelectorAll('.quill-reader-missing')).toHaveLength(2);
+    act(() => mounter.unmount());
+    await flush();
+    expect(freed).toEqual(['blob:p0']);
+  });
+
   it('opens the canvas as a sandboxed frame with an opaque origin in place of the screen, and stops it with the app', async () => {
     const { self } = start();
     await flush();
