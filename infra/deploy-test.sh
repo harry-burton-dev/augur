@@ -5,6 +5,7 @@
 #   infra/deploy-test.sh fresh                    # a new server on the images built from this checkout
 #   infra/deploy-test.sh upgrade <from-version>   # that release first, with data, then this checkout, then back
 #   infra/deploy-test.sh broken                   # a fresh install with the updater, broken on purpose: its check must see it
+#   STARTER_RELEASE=<file> infra/deploy-test.sh broken   # and then an app installed through the app runner (below)
 #   THEN='<command>' infra/deploy-test.sh fresh   # a fresh install that allows sample data, with <command> run against it
 #
 # The release under test is PLATFORM_VERSION=$LOCAL_TAG: a published release's version, whose images
@@ -23,6 +24,13 @@ local_tag=${LOCAL_TAG:-ci}
 port=${WEB_PORT:-8088}
 timeout=${READY_TIMEOUT:-300}
 work=$(mktemp -d)
+# A shell as root on the deploy folder (at /d), for the files containers write as their own users: in Postgres's
+# image, which the test pulls anyway. It reads the compose file, so only once .env is written.
+helper_image=''
+as_root() {
+  if [ -z "$helper_image" ]; then helper_image=$(docker compose -f "$deploy/compose.yml" --env-file "$deploy/.env" config --format json | jq -er .services.postgres.image); fi
+  docker run --rm -i -v "$deploy:/d" --entrypoint sh "$helper_image" -c "$1"
+}
 
 # storage reads each app's secrets from infra/deploy/.env itself, so the test's settings go there.
 # A real .env on this machine is put aside and put back afterwards.
@@ -33,9 +41,19 @@ cleanup() {
     echo "::group::State when it failed"
     pc ps -a || true
     pc logs --no-color --tail 80 || true
+    if [ -n "${starter_id:-}" ]; then
+      for app in $(docker ps -aq --filter "label=augur.app=$starter_id"); do docker logs --tail 40 "$app" 2>&1 | sed "s|^|$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$app") |" || true; done
+    fi
     echo "::endgroup::"
   fi
+  if [ -n "${starter_id:-}" ]; then starter_cleanup; fi
   pc down -v --remove-orphans >/dev/null 2>&1 || true
+  # Its networks once AUGUR's own containers, which the runner joined to them, are gone.
+  if [ -n "${starter_id:-}" ]; then docker network ls -q --filter "label=augur.app=$starter_id" | xargs -r docker network rm >/dev/null 2>&1 || true; fi
+  if [ -n "${read_key_written:-}" ]; then
+    as_root 'rm -f /d/secrets/github-read-key' >/dev/null 2>&1 || true
+    if [ -e "$work/github-read-key.saved" ]; then as_root 'cat > /d/secrets/github-read-key' < "$work/github-read-key.saved" >/dev/null 2>&1 || true; fi
+  fi
   rm -f "$deploy/.env"
   if [ -e "$work/env.saved" ]; then mv "$work/env.saved" "$deploy/.env"; fi
   # The backup container writes its files as its own user, so a container removes them.
@@ -44,7 +62,14 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
-
+# What the app runner made of the test's app, which `pc down` doesn't know of: its containers and volumes (each
+# labelled augur.app=<id>), and the apps folder, which the test made. Nothing of any other app: the test never
+# starts when this machine has anything of that app already, or runs apps of its own.
+starter_cleanup() {
+  docker ps -aq --filter "label=augur.app=$starter_id" | xargs -r docker rm -f >/dev/null 2>&1 || true
+  docker volume ls -q --filter "label=augur.app=$starter_id" | xargs -r docker volume rm >/dev/null 2>&1 || true
+  if [ -n "$apps_made" ]; then as_root 'rm -rf /d/apps' >/dev/null 2>&1 || true; fi
+}
 # Every secret in .env.example gets a new random value; the rest are what a small server would set.
 # An upgrade starts from the release's own deploy files, as a server that checked out its tag has them.
 dir=$deploy
@@ -77,9 +102,87 @@ if [ -n "${THEN:-}" ]; then echo 'SEED_ALLOWED=true' >> "$deploy/.env"; fi
 
 # Broken mode runs the updater too (its profile), which reads the deploy folder at its path here and
 # signs in with its own secret, as on a server that turned it on (docs/upgrade.md, "The updater").
+# The updater runs Compose on the deploy folder itself, so .env names this test's project, as `-p` does here.
 if [ "$mode" = broken ]; then
   export COMPOSE_PROFILES=updater
-  printf 'COMPOSE_PROFILES=updater\nPLATFORM_DIR=%s\nUPDATER_CLIENT_SECRET=%s\n' "$deploy" "$(openssl rand -hex 32)" >> "$deploy/.env"
+  printf 'COMPOSE_PROFILES=updater\nCOMPOSE_PROJECT_NAME=%s\nPLATFORM_DIR=%s\nUPDATER_CLIENT_SECRET=%s\n' "$project" "$deploy" "$(openssl rand -hex 32)" >> "$deploy/.env"
+fi
+
+# Sets one setting in .env, in place if it's there already.
+set_env() {
+  if grep -q "^$1=" "$deploy/.env"; then sed -i "s|^$1=.*|$1=$2|" "$deploy/.env"; else echo "$1=$2" >> "$deploy/.env"; fi
+}
+# Said plainly, and as a notice on the run in GitHub Actions.
+notice() { if [ "${GITHUB_ACTIONS:-}" = true ]; then echo "::notice::$1" >&2; else echo "$1" >&2; fi; }
+
+# Broken mode then installs an app through the app runner (the updater, with APP_SECRETS_KEY): STARTER_RELEASE is
+# its release file, which the Deploy test workflow builds from the app template (Starter) and signs as itself, only
+# on a branch the runner takes signatures from (main, release/<unit>-<major>.<minor>). The app is opened in the browser, its
+# parts are stopped and its pane must say it failed, then it is removed and its sign-in must be refused. Its id and
+# parts come from the release file. What keeps it from running here fails the run in GitHub Actions; by hand it is said, and the rest runs.
+starter_id=''
+starter_skip=''
+apps_made=''
+# Why the app runner's part can't run here. With STARTER_RELEASE set in GitHub Actions, that fails the run: the
+# workflow asked for it. Elsewhere (by hand) it is said, and the rest of the mode runs.
+cannot_run() {
+  if [ "${GITHUB_ACTIONS:-}" = true ] && [ -n "${STARTER_RELEASE:-}" ]; then
+    echo "::error::The app runner's part of the deploy test can't run: $1"
+    exit 1
+  fi
+  starter_skip=$1
+}
+# The app's containers, volumes and networks: the runner labels each with augur.app=<id>.
+app_things() {
+  docker ps -aq --filter "label=augur.app=$1"
+  docker volume ls -q --filter "label=augur.app=$1"
+  docker network ls -q --filter "label=augur.app=$1"
+}
+if [ "$mode" = broken ]; then
+  if [ -z "${STARTER_RELEASE:-}" ]; then
+    if [ "${STARTER_SIGNED:-}" = false ]; then
+      starter_skip="Starter isn't built on ${GITHUB_REF:-this ref}: the app runner trusts only signatures made on main or a release/<unit>-<major>.<minor> branch."
+    elif [ -n "${STARTER_BUILD:-}" ]; then
+      # Signed here, so it should have been built: the starter job says why it wasn't.
+      echo "::error::The app runner's part of the deploy test can't run: building Starter ended ${STARTER_BUILD} (its job's log says why)."
+      exit 1
+    else
+      starter_skip="STARTER_RELEASE isn't set, so there's no app to install (the Deploy test workflow builds Starter and sets it)."
+    fi
+  elif [ ! -s "$STARTER_RELEASE" ]; then
+    echo "STARTER_RELEASE names $STARTER_RELEASE, which isn't there or is empty." >&2
+    exit 1
+  elif [ "${BROWSER_CHECK:-1}" != 1 ]; then
+    cannot_run "BROWSER_CHECK=0, and opening the app is half of it."
+  elif [ -e "$deploy/apps" ]; then
+    cannot_run "$deploy/apps is there already: this deploy folder runs apps of its own, which the test leaves alone."
+  elif [ -n "$(docker ps -aq --filter label=com.docker.compose.project=augur-apps)" ]; then
+    cannot_run "this machine already runs apps (Compose project augur-apps), which the test leaves alone."
+  elif [ -n "$(app_things "$(jq -er .id "$STARTER_RELEASE")")" ]; then
+    cannot_run "this machine has containers, volumes or networks of $(jq -r .id "$STARTER_RELEASE") already, which the test leaves alone."
+  fi
+  if [ -z "$starter_skip" ]; then
+    # Mounted into the browser check's container, so by its full path.
+    STARTER_RELEASE=$(realpath "$STARTER_RELEASE")
+    starter_id=$(jq -er .id "$STARTER_RELEASE")
+    # Trust exactly the workflow the release says signed it: the runner still checks every signature names it.
+    set_env APP_SECRETS_KEY "$(openssl rand -hex 32)"
+    set_env APP_PUBLISHERS "$(jq -er '.signer | "\(.repository)/\(.workflow)"' "$STARTER_RELEASE")"
+    # A beta is taken only by a preview server.
+    set_env SERVER_RING preview
+    # Private images: the read key the runner pulls and checks them with (STARTER_READ_KEY, and whose it is).
+    if [ -n "${STARTER_READ_KEY:-}" ]; then
+      set_env GITHUB_READ_USER "${STARTER_READ_USER:?STARTER_READ_KEY needs STARTER_READ_USER, the account it belongs to}"
+      # Compose may have made secrets/ as root; the updater reads it as its own user.
+      if [ -e "$deploy/secrets/github-read-key" ]; then as_root 'cat /d/secrets/github-read-key' > "$work/github-read-key.saved"; fi
+      read_key_written=1
+      printf %s "$STARTER_READ_KEY" | as_root 'mkdir -p /d/secrets && cat > /d/secrets/github-read-key && chmod 644 /d/secrets/github-read-key'
+    fi
+    # The runner writes the apps' project (compose.yml, state.json, files/) here as the updater's user. It wasn't
+    # there (above), so the test made it and removes it.
+    as_root 'mkdir -p /d/apps && chown 1000:1000 /d/apps && chmod 700 /d/apps'
+    apps_made=1
+  fi
 fi
 
 cat > "$work/compose.test.yml" <<EOF
@@ -271,16 +374,86 @@ up() {
 # the kit from KIT_URL (infra/deploy-browser-check.mjs, in Playwright's own image). BROWSER_CHECK=0 skips it;
 # BROWSER_CHECK_OUT keeps its screenshots.
 PLAYWRIGHT=1.56.1
+# Playwright's container running the check, with $1 as its output folder; the rest are docker run's options, then `--`
+# and the check's app ids.
+playwright() {
+  local shots=$1 env=$deploy/.env options=()
+  shift
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do options+=("$1"); shift; done
+  shift
+  docker run --rm --network host --ipc=host -e OUT=/out -v "$shots:/out" "${options[@]}" \
+    -v "$here/deploy-browser-check.mjs:/check/check.mjs:ro" "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" \
+    sh -c 'cd /check && npm install --silent --no-save --no-audit --no-fund "playwright@$0" >/dev/null && node check.mjs "$@"' \
+    "$PLAYWRIGHT" "http://localhost:$port" "$(sed -n 's/^PLATFORM_ADMIN_USER=//p' "$env")" "$(sed -n 's/^PLATFORM_ADMIN_PASSWORD=//p' "$env")" "$@" >&2
+}
 browser_check() {
   # It changes the first admin's password, which THEN's command still has to change itself.
   [ "${BROWSER_CHECK:-1}" = 1 ] && [ -z "${THEN:-}" ] || return 0
-  local env=$deploy/.env apps shots="${BROWSER_CHECK_OUT:-$work/browser-check}"
+  local apps shots="${BROWSER_CHECK_OUT:-$work/browser-check}"
   apps=home
   mkdir -p "$shots"
-  docker run --rm --network host --ipc=host -e OUT=/out -v "$shots:/out" \
-    -v "$here/deploy-browser-check.mjs:/check/check.mjs:ro" "mcr.microsoft.com/playwright:v$PLAYWRIGHT-noble" \
-    sh -c 'cd /check && npm install --silent --no-save --no-audit --no-fund "playwright@$0" >/dev/null && node check.mjs "$@"' \
-    "$PLAYWRIGHT" "http://localhost:$port" "$(sed -n 's/^PLATFORM_ADMIN_USER=//p' "$env")" "$(sed -n 's/^PLATFORM_ADMIN_PASSWORD=//p' "$env")" $apps >&2
+  playwright "$shots" -- $apps
+}
+
+# The app's parts that keep running (its service and worker parts; a job part has run to its end), as the running
+# containers the runner labels with the app and the part (augur.app, augur.part), matched by name exactly.
+app_containers() {
+  local id=$1 parts container part
+  parts=$(jq -r '.parts[] | select(.metadata.annotations["augur.dev/part"] // "worker" | . != "job") | .metadata.name' "$STARTER_RELEASE")
+  docker ps --filter "label=augur.app=$id" --filter label=com.docker.compose.project=augur-apps --format '{{.ID}} {{.Label "augur.part"}}' |
+    while read -r container part; do
+      if grep -qxF -- "$part" <<<"$parts"; then echo "$container"; fi
+    done
+}
+
+# The app's own sign-in secret, as the runner works it out from APP_SECRETS_KEY: with the release's own updater code
+# (dist/runner.js, appSecrets), in its container, from the .env it reads.
+app_secret() {
+  pc exec -T -e APP="$1" updater node --input-type=module -e '
+    const { readFileSync } = await import("node:fs");
+    const { appSecrets } = await import(new URL("dist/runner.js", `file://${process.cwd()}/`).href);
+    const secrets = appSecrets(readFileSync(`${process.env.PLATFORM_DIR}/.env`, "utf8"), process.env.APP);
+    if (!secrets) process.exit(3);
+    process.stdout.write(secrets.signIn);'
+}
+
+# Broken mode's app (STARTER_RELEASE, above): the browser check installs it as the first admin and asks for its parts
+# to be stopped by writing <id>.stop; they are stopped here, which writes <id>.stopped ("ok", or why not).
+through_the_runner() {
+  if [ -n "$starter_skip" ]; then notice "The app runner's part of the deploy test was skipped: $starter_skip"; return 0; fi
+  # A release from before the runner took contract 3 releases can't install it: said, not failed, as broken mode does
+  # for a release from before the check command, so testing an older release by hand still passes.
+  if ! pc exec -T updater node -e 'process.exit(require("fs").readFileSync("dist/runner.js", "utf8").includes("export const appSecrets") ? 0 : 3)' >/dev/null 2>&1; then
+    starter_skip="this release's updater can't install a release on app contract 3."
+    notice "The app runner's part of the deploy test was skipped: $starter_skip"
+    return 0
+  fi
+  local id=$starter_id name secret issuer shots="${BROWSER_CHECK_OUT:-$work/browser-check}" check status=0 containers=()
+  name=$(jq -r '.manifest.name // .id' "$STARTER_RELEASE")
+  secret=$(app_secret "$id")
+  issuer=$(pc config --format json | jq -er '.services.updater.environment.OIDC_ISSUER')
+  mkdir -p "$shots"
+  rm -f "$shots/$id.stop" "$shots/$id.stopped"
+  echo "Installing $name ($id) through the app runner, as the first admin." >&2
+  playwright "$shots" -e APP_RELEASE=/check/release.json -e "ISSUER=$issuer" -e "APP_SECRET=$secret" -v "$STARTER_RELEASE:/check/release.json:ro" -- home &
+  check=$!
+  while kill -0 "$check" 2>/dev/null; do
+    if [ -e "$shots/$id.stop" ] && [ ! -e "$shots/$id.stopped" ]; then
+      mapfile -t containers < <(app_containers "$id")
+      if [ "${#containers[@]}" = 0 ]; then
+        echo "no running container of $id's service or worker parts" > "$shots/$id.stopped"
+      elif docker stop "${containers[@]}" >&2; then
+        echo "Stopped $name's ${#containers[@]} running part(s), as a crash would." >&2
+        echo ok > "$shots/$id.stopped"
+      else
+        echo "docker stop failed" > "$shots/$id.stopped"
+      fi
+    fi
+    sleep 2
+  done
+  wait "$check" || status=$?
+  if [ "$status" != 0 ]; then echo "$name through the app runner: the browser check failed." >&2; return 1; fi
+  echo "$name was installed, opened, stopped (its pane said so) and removed through the app runner, and its sign-in went with it." >&2
 }
 
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
@@ -430,6 +603,9 @@ case "$mode" in
     counted_apart
     pc start identity >&2
     check_until "With identity back" pass
+    no_restarts
+    through_the_runner
+    # Installing and removing an app leaves AUGUR's own parts as they were.
     no_restarts
     ;;
   *) echo "usage: infra/deploy-test.sh fresh | upgrade <from-version> | broken" >&2; exit 2 ;;
