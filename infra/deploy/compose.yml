@@ -467,6 +467,8 @@ services:
       SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}"
       # Its own login, owning only the registry schema.
       DATABASE_URL: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # Asked at install what the knowledge graph offers apps.
+      KNOWLEDGE_URL: http://knowledge:8086
       # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
       # for new AUGUR and app releases with it, and the updater pulls with it (docs/upgrade.md).
       GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
@@ -593,6 +595,8 @@ services:
     environment:
       <<: *env
       PORT: 8086
+      KNOWLEDGE_PAGE_LIMIT: ${KNOWLEDGE_PAGE_LIMIT:-100}
+      KNOWLEDGE_SUBGRAPH_DEPTH: ${KNOWLEDGE_SUBGRAPH_DEPTH:-3}
       SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
       DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
     depends_on:

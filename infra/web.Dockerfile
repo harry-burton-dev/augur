@@ -26,7 +26,7 @@ RUN pnpm --filter "@augur/shell..." --filter "@augur/home..." --filter "@augur/a
  && cp -r platform/frontends/shell/dist/. /site/ \
  && cp -r platform/frontends/home/dist /site/apps/home \
  && cp -r platform/frontends/admin/dist /site/apps/admin \
- && cp -r platform/frontends/upgrades/dist /site/apps/upgrades \
+ && mkdir -p /site/apps/upgrades && cp -r platform/frontends/upgrades/dist "/site/apps/upgrades/$(node -p "require('./platform/frontends/upgrades/package.json').version")" \
  && mkdir -p /site/legal && cp LICENSE /site/legal/licence.txt && cp THIRD_PARTY_NOTICES.md /site/legal/third-party.txt \
  && mv /site/index.template.html /index.template.html \
  && node scripts/kit.mjs check

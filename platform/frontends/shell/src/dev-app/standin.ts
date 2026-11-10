@@ -44,6 +44,7 @@ export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/ho
  */
 export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...args) => fetch(...args), also: AppManifestEntry[] = []): typeof fetch => {
   let preferences: unknown = {};
+  const account = devAccount();
   const inbox = devInbox(app);
   const catalogue = [...(app.id === devHome.id ? [app] : [devHome, app]), ...also.filter((a) => a.id !== app.id && a.id !== devHome.id)];
   return async (input, init) => {
@@ -54,6 +55,10 @@ export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...arg
       if (init?.method !== 'PUT') return json(preferences);
       preferences = JSON.parse(String(init.body ?? '{}'));
       return new Response(null, { status: 204 });
+    }
+    if (path.startsWith('/api/identity/v1/me/')) {
+      const said = account.answer(path.slice('/api/identity/v1/me'.length), init);
+      if (said) return said;
     }
     if (path === '/api/events/v1/notifications') return json([]);
     if (path === '/api/events/v1/notifications/stream') {
@@ -181,4 +186,65 @@ export const devInbox = (app: AppManifestEntry) => {
     return json(item);
   };
   return { answer, changes };
+};
+
+/**
+ * The stand-in for identity's account API (`/v1/me/*`), so the Account dialog opens with something in
+ * each section: a profile, a password and one code app, two places signed in, and a fortnight of
+ * sign-ins with one failed try. Changes to the profile and a request to leave last until the page reloads.
+ */
+export const devAccount = (now = Date.now()) => {
+  const at = (hoursAgo: number) => new Date(now - hoursAgo * 3_600_000).toISOString();
+  let profile = { username: 'dev.person', firstName: 'Dev', lastName: 'Person', email: 'dev.person@example.test', emailVerified: true, jobTitle: 'Developer', managed: [] as string[], languages: ['en'] };
+  let leave: { requestedAt: string; note?: string } | null = null;
+  const security = {
+    password: { set: true, createdAt: at(24 * 9) },
+    codeApps: [{ id: 'dev-otp', type: 'otp', label: 'Phone', createdAt: at(24 * 8), removeAction: 'delete_credential:dev-otp', removable: true }],
+    passkeys: [],
+    recoveryCodes: null,
+    twoStep: { required: false, set: true },
+    linked: [],
+    canLink: [],
+    actions: [
+      { id: 'password', action: 'UPDATE_PASSWORD', available: true },
+      { id: 'code-app', action: 'CONFIGURE_TOTP', available: true },
+      { id: 'passkey', action: 'webauthn-register-passwordless', available: true },
+      { id: 'recovery-codes', action: 'CONFIGURE_RECOVERY_AUTHN_CODES', available: true },
+      { id: 'email', action: 'UPDATE_EMAIL', available: true },
+    ],
+    emails: { on: false, address: profile.email, verified: true },
+  };
+  let sessions = [
+    { id: 'dev-session-1', startedAt: at(2), lastSeenAt: at(0), ipAddress: '192.0.2.10', clients: ['shell'] },
+    { id: 'dev-session-2', startedAt: at(50), lastSeenAt: at(30), ipAddress: '192.0.2.77', clients: ['shell'] },
+  ];
+  const signIns = Array.from({ length: 12 }, (_, i) =>
+    i === 3
+      ? { time: at(i * 26 + 1), kind: 'failed', event: 'LOGIN_ERROR', error: 'invalid_user_credentials', ipAddress: '203.0.113.9', client: 'shell' }
+      : { time: at(i * 26 + 1), kind: 'signed-in', event: 'LOGIN', ipAddress: '192.0.2.10', client: 'shell' },
+  );
+  const answer = (path: string, init?: RequestInit): Response | undefined => {
+    const method = init?.method ?? 'GET';
+    if (path === '/profile') {
+      if (method === 'PATCH') profile = { ...profile, ...(JSON.parse(String(init?.body ?? '{}')) as object) };
+      return json(profile);
+    }
+    if (path === '/security') return json(security);
+    if (path === '/sessions' && method === 'GET') return json({ sessions });
+    if (path.startsWith('/sessions')) {
+      const one = path.split('/')[2];
+      const ended = one ? sessions.filter((x) => x.id === decodeURIComponent(one)).length : sessions.length;
+      sessions = one ? sessions.filter((x) => x.id !== decodeURIComponent(one)) : [];
+      return json({ ended });
+    }
+    if (path === '/sign-ins') return json({ signIns });
+    if (path === '/leave') {
+      if (method === 'POST') leave = { requestedAt: new Date(now).toISOString(), ...(JSON.parse(String(init?.body ?? '{}')) as { note?: string }) };
+      if (method === 'DELETE') leave = null;
+      return method === 'DELETE' ? new Response(null, { status: 204 }) : json(leave ?? {});
+    }
+    if (path === '/data') return new Response(JSON.stringify({ profile }), { headers: { 'content-type': 'application/json', 'content-disposition': 'attachment; filename="my-data.json"' } });
+    return undefined;
+  };
+  return { answer };
 };

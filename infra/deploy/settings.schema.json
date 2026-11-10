@@ -408,6 +408,24 @@
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
+    "KNOWLEDGE_PAGE_LIMIT": {
+      "type": "string",
+      "description": "The most one page of a knowledge graph read gives, whatever the caller asks for.",
+      "default": "100",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_SUBGRAPH_DEPTH": {
+      "type": "string",
+      "description": "The most hops a knowledge graph subgraph read goes from its entity, whatever the caller asks for.",
+      "default": "3",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
     "UPDATER_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,
@@ -1206,7 +1224,8 @@
         "knowledge"
       ],
       "x-via": {
-        "gateway": "default"
+        "gateway": "default",
+        "permissions": "infra/docker-compose.yml"
       }
     },
     "DATABASE_URL": {
@@ -1267,7 +1286,8 @@
       "description": "Where the model gateway is.",
       "x-internal": "compose",
       "x-services": [
-        "gateway"
+        "gateway",
+        "knowledge"
       ]
     },
     "KNOWLEDGE_URL": {
@@ -1275,7 +1295,8 @@
       "description": "Where the knowledge graph service is.",
       "x-internal": "compose",
       "x-services": [
-        "gateway"
+        "gateway",
+        "registry"
       ]
     },
     "GATEWAY_URL": {
@@ -1826,6 +1847,32 @@
       "x-docs": "docs/observability.md#turn-it-off",
       "x-via": {
         "updater": ".env"
+      }
+    },
+    "OPENFGA_URL": {
+      "type": "string",
+      "description": "Where the permissions service reaches OpenFGA, which holds the relationships it answers from (ADR 0085).",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
+      }
+    },
+    "OPENFGA_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "OpenFGA's preshared key, which the permissions service sends when OpenFGA is set to need one.",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "default"
+      }
+    },
+    "PERMISSIONS_STORE": {
+      "type": "string",
+      "description": "The OpenFGA store this deployment's permissions are kept in.",
+      "default": "augur",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
       }
     }
   }

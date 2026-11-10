@@ -1,6 +1,7 @@
 // What the generated contract still lacks against draft 4's openapi.yaml, the seam's target (dev plan, PR 2).
 // The list is written out here so it can only shrink on purpose: PR 3 empties it, and from then on the
-// generated contract is the source and oasdiff guards it. A path or a required field added to the service
+// generated contract is the source and oasdiff guards it. The inputs of actions still to come (LATER) go with
+// the pull request that adds each action. A path or a required field added to the service
 // makes this fail until it is taken off the list.
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -14,6 +15,12 @@ const target = parse(readFileSync(new URL('./fixtures/draft4-openapi.yaml', impo
 
 /** AUGUR's name for a field draft 4 named otherwise: every AUGUR service's problems carry `reason` (service kit). */
 const SAME = new Map([['Problem.code', 'Problem.reason']]);
+/**
+ * What draft 4 asks for that the seam leaves out on purpose. A floor's name is identity's: the shell already
+ * has it (/me/workspaces), and the service, asking identity as itself, is never told a personal floor's.
+ * Retain takes either what was extracted or the text to extract from (PR 5), so neither half is required.
+ */
+const ON_PURPOSE = new Set(['Floor.name', 'RetainInput.entities', 'RetainInput.observations']);
 /** Draft 4 mirrors each action's input under components; here the catalogue is their only source. */
 const pascal = (name: string) => name.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
 const inputs = () => CATALOGUE.flatMap((a) => ((a.input as { required?: string[] }).required ?? []).map((f) => `${pascal(a.name)}Input.${f}`));
@@ -25,58 +32,23 @@ const surface = (doc: Doc) => [
 ];
 
 describe('the seam against draft 4', () => {
-  it('lacks only what PR 3 adds', async () => {
+  it('lacks only the inputs of actions still to come', async () => {
     const app = await buildApp({ store: {} as never });
     await app.ready();
     const made = app.swagger() as unknown as Doc;
     made.paths = Object.fromEntries(Object.entries(made.paths).map(([p, ops]) => [p.replace(/^\/v1/, ''), ops]));
     const have = new Set([...surface(made), ...inputs()]);
-    const missing = surface(target).filter((x) => !have.has(SAME.get(x) ?? x));
+    const missing = surface(target).filter((x) => !have.has(SAME.get(x) ?? x) && !ON_PURPOSE.has(x));
     await app.close();
-    expect(missing).toEqual(GAP);
+    expect(missing).toEqual([...GAP, ...LATER]);
   });
 });
 
-/** The gap, as of PR 2. Each line goes as PR 3 adds it. */
-const GAP = [
-  // Paths
-  'get /actions/{action}',
-  'get /actions/runs/{actionId}',
-  'get /floors/{floor}/entities',
-  'get /floors/{floor}/entities/{id}/events',
-  'get /floors/{floor}/entities/{id}/subgraph',
-  'get /floors/{floor}/entities/{id}/summary',
-  'get /floors/{floor}/beliefs/{id}',
-  'get /floors/{floor}/observations/{id}',
-  'get /floors/{floor}/sources/{id}',
-  'get /floors/{floor}/queue',
-  'get /floors/{floor}/conflicts',
-  'post /floors/{floor}/query',
-  'post /floors/{floor}/recall',
-  'get /floors/{floor}/known-entities',
-  'get /floors/{floor}/lookup',
-  'get /floors/{floor}/export',
-  'get /ontology',
-  'get /ontology/shapes',
-  'get /ontology/classes/{iri}',
-  'get /ontology/candidates',
-  // Required fields of the objects those paths answer with, and the inputs of the actions still to come
-  'Floor.name',
-  'SourceRef.id', 'SourceRef.app', 'SourceRef.ref', 'SourceRef.version', 'SourceRef.title', 'SourceRef.floor', 'SourceRef.author',
-  'Observation.id', 'Observation.floor', 'Observation.source', 'Observation.subject', 'Observation.predicate', 'Observation.kind', 'Observation.quote', 'Observation.modality', 'Observation.validPrecision', 'Observation.state', 'Observation.recordedAt', 'Observation.extractor', 'Observation.ontologyVersion',
-  'Dispute.id', 'Dispute.belief', 'Dispute.by', 'Dispute.reason', 'Dispute.at', 'Dispute.state',
-  'Summary.entity', 'Summary.floor', 'Summary.state',
-  'Candidate.term', 'Candidate.kind', 'Candidate.status', 'Candidate.askedBy',
-  'Class.iri', 'Class.label', 'Class.kind', 'Class.status',
-  'Predicate.iri', 'Predicate.label', 'Predicate.kind', 'Predicate.status',
-  'Ontology.base', 'Ontology.version', 'Ontology.classes', 'Ontology.predicates',
-  'EntityPage.entities',
-  'Subgraph.nodes', 'Subgraph.edges',
-  'Queue.floor', 'Queue.items',
-  'ConflictList.floor', 'ConflictList.conflicts', 'ConflictList.possibleDuplicates',
-  'QueryResult.entities',
-  'RecallResult.hits',
-  'ActionRecord.actionId', 'ActionRecord.action', 'ActionRecord.by', 'ActionRecord.at', 'ActionRecord.effects', 'ActionRecord.undone',
+/** The gap: empty since PR 3c. Every path draft 4 asks for is served; from here oasdiff guards the contract. */
+const GAP: string[] = [];
+
+/** The inputs of the actions that come with their own pull requests: publish to undo in PR 6, reflect in 7, adopt and dismiss in 8. */
+const LATER = [
   'PublishInput.source', 'PublishInput.to',
   'DisputeInput.belief', 'DisputeInput.reason',
   'SettleInput.dispute', 'SettleInput.outcome',

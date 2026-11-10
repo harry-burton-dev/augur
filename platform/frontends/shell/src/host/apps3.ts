@@ -53,6 +53,8 @@ export interface Catalogue3 {
   previews?: AppManifestEntry['previews'];
   previewsOn?: string[];
   category?: AppManifestEntry['category'];
+  /** Only ever on one of AUGUR's own apps (ADR 0083), from the registry: what it shows is the deployment's, so the floor gauge rests. */
+  sameOnEveryFloor?: boolean;
 }
 
 /** An app the shell runs in a worker: the entry the rest of the shell takes, and the manifest beside it. */
@@ -117,6 +119,7 @@ export function fromCatalogue3(m: Catalogue3): WorkerApp {
     inbox: c.inbox,
     notifications: c.notifications,
     category: m.category,
+    ...(m.sameOnEveryFloor ? { sameOnEveryFloor: true } : {}),
     // A card on Home on each kind of floor the app is on, drawn by the app into ctx.frame.card (spec 6.15).
     ...(c.card ? { surfaces: (m.floors ?? FLOOR_KINDS).map((floor) => ({ floor, slot: 'card' as const, module: 'card' })) } : {}),
     // The worker hears every move inside the app, so a move never starts it again.

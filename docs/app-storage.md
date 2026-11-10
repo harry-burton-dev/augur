@@ -14,7 +14,7 @@ On app contract 3 each part of an app says what it needs in its Score file's `re
 | `augur-scratch` | `size` (`<n>Mi` or `<n>Gi`) | the folder itself, as a volume's `source: ${resources.<name>}`, writable |
 | `augur-files` | `label`, `detail` | the folder itself, read-only, which an admin fills |
 | `augur-telemetry` | none | `otlp_endpoint` (where AUGUR's own services send telemetry; empty without a collector), `service_name` |
-| `augur-floor-graphs` | none | `url`, the floor graphs API through the gateway |
+| `augur-floor-graphs` | `classes` (the class IRIs it needs, such as `kg:Ship`), `actions` (the actions it takes, such as `retain`): the registry refuses an install where the deployment's knowledge graph lacks one, saying which | `url`, the floor graphs API through the gateway |
 | `augur-outbound` | `hosts`, `why` | nothing; Admin shows the ask |
 | `augur-settings` | `ids` | one output per setting: the value a deployment admin gave it in Admin → Apps, else the manifest's default, else empty (secret for a `secret` setting, read only in `files`); a required setting with neither stops the install. A changed value starts again the parts that read it |
 

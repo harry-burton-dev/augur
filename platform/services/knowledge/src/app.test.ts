@@ -2,59 +2,27 @@
 // source on their floor and reads the belief back, and the fence holds at the seam as it does in the store.
 // Each person's standing comes from a stand-in for identity. The service's pool is kg_app, signed in with
 // its own password, as on a deployment.
-import { callerHeaders, type Caller } from '@augur/service-kit';
 import type { FastifyInstance } from 'fastify';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { buildApp } from './app.ts';
 import { knowledgeDb } from './db.testing.ts';
+import { as, client, type Client, key, ORG, own, people, report } from './http.testing.ts';
 import { entityId } from './ids.ts';
 import { outboxRelay } from './outbox.ts';
-import type { Standing } from './standing.ts';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const db = knowledgeDb(DATABASE_URL);
-
-// One org with two teams beside each other; Alice is on one, Bob on the other. Each has a floor of their own.
-const ORG = 'org-1';
-const where: Record<string, Standing> = {};
-const reset = () => {
-  where.alice = { floors: [{ id: ORG, kind: 'org' }, { id: 'team-a', kind: 'team', parent: ORG }], memberOf: [ORG, 'team-a'] };
-  where.bob = { floors: [{ id: ORG, kind: 'org' }, { id: 'team-b', kind: 'team', parent: ORG }], memberOf: [ORG, 'team-b'] };
-};
-class PeopleUnavailable extends Error {}
-let identityDown = false;
-const standing = async (person: string) => {
-  if (identityDown) throw new PeopleUnavailable('Identity could not be reached.');
-  return where[person] ?? { floors: [{ id: ORG, kind: 'org' as const }], memberOf: [ORG] };
-};
-
-const own = { alice: 'you-alice', bob: 'you-bob' } as const;
-const kindOf = (floor: string) => (floor === ORG ? 'org' : floor.startsWith('you-') ? 'personal' : 'team') as 'org' | 'personal' | 'team';
-const as = (person: 'alice' | 'bob', floor?: string, extra: Partial<Caller> = {}) =>
-  callerHeaders({ id: person, name: person, departments: [], roles: [], ...(floor ? { workspace: { id: floor, kind: kindOf(floor), role: 'member' } } : {}), ...extra });
+const { where, state, reset, standing } = people();
 
 let app: FastifyInstance;
-let n = 0;
-const key = () => `test-key-${++n}-${Date.now()}`;
-const act = (person: 'alice' | 'bob', floor: string, action: string, body: unknown, { k = key(), dryRun = false } = {}) =>
-  app.inject({ method: 'POST', url: `/v1/actions/${action}${dryRun ? '?dryRun=true' : ''}`, headers: { ...as(person, floor), 'idempotency-key': k }, payload: body as object });
-const get = (person: 'alice' | 'bob', url: string, floor?: string) => app.inject({ method: 'GET', url, headers: as(person, floor) });
-
-const sha = (c: string) => c.repeat(64).slice(0, 64);
-const report = (ref: string, label = 'MV Kestrel Dawn', capacity = 1200) => ({
-  source: { app: 'notes', ref, version: '1', contentSha256: sha('a'), title: `Report ${ref}` },
-  extractor: 'test',
-  entities: [{ ref: 'ship', label, class: 'kg:Ship', identityKeys: [{ scheme: 'imo', value: `IMO-${ref}` }] }],
-  observations: [{ subject: 'ship', predicate: 'kg:capacity', kind: 'property', value: { v: capacity, unit: 'TEU' }, quote: `capacity ${capacity} TEU`, modality: 'reported' }],
-});
+let act: Client['act'];
+let get: Client['get'];
 
 describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
   beforeAll(async () => {
-    app = await buildApp({ store: db.app, standing });
+    ({ app, act, get } = await client({ store: db.app, standing }));
   });
   beforeEach(async () => {
     reset();
-    identityDown = false;
     await db.empty();
   });
 
@@ -81,7 +49,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
         kind: 'property',
         value: { v: 1200, unit: 'TEU' },
         state: 'memory',
-        evidence: { observations: 1, sources: 1, unseen: 0, byFloor: [{ floor: own.alice, floorKind: 'personal', observations: 1 }] },
+        evidence: { observations: 1, sources: 1, unseen: 0, byFloor: [{ floor: own.alice, floorKind: 'personal', observations: 1 }], seen: effects.observations },
       }),
     ]);
   });
@@ -154,7 +122,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     expect((await act('alice', 'team-a', 'retain', report('R9'))).statusCode).toBe(200);
     where.alice = { floors: [{ id: ORG, kind: 'org' }], memberOf: [ORG] };
     expect((await act('alice', 'team-a', 'retain', report('R10'))).json()).toMatchObject({ status: 403, reason: 'not_on_floor' });
-    identityDown = true;
+    state.identityDown = true;
     expect((await act('alice', own.alice, 'retain', report('R10'))).json()).toMatchObject({ status: 503, reason: 'unavailable' });
   });
 
@@ -169,16 +137,34 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     expect((await get('bob', '/v1/floors')).json().floors.map((f: { id: string }) => f.id)).toEqual([ORG, 'team-b']);
   });
 
-  it('refuses an app for now, and anyone not signed in', async () => {
-    expect((await app.inject({ method: 'POST', url: '/v1/actions/retain', headers: { ...as('alice', own.alice, { app: 'notes' }), 'idempotency-key': key() }, payload: report('R11') })).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
+  it('holds an app acting for you to its scopes, and refuses anyone not signed in', async () => {
+    const forApp = (scopes: string[]) => as('alice', 'team-a', { app: 'notes', scopes });
+    const take = (action: string, scopes: string[], payload: object) => app.inject({ method: 'POST', url: `/v1/actions/${action}`, headers: { ...forApp(scopes), 'idempotency-key': key() }, payload });
+
+    // Without knowledge:read an app reads nothing, and says who can grant it.
+    const unread = await app.inject({ url: '/v1/floors', headers: forApp([]) });
+    expect(unread.json()).toMatchObject({ status: 403, reason: 'not_allowed', whoCanChange: expect.stringContaining('admin') });
+    expect((await app.inject({ url: '/v1/ontology', headers: forApp([]) })).statusCode).toBe(403);
+    expect((await app.inject({ url: '/v1/floors', headers: forApp(['knowledge:read']) })).statusCode).toBe(200);
+
+    // An action needs its own scope: retain is knowledge:extract, which knowledge:act doesn't give.
+    expect((await take('retain', ['knowledge:read', 'knowledge:act'], report('R11'))).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
+    const retained = await take('retain', ['knowledge:extract'], report('R11'));
+    expect(retained.statusCode).toBe(200);
+    const [observation] = retained.json().effects.observations;
+
+    // Holding is never an app's to do for you, whatever it is granted: you hold, in AUGUR.
+    const held = await take('hold', ['knowledge:act'], { observations: [observation] });
+    expect(held.json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('isn’t granted to apps') });
+
     expect((await app.inject({ method: 'GET', url: '/v1/floors' })).statusCode).toBe(401);
   });
 
   it('serves its catalogue and versions', async () => {
     const catalogue = (await app.inject({ url: '/v1/actions' })).json();
     expect(catalogue.actions.map((a: { name: string }) => a.name)).toEqual(['retain', 'hold', 'keep', 'confirm-faithful']);
-    expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: expect.arrayContaining(['source', 'entities', 'observations']) });
-    expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '1' }, speaks: { knowledge: [1] } });
+    expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: ['source'], properties: { text: expect.any(Object) } });
+    expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '1', classes: expect.arrayContaining(['kg:Ship']) }, speaks: { knowledge: [1] } });
   });
 
   it('sends what the outbox holds as AUGUR’s own events, ids only, and a personal floor’s with nothing but the floor', async () => {

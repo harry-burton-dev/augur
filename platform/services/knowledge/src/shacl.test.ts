@@ -2,12 +2,12 @@
 // rdf-validate-shacl checks SHACL Core. It doesn't run SPARQL-based constraints (sh:sparql), so the five
 // shapes written that way (quantity, domain, range, entity status, one reported time per event) are asked here
 // of the same export as SQL, and the shapes file is checked to hold exactly those five.
-import { readFileSync } from 'node:fs';
 import { DataFactory, Parser, Store, type Quad, type Quad_Object, type Quad_Predicate, type Quad_Subject } from 'n3';
 import type { QueryResultRow } from 'pg';
 import SHACLValidator from 'rdf-validate-shacl';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { knowledgeDb, loadCorpus } from './db.testing.ts';
+import { SHAPES } from './shapes.ts';
 
 const { namedNode, literal, quad } = DataFactory;
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -112,7 +112,7 @@ const exportStore = async (q: (sql: string) => Promise<QueryResultRow[]>) => {
 
 describe.skipIf(!DATABASE_URL)('SHACL on the loaded store', () => {
   let data: Store;
-  const shapes = new Store(new Parser().parse(readFileSync(new URL('./fixtures/shapes.ttl', import.meta.url), 'utf8')));
+  const shapes = new Store(new Parser().parse(SHAPES));
   beforeAll(async () => {
     await loadCorpus(db);
     data = new Store(await exportStore(async (sql) => (await db.admin.query(sql)).rows));

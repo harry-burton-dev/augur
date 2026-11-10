@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.47.0
+  version: 1.48.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -1522,6 +1522,15 @@ components:
                   id:
                     type: string
                 description: The result to mark looked at
+        you:
+          type: object
+          required:
+            - deploymentAdmin
+          properties:
+            deploymentAdmin:
+              type: boolean
+              description: Whether the caller holds deployment-admin, which upgrading, going back and changing settings need (ADR 0022, 0084)
+          description: What the caller may do here, for a frontend that is never told their roles (contract 3). Absent in what Backstage is sent
     UnitResult:
       type: object
       required:
@@ -2014,7 +2023,7 @@ components:
           items:
             $ref: "#/components/schemas/Scope"
           uniqueItems: true
-          maxItems: 7
+          maxItems: 10
           description: What the app's service asks to do on AUGUR, such as "notifications:send". An app may always register itself.
         floors:
           type: array
@@ -2105,7 +2114,10 @@ components:
         - events:subscribe
         - people:read
         - inbox:write
-      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items."
+        - knowledge:read
+        - knowledge:act
+        - knowledge:extract
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items. knowledge:read: read the knowledge graph as the person the app acts for, on the floors they can see. knowledge:act: take the knowledge graph's actions apps are granted, as that person. knowledge:extract: add what a source says to the knowledge graph (retain)."
     AppMenuCategory:
       type: object
       required:
@@ -2474,7 +2486,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
   /apps/{id}/pin:
     put:
-      summary: Serve one kept version and hold the app there (admins only)
+      summary: Serve one kept version and hold the app there (deployment admins only)
       description: Rolls an app back, or holds it at its current version. Registrations after this are kept in its history but not served until it is unpinned. When the version's frontend is kept (PUT /apps/{id}/versions/{version}/frontend), its code is held too, since the manifest then points at that version's own copy; otherwise only the manifest changes. Audited as app.pinned.
       requestBody:
         required: true
@@ -2504,7 +2516,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CatalogueEntry"
         "403":
-          description: Not an admin
+          description: Not a deployment admin
           content:
             application/problem+json:
               schema:
@@ -2522,7 +2534,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
     delete:
-      summary: Let go of a pin and serve the newest version (admins only)
+      summary: Let go of a pin and serve the newest version (deployment admins only)
       description: Audited as app.unpinned.
       parameters:
         - schema:
@@ -2538,7 +2550,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CatalogueEntry"
         "403":
-          description: Not an admin
+          description: Not a deployment admin
           content:
             application/problem+json:
               schema:
@@ -2657,6 +2669,19 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/Scope"
+                  platformScopes:
+                    type: array
+                    items:
+                      enum:
+                        - people:manage
+                        - apps:manage
+                        - org:manage
+                        - audit:read
+                        - deployment:upgrade
+                        - deployment:apps
+                        - deployment:health
+                        - deployment:settings
+                    description: AUGUR's own admin scopes (ADR 0083), only ever for one of AUGUR's own frontends, which its release gives them; never for an app from a feed
                   inboxKinds:
                     type: array
                     items:
@@ -4371,7 +4396,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
     delete:
-      summary: Remove an app (admins only)
+      summary: Remove an app (deployment admins only)
       description: "Audited as app.removed. Its own service can't register it again afterwards: only an admin or the app runner can."
       parameters:
         - schema:
@@ -4383,7 +4408,7 @@ paths:
         "204":
           description: Removed
         "403":
-          description: Not an admin
+          description: Not a deployment admin
           content:
             application/problem+json:
               schema:
@@ -4716,7 +4741,7 @@ paths:
                   items:
                     $ref: "#/components/schemas/Scope"
                   uniqueItems: true
-                  maxItems: 7
+                  maxItems: 10
               additionalProperties: false
       parameters:
         - schema:
@@ -4903,7 +4928,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
     post:
-      summary: Allow apps to load from an origin (admins only)
+      summary: Allow apps to load from an origin (deployment admins only)
       description: HTTPS only, except http://localhost for development. Audited as origin.allowed.
       requestBody:
         required: true
@@ -4935,14 +4960,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not an admin
+          description: Not a deployment admin
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
   /origins/{origin}:
     delete:
-      summary: Stop allowing an origin (admins only)
+      summary: Stop allowing an origin (deployment admins only)
       description: Apps already registered from it stay in the catalogue, marked blocked, and are left out of the manifest until it is allowed again. Audited as origin.removed.
       parameters:
         - schema:
@@ -4955,7 +4980,7 @@ paths:
         "204":
           description: Removed
         "403":
-          description: Not an admin
+          description: Not a deployment admin
           content:
             application/problem+json:
               schema:

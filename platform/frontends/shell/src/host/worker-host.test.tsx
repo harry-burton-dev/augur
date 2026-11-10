@@ -80,6 +80,7 @@ const ctxFor = (over: Partial<WorkerContext> = {}): WorkerContext => ({
   fetchImpl: vi.fn(async () => new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } })) as unknown as typeof fetch,
   navigate: vi.fn(),
   notify: vi.fn(),
+  signInAgain: vi.fn(),
   raise: vi.fn(async () => undefined),
   request: vi.fn(async () => undefined),
   ...over,
@@ -656,12 +657,16 @@ describe('an app’s card on Home', () => {
     act(() => void card.mount(el, {} as never));
     await flush();
     self.post('navigate', '/notebooks');
+    self.post('signInAgain');
     await expect(self.call('raise', { type: 'note.share' })).rejects.toThrow(/only when someone presses something/);
     expect(ctx.navigate).not.toHaveBeenCalled();
+    expect(ctx.signInAgain).not.toHaveBeenCalled();
     el.firstElementChild!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     self.post('navigate', '/notebooks');
+    self.post('signInAgain');
     await flush();
     expect(ctx.navigate).toHaveBeenCalledWith('/notebooks');
+    expect(ctx.signInAgain).toHaveBeenCalledTimes(1);
     act(() => void card.unmount!(el));
   });
 

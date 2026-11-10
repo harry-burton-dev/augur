@@ -65,6 +65,18 @@
         "tailwindcss"
       ]
     },
+    "platform/frontends/upgrades": {
+      "entry": [
+        "src/entry.ts",
+        "vite.config.ts"
+      ],
+      "project": [
+        "src/**/*.{ts,tsx}"
+      ],
+      "ignoreDependencies": [
+        "tailwindcss"
+      ]
+    },
     "platform/frontends/sign-in-theme": {
       "project": [
         "src/**/*.{ts,tsx}"

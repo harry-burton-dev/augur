@@ -5,6 +5,7 @@ The shell's promise to apps, tested in a browser. A reference app on the app con
 - `tests/contract.spec.ts`: the app context, the worker's sandbox (no network, no page, no token, its own script policy), the remote vocabulary, the headers on every call, the address, floors, failing, flooding, Home and Find.
 - `tests/app-bar.spec.ts`: the app bar, its start menus and the rail with the app's places.
 - `tests/inbox.spec.ts`: the Inbox, in the words of the app's inbox kinds.
+- `tests/account.spec.ts`: Account as a dialog over the menu, opened only from it or on coming back from Keycloak, with nothing scrolling or cut off at 1280×720, 1024×768 and 800×600, and nothing serious for axe.
 - `tests/a11y.spec.ts`: axe on the desktop, a start menu, the app with its rail, and the stream.
 - `tests/manifest-frame.spec.ts`: Starter, the app template's app, drawn from its manifest alone (`starter/manifest.json`, a copy of the template's, with no code), on a second dev server at `CONTRACT_PORT` + 1: its tile, its places (when there is a choice of them) and its pane, headed with its name and saying it is opening or why it stopped.
 

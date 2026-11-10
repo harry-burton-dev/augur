@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// The repository holds code and the guides that ship with a release, nothing else (AGENTS.md, "Where to look
-// first"). Decisions, principles, architecture, plans, reviews and research live in the AUGUR handbook on
-// Google Drive. This fails on any Markdown file git tracks outside the list below, so a document can't
+// The repository holds code, the guides that ship with a release and the docs site's pages (docs/README.md),
+// nothing else (AGENTS.md, "Where to look first"). Decisions, principles, architecture, plans, reviews and
+// research live in the AUGUR handbook on Google Drive. This fails on any Markdown file git tracks outside the list below, so a document can't
 // quietly land here. A new shipped guide is added to GUIDES in the same pull request that writes it.
 //
 // node scripts/check-docs.mjs
@@ -16,8 +16,9 @@ export const GUIDES = [
   'upgrade', 'versioning',
 ].map((name) => `docs/${name}.md`);
 
-/** Markdown that belongs to code, wherever it sits. */
+/** Markdown that belongs to code, wherever it sits, and the docs site's pages (docs/README.md). */
 const ALLOWED = [
+  /^docs\/src\/content\/docs\/.+\.mdx?$/,
   /(^|\/)README\.md$/,
   /(^|\/)CHANGELOG\.md$/,
   /^(AGENTS|CLAUDE|THIRD_PARTY_NOTICES)\.md$/,

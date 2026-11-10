@@ -1,16 +1,18 @@
-/** The realm role that may change versions and settings on this deployment (ADR 0022). */
-export const DEPLOYMENT_ADMIN = 'deployment-admin';
+/** The realm role that may change versions and settings on this deployment (ADR 0022, 0084). */
+const DEPLOYMENT_ADMIN = 'deployment-admin';
 
+/** Said wherever a change needs deployment-admin and the person doesn't hold it. */
+export const NEEDS_DEPLOYMENT_ADMIN = `Needs the ${DEPLOYMENT_ADMIN} role. Ask a deployment admin.`;
+
+/** Whether the person may act, and the reason shown when they may not. */
 export type Gate = { allowed: true } | { allowed: false; requiredRole: string; reason: string };
 
 /**
- * Whether the person may act. Reading never needs a role beyond seeing the app.
- * A refusal says which role is needed; who holds it comes from the server's 403.
+ * Whether the person may change versions and settings, from what the registry says of them (`you.deploymentAdmin`
+ * on the overview): a contract 3 frontend is never told anyone's roles. Reading needs no role beyond seeing the app.
  */
-export const canChange = (roles: string[]): Gate =>
-  roles.includes(DEPLOYMENT_ADMIN)
-    ? { allowed: true }
-    : { allowed: false, requiredRole: DEPLOYMENT_ADMIN, reason: `Changing versions and settings needs the ${DEPLOYMENT_ADMIN} role.` };
+export const gateFor = (deploymentAdmin: boolean): Gate =>
+  deploymentAdmin ? { allowed: true } : { allowed: false, requiredRole: DEPLOYMENT_ADMIN, reason: NEEDS_DEPLOYMENT_ADMIN };
 
 /** A refusal from the gateway, as the security work shapes it. */
 export type Refusal =

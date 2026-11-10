@@ -157,6 +157,14 @@ export interface AppContext {
   /** Asks whichever app handles the intent for an answer, such as "pick a document". */
   request<T = unknown>(intent: Intent): Promise<T>;
   notify(notice: Notice): void;
+  /**
+   * Asks the person for their password again, then opens the app where it is now (SDK 3.1). For a call
+   * the platform turned down with `401` and `sign_in_again`, because what it does needs a fresh sign-in,
+   * such as going back to an earlier release. The page leaves the app to sign in, so keep what the person
+   * typed in the address (`navigate`) if they should find it again. From a card, only just after the
+   * person pressed something in it.
+   */
+  signInAgain(): void;
   /** Present when the app was opened to handle an intent. */
   intent?: Intent;
   /** Present when the app was opened to answer a request: give the answer, or cancel. */

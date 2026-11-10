@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { appClientId, callerFromHeaders, identifyService, reservedIdProblem, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
-import { DirectoryError, type KeycloakDirectory } from './directory.ts';
+import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type KeycloakDirectory } from './directory.ts';
 import { AppParams, empty, refused } from './schemas.ts';
 
 /**
@@ -177,7 +177,7 @@ export const appClientRoutes =
       '/:id/credential',
       {
         schema: {
-          summary: "Issue an app's own sign-in, or replace its secret (admins only)",
+          summary: "Issue an app's own sign-in, or replace its secret (deployment admins only)",
           description: [
             "Makes the app's Keycloak client (app-<id>: client credentials only,",
             '5-minute tokens for the audience platform-services), or gives it a new',
@@ -193,14 +193,14 @@ export const appClientRoutes =
             ),
             400: refused('Not an app id, or one AUGUR keeps for itself'),
             401: refused('No signed-in caller'),
-            403: refused('Not an admin'),
+            403: refused('Not a deployment admin'),
             ...signInServiceFailed,
           },
         },
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can issue an app’s sign-in.' });
+        if (!caller?.roles.includes(DEPLOYMENT_ADMIN_ROLE.name)) return reply.code(403).send({ error: 'forbidden', requiredRole: DEPLOYMENT_ADMIN_ROLE.name, message: 'Only a deployment admin can issue an app’s sign-in. Ask someone who holds the deployment-admin role (Admin, People).' });
         const reserved = reservedIdProblem(req.params.id);
         if (reserved) return reply.code(400).send({ error: 'invalid', message: reserved });
         if (!clients) return reply.code(503).send({ error: 'unavailable', message: 'Identity isn’t connected to the sign-in service, so apps’ sign-ins can’t be issued here yet.' });

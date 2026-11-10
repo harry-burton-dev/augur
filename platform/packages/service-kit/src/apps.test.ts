@@ -1,6 +1,6 @@
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { clientCredentials, identityFromClientId, serviceVerifier, ServiceTokenError, type ServiceVerifier } from './apps.js';
+import { clientCredentials, identityFromClientId, isOfferedScope, isPlatformScope, PLATFORM_SCOPES, SCOPES, scopeWords, serviceVerifier, ServiceTokenError, type ServiceVerifier } from './apps.js';
 
 const issuer = 'http://sign-in.test/realms/platform';
 
@@ -10,6 +10,17 @@ describe('who a client is', () => {
     expect(identityFromClientId('platform-registry')).toEqual({ kind: 'platform', name: 'registry' });
     expect(identityFromClientId('shell')).toBeUndefined();
     expect(identityFromClientId('app-')).toBeUndefined();
+  });
+});
+
+describe('platform scopes', () => {
+  it('are never among the scopes an app can ask for, and each has words for a refusal', () => {
+    for (const s of PLATFORM_SCOPES) {
+      expect(isPlatformScope(s)).toBe(true);
+      expect(isOfferedScope(s)).toBe(false);
+      expect(scopeWords(s)).not.toBe('do that');
+    }
+    for (const s of SCOPES) expect(isPlatformScope(s)).toBe(false);
   });
 });
 
