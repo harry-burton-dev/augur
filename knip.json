@@ -67,8 +67,8 @@
     },
     "platform/frontends/upgrades": {
       "entry": [
-        "src/sandbox/entry.ts",
-        "vite.sandbox.config.ts"
+        "src/entry.ts",
+        "vite.config.ts"
       ],
       "project": [
         "src/**/*.{ts,tsx}"

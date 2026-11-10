@@ -165,6 +165,13 @@ jobs:
       - run: pnpm check:manifest
       # Each API contract is what its service's route schemas say, and lints clean (ADR 0055).
       - run: pnpm check:contracts
+      # Within a major a contract only adds: oasdiff, pinned by digest, compares each contract a pull request
+      # changes with its base, and a break fails unless the major went up or a changeset says why it isn't one.
+      - name: Does a contract break its callers?
+        if: github.event_name == 'pull_request'
+        run: pnpm check:breaking
+        env:
+          BASE_REF: ${{ github.base_ref }}
       # The kit bundle the shell serves is the one release/kit.json pins, whole, and serves what the SDK says.
       - run: pnpm check:kit
       - run: pnpm check:migrations
@@ -172,15 +179,23 @@ jobs:
           # Into main, a migration already on main is frozen too: dev builds have run it on the workbench.
           MIGRATIONS_FROZEN_AT: ${{ github.base_ref == 'main' && 'origin/main' || '' }}
       - run: pnpm typecheck --concurrency=${{ steps.fit.outputs.tasks }}
+      # The knowledge service against its contract (Schemathesis, pinned, ADR 0080), on main only: about a minute.
+      - name: Install Schemathesis
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          pipx install schemathesis==4.32.4
+          echo "SCHEMATHESIS=$(command -v schemathesis || echo "$HOME/.local/bin/schemathesis")" >> "$GITHUB_ENV"
       # On a push to main the tests also measure coverage (Vitest's v8 coverage, ADR 0069) and the next step
       # writes a table of it to the run's summary. Only there: a pull request's tests stay as fast as they were.
       - run: pnpm turbo run test --concurrency=${{ steps.fit.outputs.tests }} ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '-- --coverage.enabled --coverage.reporter=json-summary' || '' }}
         env:
           DATABASE_URL: postgres://platform:platform-ci-only@localhost:5432/platform
           # The knowledge service's fence: a few random worlds on a pull request, many and the 200,000-row
-          # check on main (platform/services/knowledge, sight.property.test.ts and perf.test.ts).
+          # check on main, and the contract fuzzed on main (platform/services/knowledge, sight.property.test.ts,
+          # perf.test.ts and schemathesis.test.ts).
           KG_PROPERTY_RUNS: ${{ github.event_name == 'push' && '300' || '30' }}
           KG_PERF: ${{ github.event_name == 'push' && '1' || '' }}
+          KG_FUZZ: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '1' || '' }}
       - name: Test coverage
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: pnpm coverage:summary >> "$GITHUB_STEP_SUMMARY"

@@ -409,7 +409,7 @@ export const platformApps: AppEntry[] = [
   },
   {
     id: 'upgrades',
-    name: 'Upgrade Centre',
+    name: 'Deployment',
     route: '/upgrades',
     entry: '/apps/upgrades/entry.js',
     version: PLATFORM_APP_VERSIONS.upgrades,
@@ -434,7 +434,33 @@ export const platformApps: AppEntry[] = [
  * the entry above, which still holds the app's id, route and role for everything else the registry checks. Its
  * frontend is in AUGUR's web image at /apps/<id>/<version>/, and it runs in the shell's worker host like any app.
  */
-export const platformManifests3: Readonly<Record<string, AppManifest3>> = {};
+export const platformManifests3: Readonly<Record<string, AppManifest3>> = {
+  // Deployment: what this deployment runs, and upgrading it (ADR 0030). Its pages are its places; each installed app
+  // sits under Apps, filled in at run time.
+  upgrades: {
+    id: 'upgrades',
+    name: 'Deployment',
+    version: PLATFORM_APP_VERSIONS.upgrades,
+    contract: 3,
+    description: 'What this deployment runs, and upgrading it',
+    icon: 'download',
+    floors: ['personal', 'team', 'org'],
+    frontend: { entry: 'sandbox.js' },
+    contributes: {
+      places: [
+        { id: 'overview', label: 'Overview', icon: 'gauge', path: '/', detail: 'What needs you, and what is installed' },
+        { id: 'augur', label: 'AUGUR', icon: 'server', path: '/augur', detail: 'Updates, upgrade and roll back' },
+        { id: 'apps', label: 'Apps', icon: 'apps', path: '/apps', detail: 'Each installed app', fills: true },
+        { id: 'settings', label: 'Settings', icon: 'settings', path: '/settings', detail: 'Update policy and maintenance windows' },
+      ],
+      commands: [{ id: 'deployment.check', label: 'Check for updates', icon: 'download', keywords: 'release feed new version upgrade' }],
+    },
+    // The urgent path (PER-283, ADR 0044 D3), as in the entry above.
+    previews: [
+      { id: 'urgent-letterbox', name: 'Urgent news letterboxed', detail: 'A halted release or a rollback that didn’t finish opens in a letterbox over your work, and waits on the edge of the screen once you step back.' },
+    ],
+  },
+};
 
 /**
  * The platform scopes each of AUGUR's own frontends holds (ADR 0083). They come only from here, in AUGUR's own

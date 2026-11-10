@@ -11,7 +11,7 @@ const paragraph = (...lines: string[]) => lines.join(' ');
 
 export const info = {
   title: 'Knowledge',
-  version: '1.3.0',
+  version: '1.4.0',
   description: [
     paragraph(
       'The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor',

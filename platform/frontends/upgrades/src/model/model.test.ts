@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { levelFrom, newestAllowed, pinChoices, validPin } from './levels.js';
-import { canChange, isRefusal } from './roles.js';
+import { gateFor, isRefusal } from './roles.js';
 import { desiredProblems, policySentence } from './sentence.js';
 import { formatWhen, insideWindow, nextWindows } from './time.js';
 import { channelsFor } from './words.js';
@@ -83,8 +83,8 @@ describe('channels and roles', () => {
   });
 
   it('lets deployment admins change things and tells others which role they need', () => {
-    expect(canChange(['deployment-admin'])).toEqual({ allowed: true });
-    expect(canChange(['admin'])).toMatchObject({ allowed: false, requiredRole: 'deployment-admin' });
+    expect(gateFor(true)).toEqual({ allowed: true });
+    expect(gateFor(false)).toMatchObject({ allowed: false, requiredRole: 'deployment-admin' });
     expect(isRefusal({ error: 'step_up_required', acr: 'otp', maxAge: 300, message: 'Sign in again' })).toBe(true);
     expect(isRefusal({ error: 'oops' })).toBe(false);
   });

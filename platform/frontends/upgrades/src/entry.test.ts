@@ -1,6 +1,6 @@
 import type { AppContext, FrameState, PlaceItem, RemoteElement, RemoteNode } from '@augur/mfe-sdk/sdk3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppInstalls, AppJob, Overview, OverviewUnit, PlatformUpdates } from '../model/types.js';
+import type { AppInstalls, AppJob, Overview, OverviewUnit, PlatformUpdates } from './model/types.js';
 import start, { COMMANDS, PLACE_APPS } from './entry.js';
 import { pathOf, routeFor } from './routes.js';
 
@@ -18,6 +18,7 @@ const fakeShell = (answer: Answer, path = '/') => {
     moved: [] as string[],
     calls: [] as { method: string; path: string; body?: unknown }[],
     signedInAgain: 0,
+    downloads: [] as string[],
   };
   let navigated: (path: string) => void = () => undefined;
   const root = (put: (node: RemoteNode) => void) => ({ render: put, clear: () => put(null) });
@@ -47,7 +48,7 @@ const fakeShell = (answer: Answer, path = '/') => {
         return () => shell.commands.delete(id);
       },
     },
-    files: { upload: async () => new Response(null, { status: 501 }), download: async () => undefined, onDrop: () => () => undefined },
+    files: { upload: async () => new Response(null, { status: 501 }), download: async (p) => void shell.downloads.push(p), onDrop: () => () => undefined },
     raise: async () => undefined,
     request: async () => Promise.reject(new Error('No app answers that here.')),
     notify: () => undefined,
@@ -127,6 +128,9 @@ const registry =
     if (path.endsWith('/platform/updates')) return [200, given.updates ?? updates()];
     if (path.endsWith('/app-runner/apps')) return [200, given.installs ?? installs()];
     if (path.endsWith('/app-runner/jobs')) return [200, { jobs }];
+    if (path.endsWith('/desired-state/history'))
+      return [200, { history: path.includes('/augur/') ? [{ ...unit().desired, setBy: 'default' }, { ...unit().desired, policy: 'hold', setBy: 'p1', setAt: '2026-11-08T09:00:00Z' }] : [] }];
+    if (path.endsWith('/platform/reporting')) return [200, { mode: 'file', why: 'This deployment can’t reach Backstage, so its record is exported by hand.', deployment: 'workbench', publicKey: 'ssh-ed25519 AAAA' }];
     return [404, { message: 'Not here.' }];
   };
 
@@ -288,6 +292,43 @@ describe('Deployment', () => {
     expect(shell.calls.find((c) => c.method === 'POST')?.path).toBe('/api/registry/v1/platform/updates/check');
     move('/apps');
     expect(shell.pane.title).toBe('Apps');
+  });
+
+  it('shows each component’s settings, reporting and the settings history', async () => {
+    const { shell } = await open(registry({ overview: overview({ reporting: { mode: 'file', why: 'Exported by hand.' } }) }), '/settings');
+    await settle();
+    expect(shell.pane.title).toBe('Settings');
+    expect(find(shell.screen, 'quill-section', (p) => p.label === 'AUGUR')).toBeDefined();
+    expect(find(shell.screen, 'quill-section', (p) => p.label === 'Mandate')).toBeDefined();
+    expect(find(shell.screen, 'quill-text-field', (p) => p.label === 'Public key')?.props).toMatchObject({ value: 'ssh-ed25519 AAAA', readOnly: true });
+    const history = find(shell.screen, 'quill-list', (p) => p.label === 'Settings history');
+    expect(history?.props?.items).toMatchObject([{ title: 'AUGUR: settings changed', meta: expect.stringContaining('Sam Admin') }]);
+    expect(text(history)).toContain('Before: Ask first');
+    handler(find(shell.screen, 'quill-button', (p) => p.label === 'Export the record'), 'onPress')();
+    await settle();
+    expect(shell.downloads).toEqual(['/api/registry/v1/platform/reporting/export']);
+  });
+
+  it('changes a component’s settings, showing the effect before saving', async () => {
+    const { shell } = await open(registry({ change: () => [200, overview()] }), '/settings');
+    handler(find(find(shell.screen, 'quill-section', (p) => p.label === 'Mandate')?.children, 'quill-button', (p) => p.label === 'Change settings'), 'onPress')();
+    expect(shell.moved.at(-1)).toBe('/settings/mandate');
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Save settings')?.props).toMatchObject({ disabled: true, reason: 'Nothing has changed yet.' });
+    handler(find(shell.screen, 'quill-choice', (p) => p.name === 'policy'), 'onChange')('hold');
+    expect(text(find(shell.screen, 'quill-details', (p) => JSON.stringify(p).includes('After you save')))).toContain('On hold: nothing new is offered.');
+    handler(find(shell.screen, 'quill-button', (p) => p.label === 'Save settings'), 'onPress')();
+    await settle();
+    const put = shell.calls.find((c) => c.method === 'PUT');
+    expect(put?.path).toBe('/api/registry/v1/platform/units/mandate/desired-state');
+    expect(put?.body).toMatchObject({ policy: 'hold', channel: 'beta' });
+    expect(shell.moved.at(-1)).toBe('/settings');
+    expect(text(shell.screen)).toContain('Saved. The updater follows the new settings');
+  });
+
+  it('keeps settings visible but unchangeable for a plain admin, with the role named', async () => {
+    const { shell } = await open(registry({ overview: overview({ you: { deploymentAdmin: false } }) }), '/settings/augur');
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Save settings')).toBeUndefined();
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Change settings')?.props).toMatchObject({ disabled: true, reason: expect.stringContaining('deployment-admin') });
   });
 
   it('says the registry isn’t answering, and keeps what it read when a later read fails', async () => {
