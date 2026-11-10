@@ -4,8 +4,8 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type pg from 'pg';
 import Type, { type Static } from 'typebox';
 import { ulid } from 'ulid';
-import { callerFromHeaders, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
-import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type Effects } from './actions.ts';
+import { callerFromHeaders, delegationAllows, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
+import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type ActionDecl as Declared, type Effects } from './actions.ts';
 import { describeApi } from './contract.ts';
 import { EXPORT_TYPES, exportFloor, type ExportFormat } from './export.ts';
 import { BASE_CLASSES } from './profile.ts';
@@ -89,6 +89,7 @@ export const DEFAULT_SUBGRAPH_DEPTH = 3;
 const KEY = /^[\x21-\x7e]{8,200}$/;
 const NOT_ON_FLOOR = 'You can’t stand on that floor, or it no longer exists.';
 const WHO_ADDS = 'A lead of the team, or an admin, who can add you to it.';
+const WHO_GRANTS = 'An admin, who can grant the app the scope in Admin, once its manifest asks for it.';
 
 /** An error from the store, as a problem: a refusal says why, a bad reference says what to fix. */
 const fromStore = (err: unknown): unknown => {
@@ -116,11 +117,25 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', { schema: { hide: true } }, async () => health('knowledge', version, API_VERSION));
 
-  /** The person calling and the floor they ask from: the one named, or the one they stand on. */
-  const personOn = (req: FastifyRequest, floor?: string, { orOrg = false } = {}) => {
+  /**
+   * The signed-in caller, held, when an app acts for them, to what the app is granted (ADR 0079, D15): a read
+   * needs knowledge:read, an action its own scope, and an action not granted to apps by default is the person's
+   * own to take, in AUGUR, never an app's for them.
+   */
+  const callerFor = (req: FastifyRequest, action?: Pick<Declared, 'name' | 'scope' | 'grantedToAppsByDefault'>) => {
     const caller = callerFromHeaders(req.headers);
     if (!caller) throw new Problem(401, 'unauthenticated', 'Sign in to continue.');
-    if (caller.app) throw new Problem(403, 'not_allowed', `${caller.app} can’t reach the knowledge graph yet: apps reach it through its client, which comes in a later release.`);
+    if (caller.app) {
+      const needs = action?.scope ?? 'knowledge:read';
+      if (!delegationAllows(caller, needs)) throw new Problem(403, 'not_allowed', `${caller.app} isn’t granted ${needs} on this floor, so it can’t ${action ? `take ${action.name}` : 'read the knowledge graph'} for you.`, { whoCanChange: WHO_GRANTS });
+      if (action && !action.grantedToAppsByDefault) throw new Problem(403, 'not_allowed', `${action.name} isn’t granted to apps: ${caller.app} can’t take it for you. Take it yourself in AUGUR.`);
+    }
+    return caller;
+  };
+
+  /** The person calling and the floor they ask from: the one named, or the one they stand on. */
+  const personOn = (req: FastifyRequest, floor?: string, { orOrg = false, action }: { orOrg?: boolean; action?: Declared } = {}) => {
+    const caller = callerFor(req, action);
     const here = floor ?? caller.workspace?.id;
     if (!here && !orOrg) throw new Problem(400, 'floor_required', 'Say which floor you stand on (X-Workspace-Id).');
     // The gateway checked the floor named in X-Workspace-Id: when it is your own, that's where your own floor is.
@@ -129,7 +144,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
   };
 
   /** Runs `work` as the person on the floor, after bringing where they stand up to date from identity. */
-  const standOn = async <T>(req: FastifyRequest, floor: string | undefined, work: (db: pg.PoolClient, sight: string[]) => Promise<T>, options: { keep?: boolean; orOrg?: boolean } = {}) => {
+  const standOn = async <T>(req: FastifyRequest, floor: string | undefined, work: (db: pg.PoolClient, sight: string[]) => Promise<T>, options: { keep?: boolean; orOrg?: boolean; action?: Declared } = {}) => {
     const { person, here, personal } = personOn(req, floor, options);
     if (!standing) throw new StandingUnavailable('The knowledge service has no way to ask identity where people stand.');
     const where = await standing(person);
@@ -262,7 +277,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
               await db.query('select kg.keep_answer($1, $2, $3, $4::jsonb)', [key, action.name, sha, JSON.stringify(answer)]);
               return answer;
             },
-            { keep: !dryRun },
+            { keep: !dryRun, action },
           );
         },
       );
@@ -590,7 +605,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
 
       // The ontology belongs to no floor: anyone signed in reads it, and only candidates are fenced (to sources in sight).
       const signedIn = (req: FastifyRequest) => {
-        if (!callerFromHeaders(req.headers)) throw new Problem(401, 'unauthenticated', 'Sign in to continue.');
+        callerFor(req);
       };
       app.get('/ontology', { schema: { summary: 'The deployment’s ontology now: the base profile and the terms adopted since', response: { 200: ref(Ontology), 401: problem('No signed-in caller') } } }, async (req) => {
         signedIn(req);
