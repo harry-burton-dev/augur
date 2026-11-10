@@ -5,6 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { knowledgeDb } from './db.testing.ts';
 import { as, client, type Client, ORG, own, people, report } from './http.testing.ts';
 import { instant } from './objects.ts';
+import { BASE_CLASSES } from './profile.ts';
 
 const DATABASE_URL = process.env.DATABASE_URL;
 const db = knowledgeDb(DATABASE_URL);
@@ -129,6 +130,8 @@ describe.skipIf(!DATABASE_URL)('the object reads over HTTP', () => {
     const onto = await app.inject({ url: '/v1/ontology', headers: as('alice') });
     expect(onto.json()).toMatchObject({ version: '1', classes: expect.arrayContaining([expect.objectContaining({ iri: 'kg:Arrival', kind: 'occurrent', status: 'base', parent: 'kg:Act' })]) });
     expect(onto.json().predicates).toEqual(expect.arrayContaining([expect.objectContaining({ iri: 'kg:capacity', kind: 'property', datatype: 'quantity', singleValued: true })]));
+    // The contract's BaseClass, which the client types, is the base profile as the store has it.
+    expect(onto.json().classes.filter((c: { status: string }) => c.status === 'base').map((c: { iri: string }) => c.iri).sort()).toEqual([...BASE_CLASSES].sort());
     expect((await app.inject({ url: '/v1/ontology/classes/kg:Ship', headers: as('alice') })).json()).toMatchObject({ iri: 'kg:Ship', label: 'Ship' });
     expect((await app.inject({ url: '/v1/ontology/classes/ship', headers: as('alice') })).json()).toMatchObject({ iri: 'kg:Ship' });
     expect((await app.inject({ url: '/v1/ontology/classes/kg:Starship', headers: as('alice') })).statusCode).toBe(404);
