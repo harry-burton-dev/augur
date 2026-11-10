@@ -32,9 +32,9 @@ const fakeAugur = ({ allowed = true, adminOnOrg = true, orgLibrary = true } = {}
       return reply(201, { person: p, temporaryPassword: 'abcd-efgh-jkmn' });
     }
     if (pathname === '/api/identity/v1/me/workspaces') return reply(200, { workspaces: [{ id: 'w-me', kind: 'personal', name: 'You' }, ...(adminOnOrg ? [org] : [])] });
-    if (pathname === '/api/folio/v1/libraries') return reply(200, { libraries: orgLibrary && init.headers['x-workspace-id'] === org.id ? [{ id: 'lib-1', name: 'Library' }] : [] });
-    if (pathname === '/api/folio/v1/libraries/lib-1/documents' && method === 'GET') return reply(200, { documents: state.docs, total: state.docs.length });
-    if (pathname === '/api/folio/v1/libraries/lib-1/documents') {
+    if (pathname === '/api/folio/v1/library') return reply(200, { collections: orgLibrary && init.headers['x-workspace-id'] === org.id ? [{ id: 'lib-1', name: 'Library' }] : [] });
+    if (pathname === '/api/folio/v1/folders/lib-1/documents' && method === 'GET') return reply(200, { documents: state.docs, total: state.docs.length });
+    if (pathname === '/api/folio/v1/folders/lib-1/documents') {
       const d = { id: `doc${++n}`, title: searchParams.get('title'), text: body, type: init.headers['content-type'] };
       state.docs.push(d);
       return reply(201, d);
@@ -106,12 +106,12 @@ test('running it again adds nothing that is already there', async () => {
   assert.equal(second.people['amara-okafor'].temporaryPassword, 'abcd-efgh-jkmn');
 });
 
-test('says why when a floor has no library, or Data Atlas refuses an entity, and carries on', async () => {
+test('says why when a floor’s library has no collection, or Data Atlas refuses an entity, and carries on', async () => {
   const { api, state } = fakeAugur({ orgLibrary: false });
   const withUnknown = { ...cast, entities: [{ type: 'unicorn', label: 'Sparkle' }, ...cast.entities] };
   const ledger = await seed({ cast: withUnknown, api });
   assert.equal(state.docs.length, 0);
-  assert.ok(ledger.skipped.some((s) => /no library there yet; one of the floor’s leads makes it/.test(s.why)));
+  assert.ok(ledger.skipped.some((s) => /library has no collection yet; one of the floor’s leads makes it/.test(s.why)));
   assert.ok(ledger.skipped.some((s) => s.what === 'entity Sparkle' && /no kind of thing called/.test(s.why)));
   assert.equal(state.entities.length, cast.entities.length);
 });
