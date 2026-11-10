@@ -4,10 +4,16 @@ import { IntentError } from './intents.js';
 import { isMarkingOrNone, type Marking } from './refs.js';
 
 /**
- * The standard entity intents (SDK 1.5). Data Atlas handles them out of the box;
- * any app that points at real things (a ship, a port, a person) opens one with
+ * The standard entity intents (SDK 1.5). They are handled by whichever installed
+ * app declares it handles them, such as a pillar app over the knowledge graph; no
+ * app ships with AUGUR, so on a deployment with none of them installed, the shell
+ * says that no app handles the intent, and one that waits for an answer
+ * (`pickEntities`, `proposeEntity`) rejects with an IntentError.
+ * Any app that points at real things (a ship, a port, a person) opens one with
  * `openEntity`, asks the person for some with `pickEntities`, and asks why one
  * shows the way it does with `explainEntity`, without knowing which app keeps them.
+ * To read or change the knowledge graph itself, an app uses `connectKnowledge`
+ * in `@augur/clients`, not an intent.
  */
 export const ENTITY_OPEN = 'entity.open';
 export const ENTITY_PICK = 'entity.pick';
@@ -101,9 +107,9 @@ export interface ProposalReceipt {
 }
 
 /**
- * Offers what a passage names to whichever app handles `entity.propose` (Data
- * Atlas), which asks the person what it is and files it for that floor's leads
- * to decide. Nothing becomes knowledge until they do. Rejects with
+ * Offers what a passage names to whichever installed app handles `entity.propose`,
+ * which asks the person what it is and files it for that floor's leads to
+ * decide. Nothing becomes knowledge until they do. Rejects with
  * IntentCancelled when the person closes it, and with an IntentError when no
  * app they can open handles it or the answer isn't a receipt.
  */

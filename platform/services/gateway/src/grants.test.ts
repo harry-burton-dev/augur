@@ -15,6 +15,15 @@ describe('what an app’s call needs', () => {
     expect(scopeFor('GET', '/api/registry/v1/manifest', 'notes', platform)).toBeUndefined();
   });
 
+  it('maps the knowledge graph’s reads and actions to its scopes, retain to extract', () => {
+    expect(scopeFor('GET', '/api/knowledge/v1/floors/team/entities?limit=5', 'notes', platform)).toBe('knowledge:read');
+    expect(scopeFor('GET', '/api/knowledge/v1/actions', 'notes', platform)).toBe('knowledge:read');
+    expect(scopeFor('POST', '/api/knowledge/v1/floors/team/recall', 'notes', platform)).toBe('knowledge:read');
+    expect(scopeFor('POST', '/api/knowledge/v1/actions/retain?dryRun=true', 'notes', platform)).toBe('knowledge:extract');
+    expect(scopeFor('POST', '/api/knowledge/v1/actions/hold', 'notes', platform)).toBe('knowledge:act');
+    expect(scopeFor('DELETE', '/api/knowledge/v1/floors/team', 'notes', platform)).toBeUndefined();
+  });
+
   it('holds a platform scope only from the grant’s platform scopes', () => {
     expect(holds({ scopes: ['notifications:send'], platformScopes: ['audit:read'] }, 'audit:read')).toBe(true);
     expect(holds({ scopes: ['audit:read'] }, 'audit:read')).toBe(false);

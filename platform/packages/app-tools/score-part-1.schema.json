@@ -223,7 +223,28 @@
                 "params": {
                   "type": "object",
                   "additionalProperties": false,
-                  "properties": {}
+                  "properties": {
+                    "classes": {
+                      "description": "The classes the app needs the knowledge graph to have, as IRIs (kg:Ship). The registry refuses an install where the deployment has one of them neither in its base profile nor adopted.",
+                      "type": "array",
+                      "uniqueItems": true,
+                      "maxItems": 100,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z][A-Za-z0-9.+-]*:[^\\s]{1,200}$"
+                      }
+                    },
+                    "actions": {
+                      "description": "The knowledge graph's actions the app takes, by name (retain). The registry refuses an install where the deployment doesn't offer one of them.",
+                      "type": "array",
+                      "uniqueItems": true,
+                      "maxItems": 100,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9-]{1,60}$"
+                      }
+                    }
+                  }
                 }
               }
             }

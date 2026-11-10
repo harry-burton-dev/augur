@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.47.0
+  version: 1.48.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -2023,7 +2023,7 @@ components:
           items:
             $ref: "#/components/schemas/Scope"
           uniqueItems: true
-          maxItems: 7
+          maxItems: 10
           description: What the app's service asks to do on AUGUR, such as "notifications:send". An app may always register itself.
         floors:
           type: array
@@ -2114,7 +2114,10 @@ components:
         - events:subscribe
         - people:read
         - inbox:write
-      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items."
+        - knowledge:read
+        - knowledge:act
+        - knowledge:extract
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items. knowledge:read: read the knowledge graph as the person the app acts for, on the floors they can see. knowledge:act: take the knowledge graph's actions apps are granted, as that person. knowledge:extract: add what a source says to the knowledge graph (retain)."
     AppMenuCategory:
       type: object
       required:
@@ -4738,7 +4741,7 @@ paths:
                   items:
                     $ref: "#/components/schemas/Scope"
                   uniqueItems: true
-                  maxItems: 7
+                  maxItems: 10
               additionalProperties: false
       parameters:
         - schema:

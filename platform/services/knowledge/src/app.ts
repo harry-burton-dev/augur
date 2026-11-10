@@ -4,10 +4,12 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type pg from 'pg';
 import Type, { type Static } from 'typebox';
 import { ulid } from 'ulid';
-import { callerFromHeaders, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
-import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type Effects } from './actions.ts';
+import { callerFromHeaders, delegationAllows, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
+import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type ActionDecl as Declared, type Effects, type RetainInputOf } from './actions.ts';
+import { extractionContext, extractionMessages, ExtractionRefused, newFence, PROMPT_VERSION, toRetain, type Dropped } from './extract.ts';
 import { describeApi } from './contract.ts';
 import { EXPORT_TYPES, exportFloor, type ExportFormat } from './export.ts';
+import { BASE_CLASSES } from './profile.ts';
 import {
   entityBeliefs,
   entityEvents,
@@ -60,6 +62,10 @@ import { asPerson } from './store.ts';
 
 /** The major version of the API this service serves; see contracts/ for its full version. */
 export const API_VERSION = 'v1';
+/** How many entities in sight the extraction prompt names, as ones the text may mean. */
+const KNOWN_IN_PROMPT = 200;
+/** What an observation the service extracted names as its extractor. */
+const EXTRACTOR = 'the knowledge service, through the models service';
 const version = packageVersion(import.meta.url);
 /** The base profile the store ships (migration 002). */
 const BASE_PROFILE = 'augur-base (CCO profile)';
@@ -74,6 +80,8 @@ export interface KnowledgeOptions {
   standing?: StandingLookup;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
+  /** Asks the model, through the models service, for what a text says (MODELS_URL). Without it, retain takes no text. */
+  extract?: (messages: { role: 'system' | 'user'; content: string }[], floor: string | undefined) => Promise<string>;
   /** The most a page of a read gives, whatever it asks for (KNOWLEDGE_PAGE_LIMIT). */
   pageLimit?: number;
   /** The most hops a subgraph goes from its entity, whatever it asks for (KNOWLEDGE_SUBGRAPH_DEPTH). */
@@ -88,6 +96,7 @@ export const DEFAULT_SUBGRAPH_DEPTH = 3;
 const KEY = /^[\x21-\x7e]{8,200}$/;
 const NOT_ON_FLOOR = 'You can’t stand on that floor, or it no longer exists.';
 const WHO_ADDS = 'A lead of the team, or an admin, who can add you to it.';
+const WHO_GRANTS = 'An admin, who can grant the app the scope in Admin, once its manifest asks for it.';
 
 /** An error from the store, as a problem: a refusal says why, a bad reference says what to fix. */
 const fromStore = (err: unknown): unknown => {
@@ -106,7 +115,7 @@ const fromStore = (err: unknown): unknown => {
  * action, and reads, each answered as the person calling on the floor they stand on. The store's fence does
  * the deciding (migrations 003 and 004); this only says who is asking and where.
  */
-export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
+export const buildApp = async ({ store, standing, callers, extract, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
   // A path parameter may be as long as the contract lets it be once percent-encoded (an IRI of 200 characters,
   // say), not only Fastify's default of 100, which answered a longer one with a 414 the contract doesn't name.
   const app = Fastify({ ...serviceFastifyOptions(), routerOptions: { maxParamLength: 1024 } }).withTypeProvider<TypeBoxTypeProvider>();
@@ -115,11 +124,25 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', { schema: { hide: true } }, async () => health('knowledge', version, API_VERSION));
 
-  /** The person calling and the floor they ask from: the one named, or the one they stand on. */
-  const personOn = (req: FastifyRequest, floor?: string, { orOrg = false } = {}) => {
+  /**
+   * The signed-in caller, held, when an app acts for them, to what the app is granted (ADR 0079, D15): a read
+   * needs knowledge:read, an action its own scope, and an action not granted to apps by default is the person's
+   * own to take, in AUGUR, never an app's for them.
+   */
+  const callerFor = (req: FastifyRequest, action?: Pick<Declared, 'name' | 'scope' | 'grantedToAppsByDefault'>) => {
     const caller = callerFromHeaders(req.headers);
     if (!caller) throw new Problem(401, 'unauthenticated', 'Sign in to continue.');
-    if (caller.app) throw new Problem(403, 'not_allowed', `${caller.app} can’t reach the knowledge graph yet: apps reach it through its client, which comes in a later release.`);
+    if (caller.app) {
+      const needs = action?.scope ?? 'knowledge:read';
+      if (!delegationAllows(caller, needs)) throw new Problem(403, 'not_allowed', `${caller.app} isn’t granted ${needs} on this floor, so it can’t ${action ? `take ${action.name}` : 'read the knowledge graph'} for you.`, { whoCanChange: WHO_GRANTS });
+      if (action && !action.grantedToAppsByDefault) throw new Problem(403, 'not_allowed', `${action.name} isn’t granted to apps: ${caller.app} can’t take it for you. Take it yourself in AUGUR.`);
+    }
+    return caller;
+  };
+
+  /** The person calling and the floor they ask from: the one named, or the one they stand on. */
+  const personOn = (req: FastifyRequest, floor?: string, { orOrg = false, action }: { orOrg?: boolean; action?: Declared } = {}) => {
+    const caller = callerFor(req, action);
     const here = floor ?? caller.workspace?.id;
     if (!here && !orOrg) throw new Problem(400, 'floor_required', 'Say which floor you stand on (X-Workspace-Id).');
     // The gateway checked the floor named in X-Workspace-Id: when it is your own, that's where your own floor is.
@@ -128,7 +151,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
   };
 
   /** Runs `work` as the person on the floor, after bringing where they stand up to date from identity. */
-  const standOn = async <T>(req: FastifyRequest, floor: string | undefined, work: (db: pg.PoolClient, sight: string[]) => Promise<T>, options: { keep?: boolean; orOrg?: boolean } = {}) => {
+  const standOn = async <T>(req: FastifyRequest, floor: string | undefined, work: (db: pg.PoolClient, sight: string[]) => Promise<T>, options: { keep?: boolean; orOrg?: boolean; action?: Declared } = {}) => {
     const { person, here, personal } = personOn(req, floor, options);
     if (!standing) throw new StandingUnavailable('The knowledge service has no way to ask identity where people stand.');
     const where = await standing(person);
@@ -156,8 +179,12 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
       const ObjectParams = Type.Object({ floor: Type.String({ minLength: 1, maxLength: 120, description: 'A floor id as identity gives it.' }), id: Type.String({ minLength: 1, maxLength: 80 }) });
 
       app.get('/meta', { schema: { summary: 'The majors this service speaks, its version and the ontology version', response: { 200: ref(Meta) } } }, async () => {
-        const { rows } = await store.query<{ v: number }>('select max(version)::int as v from kg.ontology_versions');
-        return { apiMajor: 1 as const, version, ontology: { base: BASE_PROFILE, version: String(rows[0]?.v ?? 1) }, speaks: { knowledge: [1] } };
+        const [{ rows }, held] = await Promise.all([
+          store.query<{ v: number }>('select max(version)::int as v from kg.ontology_versions'),
+          store.query<{ iri: string }>("select iri from kg.classes where status in ('base', 'accepted') order by iri"),
+        ]);
+        const ontology = { base: BASE_PROFILE, version: String(rows[0]?.v ?? 1), baseClasses: [...BASE_CLASSES], classes: held.rows.map((r) => r.iri) };
+        return { apiMajor: 1 as const, version, ontology, speaks: { knowledge: [1] } };
       });
 
       app.get(
@@ -201,7 +228,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
             params: ActionParams,
             querystring: Type.Object({ dryRun: Type.Optional(Type.Boolean({ default: false })) }),
             headers: Type.Object({ 'idempotency-key': Type.Optional(Type.String({ description: '8 to 200 characters, unique per intended change.' })) }),
-            body: Type.Unsafe<unknown>({ type: 'object', description: 'The input schema of the action in GET /actions.' }),
+            body: Type.Unsafe<unknown>({ type: 'object', additionalProperties: true, description: 'The input schema of the action in GET /actions.' }),
             response: {
               200: ref(ActionResult),
               400: problem('The Idempotency-Key header is missing or malformed, or no floor is named'),
@@ -228,6 +255,38 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
           }
           const sha = createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
           const dryRun = req.query.dryRun === true;
+          // Text to extract is read by the model first, outside the action's transaction, which a model's minutes
+          // would hold open; a repeat of a request already answered is answered without asking the model again.
+          let extraction: { promptVersion: string; flagged: number; dropped: Dropped[] } | undefined;
+          if (action.name === 'retain' && typeof (input as RetainInputOf).text === 'string') {
+            const given = input as RetainInputOf;
+            const prior = await standOn(req, undefined, async (db) => (await db.query<{ action: string }>('select action from kg.answer_for($1)', [key])).rows[0], { action });
+            if (!prior) {
+              if (given.entities?.length || given.observations?.length) throw new Problem(422, 'invalid_input', 'Send the text to extract, or the entities and observations extracted from it, not both.');
+              if (!extract) throw new Problem(503, 'extraction_unavailable', 'This deployment’s knowledge graph has no model to read text with.', { whoCanChange: 'A deployment admin, by turning models on and giving the knowledge service MODELS_URL.' });
+              const source = { title: given.source.title, text: given.text! };
+              const ctx = await standOn(req, undefined, async (db, sight) => extractionContext(db, sight, source.text, KNOWN_IN_PROMPT), { action });
+              const fence = newFence();
+              const floor = callerFromHeaders(req.headers)?.workspace?.id;
+              let content: string;
+              try {
+                content = await extract(extractionMessages(source, ctx, fence), floor);
+              } catch (err) {
+                req.log.warn({ err: (err as Error).message }, 'extraction: the model could not be asked');
+                throw new Problem(503, 'models_unavailable', `The model couldn’t read the text: ${(err as Error).message}`);
+              }
+              try {
+                const { text: _text, ...rest } = given;
+                const made = toRetain(content, { source, ctx, fence, base: { source: rest.source }, extractor: EXTRACTOR });
+                input = made.input;
+                extraction = { promptVersion: PROMPT_VERSION, flagged: made.flagged, dropped: made.dropped };
+                if (made.dropped.length) req.log.info({ dropped: made.dropped }, 'extraction: what the model said that didn’t fit was dropped');
+              } catch (err) {
+                if (err instanceof ExtractionRefused) throw new Problem(422, 'extraction_refused', err.message);
+                throw err;
+              }
+            }
+          }
           return standOn(
             req,
             undefined,
@@ -242,7 +301,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
                 await db.query('savepoint dry');
                 try {
                   const effects = await action.run(db, input);
-                  return { action: action.name, actionId, effects, dryRun: true, wouldSucceed: true };
+                  return { action: action.name, actionId, effects, dryRun: true, wouldSucceed: true, ...(extraction ? { extraction } : {}) };
                 } catch (err) {
                   const refused = fromStore(err);
                   const why = refused instanceof InvalidInput ? refused.problems.join(' ') : refused instanceof Problem ? refused.detail : undefined;
@@ -257,11 +316,11 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
                 if (err instanceof InvalidInput) throw new Problem(422, 'invalid_input', `The input doesn’t fit ${action.name}.`, { extensions: { problems: err.problems } });
                 throw err;
               }
-              const answer = { action: action.name, actionId, effects };
+              const answer = { action: action.name, actionId, effects, ...(extraction ? { extraction } : {}) };
               await db.query('select kg.keep_answer($1, $2, $3, $4::jsonb)', [key, action.name, sha, JSON.stringify(answer)]);
               return answer;
             },
-            { keep: !dryRun },
+            { keep: !dryRun, action },
           );
         },
       );
@@ -589,7 +648,7 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
 
       // The ontology belongs to no floor: anyone signed in reads it, and only candidates are fenced (to sources in sight).
       const signedIn = (req: FastifyRequest) => {
-        if (!callerFromHeaders(req.headers)) throw new Problem(401, 'unauthenticated', 'Sign in to continue.');
+        callerFor(req);
       };
       app.get('/ontology', { schema: { summary: 'The deployment’s ontology now: the base profile and the terms adopted since', response: { 200: ref(Ontology), 401: problem('No signed-in caller') } } }, async (req) => {
         signedIn(req);

@@ -80,10 +80,17 @@ const RetainInput = Type.Object(
       },
       { additionalProperties: false },
     ),
-    extractor: Type.String({ minLength: 1, maxLength: 100 }),
+    text: Type.Optional(
+      Type.String({
+        minLength: 1,
+        maxLength: 200_000,
+        description: 'The source’s text, for the service to extract from through the models service, instead of entities and observations. The answer says what it kept back.',
+      }),
+    ),
+    extractor: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: 'Who or what extracted the claims. Required with entities and observations.' })),
     promptVersion: Type.Optional(Type.String({ maxLength: 60 })),
     ontologyVersion: Type.Optional(Type.String({ pattern: '^[0-9]{1,9}$', description: 'The ontology the extractor read; the current one when left out.' })),
-    entities: Type.Array(
+    entities: Type.Optional(Type.Array(
       Type.Object(
         {
           ref: Type.String({ minLength: 1, maxLength: 60, description: 'Local to this call. Resolution chooses the entity.' }),
@@ -95,8 +102,8 @@ const RetainInput = Type.Object(
         { additionalProperties: false },
       ),
       { maxItems: 200 },
-    ),
-    observations: Type.Array(
+    )),
+    observations: Type.Optional(Type.Array(
       Type.Object(
         {
           subject: Type.String({ minLength: 1, maxLength: 80, description: 'An entity of this call, by its ref, or an entity id.' }),
@@ -111,10 +118,27 @@ const RetainInput = Type.Object(
           validTo: Type.Optional(Type.String({ format: 'date-time' })),
           validPrecision: Type.Optional(Precision),
           attributedTo: Type.Optional(Type.String({ maxLength: 200 })),
+          flag: Type.Optional(
+            Type.String({ minLength: 1, maxLength: 300, description: 'Why its text seems to speak to the system rather than about the world. It is kept flagged: no floor believes it until its owner keeps it.' }),
+          ),
         },
         { additionalProperties: false },
       ),
       { maxItems: 500 },
+    )),
+    proposals: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            term: Type.String({ minLength: 1, maxLength: 120, pattern: '^[A-Za-z][A-Za-z0-9]*$' }),
+            kind: Type.Union([Type.Literal('class'), Type.Literal('predicate')]),
+            parent: Type.String({ minLength: 1, maxLength: 300, description: 'The declared term it would sit under.' }),
+            why: Type.String({ minLength: 1, maxLength: 300 }),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 50, description: 'Terms the ontology lacks that the extractor would have used. Each is recorded as a candidate; none is adopted here.' },
+      ),
     ),
   },
   { additionalProperties: false, description: 'Extraction output. It can only add: no confirm, dispute, hold, raise or merge can be said here.' },
@@ -123,8 +147,11 @@ const RetainInput = Type.Object(
 /** The ontology version a claim was read against, when the caller leaves it out: the current one. */
 const currentOntology = async (db: pg.ClientBase) => (await db.query<{ v: number }>('select max(version)::int as v from kg.ontology_versions')).rows[0]!.v;
 
-/** An entity this call names: one an identity key in sight already names, one with the same label and class in sight, or a new one here. */
-const resolve = async (db: pg.ClientBase, source: string, e: Static<typeof RetainInput>['entities'][number]) => {
+/** How alike two names must be (pg_trgm similarity) to be one entity's, when no key or exact name settles it. */
+const SAME_NAME = 0.8;
+
+/** An entity this call names: one an identity key in sight already names, one with the same label and class in sight, one whose name is nearly the same, or a new one here. */
+const resolve = async (db: pg.ClientBase, source: string, e: NonNullable<Static<typeof RetainInput>['entities']>[number]) => {
   let uuid: string | undefined;
   const unknownKeys: Static<typeof Key>[] = [];
   for (const key of e.identityKeys ?? []) {
@@ -138,6 +165,16 @@ const resolve = async (db: pg.ClientBase, source: string, e: Static<typeof Retai
       [e.label, e.class],
     )
   ).rows[0]?.entity;
+  // Then a name close enough to be the same one written another way ("MV Saltmarsh Heron" and "Saltmarsh Heron" are,
+  // at 0.84; "Crane C2" and "Crane C3" are not, at 0.6), of the same class, and only when it is one entity, never a guess between two.
+  uuid ??= await (async () => {
+    const { rows } = await db.query<{ entity: string }>(
+      `select distinct n.entity from kg.entity_names n join kg.entities e on e.id = n.entity
+       where n.name % $1 and similarity(n.name, $1) >= $3 and e.class = $2 and e.state = 'active' limit 2`,
+      [e.label, e.class, SAME_NAME],
+    );
+    return rows.length === 1 ? rows[0]!.entity : undefined;
+  })();
   uuid ??= (await db.query<{ id: string }>('select kg.act_new_entity($1, $2) as id', [e.class, e.label])).rows[0]!.id;
   await db.query('select kg.act_mention($1, $2, $3, null, true)', [source, uuid, e.label]);
   for (const alias of e.aliases ?? []) await db.query('select kg.act_mention($1, $2, $3, null, false)', [source, uuid, alias]);
@@ -146,6 +183,9 @@ const resolve = async (db: pg.ClientBase, source: string, e: Static<typeof Retai
   return uuid;
 };
 
+/** What `retain` takes, as extraction makes it. */
+export type RetainInputOf = Static<typeof RetainInput>;
+
 const retain: ActionDecl<typeof RetainInput> = {
   name: 'retain',
   since: '1.0',
@@ -153,27 +193,30 @@ const retain: ActionDecl<typeof RetainInput> = {
   input: RetainInput,
   who: 'Anyone who can stand on the floor, for a source on it. On a personal floor each claim is kept as memory at once.',
   scope: 'knowledge:extract',
-  grantedToAppsByDefault: false,
+  grantedToAppsByDefault: true,
   undoable: true,
   emits: ['platform.knowledge.entity.created', 'platform.knowledge.observation.retained'],
   async run(db, input) {
     const { source: s } = input;
+    // Text is extracted before the action runs (app.ts), so what reaches here is what was extracted.
+    if (input.text !== undefined) throw new InvalidInput(['Send the text to extract, or the entities and observations extracted from it, not both.']);
+    if (!input.extractor) throw new InvalidInput(['Say who extracted the claims (extractor).']);
     const source = (await db.query<{ id: string }>('select kg.act_add_source($1, $2, $3, $4, $5, $6) as id', [s.app, s.ref, count(s.version), s.contentSha256, s.title, s.writtenAt ?? null])).rows[0]!.id;
     const refs = new Map<string, string>();
-    for (const e of input.entities) {
+    for (const e of input.entities ?? []) {
       if (refs.has(e.ref)) throw new InvalidInput([`Two entities in this call are both "${e.ref}".`]);
       refs.set(e.ref, await resolve(db, source, e));
     }
     const version = input.ontologyVersion ? count(input.ontologyVersion) : await currentOntology(db);
     const observations: string[] = [];
-    for (const [i, o] of input.observations.entries()) {
+    for (const [i, o] of (input.observations ?? []).entries()) {
       const at = `Claim ${i + 1}`;
       if (o.kind === 'link' && (!o.object || o.value)) throw new InvalidInput([`${at} is a link, so it names an object and no value.`]);
       if (o.kind === 'property' && (!o.value || o.object)) throw new InvalidInput([`${at} is a property, so it carries a value and no object.`]);
       if (o.anchor && o.anchor.end < o.anchor.start) throw new InvalidInput([`${at}'s anchor ends before it starts.`]);
       const { rows } = await db.query<{ id: string }>(
         `select kg.act_retain($1, $2, $3, $4::jsonb, $5, $6, case when $7::int is null then null else int4range($7::int, $8::int) end,
-           tstzrange($9::timestamptz, $10::timestamptz), $11, $12, $13, $14, $15, $16) as id`,
+           tstzrange($9::timestamptz, $10::timestamptz), $11, $12, $13, $14, $15, $16, $17, $18) as id`,
         [
           source,
           entityOf(o.subject, refs, `${at}'s subject`),
@@ -191,10 +234,13 @@ const retain: ActionDecl<typeof RetainInput> = {
           input.extractor,
           input.promptVersion ?? '',
           version,
+          o.flag !== undefined,
+          o.flag ?? null,
         ],
       );
       observations.push(rows[0]!.id);
     }
+    for (const p of input.proposals ?? []) await db.query('select kg.act_propose($1, $2, $3, $4, $5)', [p.term, p.kind, p.parent, p.why, source]);
     const beliefs = (await db.query<{ belief: string }>('select distinct belief from kg.belief_evidence where observation = any ($1::uuid[])', [observations])).rows.map((r) => r.belief);
     return { sources: [source], entities: [...new Set(refs.values())].map(entityId), observations, beliefs };
   },

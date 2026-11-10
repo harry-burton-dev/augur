@@ -10,7 +10,7 @@ import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { automaticProblem, defaultDesiredState, windowAt } from './desired-state.ts';
 import { AppUpdateChecker, isDevBuild, newestOn, onChannel, previewPr, previewsIn, refusedIn, updateNeeds, type AppFeedRelease } from './app-updates.ts';
 import { feedHeld } from './updates.ts';
-import { checkRelease, contractMessage } from './release-check.ts';
+import { checkRelease, contractMessage, knowledgeNeeds, type KnowledgeOffer, type Offered } from './release-check.ts';
 import { isRelease2 } from '@augur/app-tools/release2';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
@@ -90,9 +90,16 @@ const internetOf = (release: AppRelease, allowed: InternetAllowed | undefined) =
   };
 };
 
+/** What the deployment offers a release, asking its knowledge graph only when the release needs something of it. */
+const offeredTo = async (release: unknown, knowledge?: () => Promise<KnowledgeOffer>): Promise<Offered> => {
+  if (!knowledge || !isRelease2(release)) return {};
+  const needs = knowledgeNeeds(release);
+  return needs.classes.length || needs.actions.length ? { knowledge: await knowledge() } : {};
+};
+
 /** Why a release can't be installed (spec 9.1, 9.2), in plain words; undefined when it can. */
-export const releaseProblem = (release: unknown): string | undefined => {
-  const { refusals } = checkRelease(release);
+export const releaseProblem = (release: unknown, offered?: Offered): string | undefined => {
+  const { refusals } = checkRelease(release, offered);
   if (refusals.length) return refusals.join(' ');
   const { version } = release as AppRelease;
   if (!semver.valid(version)) return `"${version}" is not a version such as 1.2.0.`;
@@ -135,6 +142,8 @@ export interface AppRunnerRouteOptions {
   dataGraceDays?: number;
   /** The apps this deployment installs by default (DEFAULT_APPS, spec 9.7). */
   defaultApps?: string[];
+  /** Asks the deployment's knowledge graph what it offers: an install that needs more of it is refused. */
+  knowledge?: () => Promise<KnowledgeOffer>;
 }
 
 /** The largest release file the registry reads from a pasted address. */
@@ -149,7 +158,7 @@ const RELEASE_SCHEMA = /^augur\.app-release\/v\d+$/;
  * ship with AUGUR. Admins ask for that here; the runner asks what's next and says how each step went.
  */
 export const appRunnerRoutes =
-  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = releaseFileFetch({ bytes: RELEASE_FILE_BYTES, ms: RELEASE_FILE_MS }), platformUrl, dataGraceDays = DATA_GRACE_DAYS, defaultApps = [] }: AppRunnerRouteOptions) =>
+  ({ store, updates, ring = 'preview', allowPrPreviews = true, sdkVersion, audit, serviceOf, record, live = new LiveOverrides(ring), timeZone = 'UTC', now = () => new Date(), releaseFetch = releaseFileFetch({ bytes: RELEASE_FILE_BYTES, ms: RELEASE_FILE_MS }), platformUrl, dataGraceDays = DATA_GRACE_DAYS, defaultApps = [], knowledge }: AppRunnerRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** When the runner last asked what to do; it lives only as long as this process. */
@@ -954,7 +963,7 @@ export const appRunnerRoutes =
           const listed = updates.result.releases.find((r) => r.app === release!.id && r.version === release!.version)?.channel;
           // What the file is comes first: one on contract 2 is refused for that alone (spec 11.6).
           const problem =
-            releaseProblem(release) ??
+            releaseProblem(release, await offeredTo(release, knowledge)) ??
             (previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : ringProblem(release, ring, listed));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
         }
@@ -1074,7 +1083,7 @@ export const appRunnerRoutes =
         if (!file || typeof file !== 'object' || Array.isArray(file) || !RELEASE_SCHEMA.test(String((file as { schema?: unknown }).schema))) {
           return reply.code(400).send({ error: 'bad_request', message: `${url} isn’t a release file.` });
         }
-        const { refusals, warnings } = checkRelease(file);
+        const { refusals, warnings } = checkRelease(file, await offeredTo(file, knowledge));
         req.log.info({ by: caller.id, url, refused: refusals.length }, 'release file read from a pasted address');
         const r = file as Partial<AppRelease>;
         return {
