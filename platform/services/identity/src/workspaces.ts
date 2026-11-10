@@ -100,6 +100,8 @@ export interface WorkspaceStore {
   org(): Promise<Workspace>;
   /** A person's own floor, made the first time it's asked for. */
   personal(owner: string, name: string): Promise<Workspace>;
+  /** Every live personal floor, with its owner: for the permissions service's copy (ADR 0085). */
+  personalFloors(): Promise<{ id: string; owner: string }[]>;
   /** Every team that isn't archived, each below the one it sits in. */
   teams(): Promise<Workspace[]>;
   /** Any floor by id, archived teams included, so old links and audit entries still resolve. */
@@ -408,6 +410,11 @@ export class PgWorkspaceStore implements WorkspaceStore {
 
   teams() {
     return this.teamsIn(this.pool);
+  }
+
+  async personalFloors() {
+    const { rows } = await this.pool.query<{ id: string; owner: string }>(`select id, owner from identity.workspaces where kind = 'personal' and archived_at is null order by id`);
+    return rows;
   }
 
   async workspace(id: string) {

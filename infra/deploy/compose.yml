@@ -335,7 +335,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Each platform service's sign-in in Keycloak, made or set to these secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-}
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-permissions=${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
@@ -661,8 +661,12 @@ services:
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
       OPENFGA_TOKEN: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+      # Its own sign-in, to copy floors, positions and who holds them from identity (ADR 0089).
+      SERVICE_CLIENT_SECRET: ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
+      PERMISSIONS_COPY_SECONDS: ${PERMISSIONS_COPY_SECONDS:-30}
     depends_on:
       openfga: { condition: service_healthy }
+      identity: { condition: service_healthy }
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
   # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with
