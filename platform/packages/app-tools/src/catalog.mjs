@@ -19,6 +19,7 @@ export const appApis = (manifest) =>
     'api:default/registry-api',
     ...((manifest.scopes ?? []).some((s) => EVENTS_SCOPES.includes(s)) ? ['api:default/events-api'] : []),
     ...((manifest.scopes ?? []).includes('models:use') ? ['api:default/models-api'] : []),
+    ...((manifest.scopes ?? []).some((s) => s.startsWith('knowledge:')) ? ['api:default/knowledge-api'] : []),
   ].sort();
 
 /** The repository the app lives in, as owner/name, from GITHUB_REPOSITORY or a GitHub remote's address. */
