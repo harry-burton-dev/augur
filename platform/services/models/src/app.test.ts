@@ -166,6 +166,18 @@ describe.runIf(DATABASE_URL)('models', () => {
     expect((await none.app.inject({ method: 'GET', url: '/v1/status', headers: sam })).json()).toEqual({ enabled: false, ready: false });
   });
 
+  it('compares the admin check with the permissions service, still deciding by today’s role (shadow mode)', async () => {
+    const asked: { site: string; caller: string; today: boolean }[] = [];
+    const shadow = { check: (site: string, caller: { id: string }, _q: unknown, today: boolean) => void asked.push({ site, caller: caller.id, today }), settled: async () => {} };
+    const { app } = await start({ shadow });
+    expect((await app.inject({ method: 'GET', url: '/v1/settings', headers: sam })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/v1/usage', headers: alex })).statusCode).toBe(200);
+    expect(asked).toEqual([
+      { site: 'models.settings.read', caller: 'u-2', today: false },
+      { site: 'models.usage', caller: 'u-1', today: true },
+    ]);
+  });
+
   it('lets only admins turn models on and off and set the limit, recording each change', async () => {
     const { app, audited } = await start({}, { on: false });
     const put = (headers: Record<string, string>, payload: object) => app.inject({ method: 'PUT', url: '/v1/settings', headers, payload });
