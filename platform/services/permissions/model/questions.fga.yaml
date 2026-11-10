@@ -82,6 +82,12 @@ tuples:
   - { user: role:ops-duty-planner#assignee, relation: viewer, object: document:fleet-roster }
   - { user: floor:fleet, relation: floor, object: document:fleet-incident }
   - { user: person:lucia, relation: blocked, object: document:fleet-incident }
+  # The knowledge graph's floor roles (ADR 0095): Fleet's settler is a position, its raiser a person; Operations'
+  # settler is the duty-planner role; Owen, blocked on Operations, is named its raiser.
+  - { user: persona:fleet-lead#holder, relation: settler, object: floor:fleet }
+  - { user: person:lucia, relation: raiser, object: floor:fleet }
+  - { user: role:ops-duty-planner#assignee, relation: settler, object: floor:operations }
+  - { user: person:owen, relation: raiser, object: floor:operations }
 
 tests:
   - name: Standing goes up the floors, never sideways or down
@@ -179,3 +185,18 @@ tests:
       - { user: person:hamid, object: document:berth-plan, assertions: { can_edit: true } }     # Q53
       - { user: person:jonah, object: floor:port-services, assertions: { stands: true, can_act_as_lead: true, can_manage_members: true } }  # Q54
       - { user: person:jonah, object: document:berth-plan, assertions: { can_share: true } }    # Q55 (the document is the position's)
+
+  - name: A floor's settler and raiser are positions, people or roles, and leading gives neither (ADR 0095)
+    check:
+      - { user: person:jonah, object: floor:fleet, assertions: { can_settle: true, can_raise: false } }         # Q56 (through the Fleet lead position)
+      - { user: person:lucia, object: floor:fleet, assertions: { can_settle: false, can_raise: true } }         # Q57 (named herself)
+      - { user: person:priya, object: floor:operations, assertions: { can_settle: true } }                      # Q58 (through the duty-planner role)
+      - { user: person:amara, object: floor:operations, assertions: { can_settle: false, can_raise: false } }   # Q59 (leading isn't settling)
+      - { user: person:owen, object: floor:operations, assertions: { can_raise: false } }                       # Q60 (a block wins)
+      - { user: person:jonah, object: floor:port-services, assertions: { can_settle: false } }                  # Q61 (only on that floor)
+
+  - name: The next holder of a settling position settles at once
+    tuples:
+      - { user: person:hamid, relation: holder, object: persona:fleet-lead }
+    check:
+      - { user: person:hamid, object: floor:fleet, assertions: { can_settle: true } }                           # Q62
