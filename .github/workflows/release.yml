@@ -133,10 +133,17 @@ jobs:
     # A called workflow gets no secrets unless passed: the feed reads the app repositories with APP_RELEASES_TOKEN.
     secrets: inherit
   # A new AUGUR release is installed fresh, upgraded to from the release before, and gone back
-  # from, with the images just pushed (The deploy test in the AUGUR handbook, 03 Architecture/Engineering). Once per release, nothing rebuilt.
+  # from, with the images just pushed, then has an app installed and removed through its app runner (The deploy test in the AUGUR handbook, 03 Architecture/Engineering). Once per release, nothing rebuilt.
   deploy-test:
     needs: release
     if: needs.release.outputs.augur != ''
     uses: ./.github/workflows/deploy-test.yml
+    # It builds Starter, the app template, and signs it as itself for broken mode's app runner: it pushes
+    # packages, signs keyless, and reads the template and the kit's packages with the tokens it inherits.
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    secrets: inherit
     with:
       to: ${{ needs.release.outputs.augur }}
