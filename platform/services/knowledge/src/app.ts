@@ -8,7 +8,7 @@ import { callerFromHeaders, delegationAllows, health, packageVersion, Problem, p
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type ActionDecl as Declared, type Effects, type RetainInputOf } from './actions.ts';
 import { extractionContext, extractionMessages, ExtractionRefused, newFence, PROMPT_VERSION, toRetain, type Dropped } from './extract.ts';
 import { describeApi } from './contract.ts';
-import { EXPORT_TYPES, exportFloor, type ExportFormat } from './export.ts';
+import { EXPORT_TYPES, exportFloor, exportOntology, type ExportFormat } from './export.ts';
 import { BASE_CLASSES } from './profile.ts';
 import {
   entityBeliefs,
@@ -100,6 +100,12 @@ const KEY = /^[\x21-\x7e]{8,200}$/;
 const NOT_ON_FLOOR = 'You can’t stand on that floor, or it no longer exists.';
 const WHO_ADDS = 'A lead of the team, or an admin, who can add you to it.';
 const WHO_GRANTS = 'An admin, who can grant the app the scope in Admin, once its manifest asks for it.';
+/**
+ * Who is an ontology admin: AUGUR's admins, by identity's admin role, as the other services check it. The
+ * ontology is the deployment's, not a floor's, so no floor role decides it.
+ */
+export const ONTOLOGY_ADMIN_ROLE = 'admin';
+const WHO_ADMINS = 'A deployment admin, who can give you the admin role in Admin.';
 
 /** An error from the store, as a problem: a refusal says why, a bad reference says what to fix. */
 const fromStore = (err: unknown): unknown => {
@@ -247,6 +253,10 @@ export const buildApp = async ({ store, standing, callers, extract, ledger, page
         async (req) => {
           const action = actionNamed(req.params.action);
           if (!action) throw unknown(req.params.action);
+          // The ontology belongs to no floor: an ontology admin acts on it from wherever they stand.
+          const onOntology = action.role === 'ontology-admin';
+          if (onOntology && !callerFor(req, action).roles.includes(ONTOLOGY_ADMIN_ROLE))
+            throw new Problem(403, 'not_allowed', `${action.name} is for an ontology admin, and you aren’t one.`, { whoCanChange: WHO_ADMINS });
           const key = req.headers['idempotency-key'];
           if (typeof key !== 'string' || !KEY.test(key)) throw new Problem(400, 'idempotency_key_required', 'Send an Idempotency-Key header of 8 to 200 printable characters, new for each change you mean.');
           let input;
@@ -300,6 +310,7 @@ export const buildApp = async ({ store, standing, callers, extract, ledger, page
                 return { ...(prior.answer as { action: string; actionId: string; effects: Effects }), replayed: true };
               }
               const actionId = `run_${ulid()}`;
+              if (onOntology) await db.query(`select set_config('kg.ontology_admin', 'true', true)`);
               if (dryRun) {
                 await db.query('savepoint dry');
                 try {
@@ -325,7 +336,7 @@ export const buildApp = async ({ store, standing, callers, extract, ledger, page
               await db.query('select kg.keep_answer($1, $2, $3, $4::jsonb)', [key, action.name, sha, JSON.stringify(answer)]);
               return answer;
             },
-            { keep: !dryRun, action },
+            { keep: !dryRun, action, orOrg: onOntology },
           );
         },
       );
@@ -659,6 +670,21 @@ export const buildApp = async ({ store, standing, callers, extract, ledger, page
         signedIn(req);
         return { base: BASE_PROFILE, ...(await readOntology(store)) };
       });
+      app.get(
+        '/ontology/owl',
+        {
+          schema: {
+            summary: 'The deployment’s ontology now as OWL, in Turtle',
+            description: 'The base profile and the terms adopted since, never a candidate, with each term’s status, its pack term as skos:exactMatch, and the other names extraction asks a predicate by as skos:hiddenLabel.',
+            produces: ['text/turtle'],
+            response: { 200: Type.String({ description: 'Turtle.' }), 401: problem('No signed-in caller') },
+          },
+        },
+        async (req, reply) => {
+          signedIn(req);
+          return reply.type('text/turtle; charset=utf-8').send(await exportOntology(store, BASE_PROFILE));
+        },
+      );
       app.get(
         '/ontology/shapes',
         { schema: { summary: 'The SHACL shapes the store is checked against', produces: ['text/turtle'], response: { 200: Type.String({ description: 'Turtle.' }), 401: problem('No signed-in caller') } } },

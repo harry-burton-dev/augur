@@ -19,8 +19,9 @@ const SAME = new Map([['Problem.code', 'Problem.reason']]);
  * What draft 4 asks for that the seam leaves out on purpose. A floor's name is identity's: the shell already
  * has it (/me/workspaces), and the service, asking identity as itself, is never told a personal floor's.
  * Retain takes either what was extracted or the text to extract from (PR 5), so neither half is required.
+ * Reflect is the service's own, on its schedule (PR 7): no person asks for a summary, so it isn't an action.
  */
-const ON_PURPOSE = new Set(['Floor.name', 'RetainInput.entities', 'RetainInput.observations']);
+const ON_PURPOSE = new Set(['Floor.name', 'RetainInput.entities', 'RetainInput.observations', 'ReflectInput.entity']);
 /** Draft 4 mirrors each action's input under components; here the catalogue is their only source. */
 const pascal = (name: string) => name.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
 const inputs = () => CATALOGUE.flatMap((a) => ((a.input as { required?: string[] }).required ?? []).map((f) => `${pascal(a.name)}Input.${f}`));
@@ -47,9 +48,5 @@ describe('the seam against draft 4', () => {
 /** The gap: empty since PR 3c. Every path draft 4 asks for is served; from here oasdiff guards the contract. */
 const GAP: string[] = [];
 
-/** The inputs of the actions that come with their own pull requests: reflect in PR 7, adopt and dismiss in 8. */
-const LATER = [
-  'AdoptInput.term', 'AdoptInput.kind', 'AdoptInput.iri', 'AdoptInput.label',
-  'DismissInput.term', 'DismissInput.kind', 'DismissInput.why',
-  'ReflectInput.entity',
-];
+/** The inputs of actions still to come: none since PR 8 took adopt and dismiss. */
+const LATER: string[] = [];
