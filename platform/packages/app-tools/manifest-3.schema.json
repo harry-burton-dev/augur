@@ -172,7 +172,19 @@
         },
         "search": { "type": "boolean", "description": "The app's inbound part answers GET /v1/search?q= and the shell's Find asks it." },
         "card": { "type": "boolean", "description": "Home draws a card for the app, which the app fills through ctx.frame.card." },
-        "canvas": { "type": "boolean", "description": "The app uses the full-canvas sandboxed frame for free drawing (ADR 0076). Shown to the admin before install." }
+        "canvas": { "type": "boolean", "description": "The app uses the full-canvas sandboxed frame for free drawing (ADR 0076). Shown to the admin before install." },
+        "frame": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "How the shell lays out the app's pane until a page says otherwise (ctx.frame.set). Every layout is the shell's, drawn from the kit's tokens; an app chooses one, never a distance.",
+          "properties": {
+            "layout": { "enum": ["focus", "aside", "split", "canvas"], "description": "focus: one main column, no About panel. aside: the main column and the About panel. split: a list beside its detail. canvas: one column edge to edge. Without it, aside when the app declares About sections and focus when it doesn't." },
+            "width": { "enum": ["read", "wide", "full"], "description": "The main column's width (PDR-014); read without it." },
+            "density": { "enum": ["comfortable", "compact"], "description": "The app's default spacing; the person's own setting overrides it. comfortable without it." },
+            "inset": { "enum": ["standard", "flush"], "description": "flush puts the screen against the pane's edges, for a canvas or media; the page head keeps its inset. standard without it." },
+            "about": { "enum": ["open", "folded"], "description": "Whether the About panel starts open, in a layout that has it. folded without it." }
+          }
+        }
       }
     },
     "previews": {

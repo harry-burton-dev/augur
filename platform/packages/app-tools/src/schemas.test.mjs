@@ -23,6 +23,15 @@ test('the example app is a valid contract-3 app: its manifest and each part, aga
   assert.deepEqual(validateApp({ manifest, parts: Object.fromEntries(partFiles.map((f, i) => [`score/${f}`, parts[i]])) }), { ok: true, problems: [] });
 });
 
+test('an app chooses its pane layout from the shell\'s named ones, and never a distance', () => {
+  const v = contractValidators();
+  const framed = (frame) => ({ ...manifest, contributes: { ...manifest.contributes, frame } });
+  assert.deepEqual(v.manifest(framed({ layout: 'split', width: 'wide', density: 'compact', inset: 'standard', about: 'folded' })), []);
+  assert.deepEqual(v.manifest(framed({ layout: 'canvas', inset: 'flush' })), []);
+  assert.ok(v.manifest(framed({ layout: 'three-column' })).some((p) => p.includes('/contributes/frame/layout must be equal to one of the allowed values')));
+  assert.ok(v.manifest(framed({ padding: '24px' })).some((p) => p.includes('/contributes/frame must not have additional properties')));
+});
+
 // The first problem each broken file is refused for, as the spec's check printed it (section 18).
 const refusals = {
   'manifest-absolute-entry.json': '/frontend/entry must match pattern',
