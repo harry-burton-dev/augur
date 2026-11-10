@@ -137,8 +137,26 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     expect((await get('bob', '/v1/floors')).json().floors.map((f: { id: string }) => f.id)).toEqual([ORG, 'team-b']);
   });
 
-  it('refuses an app for now, and anyone not signed in', async () => {
-    expect((await app.inject({ method: 'POST', url: '/v1/actions/retain', headers: { ...as('alice', own.alice, { app: 'notes' }), 'idempotency-key': key() }, payload: report('R11') })).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
+  it('holds an app acting for you to its scopes, and refuses anyone not signed in', async () => {
+    const forApp = (scopes: string[]) => as('alice', 'team-a', { app: 'notes', scopes });
+    const take = (action: string, scopes: string[], payload: object) => app.inject({ method: 'POST', url: `/v1/actions/${action}`, headers: { ...forApp(scopes), 'idempotency-key': key() }, payload });
+
+    // Without knowledge:read an app reads nothing, and says who can grant it.
+    const unread = await app.inject({ url: '/v1/floors', headers: forApp([]) });
+    expect(unread.json()).toMatchObject({ status: 403, reason: 'not_allowed', whoCanChange: expect.stringContaining('admin') });
+    expect((await app.inject({ url: '/v1/ontology', headers: forApp([]) })).statusCode).toBe(403);
+    expect((await app.inject({ url: '/v1/floors', headers: forApp(['knowledge:read']) })).statusCode).toBe(200);
+
+    // An action needs its own scope: retain is knowledge:extract, which knowledge:act doesn't give.
+    expect((await take('retain', ['knowledge:read', 'knowledge:act'], report('R11'))).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
+    const retained = await take('retain', ['knowledge:extract'], report('R11'));
+    expect(retained.statusCode).toBe(200);
+    const [observation] = retained.json().effects.observations;
+
+    // Holding is never an app's to do for you, whatever it is granted: you hold, in AUGUR.
+    const held = await take('hold', ['knowledge:act'], { observations: [observation] });
+    expect(held.json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('isn’t granted to apps') });
+
     expect((await app.inject({ method: 'GET', url: '/v1/floors' })).statusCode).toBe(401);
   });
 

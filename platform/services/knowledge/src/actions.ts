@@ -153,7 +153,7 @@ const retain: ActionDecl<typeof RetainInput> = {
   input: RetainInput,
   who: 'Anyone who can stand on the floor, for a source on it. On a personal floor each claim is kept as memory at once.',
   scope: 'knowledge:extract',
-  grantedToAppsByDefault: false,
+  grantedToAppsByDefault: true,
   undoable: true,
   emits: ['platform.knowledge.entity.created', 'platform.knowledge.observation.retained'],
   async run(db, input) {
