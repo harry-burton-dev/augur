@@ -113,7 +113,7 @@ export function Status({ api, openUpgrades }: { api: AdminApi; openUpgrades: () 
         </Notice>
       ) : null}
       {out && updates ? (
-        <Notice tone="needs" heading={`AUGUR ${out} is out.`} action="Open the Upgrade Centre" onAction={openUpgrades}>
+        <Notice tone="needs" heading={`AUGUR ${out} is out.`} action="Open Deployment" onAction={() => openUpgrades()}>
           <span data-update>
             You’re on {updates.running.version}
             {updates.running.build === 'source' ? ' (built from source)' : ''}.

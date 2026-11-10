@@ -1,19 +1,15 @@
-import { Button, Dialog, Section, Status, TagPicker, TextField } from '@augur/app-kit';
+import { Button, Dialog, Heading, Section, TagPicker } from '@augur/app-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ApiError, fullName, type AdminApi, type AppInstalls, type AppSettingDecl, type InstalledApp, type PastedRelease, type Person } from './api.js';
+import { ApiError, fullName, type AdminApi, type AppInstalls, type InstalledApp, type Person } from './api.js';
 import { SettingFields } from './app-settings.js';
-import { givenSettings, mustFill, settingChanges, settingNow } from './settings-form.js';
-import { scopeWords } from './apps-model.js';
+import { fieldName, settingChanges } from './settings-form.js';
 import { JobSteps } from './changes.js';
-import { asksWords, JOB_REFRESH_MS, jobOpen, jobWords } from './installs.js';
+import { JOB_REFRESH_MS, jobOpen, jobWords } from './installs.js';
 import { Line, Problem, Quiet } from './parts.js';
 
-/** A release about to be installed, while the admin confirms: with what it asks, or why it waited. */
-export type InstallAsk = { app: string; name: string; version: string; notes: string[]; release?: PastedRelease['release']; from?: string; fill?: AppSettingDecl[] };
-
 /** Where the password is entered again before anything is installed or removed; back here after. */
-const signInAgain = (query: string) => {
-  const back = `${window.location.pathname}?${query}`;
+const signInAgain = (query = '') => {
+  const back = `${window.location.pathname}${query ? `?${query}` : ''}`;
   window.location.assign(`/auth/again?return=${encodeURIComponent(back)}`);
 };
 
@@ -27,56 +23,28 @@ export function useInstalls(api: AdminApi, then: () => void) {
   const [error, setError] = useState('');
   /** Counts failed reads, so the wait for the next one starts again after one. */
   const [failedReads, setFailedReads] = useState(0);
-  const [checking, setChecking] = useState(false);
-  const [confirmInstall, setConfirmInstall] = useState<InstallAsk>();
   const [confirmRemove, setConfirmRemove] = useState<InstalledApp>();
-  const [pasting, setPasting] = useState<string>();
   const [confirmInternet, setConfirmInternet] = useState<InstalledApp>();
-  const [editing, setEditing] = useState<InstalledApp>();
   const [people, setPeople] = useState<Person[]>();
   const resumed = useRef(false);
-  const latest = useRef(installs);
-  latest.current = installs;
 
-  const ask = useCallback((app: string, version: string, i = latest.current) => {
-    const offered = i?.available.find((a) => a.app === app && a.version === version);
-    if (offered)
-      setConfirmInstall({
-        app,
-        name: offered.name,
-        version,
-        notes: [...(offered.asks ? asksWords(offered.asks, scopeWords, offered.review, offered.signer) : []), ...(offered.problem ? [offered.problem] : [])],
-        fill: mustFill(offered.review?.settings ?? []),
-      });
-  }, []);
-
-  /** Back from entering the password again (`?install=<app>@<version>` or `?uninstall=<app>`): ask once more. */
+  /** Back from entering the password again (`?uninstall=<app>` or `?internet=<app>`): ask once more. */
   const resume = useCallback(
     (i: AppInstalls) => {
       if (resumed.current) return;
       resumed.current = true;
       const params = new URLSearchParams(window.location.search);
-      const install = params.get('install');
       const uninstall = params.get('uninstall');
-      const paste = params.get('paste');
       const internet = params.get('internet');
-      const settings = params.get('settings');
-      if (!install && !uninstall && !paste && !internet && !settings) return;
-      params.delete('install');
+      if (!uninstall && !internet) return;
       params.delete('uninstall');
-      params.delete('paste');
       params.delete('internet');
-      params.delete('settings');
       const rest = params.toString();
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
-      const at = install?.lastIndexOf('@') ?? -1;
-      if (install && at > 0) ask(install.slice(0, at), install.slice(at + 1), i);
       if (uninstall) setConfirmRemove(i.installed.find((x) => x.app === uninstall));
-      if (paste) setPasting(paste);
       if (internet) setConfirmInternet(i.installed.find((x) => x.app === internet && x.internet));
-      if (settings) setEditing(i.installed.find((x) => x.app === settings && x.settings?.length));
     },
-    [ask],
+    [],
   );
 
   const load = useCallback(async () => {
@@ -101,18 +69,6 @@ export function useInstalls(api: AdminApi, then: () => void) {
     return () => clearTimeout(timer);
   }, [busy, installs, failedReads, load, then]);
 
-  const check = async () => {
-    setChecking(true);
-    try {
-      setInstalls(await api.checkInstalls());
-      setError('');
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setChecking(false);
-    }
-  };
-
   /** Asks the app runner; when the password is needed again, goes to enter it and keeps the dialog open. */
   const stepUp = async (call: () => Promise<unknown>, query: string) => {
     try {
@@ -125,36 +81,6 @@ export function useInstalls(api: AdminApi, then: () => void) {
       throw err;
     }
     await load();
-  };
-
-  /**
-   * Reads a pasted release file's address and, when it can install, asks to confirm it with what it asks
-   * for. Why it can't is the read dialog's error; the password asked again comes back here to read it again.
-   */
-  const readPasted = async (url: string) => {
-    let read: PastedRelease;
-    try {
-      read = await api.readRelease(url);
-    } catch (err) {
-      if (err instanceof ApiError && err.code === 'sign_in_again') {
-        signInAgain(`paste=${encodeURIComponent(url)}`);
-        return false as const;
-      }
-      throw err;
-    }
-    if (read.refusals.length) throw new Error(`It can’t install here: ${read.refusals.join(' ')}`);
-    const { release } = read;
-    const name = typeof release.manifest?.name === 'string' ? release.manifest.name : release.id;
-    setPasting(undefined);
-    setConfirmInstall({
-      app: release.id,
-      name,
-      version: release.version,
-      release,
-      from: url,
-      notes: [...(read.asks ? asksWords(read.asks, scopeWords, read.review, read.signer) : []), ...read.warnings, 'No feed lists it: later versions are installed the same way, from their address.'],
-      fill: mustFill(read.review?.settings ?? []),
-    });
   };
 
   const loadPeople = useCallback(() => {
@@ -171,69 +97,21 @@ export function useInstalls(api: AdminApi, then: () => void) {
     }
   };
 
-  /** Sends what the settings form changed, one setting at a time; a secret may ask for the password again first. */
-  const saveSettings = async (app: InstalledApp, values: Record<string, string>) => {
-    let last: AppInstalls | undefined;
-    for (const change of settingChanges(app.settings ?? [], values)) {
-      try {
-        last = await api.setRunnerSetting(app.app, change.id, change.value);
-      } catch (err) {
-        if (err instanceof ApiError && err.code === 'sign_in_again') {
-          signInAgain(`settings=${encodeURIComponent(app.app)}`);
-          return false as const;
-        }
-        throw err;
-      }
+  /** Saves one setting as soon as it changes, if it differs from what it is; a secret may ask for the password again first. */
+  const saveSetting = async (app: InstalledApp, id: string, raw: string) => {
+    const [change] = settingChanges((app.settings ?? []).filter((x) => x.id === id), { [fieldName(id)]: raw });
+    if (!change) return;
+    setError('');
+    try {
+      setInstalls(await api.setRunnerSetting(app.app, change.id, change.value));
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') return signInAgain();
+      setError((err as Error).message);
     }
-    if (last) setInstalls(last);
   };
 
   const dialogs = (
     <>
-      {confirmInstall ? (
-        <Dialog
-          open
-          size="glance"
-          eyebrow="Apps"
-          heading={`Install ${confirmInstall.name} ${confirmInstall.version}?`}
-          summary="The new version starts beside whatever runs now, and people are switched to it only once it answers. If it doesn’t, nothing changes."
-          actionLabel="Install"
-          busyLabel="Asking…"
-          cancelLabel="Not now"
-          onSubmit={(values) => {
-            const given = givenSettings(confirmInstall.fill ?? [], values);
-            return confirmInstall.release
-              ? stepUp(() => api.installRelease(confirmInstall.release!, given), `paste=${encodeURIComponent(confirmInstall.from ?? '')}`)
-              : stepUp(() => api.installApp(confirmInstall.app, confirmInstall.version, given), `install=${encodeURIComponent(`${confirmInstall.app}@${confirmInstall.version}`)}`);
-          }}
-          onClose={() => setConfirmInstall(undefined)}
-          fields={confirmInstall.fill?.length ? <SettingFields settings={confirmInstall.fill} /> : undefined}
-        >
-          {confirmInstall.notes.length ? (
-            <ul className="admin-notes">
-              {confirmInstall.notes.map((n) => (
-                <li key={n}>{n}</li>
-              ))}
-            </ul>
-          ) : null}
-          <p>You may be asked for your password again.</p>
-        </Dialog>
-      ) : null}
-      {pasting !== undefined ? (
-        <Dialog
-          open
-          size="glance"
-          eyebrow="Apps"
-          heading="Install from a release file’s address"
-          summary="For an app no feed lists: paste the address of its app-release.json. It is read over https and checked as the feed’s are, and you see what it asks for before anything is installed."
-          actionLabel="Read it"
-          busyLabel="Reading…"
-          cancelLabel="Not now"
-          onSubmit={(values) => readPasted((values.url ?? '').trim())}
-          onClose={() => setPasting(undefined)}
-          fields={<TextField name="url" label="Release file address" placeholder="https://github.com/owner/repo/releases/download/…/app-release.json" defaultValue={pasting} required />}
-        />
-      ) : null}
       {confirmInternet?.internet ? (
         <Dialog
           open
@@ -251,21 +129,6 @@ export function useInstalls(api: AdminApi, then: () => void) {
           cancelLabel="Not now"
           onSubmit={() => stepUp(() => api.setInternet(confirmInternet.app, !confirmInternet.internet!.allowed), `internet=${encodeURIComponent(confirmInternet.app)}`)}
           onClose={() => setConfirmInternet(undefined)}
-        />
-      ) : null}
-      {editing?.settings?.length ? (
-        <Dialog
-          open
-          size="glance"
-          eyebrow={editing.name}
-          heading="Its settings"
-          summary="The parts that read a setting you change start again with it within a minute; the others keep running. A secret is never shown again once given."
-          actionLabel="Save"
-          busyLabel="Saving…"
-          cancelLabel="Not now"
-          onSubmit={(values) => saveSettings(editing, values)}
-          onClose={() => setEditing(undefined)}
-          fields={<SettingFields settings={editing.settings} />}
         />
       ) : null}
       {confirmRemove ? (
@@ -286,7 +149,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
     </>
   );
 
-  return { installs, error, checking, check, ask, paste: () => setPasting(''), people, loadPeople, setDevelopers, remove: setConfirmRemove, internet: setConfirmInternet, editSettings: setEditing, dialogs };
+  return { installs, error, people, loadPeople, setDevelopers, remove: setConfirmRemove, internet: setConfirmInternet, saveSetting, dialogs };
 }
 
 export type Installs = ReturnType<typeof useInstalls>;
@@ -313,7 +176,7 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
           {installed.update ? `Version ${installed.update.version} is out. ` : ''}New releases, installing one, going back and its history are in the {upgradesName}.
         </p>
         <div>
-          <Button kind="secondary" size="sm" onPress={openUpgrades}>
+          <Button kind="secondary" size="sm" onPress={() => openUpgrades()}>
             Open the {upgradesName}
           </Button>
         </div>
@@ -342,19 +205,8 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
       ) : null}
       {installed.settings?.length ? (
         <div data-settings className="admin-stack">
-          <Section label="Settings" count={-1} limit={0}>
-            {installed.settings.map((s) => (
-              <Line key={s.id} end={settingNow(s)}>
-                {s.label}
-                {s.newIn ? <Quiet> · version {s.newIn} needs it</Quiet> : null}
-              </Line>
-            ))}
-          </Section>
-          <div>
-            <Button kind="tertiary" size="sm" onPress={() => ins.editSettings(installed)}>
-              Change its settings
-            </Button>
-          </div>
+          <Heading heading="Its settings" summary="Each is saved as soon as you change it. The parts that read it start again with it within a minute; a secret is never shown again once given." size="s" />
+          <SettingFields settings={installed.settings} onSave={(id, raw) => void ins.saveSetting(installed, id, raw)} disabled={open} reason={WAIT} />
         </div>
       ) : null}
       <div data-developers>
@@ -401,102 +253,6 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
           Remove from the server
         </Button>
       </div>
-    </div>
-  );
-}
-
-/** What the app feed offers to install, what's under way, and whether there's a runner to do it. Updates waiting on an admin are in the Upgrade Centre's Needs you. */
-export function InstallsSection({ ins }: { ins: Installs }) {
-  const i = ins.installs;
-  if (!i) return <Problem>{ins.error}</Problem>;
-  const busy = [...i.installed, ...i.available].filter((a) => jobOpen(a.job));
-  const offered = i.available.filter((a) => !jobOpen(a.job));
-  return (
-    <div data-installs className="admin-stack-wide">
-      {!i.runnerSeenAt ? (
-        <Status status="warning" label="No app runner has asked for work since the registry started, so nothing below can be installed yet. It’s the updater with APP_SECRETS_KEY set: see docs/upgrade.md, The app runner." />
-      ) : null}
-      {i.problem ? <Status status="warning" label={`Not every app release could be read. ${i.problem}`} /> : null}
-      {i.defaultApps?.some((d) => d.state === 'waiting') ? (
-        <Section label="Default apps waiting" count={-1} limit={0}>
-          <div data-default-waiting>
-            {i.defaultApps
-              .filter((d) => d.state === 'waiting')
-              .map((d) => (
-                <Line key={d.app} end="Not installed yet">
-                  {d.app}
-                  <Quiet> · {d.problem}</Quiet>
-                </Line>
-              ))}
-          </div>
-        </Section>
-      ) : null}
-      {i.removed?.length ? (
-        <Section label="Removed, data kept" count={-1} limit={0}>
-          <div data-removed>
-            {i.removed.map((r) => (
-              <Line key={r.app} end={`Deleted on ${new Date(r.deleteAt).toLocaleDateString()}`}>
-                {r.name}
-                <Quiet> · install it again before then to keep its data, settings and floors</Quiet>
-                {r.problem ? <Status status="warning" label={`Deleting its data failed ${r.failures === 1 ? 'once' : `${r.failures} times in a row`}, and is tried again then: ${r.problem}`} /> : null}
-              </Line>
-            ))}
-          </div>
-        </Section>
-      ) : null}
-      {busy.length ? (
-        <Section label="Under way" limit={0}>
-          {busy.map((a) => (
-            <Line key={a.app} end={jobWords(a.job!)}>
-              {a.name}
-            </Line>
-          ))}
-        </Section>
-      ) : null}
-      <Section label="Install from releases" count={-1} limit={0}>
-        {i.feed === 'off' ? (
-          <p className="admin-flat">This server doesn’t read app releases: APP_FEEDS is off, or the release feed is a mirror and APP_FEEDS names none.</p>
-        ) : (
-          <>
-            <div data-available>
-              {offered.length ? (
-                offered.map((a) => (
-                  <Line
-                    key={`${a.app}@${a.version}`}
-                    end={
-                      <Button kind="secondary" size="sm" disabled={Boolean(a.problem)} reason={a.problem} onPress={() => ins.ask(a.app, a.version)}>
-                        Install
-                      </Button>
-                    }
-                  >
-                    {a.name} {a.version}
-                    {a.channel === 'beta' ? ' (preview)' : ''}
-                    <Quiet>
-                      {a.description ? ` · ${a.description}` : ''}
-                      {a.job?.state === 'failed' ? ` · ${jobWords(a.job)}` : ''}
-                    </Quiet>
-                  </Line>
-                ))
-              ) : (
-                <p className="admin-flat">
-                  Nothing new to install.{i.checkedAt ? ` Checked ${new Date(i.checkedAt).toLocaleString()}.` : ''}
-                </p>
-              )}
-            </div>
-            <div>
-              <Button kind="tertiary" size="sm" busy={ins.checking} onPress={() => void ins.check()}>
-                Check for releases
-              </Button>
-            </div>
-          </>
-        )}
-        <div>
-          <Button kind="tertiary" size="sm" onPress={ins.paste}>
-            Install from an address
-          </Button>
-        </div>
-      </Section>
-      <Problem>{ins.error}</Problem>
     </div>
   );
 }

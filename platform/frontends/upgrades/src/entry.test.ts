@@ -184,6 +184,8 @@ describe('routes', () => {
       { page: 'augur', ask: { kind: 'roll-back', version: '0.23.1' } },
       { page: 'augur', ask: { kind: 'test', version: '0.25.1' } },
       { page: 'apps' },
+      { page: 'apps', address: '' },
+      { page: 'apps', address: 'https://example.test/r/app-release.json' },
       { page: 'app', app: 'mandate' },
       { page: 'app', app: 'mandate', install: '1.4.1' },
       { page: 'health' },
@@ -428,5 +430,85 @@ describe('Deployment', () => {
   it('says the registry isn’t answering, and keeps what it read when a later read fails', async () => {
     const down = await open(() => [503, { message: 'Registry down.' }]);
     expect(find(down.shell.screen, 'quill-state')?.props).toMatchObject({ kind: 'error', heading: 'The registry isn’t answering' });
+  });
+  it('installs a new app from the feed on Apps, asking for the settings it can’t start without', async () => {
+    const offered = installs({
+      runnerSeenAt: '2026-11-09T22:29:00Z',
+      available: [
+        {
+          app: 'atlas',
+          name: 'Data Atlas',
+          description: 'The entities AUGUR knows about.',
+          version: '0.3.0',
+          channel: 'beta',
+          signer: { repository: 'o/atlas', workflow: 'release.yml' },
+          asks: { scopes: ['audit:write'], resources: [], limits: { web: { memory: '256Mi', cpu: '500m' } }, floors: ['team'], maxUpload: 10, settings: ['size'] },
+          review: { kinds: { web: 'service' }, settings: [{ id: 'size', label: 'Page size', type: 'number', required: true, min: 1, max: 50 }] },
+        },
+        { app: 'old', name: 'Old', version: '1.0.0', channel: 'stable', problem: 'It is on contract 2.' },
+      ],
+      removed: [{ app: 'folio', name: 'Artifacts', removedAt: '2026-11-05T00:00:00Z', deleteAt: '2026-12-05T00:00:00Z' }],
+      defaultApps: [{ app: 'mandate', state: 'waiting', problem: 'No feed lists it.' }],
+    });
+    const { shell } = await open(registry({ installs: offered, change: () => [200, jobs[0]] }), '/apps');
+    const list = find(shell.screen, 'quill-paged-list', (p) => p.label === 'Available apps');
+    expect(list?.props?.items).toMatchObject([{ id: 'atlas@0.3.0', title: 'Data Atlas 0.3.0', meta: 'Beta channel' }, { id: 'old@1.0.0', status: 'failed' }]);
+    expect(text(find(shell.screen, 'quill-check-list', (p) => p.label === 'Removed, data kept'))).toContain('Install it again before then');
+    expect(text(find(shell.screen, 'quill-check-list', (p) => p.label === 'Default apps waiting'))).toContain('No feed lists it.');
+
+    handler(list, 'onOpen')('atlas@0.3.0');
+    expect(shell.moved.at(-1)).toBe('/apps/atlas/install/0.3.0');
+    expect(shell.pane.title).toBe('Apps');
+    const dialog = find(shell.screen, 'quill-dialog');
+    expect(dialog?.props?.heading).toBe('Install Data Atlas 0.3.0?');
+    expect(find(dialog!, 'quill-text-field', (p) => p.name === 'setting:size')).toBeDefined();
+    expect(text(dialog)).toContain('Signed by o/atlas’s release.yml');
+
+    handler(dialog, 'onSubmit')({ 'setting:size': '99' });
+    expect(find(shell.screen, 'quill-dialog')?.props?.error).toBe('Page size takes a number from 1 to 50.');
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({ 'setting:size': '20' });
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'POST')).toEqual({ method: 'POST', path: '/api/registry/v1/app-runner/jobs', body: { action: 'install', app: 'atlas', version: '0.3.0', settings: { size: 20 } } });
+    expect(shell.moved.at(-1)).toBe('/apps');
+  });
+
+  it('says why nothing installs without an app runner, and explains a release it can’t install', async () => {
+    const offered = installs({ available: [{ app: 'old', name: 'Old', version: '1.0.0', channel: 'stable', problem: 'It is on contract 2.' }] });
+    const { shell } = await open(registry({ installs: offered }), '/apps/old/install/1.0.0');
+    expect(find(shell.screen, 'quill-notice', (p) => p.heading === 'No app runner yet')).toBeDefined();
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Install from an address')?.props).toMatchObject({ disabled: true });
+    expect(find(shell.screen, 'quill-dialog')).toBeUndefined();
+    expect(find(shell.screen, 'quill-notice', (p) => p.heading === 'Installing Old 1.0.0 can’t start now')).toBeDefined();
+  });
+
+  it('installs from a release file’s address, keeping the address in the path for signing in again', async () => {
+    const url = 'https://example.test/r/app-release.json';
+    const release = { id: 'probe', version: '0.1.0', manifest: { name: 'Probe' } };
+    let asked = 0;
+    const { shell } = await open(
+      registry({
+        installs: installs({ runnerSeenAt: '2026-11-09T22:29:00Z' }),
+        change: (path) => {
+          if (path.endsWith('/releases/read')) return asked++ ? [200, { release, refusals: [], warnings: ['It is unsigned by a known feed.'] }] : [401, { error: 'sign_in_again', message: 'Enter your password again.' }];
+          return [200, jobs[0]];
+        },
+      }),
+      '/apps',
+    );
+    handler(find(shell.screen, 'quill-button', (p) => p.label === 'Install from an address'), 'onPress')();
+    expect(shell.moved.at(-1)).toBe('/install-from-address');
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({ url });
+    await settle();
+    expect(shell.signedInAgain).toBe(1);
+    expect(shell.moved.at(-1)).toBe(`/install-from-address/${encodeURIComponent(url)}`);
+    expect(find(shell.screen, 'quill-text-field', (p) => p.name === 'url')?.props?.value).toBe(url);
+
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({ url });
+    await settle();
+    expect(find(shell.screen, 'quill-dialog')?.props?.heading).toBe('Install Probe 0.1.0?');
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({});
+    await settle();
+    expect(shell.calls.filter((c) => c.method === 'POST').at(-1)).toEqual({ method: 'POST', path: '/api/registry/v1/app-runner/jobs', body: { action: 'install', release } });
+    expect(shell.moved.at(-1)).toBe('/apps');
   });
 });

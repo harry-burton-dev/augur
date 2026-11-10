@@ -79,4 +79,4 @@ APP_FEEDS=file:///run/augur/releases/apps.json
 
 Without `APP_FEEDS` (or `APP_FEED_URL`, its name before), a server whose `RELEASE_FEED_URL` is a mirror reads no app releases at all. Previews of pull requests aren't mirrored: they're for servers that can reach GitHub ([app-previews.md](app-previews.md)).
 
-Default apps (`DEFAULT_APPS`, [upgrade.md](upgrade.md#the-app-runner)) come from the feed too, so mirror each one's stable releases before naming it: until the mirror's `apps.json` has a stable release of it, Admin → Apps says it's waiting for one.
+Default apps (`DEFAULT_APPS`, [upgrade.md](upgrade.md#the-app-runner)) come from the feed too, so mirror each one's stable releases before naming it: until the mirror's `apps.json` has a stable release of it, Deployment → Apps says it's waiting for one.

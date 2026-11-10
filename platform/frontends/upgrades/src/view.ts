@@ -4,7 +4,8 @@ import { historyOf, tookWords, type HistoryEntry } from './model/history.js';
 import { levelFrom } from './model/levels.js';
 import { needsYou } from './model/needs-you.js';
 import { formatWhen } from './model/time.js';
-import type { OverviewUnit } from './model/types.js';
+import type { AppSettingDecl, OverviewUnit, PastedRelease } from './model/types.js';
+import { addressQuestion, installSections, newInstallQuestion } from './install.js';
 import { RING_WORDS } from './model/words.js';
 import { AUGUR, rowOf, type UnitRow } from './units.js';
 import type { Data } from './data.js';
@@ -17,8 +18,11 @@ export interface Ui {
   /** The open question's state: working on it, or why it didn't work. */
   dialog: { busy?: boolean; error?: string };
   checking?: boolean;
+  checkingApps?: boolean;
   /** Why the last check, mark as reviewed or cancel didn't work, shown where it was pressed. */
-  problem?: { where: 'check' | 'seen' | 'cancel'; words: string };
+  problem?: { where: 'check' | 'seen' | 'cancel' | 'apps'; words: string };
+  /** A release file read from an address, waiting to be installed. */
+  pasted?: { url: string; read: PastedRelease };
 }
 
 /** What the person can do from a page; each one goes through the registry, which decides. */
@@ -30,7 +34,11 @@ export interface Actions {
   upgrade: (version: string, settings: Record<string, string>) => void;
   rollBack: (version: string) => void;
   test: (version: string, reason: string) => void;
-  install: (app: string, version: string) => void;
+  /** Installs a version of an app; `fill` are the settings it must be given, read from the dialog's values. */
+  install: (app: string, version: string, fill?: AppSettingDecl[], values?: Record<string, string>) => void;
+  checkApps: () => void;
+  readAddress: (url: string) => void;
+  installPasted: (fill: AppSettingDecl[], values: Record<string, string>) => void;
   closeDialog: (back: string) => void;
 }
 
@@ -233,18 +241,25 @@ export const overviewPage = (v: View): RemoteNode => {
   ];
 };
 
-/** Apps: every installed app, what it runs and what happens next. */
-export const appsPage = (v: View): RemoteNode =>
-  quill(
-    'quill-section',
-    { label: 'Installed apps' },
-    installedTable(
-      v,
-      'Installed apps',
-      rowsOf(v).filter((r) => r.id !== AUGUR),
-      'No apps are installed. Apps are installed from the app feed in Admin, Apps.',
+/** Apps: every installed app and what happens next, then installing new ones; a route may open an install question over it. */
+export const appsPage = (v: View): RemoteNode => {
+  const r = v.route;
+  return [
+    quill(
+      'quill-section',
+      { label: 'Installed apps' },
+      installedTable(
+        v,
+        'Installed apps',
+        rowsOf(v).filter((x) => x.id !== AUGUR),
+        'No apps are installed yet. Install one from the app feed below.',
+      ),
     ),
-  );
+    installSections(v),
+    r.page === 'apps' && r.address !== undefined ? addressQuestion(v, r.address) : null,
+    r.page === 'app' && r.install ? newInstallQuestion(v, v.data.installs?.available.find((a) => a.app === r.app && a.version === r.install), r.app, r.install) : null,
+  ];
+};
 
 /** Says once, at the top, that what's shown is older than it should be, and why. */
 export const staleNotice = (v: View): RemoteNode =>
