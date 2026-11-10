@@ -370,4 +370,4 @@ export const AppParams = Type.Object({ id: Type.String({ pattern: '^[a-z][a-z0-9
 export const IdParams = Type.Object({ id: Type.String() });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, TeamLevels, WorkspaceRef, Floor, MapPerson, FloorReason, PersonMap, Role, Person, NewPerson, PersonChanges, Department, Caller, Preferences];
+export const SCHEMAS = [Refusal, TeamLevels, WorkspaceRef, Floor, MapPerson, FloorReason, PersonMap, Role, Person, NewPerson, PersonChanges, Department, Position, Caller, Preferences];

@@ -523,6 +523,34 @@ components:
           items:
             type: string
           description: Ids of its own members
+    Position:
+      type: object
+      required:
+        - id
+        - department
+        - name
+        - role
+      properties:
+        id:
+          type: string
+        department:
+          type: string
+          description: The department it is on
+        name:
+          type: string
+          description: What the job is called, such as Harbour master
+        role:
+          anyOf:
+            - type: string
+              enum:
+                - member
+            - type: string
+              enum:
+                - lead
+          description: Whether whoever holds it leads the department
+        holder:
+          type: string
+          description: Who holds it now; absent while it is vacant
     Caller:
       type: object
       required:
@@ -3759,7 +3787,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: Position
+                  $ref: "#/components/schemas/Position"
                 description: Positions
         "401":
           description: No signed-in caller
@@ -3817,7 +3845,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: Position
+                $ref: "#/components/schemas/Position"
         "400":
           description: The name is empty or too long
           content:
@@ -3886,7 +3914,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: Position
+                $ref: "#/components/schemas/Position"
         "400":
           description: The name is empty or too long
           content:
@@ -3982,7 +4010,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: Position
+                $ref: "#/components/schemas/Position"
         "401":
           description: No signed-in caller
           content:
