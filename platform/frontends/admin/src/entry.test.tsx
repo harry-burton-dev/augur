@@ -103,6 +103,13 @@ const type = async (input: HTMLInputElement, text: string) => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 };
+/** Leaves a field, which commits what was typed. */
+const leave = async (input: HTMLInputElement) => {
+  await act(async () => {
+    input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    input.dispatchEvent(new FocusEvent('blur'));
+  });
+};
 const title = (el: Element) => el.querySelector('.quill-page-head-title')?.textContent;
 
 describe('admin', () => {
@@ -705,11 +712,12 @@ describe('Apps', () => {
       const el = await open('/apps');
       await openRow(el, 'Notes');
       const said = document.querySelector('[data-settings]');
-      expect(said?.textContent).toContain('365 days (its default)');
-      expect(said?.textContent).toContain('Given');
-      await press(button('Change its settings', said!));
+      expect(said?.textContent).toContain('Empty is its default, 365 days');
+      expect(said?.textContent).toContain('Given already');
+      // Inline: no table row or dialog to open, saved as soon as the field is left.
+      expect(button('Change its settings', said!)).toBeUndefined();
       await type(fieldNamed('Keep archived notes for (days)'), '30');
-      await press(button('Save', document.querySelectorAll('.augur-dialog')[1] ?? document));
+      await leave(fieldNamed('Keep archived notes for (days)'));
       expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/settings/retentionDays', body: { value: 30 } });
       // The secret left empty stays as it was.
       expect(sent.some((r) => r.url.endsWith('/settings/exportKey'))).toBe(false);

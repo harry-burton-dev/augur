@@ -1,15 +1,15 @@
-import { Button, Dialog, Section, TagPicker } from '@augur/app-kit';
+import { Button, Dialog, Heading, Section, TagPicker } from '@augur/app-kit';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError, fullName, type AdminApi, type AppInstalls, type InstalledApp, type Person } from './api.js';
 import { SettingFields } from './app-settings.js';
-import { settingChanges, settingNow } from './settings-form.js';
+import { fieldName, settingChanges } from './settings-form.js';
 import { JobSteps } from './changes.js';
 import { JOB_REFRESH_MS, jobOpen, jobWords } from './installs.js';
 import { Line, Problem, Quiet } from './parts.js';
 
 /** Where the password is entered again before anything is installed or removed; back here after. */
-const signInAgain = (query: string) => {
-  const back = `${window.location.pathname}?${query}`;
+const signInAgain = (query = '') => {
+  const back = `${window.location.pathname}${query ? `?${query}` : ''}`;
   window.location.assign(`/auth/again?return=${encodeURIComponent(back)}`);
 };
 
@@ -25,11 +25,10 @@ export function useInstalls(api: AdminApi, then: () => void) {
   const [failedReads, setFailedReads] = useState(0);
   const [confirmRemove, setConfirmRemove] = useState<InstalledApp>();
   const [confirmInternet, setConfirmInternet] = useState<InstalledApp>();
-  const [editing, setEditing] = useState<InstalledApp>();
   const [people, setPeople] = useState<Person[]>();
   const resumed = useRef(false);
 
-  /** Back from entering the password again (`?uninstall=<app>`, `?internet=<app>` or `?settings=<app>`): ask once more. */
+  /** Back from entering the password again (`?uninstall=<app>` or `?internet=<app>`): ask once more. */
   const resume = useCallback(
     (i: AppInstalls) => {
       if (resumed.current) return;
@@ -37,16 +36,13 @@ export function useInstalls(api: AdminApi, then: () => void) {
       const params = new URLSearchParams(window.location.search);
       const uninstall = params.get('uninstall');
       const internet = params.get('internet');
-      const settings = params.get('settings');
-      if (!uninstall && !internet && !settings) return;
+      if (!uninstall && !internet) return;
       params.delete('uninstall');
       params.delete('internet');
-      params.delete('settings');
       const rest = params.toString();
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
       if (uninstall) setConfirmRemove(i.installed.find((x) => x.app === uninstall));
       if (internet) setConfirmInternet(i.installed.find((x) => x.app === internet && x.internet));
-      if (settings) setEditing(i.installed.find((x) => x.app === settings && x.settings?.length));
     },
     [],
   );
@@ -101,21 +97,17 @@ export function useInstalls(api: AdminApi, then: () => void) {
     }
   };
 
-  /** Sends what the settings form changed, one setting at a time; a secret may ask for the password again first. */
-  const saveSettings = async (app: InstalledApp, values: Record<string, string>) => {
-    let last: AppInstalls | undefined;
-    for (const change of settingChanges(app.settings ?? [], values)) {
-      try {
-        last = await api.setRunnerSetting(app.app, change.id, change.value);
-      } catch (err) {
-        if (err instanceof ApiError && err.code === 'sign_in_again') {
-          signInAgain(`settings=${encodeURIComponent(app.app)}`);
-          return false as const;
-        }
-        throw err;
-      }
+  /** Saves one setting as soon as it changes, if it differs from what it is; a secret may ask for the password again first. */
+  const saveSetting = async (app: InstalledApp, id: string, raw: string) => {
+    const [change] = settingChanges((app.settings ?? []).filter((x) => x.id === id), { [fieldName(id)]: raw });
+    if (!change) return;
+    setError('');
+    try {
+      setInstalls(await api.setRunnerSetting(app.app, change.id, change.value));
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'sign_in_again') return signInAgain();
+      setError((err as Error).message);
     }
-    if (last) setInstalls(last);
   };
 
   const dialogs = (
@@ -139,21 +131,6 @@ export function useInstalls(api: AdminApi, then: () => void) {
           onClose={() => setConfirmInternet(undefined)}
         />
       ) : null}
-      {editing?.settings?.length ? (
-        <Dialog
-          open
-          size="glance"
-          eyebrow={editing.name}
-          heading="Its settings"
-          summary="The parts that read a setting you change start again with it within a minute; the others keep running. A secret is never shown again once given."
-          actionLabel="Save"
-          busyLabel="Saving…"
-          cancelLabel="Not now"
-          onSubmit={(values) => saveSettings(editing, values)}
-          onClose={() => setEditing(undefined)}
-          fields={<SettingFields settings={editing.settings} />}
-        />
-      ) : null}
       {confirmRemove ? (
         <Dialog
           open
@@ -172,7 +149,7 @@ export function useInstalls(api: AdminApi, then: () => void) {
     </>
   );
 
-  return { installs, error, people, loadPeople, setDevelopers, remove: setConfirmRemove, internet: setConfirmInternet, editSettings: setEditing, dialogs };
+  return { installs, error, people, loadPeople, setDevelopers, remove: setConfirmRemove, internet: setConfirmInternet, saveSetting, dialogs };
 }
 
 export type Installs = ReturnType<typeof useInstalls>;
@@ -228,19 +205,8 @@ export function RunnerControls({ installed, ins, openUpgrades, upgradesName }: {
       ) : null}
       {installed.settings?.length ? (
         <div data-settings className="admin-stack">
-          <Section label="Settings" count={-1} limit={0}>
-            {installed.settings.map((s) => (
-              <Line key={s.id} end={settingNow(s)}>
-                {s.label}
-                {s.newIn ? <Quiet> · version {s.newIn} needs it</Quiet> : null}
-              </Line>
-            ))}
-          </Section>
-          <div>
-            <Button kind="tertiary" size="sm" onPress={() => ins.editSettings(installed)}>
-              Change its settings
-            </Button>
-          </div>
+          <Heading heading="Its settings" summary="Each is saved as soon as you change it. The parts that read it start again with it within a minute; a secret is never shown again once given." size="s" />
+          <SettingFields settings={installed.settings} onSave={(id, raw) => void ins.saveSetting(installed, id, raw)} disabled={open} reason={WAIT} />
         </div>
       ) : null}
       <div data-developers>

@@ -60,7 +60,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 **From** unreleased
 
-Installing a new app moved from Admin → Apps to Deployment → Apps (`/upgrades/apps`): what the app feed offers, **Check for new apps**, **Install from an address**, what's in progress, default apps waiting and apps removed with their data kept. The install asks for the settings an app can't start without, as before. Admin → Apps keeps each installed app's settings, internet, developers, previews and **Remove from the server**, and links to Deployment for installing. Nothing to do on the server.
+Installing a new app moved from Admin → Apps to Deployment → Apps (`/upgrades/apps`): what the app feed offers, **Check for new apps**, **Install from an address**, what's in progress, default apps waiting and apps removed with their data kept. The install asks for the settings an app can't start without, as before. Admin → Apps keeps each installed app's settings, internet, developers, previews and **Remove from the server**, and links to Deployment for installing. An app's own settings are now fields right on the app, each saved as soon as it changes, with no **Change its settings** dialog. Nothing to do on the server.
 
 ### Who settles and raises on a floor comes from the permissions service
 
