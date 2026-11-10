@@ -73,6 +73,15 @@ export interface FrameAction {
 }
 
 // @public
+export type FrameDensity = 'comfortable' | 'compact';
+
+// @public
+export type FrameInset = 'standard' | 'flush';
+
+// @public
+export type FrameLayout = 'focus' | 'aside' | 'split' | 'canvas';
+
+// @public
 export interface FrameRoot {
     clear(): void;
     render(node: RemoteNode): void;
@@ -83,6 +92,9 @@ export interface FrameState {
     // (undocumented)
     actions?: FrameAction[];
     busy?: boolean;
+    density?: FrameDensity;
+    inset?: FrameInset;
+    layout?: FrameLayout;
     title?: string;
     // (undocumented)
     width?: FrameWidth;

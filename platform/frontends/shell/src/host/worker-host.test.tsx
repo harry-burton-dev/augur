@@ -633,6 +633,42 @@ describe('the frame round an app’s pane', () => {
     expect(stage.textContent).toContain('Made by Ada');
   });
 
+  it('lays the pane out as the manifest says until a page sets another layout, keeping only the names the shell knows', async () => {
+    let self!: Channel;
+    const stub = stubApp((a, method) => {
+      self = a;
+      if (method === 'start') a.mutate('screen', [notice('n1', 'Ready')]);
+    });
+    const split = fromCatalogue3({ ...manifest, contributes: { ...manifest.contributes, about: [{ id: 'details', label: 'Details' }], frame: { layout: 'split', density: 'compact' } } });
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(split, ctxFor()));
+    await flush();
+    const pane = () => stage.querySelector<HTMLElement>('.app-frame')!;
+    expect([pane().dataset.layout, pane().dataset.density, pane().dataset.inset]).toEqual(['split', 'compact', 'standard']);
+    expect(stage.querySelector('.aerie-about, .aerie-about-open')).toBeNull();
+    self.post('frame.set', { layout: 'aside', inset: 'flush', width: 'wide' });
+    await flush();
+    expect([pane().dataset.layout, pane().dataset.inset]).toEqual(['aside', 'flush']);
+    expect(stage.querySelector('[data-width]')?.getAttribute('data-width')).toBe('wide');
+    expect(stage.querySelector('.aerie-about, .aerie-about-open')).not.toBeNull();
+    // A layout the shell doesn't know is left out, so the manifest's default stands.
+    self.post('frame.set', { layout: 'three-column', density: '4px' });
+    await flush();
+    expect([pane().dataset.layout, pane().dataset.density]).toEqual(['split', 'compact']);
+  });
+
+  it('defaults to the About panel beside the main column for an app with sections, and to one column without', async () => {
+    run();
+    await flush();
+    expect(stage.querySelector<HTMLElement>('.app-frame')!.dataset.layout).toBe('aside');
+    act(() => mounter.unmount());
+    const stub = stubApp((self, method) => method === 'start' && self.mutate('screen', [notice('n1', 'Ready')]));
+    mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
+    act(() => void mounter.mount(app, ctxFor()));
+    await flush();
+    expect(stage.querySelector<HTMLElement>('.app-frame')!.dataset.layout).toBe('focus');
+  });
+
   it('has no About panel for an app that declares no sections', async () => {
     const stub = stubApp((self, method) => method === 'start' && self.mutate('screen', [notice('n1', 'Ready')]));
     mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
