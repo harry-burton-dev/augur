@@ -11,6 +11,12 @@ import { defineConfig } from '@playwright/test';
 process.env.DEV_APP ??= fileURLToPath(new URL('reference-app', import.meta.url));
 process.env.DEV_PREVIEWS ??= 'turned-on';
 const port = Number(process.env.CONTRACT_PORT ?? 5180);
+/**
+ * Starter, the app template's app (augur-app-template, contract 3), as the shell draws it from its manifest alone: a
+ * second dev server with Starter's manifest as its one app and no code to run (`starter/`), for the frame check.
+ */
+const starterPort = port + 1;
+const starter = fileURLToPath(new URL('starter', import.meta.url));
 export default defineConfig({
   testDir: 'tests',
   outputDir: 'test-results',
@@ -22,10 +28,13 @@ export default defineConfig({
   retries: 0,
   reporter: process.env.CI ? [['list'], ['github']] : 'list',
   use: {
-    baseURL: `http://localhost:${port}`,
     // Where a browser is already installed (PLAYWRIGHT_CHROMIUM), use it.
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM } : {},
   },
+  projects: [
+    { name: 'reference', testIgnore: /manifest-frame\.spec\.ts/, use: { baseURL: `http://localhost:${port}` } },
+    { name: 'starter', testMatch: /manifest-frame\.spec\.ts/, use: { baseURL: `http://localhost:${starterPort}` } },
+  ],
   webServer: [
     {
       command: `pnpm --filter @augur/shell dev --port ${port} --strictPort`,
@@ -35,6 +44,15 @@ export default defineConfig({
       stdout: 'ignore',
       stderr: 'pipe',
       env: { ...(process.env as Record<string, string>) },
+    },
+    {
+      command: `pnpm --filter @augur/shell dev --port ${starterPort} --strictPort`,
+      url: `http://localhost:${starterPort}/`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+      stdout: 'ignore',
+      stderr: 'pipe',
+      env: { ...(process.env as Record<string, string>), DEV_APP: starter, DEV_PREVIEWS: '', DEV_APP_ENTRY: '/starter-has-no-code.js' },
     },
   ],
 });

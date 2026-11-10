@@ -12,7 +12,7 @@ import { automaticDevUpgrade, automaticUpgrade, goBackTargets, historyEntry, tru
 import { afterLook, lookDue, MIN_CALLS as AFTER_MIN_CALLS, startAfterWatch } from './after-watch.ts';
 import { HALTED_PRODUCTION_ONLY, takesHaltedOnRequest } from './ring.ts';
 import type { AppStore, Upgrade, UpgradeOutcome } from './store.ts';
-import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
+import { needsDeploymentAdmin, roleChecks, type RoleChecks } from './roles.ts';
 
 /** How recently an admin must have entered their password to start an upgrade. */
 export const UPGRADE_SIGN_IN_MS = 10 * 60 * 1000;
@@ -38,6 +38,8 @@ export interface PlatformUpgradeOptions {
   /** Who is calling as a service: null for a person, undefined when the reply has been sent. */
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
+  /** Today's admin roles, each check compared with the permissions service (shadow mode). */
+  roles?: RoleChecks;
 }
 
 /**
@@ -47,10 +49,10 @@ export interface PlatformUpgradeOptions {
  * only the store.
  */
 export const platformUpgradeRoutes =
-  ({ store, updates, pipeline, portalUrl, timeZone, now, serviceOf, record }: PlatformUpgradeOptions) =>
+  ({ store, updates, pipeline, portalUrl, timeZone, now, serviceOf, record, roles = roleChecks() }: PlatformUpgradeOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
-    const isAdmin = (req: FastifyRequest) => callerFromHeaders(req.headers)?.roles.includes('admin') ?? false;
+    const isAdmin = (req: FastifyRequest, site: string) => roles.admin(site, callerFromHeaders(req.headers), 'admin');
 
     /**
      * Whether a newer AUGUR release is out, and what upgrading to it needs first. Read-only: the
@@ -73,7 +75,7 @@ export const platformUpgradeRoutes =
         },
       },
       async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
+        if (!isAdmin(req, 'registry.upgrades.out')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
         return updatesPage();
       },
     );
@@ -93,7 +95,7 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
+        if (!roles.admin('registry.upgrades.check', caller, 'admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
         await updates.check();
         const view = await updatesPage();
         req.log.info({ by: caller.id, available: view.available?.version, problem: view.problem }, 'updates checked');
@@ -181,7 +183,7 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('upgrade AUGUR'));
+        if (!roles.deploymentAdmin('registry.upgrades.start', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('upgrade AUGUR'));
         if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to upgrade. It’s asked for anything this drastic.' });
         }
@@ -248,7 +250,7 @@ export const platformUpgradeRoutes =
           await record(req, { actor: { id: caller?.id ?? 'unknown', kind: 'user' }, app: 'registry', action: 'platform.halted-install-refused', target: version, detail: { from, reason, why: body.message } });
           return reply.code(code).send(body);
         };
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return refuse(403, needsDeploymentAdmin('install a halted release'));
+        if (!roles.deploymentAdmin('registry.upgrades.halted', caller, 'can_upgrade')) return refuse(403, needsDeploymentAdmin('install a halted release'));
         if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
           return refuse(401, { error: 'sign_in_again', message: 'Enter your password again to install a halted release. It’s asked for anything this drastic.' });
         }
@@ -304,7 +306,7 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('take AUGUR back to an earlier release'));
+        if (!roles.deploymentAdmin('registry.upgrades.rollback', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('take AUGUR back to an earlier release'));
         if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to go back. It’s asked for anything this drastic.' });
         }
@@ -340,7 +342,7 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('take back an upgrade'));
+        if (!roles.deploymentAdmin('registry.upgrades.cancel', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('take back an upgrade'));
         const upgrade = await store.upgrade();
         if (upgrade?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes or rolls back by itself.' });
         if (!upgrade || !(await store.cancelUpgrade(upgrade.id))) return reply.code(404).send({ error: 'not_found', message: 'No upgrade is waiting.' });

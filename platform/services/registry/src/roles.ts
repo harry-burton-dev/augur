@@ -1,3 +1,5 @@
+import { noShadow, type Caller, type Shadow, type ShadowQuestion } from '@augur/service-kit';
+
 /**
  * The realm role that runs the deployment (ADR 0022): only its holders upgrade AUGUR, go back to an
  * earlier release, take back a waiting upgrade or change how updates are taken (policy, pin, windows).
@@ -17,3 +19,35 @@ export const needsDeploymentAdmin = (doing: string) => ({
  * The ADR's OIDC step-up (`acr_values`, `max_age`) replaces this check once identity offers it.
  */
 export const CHANGE_SIGN_IN_MS = 10 * 60 * 1000;
+
+/**
+ * Today's two realm roles, each check compared with the permissions service's answer to the same question
+ * (shadow mode, ADR 0085). Today's role still decides. `admin` runs the organisation's apps (the org's
+ * `can_manage_apps`, or `admin` where the check is about the server's state); `deployment-admin` runs the
+ * server (one of the deployment's relations, such as `can_upgrade`). Both are asked as any persona the caller
+ * holds, which is how today's roles are copied in (one admin persona each).
+ */
+export interface RoleChecks {
+  /** Whether the caller holds `admin`. `site` names the check, the same at every call, such as `registry.catalogue`. */
+  admin(site: string, caller: Caller | undefined, action?: OrgAction): caller is Caller;
+  /** Whether the caller holds `deployment-admin`, for one of the deployment's relations. */
+  deploymentAdmin(site: string, caller: Caller | undefined, action: DeploymentAction): caller is Caller;
+}
+
+/** What `admin` lets someone do, in the model: manage the org's apps, or be its admin. */
+export type OrgAction = 'can_manage_apps' | 'admin';
+/** What `deployment-admin` lets someone do, in the model. */
+export type DeploymentAction = 'can_upgrade' | 'can_install_apps' | 'can_remove_apps' | 'can_pin_versions' | 'can_allow_sites' | 'can_set_app_secrets';
+
+export const roleChecks = (shadow: Shadow = noShadow): RoleChecks => {
+  const holds = (site: string, caller: Caller | undefined, role: string, question: ShadowQuestion): caller is Caller => {
+    if (!caller) return false;
+    const held = caller.roles.includes(role);
+    shadow.check(site, caller, question, held);
+    return held;
+  };
+  return {
+    admin: (site, caller, action = 'can_manage_apps') => holds(site, caller, 'admin', { action, resource: { type: 'org', id: 'this' }, as: 'persona' }),
+    deploymentAdmin: (site, caller, action) => holds(site, caller, DEPLOYMENT_ADMIN, { action, resource: { type: 'deployment', id: 'this' }, as: 'persona' }),
+  };
+};
