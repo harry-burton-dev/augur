@@ -21,7 +21,7 @@ import {
   type StoredDesiredState,
 } from './desired-state.ts';
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
-import { CHANGE_SIGN_IN_MS, DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
+import { CHANGE_SIGN_IN_MS, DEPLOYMENT_ADMIN, needsDeploymentAdmin, roleChecks, type RoleChecks } from './roles.ts';
 import type { AppJob, AppStore, InstalledApp, Upgrade } from './store.ts';
 import { updatesView, type Halt, type UpdateChecker, type UpdatesView } from './updates.ts';
 
@@ -203,6 +203,8 @@ export interface OverviewRouteOptions {
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
   now?: () => Date;
   reporting?: { mode: 'send' | 'file' | 'off'; why: string };
+  /** Today's admin roles, each check compared with the permissions service (shadow mode). */
+  roles?: RoleChecks;
 }
 
 /** The overview from the registry's store and checkers, for the routes and for the deployment's report. */
@@ -227,13 +229,13 @@ export const overviewBuilder =
   };
 
 export const overviewRoutes =
-  ({ store, updates, appUpdates, timeZone, record, now = () => new Date(), reporting }: OverviewRouteOptions) =>
+  ({ store, updates, appUpdates, timeZone, record, now = () => new Date(), reporting, roles = roleChecks() }: OverviewRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const ring = updates.ring;
-    const adminOf = (req: FastifyRequest) => {
+    const adminOf = (req: FastifyRequest, site: string) => {
       const caller = callerFromHeaders(req.headers);
-      return caller?.roles.includes('admin') ? caller : undefined;
+      return roles.admin(site, caller, 'admin') ? caller : undefined;
     };
 
     const built = overviewBuilder({ store, updates, appUpdates, timeZone, now });
@@ -263,7 +265,7 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
-        if (!adminOf(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
+        if (!adminOf(req, 'registry.overview')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
         return forCaller(req);
       },
     );
@@ -300,7 +302,7 @@ export const overviewRoutes =
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         // Policies, pins and windows decide what the server runs, so they need the deployment's own role (ADR 0022).
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
+        if (!roles.deploymentAdmin('registry.update-policy', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
         // And a password entered just now, as for an upgrade (ADR 0022).
         if (!signedInRecently(caller, CHANGE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how updates are taken. It’s asked for anything this drastic.' });
@@ -346,7 +348,7 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
-        if (!adminOf(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how updates were set.' });
+        if (!adminOf(req, 'registry.update-history')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how updates were set.' });
         if (!(await knownUnit(req.params.unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${req.params.unit}.` });
         return { unit: req.params.unit, history: await store.desiredStateHistory(req.params.unit) };
       },
@@ -368,7 +370,7 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
-        const caller = adminOf(req);
+        const caller = adminOf(req, 'registry.result-seen');
         if (!caller) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can mark a result looked at.' });
         if (!(await store.markSeen(req.params.kind, req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: 'There’s no finished upgrade or install with that id.' });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.result-seen', target: req.params.id, detail: { kind: req.params.kind } });

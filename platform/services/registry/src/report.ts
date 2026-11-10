@@ -5,6 +5,7 @@
 // health, package statuses), so a standard OpAMP server could take over later. It holds no personal data:
 // no names, no ids of people, nothing about what anyone keeps in AUGUR.
 import { callerFromHeaders } from '@augur/service-kit';
+import { roleChecks, type RoleChecks } from './roles.ts';
 import { createHash, createPrivateKey, createPublicKey, generateKeyPairSync, sign } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
@@ -226,10 +227,10 @@ export interface ReportingView {
 }
 
 export const reportRoutes =
-  ({ reporting, store, sender, overview, now = () => new Date() }: { reporting: Reporting; store: AppStore; sender: ReportSender; overview: () => Promise<Overview>; now?: () => Date }) =>
+  ({ reporting, store, sender, overview, now = () => new Date(), roles = roleChecks() }: { reporting: Reporting; store: AppStore; sender: ReportSender; overview: () => Promise<Overview>; now?: () => Date; roles?: RoleChecks }) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
-    const isAdmin = (req: FastifyRequest) => !!callerFromHeaders(req.headers)?.roles.includes('admin');
+    const isAdmin = (req: FastifyRequest, site: string) => roles.admin(site, callerFromHeaders(req.headers), 'admin');
 
     /** Whether this server reports, why, its public key, and how the last send went. */
     app.get(
@@ -249,7 +250,7 @@ export const reportRoutes =
         },
       },
       async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how this server reports what it runs.' });
+        if (!isAdmin(req, 'registry.reporting')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how this server reports what it runs.' });
         const key = reporting.mode === 'off' ? undefined : await deploymentKey(store);
         const view: ReportingView = { mode: reporting.mode, why: reporting.why, ...(reporting.deployment ? { deployment: reporting.deployment } : {}), ...(key ? { publicKey: publicKeyLine(key) } : {}), ...(sender.last ? { last: sender.last } : {}) };
         return view;
@@ -274,7 +275,7 @@ export const reportRoutes =
         },
       },
       async (req, reply) => {
-        if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can export what this server runs.' });
+        if (!isAdmin(req, 'registry.report-export')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can export what this server runs.' });
         if (reporting.mode === 'off' || !reporting.deployment) return reply.code(409).send({ error: 'reporting_off', message: reporting.why });
         const at = now();
         const signed = signReport(reportOf(await overview(), { deployment: reporting.deployment, reason: 'export', now: at }), await deploymentKey(store));

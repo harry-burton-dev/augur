@@ -1362,7 +1362,8 @@
       "x-services": [
         "events",
         "identity",
-        "knowledge"
+        "knowledge",
+        "registry"
       ]
     },
     "KNOWLEDGE_URL": {
