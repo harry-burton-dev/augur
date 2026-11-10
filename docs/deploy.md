@@ -290,7 +290,7 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
 
 - **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
 - **Test a restore now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test`. The result is in `infra/deploy/backups/status/restore-test.json`.
-- **Restore**: stop everything but Postgres (the apps that ship with AUGUR and the updater too, so nothing writes while the dump loads), wait for Postgres to say `healthy`, load the dump, then start again. The dump drops and recreates each database itself. Anything saved since that backup is lost, in every app and in sign-in: check Admin → Activity first. `pc stop` stops AUGUR's own Tailscale node too, so reach the server some other way. After an upgrade that went back, follow [upgrade-went-back.md](upgrade-went-back.md) instead: it says which file and when.
+- **Restore**: stop everything but Postgres (the apps that ship with AUGUR and the updater too, so nothing writes while the dump loads), wait for Postgres to say `healthy`, load the dump, then start again. The dump drops and recreates each database itself. Anything saved since that backup is lost, in every app and in sign-in: check Admin → Activity first. What people forgot in the knowledge graph since then stays forgotten: the graph keeps a ledger of each forget on a volume of its own (`knowledge-ledger`), outside the database, and forgets those again when `pc up -d` starts it. Its log says how many (`pc logs knowledge-migrate`). The same holds after [a restore to a point in time](#restore-to-a-point-in-time). `pc stop` stops AUGUR's own Tailscale node too, so reach the server some other way. After an upgrade that went back, follow [upgrade-went-back.md](upgrade-went-back.md) instead: it says which file and when.
   ```sh
   pc stop
   pc up -d postgres
@@ -361,7 +361,7 @@ When the server and its disk are gone, everything comes back from the off-server
    restic restore <augur-db id> --target /restore
    restic restore <augur-files id> --target /restore
    ```
-   `infra/deploy/restore/` now has `deploy/.env` and `deploy/secrets/`, `backups/platform-<date>.sql.gz` and `objects/{data,meta}`.
+   `infra/deploy/restore/` now has `deploy/.env` and `deploy/secrets/`, `backups/platform-<date>.sql.gz`, `objects/{data,meta}` and, once the knowledge graph has had something forgotten, `knowledge-ledger/forget-ledger.jsonl`.
 4. **Put the settings back**, and the release they name:
    ```sh
    install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env
@@ -377,6 +377,11 @@ When the server and its disk are gone, everything comes back from the off-server
    pc up -d postgres
    pc ps postgres            # again until it says healthy
    gunzip -c infra/deploy/restore/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
+   ```
+   Then put the knowledge graph's forget ledger back, if the copy has one, so what people forgot before that night stays forgotten when AUGUR starts (the knowledge service runs as user 1000):
+   ```sh
+   [ ! -d infra/deploy/restore/knowledge-ledger ] || pc run --rm --no-deps -v platform_knowledge-ledger:/r -v "$PWD/infra/deploy/restore/knowledge-ledger:/from:ro" \
+     --entrypoint sh backup -c 'cp -a /from/. /r/ && chown -R 1000:1000 /r'
    ```
 6. **Put apps' files back** into Garage's volumes, with the newest metadata snapshot as its database:
    ```sh

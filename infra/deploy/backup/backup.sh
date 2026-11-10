@@ -17,8 +17,8 @@
 # Off-server copy (ADR 0060): once RESTIC_REPOSITORY is set, each day's dump and apps' files are also
 # copied with restic to that repository (an S3-compatible bucket), encrypted here before they leave, and
 # OFFSITE_KEEP_DAILY days of them are kept there. The weekly restore test then restores from that copy.
-# The deployment's settings and secrets (.env and secrets/, mounted read only at $CONFIG_DIR) go with
-# them, encrypted the same way, so a lost server can be set up again from the bucket and the password alone.
+# The knowledge graph's forget ledger ($LEDGER_DIR) goes with each dump. The deployment's settings and
+# secrets (.env and secrets/, mounted read only at $CONFIG_DIR) go with them, encrypted the same way, so a lost server can be set up again from the bucket and the password alone.
 # It never copies a database that has no AUGUR in it, and never into a repository that already holds
 # another server's backups until told this server is that deployment (--adopt-offsite), so a new server
 # can't push the real backups out of retention. The result goes in $STATUS_DIR/offsite.json. Without
@@ -53,6 +53,8 @@ export WAL_DIR
 export STATUS_DIR
 # The deploy folder, read only: .env and secrets/ are copied off the server from here.
 : "${CONFIG_DIR:=/deploy}"
+# The knowledge graph's forget ledger, read only: it goes off the server with each day's dump.
+: "${LEDGER_DIR:=/knowledge-ledger}"
 # What restic files the snapshots under, so retention counts days: one repository per deployment.
 : "${OFFSITE_HOST:=augur}"
 export OFFSITE_HOST
@@ -187,7 +189,12 @@ offsite() {
     return 1
   fi
   # Two snapshots a day, so apps' files keep the same paths each day and restic only sends what changed.
-  snapshot=$(restic backup --json --host "$OFFSITE_HOST" --tag augur-db "$1" 2>"$errors" | sed -n 's/.*"snapshot_id":"\([0-9a-f]\{8\}\).*/\1/p' | tail -n 1) || true
+  # The knowledge graph's forget ledger goes with the dump: loading a dump on a new server brings back words
+  # people forgot since, until the knowledge graph's migrate job reads the ledger and forgets them again.
+  ledger=""
+  [ ! -f "$LEDGER_DIR/forget-ledger.jsonl" ] || ledger=$LEDGER_DIR
+  # shellcheck disable=SC2086 # One path at most, without a space.
+  snapshot=$(restic backup --json --host "$OFFSITE_HOST" --tag augur-db "$1" $ledger 2>"$errors" | sed -n 's/.*"snapshot_id":"\([0-9a-f]\{8\}\).*/\1/p' | tail -n 1) || true
   if [ -z "$snapshot" ]; then
     echo "backup: off-server copy FAILED: $(said "$errors")" >&2
     offnoted false "" "The database backup could not be copied off this server: $(said "$errors"). Earlier copies are kept."
