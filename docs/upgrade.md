@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The knowledge graph isn't connected to models yet
+
+**From** unreleased
+
+Compose leaves the knowledge service's `MODELS_URL` empty for now. So retain takes only claims an app has already extracted, never raw text to read, and entities show their beliefs without written summaries. Each refusal says so. Nothing for you to do: when models are connected to it, a note here will say how.
+
 ### Who settles and raises on a floor comes from the permissions service
 
 **From** unreleased
