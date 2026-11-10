@@ -1,5 +1,37 @@
 # @augur/registry
 
+## 0.21.0
+
+### Minor Changes
+
+- 531cf56: Removing an app, pinning and unpinning its version, allowing and stopping a site apps load from, and issuing an app's sign-in now need the deployment-admin role (ADR 0084). Admin shows those buttons turned off to a plain admin, with the reason.
+- b1ec856: Deployment gains Health (each part's health, email and event deliveries) and Backups (the last backup, the copy off the server, point in time and restore tests). Each page's history is now the kit's paged list, and an upgrade's watch checks a check list.
+- 3875cc9: Deployment gains its Release channel page: the channel this deployment and each component tracks, each component's path from main to stable from the pipeline feed, and every change of channel.
+- 71c250a: Deployment (once the Upgrade Centre) now runs on the app contract: the registry lists its contract 3 manifest, the web image serves its `sandbox.js`, and the React page is gone.
+- f59617f: An app names what it needs of the knowledge graph in its `augur-floor-graphs` resource: `classes` (class IRIs) and `actions` (action names). The registry asks the deployment's knowledge graph what it offers when an app is installed, and refuses an install that needs a class or action it lacks, saying which and who can adopt a class. When the knowledge graph can't be asked, it only warns. The knowledge graph's `GET /meta` now lists every class it has (`ontology.classes`), and Admin's review of an install names the classes and actions.
+- d2ce7c9: Apps can ask for the knowledge graph in their manifest's `scopes`: `knowledge:read` to read it as the person they act for, `knowledge:act` for its actions apps are granted, and `knowledge:extract` to add what a source says (retain). The gateway lets an app's calls to the knowledge graph through on those scopes, Admin names them when an admin allows an app, and an app's catalog entry names the knowledge API. The knowledge graph itself still refuses apps until its next release, which checks each action's own scope.
+
+  Not breaking: registry.openapi.yaml lists three more scopes an app's entry may carry. The list grows as AUGUR adds what apps can be granted, and its readers (Admin, the shell and the registry client) show a scope they don't know by its name.
+
+- 1506ff8: The platform overview says whether the caller is a deployment admin (`you.deploymentAdmin`), so a frontend that is never told someone's roles can show what they may change.
+- 5ef8329: AUGUR's own apps can be on the app contract (ADR 0083): the registry sends such an app's contract 3 manifest, with its role, its kind and whether the floor gauge rests, and the front door serves its frontend from the image at /apps/<id>/<version>/ before the frontends bucket. No own app uses it yet.
+- cc7aa74: Platform scopes (ADR 0083): AUGUR's own admin APIs get scopes of their own (`people:manage`, `apps:manage`, `org:manage`, `audit:read`, `deployment:upgrade`, `deployment:apps`, `deployment:health`, `deployment:settings`). The registry gives them only to AUGUR's own frontends (Admin holds who and what is allowed; the Upgrade Centre what runs and changing it), and the gateway lets a person's call made through one of those frontends reach the matching API with them. No app from a feed can ask for one. The service still checks the person's roles.
+
+### Patch Changes
+
+- Updated dependencies [d6f1a93]
+- Updated dependencies [f59617f]
+- Updated dependencies [d2ce7c9]
+- Updated dependencies [e60b45e]
+- Updated dependencies [7e6b12b]
+- Updated dependencies [12064f5]
+- Updated dependencies [cc7aa74]
+- Updated dependencies [7adc7fc]
+- Updated dependencies [7f0d097]
+  - @augur/mfe-sdk@3.1.0
+  - @augur/app-tools@0.6.0
+  - @augur/service-kit@0.19.0
+
 ## 0.20.0
 
 ### Minor Changes

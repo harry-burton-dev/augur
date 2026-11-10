@@ -436,6 +436,8 @@ services:
     environment:
       <<: *env
       PORT: 8081
+      # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
+      PERMISSIONS_URL: http://permissions:8087
       # Its own login, owning only the identity schema.
       DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # Admin's People screen: identity manages people in Keycloak as its own client, whose rights in
