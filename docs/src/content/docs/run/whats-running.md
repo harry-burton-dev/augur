@@ -30,7 +30,7 @@ anything an announcement missed. A copy that would take away more than half of w
 back and logged, and Status shows how the last copy went.
 
 It also copies who holds the Keycloak roles `admin`, `deployment-admin` and `publisher`, with each admin as an
-admin persona. For now the events, identity and registry services ask it beside each of their own admin and
+admin persona. For now the events, identity, registry and models services ask it beside each of their own admin and
 lead checks and compare the answers, without acting on its answer
 ([Observability](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#what-the-alert-rules-read)).
 

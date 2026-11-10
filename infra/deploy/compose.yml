@@ -562,6 +562,8 @@ services:
     environment:
       <<: *env
       PORT: 8085
+      # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
+      PERMISSIONS_URL: http://permissions:8087
       SERVICE_CLIENT_SECRET: "${MODELS_CLIENT_SECRET:-}"
       # Its own login, owning only the models schema.
       DATABASE_URL: postgres://platform_models:${MODELS_DATABASE_PASSWORD:?set MODELS_DATABASE_PASSWORD in .env}@postgres:5432/platform
