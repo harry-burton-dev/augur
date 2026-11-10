@@ -93,7 +93,7 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
         } catch (err) {
           // Garage never takes back the id of a key that was deleted, and the id comes from the secret.
           if (!(err instanceof GarageError) || err.code !== 'KeyAlreadyExists') throw err;
-          throw new GarageError(err.status, err.code, `key ${id} was deleted from the object store before, and a deleted key's id can't be used again: a new secret makes a new key.`);
+          throw new GarageError(err.status, err.code, `key ${id} was deleted from the object store before, and a deleted key's id can't be used again: a new secret makes a new key. (${err.message})`);
         }
       }
       await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: id, permissions: { read: true, write: true, owner: false } });
@@ -128,7 +128,12 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
       const secret = randomBytes(32).toString('hex');
       const id = keyIdFor(secret);
       await call('POST', 'ImportKey', { name, accessKeyId: id, secretAccessKey: secret });
-      await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: id, permissions: { read: true, write: true, owner: false } });
+      try {
+        await call('POST', 'AllowBucketKey', { bucketId, accessKeyId: id, permissions: { read: true, write: true, owner: false } });
+      } catch (err) {
+        await call('POST', `DeleteKey?id=${encodeURIComponent(id)}`).catch(() => undefined);
+        throw err;
+      }
       return { id, secret };
     },
 

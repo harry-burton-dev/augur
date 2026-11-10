@@ -131,7 +131,7 @@ if (config.garage) {
 
 /**
  * The key for this secret, with the words an admin needs when Garage refuses it: a key deleted before (a release
- * that took the app's bucket away with its key, before 0.24.1) can't be imported again, only replaced.
+ * that took the app's bucket away with its key, before this one kept them) can't be imported again, only replaced.
  */
 async function ensureKeyOf(garage: ReturnType<typeof garageAdmin>, app: string, secret: string, bucketId: string, setting: string, name?: string) {
   try {
@@ -153,12 +153,14 @@ async function retireApp(sql: pg.Client, app: string, again = false) {
   if (options) {
     const garage = garageAdmin(options);
     await garage.removeBucket(app, async (bucketId) => {
-      const key = await garage.temporaryKey(bucketId, `${keyNameFor(app)}-retire`);
+      // Named so no app's own keys (app-<id>, and an id can't hold a colon) are ever mistaken for it.
+      const key = await garage.temporaryKey(bucketId, `${keyNameFor(app)}:retire`);
       try {
         const deleted = await emptyBucket({ endpoint: options.s3Url, bucket: app, secret: key.secret });
         log.info(`emptied bucket ${app} (${deleted} objects)`);
       } finally {
-        await garage.deleteKey(key.id);
+        // A key left behind opens nothing once the bucket is gone, so this never hides why emptying failed.
+        await garage.deleteKey(key.id).catch((err: Error) => log.warn(`the key that emptied bucket ${app} couldn't be deleted: ${err.message}`));
       }
     });
   }

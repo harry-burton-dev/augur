@@ -91,10 +91,10 @@ describe('garageAdmin', () => {
   it('gives a bucket a key of its own for a while, which deleteKey takes away for good', async () => {
     const { garage, state } = fakeGarage({ roles: [], buckets: { notes: 'b-notes' }, keys: [] });
     let key = { id: '', secret: '' };
-    expect(await garage.removeBucket('notes', async (id) => void (key = await garage.temporaryKey(id, 'app-notes-retire')))).toBe(true);
+    expect(await garage.removeBucket('notes', async (id) => void (key = await garage.temporaryKey(id, 'app-notes:retire')))).toBe(true);
     expect(key.secret).toMatch(/^[0-9a-f]{64}$/);
     expect(key.id).toBe(keyIdFor(key.secret));
-    expect(state.keys).toEqual([{ id: key.id, name: 'app-notes-retire' }]);
+    expect(state.keys).toEqual([{ id: key.id, name: 'app-notes:retire' }]);
     await garage.deleteKey(key.id);
     expect(state.keys).toEqual([]);
     expect(state.buckets).toEqual({});
