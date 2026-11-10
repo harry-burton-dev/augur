@@ -62,6 +62,12 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Compose leaves the knowledge service's `MODELS_URL` empty for now. So retain takes only claims an app has already extracted, never raw text to read, and entities show their beliefs without written summaries. Each refusal says so. Nothing for you to do: when models are connected to it, a note here will say how.
 
+### Going back from 0.24.0 needs new bucket secrets
+
+**From** unreleased
+
+augur@0.24.0 took the retired apps' buckets away with their keys. Garage never takes a deleted key's id back, and an app's key id comes from its bucket secret, so a server that has run 0.24.0 can't go back to 0.23.1 as it is: 0.23.1's storage job stops at the Artifacts key with `KeyAlreadyExists`, and everything waits on it. To go back, set new `FOLIO_BUCKET_SECRET`, `ATLAS_BUCKET_SECRET` and `MANDATE_BUCKET_SECRET` values in `.env` (`openssl rand -hex 32` each) first; those apps' data is gone unless you restore the backup the upgrade took. From this release on, taking a bucket away leaves the app's keys, so going back works without this, and the storage job says in words when a secret's key was deleted before.
+
 ### Who settles and raises on a floor comes from the permissions service
 
 **From** unreleased
