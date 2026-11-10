@@ -164,7 +164,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     const catalogue = (await app.inject({ url: '/v1/actions' })).json();
     expect(catalogue.actions.map((a: { name: string }) => a.name)).toEqual(['retain', 'hold', 'keep', 'confirm-faithful']);
     expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: expect.arrayContaining(['source', 'entities', 'observations']) });
-    expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '1' }, speaks: { knowledge: [1] } });
+    expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '1', classes: expect.arrayContaining(['kg:Ship']) }, speaks: { knowledge: [1] } });
   });
 
   it('sends what the outbox holds as AUGUR’s own events, ids only, and a personal floor’s with nothing but the floor', async () => {

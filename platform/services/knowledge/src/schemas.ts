@@ -46,6 +46,7 @@ export const Meta = Type.Object(
       base: Type.String({ description: 'The shipped base profile.' }),
       version: Type.String({ description: 'This deployment’s ontology version.' }),
       baseClasses: Type.Array(ref(BaseClass), { description: 'The base profile’s classes, which every deployment has.' }),
+      classes: Type.Array(Type.String(), { description: 'Every class this deployment has now: the base profile’s and those it adopted. The registry checks the classes an app needs against it at install.' }),
     }),
     speaks: Type.Record(Type.String(), Type.Array(Type.Integer()), { description: 'Majors this service speaks, for the registry’s install check.' }),
   },

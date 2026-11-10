@@ -1294,7 +1294,8 @@
       "description": "Where the knowledge graph service is.",
       "x-internal": "compose",
       "x-services": [
-        "gateway"
+        "gateway",
+        "registry"
       ]
     },
     "GATEWAY_URL": {

@@ -61,7 +61,7 @@ const VALID: Record<string, Record<string, unknown>> = {
   'augur-scratch': { size: '256Mi' },
   'augur-files': { label: 'Map tiles', detail: 'Offline tiles' },
   'augur-telemetry': {},
-  'augur-floor-graphs': {},
+  'augur-floor-graphs': { classes: ['kg:Ship', 'kg:Port'], actions: ['retain'] },
   'augur-outbound': { hosts: ['tiles.example.org'], why: 'Fetches map tiles' },
   'augur-settings': { ids: ['retentionDays', 'exportKey'] },
 };
@@ -115,6 +115,8 @@ describe('provisioners (spec 4.6, 10.2)', () => {
     expect(refused('augur-outbound', { hosts: ['x.org'] })).toThrow('why is required');
     expect(refused('augur-gateway', { inbound: 'yes' })).toThrow('inbound is true or false.');
     expect(refused('augur-settings', { ids: ['nope'] })).toThrow('nope isn’t a setting the manifest declares.');
+    expect(refused('augur-floor-graphs', { classes: ['Ship'] })).toThrow('classes is a list of up to 100 class IRIs, such as kg:Ship.');
+    expect(refused('augur-floor-graphs', { actions: ['retain', 'retain'] })).toThrow('actions names one of them twice.');
   });
 
   it('gives the gateway’s outputs: the app’s client and secret, and the gateway’s token and caller-keys routes', () => {

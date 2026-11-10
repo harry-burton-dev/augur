@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { asksOf2 } from '@augur/app-tools/release2';
 import { callerHeaders } from '@augur/service-kit';
 import { DEV_BUILDS_PREVIEW_ONLY, ringProblem } from './app-runner.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import { PRODUCTION_ONLY } from './ring.ts';
+import type { KnowledgeOffer } from './release-check.ts';
 import type { AppRelease } from './store.ts';
 import { exampleRelease, releaseOf } from './release3.testing.ts';
 
@@ -29,9 +31,9 @@ const verifyService = async (headers: Record<string, string | string[] | undefin
 };
 const runner = { authorization: 'Bearer platform-updater' };
 
-const setup = async () => {
+const setup = async (options: { knowledge?: () => Promise<KnowledgeOffer> } = {}) => {
   const entries: { action: string; target?: string }[] = [];
-  const server = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
+  const server = await db.app({ verifyService, audit: async (e) => void entries.push(e), ...options });
   const ask = (payload: unknown, headers = fresh()) => server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers, payload: payload as object });
   return { server, entries, ask };
 };
@@ -146,6 +148,19 @@ describe('a contract 3 release in the app runner', async () => {
     const v1 = await ask({ action: 'install', release: v1Release });
     expect(v1.statusCode).toBe(400);
     expect(v1.json().message).toBe('Notes 1.2.0 speaks contract 2, and this AUGUR serves 3; the app needs a release on contract 3.');
+  });
+
+  it.runIf(DATABASE_URL)('asks the knowledge graph what it offers, only for a release that needs something of it, and refuses one it can’t meet', async () => {
+    let asked = 0;
+    const { ask } = await setup({ knowledge: async () => (asked++, { actions: ['retain'], classes: ['kg:Ship'] }) });
+    expect((await ask({ action: 'install', release: await exampleRelease() })).statusCode).toBe(202);
+    expect(asked).toBe(0);
+    const r = structuredClone(await exampleRelease());
+    r.parts[1]!.resources = { ...r.parts[1]!.resources, kg: { type: 'augur-floor-graphs', params: { actions: ['merge'] } } };
+    const needing = { ...r, version: '1.2.1', manifest: { ...r.manifest, version: '1.2.1' } };
+    const refused = await ask({ action: 'install', release: { ...needing, asks: asksOf2(needing.manifest, needing.parts) } });
+    expect(asked).toBe(1);
+    expect(refused.json().message).toMatch(/takes the knowledge graph’s action merge, which this deployment’s doesn’t offer\. It offers retain\./);
   });
 });
 

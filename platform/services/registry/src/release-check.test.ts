@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { asksOf2 } from '@augur/app-tools/release2';
-import { checkRelease, contractMessage, SERVED_CONTRACTS } from './release-check.ts';
+import { checkRelease, contractMessage, knowledgeNeeds, SERVED_CONTRACTS } from './release-check.ts';
 import { exampleRelease, examplePart, releaseOf } from './release3.testing.ts';
 
 const withoutFrontend = (over: Record<string, unknown> = {}, manifest: Record<string, unknown> = {}) => {
@@ -95,6 +95,24 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
     expect(warnings).toEqual(expect.arrayContaining([expect.stringMatching(/app’s own label/), expect.stringMatching(/note\.print/)]));
     const noFrontend = withoutFrontend();
     expect(checkRelease(noFrontend).warnings.join()).toMatch(/fills/);
+  });
+
+  it('refuses an install the knowledge graph can’t meet, naming what it lacks, and only warns when it can’t be asked', async () => {
+    const r = await withPart('worker', (p) => (p.resources.kg = { type: 'augur-floor-graphs', params: { classes: ['kg:Ship', 'kg:Tug'], actions: ['retain', 'merge'] } }));
+    expect(knowledgeNeeds(r)).toEqual({ classes: ['kg:Ship', 'kg:Tug'], actions: ['retain', 'merge'] });
+    // Not asked: nothing to check against.
+    expect(checkRelease(r).refusals).toEqual([]);
+    const offered = { actions: ['retain', 'hold'], classes: ['kg:Ship', 'kg:Port'] };
+    expect(checkRelease(r, { knowledge: offered }).refusals).toEqual([
+      `${r.manifest.name} takes the knowledge graph’s action merge, which this deployment’s doesn’t offer. It offers retain and hold.`,
+      `${r.manifest.name} needs the class kg:Tug, which this deployment’s knowledge graph doesn’t have. An ontology admin can adopt it, and then it can be installed.`,
+    ]);
+    expect(checkRelease(r, { knowledge: { actions: ['retain', 'merge'], classes: ['kg:Ship', 'kg:Tug'] } }).refusals).toEqual([]);
+    const down = checkRelease(r, { knowledge: { unavailable: 'the knowledge graph couldn’t be reached.' } });
+    expect(down.refusals).toEqual([]);
+    expect(down.warnings.join()).toMatch(/couldn’t be checked: the knowledge graph couldn’t be reached/);
+    // An app that needs nothing of it is never held to it.
+    expect(checkRelease(await exampleRelease(), { knowledge: { unavailable: 'down' } }).warnings.join()).not.toMatch(/knowledge/);
   });
 
   it('reads a part from its Score file, as the release carries it', () => {
