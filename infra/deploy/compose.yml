@@ -603,6 +603,9 @@ services:
     environment:
       <<: *env
       PORT: 8086
+      # Not connected to the models service in this phase of design: with no MODELS_URL, retain takes no raw text
+      # and reflect writes no summaries. Both stay in the code, ready, until this line goes.
+      MODELS_URL: ""
       KNOWLEDGE_PAGE_LIMIT: ${KNOWLEDGE_PAGE_LIMIT:-100}
       KNOWLEDGE_SUBGRAPH_DEPTH: ${KNOWLEDGE_SUBGRAPH_DEPTH:-3}
       KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS: ${KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS:-600}
