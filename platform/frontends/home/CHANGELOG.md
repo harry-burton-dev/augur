@@ -1,5 +1,19 @@
 # @augur/home
 
+## 0.4.3
+
+### Patch Changes
+
+- 523cbc6: Account is a dialog over the shell's menu, on kit 0.5.13. Its sections are tabs down the side, with a new Overview first (who you are, and an account check with Something's wrong? to secure the account). Each section's parts sit side by side while they fit and wait behind a switch when they don't, and long lists page, so nothing in it scrolls at 1280×720, 1024×768 or 800×600. It opens only from the menu, or on coming back from one of Keycloak's screens; an address alone no longer opens it.
+- 7f0d097: On kit 0.5.12, an app on the app contract can describe dialogs whose work it does itself, ask-twice buttons, choices, checkbox groups, dates, tag pickers, steps, progress and status, which the shell draws with the kit.
+- 318926c: On kit 0.5.14, an app on the app contract can describe a list of checks, steps through one job and a list a page at a time (`quill-check-list`, `quill-step-list`, `quill-paged-list`), which the shell draws with the kit.
+- d6f1a93: On kit 0.5.15, an app on the app contract can describe what a documents app needs: `quill-reader`, `quill-file-button`, `quill-people-picker`, `quill-floor-path` and `quill-filter-bar`. The shell fetches a reader's pictures itself, only under the app's own `/api/<id>/` and with the person's token, and frees them when the app stops (ADR 0092). A file button's files reach the app's `ctx.files.onDrop` handler as a drop does; while the app has no handler, the button says it can't take files.
+- Updated dependencies [d6f1a93]
+- Updated dependencies [e60b45e]
+- Updated dependencies [7adc7fc]
+- Updated dependencies [7f0d097]
+  - @augur/mfe-sdk@3.1.0
+
 ## 0.4.2
 
 ### Patch Changes
