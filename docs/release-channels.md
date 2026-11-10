@@ -127,7 +127,7 @@ Beside the release feed, `ghcr.io/<repo>/feed:pipeline` says where everything is
 
 It only describes the line. Nothing reads it to decide what to install: that stays the release feed's job.
 
-Admin → **Upgrade Centre** (it replaced Updates) shows it as **The line**: each part at each stage, this server's version highlighted where it sits, what's waiting between the stages, and the open Version packages pull request, linked to GitHub. It shows and links only: merging and promoting stay in GitHub. With `PORTAL_URL` set to the company's Backstage, each part links to its system there. The registry reads the pipeline at most once a minute, from `feed:pipeline` beside the release feed (`PIPELINE_FEED_URL` says otherwise, `off` hides it); a server on a mirror has none, and the page says so.
+Deployment's **Release channel** page (`/upgrades/release-channel`) shows it as **Path to stable**: each part at each stage, where this server's version sits, what's waiting between the stages, and the open Version packages and promotion pull requests, with their GitHub addresses. It shows and links only: merging and promoting stay in GitHub. With `PORTAL_URL` set to the company's Backstage, each part links to its system there. The registry reads the pipeline at most once a minute, from `feed:pipeline` beside the release feed (`PIPELINE_FEED_URL` says otherwise, `off` hides it); a server on a mirror has none, and the page says so.
 
 ## Feature previews
 

@@ -4,6 +4,7 @@ import { reasonProblem } from './model/halted.js';
 import type { DesiredState, PlatformUpdates } from './model/types.js';
 import { AUGUR } from './units.js';
 import { reader, type Data } from './data.js';
+import { channelPage } from './channel.js';
 import { backupsPage, healthPage } from './health.js';
 import { quill } from './quill.js';
 import { pathOf, PLACES, routeFor, type Route } from './routes.js';
@@ -14,6 +15,9 @@ import { appsPage, overviewPage, rowsOf, staleNotice, type Actions, type Ui } fr
 /** The commands and places Deployment handles: each is declared in its manifest, which the shell draws from. */
 export const COMMANDS = { check: 'deployment.check' } as const;
 export const PLACE_APPS = 'apps';
+
+/** The pages that show the settings history: Settings itself, and Release channel's channel changes. */
+const HISTORY_PAGES = new Set<Route['page']>(['settings', 'channel']);
 
 const words = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -30,6 +34,8 @@ const titleOf = (route: Route, data: Data): string => {
       return 'Health';
     case 'backups':
       return 'Backups';
+    case 'channel':
+      return 'Release channel';
     case 'settings':
       return 'Settings';
     case 'app':
@@ -42,20 +48,23 @@ export const screen = (v: SettingsView): RemoteNode => {
   if (v.data.loading && !v.data.overview) return quill('quill-state', { kind: 'loading', heading: 'Reading what this deployment runs', size: 'page' });
   if (!v.data.overview || !v.data.updates)
     return quill('quill-state', { kind: 'error', heading: 'The registry isn’t answering', body: `${v.data.error ?? ''} Nothing can be shown or changed here until it does. Check it with \`pc logs registry\`.`.trim(), size: 'page' });
+  const r = v.route;
   const page =
-    v.route.page === 'overview'
+    r.page === 'overview'
       ? overviewPage(v)
-      : v.route.page === 'augur'
-        ? augurPage(v, v.route.ask)
-        : v.route.page === 'apps'
+      : r.page === 'augur'
+        ? augurPage(v, r.ask)
+        : r.page === 'apps'
           ? appsPage(v)
-          : v.route.page === 'health'
+          : r.page === 'health'
             ? healthPage(v)
-            : v.route.page === 'backups'
+            : r.page === 'backups'
               ? backupsPage(v)
-          : v.route.page === 'settings'
-            ? settingsPage(v, v.route.edit)
-            : appPage(v, v.route.app, v.route.install);
+              : r.page === 'channel'
+                ? channelPage(v)
+                : r.page === 'settings'
+                  ? settingsPage(v, r.edit)
+                  : appPage(v, r.app, r.install);
   return [staleNotice(v), page];
 };
 
@@ -106,10 +115,10 @@ export default defineApp((ctx: AppContext) => {
     return draft.draft;
   };
 
-  /** Reads each unit's settings history and the reporting view, once the Settings page opens and the units are known. */
+  /** Reads each unit's settings history and the reporting view, once Settings or Release channel opens and the units are known. */
   const readSettings = async () => {
     const o = data.data.overview;
-    if (settingsRead || !o || routeFor(path).page !== 'settings') return;
+    if (settingsRead || !o || !HISTORY_PAGES.has(routeFor(path).page)) return;
     settingsRead = true;
     const missing: string[] = [];
     const [history, report] = await Promise.all([
@@ -153,8 +162,8 @@ export default defineApp((ctx: AppContext) => {
     if (now.page !== 'settings') {
       saved = undefined;
       exporting = undefined;
-      settingsRead = false;
     }
+    if (!HISTORY_PAGES.has(now.page)) settingsRead = false;
     draw();
     void readSettings();
   };

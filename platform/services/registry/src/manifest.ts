@@ -453,6 +453,7 @@ export const platformManifests3: Readonly<Record<string, AppManifest3>> = {
         { id: 'apps', label: 'Apps', icon: 'apps', path: '/apps', detail: 'Each installed app', fills: true },
         { id: 'health', label: 'Health', icon: 'pulse', path: '/health', detail: 'Services, email and event deliveries' },
         { id: 'backups', label: 'Backups', icon: 'archive', path: '/backups', detail: 'Last backup, copy off the server and restore tests' },
+        { id: 'channel', label: 'Release channel', icon: 'preview', path: '/release-channel', detail: 'What this deployment tracks, and the path to stable' },
         { id: 'settings', label: 'Settings', icon: 'settings', path: '/settings', detail: 'Update policy and maintenance windows' },
       ],
       commands: [{ id: 'deployment.check', label: 'Check for updates', icon: 'download', keywords: 'release feed new version upgrade' }],

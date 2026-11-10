@@ -1,6 +1,6 @@
 import type { AppContext, FrameState, PlaceItem, RemoteElement, RemoteNode } from '@augur/mfe-sdk/sdk3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppInstalls, AppJob, Deliveries, Overview, OverviewUnit, PlatformStatus, PlatformUpdates } from './model/types.js';
+import type { AppInstalls, AppJob, Deliveries, DesiredState, Overview, OverviewUnit, PlatformStatus, PlatformUpdates } from './model/types.js';
 import start, { COMMANDS, PLACE_APPS } from './entry.js';
 import { pathOf, routeFor } from './routes.js';
 
@@ -142,7 +142,7 @@ const deliveries: Deliveries = {
 
 /** The registry and the gateway, answering each read from what a test gives it, and each change as it says. */
 const registry =
-  (given: { overview?: Overview; updates?: PlatformUpdates; installs?: AppInstalls; status?: PlatformStatus | null; change?: Answer } = {}): Answer =>
+  (given: { overview?: Overview; updates?: PlatformUpdates; installs?: AppInstalls; status?: PlatformStatus | null; history?: DesiredState[]; change?: Answer } = {}): Answer =>
   (path, init) => {
     const method = init?.method ?? 'GET';
     if (method !== 'GET' && given.change) return given.change(path, init);
@@ -153,7 +153,7 @@ const registry =
     if (path.endsWith('/app-runner/apps')) return [200, given.installs ?? installs()];
     if (path.endsWith('/app-runner/jobs')) return [200, { jobs }];
     if (path.endsWith('/desired-state/history'))
-      return [200, { history: path.includes('/augur/') ? [{ ...unit().desired, setBy: 'default' }, { ...unit().desired, policy: 'hold', setBy: 'p1', setAt: '2026-11-08T09:00:00Z' }] : [] }];
+      return [200, { history: path.includes('/augur/') ? given.history ?? [{ ...unit().desired, setBy: 'default' }, { ...unit().desired, policy: 'hold', setBy: 'p1', setAt: '2026-11-08T09:00:00Z' }] : [] }];
     if (path.endsWith('/platform/reporting')) return [200, { mode: 'file', why: 'This deployment can’t reach Backstage, so its record is exported by hand.', deployment: 'workbench', publicKey: 'ssh-ed25519 AAAA' }];
     return [404, { message: 'Not here.' }];
   };
@@ -188,6 +188,7 @@ describe('routes', () => {
       { page: 'app', app: 'mandate', install: '1.4.1' },
       { page: 'health' },
       { page: 'backups' },
+      { page: 'channel' },
     ] as const)
       expect(routeFor(pathOf(r))).toEqual(r);
     expect(routeFor('/nonsense')).toEqual({ page: 'overview' });
@@ -359,6 +360,29 @@ describe('Deployment', () => {
     ]);
     const down = await open(registry({ status: null }), '/backups');
     expect(find(down.shell.screen, 'quill-state')?.props).toMatchObject({ kind: 'error', heading: 'The gateway didn’t say how backups are doing' });
+  });
+
+  it('shows the release channel, the path to stable and every change of channel', async () => {
+    const line: PlatformUpdates['line'] = {
+      feed: 'on',
+      repository: 'example/augur',
+      units: [{ id: 'augur', name: 'AUGUR', versions: { dev: '0.26.0', preview: '0.25.0', production: '0.23.1' }, waiting: ['a', 'b'], previews: [], running: '0.25.0' }],
+      steps: [{ from: 'dev', to: 'preview', merged: 3, pulls: [] }, { from: 'preview', to: 'production', merged: 0, pulls: [] }],
+      pulls: { promoteToProduction: [{ number: 7, title: 'Promote', url: 'https://example.test/7', unit: 'augur', version: '0.25.0' }] },
+    };
+    const history = [{ ...unit().desired, setBy: 'default' }, { ...unit().desired, channel: 'stable' as const, setBy: 'p1', setAt: '2026-11-08T09:00:00Z' }];
+    const { shell } = await open(registry({ updates: updates({ line }), history }), '/release-channel');
+    await settle();
+    expect(shell.pane.title).toBe('Release channel');
+    expect(find(shell.screen, 'quill-table', (p) => p.label === 'Path to stable')?.props?.rows).toMatchObject([{ component: 'AUGUR (2 changes waiting)', preview: '0.25.0', here: '0.25.0, at Beta' }]);
+    expect(find(shell.screen, 'quill-check-list', (p) => p.label === 'Between the stages')?.props?.rows).toMatchObject([
+      { title: '3 pull requests on Main that Beta hasn’t got', detail: 'https://github.com/example/augur/compare/preview...dev' },
+      { title: 'Stable has everything on Beta', tone: 'ok' },
+      { title: 'Promote AUGUR 0.25.0 to Stable is open', tone: 'needs' },
+    ]);
+    expect(find(shell.screen, 'quill-paged-list', (p) => p.label === 'Channel changes')?.props?.items).toMatchObject([{ title: 'AUGUR: Beta to Stable', meta: expect.stringContaining('Sam Admin') }]);
+    const off = await open(registry({ updates: updates({ line: { feed: 'off', units: [], steps: [] } }) }), '/release-channel');
+    expect(find(off.shell.screen, 'quill-notice', (p) => p.heading === 'The path to stable can’t be shown')).toBeDefined();
   });
 
   it('changes a component’s settings, showing the effect before saving', async () => {
