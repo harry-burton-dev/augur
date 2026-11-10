@@ -7,6 +7,7 @@ The shell's promise to apps, tested in a browser. A reference app on the app con
 - `tests/inbox.spec.ts`: the Inbox, in the words of the app's inbox kinds.
 - `tests/account.spec.ts`: Account as a dialog over the menu, opened only from it or on coming back from Keycloak, with nothing scrolling or cut off at 1280×720, 1024×768 and 800×600, and nothing serious for axe.
 - `tests/a11y.spec.ts`: axe on the desktop, a start menu, the app with its rail, and the stream.
+- `tests/manifest-frame.spec.ts`: Starter, the app template's app, drawn from its manifest alone (`starter/manifest.json`, a copy of the template's, with no code), on a second dev server at `CONTRACT_PORT` + 1: its tile, its places (when there is a choice of them) and its pane, headed with its name and saying it is opening or why it stopped.
 
 ```sh
 pnpm build   # the shell's packages and Home
