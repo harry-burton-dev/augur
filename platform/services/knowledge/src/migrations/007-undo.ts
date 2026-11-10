@@ -3,6 +3,7 @@
 // restores what it replaced, or takes back only the evidence it added; undoing a keep lets the observation fall
 // back to flagged. Retire takes an entity out of use on a floor's authority, as merge does; nothing is deleted.
 export const sql = String.raw`
+-- squawk-ignore-file ban-revoke
 -- Each function here is new, made and handed to kg_owner in this migration, so no release before runs on them.
 alter table kg.action_answers add column undone_at timestamptz, add column undone_why text;
 

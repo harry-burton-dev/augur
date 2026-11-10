@@ -40,7 +40,7 @@
     "004-service": "d67cc8c0b66c8096",
     "005-reads": "7ddd4d1cf38f8ebd",
     "006-queries": "6735a67e837c16c0",
-    "007-undo": "c9b8c1b351a26368"
+    "007-undo": "3b92b48990a4f834"
   },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"
