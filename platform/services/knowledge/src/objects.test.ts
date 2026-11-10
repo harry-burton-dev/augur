@@ -52,7 +52,8 @@ describe.skipIf(!DATABASE_URL)('the object reads over HTTP', () => {
       // On a team floor that holds by role, a retained claim waits to be confirmed.
       state: 'proposed',
       extractor: 'test',
-      ontologyVersion: '1',
+      // The base profile and the first adopt pass's seven predicates.
+      ontologyVersion: '8',
     });
     const source = await get('alice', `/v1/floors/team-a/sources/${effects.sources[0]}`, 'team-a');
     expect(source.json()).toMatchObject({ id: effects.sources[0], title: 'Report O1', extraction: { observations: 1, flagged: 0 } });
@@ -128,7 +129,7 @@ describe.skipIf(!DATABASE_URL)('the object reads over HTTP', () => {
 
   it('serves the ontology, its classes and shapes to anyone signed in, and candidates from sources in sight', async () => {
     const onto = await app.inject({ url: '/v1/ontology', headers: as('alice') });
-    expect(onto.json()).toMatchObject({ version: '1', classes: expect.arrayContaining([expect.objectContaining({ iri: 'kg:Arrival', kind: 'occurrent', status: 'base', parent: 'kg:Act' })]) });
+    expect(onto.json()).toMatchObject({ version: '8', classes: expect.arrayContaining([expect.objectContaining({ iri: 'kg:Arrival', kind: 'occurrent', status: 'base', parent: 'kg:Act' })]) });
     expect(onto.json().predicates).toEqual(expect.arrayContaining([expect.objectContaining({ iri: 'kg:capacity', kind: 'property', datatype: 'quantity', singleValued: true })]));
     // The contract's BaseClass, which the client types, is the base profile as the store has it.
     expect(onto.json().classes.filter((c: { status: string }) => c.status === 'base').map((c: { iri: string }) => c.iri).sort()).toEqual([...BASE_CLASSES].sort());

@@ -395,8 +395,10 @@ export const readOntology = async (db: pg.Pool | pg.PoolClient) => {
     db.query<{ iri: string; label: string; parent: string | null; kind: 'continuant' | 'occurrent'; status: 'base' | 'accepted' | 'proposed' | 'dismissed'; pack_term: string | null; since_version: number | null }>(
       'select iri, label, parent, kind, status, pack_term, since_version from kg.classes order by iri',
     ),
-    db.query<{ iri: string; label: string; kind: 'property' | 'link'; domain: string | null; range: string | null; datatype: string | null; unit: string | null; single_valued: boolean; status: 'base' | 'accepted' | 'proposed' | 'dismissed' }>(
-      'select iri, label, kind, domain, range, datatype, unit, single_valued, status from kg.predicates order by iri',
+    db.query<{ iri: string; label: string; kind: 'property' | 'link'; domain: string | null; range: string | null; datatype: string | null; unit: string | null; single_valued: boolean; status: 'base' | 'accepted' | 'proposed' | 'dismissed'; since_version: number | null; asked_as: string[] }>(
+      `select p.iri, p.label, p.kind, p.domain, p.range, p.datatype, p.unit, p.single_valued, p.status, p.since_version,
+              array(select t.term from kg.predicate_terms t where t.predicate = p.iri order by t.term) as asked_as
+       from kg.predicates p order by p.iri`,
     ),
     db.query<{ v: number | null }>('select max(version)::int as v from kg.ontology_versions'),
   ]);
@@ -404,7 +406,19 @@ export const readOntology = async (db: pg.Pool | pg.PoolClient) => {
     version: String(v.rows[0]?.v ?? 1),
     classes: classes.rows.map(toClass),
     predicates: predicates.rows.map((p) =>
-      defined({ iri: p.iri, label: p.label, kind: p.kind, domain: p.domain ?? undefined, range: p.range ?? undefined, datatype: p.datatype ?? undefined, unit: p.unit ?? undefined, singleValued: p.single_valued, status: p.status }),
+      defined({
+        iri: p.iri,
+        label: p.label,
+        kind: p.kind,
+        domain: p.domain ?? undefined,
+        range: p.range ?? undefined,
+        datatype: p.datatype ?? undefined,
+        unit: p.unit ?? undefined,
+        singleValued: p.single_valued,
+        status: p.status,
+        sinceVersion: p.since_version === null ? undefined : String(p.since_version),
+        askedAs: p.asked_as.length ? p.asked_as : undefined,
+      }),
     ),
   };
 };
@@ -426,7 +440,18 @@ export const readClass = async (db: pg.Pool, iriOrName: string) => {
 /** Terms extraction asked for that the ontology lacks, from sources in sight. */
 export const listCandidates = async (db: pg.PoolClient) =>
   (
-    await db.query<{ term: string; kind: 'class' | 'predicate'; suggested_parent: string | null; why: string; asked_by: number; status: 'proposed' | 'adopted' | 'dismissed' }>(
-      'select term, kind, suggested_parent, why, asked_by, status from kg.candidates order by asked_by desc, term',
+    await db.query<{ term: string; kind: 'class' | 'predicate'; suggested_parent: string | null; why: string; asked_by: number; status: 'proposed' | 'adopted' | 'dismissed'; decided_as: string | null; decided_why: string | null }>(
+      'select term, kind, suggested_parent, why, asked_by, status, decided_as, decided_why from kg.candidates order by asked_by desc, term',
     )
-  ).rows.map((c) => defined({ term: c.term, kind: c.kind, suggestedParent: c.suggested_parent ?? undefined, why: c.why || undefined, askedBy: c.asked_by, status: c.status }));
+  ).rows.map((c) =>
+    defined({
+      term: c.term,
+      kind: c.kind,
+      suggestedParent: c.suggested_parent ?? undefined,
+      why: c.why || undefined,
+      askedBy: c.asked_by,
+      status: c.status,
+      adoptedAs: c.decided_as ?? undefined,
+      dismissedWhy: c.decided_why ?? undefined,
+    }),
+  );

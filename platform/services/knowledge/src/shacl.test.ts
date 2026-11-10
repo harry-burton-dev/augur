@@ -118,8 +118,10 @@ describe.skipIf(!DATABASE_URL)('SHACL on the loaded store', () => {
     data = new Store(await exportStore(async (sql) => (await db.admin.query(sql)).rows));
   });
 
-  it('exports the same graph draft 4 checked: 9,323 triples', () => {
-    expect(data.size).toBe(9323);
+  // Draft 4's graph, and the seven predicates of the first adopt pass (six triples each). Claims the pass files
+  // under them are as many triples as they were under kg:note.
+  it('exports the graph draft 4 checked, 9,323 triples, and the first adopt pass', () => {
+    expect(data.size).toBe(9323 + 7 * 6);
   });
 
   it('conforms to the Core shapes, with no results', async () => {

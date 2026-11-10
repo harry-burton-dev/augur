@@ -289,6 +289,8 @@ export const Predicate = Type.Object(
     unit: Type.Optional(Type.String()),
     singleValued: Type.Boolean(),
     status: Status,
+    sinceVersion: Type.Optional(Type.String({ description: 'The ontology version that adopted it; none for the base profile’s.' })),
+    askedAs: Type.Optional(Type.Array(Type.String(), { description: 'Other names extraction asks for it by, adopted as this predicate: a claim asking by one is kept under it.' })),
   },
   { $id: 'Predicate' },
 );
@@ -304,6 +306,8 @@ export const Candidate = Type.Object(
     why: Type.Optional(Type.String()),
     askedBy: Type.Integer({ description: 'How many sources asked for it.' }),
     status: Type.Union([Type.Literal('proposed'), Type.Literal('adopted'), Type.Literal('dismissed')]),
+    adoptedAs: Type.Optional(Type.String({ description: 'Adopted: the class or predicate it was adopted as.' })),
+    dismissedWhy: Type.Optional(Type.String({ description: 'Dismissed: why, as the ontology admin said.' })),
   },
   { $id: 'Candidate', description: 'A term extraction asked for that the ontology lacks.' },
 );

@@ -222,3 +222,71 @@ export const exportFloor = async (db: pg.PoolClient, floor: string, format: Expo
   }
   return new Promise<string>((resolve, reject) => writer.end((err, text) => (err ? reject(err) : resolve(text ?? ''))));
 };
+
+const OWL = 'http://www.w3.org/2002/07/owl#';
+/** The ontology itself, and each of its versions, as OWL names them. */
+export const ONTOLOGY_IRI = `${KG}ontology`;
+/** What a property's values are, as XSD names them. */
+const XSD_OF: Record<string, string> = { text: 'string', boolean: 'boolean', date: 'dateTime', quantity: 'decimal' };
+
+/**
+ * The deployment's ontology now as OWL, in Turtle (draft 4, section 5): the base profile and every term adopted
+ * since, never a candidate. Each class and predicate keeps its status and, where it has one, its pack term as
+ * skos:exactMatch; a predicate keeps the other names extraction asks for it by as skos:hiddenLabel. The ontology
+ * belongs to no floor, so nothing here is fenced.
+ */
+export const exportOntology = async (db: pg.Pool | pg.PoolClient, base: string) => {
+  const [version, classes, predicates] = await Promise.all([
+    db.query<{ v: number }>('select max(version)::int as v from kg.ontology_versions'),
+    db.query<{ iri: string; label: string; parent: string | null; kind: string; status: string; pack_term: string | null; since_version: number | null }>(
+      `select iri, label, parent, kind, status, pack_term, since_version from kg.classes where status in ('base', 'accepted') order by iri`,
+    ),
+    db.query<{ iri: string; label: string; kind: string; domain: string | null; range: string | null; datatype: string | null; unit: string | null; single_valued: boolean; status: string; pack_term: string | null; since_version: number | null; asked_as: string[] }>(
+      `select p.iri, p.label, p.kind, p.domain, p.range, p.datatype, p.unit, p.single_valued, p.status, p.pack_term, p.since_version,
+              array(select t.term from kg.predicate_terms t where t.predicate = p.iri order by t.term) as asked_as
+       from kg.predicates p where p.status in ('base', 'accepted') order by p.iri`,
+    ),
+  ]);
+  const v = version.rows[0]?.v ?? 1;
+  const writer = new Writer({ format: 'text/turtle', prefixes: { ...PREFIXES, owl: OWL } });
+  const add = (s: Quad_Subject, p: Quad_Predicate, o: Quad_Object) => writer.addQuad(quad(s, p, o));
+  const label = namedNode(RDFS + 'label');
+  const ontology = namedNode(ONTOLOGY_IRI);
+  add(ontology, TYPE, namedNode(OWL + 'Ontology'));
+  add(ontology, label, literal(base));
+  add(ontology, namedNode(OWL + 'versionIRI'), namedNode(`${ONTOLOGY_IRI}:v${v}`));
+  add(ontology, namedNode(OWL + 'versionInfo'), literal(String(v)));
+  const since = (n: Quad_Subject, at: number | null) => {
+    if (at !== null) add(n, k('sinceVersion'), typed(at));
+  };
+  for (const c of classes.rows) {
+    const n = term(c.iri);
+    add(n, TYPE, namedNode(OWL + 'Class'));
+    add(n, label, literal(c.label));
+    add(n, k('status'), literal(c.status));
+    add(n, k('kind'), literal(c.kind));
+    add(n, namedNode(RDFS + 'isDefinedBy'), ontology);
+    if (c.parent) add(n, namedNode(RDFS + 'subClassOf'), term(c.parent));
+    if (c.pack_term) add(n, namedNode(SKOS + 'exactMatch'), namedNode(c.pack_term));
+    since(n, c.since_version);
+  }
+  for (const p of predicates.rows) {
+    const n = term(p.iri);
+    add(n, TYPE, namedNode(OWL + (p.kind === 'link' ? 'ObjectProperty' : 'DatatypeProperty')));
+    if (p.single_valued) add(n, TYPE, namedNode(OWL + 'FunctionalProperty'));
+    add(n, label, literal(p.label));
+    add(n, k('status'), literal(p.status));
+    add(n, namedNode(RDFS + 'isDefinedBy'), ontology);
+    if (p.domain) add(n, namedNode(RDFS + 'domain'), term(p.domain));
+    if (p.range) add(n, namedNode(RDFS + 'range'), term(p.range));
+    else if (p.datatype) {
+      add(n, namedNode(RDFS + 'range'), namedNode(XSD + (XSD_OF[p.datatype] ?? 'string')));
+      add(n, k('datatype'), literal(p.datatype));
+    }
+    if (p.unit) add(n, k('unit'), literal(p.unit));
+    if (p.pack_term) add(n, namedNode(SKOS + 'exactMatch'), namedNode(p.pack_term));
+    for (const t of p.asked_as) add(n, namedNode(SKOS + 'hiddenLabel'), literal(t));
+    since(n, p.since_version);
+  }
+  return new Promise<string>((resolve, reject) => writer.end((err, text) => (err ? reject(err) : resolve(text ?? ''))));
+};

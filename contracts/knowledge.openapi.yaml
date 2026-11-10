@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Knowledge
-  version: 1.9.0
+  version: 1.10.0
   description: |-
     The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
     A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. An app acting for a person reaches it the same way, through its client, held to the scopes it is granted (knowledge:read, an action’s own).
@@ -977,6 +977,14 @@ components:
             - type: string
               enum:
                 - dismissed
+        sinceVersion:
+          type: string
+          description: The ontology version that adopted it; none for the base profile’s.
+        askedAs:
+          type: array
+          items:
+            type: string
+          description: "Other names extraction asks for it by, adopted as this predicate: a claim asking by one is kept under it."
     Ontology:
       type: object
       required:
@@ -1034,6 +1042,12 @@ components:
             - type: string
               enum:
                 - dismissed
+        adoptedAs:
+          type: string
+          description: "Adopted: the class or predicate it was adopted as."
+        dismissedWhy:
+          type: string
+          description: "Dismissed: why, as the ontology admin said."
       description: A term extraction asked for that the ontology lacks.
     Summary:
       type: object
@@ -2572,6 +2586,24 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Ontology"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+  /ontology/owl:
+    get:
+      summary: The deployment’s ontology now as OWL, in Turtle
+      description: The base profile and the terms adopted since, never a candidate, with each term’s status, its pack term as skos:exactMatch, and the other names extraction asks a predicate by as skos:hiddenLabel.
+      responses:
+        "200":
+          description: Turtle.
+          content:
+            text/turtle:
+              schema:
+                type: string
+                description: Turtle.
         "401":
           description: No signed-in caller
           content:

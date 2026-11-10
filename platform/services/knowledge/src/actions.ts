@@ -567,8 +567,78 @@ const undo: ActionDecl<typeof UndoInput> = {
   },
 };
 
+const Term = Type.String({ minLength: 1, maxLength: 120, pattern: '^(kg:)?[A-Za-z][A-Za-z0-9]*$', description: 'The term as extraction asked for it, as GET /ontology/candidates lists it.' });
+const TermKind = Type.Union([Type.Literal('class'), Type.Literal('predicate')]);
+const Iri = (description: string) => Type.String({ minLength: 1, maxLength: 300, description });
+
+const AdoptInput = Type.Object(
+  {
+    term: Term,
+    kind: TermKind,
+    iri: Iri('The IRI it is adopted as: a new one (kg: and a name, or a pack term’s IRI), or one the ontology has, to take the term as another name for it.'),
+    label: Type.String({ minLength: 1, maxLength: 200, description: 'What people read for it. Kept only when the IRI is new.' }),
+    parent: Type.Optional(Iri('A class: the class it sits under. kg:Entity when left out.')),
+    classKind: Type.Optional(Type.Union([Type.Literal('continuant'), Type.Literal('occurrent')], { description: 'A class: occurrent for an event. continuant when left out.' })),
+    domain: Type.Optional(Iri('A predicate: the class its subjects are. kg:Entity when left out.')),
+    range: Type.Optional(Iri('A link: the class its objects are. A predicate with a range is a link; without one, a property.')),
+    datatype: Type.Optional(Type.Union([Type.Literal('quantity'), Type.Literal('date'), Type.Literal('text'), Type.Literal('boolean')], { description: 'A property: what its values are.' })),
+    unit: Type.Optional(Type.String({ minLength: 1, maxLength: 40, description: 'A quantity: the unit a value takes when its source gives none.' })),
+    singleValued: Type.Optional(Type.Boolean({ description: 'A predicate: whether a subject has one current value of it.' })),
+  },
+  { additionalProperties: false },
+);
+const adopt: ActionDecl<typeof AdoptInput> = {
+  name: 'adopt',
+  since: '1.10',
+  summary: 'Adopt a term extraction asked for: as a class or predicate of its own, or as another name for one the ontology has',
+  input: AdoptInput,
+  who: 'An ontology admin: one of AUGUR’s admins.',
+  scope: 'knowledge:act',
+  role: 'ontology-admin',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: ['platform.knowledge.ontology.changed'],
+  // A new term is a new ontology version; another name for one the ontology has is not, since the ontology is
+  // the same. Either way, a claim that falls to kg:note asking for the term is kept under it from then on.
+  // What was kept before stays as it was: a claim is never edited.
+  async run(db, input) {
+    const { rows } = await db.query<{ v: number }>('select kg.act_adopt($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) as v', [
+      input.term,
+      input.kind,
+      input.iri,
+      input.label,
+      input.parent ?? null,
+      input.classKind ?? null,
+      input.domain ?? null,
+      input.range ?? null,
+      input.datatype ?? null,
+      input.unit ?? null,
+      input.singleValued ?? null,
+    ]);
+    return { [input.kind === 'class' ? 'classes' : 'predicates']: [input.iri], ontologyVersions: [String(rows[0]!.v)] };
+  },
+};
+
+const DismissInput = Type.Object({ term: Term, kind: TermKind, why: Why('Why the ontology won’t take it: kept with the candidate, for whoever asks next.') }, { additionalProperties: false });
+const dismiss: ActionDecl<typeof DismissInput> = {
+  name: 'dismiss',
+  since: '1.10',
+  summary: 'Dismiss a term extraction asked for, saying why: it is no longer counted',
+  input: DismissInput,
+  who: 'An ontology admin: one of AUGUR’s admins.',
+  scope: 'knowledge:act',
+  role: 'ontology-admin',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    await db.query('select kg.act_dismiss($1, $2, $3)', [input.term, input.kind, input.why]);
+    return { candidates: [input.term] };
+  },
+};
+
 /** Every action, by name. */
-export const CATALOGUE: ActionDecl[] = [retain, hold, keep, confirmFaithful, publish, dispute, settle, retract, raise, end, forget, merge, split, retire, undo] as ActionDecl[];
+export const CATALOGUE: ActionDecl[] = [retain, hold, keep, confirmFaithful, publish, dispute, settle, retract, raise, end, forget, merge, split, retire, undo, adopt, dismiss] as ActionDecl[];
 export const actionNamed = (name: string) => CATALOGUE.find((a) => a.name === name);
 
 const checkers = new Map(CATALOGUE.map((a) => [a.name, Compile(a.input)]));
