@@ -7,6 +7,7 @@ import type { AuthConfig } from './auth.ts';
 import { HealthMonitor } from './status.ts';
 import { Mailer, NO_RELAY } from '@augur/service-kit/mail';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
+import { PersonaSessionsUnavailable } from './personas.ts';
 import { AppAccessUnavailable, registryAppAccess } from './uploads.ts';
 import { registryUpstreams, UpstreamsUnavailable } from './upstreams.ts';
 import { Readable } from 'node:stream';
@@ -135,6 +136,41 @@ describe('gateway', () => {
     expect(res.json()['x-user-signed-in-at']).toBe(new Date(1_793_000_000_000).toISOString());
     const without = await app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${await sign(ada)}`, 'x-user-signed-in-at': '2099-01-01T00:00:00Z' } });
     expect(without.json()['x-user-signed-in-at']).toBeUndefined();
+  });
+
+  it('acts as an admin persona only while the permissions service has a live session for it', async () => {
+    const asked: [string, string][] = [];
+    const personaSessions = async (person: string, persona: string) => {
+      asked.push([person, persona]);
+      return persona === 'admin.u-1';
+    };
+    const app = await buildApp({ upstreams: { registry: url }, auth, personaSessions });
+    const call = async (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${await sign(ada)}`, ...headers } });
+    const acting = await call({ 'x-augur-persona': 'admin.u-1', 'x-user-persona': 'forged' });
+    expect(acting.statusCode).toBe(200);
+    expect(acting.json()['x-user-id']).toBe('u-1');
+    expect(acting.json()['x-user-persona']).toBe('admin.u-1');
+    expect(acting.json()['x-augur-persona']).toBeUndefined();
+    // Without the header the person is themselves, whatever a client claims.
+    expect((await call({ 'x-user-persona': 'admin.u-1' })).json()['x-user-persona']).toBeUndefined();
+    const ended = await call({ 'x-augur-persona': 'admin.u-2' });
+    expect(ended.statusCode).toBe(403);
+    expect(ended.json().error).toBe('persona_ended');
+    expect((await call({ 'x-augur-persona': 'admin.u-1', 'x-augur-app': 'artifacts' })).statusCode).toBe(403);
+    expect((await call({ 'x-augur-persona': '../x' })).statusCode).toBe(400);
+    expect(asked).toEqual([
+      ['u-1', 'admin.u-1'],
+      ['u-1', 'admin.u-2'],
+    ]);
+  });
+
+  it('refuses to act as a persona when the permissions service can’t say, never letting the call through as it', async () => {
+    const personaSessions = async () => {
+      throw new PersonaSessionsUnavailable('down');
+    };
+    const app = await buildApp({ upstreams: { registry: url }, auth, personaSessions });
+    const res = await app.inject({ method: 'GET', url: '/api/registry/echo', headers: { authorization: `Bearer ${await sign(ada)}`, 'x-augur-persona': 'admin.u-1' } });
+    expect(res.statusCode).toBe(503);
   });
 
   it('signs the caller for the one service the request goes to', async () => {

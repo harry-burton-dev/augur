@@ -113,6 +113,7 @@ services:
       EVENTS_URL: http://events:8084
       MODELS_URL: http://models:8085
       KNOWLEDGE_URL: http://knowledge:8086
+      PERMISSIONS_URL: http://permissions:8087
       # Tokens are issued for the browser's address; signing keys are fetched over the compose network.
       OIDC_ISSUER: http://localhost:8180/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs

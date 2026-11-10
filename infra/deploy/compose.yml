@@ -386,6 +386,8 @@ services:
       EVENTS_URL: http://events:8084
       MODELS_URL: http://models:8085
       KNOWLEDGE_URL: http://knowledge:8086
+      # Asked whether someone is acting as an admin persona, when the shell says they are (ADR 0086).
+      PERMISSIONS_URL: http://permissions:8087
       # Tokens name the platform's public address; signing keys are fetched inside the compose network.
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/sso/realms/platform/protocol/openid-connect/certs
