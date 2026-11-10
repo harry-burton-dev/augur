@@ -1,4 +1,4 @@
-import { metrics, type Counter, type Meter } from '@opentelemetry/api';
+import { metrics } from '@opentelemetry/api';
 import type { Caller } from './caller.js';
 import { callService, type ServiceCredentials } from './service.js';
 
@@ -45,13 +45,18 @@ export interface ShadowLog {
   warn(message: string, fields?: Record<string, unknown>): void;
 }
 
+/** Where the counts go: OpenTelemetry's meter unless a test gives its own. */
+export interface ShadowMeter {
+  createCounter(name: string, options?: { description?: string }): { add(value: number, attributes?: Record<string, string>): void };
+}
+
 export interface ShadowOptions {
   /** Where the permissions service is, such as http://permissions:8087. */
   permissionsUrl: string;
   /** The service's own sign-in: only the gateway and AUGUR's services may ask. */
   credentials: ServiceCredentials;
   log: ShadowLog;
-  meter?: Meter;
+  meter?: ShadowMeter;
   /** The most comparisons in flight; more are skipped and counted, so shadow mode can't load a busy service. */
   maxInFlight?: number;
   fetchImpl?: typeof fetch;
@@ -64,10 +69,10 @@ const BATCH = 50;
 
 export const permissionsShadow = ({ permissionsUrl, credentials, log, meter = metrics.getMeter('permissions-shadow'), maxInFlight = 20, fetchImpl }: ShadowOptions): Shadow => {
   const base = `${permissionsUrl.replace(/\/$/, '')}/access/v1`;
-  const checks: Counter = meter.createCounter('augur.permissions.shadow.checks', {
+  const checks = meter.createCounter('augur.permissions.shadow.checks', {
     description: 'Checks compared with the permissions service, by site and outcome (agree, disagree, unanswered, skipped)',
   });
-  const disagreements: Counter = meter.createCounter('augur.permissions.shadow.disagreements', {
+  const disagreements = meter.createCounter('augur.permissions.shadow.disagreements', {
     description: 'Checks where the permissions service answered differently from the service’s own check, by site',
   });
   const inFlight = new Set<Promise<void>>();

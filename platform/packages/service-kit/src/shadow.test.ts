@@ -1,13 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { Meter } from '@opentelemetry/api';
-import { noShadow, permissionsShadow, shadowFromEnv } from './shadow.js';
+import { noShadow, permissionsShadow, shadowFromEnv, type ShadowMeter } from './shadow.js';
 
 const credentials = { name: 'events', getToken: async () => 'the-token' };
 
 /** A meter that remembers what was counted. */
 const counting = () => {
   const counted: { name: string; attrs: Record<string, unknown> }[] = [];
-  const meter = { createCounter: (name: string) => ({ add: (_n: number, attrs: Record<string, unknown>) => counted.push({ name, attrs }) }) } as unknown as Meter;
+  const meter = { createCounter: (name: string) => ({ add: (_n: number, attrs: Record<string, unknown>) => counted.push({ name, attrs }) }) } as unknown as ShadowMeter;
   return { counted, meter };
 };
 
