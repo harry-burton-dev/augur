@@ -8,7 +8,7 @@
  */
 import { PageHead, QuillRemote, State, createQuillReceiver, readerPicturePath, type QuillReceiver, type QuillRemoteHost } from '@augur/app-kit';
 import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
-import type { FrameState, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
+import type { FrameDensity, FrameInset, FrameLayout, FrameState, FrameWidth, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireFile, type WireRequest, type WireResponse } from '@augur/mfe-sdk/sdk3/host';
 import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
 import { createRoot, type Root } from 'react-dom/client';
@@ -77,6 +77,28 @@ const STOP_GRACE_MS = 1000;
 const UNDER_MAX = 200;
 
 const WIDTHS = new Set(['read', 'wide', 'full']);
+const LAYOUTS = new Set(['focus', 'aside', 'split', 'canvas']);
+const DENSITIES = new Set(['comfortable', 'compact']);
+const INSETS = new Set(['standard', 'flush']);
+const oneOf = <T extends string>(names: ReadonlySet<string>, v: unknown) => (typeof v === 'string' && names.has(v) ? (v as T) : undefined);
+
+/** The layouts with the About panel beside the main column. */
+const WITH_ABOUT = new Set(['aside']);
+
+/**
+ * The pane's layout as the shell draws it: what the page set, else the manifest's defaults, else `aside`
+ * for an app with About sections and `focus` for one without, at reading width, comfortable and inset.
+ * Each is one of the shell's named layouts; an app never sets a distance.
+ */
+export function paneLayout(app: WorkerApp, frame: FrameState): Required<Pick<FrameState, 'layout' | 'width' | 'density' | 'inset'>> {
+  const given = app.manifest.contributes?.frame ?? {};
+  return {
+    layout: frame.layout ?? oneOf<FrameLayout>(LAYOUTS, given.layout) ?? (app.manifest.contributes?.about?.length ? 'aside' : 'focus'),
+    width: frame.width ?? oneOf<FrameWidth>(WIDTHS, given.width) ?? 'read',
+    density: frame.density ?? oneOf<FrameDensity>(DENSITIES, given.density) ?? 'comfortable',
+    inset: frame.inset ?? oneOf<FrameInset>(INSETS, given.inset) ?? 'standard',
+  };
+}
 
 /** The page every canvas opens in: the shell's own, served with the canvas's policy (vite.config.ts, nginx.conf). */
 export const CANVAS_PAGE = '/sandbox/canvas.html';
@@ -129,7 +151,10 @@ function frameFrom(was: FrameState, v: unknown): FrameState {
   const next: FrameState = { ...was };
   if ('title' in v) next.title = text(v.title, 120);
   if ('busy' in v) next.busy = v.busy === true;
-  if ('width' in v) next.width = typeof v.width === 'string' && WIDTHS.has(v.width) ? (v.width as FrameState['width']) : undefined;
+  if ('width' in v) next.width = oneOf<FrameWidth>(WIDTHS, v.width);
+  if ('layout' in v) next.layout = oneOf<FrameLayout>(LAYOUTS, v.layout);
+  if ('density' in v) next.density = oneOf<FrameDensity>(DENSITIES, v.density);
+  if ('inset' in v) next.inset = oneOf<FrameInset>(INSETS, v.inset);
   if ('actions' in v)
     next.actions = Array.isArray(v.actions)
       ? v.actions.filter(isPlain).slice(0, 8).flatMap((a) => (typeof a.command === 'string' ? [{ command: a.command, label: text(a.label, 60), unavailable: text(a.unavailable, 200) }] : []))
@@ -561,7 +586,8 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
   const contributes = app.manifest.contributes;
   const stopped = state.phase === 'failed' || state.phase === 'unresponsive';
   const [palette, setPalette] = useState(false);
-  const [about, setAbout] = useState(false);
+  const [about, setAbout] = useState(contributes?.frame?.about === 'open');
+  const layout = paneLayout(app, state.frame);
   const source = useMemo<CommandSource>(
     () => ({ app: { id: app.id, name: app.name }, commands: contributes?.commands ?? [], radial: contributes?.radial, handled: stopped ? [] : state.handled, onScreen: true }),
     [app, contributes, stopped, state.handled],
@@ -590,9 +616,9 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
     }),
   );
   return (
-    <div className="app-frame" data-app={app.id} ref={frame}>
+    <div className="app-frame" data-app={app.id} data-layout={layout.layout} data-density={layout.density} data-inset={layout.inset} ref={frame}>
       <Pane session={session} state={state} stopped={stopped} onRetry={onRetry} source={source} />
-      <AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />
+      {WITH_ABOUT.has(layout.layout) && <AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />}
       <CommandPalette open={palette && !stopped} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />
     </div>
   );
@@ -641,7 +667,7 @@ function Pane({ session, state, stopped, onRetry, source }: { session: AppSessio
         e.preventDefault();
         void session.drop([...(e.dataTransfer?.files ?? [])]);
       }}
-      data-dropping={dropping ? '' : undefined} className="app-pane" data-app={app.id} data-width={state.frame.width ?? 'read'} data-phase={state.phase} aria-busy={state.frame.busy || state.phase === 'opening' || state.phase === 'slow'}>
+      data-dropping={dropping ? '' : undefined} className="app-pane" data-app={app.id} data-width={paneLayout(app, state.frame).width} data-phase={state.phase} aria-busy={state.frame.busy || state.phase === 'opening' || state.phase === 'slow'}>
       <PageHead heading={state.frame.title || app.name} actions={actions} onAction={(a) => session.command(a.id)} />
       {stopped ? (
         <State kind="error" heading={state.phase === 'unresponsive' ? `${app.name} was stopped` : `${app.name} stopped`} body={state.reason} action="Try again" onAction={onRetry} />
