@@ -201,6 +201,22 @@ services:
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
 
+  # Permissions (ADR 0085): OpenFGA holds the relationships, in memory here, so they go with the
+  # container until identity's events fill them in; the permissions service answers from them.
+  openfga:
+    image: openfga/openfga:v1.11.2
+    command: ["run"]
+    ports: ["127.0.0.1:8088:8080"]
+  permissions:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/permissions" } }
+    environment:
+      PORT: 8087
+      OPENFGA_URL: http://openfga:8080
+      PERMISSIONS_STORE: augur
+      <<: *internal
+    depends_on: [openfga]
+
 volumes:
   pgdata:
   garagemeta:

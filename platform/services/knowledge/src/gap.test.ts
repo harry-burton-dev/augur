@@ -18,8 +18,9 @@ const SAME = new Map([['Problem.code', 'Problem.reason']]);
 /**
  * What draft 4 asks for that the seam leaves out on purpose. A floor's name is identity's: the shell already
  * has it (/me/workspaces), and the service, asking identity as itself, is never told a personal floor's.
+ * Retain takes either what was extracted or the text to extract from (PR 5), so neither half is required.
  */
-const ON_PURPOSE = new Set(['Floor.name']);
+const ON_PURPOSE = new Set(['Floor.name', 'RetainInput.entities', 'RetainInput.observations']);
 /** Draft 4 mirrors each action's input under components; here the catalogue is their only source. */
 const pascal = (name: string) => name.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
 const inputs = () => CATALOGUE.flatMap((a) => ((a.input as { required?: string[] }).required ?? []).map((f) => `${pascal(a.name)}Input.${f}`));

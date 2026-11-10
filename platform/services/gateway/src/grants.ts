@@ -92,6 +92,12 @@ const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
   { method: /^(GET|PUT|PATCH)$/, path: /^\/api\/events\/v1\/inbox\/items\//, scope: 'inbox:write' },
   { method: /^GET$/, path: /^\/api\/identity\/v1\/(people\/[^/]+\/principals|directory|members)\/?$/, scope: 'people:read' },
   { method: /^POST$/, path: /^\/api\/models\/v1\/(chat|embeddings)\/?$/, scope: 'models:use' },
+  // The knowledge graph (ADR 0079): its reads, the POST ones included, then its actions. retain is the one that
+  // extracts, as its declaration in GET /actions says; the service checks each action's own scope again.
+  { method: /^GET$/, path: /^\/api\/knowledge\/v1\/(meta|floors|actions|ontology)(\/|$)/, scope: 'knowledge:read' },
+  { method: /^POST$/, path: /^\/api\/knowledge\/v1\/floors\/[^/]+\/(query|recall|known-entities)\/?$/, scope: 'knowledge:read' },
+  { method: /^POST$/, path: /^\/api\/knowledge\/v1\/actions\/retain\/?$/, scope: 'knowledge:extract' },
+  { method: /^POST$/, path: /^\/api\/knowledge\/v1\/actions\/[^/]+\/?$/, scope: 'knowledge:act' },
   // AUGUR's own admin APIs (ADR 0083), held only by AUGUR's own frontends, for a person's call; the service still checks their roles.
   // Admin: who and what is allowed.
   { method: /^(GET|POST|PATCH|PUT|DELETE)$/, path: /^\/api\/identity\/v1\/admin\/(people|leave-requests|lifecycle|roles|departments|levels)(\/|$)/, scope: 'people:manage' },

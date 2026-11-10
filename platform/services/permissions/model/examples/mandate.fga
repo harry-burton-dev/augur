@@ -1,0 +1,8 @@
+module mandate
+
+# An app's own module can also add permissions to AUGUR's types: Mandate's approvers, per floor.
+
+extend type floor
+  relations
+    define mandate_approver: [persona#holder, role#assignee] or lead
+    define can_approve_intent: mandate_approver but not blocked

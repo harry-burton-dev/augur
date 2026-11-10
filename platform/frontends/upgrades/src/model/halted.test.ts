@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { haltedInstallWhyNot, reasonProblem, TOO_OLD } from './halted.js';
-import { canChange } from './roles.js';
+import { gateFor } from './roles.js';
 import type { Upgrade } from './types.js';
 
-const admin = canChange(['deployment-admin']);
+const admin = gateFor(true);
 
 describe('installing a halted release for a test', () => {
   it('is allowed only where the registry says so, and says why not', () => {
@@ -17,7 +17,7 @@ describe('installing a halted release for a test', () => {
   });
 
   it('needs the role, and waits for an upgrade under way', () => {
-    expect(haltedInstallWhyNot({ ring: 'dev', haltedInstall: { allowed: true } }, canChange([]))).toContain('deployment-admin');
+    expect(haltedInstallWhyNot({ ring: 'dev', haltedInstall: { allowed: true } }, gateFor(false))).toContain('deployment-admin');
     const upgrade: Upgrade = { id: 'u1', from: '0.13.1', version: '0.13.2', requestedBy: 'p1', requestedAt: '', state: 'running', steps: [] };
     expect(haltedInstallWhyNot({ ring: 'dev', haltedInstall: { allowed: true }, upgrade }, admin)).toBe('Wait for the upgrade under way to finish.');
     expect(haltedInstallWhyNot({ ring: 'dev', haltedInstall: { allowed: true }, upgrade: { ...upgrade, state: 'rolled-back' } }, admin)).toBeUndefined();
