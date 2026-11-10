@@ -220,9 +220,10 @@ services:
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
       PERMISSIONS_STORE: augur
+      DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-permissions
       <<: *internal
-    depends_on: [openfga, identity]
+    depends_on: [postgres, openfga, identity]
 
 volumes:
   pgdata:
