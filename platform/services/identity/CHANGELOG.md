@@ -1,5 +1,24 @@
 # @augur/identity
 
+## 1.7.0
+
+### Minor Changes
+
+- 531cf56: Removing an app, pinning and unpinning its version, allowing and stopping a site apps load from, and issuing an app's sign-in now need the deployment-admin role (ADR 0084). Admin shows those buttons turned off to a plain admin, with the reason.
+- 60998e0: Positions (ADR 0089): each department now has positions, the jobs on it, and people stand on a department by holding one. Admins can name positions, make one lead or member, hand one over and take one away (`/v1/admin/departments/:id/positions`, `/v1/admin/positions/:id`, each audited). Upgrading makes a position for each place someone already had on a department, held from when they joined, so nobody moves. Who is on each department is still written the old way too, so going back a release finds it as it is now.
+- 5010f17: The permissions service copies identity's floors, the positions on them and who holds each into OpenFGA (ADR 0085, ADR 0089), every `PERMISSIONS_COPY_SECONDS` (30), writing only what changed and never touching what others wrote there. A handover counts within that time. A copy that would take away more than half of what it holds at once is held back and logged. Its health shows how the last copy went. Identity gives platform services the whole picture at `GET /v1/relationships`. The permissions service signs in as itself, with the new `PERMISSIONS_CLIENT_SECRET`.
+- 12064f5: Shadow mode begins (ADR 0085): the events service asks the permissions service each of its admin and lead checks too, after answering as it always has, and counts and logs where the two disagree (`augur_permissions_shadow_checks_total` and `augur_permissions_shadow_disagreements_total`, docs/observability.md). Its own answer still decides. To make the comparison fair, the permissions service now copies who holds the Keycloak roles `admin`, `deployment-admin` and `publisher` from identity, with each admin as an admin persona, and answers `POST /access/v1/search/resource` (which personas someone holds) and questions about `org:this` and `deployment:this`. Service kit gains `permissionsShadow` and `shadowFromEnv` for the other services to follow.
+- 0584b9c: Shadow mode reaches identity (ADR 0085): its admin checks (managing people, deployment admins, apps' sign-ins, the organisation's settings and its security) are also asked of the permissions service, after identity has answered as it always has, and disagreements are counted and logged (docs/observability.md). Identity's own answer still decides.
+- 9eccfb9: Sign-in no longer asks admins and deployment admins for a one-time code. The realm job takes the two-step role out of `admin` and `deployment-admin`; code apps and passkeys stay on offer to everyone, and Admin → Organisation can still ask everyone for one ("Optional" or "Everyone"). Account and Admin say so in those words. The sign-in pages and emails move to the Endstate look on Common 0.15: the shell's still horizon and band, one solid square panel, Keycap buttons, Well fields and Instrument Sans, in the horizon greys.
+
+### Patch Changes
+
+- Updated dependencies [d2ce7c9]
+- Updated dependencies [7e6b12b]
+- Updated dependencies [12064f5]
+- Updated dependencies [cc7aa74]
+  - @augur/service-kit@0.19.0
+
 ## 1.6.0
 
 ### Minor Changes

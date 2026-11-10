@@ -1,5 +1,17 @@
 # @augur/mfe-sdk
 
+## 3.1.0
+
+### Minor Changes
+
+- e60b45e: An app on contract 3 chooses its pane's layout from the shell's named ones: `focus`, `aside` (with the About panel), `split` and `canvas`, with `density` and `inset` beside `width`. `contributes.frame` in the manifest sets the defaults, and `ctx.frame.set` changes them for a page. The shell takes the choice and shows the About panel only in `aside`; an app with About sections and no choice keeps `aside`, so nothing it shows today moves. The spacing of each layout follows in the next kit release.
+- 7f0d097: SDK 3.1: `ctx.signInAgain()` lets an app on the contract ask for a fresh sign-in when the platform turns a call down with `sign_in_again`, and comes back to where the app was. The shell sends the person through its `/auth/again`.
+
+### Patch Changes
+
+- d6f1a93: On kit 0.5.15, an app on the app contract can describe what a documents app needs: `quill-reader`, `quill-file-button`, `quill-people-picker`, `quill-floor-path` and `quill-filter-bar`. The shell fetches a reader's pictures itself, only under the app's own `/api/<id>/` and with the person's token, and frees them when the app stops (ADR 0092). A file button's files reach the app's `ctx.files.onDrop` handler as a drop does; while the app has no handler, the button says it can't take files.
+- 7adc7fc: The entity intents' documentation no longer says Data Atlas handles them out of the box: no app ships with AUGUR, so they are handled by whichever installed app declares it, the shell says when none does, and an app reads or changes the knowledge graph through `connectKnowledge` in `@augur/clients`.
+
 ## 3.0.0
 
 ### Major Changes

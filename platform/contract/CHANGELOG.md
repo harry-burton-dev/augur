@@ -1,5 +1,19 @@
 # @augur/contract-tests
 
+## 0.4.0
+
+### Minor Changes
+
+- 523cbc6: Account is a dialog over the shell's menu, on kit 0.5.13. Its sections are tabs down the side, with a new Overview first (who you are, and an account check with Something's wrong? to secure the account). Each section's parts sit side by side while they fit and wait behind a switch when they don't, and long lists page, so nothing in it scrolls at 1280×720, 1024×768 or 800×600. It opens only from the menu, or on coming back from one of Keycloak's screens; an address alone no longer opens it.
+
+### Patch Changes
+
+- Updated dependencies [d6f1a93]
+- Updated dependencies [e60b45e]
+- Updated dependencies [7adc7fc]
+- Updated dependencies [7f0d097]
+  - @augur/mfe-sdk@3.1.0
+
 ## 0.3.0
 
 ### Minor Changes

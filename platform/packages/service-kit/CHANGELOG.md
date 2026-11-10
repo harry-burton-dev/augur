@@ -1,5 +1,25 @@
 # @augur/service-kit
 
+## 0.19.0
+
+### Minor Changes
+
+- d2ce7c9: Apps can ask for the knowledge graph in their manifest's `scopes`: `knowledge:read` to read it as the person they act for, `knowledge:act` for its actions apps are granted, and `knowledge:extract` to add what a source says (retain). The gateway lets an app's calls to the knowledge graph through on those scopes, Admin names them when an admin allows an app, and an app's catalog entry names the knowledge API. The knowledge graph itself still refuses apps until its next release, which checks each action's own scope.
+
+  Not breaking: registry.openapi.yaml lists three more scopes an app's entry may carry. The list grows as AUGUR adds what apps can be granted, and its readers (Admin, the shell and the registry client) show a scope they don't know by its name.
+
+- 12064f5: Shadow mode begins (ADR 0085): the events service asks the permissions service each of its admin and lead checks too, after answering as it always has, and counts and logs where the two disagree (`augur_permissions_shadow_checks_total` and `augur_permissions_shadow_disagreements_total`, docs/observability.md). Its own answer still decides. To make the comparison fair, the permissions service now copies who holds the Keycloak roles `admin`, `deployment-admin` and `publisher` from identity, with each admin as an admin persona, and answers `POST /access/v1/search/resource` (which personas someone holds) and questions about `org:this` and `deployment:this`. Service kit gains `permissionsShadow` and `shadowFromEnv` for the other services to follow.
+- cc7aa74: Platform scopes (ADR 0083): AUGUR's own admin APIs get scopes of their own (`people:manage`, `apps:manage`, `org:manage`, `audit:read`, `deployment:upgrade`, `deployment:apps`, `deployment:health`, `deployment:settings`). The registry gives them only to AUGUR's own frontends (Admin holds who and what is allowed; the Upgrade Centre what runs and changing it), and the gateway lets a person's call made through one of those frontends reach the matching API with them. No app from a feed can ask for one. The service still checks the person's roles.
+
+### Patch Changes
+
+- 7e6b12b: The permissions service (ADR 0085), not yet run by deployments. It answers "may this subject do this to
+  that?" from the relationships OpenFGA holds, at `/access/v1/evaluation` and `/access/v1/evaluations` in the
+  shape of the AuthZEN Authorization API, for the gateway and AUGUR's own services only. Its model
+  (`model/core.fga`) covers the deployment, the org, floors, personas (ADR 0086) and roles made inside
+  AUGUR, and `model/questions.fga.yaml` holds the questions it must answer. A check it can't answer is
+  refused with the reason, never allowed. The service kit reserves `permissions` and `openfga` as app ids.
+
 ## 0.18.0
 
 ### Minor Changes
