@@ -8,12 +8,13 @@
 //   node scripts/promote.mjs stable <unit> [<v>]    from the Promote workflow: makes the release stable, with promotion.json
 //   node scripts/promote.mjs versions [<ref>]       prints each unit's version at a ref (default HEAD)
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import semver from 'semver';
 import { readApps } from './app-release.mjs';
+import { ownAppRepos } from './publish-feed.mjs';
 import { REPO } from './repo.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -181,8 +182,7 @@ const main = async () => {
     console.log(`✓ ${head} may go into ${base}.`);
   } else if (mode === 'stable') {
     const [unit, wanted] = args;
-    const json = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
-    const source = promotionSource(unit, { repo: REPO, here: appIds, own: json('release/app-repos.json').apps ?? {} });
+    const source = promotionSource(unit, { repo: REPO, here: appIds, own: ownAppRepos(pathToFileURL(`${root}/`)) });
     if (source.problem) throw new Error(source.problem);
     const owner = REPO.split('/')[0];
     const actor = process.env.GITHUB_ACTOR;

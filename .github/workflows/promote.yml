@@ -63,6 +63,8 @@ jobs:
           VERSION: ${{ inputs.version }}
           SKIP_BAKE: ${{ inputs.skip_bake }}
           PORTAL_URL: ${{ vars.PORTAL_URL }}
+          # The apps in their own repositories (else release/app-repos.json), as the Release feed reads them.
+          APP_REPOS: ${{ vars.APP_REPOS }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Writes an app repository's releases, for an app in its own repository; nothing else has it.
           APP_PROMOTE_TOKEN: ${{ secrets.APP_PROMOTE_TOKEN }}

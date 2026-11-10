@@ -77,7 +77,7 @@ The release steps come from `@augur/app-tools`, published beside the SDK. Its `a
 
 Servers still read one feed, AUGUR's (ADR 0047):
 
-- `release/app-repos.json` names the repository each moved app is published from. The pull request that moves an app out adds its line.
+- The repository's `APP_REPOS` Actions variable names the repository each moved app is published from, as `id=owner/repo` pairs split by spaces, commas or lines (`folio=harry-burton-dev/augur-folio mandate=harry-burton-dev/augur-mandate`). Change it in Settings → Secrets and variables → Actions → Variables, with no pull request or build, then run the Release feed workflow so the feed lists the change; a pair that isn't `id=owner/repo` stops the run with its reason, so no app drops out of the feed unnoticed. While the variable isn't set, `release/app-repos.json` names them instead.
 - The Release feed workflow lists that repository's releases of that app, and only those signed there, beside AUGUR's own. It reads them with the `APP_RELEASES_TOKEN` secret, a fine-grained token that can read the app repositories' contents. The app's release workflow starts the Release feed workflow when it has released, with the same token, which can also run Actions in this repository.
 - A server's app runner trusts only the repositories `APP_PUBLISHERS` in its `.env` lists, so each server lists the app's repository before installing it.
 - The first release a server installs from the new repository takes over the data the old one left, so the updater takes a backup of the database first, and the install's first step names the file. Later releases from that repository install as usual. A version installed before this rule (its record names no repository) gets the same backup at its next update.
