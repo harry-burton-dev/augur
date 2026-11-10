@@ -4,7 +4,7 @@ import type pg from 'pg';
 export const GLOBAL_TABLES = ['classes', 'predicates', 'ontology_versions'];
 
 /** The functions kg_app may call: the actions, its own sight, and the reads the views and the seam need. */
-export const APP_FUNCTIONS = /^(act_.+|me|here|app|my_sight|lookup_key|known_entities|accepted_class|stands|sources_behind|evidence_unseen|last_change|is_disputed|sync_person|answer_for|keep_answer|outbox_take|outbox_sent|entity_elsewhere|standable|sight_from|my_run|run_undone|observation_elsewhere|source_elsewhere|subclass_of|is_occurrent|my_roles|disputes_waiting|stood_at|keys_in)$/;
+export const APP_FUNCTIONS = /^(act_.+|me|here|app|my_sight|lookup_key|known_entities|accepted_class|stands|sources_behind|evidence_unseen|last_change|is_disputed|sync_person|answer_for|keep_answer|outbox_take|outbox_sent|entity_elsewhere|standable|sight_from|my_run|run_undone|observation_elsewhere|source_elsewhere|subclass_of|is_occurrent|my_roles|disputes_waiting|stood_at|keys_in|reflect_wanted|floor_beliefs|reflect_write|reflects_since)$/;
 
 /**
  * What the database catalog says is wrong with the fence, as sentences; empty when it holds. Asked as the

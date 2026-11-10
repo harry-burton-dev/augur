@@ -440,6 +440,33 @@
       ],
       "x-docs": "docs/deploy.md#logs-memory-and-health"
     },
+    "KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS": {
+      "type": "string",
+      "description": "How long an entity's beliefs must be quiet before the knowledge graph writes its summaries, in seconds.",
+      "default": "600",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_DAILY_BUDGET": {
+      "type": "string",
+      "description": "The most knowledge graph summaries written a day (UTC) for the whole deployment. Keep it under the models service's daily limit, with room for extraction.",
+      "default": "400",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_FLOOR_BUDGET": {
+      "type": "string",
+      "description": "The most knowledge graph summaries written a day (UTC) on any one floor.",
+      "default": "100",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
     "UPDATER_CLIENT_SECRET": {
       "type": "string",
       "writeOnly": true,

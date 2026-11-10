@@ -8,6 +8,7 @@ import { sql as reads } from './migrations/005-reads.ts';
 import { sql as queries } from './migrations/006-queries.ts';
 import { sql as undo } from './migrations/007-undo.ts';
 import { sql as forgetAgain } from './migrations/008-forget-again.ts';
+import { sql as reflect } from './migrations/009-reflect.ts';
 
 /** The knowledge service's schema in the platform database. */
 export const SCHEMA = 'kg';
@@ -32,6 +33,7 @@ export const migrations: Migration[] = [
   { id: '006-queries', sql: queries },
   { id: '007-undo', sql: undo },
   { id: '008-forget-again', sql: forgetAgain },
+  { id: '009-reflect', sql: reflect },
 ];
 
 /**
