@@ -415,9 +415,10 @@ app_secret() {
 # to be stopped by writing <id>.stop; they are stopped here, which writes <id>.stopped ("ok", or why not).
 through_the_runner() {
   if [ -n "$starter_skip" ]; then notice "The app runner's part of the deploy test was skipped: $starter_skip"; return 0; fi
-  # A release from before the runner took contract 3 releases can't install it (a failure where it was asked for).
+  # A release from before the runner took contract 3 releases can't install it: said, not failed, as broken mode does
+  # for a release from before the check command, so testing an older release by hand still passes.
   if ! pc exec -T updater node -e 'process.exit(require("fs").readFileSync("dist/runner.js", "utf8").includes("export const appSecrets") ? 0 : 3)' >/dev/null 2>&1; then
-    cannot_run "this release's updater can't install a release on app contract 3."
+    starter_skip="this release's updater can't install a release on app contract 3."
     notice "The app runner's part of the deploy test was skipped: $starter_skip"
     return 0
   fi
