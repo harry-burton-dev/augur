@@ -1,8 +1,5 @@
-import '@fontsource/jost/300.css';
-import '@fontsource/jost/400.css';
-import '@fontsource/jost/600.css';
+import '@augur/kit-common/fonts.css';
 import '@augur/kit-common/tokens.css';
-import '@augur/kit-common/kit.css';
 import './sign-in.css';
 import type { ClassKey } from 'keycloakify/login';
 import DefaultPage from 'keycloakify/login/DefaultPage';
@@ -15,7 +12,7 @@ const UserProfileFormFields = lazy(() => import('keycloakify/login/UserProfileFo
 
 /**
  * Keycloak's sign-in pages, each Keycloakify's own (so every page Keycloak can show is covered and stays
- * in step with Keycloak), in AUGUR's frame (Template) and look (sign-in.css, Common's tokens and kit.css).
+ * in step with Keycloak), in AUGUR's frame (Template) and the Endstate look (sign-in.css, from Common's tokens, with Common's typefaces).
  * Keycloak's default stylesheet isn't loaded.
  */
 export default function KcPage({ kcContext }: { kcContext: KcContext }) {
@@ -65,7 +62,8 @@ export const classes = {
   kcSelectAuthListItemClass: 'augur-signin-choice',
   kcSelectAuthListItemTitle: 'augur-signin-choice-title',
   kcSelectAuthListItemDescriptionClass: 'augur-signin-choice-detail',
-  kcLoginOTPListClass: 'augur-signin-choices',
+  kcLoginOTPListClass: 'augur-signin-otp-choice',
+  kcLoginOTPListInputClass: 'augur-signin-otp-input',
   kcLoginOTPListItemTitleClass: 'augur-signin-choice-title',
   kcRecoveryCodesList: 'augur-signin-codes',
   kcRecoveryCodesActions: 'augur-signin-actions',

@@ -12,7 +12,7 @@ import Type from 'typebox';
 import { callerFromHeaders, leaveNoticeKey, type Caller, type NewAuditEntry, type NewNotification } from '@augur/service-kit';
 import { ADMINS } from './leavers.ts';
 import { DirectoryError, TWO_STEP_ROLE, type KeycloakDirectory } from './directory.ts';
-import { SECURITY_EMAIL_LISTENER, TWO_STEP_ROLES } from './realm.ts';
+import { SECURITY_EMAIL_LISTENER } from './realm.ts';
 import { choice, empty, IdParams, Preferences, ref, refused } from './schemas.ts';
 import type { LeaveRequest, PreferenceStore, Preferences as Prefs } from './store.ts';
 
@@ -391,7 +391,7 @@ export const securityOf = (
   const held = (c: Credential): Held => {
     // the last code app or passkey of someone who must have one stays: they'd be asked for one at next sign-in
     const last = required && SECOND_STEPS.has(c.type) && c.type !== 'recovery-authn-codes' && seconds.length === 1;
-    return { ...c, removeAction: `delete_credential:${c.id}`, removable: !last, ...(last ? { reason: 'Your role needs two-step sign-in, so keep one code app or passkey. Add another before removing this one.' } : {}) };
+    return { ...c, removeAction: `delete_credential:${c.id}`, removable: !last, ...(last ? { reason: 'Your organisation asks everyone to sign in with a second step, so keep one code app or passkey. Add another before removing this one.' } : {}) };
   };
   const codes = creds.find((c) => c.type === 'recovery-authn-codes');
   const managedEmail = profile.managed.includes('email');
@@ -403,13 +403,7 @@ export const securityOf = (
     twoStep: {
       required,
       set: seconds.length > 0,
-      ...(required
-        ? {
-            reason: caller.roles.some((r) => (TWO_STEP_ROLES as readonly string[]).includes(r))
-              ? 'Your role can change AUGUR for everyone, so it signs in with a second step (ADR 0038).'
-              : 'Your organisation asks everyone to sign in with a second step.',
-          }
-        : {}),
+      ...(required ? { reason: 'Your organisation asks everyone to sign in with a second step.' } : {}),
     },
     linked,
     canLink: providers.filter((p) => !linked.some((l) => l.provider === p.alias)).map((p) => ({ alias: p.alias, name: p.name, action: `idp_link:${p.alias}` })),
@@ -509,7 +503,7 @@ export const AccountSecurity = Type.Object(
     codeApps: Type.Array(HeldCredential),
     passkeys: Type.Array(HeldCredential),
     recoveryCodes: Type.Union([HeldCredential, Type.Null()]),
-    twoStep: Type.Object({ required: Type.Boolean({ description: 'Their role signs in with a second step' }), set: Type.Boolean({ description: 'They have a code app or a passkey' }), reason: opt(Type.String()) }),
+    twoStep: Type.Object({ required: Type.Boolean({ description: 'They must sign in with a second step, as the organisation asks everyone for one' }), set: Type.Boolean({ description: 'They have a code app or a passkey' }), reason: opt(Type.String()) }),
     linked: Type.Array(Linked),
     canLink: Type.Array(Type.Object({ alias: Type.String(), name: Type.String(), action: Type.String({ description: 'idp_link:<alias>' }) })),
     actions: Type.Array(
@@ -688,7 +682,7 @@ export const meRoutes =
         schema: {
           summary: 'How the caller signs in',
           description: [
-            'Their password, code apps, passkeys and recovery codes, whether their role needs two-step sign-in,',
+            'Their password, code apps, passkeys and recovery codes, whether they must sign in with a second step,',
             'the organisation sign-ins their account is linked to, and the kc_action that changes each.',
           ].join(' '),
           response: { 200: { ...ref(AccountSecurity), description: 'How they sign in' }, 401: unauthenticated, 503: noAccounts },

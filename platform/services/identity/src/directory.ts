@@ -78,7 +78,7 @@ export const DEPLOYMENT_ADMIN_ROLE: Role = { name: 'deployment-admin', descripti
 /** The roles the platform itself relies on, made by the realm job when they're missing (Keycloak reads its realm file only when it first starts). */
 export const PLATFORM_ROLES: readonly Role[] = [PUBLISHER_ROLE, DEPLOYMENT_ADMIN_ROLE];
 
-/** The realm's sign-in flow: Keycloak's browser flow plus the admin roles' second step (realm.ts). */
+/** The realm's sign-in flow: Keycloak's browser flow plus a second step for holders of the two-step role (realm.ts). */
 export const SIGN_IN_FLOW = 'augur browser';
 
 /** A refusal the admin can act on (404, 409), or the directory being out of reach (503). */
@@ -315,12 +315,13 @@ export interface KeycloakConfig {
 }
 
 /**
- * Held through the admin roles (a composite the realm job sets up), never given by hand: everyone
- * who has it signs in with a code app or a passkey as well as their password (ADR 0038).
+ * Held through the realm's default roles when Admin → Organisation asks everyone for two steps (a composite
+ * the realm job sets up), never given by hand: everyone who has it signs in with a code app or a passkey as
+ * well as their password. No role needs it on its own.
  */
-export const TWO_STEP_ROLE: Role = { name: 'two-step-sign-in', description: 'Signs in with a code app or a passkey as well as a password. Comes with the admin roles; not given by hand.' };
+export const TWO_STEP_ROLE: Role = { name: 'two-step-sign-in', description: 'Signs in with a code app or a passkey as well as a password. Held by everyone when the organisation asks for two steps; not given by hand.' };
 
-/** Roles every Keycloak realm has, and the one the admin roles carry; they aren't the platform's to hand out. */
+/** Roles every Keycloak realm has, and the two-step role; they aren't the platform's to hand out. */
 const builtInRole = (name: string, realm: string) => name === `default-roles-${realm}` || name === 'offline_access' || name === 'uma_authorization' || name === TWO_STEP_ROLE.name;
 
 interface KcUser {
