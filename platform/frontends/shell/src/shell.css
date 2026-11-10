@@ -52,7 +52,6 @@ html[data-density='compact'] {
   border-bottom: 1px solid var(--hairline);
 }
 /* The Account dialog (account/AccountArea.tsx): Common's SectionDialog over the menu; each section's parts in FitParts. */
-.augur-section-panel:has(> .account-panel) { grid-template-rows: minmax(0, 1fr); }
 .account-panel, .account-sub-page { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .account-panel > .augur-fit-parts, .account-sub-page > .augur-fit-parts, .account-panel > .account-sub-page { flex: 1 1 0; }
 .account-back { display: flex; }
