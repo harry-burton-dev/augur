@@ -89,6 +89,31 @@ describe('a call made for an app', () => {
     expect(fromAFeed.json().message).toBe('Notes isn’t allowed to upgrade AUGUR or take it back (deployment:upgrade).');
   });
 
+  it('carries an admin persona only through AUGUR’s own frontends, never an app from a feed or its part (PDR-024)', async () => {
+    const grants: AppGrants = async (app) =>
+      app === 'upgrades' ? { name: 'Upgrade Centre', on: true, scopes: [], platformScopes: ['deployment:upgrade'] } : app === 'notes' ? { name: 'Notes', on: true, scopes: ['notifications:send'] } : undefined;
+    const app = await buildApp({
+      upstreams: { events: url, registry: url, notes: url },
+      auth,
+      signer,
+      appGrants: grants,
+      floors,
+      access: async () => new Map([['notes', { name: 'Notes', maxUpload: 10 }], ['upgrades', { name: 'Upgrade Centre', maxUpload: 1 }]]),
+      monitor: new HealthMonitor({ probes: [] }),
+      personaSessions: async () => true,
+    });
+    const asFor = async (id: string) => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: id, 'x-augur-persona': 'admin.u-1' });
+    const goBack = await app.inject({ method: 'PUT', url: '/api/registry/v1/platform/go-back', headers: await asFor('upgrades'), payload: { version: '0.24.1' } });
+    expect(goBack.statusCode).toBe(200);
+    expect(await callerIn(goBack, 'registry')).toMatchObject({ id: 'u-1', persona: 'admin.u-1', app: 'upgrades' });
+    const fromAFeed = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: await asFor('notes'), payload: {} });
+    expect(fromAFeed.statusCode).toBe(403);
+    expect(fromAFeed.json().message).toBe('Notes can’t act as your admin persona: only AUGUR’s own Admin and Deployment can. Stop “Act as” to use it.');
+    expect((await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: await asFor('notes') })).statusCode).toBe(403);
+    const direct = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, 'x-augur-persona': 'admin.u-1' } });
+    expect(direct.statusCode).toBe(403);
+  });
+
   it('never lets an app’s own token use a platform scope, even one a registry wrongly listed', async () => {
     const grants: AppGrants = async (app) => (app === 'notes' ? { name: 'Notes', on: true, scopes: [], platformScopes: ['audit:read'] } : undefined);
     const app = await buildApp({ upstreams: { events: url, notes: url }, auth, signer, appGrants: grants, floors, access, monitor: new HealthMonitor({ probes: [] }) });

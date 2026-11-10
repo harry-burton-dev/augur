@@ -381,12 +381,11 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     }
 
     // The admin persona the shell says the person is acting as (PDR-024): only while the permissions service has
-    // a live session for it, and never on a call made for an app.
+    // a live session for it. On a call made for an app, only AUGUR's own frontends carry it (checked with the grant).
     const sentPersona = req.headers[PERSONA_HEADER];
     const persona = Array.isArray(sentPersona) ? sentPersona[0] : sentPersona;
     if (persona !== undefined) {
       if (!PERSONA_ID.test(persona)) return reply.code(400).send({ error: 'bad_request', message: `${PERSONA_HEADER} must be a persona’s id.` });
-      if (req.actingApp) return reply.code(403).send({ error: 'forbidden', message: 'An app never acts as your admin persona. Stop “Act as” to use apps, or use AUGUR itself.' });
       if (!actingAs) return reply.code(503).send({ error: 'unavailable', message: 'You can’t act as a persona here: this deployment has no permissions service.' });
       try {
         if (!(await actingAs(req.caller.id, persona))) {
@@ -574,6 +573,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     };
     const toPlatform = PLATFORM_SERVICES.includes(name);
 
+    // An admin persona is for AUGUR's own services, never an app's part.
+    if (req.caller?.persona && !toPlatform) return refuse(403, 'forbidden', 'An app never acts as your admin persona. Stop “Act as” to use it.');
     // An app's own token, or a part calling onward for a person (spec 8.3): within the grant, or refused naming the scope.
     if (req.identity?.kind === 'app' && req.caller && req.grant) {
       const { app: id } = req.identity;
@@ -598,6 +599,11 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       }
       if (!grant) return refuse(403, 'forbidden', `${id} isn’t installed here.`);
       if (!grant.on) return refuse(403, 'forbidden', `${appName(id, grant)} is turned off${req.caller.workspace ? ' on this floor' : ''}.`);
+      // Acting as an admin persona reaches AUGUR only through its own frontends (those with platform scopes, ADR 0083),
+      // never through an app installed from a feed, and never to an app's own part.
+      if (req.caller.persona && !(toPlatform && grant.platformScopes?.length)) {
+        return refuse(403, 'forbidden', `${appName(id, grant)} can’t act as your admin persona: only AUGUR’s own Admin and Deployment can. Stop “Act as” to use it.`);
+      }
       if (toPlatform) {
         // The app must be on for this person here, as for a call to its own routes: blocked or needing a role they lack is not on.
         try {
