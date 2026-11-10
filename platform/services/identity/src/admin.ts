@@ -4,13 +4,13 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, signedInRecently, type NewAuditEntry } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type Person as DirectoryPerson } from './directory.ts';
-import { choice, Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, ref, refused, Role, TeamLevels } from './schemas.ts';
+import { choice, Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, Position, PositionRole, positionName, ref, refused, Role, TeamLevels } from './schemas.ts';
 import { withLifecycle, type IdlePolicy, type LifecycleStore } from './lifecycle.ts';
 import { addDays, runLeaver, todayIn } from './leavers.ts';
 import { deleteAccount } from './deletion.ts';
 import { organisationSettings, type OrganisationStore } from './organisation.ts';
 import type { PreferenceStore } from './store.ts';
-import { DEFAULT_LEVELS, MAX_TEAM_DEPTH, type WorkspaceStore } from './workspaces.ts';
+import { DEFAULT_LEVELS, MAX_TEAM_DEPTH, type Position as StoredPosition, type WorkspaceStore } from './workspaces.ts';
 
 /** Easy to read out or type: no 0/O, 1/l/I. */
 const ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -696,4 +696,88 @@ export const adminRoutes =
     });
     app.put('/departments/:id/members/:person', { schema: membershipSchema('Put someone in a department', "They're in it") }, membership(true));
     app.delete('/departments/:id/members/:person', { schema: membershipSchema('Take someone out of a department', "They're out of it") }, membership(false));
+
+    // Positions (ADR 0089): the jobs on a department. Whoever holds one is on the department, and a handover
+    // gives the next holder everything given to the position, at once.
+    const positionsHere = () => {
+      if (!workspaces) throw new DirectoryError('Positions can’t be changed here yet.', 503);
+      return workspaces;
+    };
+    const shown = ({ workspace, ...p }: StoredPosition) => ({ ...p, department: workspace });
+    const PositionParams = Type.Object({ id: Type.String({ minLength: 1, maxLength: 100 }) });
+
+    app.get(
+      '/departments/:id/positions',
+      { schema: { summary: 'The positions on a department, each with who holds it now', params: IdParams, response: { 200: Type.Array(ref(Position), { description: 'Positions' }), ...guarded } } },
+      async (req) => (await positionsHere().positions({ workspace: req.params.id })).map(shown),
+    );
+
+    app.post(
+      '/departments/:id/positions',
+      {
+        schema: {
+          summary: 'Add a vacant position to a department, audited as position.created',
+          params: IdParams,
+          body: Type.Object({ name: positionName(), role: PositionRole }, { additionalProperties: false }),
+          response: { 201: { ...ref(Position), description: 'Added, vacant' }, 400: refused('The name is empty or too long'), ...guarded, 404: refused('No such department') },
+        },
+      },
+      async (req, reply) => {
+        const made = await positionsHere().createPosition(req.params.id, req.body.name, req.body.role);
+        await record(req, 'position.created', made.id, { department: made.workspace, name: made.name, role: made.role });
+        return reply.code(201).send(shown(made));
+      },
+    );
+
+    app.patch(
+      '/positions/:id',
+      {
+        schema: {
+          summary: 'Rename a position, or change whether it leads its department, audited as position.changed',
+          params: PositionParams,
+          body: Type.Object({ name: Type.Optional(positionName()), role: Type.Optional(PositionRole) }, { additionalProperties: false }),
+          response: { 200: { ...ref(Position), description: 'Changed' }, 400: refused('The name is empty or too long'), ...guarded, 404: refused('No such position') },
+        },
+      },
+      async (req) => {
+        const changed = await positionsHere().updatePosition(req.params.id, req.body);
+        await record(req, 'position.changed', changed.id, { ...req.body });
+        return shown(changed);
+      },
+    );
+
+    app.put(
+      '/positions/:id/holder',
+      {
+        schema: {
+          summary: 'Hand a position to someone, or leave it vacant, audited as position.handed-over',
+          params: PositionParams,
+          body: Type.Object({ person: Type.Union([Type.String({ minLength: 1, maxLength: 100 }), Type.Null()], { description: 'Who holds it from now; null leaves it vacant' }) }, { additionalProperties: false }),
+          response: { 200: { ...ref(Position), description: 'Handed over' }, ...guarded, 404: refused('No such position or person') },
+        },
+      },
+      async (req) => {
+        if (req.body.person) await dir().person(req.body.person);
+        const before = (await positionsHere().positions()).find((p) => p.id === req.params.id);
+        const after = await positionsHere().handOver(req.params.id, req.body.person);
+        await record(req, 'position.handed-over', after.id, { from: before?.holder ?? null, to: after.holder ?? null });
+        return shown(after);
+      },
+    );
+
+    app.delete(
+      '/positions/:id',
+      {
+        schema: {
+          summary: 'Take a position away, audited as position.retired; whoever holds it stops',
+          params: PositionParams,
+          response: { 204: empty('Taken away'), ...guarded },
+        },
+      },
+      async (req, reply) => {
+        await positionsHere().retirePosition(req.params.id);
+        await record(req, 'position.retired', req.params.id, {});
+        return reply.code(204).send(null);
+      },
+    );
   };

@@ -4,7 +4,7 @@ import { organisationIdleMigrations, organisationMigrations, organisationMoreMig
 import { signInMigrations } from './sign-ins.ts';
 import { lifecycleDeletionMigrations, lifecycleLeavingMigrations, lifecycleMigrations } from './lifecycle.ts';
 import { reconcileMigrations } from './reconcile.ts';
-import { workspaceMigrations } from './workspaces.ts';
+import { positionMigrations, workspaceMigrations } from './workspaces.ts';
 
 /** What someone has chosen for the shell. Every field is optional: what's missing takes the shell's default. */
 export interface Preferences {
@@ -110,6 +110,7 @@ export const migrations: Migration[] = [
   ...lifecycleLeavingMigrations,
   ...organisationMoreMigrations,
   ...lifecycleDeletionMigrations,
+  ...positionMigrations,
 ];
 
 export class PgPreferenceStore implements PreferenceStore {
