@@ -22,7 +22,7 @@ Without a connected Keycloak, everything but preferences answers 503 and says a 
 
 Identity never changes a password, a code app, a passkey, recovery codes or the email address itself. `GET /me/security` names Keycloak's application-initiated action for each (`UPDATE_PASSWORD`, `CONFIGURE_TOTP`, `webauthn-register-passwordless`, `CONFIGURE_RECOVERY_AUTHN_CODES`, `UPDATE_EMAIL`, `delete_credential:<id>`, `idp_link:<alias>`). The shell signs in again with `kc_action` set to it; Keycloak shows its own screen (in AUGUR's sign-in theme) and returns with `kc_action_status`. The realm job turns each of these actions on.
 
-Someone who must sign in with two steps (when the organisation asks everyone, ADR 0098) can't remove their last code app or passkey: the summary marks it, with the reason. Someone who signs in through their organisation and has no password here is told their password is changed there.
+Someone who must sign in with two steps (when the organisation asks everyone) can't remove their last code app or passkey: the summary marks it, with the reason. Someone who signs in through their organisation and has no password here is told their password is changed there.
 
 ## The Account dialog in the shell
 

@@ -60,7 +60,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 **From** unreleased
 
-Admins and deployment admins no longer have to sign in with a code app or a passkey (ADR 0098, in part replacing ADR 0038). On the next `pc up -d` the realm job takes the two-step role out of `admin` and `deployment-admin`, and its log says so. Code apps and passkeys stay on offer to everyone, and Admin → Organisation, Security and retention, can still ask everyone for one.
+Admins and deployment admins no longer have to sign in with a code app or a passkey. On the next `pc up -d` the realm job takes the two-step role out of `admin` and `deployment-admin`, and its log says so. Code apps and passkeys stay on offer to everyone, and Admin → Organisation, Security and retention, can still ask everyone for one.
 
 - Anyone who already set up a code app is still asked for its code, because Keycloak asks for a second step someone has. To stop, remove it in Account → Sign-in and security.
 - An admin account is now protected by its password alone. On a deployment where real people work, turn on two steps for everyone, or have every admin add a passkey.
