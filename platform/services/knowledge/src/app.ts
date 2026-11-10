@@ -8,6 +8,7 @@ import { callerFromHeaders, delegationAllows, health, packageVersion, Problem, p
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type ActionDecl as Declared, type Effects, type RetainInputOf } from './actions.ts';
 import { extractionContext, extractionMessages, ExtractionRefused, newFence, PROMPT_VERSION, toRetain, type Dropped } from './extract.ts';
 import { describeApi } from './contract.ts';
+import { RolesUnavailable, type RolesLookup } from './permissions.ts';
 import { EXPORT_TYPES, exportFloor, exportOntology, type ExportFormat } from './export.ts';
 import { BASE_CLASSES } from './profile.ts';
 import {
@@ -85,6 +86,13 @@ export interface KnowledgeOptions {
   extract?: (messages: { role: 'system' | 'user'; content: string }[], floor: string | undefined) => Promise<string>;
   /** Where each forget is also written, outside Postgres, so a restore forgets it again. Without it, nowhere. */
   ledger?: ForgetLedger;
+  /**
+   * Who settles and raises where, from the permissions service (PERMISSIONS_URL). Without it the store's own
+   * floor roles stand as they are, as in tests and local dev.
+   */
+  roles?: RolesLookup;
+  /** Told when the permissions service couldn't say, so the person held no role on this request. */
+  onRolesUnavailable?: (err: Error) => void;
   /** The most a page of a read gives, whatever it asks for (KNOWLEDGE_PAGE_LIMIT). */
   pageLimit?: number;
   /** The most hops a subgraph goes from its entity, whatever it asks for (KNOWLEDGE_SUBGRAPH_DEPTH). */
@@ -100,6 +108,7 @@ const KEY = /^[\x21-\x7e]{8,200}$/;
 const NOT_ON_FLOOR = 'You can’t stand on that floor, or it no longer exists.';
 const WHO_ADDS = 'A lead of the team, or an admin, who can add you to it.';
 const WHO_GRANTS = 'An admin, who can grant the app the scope in Admin, once its manifest asks for it.';
+const WHO_SETS_ROLES = 'An admin, who sets who settles and raises on each floor, a position or a person, in Admin.';
 /**
  * Who is an ontology admin: AUGUR's admins, by identity's admin role, as the other services check it. The
  * ontology is the deployment's, not a floor's, so no floor role decides it.
@@ -112,7 +121,7 @@ const fromStore = (err: unknown): unknown => {
   const e = err as { code?: string; message?: string; constraint?: string };
   if (e.code === '42501' && e.message?.startsWith('refused: ')) {
     const why = e.message.slice('refused: '.length);
-    return new Problem(403, 'not_allowed', `Not done: ${why}.`, { extensions: { why } });
+    return new Problem(403, 'not_allowed', `Not done: ${why}.`, { extensions: { why }, ...(/settler|raiser/.test(why) ? { whoCanChange: WHO_SETS_ROLES } : {}) });
   }
   if (e.code === '23505') return new Problem(409, 'conflict', 'That is already in the graph, so nothing was added.');
   if (e.code && /^(23503|23514|22P02|22007|22008|22003|22021|22P05)$/.test(e.code)) return new Problem(422, 'invalid_input', 'The input names something the graph doesn’t have, or a value it can’t take.');
@@ -124,7 +133,7 @@ const fromStore = (err: unknown): unknown => {
  * action, and reads, each answered as the person calling on the floor they stand on. The store's fence does
  * the deciding (migrations 003 and 004); this only says who is asking and where.
  */
-export const buildApp = async ({ store, standing, callers, extract, ledger, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
+export const buildApp = async ({ store, standing, callers, extract, ledger, roles, onRolesUnavailable, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
   // A path parameter may be as long as the contract lets it be once percent-encoded (an IRI of 200 characters,
   // say), not only Fastify's default of 100, which answered a longer one with a 414 the contract doesn't name.
   const app = Fastify({ ...serviceFastifyOptions(), routerOptions: { maxParamLength: 1024 } }).withTypeProvider<TypeBoxTypeProvider>();
@@ -164,12 +173,21 @@ export const buildApp = async ({ store, standing, callers, extract, ledger, page
     const { person, here, personal } = personOn(req, floor, options);
     if (!standing) throw new StandingUnavailable('The knowledge service has no way to ask identity where people stand.');
     const where = await standing(person);
+    // Asked before the transaction, which a slow answer would hold open. No answer is no role (ADR 0085, D9).
+    const held = roles
+      ? await roles(person, where.floors).catch((err: Error) => {
+          if (!(err instanceof RolesUnavailable)) throw err;
+          onRolesUnavailable?.(err);
+          return [];
+        })
+      : undefined;
     return asPerson(
       store,
       // Everyone stands on the org, so a read that names no floor is made from there.
       { person, floor: here ?? where.memberOf[0]! },
       async (db) => {
         await db.query('select kg.sync_person($1, $2::jsonb, $3::text[], $4)', [person, JSON.stringify(where.floors), where.memberOf, personal ?? null]);
+        if (held) await db.query('select kg.sync_roles($1, $2::jsonb)', [person, JSON.stringify(held)]);
         const sight = (await db.query<{ sight: string[] }>('select kg.my_sight() as sight')).rows[0]!.sight;
         if (!sight.length) throw new Problem(403, 'not_on_floor', NOT_ON_FLOOR, { whoCanChange: WHO_ADDS });
         try {

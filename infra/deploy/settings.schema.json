@@ -1354,6 +1354,14 @@
         "knowledge"
       ]
     },
+    "PERMISSIONS_URL": {
+      "type": "string",
+      "description": "Where the permissions service is, for who settles and raises on each floor.",
+      "x-internal": "compose",
+      "x-services": [
+        "knowledge"
+      ]
+    },
     "KNOWLEDGE_URL": {
       "type": "string",
       "description": "Where the knowledge graph service is.",

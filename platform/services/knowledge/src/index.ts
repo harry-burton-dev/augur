@@ -3,6 +3,7 @@ import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrinc
 import { buildApp } from './app.ts';
 import { fileLedger } from './ledger.ts';
 import { outboxRelay } from './outbox.ts';
+import { permissionsRoles, type RolesLookup } from './permissions.ts';
 import { DEFAULT_BUDGETS, reflectScheduler } from './reflect.ts';
 import { identityStanding } from './standing.ts';
 
@@ -23,6 +24,7 @@ loadConfigOrExit('knowledge', [
   { name: 'KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS', about: 'how long an entity’s beliefs must be quiet before reflect summarises it, such as 600.' },
   { name: 'KNOWLEDGE_REFLECT_DAILY_BUDGET', about: 'the most summaries reflect writes a day for the whole deployment, such as 400; keep it under the models service’s daily limit, with room for extraction.' },
   { name: 'KNOWLEDGE_REFLECT_FLOOR_BUDGET', about: 'the most summaries reflect writes a day on any one floor, such as 100.' },
+  { name: 'PERMISSIONS_URL', about: 'where the permissions service is, such as http://permissions:8087, asked who settles and raises on each floor. Without it nobody does.' },
   { name: 'KNOWLEDGE_LEDGER_DIR', about: 'the folder, on a volume of its own, where each forget is written so a restore from backup forgets it again.', required: true },
 ]);
 
@@ -59,7 +61,12 @@ const extract =
 const { KNOWLEDGE_LEDGER_DIR } = process.env;
 if (!KNOWLEDGE_LEDGER_DIR) log.warn('KNOWLEDGE_LEDGER_DIR is not set: what people forget is forgotten, but a restore from backup would bring its words back.');
 const ledger = KNOWLEDGE_LEDGER_DIR ? fileLedger(KNOWLEDGE_LEDGER_DIR) : undefined;
-const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, ledger, pageLimit, subgraphDepth });
+// Who settles and raises comes from the permissions service; without it, or without the service's sign-in, nobody does.
+const { PERMISSIONS_URL } = process.env;
+const roles: RolesLookup = PERMISSIONS_URL && credentials ? permissionsRoles({ permissionsUrl: PERMISSIONS_URL, credentials }) : async () => [];
+if (!PERMISSIONS_URL) log.warn('PERMISSIONS_URL is not set: nobody settles or raises on any floor until it is.');
+const onRolesUnavailable = (err: Error) => app.log.warn({ err: err.message }, 'the permissions service could not say who settles and raises; nobody does on this request');
+const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, ledger, roles, onRolesUnavailable, pageLimit, subgraphDepth });
 await app.listen({ port, host: '0.0.0.0' });
 // Reflect writes each floor's summaries from its own beliefs, through the models service, within its budgets.
 if (MODELS_URL && credentials) {

@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Who settles and raises on a floor comes from the permissions service
+
+**From** unreleased
+
+The knowledge graph now asks the permissions service who settles a floor's disputes and holds what its people retained, and who raises its beliefs to the floor above. A position or a person holds each, as set for the floor. Nothing is carried over: until someone is set, nobody on a team floor can hold, settle, retract, raise, end, merge, split or retire there. Retaining, confirming, disputing and personal floors are unchanged. While the permissions service can't answer, nobody holds either role; the knowledge service's log says so on each request. Set `PERMISSIONS_CLIENT_SECRET` (the permissions service's own sign-in note) before upgrading.
+
 ### The permissions service's own sign-in
 
 **From** unreleased

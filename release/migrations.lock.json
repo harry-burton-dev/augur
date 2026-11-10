@@ -45,7 +45,8 @@
     "008-forget-again": "1007d1762e306373",
     "009-reflect": "f7a64ac45ad5331a",
     "010-ontology-admin": "e74f984f96414d05",
-    "011-first-adopt-pass": "e9253f358b9360fd"
+    "011-first-adopt-pass": "e9253f358b9360fd",
+    "012-floor-roles-from-permissions": "da163d565d68a352"
   },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"

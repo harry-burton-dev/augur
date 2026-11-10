@@ -609,6 +609,9 @@ services:
       SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
       DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
+      # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
+      # knowledge asks on each request. While it can't answer, nobody settles or raises.
+      PERMISSIONS_URL: http://permissions:8087
     # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge

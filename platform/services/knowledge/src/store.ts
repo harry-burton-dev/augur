@@ -11,6 +11,7 @@ import { sql as forgetAgain } from './migrations/008-forget-again.ts';
 import { sql as reflect } from './migrations/009-reflect.ts';
 import { sql as ontologyAdmin } from './migrations/010-ontology-admin.ts';
 import { sql as firstAdoptPass } from './migrations/011-first-adopt-pass.ts';
+import { sql as floorRoles } from './migrations/012-floor-roles-from-permissions.ts';
 
 /** The knowledge service's schema in the platform database. */
 export const SCHEMA = 'kg';
@@ -38,6 +39,7 @@ export const migrations: Migration[] = [
   { id: '009-reflect', sql: reflect },
   { id: '010-ontology-admin', sql: ontologyAdmin },
   { id: '011-first-adopt-pass', sql: firstAdoptPass },
+  { id: '012-floor-roles-from-permissions', sql: floorRoles },
 ];
 
 /**
