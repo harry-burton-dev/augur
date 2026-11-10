@@ -6,7 +6,7 @@
  * the pane: its heading, its actions and its states. An app that fails, hangs or draws past its
  * budget stops only its own pane.
  */
-import { PageHead, QuillRemote, State, createQuillReceiver, type QuillReceiver } from '@augur/app-kit';
+import { PageHead, QuillRemote, State, createQuillReceiver, readerPicturePath, type QuillReceiver, type QuillRemoteHost } from '@augur/app-kit';
 import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
 import type { FrameState, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireFile, type WireRequest, type WireResponse } from '@augur/mfe-sdk/sdk3/host';
@@ -274,6 +274,35 @@ export class AppSession {
     this.#channel?.call('drop', wire).catch((err: Error) => this.#ctx.notify({ title: `${this.app.name} couldn’t take those files: ${err.message}` }));
   }
 
+  /**
+   * A reader's picture (ADR 0092): fetched here, never by the sandbox, and only under the app's own API,
+   * with the person's token. Answers an object URL the page shows, kept until the app stops.
+   */
+  readonly picture = async (path: string): Promise<string | undefined> => {
+    const named = readerPicturePath(path);
+    if (!named || this.#stopping) return undefined;
+    const ctx = this.#ctx;
+    try {
+      const res = await ctx.fetchImpl(`/api/${encodeURIComponent(this.app.id)}/${named}`, {
+        headers: { authorization: `Bearer ${await ctx.getToken()}`, [WORKSPACE_HEADER]: ctx.workspace.id, [APP_HEADER]: this.app.id, accept: 'image/*' },
+        credentials: 'omit',
+        redirect: 'error',
+      });
+      if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image/')) return undefined;
+      const blob = await res.blob();
+      // No bigger than the app may take in at once, where its manifest says.
+      const mb = this.app.manifest.maxUpload;
+      if (this.#stopping || (mb !== undefined && blob.size > mb * 1024 * 1024)) return undefined;
+      const url = URL.createObjectURL(blob);
+      this.#pictures.push(url);
+      return url;
+    } catch {
+      return undefined;
+    }
+  };
+
+  #pictures: string[] = [];
+
   /** Ends the run, giving the app's own stop a moment first. Meanwhile it is answered nothing. */
   async stop() {
     this.#stopping = true;
@@ -295,6 +324,8 @@ export class AppSession {
     this.#channel = undefined;
     this.#worker?.terminate();
     this.#worker = undefined;
+    for (const url of this.#pictures) URL.revokeObjectURL(url);
+    this.#pictures = [];
   }
 
   /** Counts each message against the app's rate; past it, the app is stopped and the message dropped. */
@@ -511,6 +542,15 @@ const overrunReason = (name: string, over: Overrun) => {
 const isPaletteKey = (e: KeyboardEvent) => isCommandKey(e, COMMAND_KEY) || (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyP');
 
 /**
+ * What the host does for the kit's elements in this app's pane: fetch a reader's pictures, and take a
+ * file button's files as a drop, while the app takes drops (`ctx.files.onDrop`); otherwise the button
+ * says it can't.
+ */
+function usePaneHost(session: AppSession, takesFiles: boolean): QuillRemoteHost {
+  return useMemo(() => ({ picture: session.picture, ...(takesFiles ? { files: (files: File[]) => void session.drop(files) } : {}) }), [session, takesFiles]);
+}
+
+/**
  * The frame round the pane (spec 6.4, 6.8): the command palette over the app's commands, the radial
  * menu on the things it marks, and the About panel with the sections it declares. The shell draws them
  * all from the manifest; the app only fills them and handles the commands.
@@ -541,11 +581,12 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [contributes, stopped]);
+  const host = usePaneHost(session, state.drops === true && !stopped);
   const sections = contributes?.about ?? [];
   const content = Object.fromEntries(
     sections.flatMap((s) => {
       const receiver = state.drawn.has(aboutRoot(s.id)) ? session.receiverOf(aboutRoot(s.id)) : undefined;
-      return receiver ? [[s.id, <QuillRemote receiver={receiver} />]] : [];
+      return receiver ? [[s.id, <QuillRemote receiver={receiver} host={host} />]] : [];
     }),
   );
   return (
@@ -582,6 +623,7 @@ const thingDetail = (thing: FrameThing) => ({ thing: { kind: thing.kind, ...(thi
 function Pane({ session, state, stopped, onRetry, source }: { session: AppSession; state: PaneState; stopped: boolean; onRetry: () => void; source: CommandSource }) {
   const { app } = session;
   const actions = stopped ? [] : actionsOf(app, state.frame.actions, state.handled);
+  const host = usePaneHost(session, state.drops === true && !stopped);
   const [dropping, setDropping] = useState(false);
   // Files from the desktop land here, in the host, only while the app has a handler for them (spec 6.10).
   const takes = (e: DragEvent) => !stopped && state.drops === true && [...(e.dataTransfer?.types ?? [])].includes('Files');
@@ -611,7 +653,7 @@ function Pane({ session, state, stopped, onRetry, source }: { session: AppSessio
           {state.canvas && state.phase === 'open' && <CanvasFrame key={state.canvas.opened} name={app.name} canvas={state.canvas} />}
           <div className="app-pane-screen" hidden={state.phase !== 'open' || !!state.canvas}>
             <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
-              <QuillRemote receiver={session.screen} />
+              <QuillRemote receiver={session.screen} host={host} />
             </FrameRadial>
           </div>
         </>
@@ -667,6 +709,8 @@ export function workerCard(app: WorkerApp, ctx: WorkerContext, options: WorkerHo
 /** The card as the app draws it, and its states: opening, and stopped with why (a failed card is never blank, spec 6.13). */
 function CardPane({ session }: { session: AppSession }) {
   const state = useSyncExternalStore(session.subscribe, () => session.state);
+  // A card shows pictures but takes no files: those go to the app's own pane.
+  const host = usePaneHost(session, false);
   const receiver = session.receiverOf(CARD_ROOT);
   const { app } = session;
   return (
@@ -676,7 +720,7 @@ function CardPane({ session }: { session: AppSession }) {
       ) : state.phase !== 'open' ? (
         <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while` : `Opening ${app.name}`} />
       ) : (
-        receiver && <QuillRemote receiver={receiver} />
+        receiver && <QuillRemote receiver={receiver} host={host} />
       )}
     </div>
   );
