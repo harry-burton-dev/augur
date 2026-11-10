@@ -1,7 +1,7 @@
 import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
 import type { BackupStatus, ComponentStatus, EmailStatus, EventDelivery } from './model/types.js';
 import { quill } from './quill.js';
-import { when, type View } from './view.js';
+import { paged, when, type View } from './view.js';
 
 type Tone = 'ok' | 'needs' | 'problem' | 'info';
 
@@ -43,6 +43,8 @@ const emailRow = (v: View, e: EmailStatus) => ({
 });
 
 const DELIVERY: Record<EventDelivery['state'], Tone> = { ok: 'ok', retrying: 'needs', stalled: 'problem' };
+const troubled = (all: EventDelivery[]) => all.filter((x) => x.state !== 'ok');
+const okWords = (n: number) => (n === 1 ? '1 app takes its events without trouble' : `${n} apps take their events without trouble`);
 
 /** What the gateway's status couldn't say, or that it hasn't been read yet. */
 const unread = (v: View, what: string): RemoteNode =>
@@ -92,6 +94,7 @@ export const healthPage = (v: View): RemoteNode => {
           answered: c.seenAt ? when(v, c.seenAt) : 'Never',
         })),
         empty: 'The gateway hasn’t checked anything yet.',
+        ...paged(s.components.length),
       }),
     ]),
     s.email ? quill('quill-section', { label: 'Email' }, quill('quill-check-list', { label: 'Email', rows: [emailRow(v, s.email)] })) : null,
@@ -106,16 +109,27 @@ export const healthPage = (v: View): RemoteNode => {
               : d.pushing.problem
                 ? quill('quill-notice', { tone: 'warning' }, d.pushing.problem)
                 : null,
+            // Only the apps in trouble are listed: the rest are a count, however many apps there are.
             d.deliveries.length
-              ? quill('quill-check-list', {
-                  label: 'Event deliveries',
-                  rows: d.deliveries.map((x) => ({
-                    id: x.app,
-                    title: x.app,
-                    detail: [x.words, x.lastError && `Last error: ${x.lastError}`, x.dropped ? `${x.dropped} dropped` : null].filter(Boolean).join(' · '),
-                    tone: DELIVERY[x.state],
-                  })),
-                })
+              ? [
+                  troubled(d.deliveries).length
+                    ? quill('quill-check-list', {
+                        label: 'Event deliveries',
+                        rows: troubled(d.deliveries).map((x) => ({
+                          id: x.app,
+                          title: x.app,
+                          detail: [x.words, x.lastError && `Last error: ${x.lastError}`, x.dropped ? `${x.dropped} dropped` : null].filter(Boolean).join(' · '),
+                          tone: DELIVERY[x.state],
+                        })),
+                      })
+                    : null,
+                  d.deliveries.length > troubled(d.deliveries).length
+                    ? quill('quill-check-list', {
+                        label: 'Taking their events',
+                        rows: [{ id: 'ok', title: okWords(d.deliveries.length - troubled(d.deliveries).length), tone: 'ok' as Tone }],
+                      })
+                    : null,
+                ]
               : quill('quill-state', { kind: 'empty', heading: 'No app takes events here', size: 'line' }),
           ],
     ]),
