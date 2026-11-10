@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadModel, OpenFga } from './openfga.ts';
+import { project } from './projection.ts';
 
 // Against a real OpenFGA, when OPENFGA_TEST_URL names one (docker run -p 8080:8080 openfga/openfga run):
 // the calls this service makes, as OpenFGA's API answers them.
@@ -51,5 +52,29 @@ describe.skipIf(!url)('OpenFGA itself', () => {
       ),
     ).toEqual([{ allowed: true }, { allowed: false }]);
     expect(await engine.healthy()).toBe(true);
+  });
+
+  it('copies identity in, reading every page and writing what changed, and the copy answers checks', async () => {
+    const engine = new OpenFga({ url: url! });
+    const store = await engine.ensureStore(`copy-${Date.now()}`);
+    const modelId = await engine.ensureModel(store, loadModel());
+    const people = Array.from({ length: 130 }, (_, i) => `p${i}`);
+    const identity = {
+      org: 'o',
+      teams: [{ id: 'port', parent: 'o' }],
+      personal: [],
+      positions: [{ id: 'harbour-master', team: 'port', role: 'lead' as const, holder: 'p1' }],
+      people,
+    };
+    // More than one page to read and more than one call to write.
+    expect(await project({ engine, store, modelId, relationships: async () => identity })).toMatchObject({ added: 134, removed: 0 });
+    expect((await engine.readAll(store, 50)).length).toBe(134);
+    expect(await project({ engine, store, modelId, relationships: async () => identity })).toMatchObject({ added: 0, removed: 0 });
+    const now = { current_time: new Date().toISOString() };
+    expect(await engine.check(store, modelId, { user: 'person:p1', relation: 'can_act_as_lead', object: 'floor:port' }, now, 'HIGHER_CONSISTENCY')).toBe(true);
+    const handedOver = { ...identity, positions: [{ ...identity.positions[0], holder: 'p2' }] };
+    expect(await project({ engine, store, modelId, relationships: async () => handedOver })).toMatchObject({ added: 1, removed: 1 });
+    expect(await engine.check(store, modelId, { user: 'person:p1', relation: 'can_act_as_lead', object: 'floor:port' }, now, 'HIGHER_CONSISTENCY')).toBe(false);
+    expect(await engine.check(store, modelId, { user: 'person:p2', relation: 'stands', object: 'org:o' }, now, 'HIGHER_CONSISTENCY')).toBe(true);
   });
 });

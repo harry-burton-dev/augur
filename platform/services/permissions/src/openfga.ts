@@ -127,6 +127,39 @@ export class OpenFga {
     });
   }
 
+  /** Every relationship in the store, page by page (OpenFGA's Read with no filter). */
+  async readAll(store: string, pageSize = 100): Promise<CheckKey[]> {
+    const all: CheckKey[] = [];
+    let token = '';
+    do {
+      const page = await this.call<{ tuples?: { key: CheckKey }[]; continuation_token?: string }>('POST', `/stores/${store}/read`, {
+        page_size: pageSize,
+        ...(token ? { continuation_token: token } : {}),
+      });
+      for (const t of page.tuples ?? []) all.push({ user: t.key.user, relation: t.key.relation, object: t.key.object });
+      token = page.continuation_token ?? '';
+    } while (token);
+    return all;
+  }
+
+  /**
+   * Writes and deletes relationships, at most `perCall` to a call (OpenFGA's own limit is 100). One already
+   * there or already gone is no error, so a write that is repeated after a failure lands the same.
+   */
+  async write(store: string, model: string, writes: readonly CheckKey[], deletes: readonly CheckKey[], perCall = 100): Promise<void> {
+    const changes = [...writes.map((key) => ({ key, write: true })), ...deletes.map((key) => ({ key, write: false }))];
+    for (let i = 0; i < changes.length; i += perCall) {
+      const chunk = changes.slice(i, i + perCall);
+      const adds = chunk.filter((c) => c.write).map((c) => c.key);
+      const removes = chunk.filter((c) => !c.write).map((c) => c.key);
+      await this.call('POST', `/stores/${store}/write`, {
+        authorization_model_id: model,
+        ...(adds.length ? { writes: { tuple_keys: adds, on_duplicate: 'ignore' } } : {}),
+        ...(removes.length ? { deletes: { tuple_keys: removes, on_missing: 'ignore' } } : {}),
+      });
+    }
+  }
+
   async healthy(): Promise<boolean> {
     try {
       const res = await this.fetchImpl(`${this.base}/healthz`);
