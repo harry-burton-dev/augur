@@ -1,5 +1,33 @@
 # @augur/admin
 
+## 0.20.0
+
+### Minor Changes
+
+- 531cf56: Removing an app, pinning and unpinning its version, allowing and stopping a site apps load from, and issuing an app's sign-in now need the deployment-admin role (ADR 0084). Admin shows those buttons turned off to a plain admin, with the reason.
+- f59617f: An app names what it needs of the knowledge graph in its `augur-floor-graphs` resource: `classes` (class IRIs) and `actions` (action names). The registry asks the deployment's knowledge graph what it offers when an app is installed, and refuses an install that needs a class or action it lacks, saying which and who can adopt a class. When the knowledge graph can't be asked, it only warns. The knowledge graph's `GET /meta` now lists every class it has (`ontology.classes`), and Admin's review of an install names the classes and actions.
+
+### Patch Changes
+
+- 523cbc6: Account is a dialog over the shell's menu, on kit 0.5.13. Its sections are tabs down the side, with a new Overview first (who you are, and an account check with Something's wrong? to secure the account). Each section's parts sit side by side while they fit and wait behind a switch when they don't, and long lists page, so nothing in it scrolls at 1280×720, 1024×768 or 800×600. It opens only from the menu, or on coming back from one of Keycloak's screens; an address alone no longer opens it.
+- dfad5d2: Install new apps from Deployment's Apps page: what the app feed offers, installing from a release file's address, the settings an install must be given, what's in progress, default apps waiting and apps removed with their data kept. Admin's Apps no longer installs; it links to Deployment.
+
+  An installed app's own settings in Admin are inline fields, each saved as soon as it changes, instead of a dialog.
+
+- 7f0d097: On kit 0.5.12, an app on the app contract can describe dialogs whose work it does itself, ask-twice buttons, choices, checkbox groups, dates, tag pickers, steps, progress and status, which the shell draws with the kit.
+- 318926c: On kit 0.5.14, an app on the app contract can describe a list of checks, steps through one job and a list a page at a time (`quill-check-list`, `quill-step-list`, `quill-paged-list`), which the shell draws with the kit.
+- d6f1a93: On kit 0.5.15, an app on the app contract can describe what a documents app needs: `quill-reader`, `quill-file-button`, `quill-people-picker`, `quill-floor-path` and `quill-filter-bar`. The shell fetches a reader's pictures itself, only under the app's own `/api/<id>/` and with the person's token, and frees them when the app stops (ADR 0092). A file button's files reach the app's `ctx.files.onDrop` handler as a drop does; while the app has no handler, the button says it can't take files.
+- d2ce7c9: Apps can ask for the knowledge graph in their manifest's `scopes`: `knowledge:read` to read it as the person they act for, `knowledge:act` for its actions apps are granted, and `knowledge:extract` to add what a source says (retain). The gateway lets an app's calls to the knowledge graph through on those scopes, Admin names them when an admin allows an app, and an app's catalog entry names the knowledge API. The knowledge graph itself still refuses apps until its next release, which checks each action's own scope.
+
+  Not breaking: registry.openapi.yaml lists three more scopes an app's entry may carry. The list grows as AUGUR adds what apps can be granted, and its readers (Admin, the shell and the registry client) show a scope they don't know by its name.
+
+- 9eccfb9: Sign-in no longer asks admins and deployment admins for a one-time code. The realm job takes the two-step role out of `admin` and `deployment-admin`; code apps and passkeys stay on offer to everyone, and Admin → Organisation can still ask everyone for one ("Optional" or "Everyone"). Account and Admin say so in those words. The sign-in pages and emails move to the Endstate look on Common 0.15: the shell's still horizon and band, one solid square panel, Keycap buttons, Well fields and Instrument Sans, in the horizon greys.
+- Updated dependencies [d6f1a93]
+- Updated dependencies [e60b45e]
+- Updated dependencies [7adc7fc]
+- Updated dependencies [7f0d097]
+  - @augur/mfe-sdk@3.1.0
+
 ## 0.19.0
 
 ### Minor Changes

@@ -29,6 +29,9 @@ import {
   type ServiceVerifier,
   signedCallers,
   type CallerCheck,
+  noShadow,
+  type Shadow,
+  type ShadowQuestion,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
 import { deliveryStatus, type PushingState } from './deliver.ts';
@@ -71,6 +74,8 @@ export const API_VERSION = 'v1';
 const version = packageVersion(import.meta.url);
 
 export interface EventsOptions {
+  /** Compares each admin and lead check here with the permissions service's answer (shadow mode, ADR 0085). */
+  shadow?: Shadow;
   /** Where notifications, Activity, domain events and the inbox are kept: Postgres. */
   store: EventStore;
   /** Checks apps' and platform services' own sign-in tokens: only services send notifications and write the audit log. */
@@ -131,6 +136,14 @@ const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntr
   'identity department.renamed': { topic: 'platform.team.renamed', payload: (e) => ({ team: e.target, name: e.detail?.to }) },
   'identity department.member-added': { topic: 'platform.team.member-added', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
   'identity department.member-removed': { topic: 'platform.team.member-removed', payload: (e) => ({ team: e.target, person: e.detail?.person }) },
+  // Positions (ADR 0089): the jobs on a team. A handover gives the next holder what the position has, at once.
+  'identity position.created': { topic: 'platform.position.created', payload: (e) => ({ position: e.target, ...(typeof e.detail?.department === 'string' ? { team: e.detail.department } : {}) }) },
+  'identity position.changed': { topic: 'platform.position.changed', payload: (e) => ({ position: e.target }) },
+  'identity position.handed-over': {
+    topic: 'platform.position.handed-over',
+    payload: (e) => ({ position: e.target, ...(typeof e.detail?.from === 'string' ? { from: e.detail.from } : {}), ...(typeof e.detail?.to === 'string' ? { to: e.detail.to } : {}) }),
+  },
+  'identity position.retired': { topic: 'platform.position.retired', payload: (e) => ({ position: e.target }) },
   'registry app.disabled': { topic: 'platform.app.turned-off', payload: (e) => ({ app: e.target }) },
   'registry app.enabled': { topic: 'platform.app.turned-on', payload: (e) => ({ app: e.target }) },
   'registry app.removed': { topic: 'platform.app.removed', payload: (e) => ({ app: e.target }) },
@@ -177,7 +190,12 @@ const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
  * send notifications and audit entries; people read their own notifications,
  * live, and admins read the audit log.
  */
-export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }) }: EventsOptions) => {
+/** This deployment's org, as the permissions service names it. */
+const THIS_ORG = 'this';
+/** Reading the whole audit log, as the permissions service is asked it: an org admin's. */
+const READ_AUDIT: ShadowQuestion = { action: 'can_read_audit', resource: { type: 'org', id: THIS_ORG }, as: 'persona' };
+
+export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }), shadow = noShadow }: EventsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -347,6 +365,16 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
 
       /** Who may change a team's settings: an admin, or a lead standing on that team (as the gateway checked). */
       const leadsOrAdmin = (caller: Caller, workspace: string) => caller.roles.includes('admin') || (caller.workspace?.id === workspace && caller.workspace.role === 'lead');
+      /** The same, asked of the permissions service too: a lead of exactly that team, or an org admin. */
+      const leadOrAdminOf = (workspace: string): ShadowQuestion[] => [
+        { action: 'can_act_as_lead', resource: { type: 'floor', id: workspace } },
+        { action: 'admin', resource: { type: 'floor', id: workspace }, as: 'persona' },
+      ];
+      const shadowedLeadsOrAdmin = (site: string, caller: Caller, workspace: string) => {
+        const today = leadsOrAdmin(caller, workspace);
+        shadow.check(site, caller, leadOrAdminOf(workspace), today);
+        return today;
+      };
 
       // Team notices are off until a team's lead (or an admin) turns them on.
       const TeamParams = Type.Object({ workspace: Type.String() });
@@ -366,7 +394,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         async (req, reply) => {
         const caller = signedIn(req, reply);
         if (!caller) return reply;
-        if (!leadsOrAdmin(caller, req.params.workspace)) return reply.code(403).send({ error: 'forbidden', message: 'Only the team’s leads or an admin can see this.' });
+        if (!shadowedLeadsOrAdmin('events.team-notices.read', caller, req.params.workspace)) return reply.code(403).send({ error: 'forbidden', message: 'Only the team’s leads or an admin can see this.' });
         return { workspace: req.params.workspace, on: await store.teamNotices(req.params.workspace) };
         },
       );
@@ -388,7 +416,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         async (req, reply) => {
           const caller = signedIn(req, reply);
           if (!caller) return reply;
-          if (!leadsOrAdmin(caller, req.params.workspace)) return reply.code(403).send({ error: 'forbidden', message: 'Only the team’s leads or an admin can turn team notices on or off.' });
+          if (!shadowedLeadsOrAdmin('events.team-notices.change', caller, req.params.workspace)) return reply.code(403).send({ error: 'forbidden', message: 'Only the team’s leads or an admin can turn team notices on or off.' });
           const floor = floors ? await floors(req.params.workspace).catch(() => undefined) : undefined;
           await store.setTeamNotices(req.params.workspace, req.body.on, caller.id, floor ? { id: floor.id, path: floor.path } : { id: req.params.workspace, path: [req.params.workspace] });
           return { workspace: req.params.workspace, on: req.body.on };
@@ -723,7 +751,9 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         async (req, reply) => {
           const caller = signedIn(req, reply);
           if (!caller) return reply;
-          if (!caller.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how apps take events.' });
+          const admin = caller.roles.includes('admin');
+          shadow.check('events.deliveries', caller, { action: 'can_manage_apps', resource: { type: 'org', id: THIS_ORG }, as: 'persona' }, admin);
+          if (!admin) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how apps take events.' });
           const now = Date.now();
           return { deliveries: (await store.deliveries.list()).map((d) => ({ ...d, ...deliveryStatus(d, now) })), pushing: pushing() };
         },
@@ -763,7 +793,9 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           if (!caller) return reply;
           const { app: forApp, actor, since, until, before, workspace, target, person, kind, limit = 100 } = req.query;
           // Admins read the whole log; a lead reads their own floor's, and the floors below it.
-          if (!caller.roles.includes('admin') && !(workspace && leadsOrAdmin(caller, workspace))) {
+          const mayRead = caller.roles.includes('admin') || Boolean(workspace && leadsOrAdmin(caller, workspace));
+          shadow.check('events.audit.read', caller, [READ_AUDIT, ...(workspace ? leadOrAdminOf(workspace) : [])], mayRead);
+          if (!mayRead) {
             return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can read the whole audit log; a lead can read their own floor’s.' });
           }
           return store.audit({ app: forApp, actor, since, until, before, workspace, target, person, kind, limit });
@@ -801,7 +833,9 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         async (req, reply) => {
           const caller = signedIn(req, reply);
           if (!caller) return reply;
-          if (!caller.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can download Activity.' });
+          const admin = caller.roles.includes('admin');
+          shadow.check('events.audit.export', caller, READ_AUDIT, admin);
+          if (!admin) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can download Activity.' });
           const { format = 'csv', since: from, until: to, ...rest } = req.query;
           const until = to ? new Date(to) : new Date();
           const since = from ? new Date(from) : new Date(until.getTime() - EXPORT_MAX_DAYS * DAY_MS);

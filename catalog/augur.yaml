@@ -28,7 +28,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/techdocs-ref: dir:..
     augur.dev/release-unit: augur
-    augur.dev/version: 0.24.0
+    augur.dev/version: 0.25.0
   links:
     - url: https://drive.google.com/drive/folders/16wXmUMRNP2_vXAlf4kBMF9hCDNUXg7yO
       title: Decision register (AUGUR handbook, 04 Decisions)
@@ -47,7 +47,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/admin/
     augur.dev/package: "@augur/admin"
-    augur.dev/version: 0.19.0
+    augur.dev/version: 0.20.0
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -65,7 +65,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/home/
     augur.dev/package: "@augur/home"
-    augur.dev/version: 0.4.2
+    augur.dev/version: 0.4.3
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -83,7 +83,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/shell/
     augur.dev/package: "@augur/shell"
-    augur.dev/version: 0.20.0
+    augur.dev/version: 0.21.0
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -96,12 +96,12 @@ kind: Component
 metadata:
   name: augur-sign-in-theme
   title: "@augur/sign-in-theme"
-  description: AUGUR's sign-in and email theme for Keycloak (ADR 0041), built with Keycloakify from Common's tokens and parts. Shipped as a jar in AUGUR's Keycloak image.
+  description: AUGUR's sign-in and email theme for Keycloak (ADR 0041), built with Keycloakify from Common's tokens, typefaces and parts, in the Endstate look. Shipped as a jar in AUGUR's Keycloak image.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/sign-in-theme/
     augur.dev/package: "@augur/sign-in-theme"
-    augur.dev/version: 0.1.1
+    augur.dev/version: 0.2.0
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -114,12 +114,12 @@ kind: Component
 metadata:
   name: augur-upgrades
   title: "@augur/upgrades"
-  description: "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL."
+  description: "Deployment (at /upgrades): what this deployment runs, what's available, and upgrading, rolling back and the update policy, for AUGUR and each app. A contract 3 app: one ES module the shell runs in a web worker."
   annotations:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/upgrades/
     augur.dev/package: "@augur/upgrades"
-    augur.dev/version: 0.1.7
+    augur.dev/version: 0.2.0
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -137,7 +137,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/app-tools/
     augur.dev/package: "@augur/app-tools"
-    augur.dev/version: 0.5.0
+    augur.dev/version: 0.6.0
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -155,7 +155,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/clients/
     augur.dev/package: "@augur/clients"
-    augur.dev/version: 0.1.1
+    augur.dev/version: 0.2.0
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -173,7 +173,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/mfe-sdk/
     augur.dev/package: "@augur/mfe-sdk"
-    augur.dev/version: 3.0.0
+    augur.dev/version: 3.1.0
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -209,7 +209,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/service-kit/
     augur.dev/package: "@augur/service-kit"
-    augur.dev/version: 0.18.0
+    augur.dev/version: 0.19.0
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -226,7 +226,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/events/
     augur.dev/package: "@augur/events"
-    augur.dev/version: 0.11.0
+    augur.dev/version: 0.12.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -252,7 +252,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/gateway/
     augur.dev/package: "@augur/gateway"
-    augur.dev/version: 0.13.0
+    augur.dev/version: 0.14.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -277,7 +277,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/identity/
     augur.dev/package: "@augur/identity"
-    augur.dev/version: 1.6.0
+    augur.dev/version: 1.7.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -304,7 +304,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/knowledge/
     augur.dev/package: "@augur/knowledge"
-    augur.dev/version: 0.1.0
+    augur.dev/version: 0.2.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -330,7 +330,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/models/
     augur.dev/package: "@augur/models"
-    augur.dev/version: 0.4.0
+    augur.dev/version: 0.4.1
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -350,13 +350,37 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
+  name: augur-permissions
+  title: "@augur/permissions"
+  annotations:
+    github.com/project-slug: harry-burton-dev/augur
+    backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/permissions/
+    augur.dev/package: "@augur/permissions"
+    augur.dev/version: 0.1.0
+    augur.dev/release-unit: augur
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/augur-core
+  system: augur-platform
+  consumesApis:
+    - api:default/events-api
+    - api:default/gateway-api
+    - api:default/identity-api
+    - api:default/models-api
+    - api:default/registry-api
+  dependsOn: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
   name: augur-registry
   title: "@augur/registry"
   annotations:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/registry/
     augur.dev/package: "@augur/registry"
-    augur.dev/version: 0.20.0
+    augur.dev/version: 0.21.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -382,7 +406,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/storage/
     augur.dev/package: "@augur/storage"
-    augur.dev/version: 0.6.0
+    augur.dev/version: 0.6.1
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -403,7 +427,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/updater/
     augur.dev/package: "@augur/updater"
-    augur.dev/version: 0.10.0
+    augur.dev/version: 0.11.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -425,7 +449,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/contract/
     augur.dev/package: "@augur/contract-tests"
-    augur.dev/version: 0.3.0
+    augur.dev/version: 0.4.0
     augur.dev/release-unit: augur
 spec:
   type: tool
@@ -491,11 +515,12 @@ metadata:
   title: Knowledge API
   description: |-
     The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
-    A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. Apps reach it through its client in a later release.
-    Version 1 grows while the seam fills in: draft 4 of the spec is its target, and paths are added until it is met.
+    A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. An app acting for a person reaches it the same way, through its client, held to the scopes it is granted (knowledge:read, an action’s own).
+    Retain takes either what was extracted from a source or the source’s text. Given text, the service asks the model what it claims, through the models service, for the floor it is retained on: what fits is kept as observations, never as belief, a term the ontology lacks becomes a candidate, text that speaks to the system is kept only flagged, and the answer says what was dropped and why.
+    Every read draft 4 of the spec asks for is served. Actions are added as their releases come; within version 1 the API only adds, and a change that would break a caller is served as /v2 beside it.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.1.0
+    augur.dev/contract-version: 1.10.0
 spec:
   type: openapi
   lifecycle: production
@@ -533,7 +558,7 @@ metadata:
   description: Catalogue of apps and micro frontends; serves the shell manifest.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.47.0
+    augur.dev/contract-version: 1.48.0
 spec:
   type: openapi
   lifecycle: production

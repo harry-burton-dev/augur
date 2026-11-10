@@ -376,6 +376,28 @@ describe.runIf(DATABASE_URL)('events', () => {
       const log = (await app.inject({ method: 'GET', url: '/v1/audit?workspace=w-finance', headers: alex })).json();
       expect(log[0]).toMatchObject({ action: 'team-notices.on', actor: { id: 'u-3' }, workspace: { id: 'w-finance' } });
     });
+
+    it('asks the permissions service each admin and lead check too, and still answers as it always has', async () => {
+      const asked: { site: string; caller: string; question: unknown; today: boolean }[] = [];
+      const shadow = { check: (site: string, caller: { id: string }, question: unknown, today: boolean) => void asked.push({ site, caller: caller.id, question, today }), settled: async () => {} };
+      const app = await db.app({ verifyService, floors, shadow });
+      expect((await app.inject({ method: 'GET', url: '/v1/team-notices/w-finance', headers: on('w-finance') })).statusCode).toBe(403);
+      expect((await app.inject({ method: 'GET', url: '/v1/audit/export', headers: alex })).statusCode).toBe(200);
+      expect((await app.inject({ method: 'GET', url: '/v1/audit?workspace=w-finance', headers: on('w-finance', 'lead') })).statusCode).toBe(200);
+      expect(asked).toEqual([
+        {
+          site: 'events.team-notices.read',
+          caller: expect.any(String),
+          question: [
+            { action: 'can_act_as_lead', resource: { type: 'floor', id: 'w-finance' } },
+            { action: 'admin', resource: { type: 'floor', id: 'w-finance' }, as: 'persona' },
+          ],
+          today: false,
+        },
+        { site: 'events.audit.export', caller: 'u-1', question: { action: 'can_read_audit', resource: { type: 'org', id: 'this' }, as: 'persona' }, today: true },
+        { site: 'events.audit.read', caller: expect.any(String), question: [expect.objectContaining({ action: 'can_read_audit' }), expect.objectContaining({ action: 'can_act_as_lead' }), expect.objectContaining({ action: 'admin' })], today: true },
+      ]);
+    });
   });
 
   describe('domain events', () => {
@@ -432,6 +454,9 @@ describe.runIf(DATABASE_URL)('events', () => {
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-9', detail: { username: 'jo', asked: true, handOverTo: 'u-2', note: 'Agreed' } });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-8', detail: { username: 'al', asked: false } });
       await audit(platform, { actor: { id: 'identity', kind: 'service' }, app: 'identity', action: 'person.deleted', target: 'u-7', detail: {} });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'position.created', target: 'pos-1', detail: { department: 'w-legal', name: 'Counsel', role: 'lead' } });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'position.handed-over', target: 'pos-1', detail: { from: null, to: 'u-2' } });
+      await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'position.retired', target: 'pos-1', detail: {} });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.blocked', target: 'notes' }, 'w-legal');
       // Followers see an event once every earlier transaction on the database has settled.
@@ -443,6 +468,10 @@ describe.runIf(DATABASE_URL)('events', () => {
         { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-9', handOverTo: 'u-2' } },
         { topic: 'platform.person.left', publisher: 'identity', payload: { person: 'u-8' } },
         { topic: 'platform.person.deleted', publisher: 'identity', payload: { person: 'u-7' } },
+        // Positions: ids only, never the position's name.
+        { topic: 'platform.position.created', publisher: 'identity', payload: { position: 'pos-1', team: 'w-legal' } },
+        { topic: 'platform.position.handed-over', publisher: 'identity', payload: { position: 'pos-1', to: 'u-2' } },
+        { topic: 'platform.position.retired', publisher: 'identity', payload: { position: 'pos-1' } },
         { topic: 'platform.app.turned-off', publisher: 'registry', payload: { app: 'notes' } },
         { topic: 'platform.app.blocked', payload: { app: 'notes' }, workspace: { id: 'w-legal' } },
       ]);

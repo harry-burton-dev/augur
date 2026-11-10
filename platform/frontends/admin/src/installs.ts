@@ -1,5 +1,5 @@
 import type { SelectOption } from '@augur/app-kit';
-import type { AppJob, AppJobStepState, AppReview, AvailableApp, FeaturePreviewMode, FeaturePreviews } from './api.js';
+import type { AppJob, AppJobStepState, FeaturePreviewMode, FeaturePreviews } from './api.js';
 
 /** How often Apps asks again while the app runner has a job waiting or under way. */
 export const JOB_REFRESH_MS = 4_000;
@@ -44,74 +44,6 @@ export const featureHint = (preview: FeaturePreviews['previews'][number], floorN
   ]
     .filter(Boolean)
     .join(' ');
-
-/** One resource a part asks for, in words (spec 4.6, 9.4). */
-const resourceWords = ({ type, params = {} }: NonNullable<AvailableApp['asks']>['resources'][number]): string => {
-  const list = (v: unknown) => (Array.isArray(v) ? listWords(v.map(String)) : '');
-  switch (type) {
-    case 'augur-gateway':
-      return params.inbound ? 'answers people’s calls through the gateway' : 'calls AUGUR through the gateway';
-    case 'augur-database':
-      return typeof params.connections === 'number' ? `keeps a database, with up to ${params.connections} connections` : 'keeps a database';
-    case 'augur-bucket':
-      return 'keeps files on the server';
-    case 'augur-floor-graphs':
-      return 'reads the floors’ graphs';
-    case 'augur-telemetry':
-      return 'sends its telemetry to the deployment’s collector';
-    case 'augur-scratch':
-      return `has a private folder of ${String(params.size ?? '')}`.trim();
-    case 'augur-files':
-      return `reads a folder you fill: ${String(params.label ?? '')}`.trim();
-    case 'augur-outbound':
-      return `internet access${params.hosts ? ` to ${list(params.hosts)}` : ''}${params.why ? `, because: ${String(params.why)}` : ''}`;
-    case 'augur-settings':
-      return params.ids ? `reads the settings ${list(params.ids)}` : 'reads its settings';
-    default:
-      return type;
-  }
-};
-
-/** What a release asks to be allowed, in words: one line for its scopes, one per part, then the rest (spec 9.4). */
-export const asksWords = (asks: NonNullable<AvailableApp['asks']>, scopeWords: (s: string[]) => string, review?: AppReview, signer?: AvailableApp['signer']) => {
-  const parts = Object.keys(asks.limits);
-  return [
-    `May: ${scopeWords(asks.scopes)}`,
-    ...(parts.length
-      ? parts.map((part) => {
-          const { memory, cpu } = asks.limits[part]!;
-          const uses = asks.resources.filter((r) => r.part === part).map(resourceWords);
-          const kind = review?.kinds[part];
-          return `Its ${part} part (${kind ? `${KIND_WORDS[kind] ?? kind}; ` : ''}${memory} of memory, ${cpu} CPU) ${uses.length ? listWords(uses) : 'asks for nothing'}`;
-        })
-      : ['Runs nothing on the server']),
-    ...(review?.settings.length
-      ? [`Offers ${review.settings.length === 1 ? 'a setting' : `${review.settings.length} settings`}: ${listWords(review.settings.map(settingWords))}`]
-      : asks.settings.length
-        ? [`Offers ${asks.settings.length === 1 ? 'a setting' : `${asks.settings.length} settings`}: ${listWords(asks.settings)}`]
-        : []),
-    ...folderWords(asks),
-    `Works on ${listWords(asks.floors.map((f) => (f === 'personal' ? 'personal floors' : f === 'team' ? 'team floors' : 'the organisation’s floor')))}`,
-    `Uploads up to ${asks.maxUpload} MB`,
-    ...(asks.canvas ? ['Draws in a canvas frame'] : []),
-    ...(signer?.repository ? [`Signed by ${signer.repository}’s ${signer.workflow}`] : []),
-  ];
-};
-
-/** A part's kind, as the review says it (spec 4.2). */
-const KIND_WORDS: Record<string, string> = { service: 'a service', worker: 'a worker', job: 'a job run before each version starts' };
-
-/** One setting in the review: its label, type, and whether it's secret or must be filled in (spec 5.6). */
-const settingWords = (s: AppReview['settings'][number]) => {
-  const notes = [s.type === 'secret' ? 'secret' : s.type === 'enum' ? 'a choice' : s.type, ...(s.required ? ['required'] : [])];
-  return `${s.label} (${notes.join(', ')})`;
-};
-
-/** The folders the admin fills (augur-files), each by its label (spec 5.6). */
-const folderWords = (asks: NonNullable<AvailableApp['asks']>) => {
-  const folders = asks.resources.filter((r) => r.type === 'augur-files').map((r) => String(r.params?.label ?? r.part));
-  return folders.length ? [`Asks you to fill ${folders.length === 1 ? 'a folder' : `${folders.length} folders`}: ${listWords(folders)}`] : [];
-};
 
 /** Where a job stands, in a few words. */
 export const jobWords = (job: AppJob): string => {

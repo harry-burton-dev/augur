@@ -2,8 +2,12 @@ import { Select, TextField } from '@augur/app-kit';
 import type { AppSettingDecl, AppSettingView } from './api.js';
 import { DEFAULT_CHOICE, fieldName, numberCheck, valueWords } from './settings-form.js';
 
-/** One field per setting, each drawn for its type, with its detail, unit, bounds or options and whether it's required. */
-export function SettingFields({ settings }: { settings: (AppSettingDecl & Partial<Pick<AppSettingView, 'set' | 'value' | 'newIn'>>)[] }) {
+/**
+ * One field per setting, each drawn for its type, with its detail, unit, bounds or options and whether it's required.
+ * With `onSave`, each is an inline choice saved as soon as it changes (a choice) or is left (typing).
+ */
+export function SettingFields({ settings, onSave, disabled, reason }: { settings: (AppSettingDecl & Partial<Pick<AppSettingView, 'set' | 'value' | 'newIn'>>)[]; onSave?: (id: string, raw: string) => void; disabled?: boolean; reason?: string }) {
+  const off = disabled ? { disabled: true, reason } : {};
   return (
     <>
       {settings.map((s) => {
@@ -17,12 +21,25 @@ export function SettingFields({ settings }: { settings: (AppSettingDecl & Partia
             ...(s.type === 'boolean' ? [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }] : (s.options ?? []).map((o) => ({ value: o, label: o }))),
           ];
           const now = s.set && s.value !== undefined ? String(s.value) : s.default !== undefined ? DEFAULT_CHOICE : null;
-          return <Select key={s.id} name={name} label={s.label} hint={hint} options={options} required={needed} optional={!needed} defaultValue={now} />;
+          return (
+            <Select
+              key={`${s.id}:${String(s.value)}`}
+              name={name}
+              label={s.label}
+              hint={hint}
+              options={options}
+              required={needed}
+              optional={!needed}
+              defaultValue={now}
+              {...off}
+              {...(onSave ? { onChange: (v: string) => onSave(s.id, v) } : {})}
+            />
+          );
         }
         if (s.type === 'secret')
           return (
             <TextField
-              key={s.id}
+              key={`${s.id}:${String(s.set)}`}
               name={name}
               type="password"
               label={s.label}
@@ -30,12 +47,14 @@ export function SettingFields({ settings }: { settings: (AppSettingDecl & Partia
               required={needed && !s.set}
               optional={!needed}
               maxLength={4096}
+              {...off}
+              {...(onSave ? { onCommit: (v: string) => v && onSave(s.id, v) } : {})}
             />
           );
         const unit = s.type === 'number' && s.unit ? ` (${s.unit})` : '';
         return (
           <TextField
-            key={s.id}
+            key={`${s.id}:${String(s.value)}`}
             name={name}
             label={`${s.label}${unit}`}
             hint={[hint, s.type === 'number' ? `From ${s.min} to ${s.max}` : undefined, s.default !== undefined ? `Empty is its default, ${valueWords(s, s.default)}` : undefined].filter(Boolean).join('. ') || undefined}
@@ -44,6 +63,8 @@ export function SettingFields({ settings }: { settings: (AppSettingDecl & Partia
             maxLength={s.type === 'number' ? 20 : 500}
             defaultValue={s.set && s.value !== undefined ? String(s.value) : ''}
             validate={s.type === 'number' ? numberCheck(s) : undefined}
+            {...off}
+            {...(onSave ? { onCommit: (v: string) => onSave(s.id, v) } : {})}
           />
         );
       })}

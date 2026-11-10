@@ -10,7 +10,18 @@ import { withDeadline } from './deadline.js';
  */
 
 /** What an app can be granted. An app always may register itself; everything else it asks for in its manifest's `scopes`. */
-export const SCOPES = ['notifications:send', 'audit:write', 'models:use', 'events:publish', 'events:subscribe', 'people:read', 'inbox:write'] as const;
+export const SCOPES = [
+  'notifications:send',
+  'audit:write',
+  'models:use',
+  'events:publish',
+  'events:subscribe',
+  'people:read',
+  'inbox:write',
+  'knowledge:read',
+  'knowledge:act',
+  'knowledge:extract',
+] as const;
 export type Scope = (typeof SCOPES)[number];
 
 /** Each scope in words, for a refusal a person reads: "Notes isn’t allowed to send notifications (notifications:send)." */
@@ -22,6 +33,9 @@ export const SCOPE_WORDS: Record<Scope, string> = {
   'events:subscribe': 'read events',
   'people:read': 'look people up',
   'inbox:write': 'write to inboxes',
+  'knowledge:read': 'read the knowledge graph',
+  'knowledge:act': 'act on the knowledge graph',
+  'knowledge:extract': 'add what a source says to the knowledge graph',
 };
 /**
  * AUGUR's own admin APIs, as scopes of their own (ADR 0083): the registry grants them only to AUGUR's own

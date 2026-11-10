@@ -366,6 +366,12 @@ export const Overview = Type.Object(
         result: Type.Optional(Type.Object({ kind: Type.Enum(RESULT_KINDS), id: Type.String() }, { description: 'The result to mark looked at' })),
       }),
     ),
+    you: Type.Optional(
+      Type.Object(
+        { deploymentAdmin: Type.Boolean({ description: 'Whether the caller holds deployment-admin, which upgrading, going back and changing settings need (ADR 0022, 0084)' }) },
+        { description: 'What the caller may do here, for a frontend that is never told their roles (contract 3). Absent in what Backstage is sent' },
+      ),
+    ),
   },
   { $id: 'Overview' },
 );

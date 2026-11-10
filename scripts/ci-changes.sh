@@ -35,3 +35,5 @@ pr_only contract platform/frontends platform/packages platform/contract \
 pr_only docs docs ':(glob,exclude)docs/*.md' contracts 'platform/packages/app-tools/*.schema.json' infra/deploy/settings.schema.json
 # What goes into the images beyond the code build-test builds: Dockerfiles, deploy files, dependencies.
 pr_only images infra .dockerignore pnpm-lock.yaml pnpm-workspace.yaml package.json '*/package.json' '**/package.json' ':!docs'
+# The permissions service's model and its client, checked against OpenFGA itself.
+pr_only permissions platform/services/permissions ':!**/*.md'

@@ -16,6 +16,9 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   knowledge: 'the knowledge graph service',
   // Its schema is kg, not its name, so an app called kg would share it.
   kg: 'the knowledge graph service’s database schema',
+  permissions: 'the permissions service',
+  // OpenFGA, which holds the permissions service's relationships, is to keep its own database of this name.
+  openfga: 'the permissions service’s store',
   // The platform's own apps, which the shell serves itself.
   shell: 'the shell',
   home: 'Home',

@@ -1,5 +1,15 @@
 # @augur/models
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [d2ce7c9]
+- Updated dependencies [7e6b12b]
+- Updated dependencies [12064f5]
+- Updated dependencies [cc7aa74]
+  - @augur/service-kit@0.19.0
+
 ## 0.4.0
 
 ### Minor Changes

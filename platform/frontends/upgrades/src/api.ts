@@ -1,6 +1,6 @@
 import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { isRefusal, type Refusal } from './model/roles.js';
-import type { AppInstalls, AppJob, DesiredState, DesiredStateInput, Overview, PlatformUpdates, ReportingView } from './model/types.js';
+import type { AppInstalls, AppJob, Deliveries, PastedRelease, DesiredState, DesiredStateInput, Overview, PlatformStatus, PlatformUpdates, ReportingView } from './model/types.js';
 
 /** A call the platform turned down, with the refusal when it explained itself. */
 export class ApiError extends Error {
@@ -17,16 +17,19 @@ export class ApiError extends Error {
 
 const REGISTRY = '/api/registry/v1';
 
+/** Values for a release's settings, by id, given with its install. */
+export type GivenSettings = Record<string, string | number | boolean>;
+
 /**
- * The Upgrade Centre's calls, all to the registry through the gateway with `ctx.fetch`.
+ * Deployment's calls, through the gateway with `ctx.fetch`: the registry's, and two reads for Health and Backups.
  * Upgrades and settings never call the updater directly: the registry queues the work
  * and the updater picks it up, so a job keeps going when the page closes.
  */
 export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
-  const call = async <T>(method: string, path: string, body?: unknown): Promise<T> => {
+  const call = async <T>(method: string, path: string, body?: unknown, base = REGISTRY): Promise<T> => {
     let res: Response;
     try {
-      res = await ctx.fetch(`${REGISTRY}${path}`, {
+      res = await ctx.fetch(`${base}${path}`, {
         method,
         headers: body === undefined ? {} : { 'content-type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
@@ -57,12 +60,23 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     /** Every app's installs and removals, newest first, for the history. */
     appJobs: async () => (await call<{ jobs: AppJob[] }>('GET', '/app-runner/jobs')).jobs,
     checkApps: () => call<AppInstalls>('POST', '/app-runner/check'),
-    install: (app: string, version: string) => call<AppJob>('POST', '/app-runner/jobs', { action: 'install', app, version }),
+    /** Installs a release from the feed, with any settings it can't start without. Turned down with `sign_in_again` unless the password was just entered. */
+    install: (app: string, version: string, settings: GivenSettings = {}) =>
+      call<AppJob>('POST', '/app-runner/jobs', { action: 'install', app, version, ...(Object.keys(settings).length ? { settings } : {}) }),
+    /** Reads a release file from an address, for an app no feed lists. Needs the password just entered too. */
+    readRelease: (url: string) => call<PastedRelease>('POST', '/app-runner/releases/read', { url }),
+    /** Installs a release given whole, such as one read from an address. */
+    installRelease: (release: PastedRelease['release'], settings: GivenSettings = {}) =>
+      call<AppJob>('POST', '/app-runner/jobs', { action: 'install', release, ...(Object.keys(settings).length ? { settings } : {}) }),
     remove: (app: string) => call('POST', '/app-runner/jobs', { action: 'remove', app }),
     /** The apps this person can open, for this app's own name and icon and each app's icon. */
     manifest: () => call<AppManifestEntry[]>('GET', '/manifest'),
     /** Every unit, its desired state, what's next and what needs an admin: the same shape Backstage's card reads. */
     overview: () => call<Overview>('GET', '/platform/overview'),
+    /** Every part as the gateway last checked it, with backups and email. */
+    status: () => call<PlatformStatus>('GET', '/status', undefined, '/api/gateway/v1'),
+    /** How each app's part is taking the events pushed to it. */
+    deliveries: () => call<Deliveries>('GET', '/deliveries', undefined, '/api/events/v1'),
     /** Sets how a unit takes new releases (ADR 0020), and answers with the overview. */
     setDesired: (id: string, input: DesiredStateInput) => call<Overview>('PUT', unit(id), input),
     desiredHistory: async (id: string) => (await call<{ history: DesiredState[] }>('GET', `${unit(id)}/history`)).history,

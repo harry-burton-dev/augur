@@ -18,8 +18,10 @@ const SAME = new Map([['Problem.code', 'Problem.reason']]);
 /**
  * What draft 4 asks for that the seam leaves out on purpose. A floor's name is identity's: the shell already
  * has it (/me/workspaces), and the service, asking identity as itself, is never told a personal floor's.
+ * Retain takes either what was extracted or the text to extract from (PR 5), so neither half is required.
+ * Reflect is the service's own, on its schedule (PR 7): no person asks for a summary, so it isn't an action.
  */
-const ON_PURPOSE = new Set(['Floor.name']);
+const ON_PURPOSE = new Set(['Floor.name', 'RetainInput.entities', 'RetainInput.observations', 'ReflectInput.entity']);
 /** Draft 4 mirrors each action's input under components; here the catalogue is their only source. */
 const pascal = (name: string) => name.replace(/(^|-)([a-z])/g, (_, __, c: string) => c.toUpperCase());
 const inputs = () => CATALOGUE.flatMap((a) => ((a.input as { required?: string[] }).required ?? []).map((f) => `${pascal(a.name)}Input.${f}`));
@@ -31,7 +33,7 @@ const surface = (doc: Doc) => [
 ];
 
 describe('the seam against draft 4', () => {
-  it('lacks only what PR 3 adds', async () => {
+  it('lacks only the inputs of actions still to come', async () => {
     const app = await buildApp({ store: {} as never });
     await app.ready();
     const made = app.swagger() as unknown as Doc;
@@ -43,41 +45,8 @@ describe('the seam against draft 4', () => {
   });
 });
 
-/** The gap, as of PR 3a. Each line goes as PR 3b and 3c add it. */
-const GAP = [
-  // Paths
-  'get /floors/{floor}/entities/{id}/subgraph',
-  'get /floors/{floor}/entities/{id}/summary',
-  'get /floors/{floor}/queue',
-  'get /floors/{floor}/conflicts',
-  'post /floors/{floor}/query',
-  'post /floors/{floor}/recall',
-  'get /floors/{floor}/known-entities',
-  'get /floors/{floor}/lookup',
-  'get /floors/{floor}/export',
-  // Required fields of the objects those paths answer with
-  'Summary.entity', 'Summary.floor', 'Summary.state',
-  'Subgraph.nodes', 'Subgraph.edges',
-  'Queue.floor', 'Queue.items',
-  'ConflictList.floor', 'ConflictList.conflicts', 'ConflictList.possibleDuplicates',
-  'QueryResult.entities',
-  'RecallResult.hits',
-];
+/** The gap: empty since PR 3c. Every path draft 4 asks for is served; from here oasdiff guards the contract. */
+const GAP: string[] = [];
 
-/** The inputs of the actions that come with their own pull requests: publish to undo in PR 6, reflect in 7, adopt and dismiss in 8. */
-const LATER = [
-  'PublishInput.source', 'PublishInput.to',
-  'DisputeInput.belief', 'DisputeInput.reason',
-  'SettleInput.dispute', 'SettleInput.outcome',
-  'RetractInput.observation', 'RetractInput.why',
-  'RaiseInput.belief', 'RaiseInput.why',
-  'EndInput.belief', 'EndInput.at', 'EndInput.why',
-  'MergeInput.senior', 'MergeInput.junior', 'MergeInput.why',
-  'SplitInput.merge', 'SplitInput.why',
-  'RetireInput.entity', 'RetireInput.why',
-  'UndoInput.action', 'UndoInput.why',
-  'ForgetInput.observation',
-  'AdoptInput.term', 'AdoptInput.kind', 'AdoptInput.iri', 'AdoptInput.label',
-  'DismissInput.term', 'DismissInput.kind', 'DismissInput.why',
-  'ReflectInput.entity',
-];
+/** The inputs of actions still to come: none since PR 8 took adopt and dismiss. */
+const LATER: string[] = [];

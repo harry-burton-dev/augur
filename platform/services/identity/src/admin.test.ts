@@ -81,6 +81,20 @@ const setup = async () => {
   return { app, directory, audit, store, lifecycle, call };
 };
 
+describe.runIf(DATABASE_URL)('admin: shadow mode', () => {
+  it('asks the permissions service each admin check too, and still answers as it always has', async () => {
+    const asked: { site: string; caller: string; today: boolean }[] = [];
+    const shadow = { check: (site: string, caller: { id: string }, _q: unknown, today: boolean) => void asked.push({ site, caller: caller.id, today }), settled: async () => {} };
+    const app = await db.app({ directory: new MemoryDirectory(), store: db.store, shadow });
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/people', headers: admin })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/people', headers: editor })).statusCode).toBe(403);
+    expect(asked).toEqual([
+      { site: 'identity.people', caller: 'admin-1', today: true },
+      { site: 'identity.people', caller: 'u-2', today: false },
+    ]);
+  });
+});
+
 describe.runIf(DATABASE_URL)('admin: deployment admins', () => {
   const deployer = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'] });
 
@@ -392,6 +406,36 @@ describe.runIf(DATABASE_URL)('admin: departments', () => {
     expect((await call('GET', '/departments')).json()[0].members).toEqual([person.id]);
     expect((await call('DELETE', `/departments/${dept.id}/members/${person.id}`)).statusCode).toBe(204);
     expect((await call('GET', '/departments')).json()[0].members).toEqual([]);
+  });
+
+  it('keeps positions on a department, and hands one over so the next holder stands there at once (ADR 0089)', async () => {
+    const { call, audit } = await setup();
+    const dept = (await call('POST', '/departments', { name: 'Finance' })).json();
+    const jo = (await call('POST', '/people', { firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org' })).json().person;
+    const kim = (await call('POST', '/people', { firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org' })).json().person;
+    const made = await call('POST', `/departments/${dept.id}/positions`, { name: 'Head of finance', role: 'lead' });
+    expect(made.statusCode).toBe(201);
+    const head = made.json();
+    expect(head).toMatchObject({ department: dept.id, name: 'Head of finance', role: 'lead' });
+    expect(head.holder).toBeUndefined();
+    expect((await call('POST', `/departments/${dept.id}/positions`, { name: '', role: 'lead' })).statusCode).toBe(400);
+    expect((await call('POST', `/departments/${dept.id}/positions`, { name: 'Clerk', role: 'owner' })).statusCode).toBe(400);
+    expect((await call('POST', `/departments/${dept.id}/positions`, { name: 'Clerk', role: 'member' }, editor)).statusCode).toBe(403);
+
+    expect((await call('PUT', `/positions/${head.id}/holder`, { person: jo.id })).json()).toMatchObject({ holder: jo.id });
+    expect((await call('GET', '/departments')).json()[0].members).toEqual([jo.id]);
+    expect((await call('PUT', `/positions/${head.id}/holder`, { person: 'nobody' })).statusCode).toBe(404);
+    expect((await call('PUT', `/positions/${head.id}/holder`, { person: kim.id })).json()).toMatchObject({ holder: kim.id });
+    expect((await call('GET', '/departments')).json()[0].members).toEqual([kim.id]);
+    expect(audit.mock.calls.map(([e]) => e)).toContainEqual(expect.objectContaining({ action: 'position.handed-over', target: head.id, detail: { from: jo.id, to: kim.id } }));
+
+    expect((await call('PATCH', `/positions/${head.id}`, { name: 'Finance lead' })).json()).toMatchObject({ name: 'Finance lead', role: 'lead' });
+    expect((await call('GET', `/departments/${dept.id}/positions`)).json().map((p: { name: string }) => p.name)).toEqual(['Finance lead']);
+    expect((await call('PUT', `/positions/${head.id}/holder`, { person: null })).json().holder).toBeUndefined();
+    expect((await call('GET', '/departments')).json()[0].members).toEqual([]);
+    expect((await call('DELETE', `/positions/${head.id}`)).statusCode).toBe(204);
+    expect((await call('GET', `/departments/${dept.id}/positions`)).json()).toEqual([]);
+    expect((await call('PATCH', '/positions/gone', { name: 'X' })).statusCode).toBe(404);
   });
 });
 

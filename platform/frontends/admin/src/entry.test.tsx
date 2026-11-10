@@ -18,7 +18,7 @@ const alex: Person = { id: 'u-1', username: 'alex', firstName: 'Alex', lastName:
 const sam: Person = { id: 'u-2', username: 'sam', firstName: 'Sam', lastName: 'Okafor', email: 'sam@example.org', enabled: false, invited: false, roles: [], departments: [] };
 const catalogue: CatalogueApp[] = [
   { id: 'admin', name: 'Admin', route: '/admin', entry: '/apps/admin/entry.js', version: '0.11.0', sdk: '^1.0.0', platform: true, enabled: true, icon: 'admin' },
-  { id: 'upgrades', name: 'Upgrade Centre', route: '/upgrades', entry: '/apps/upgrades/entry.js', version: '0.1.0', sdk: '^1.9.0', platform: true, enabled: true, icon: 'download' },
+  { id: 'upgrades', name: 'Deployment', route: '/upgrades', entry: '/apps/upgrades/entry.js', version: '0.1.0', sdk: '^1.9.0', platform: true, enabled: true, icon: 'download' },
 ];
 
 type Answer = (method: string, url: string, body?: unknown) => Response | undefined;
@@ -47,8 +47,8 @@ const gateway = (more: Answer = () => undefined) => {
 };
 
 const own = { id: 'w-me', kind: 'personal' as const, name: 'You', slug: 'me', path: [], role: 'lead' as const };
-const ctx = (path: string): MountContext => ({
-  user: { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'] },
+const ctx = (path: string, roles = ['admin']): MountContext => ({
+  user: { id: 'u-1', name: 'Alex', departments: [], roles },
   getToken: async () => 'token',
   bus: createEventBus(),
   raise: vi.fn(),
@@ -66,10 +66,10 @@ const settle = async (rounds = 8) => {
   for (let i = 0; i < rounds; i++) await act(async () => new Promise((r) => setTimeout(r, 5)));
 };
 let mounts: HTMLElement[] = [];
-const open = async (path: string) => {
+const open = async (path: string, roles?: string[]) => {
   window.history.replaceState(null, '', `/admin${path}`);
   const el = document.body.appendChild(document.createElement('div'));
-  await act(async () => void (await admin.mount(el, ctx(path))));
+  await act(async () => void (await admin.mount(el, ctx(path, roles))));
   await settle();
   mounts.push(el);
   return el;
@@ -103,6 +103,13 @@ const type = async (input: HTMLInputElement, text: string) => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 };
+/** Leaves a field, which commits what was typed. */
+const leave = async (input: HTMLInputElement) => {
+  await act(async () => {
+    input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    input.dispatchEvent(new FocusEvent('blur'));
+  });
+};
 const title = (el: Element) => el.querySelector('.quill-page-head-title')?.textContent;
 
 describe('admin', () => {
@@ -119,7 +126,7 @@ describe('admin', () => {
     const { fetchImpl } = gateway();
     const el = await open('/people');
     expect(fetchImpl).toHaveBeenCalledWith('/api/identity/v1/admin/people', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer token' }) }));
-    expect(el.textContent).toContain('Upgrade Centre');
+    expect(el.textContent).toContain('Deployment');
     await press(button('Departments', el));
     expect(title(el)).toBe('Departments');
     expect(window.location.pathname).toBe('/admin/departments');
@@ -128,12 +135,12 @@ describe('admin', () => {
     expect(el.querySelector('.quill-page-head-title')).toBeNull();
   });
 
-  it('sends you to the Upgrade Centre through the shell', async () => {
+  it('sends you to Deployment through the shell', async () => {
     gateway();
     const el = await open('/people');
     const heard = vi.fn();
     window.addEventListener('popstate', heard);
-    await press(button('Upgrade Centre', el));
+    await press(button('Deployment', el));
     window.removeEventListener('popstate', heard);
     expect(window.location.pathname).toBe('/upgrades');
     expect(heard).toHaveBeenCalled();
@@ -359,7 +366,7 @@ describe('Organisation', () => {
     const el = await open('/organisation');
     expect(el.textContent).toContain('Only a deployment admin can change these.');
     expect(button('Change rules', el)).toBeFalsy();
-    expect(el.textContent).toContain('Admin roles only');
+    expect(el.textContent).toContain('Optional');
     expect(el.textContent).toContain('No logo yet');
   });
 
@@ -618,13 +625,22 @@ describe('Apps', () => {
             ? Response.json([])
             : undefined,
     );
-    const el = await open('/apps');
+    const el = await open('/apps', ['admin', 'deployment-admin']);
     await openRow(el, 'Library');
     expect(document.querySelector('.augur-dialog')!.textContent).toContain('Notify people');
     await press(button('Issue a new sign-in'));
     await press(button('Issue a new sign-in', document.querySelectorAll('.augur-dialog')[1] ?? document));
     expect(sent).toContainEqual({ method: 'POST', url: '/api/identity/v1/admin/apps/library/credential', body: undefined });
     expect(document.querySelector('[data-secret]')?.textContent).toBe('s3cret-value');
+  });
+
+  it('leaves issuing a sign-in to deployment admins, and says who can (ADR 0084)', async () => {
+    gateway((_m, url) => (url === '/api/registry/v1/apps' ? Response.json([library]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
+    const el = await open('/apps');
+    await openRow(el, 'Library');
+    const issue = button('Issue a new sign-in');
+    expect(shut(issue)).toBe(true);
+    expect(reasonOf(issue)).toContain('Only a deployment admin can do this.');
   });
 
   describe('installs from releases', () => {
@@ -637,63 +653,13 @@ describe('Apps', () => {
     };
     const runner: Answer = (method, url) => (url.startsWith('/api/registry/v1/app-runner/') && method === 'GET' ? Response.json(installs) : undefined);
 
-    it('lists what the feed offers, leaves updates waiting to the Upgrade Centre, and installs on confirming', async () => {
-      const { sent } = gateway(runner);
+    it('leaves installing new apps to Deployment, and sends you to its Apps', async () => {
+      gateway(runner);
       const el = await open('/apps');
-      expect(el.querySelector('[data-available]')?.textContent).toContain('Tasks 1.2.0');
-      expect(el.querySelector('[data-waiting]')).toBeNull();
-      await press(button('Install', el.querySelector('[data-available]')!));
-      expect(document.querySelector('.augur-dialog')!.textContent).toContain('Its web part (256Mi of memory, 500m CPU) keeps a database');
-      await press(button('Install', document.querySelector('.augur-dialog')!));
-      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', app: 'tasks', version: '1.2.0' } });
-    });
-
-    it('goes to enter the password again when the registry asks for it', async () => {
-      gateway((method, url, body) => (method === 'POST' ? Response.json({ error: 'sign_in_again', message: 'Enter your password again.' }, { status: 401 }) : runner(method, url, body)));
-      const assign = vi.fn();
-      const location = window.location;
-      const el = await open('/apps');
-      Object.defineProperty(window, 'location', { configurable: true, value: { ...location, pathname: '/admin/apps', search: '', assign } });
-      try {
-        await press(button('Install', el.querySelector('[data-available]')!));
-        await press(button('Install', document.querySelector('.augur-dialog')!));
-        expect(assign).toHaveBeenCalledWith(`/auth/again?return=${encodeURIComponent('/admin/apps?install=tasks%401.2.0')}`);
-        expect(document.querySelector('.augur-dialog')).not.toBeNull();
-      } finally {
-        Object.defineProperty(window, 'location', { configurable: true, value: location });
-      }
-    });
-
-    it('reads a pasted release file’s address, shows what it asks for, and installs it whole', async () => {
-      const address = 'https://example.org/maps/app-release.json';
-      const release = { schema: 'augur.app-release/v2', id: 'maps', version: '2.0.0', manifest: { name: 'Maps' } };
-      const { sent } = gateway((method, url, body) =>
-        url === '/api/registry/v1/app-runner/releases/read'
-          ? Response.json({
-              release,
-              refusals: [],
-              warnings: [],
-              asks: { scopes: [], resources: [], limits: { web: { memory: '256Mi', cpu: '500m' } }, floors: [], maxUpload: 10, settings: ['key'], canvas: false },
-              signer: { repository: 'o/maps', workflow: 'release.yml' },
-              review: { kinds: { web: 'service' }, settings: [{ id: 'key', label: 'Map key', type: 'secret', required: true }] },
-            })
-          : runner(method, url, body),
-      );
-      const el = await open('/apps');
-      await press(button('Install from an address', el));
-      await type(fieldNamed('Release file address'), address);
-      await press(button('Read it', document.querySelector('.augur-dialog')!));
-      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/releases/read', body: { url: address } });
-      const confirm = document.querySelector('.augur-dialog')!;
-      expect(confirm.textContent).toContain('Its web part (a service; 256Mi of memory, 500m CPU)');
-      expect(confirm.textContent).toContain('Map key (secret, required)');
-      expect(confirm.textContent).toContain('Signed by o/maps’s release.yml');
-      // A required secret with no default is asked for here: the app can't start without it.
-      await press(button('Install', confirm));
-      expect(sent.some((r) => r.url === '/api/registry/v1/app-runner/jobs')).toBe(false);
-      await type(fieldNamed('Map key'), 'k-1');
-      await press(button('Install', confirm));
-      expect(sent).toContainEqual({ method: 'POST', url: '/api/registry/v1/app-runner/jobs', body: { action: 'install', release, settings: { key: 'k-1' } } });
+      expect(el.textContent).not.toContain('Tasks 1.2.0');
+      expect(button('Install from an address', el)).toBeUndefined();
+      await press(button('Install apps in Deployment', el.querySelector('[data-installs]')!));
+      expect(window.location.pathname).toBe('/upgrades/apps');
     });
 
     it('says an app asks for the internet, off until a deployment admin allows it, and allows it on confirming', async () => {
@@ -746,28 +712,15 @@ describe('Apps', () => {
       const el = await open('/apps');
       await openRow(el, 'Notes');
       const said = document.querySelector('[data-settings]');
-      expect(said?.textContent).toContain('365 days (its default)');
-      expect(said?.textContent).toContain('Given');
-      await press(button('Change its settings', said!));
+      expect(said?.textContent).toContain('Empty is its default, 365 days');
+      expect(said?.textContent).toContain('Given already');
+      // Inline: no table row or dialog to open, saved as soon as the field is left.
+      expect(button('Change its settings', said!)).toBeUndefined();
       await type(fieldNamed('Keep archived notes for (days)'), '30');
-      await press(button('Save', document.querySelectorAll('.augur-dialog')[1] ?? document));
+      await leave(fieldNamed('Keep archived notes for (days)'));
       expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/settings/retentionDays', body: { value: 30 } });
       // The secret left empty stays as it was.
       expect(sent.some((r) => r.url.endsWith('/settings/exportKey'))).toBe(false);
-    });
-
-    it('says why a pasted release can’t install, and keeps its address', async () => {
-      gateway((method, url, body) =>
-        url === '/api/registry/v1/app-runner/releases/read'
-          ? Response.json({ release: { id: 'maps', version: '2.0.0' }, refusals: ['Its signature doesn’t match.'], warnings: [] })
-          : runner(method, url, body),
-      );
-      const el = await open('/apps');
-      await press(button('Install from an address', el));
-      await type(fieldNamed('Release file address'), 'https://example.org/app-release.json');
-      await press(button('Read it', document.querySelector('.augur-dialog')!));
-      expect(document.querySelector('.augur-dialog')!.textContent).toContain('It can’t install here: Its signature doesn’t match.');
-      expect(fieldNamed('Release file address').value).toBe('https://example.org/app-release.json');
     });
   });
 });
@@ -789,8 +742,8 @@ describe('the line', () => {
     const el = await open('/updates');
     expect(el.querySelector('[data-unit="augur"] [data-here]')?.textContent).toContain('0.13.2');
     expect(el.querySelector('[data-step="dev-preview"]')?.textContent).toContain('2 pull requests on Dev that Preview hasn’t got');
-    expect(button('Open the Upgrade Centre', el)).toBeDefined();
-    expect(shut(button('Open the Upgrade Centre', el))).toBe(false);
-    expect(reasonOf(button('Open the Upgrade Centre', el))).toBe('');
+    expect(button('Open Deployment', el)).toBeDefined();
+    expect(shut(button('Open Deployment', el))).toBe(false);
+    expect(reasonOf(button('Open Deployment', el))).toBe('');
   });
 });

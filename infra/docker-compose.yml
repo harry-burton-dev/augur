@@ -83,7 +83,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       IDENTITY_CLIENT_SECRET: platform-local-only-identity
       # The clients for the platform's services, with their secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,platform-knowledge=platform-local-only-knowledge
+      SERVICE_CLIENT_SECRETS: platform-registry=platform-local-only-registry,platform-events=platform-local-only-events,platform-models=platform-local-only-models,platform-knowledge=platform-local-only-knowledge,platform-permissions=platform-local-only-permissions
       PLATFORM_ADMIN_USER: alex
       REALM_LANGUAGES: ${REALM_LANGUAGES:-en}
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
@@ -136,6 +136,7 @@ services:
       # client, which keycloak-config makes and gives its rights.
       KEYCLOAK_URL: http://keycloak:8080
       SERVICE_CLIENT_SECRET: platform-local-only-identity
+      PERMISSIONS_URL: http://permissions:8087
       <<: *internal
     depends_on:
       postgres: { condition: service_started }
@@ -158,6 +159,7 @@ services:
       PORT: 8084
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-events
+      PERMISSIONS_URL: http://permissions:8087
       # Notice emails land in Mailpit (http://localhost:8025), never out.
       PLATFORM_URL: http://localhost:5173
       SMTP_HOST: mailpit
@@ -197,9 +199,28 @@ services:
       PORT: 8086
       DATABASE_URL: postgres://kg_app:platform-local-only-knowledge@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-knowledge
+      # Not connected to the models service in this phase of design (see infra/deploy/compose.yml).
+      MODELS_URL: ""
       <<: *internal
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
+
+  # Permissions (ADR 0085): OpenFGA holds the relationships, in memory here, so they go with the
+  # container; the permissions service copies floors and positions in from identity as each changes.
+  openfga:
+    image: openfga/openfga:v1.11.2
+    command: ["run"]
+    ports: ["127.0.0.1:8088:8080"]
+  permissions:
+    <<: *service
+    build: { context: .., dockerfile: infra/service.Dockerfile, args: { PACKAGE: "@augur/permissions" } }
+    environment:
+      PORT: 8087
+      OPENFGA_URL: http://openfga:8080
+      PERMISSIONS_STORE: augur
+      SERVICE_CLIENT_SECRET: platform-local-only-permissions
+      <<: *internal
+    depends_on: [openfga, identity]
 
 volumes:
   pgdata:

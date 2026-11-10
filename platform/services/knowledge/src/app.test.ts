@@ -49,7 +49,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
         kind: 'property',
         value: { v: 1200, unit: 'TEU' },
         state: 'memory',
-        evidence: { observations: 1, sources: 1, unseen: 0, byFloor: [{ floor: own.alice, floorKind: 'personal', observations: 1 }] },
+        evidence: { observations: 1, sources: 1, unseen: 0, byFloor: [{ floor: own.alice, floorKind: 'personal', observations: 1 }], seen: effects.observations },
       }),
     ]);
   });
@@ -75,7 +75,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     const noKey = await app.inject({ method: 'POST', url: '/v1/actions/retain', headers: as('alice', own.alice), payload: report('R4') });
     expect(noKey.json()).toMatchObject({ status: 400, reason: 'idempotency_key_required' });
     const unknown = await act('alice', own.alice, 'teleport', {});
-    expect(unknown.json()).toMatchObject({ status: 404, reason: 'unknown_action', problems: ['retain', 'hold', 'keep', 'confirm-faithful'] });
+    expect(unknown.json()).toMatchObject({ status: 404, reason: 'unknown_action', problems: ['retain', 'hold', 'keep', 'confirm-faithful', 'publish', 'dispute', 'settle', 'retract', 'raise', 'end', 'forget', 'merge', 'split', 'retire', 'undo', 'adopt', 'dismiss'] });
     const bad = await act('alice', own.alice, 'retain', { ...report('R4'), confidence: 0.9 });
     expect(bad.json()).toMatchObject({ status: 422, reason: 'invalid_input', problems: expect.arrayContaining([expect.stringMatching(/additional properties/)]) });
     const dangling = await act('alice', own.alice, 'retain', { ...report('R4'), observations: [{ ...report('R4').observations[0], subject: 'nobody' }] });
@@ -137,16 +137,34 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     expect((await get('bob', '/v1/floors')).json().floors.map((f: { id: string }) => f.id)).toEqual([ORG, 'team-b']);
   });
 
-  it('refuses an app for now, and anyone not signed in', async () => {
-    expect((await app.inject({ method: 'POST', url: '/v1/actions/retain', headers: { ...as('alice', own.alice, { app: 'notes' }), 'idempotency-key': key() }, payload: report('R11') })).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
+  it('holds an app acting for you to its scopes, and refuses anyone not signed in', async () => {
+    const forApp = (scopes: string[]) => as('alice', 'team-a', { app: 'notes', scopes });
+    const take = (action: string, scopes: string[], payload: object) => app.inject({ method: 'POST', url: `/v1/actions/${action}`, headers: { ...forApp(scopes), 'idempotency-key': key() }, payload });
+
+    // Without knowledge:read an app reads nothing, and says who can grant it.
+    const unread = await app.inject({ url: '/v1/floors', headers: forApp([]) });
+    expect(unread.json()).toMatchObject({ status: 403, reason: 'not_allowed', whoCanChange: expect.stringContaining('admin') });
+    expect((await app.inject({ url: '/v1/ontology', headers: forApp([]) })).statusCode).toBe(403);
+    expect((await app.inject({ url: '/v1/floors', headers: forApp(['knowledge:read']) })).statusCode).toBe(200);
+
+    // An action needs its own scope: retain is knowledge:extract, which knowledge:act doesn't give.
+    expect((await take('retain', ['knowledge:read', 'knowledge:act'], report('R11'))).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
+    const retained = await take('retain', ['knowledge:extract'], report('R11'));
+    expect(retained.statusCode).toBe(200);
+    const [observation] = retained.json().effects.observations;
+
+    // Holding is never an app's to do for you, whatever it is granted: you hold, in AUGUR.
+    const held = await take('hold', ['knowledge:act'], { observations: [observation] });
+    expect(held.json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('isn’t granted to apps') });
+
     expect((await app.inject({ method: 'GET', url: '/v1/floors' })).statusCode).toBe(401);
   });
 
   it('serves its catalogue and versions', async () => {
     const catalogue = (await app.inject({ url: '/v1/actions' })).json();
-    expect(catalogue.actions.map((a: { name: string }) => a.name)).toEqual(['retain', 'hold', 'keep', 'confirm-faithful']);
-    expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: expect.arrayContaining(['source', 'entities', 'observations']) });
-    expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '1' }, speaks: { knowledge: [1] } });
+    expect(catalogue.actions.map((a: { name: string }) => a.name)).toEqual(['retain', 'hold', 'keep', 'confirm-faithful', 'publish', 'dispute', 'settle', 'retract', 'raise', 'end', 'forget', 'merge', 'split', 'retire', 'undo', 'adopt', 'dismiss']);
+    expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: ['source'], properties: { text: expect.any(Object) } });
+    expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '8', classes: expect.arrayContaining(['kg:Ship']) }, speaks: { knowledge: [1] } });
   });
 
   it('sends what the outbox holds as AUGUR’s own events, ids only, and a personal floor’s with nothing but the floor', async () => {

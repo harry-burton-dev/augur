@@ -119,6 +119,9 @@ The events service publishes these as identity and the registry record the chang
 | `platform.person.deleted` | `{ person }` | A leaver's account is deleted (ADR 0072), after the organisation's leaver retention or when a deployment admin deletes it at once. Activity no longer holds their personal values and identity has forgotten them. Delete or anonymise anything personal you still keep about them; their id is all that's left |
 | `platform.team.created`, `platform.team.renamed` | `{ team, name }` | A team is made or renamed |
 | `platform.team.member-added`, `platform.team.member-removed` | `{ team, person }` | Someone joins or leaves a team, however an admin did it, on that team's floor |
+| `platform.position.created` | `{ position, team }` | An admin adds a position, a job such as Harbour master, to a team (ADR 0089) |
+| `platform.position.changed`, `platform.position.retired` | `{ position }` | A position is renamed, made lead or member, or taken away; whoever held one taken away stops holding it |
+| `platform.position.handed-over` | `{ position, from?, to? }` | A position changes holder. The next holder has what the position has at once; `from` or `to` is missing when it was or is now vacant |
 | `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on, everywhere or on one floor (the event's floor), or removes it |
 | `platform.app.blocked`, `platform.app.rule-cleared` | `{ app }` | An admin blocks an app on a floor and every floor below it, or clears a floor's rule so it follows the floor above |
 | `platform.inbox.taken`, `.released`, `.declined`, `.done` | `{ item, app, key, by }` | Someone takes a team's inbox item, gives it back, declines it or marks it done ([The Inbox](inbox.md)) |
@@ -130,6 +133,7 @@ The knowledge graph service publishes its own as each action commits, from its o
 | --- | --- | --- |
 | `platform.knowledge.entity.created` | `{ entity, floor }` | An entity is first named, on that floor |
 | `platform.knowledge.observation.retained` | `{ observation, floor }` | A claim read in a source is kept |
+| `platform.knowledge.ontology.changed` | `{ version }` | An ontology admin adopts a new class or predicate. The ontology is the deployment's, so it is on no floor |
 
 Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own profile in their account (`PATCH /v1/me/profile`, docs/account.md) aren't sent yet.
 

@@ -113,6 +113,36 @@ export interface PlatformUpdates {
   feedTrust?: FeedTrust;
   /** Whether a halted release may be installed here for a test (ADR 0051), and why not. Absent from an older registry. */
   haltedInstall?: HaltedInstall;
+  /** Each unit on its way from main to stable, from the pipeline feed, with what this server runs of it. */
+  line?: PipelineLine;
+}
+
+/** A pipeline stage: dev is main, preview each unit's newest release, production its newest stable one. */
+export type Stage = 'dev' | 'preview' | 'production';
+export interface PipelinePull {
+  number: number;
+  title: string;
+  url: string;
+}
+
+/** The pipeline feed (docs/release-channels.md, The pipeline feed), as the registry passes it on. */
+export interface PipelineLine {
+  feed: 'on' | 'off';
+  checkedAt?: string;
+  problem?: string;
+  generatedAt?: string;
+  repository?: string;
+  units: {
+    id: string;
+    name: string;
+    versions: Record<Stage, string | null>;
+    devBuild?: { version: string; released?: string };
+    waiting: string[];
+    previews: { pr: number; version: string }[];
+    running?: string;
+  }[];
+  steps: { from: Stage; to: Stage; merged: number; pulls: { number: number; title: string; mergedAt?: string }[] }[];
+  pulls?: { versionPackages?: PipelinePull; promoteToPreview?: PipelinePull; promoteToProduction: (PipelinePull & { unit: string; version: string })[] };
 }
 
 /** Only dev and preview servers install a halted release, on request, to test going back (ADR 0051). */
@@ -189,6 +219,8 @@ export interface Overview {
   needsYou: { kind: 'halted' | 'failed' | 'went-back' | 'first-upgrade' | 'after-watch'; unit: string; message: string; result?: { kind: 'upgrade' | 'app-job'; id: string } }[];
   /** Whether this deployment tells Backstage what it runs (ADR 0019), and why. Absent from an older registry. */
   reporting?: { mode: ReportingMode; why: string };
+  /** What the caller may do here, for a frontend that is never told their roles (contract 3). */
+  you?: { deploymentAdmin: boolean };
 }
 
 export type ReportingMode = 'send' | 'file' | 'off';
@@ -232,6 +264,41 @@ export interface InstalledApp {
   older?: { version: string; channel: Channel }[];
 }
 
+/** What a contract 3 release asks an admin to agree to (spec 9.4). */
+export interface AppAsks {
+  scopes: string[];
+  /** Each resource a part asks for, with its params. */
+  resources: { part: string; type: string; params?: Record<string, unknown> }[];
+  /** Each part's limits, by part name. */
+  limits: Record<string, { memory: string; cpu: string }>;
+  floors: string[];
+  maxUpload: number;
+  /** The ids of the settings it offers. */
+  settings: string[];
+  canvas?: boolean;
+}
+
+/** A setting an app offers admins (spec 5.2), as its manifest declares it. */
+export interface AppSettingDecl {
+  id: string;
+  label: string;
+  /** string, number, boolean, enum or secret. */
+  type: string;
+  required: boolean;
+  detail?: string;
+  unit?: string;
+  min?: number;
+  max?: number;
+  options?: string[];
+  default?: string | number | boolean;
+}
+
+/** What the review shows beyond the asks: each part's kind, and each setting. */
+export interface AppReview {
+  kinds: Record<string, string>;
+  settings: AppSettingDecl[];
+}
+
 /** An app the feed offers that isn't installed. */
 export interface AvailableApp {
   app: string;
@@ -240,10 +307,26 @@ export interface AvailableApp {
   version: string;
   channel: Channel;
   notesUrl?: string;
-  signer: { repository: string; workflow: string };
-  asks: { scopes: string[]; storage: { database?: boolean; bucket?: boolean }; maxUpload: number };
+  /** The feed it is listed in, one of APP_FEEDS. */
+  feed?: string;
+  /** Missing for a release that can't install here. */
+  signer?: { repository: string; workflow: string };
+  asks?: AppAsks;
+  review?: AppReview;
+  /** Why it can't install in this AUGUR. */
   problem?: string;
   job?: AppJob;
+}
+
+/** A release file read from an address an admin pasted, checked as the feed's are. */
+export interface PastedRelease {
+  release: { id: string; version: string; manifest?: { name?: string } } & Record<string, unknown>;
+  /** Why it can't install here; empty when it can. */
+  refusals: string[];
+  warnings: string[];
+  asks?: AppAsks;
+  signer?: { repository: string; workflow: string };
+  review?: AppReview;
 }
 
 /** GET /api/registry/v1/app-runner/apps */
@@ -256,6 +339,76 @@ export interface AppInstalls {
   ring?: Ring;
   previewsAllowed?: boolean;
   channelNote?: string;
+  /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS). */
+  dataGraceDays?: number;
+  /** The deployment's default apps (DEFAULT_APPS) and where each stands: a waiting one says why. */
+  defaultApps?: { app: string; state: 'installed' | 'asked' | 'waiting'; problem?: string }[];
+  /** Apps removed from the server whose data is still kept, and until when. */
+  removed?: { app: string; name: string; removedAt: string; deleteAt: string; failures?: number; problem?: string }[];
   installed: InstalledApp[];
   available: AvailableApp[];
+}
+
+/** One part of AUGUR as the gateway last checked it (the gateway's GET /status). */
+export interface ComponentStatus {
+  name: string;
+  kind: 'gateway' | 'service' | 'app' | 'sign-in';
+  state: 'up' | 'slow' | 'down' | 'checking';
+  version?: string;
+  api?: string;
+  latencyMs?: number;
+  checkedAt?: string;
+  seenAt?: string;
+  problem?: string;
+}
+
+/** Whether backups can be relied on, from what the backup container last wrote. */
+export interface BackupStatus {
+  state: 'ok' | 'attention';
+  problem?: string;
+  lastBackup?: { at: string; ok: boolean; file?: string; bytes?: number; problem?: string };
+  /** The last copy off the server (ADR 0060); absent while backups stay on the server only. */
+  offsite?: { at: string; ok: boolean; snapshot?: string; keepDays?: number; problem?: string };
+  /** Restoring to a point in time (ADR 0064); absent where Postgres doesn't archive yet. */
+  pointInTime?: { at: string; ok: boolean; bases?: number; earliest?: string; archivedAt?: string; copiedAt?: string; lastTest?: { at: string; ok: boolean }; problem?: string };
+  lastRestoreTest?: { at: string; ok: boolean; from?: 'local' | 'offsite'; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
+}
+
+/** Whether AUGUR can send email through the organisation's relay. */
+export interface EmailStatus {
+  state: 'off' | 'ok' | 'attention';
+  problem?: string;
+  relay?: string;
+  from?: string;
+  checkedAt?: string;
+}
+
+/** The gateway's GET /status: every part, backups, email and whether AUGUR is open to the internet. */
+export interface PlatformStatus {
+  components: ComponentStatus[];
+  backups?: BackupStatus;
+  publicAccess?: { open: boolean; until?: string };
+  email?: EmailStatus;
+}
+
+/** How one app's part is taking the events pushed to it (the events service's GET /deliveries). */
+export interface EventDelivery {
+  app: string;
+  failures: number;
+  nextAt: string | null;
+  lastError: string | null;
+  failingSince: string | null;
+  deliveredAt: string | null;
+  dropped: number;
+  droppedAt: string | null;
+  state: 'ok' | 'retrying' | 'stalled';
+  words: string;
+}
+
+/** Whether events are pushed to apps' parts at all, and when not, why and who can change that. */
+export type EventPushing = { on: true; problem?: string } | { on: false; why: string; whoCanChange: string };
+
+export interface Deliveries {
+  deliveries: EventDelivery[];
+  pushing: EventPushing;
 }

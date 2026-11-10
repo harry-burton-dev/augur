@@ -25,7 +25,7 @@ pnpm seed --check                          # checks the data file and says what 
 
 `--data <file>` seeds another cast, `--ledger <file>` keeps the ledger elsewhere, and `--issuer <realm address>` names the sign-in realm when it isn't at `<url>/sso/realms/platform`. `AUGUR_TOKEN` skips the sign-in with an admin's access token, for a script that already holds one.
 
-Running it again adds only what is missing: floors are matched by name under the same parent, people by username, documents by title in their library, and entities by kind and label. People who already exist keep their floors and roles.
+Running it again adds only what is missing: floors are matched by name under the same parent, people by username, documents by title in their collection, and entities by kind and label. People who already exist keep their floors and roles.
 
 ## The cast
 
@@ -34,7 +34,7 @@ The cast is a data file, `scripts/seed/cast.json` by default. Nothing in the cod
 - `synthetic`: how everything is marked. `emailDomain` (under `.invalid` unless `emailDomainDelivers` is true, so mail to sample people never reaches anyone), `usernamePrefix` and `note`, the line added to the end of every document and entity description.
 - `floors`: departments, each with `teams` inside (up to five levels).
 - `people`: each with a `key` (their username is the prefix and the key), names, the `floors` they are on, and `roles`. Sample people never get `deployment-admin`.
-- `documents`: per floor (`org` is the organisation's), the documents to add to that floor's library, or the one named `library`.
+- `documents`: per floor (`org` is the organisation's), the documents to add to the first collection in that floor's library, or to the collection named `library`.
 - `entities`: Data Atlas entities by ontology kind (`type`), with a label, aliases and description, on the organisation's floor or the one named `floor`.
 
 `--check` lists every mistake in the file at once.
@@ -43,7 +43,7 @@ The cast is a data file, `scripts/seed/cast.json` by default. Nothing in the cod
 
 The seed acts as the admin who runs it, so it only adds where that admin can:
 
-- **Documents go into a library that is already on their floor.** Making a library is for the floor's leads, so where there is none, the seed says so and moves on.
+- **Documents go into a collection that is already in their floor's library.** Making a collection is for the floor's leads, so where there is none, the seed says so and moves on.
 - **Documents and entities on a floor the admin isn't on are left out**, with the reason. Sample people add their own once the run suite can sign them in (Linear PER-296).
 
 ## The ledger

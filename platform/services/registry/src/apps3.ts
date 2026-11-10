@@ -165,3 +165,17 @@ export const Served3 = Type.Object(
   },
   { additionalProperties: true, description: 'An app on contract 3: its manifest in force, filled in with maxUpload, previewsOn and its contract major' },
 );
+
+/**
+ * One of AUGUR's own apps as the shell's manifest gives it: its contract 3 manifest, when it has one, filled in as a
+ * feed app's is, with what only AUGUR's own apps carry (their kind, and resting the floor gauge); else its entry.
+ */
+export const ownServed = (entry: AppEntry, manifest: AppManifest3 | undefined, filled: { maxUpload: number; previewsOn?: string[] }) => {
+  if (!manifest) return filled.previewsOn?.length ? { ...entry, previewsOn: filled.previewsOn } : entry;
+  return {
+    ...served3(manifest, filled),
+    ...(entry.requiredRole ? { requiredRole: entry.requiredRole } : {}),
+    category: entry.category ?? 'platform',
+    ...(entry.sameOnEveryFloor ? { sameOnEveryFloor: true } : {}),
+  };
+};

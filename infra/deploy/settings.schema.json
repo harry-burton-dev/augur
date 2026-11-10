@@ -15,6 +15,7 @@
     "REGISTRY_DATABASE_PASSWORD",
     "EVENTS_DATABASE_PASSWORD",
     "MODELS_DATABASE_PASSWORD",
+    "PERMISSIONS_DATABASE_PASSWORD",
     "KNOWLEDGE_DATABASE_PASSWORD",
     "KEYCLOAK_DATABASE_PASSWORD",
     "GARAGE_RPC_SECRET",
@@ -22,7 +23,9 @@
     "IDENTITY_CLIENT_SECRET",
     "REGISTRY_CLIENT_SECRET",
     "EVENTS_CLIENT_SECRET",
+    "OPENFGA_TOKEN",
     "KNOWLEDGE_CLIENT_SECRET",
+    "PERMISSIONS_CLIENT_SECRET",
     "PLATFORM_ADMIN_USER",
     "PLATFORM_ADMIN_PASSWORD",
     "PLATFORM_ADMIN_EMAIL",
@@ -198,6 +201,18 @@
       "x-services": [
         "models",
         "storage"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "PERMISSIONS_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The permissions service's own database login (platform_permissions), which the storage job makes and OpenFGA keeps its tables under.",
+      "x-services": [
+        "storage",
+        "openfga"
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
@@ -408,9 +423,57 @@
       ],
       "x-docs": "docs/deploy.md#first-start"
     },
+    "PERMISSIONS_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The permissions service's own sign-in, to copy floors, positions and who holds them from identity.",
+      "x-services": [
+        "keycloak-config",
+        "permissions"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
     "KNOWLEDGE_PAGE_LIMIT": {
       "type": "string",
       "description": "The most one page of a knowledge graph read gives, whatever the caller asks for.",
+      "default": "100",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_SUBGRAPH_DEPTH": {
+      "type": "string",
+      "description": "The most hops a knowledge graph subgraph read goes from its entity, whatever the caller asks for.",
+      "default": "3",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS": {
+      "type": "string",
+      "description": "How long an entity's beliefs must be quiet before the knowledge graph writes its summaries, in seconds.",
+      "default": "600",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_DAILY_BUDGET": {
+      "type": "string",
+      "description": "The most knowledge graph summaries written a day (UTC) for the whole deployment. Keep it under the models service's daily limit, with room for extraction.",
+      "default": "400",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/deploy.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_FLOOR_BUDGET": {
+      "type": "string",
+      "description": "The most knowledge graph summaries written a day (UTC) on any one floor.",
       "default": "100",
       "x-services": [
         "knowledge"
@@ -1212,11 +1275,21 @@
         "registry",
         "events",
         "models",
-        "knowledge"
+        "knowledge",
+        "permissions"
       ],
       "x-via": {
         "gateway": "default"
       }
+    },
+    "KNOWLEDGE_LEDGER_DIR": {
+      "type": "string",
+      "description": "Where the knowledge graph writes each forget, on a volume of its own outside Postgres, so a restore forgets it again.",
+      "x-internal": "compose",
+      "x-services": [
+        "knowledge",
+        "knowledge-migrate"
+      ]
     },
     "DATABASE_URL": {
       "type": "string",
@@ -1241,7 +1314,8 @@
         "gateway",
         "registry",
         "events",
-        "knowledge"
+        "knowledge",
+        "permissions"
       ],
       "x-via": {
         "updater": "default"
@@ -1268,7 +1342,8 @@
         "identity",
         "registry",
         "models",
-        "knowledge"
+        "knowledge",
+        "permissions"
       ]
     },
     "MODELS_URL": {
@@ -1276,7 +1351,18 @@
       "description": "Where the model gateway is.",
       "x-internal": "compose",
       "x-services": [
-        "gateway"
+        "gateway",
+        "knowledge"
+      ]
+    },
+    "PERMISSIONS_URL": {
+      "type": "string",
+      "description": "Where the permissions service is: for who settles and raises on each floor, and asked beside other services' admin and lead checks to compare answers (shadow mode).",
+      "x-internal": "compose",
+      "x-services": [
+        "events",
+        "identity",
+        "knowledge"
       ]
     },
     "KNOWLEDGE_URL": {
@@ -1284,7 +1370,8 @@
       "description": "Where the knowledge graph service is.",
       "x-internal": "compose",
       "x-services": [
-        "gateway"
+        "gateway",
+        "registry"
       ]
     },
     "GATEWAY_URL": {
@@ -1376,7 +1463,8 @@
         "registry",
         "events",
         "models",
-        "updater"
+        "updater",
+        "permissions"
       ]
     },
     "SERVICE_CLIENT_SECRETS": {
@@ -1836,6 +1924,44 @@
       "x-via": {
         "updater": ".env"
       }
+    },
+    "OPENFGA_URL": {
+      "type": "string",
+      "description": "Where the permissions service reaches OpenFGA, which holds the relationships it answers from (ADR 0085).",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
+      }
+    },
+    "OPENFGA_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The key the permissions service sends OpenFGA, which OpenFGA needs on every call (ADR 0085).",
+      "x-services": [
+        "openfga",
+        "permissions"
+      ],
+      "x-docs": "docs/deploy.md#first-start"
+    },
+    "PERMISSIONS_STORE": {
+      "type": "string",
+      "description": "The OpenFGA store this deployment's permissions are kept in.",
+      "default": "augur",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
+      }
+    },
+    "PERMISSIONS_COPY_SECONDS": {
+      "type": "string",
+      "description": "How often the permissions service copies floors, positions and who holds them whole from identity, in seconds, to put right anything an event missed. Each change identity announces is copied as it happens.",
+      "default": "300",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/deploy.md#whats-in-it"
     }
   }
 }

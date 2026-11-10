@@ -5,6 +5,13 @@ import { sql as baseOntology } from './migrations/002-base-ontology.ts';
 import { sql as fence } from './migrations/003-fence.ts';
 import { sql as service } from './migrations/004-service.ts';
 import { sql as reads } from './migrations/005-reads.ts';
+import { sql as queries } from './migrations/006-queries.ts';
+import { sql as undo } from './migrations/007-undo.ts';
+import { sql as forgetAgain } from './migrations/008-forget-again.ts';
+import { sql as reflect } from './migrations/009-reflect.ts';
+import { sql as ontologyAdmin } from './migrations/010-ontology-admin.ts';
+import { sql as firstAdoptPass } from './migrations/011-first-adopt-pass.ts';
+import { sql as floorRoles } from './migrations/012-floor-roles-from-permissions.ts';
 
 /** The knowledge service's schema in the platform database. */
 export const SCHEMA = 'kg';
@@ -16,7 +23,9 @@ export const APP_LOGIN = 'kg_app';
  * The knowledge graph's schema, in order. Once a migration ships it never changes (`pnpm check:migrations`).
  * 001 and 002 are the store spec draft 4 proved; 003 hardens its floor fence (see fence.test.ts); 004 is what
  * the service needs: standing mirrored from identity, answers kept per Idempotency-Key, and the outbox; 005
- * is what the object reads need: your own action records, and the kind of floor of what isn't in sight.
+ * is what the object reads need: your own action records, and the kind of floor of what isn't in sight; 006
+ * is what the query reads need: your roles, the disputes waiting on you, and whether a belief stood then; 007
+ * is undo and retire.
  */
 export const migrations: Migration[] = [
   { id: '001-store', sql: store },
@@ -24,6 +33,13 @@ export const migrations: Migration[] = [
   { id: '003-fence', sql: fence },
   { id: '004-service', sql: service },
   { id: '005-reads', sql: reads },
+  { id: '006-queries', sql: queries },
+  { id: '007-undo', sql: undo },
+  { id: '008-forget-again', sql: forgetAgain },
+  { id: '009-reflect', sql: reflect },
+  { id: '010-ontology-admin', sql: ontologyAdmin },
+  { id: '011-first-adopt-pass', sql: firstAdoptPass },
+  { id: '012-floor-roles-from-permissions', sql: floorRoles },
 ];
 
 /**

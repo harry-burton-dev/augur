@@ -48,6 +48,20 @@ export interface FrameRoot {
 /** The width of the one main column of work (PDR-014): reading width, wide, or the whole pane. */
 export type FrameWidth = 'read' | 'wide' | 'full';
 
+/**
+ * How the shell lays out the app's pane. Each is the shell's, drawn from the kit's tokens, with the app
+ * bar and the page head in every one: `focus`, one main column and no About panel; `aside`, the main
+ * column and the About panel beside it; `split`, a list column beside its detail; `canvas`, one column
+ * edge to edge, for a map, a graph or the full canvas.
+ */
+export type FrameLayout = 'focus' | 'aside' | 'split' | 'canvas';
+
+/** How tightly the app's pane is spaced: the app's default, which the person's own setting overrides. */
+export type FrameDensity = 'comfortable' | 'compact';
+
+/** How far the app's screen sits in from the pane's edges: the standard inset, or flush for a canvas or media. The page head keeps its inset either way. */
+export type FrameInset = 'standard' | 'flush';
+
 /** An action the app offers in its pane's heading; `command` names one of the manifest's `contributes.commands`. */
 export interface FrameAction {
   command: string;
@@ -65,6 +79,12 @@ export interface FrameState {
   /** The pane is working on something; the host shows it without the app drawing a spinner. */
   busy?: boolean;
   width?: FrameWidth;
+  /** The pane's layout for this page; the manifest's `contributes.frame.layout`, else `aside` with About sections and `focus` without, until set. */
+  layout?: FrameLayout;
+  /** The pane's spacing for this page; the person's own density setting still wins. */
+  density?: FrameDensity;
+  /** Whether the screen sits in from the pane's edges or against them. */
+  inset?: FrameInset;
 }
 
 /** Something sitting under a place that `fills` (spec 6.3), such as one notebook under Notebooks. */
@@ -84,7 +104,7 @@ export interface Frame {
   about(id: string): FrameRoot;
   /** The Home card, for an app that declares `contributes.card`. */
   card: FrameRoot;
-  /** Sets the pane's title, actions, busy state and width; fields left out keep their value. */
+  /** Sets the pane's title, actions, busy state, width and layout; fields left out keep their value. */
   set(state: FrameState): void;
   /** What sits under a declared place that `fills`. The shell caps the list and shows "and n more". */
   under(placeId: string, items: PlaceItem[]): void;
@@ -98,7 +118,7 @@ export interface Files {
   upload(blob: Blob, path: string): Promise<Response>;
   /** Fetches the bytes through the host, or asks the host to save them for the person. */
   download(path: string, options?: { save?: boolean }): Promise<Blob | undefined>;
-  /** Files dropped on the app's pane from the desktop land in the host, which forwards them here. */
+  /** Files dropped on the app's pane from the desktop, or chosen with a `quill-file-button`, land in the host, which forwards them here. */
   onDrop(handler: (files: File[]) => void | Promise<void>): () => void;
 }
 

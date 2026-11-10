@@ -31,14 +31,22 @@
     "lifecycle_004_federated": "d76252f0a2c47b37",
     "organisation_003_logo_notice_languages_security": "88eeebf20abb75c5",
     "lifecycle_005_deletion": "6c2ec71d580ce4ba",
-    "lifecycle_006_carry_on": "ec8894dd106095e1"
+    "lifecycle_006_carry_on": "ec8894dd106095e1",
+    "workspaces_004_positions": "1299eb3ff5e1158e"
   },
   "@augur/knowledge": {
     "001-store": "0fc93833d19a7f62",
     "002-base-ontology": "6052dcdd48e8f357",
     "003-fence": "1b19496f39cc6e1b",
     "004-service": "d67cc8c0b66c8096",
-    "005-reads": "7ddd4d1cf38f8ebd"
+    "005-reads": "7ddd4d1cf38f8ebd",
+    "006-queries": "6735a67e837c16c0",
+    "007-undo": "3b92b48990a4f834",
+    "008-forget-again": "1007d1762e306373",
+    "009-reflect": "f7a64ac45ad5331a",
+    "010-ontology-admin": "e74f984f96414d05",
+    "011-first-adopt-pass": "e9253f358b9360fd",
+    "012-floor-roles-from-permissions": "da163d565d68a352"
   },
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"

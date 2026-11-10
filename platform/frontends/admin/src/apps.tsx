@@ -1,10 +1,13 @@
 import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TagPicker, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, EventDelivery, EventPushing, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
-import { InstallsSection, RunnerControls, useInstalls, type Installs } from './app-runner.js';
+import { RunnerControls, useInstalls, type Installs } from './app-runner.js';
 import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, inboxWords, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
 import { featureHint, featureModeChoices } from './installs.js';
 import { day, Line, Page, Problem, Quiet, Secret } from './parts.js';
+import { DEPLOYMENT_ADMIN } from './organisation.js';
+
+const NEEDS_DEPLOYMENT_ADMIN = 'Only a deployment admin can do this. Ask someone who holds the deployment-admin role (Admin, People).';
 
 const columns: TableColumn[] = [
   { key: 'name', label: 'App', sortable: true },
@@ -16,7 +19,9 @@ const columns: TableColumn[] = [
 ];
 
 /** Every app in the catalogue with its version, a switch to stop offering one, and its kept versions to go back to. */
-export function Apps({ api, openUpgrades, upgradesName }: { api: AdminApi; openUpgrades: () => void; upgradesName: string }) {
+export function Apps({ api, openUpgrades, upgradesName, roles = [] }: { api: AdminApi; openUpgrades: (to?: string) => void; upgradesName: string; roles?: string[] }) {
+  // Choosing a version, issuing a sign-in and choosing where apps load from need deployment-admin (ADR 0084).
+  const deploys = roles.includes(DEPLOYMENT_ADMIN);
   const [apps, setApps] = useState<CatalogueApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -53,14 +58,18 @@ export function Apps({ api, openUpgrades, upgradesName }: { api: AdminApi; openU
   return (
     <Page
       heading="Apps"
-      summary="Every app in the catalogue. Turn one off to stop offering it, or go back to an earlier version, without removing it. Install new apps from their releases below."
+      summary={`Every app in the catalogue. Turn one off to stop offering it, or go back to an earlier version, without removing it. New apps are installed in ${upgradesName}, Apps.`}
       actions={[{ id: 'origins', label: 'Where apps load from' }]}
       onAction={() => setOriginsOpen(true)}
     >
       <Table noun="apps" columns={columns} rows={rows} loading={loading} error={error} empty="No apps are registered." onOpen={(row) => setOpen(row.id)} onRetry={() => void load()} />
-      <InstallsSection ins={ins} />
-      {app ? <AppDetails key={app.id} api={api} app={app} ins={ins} openUpgrades={openUpgrades} upgradesName={upgradesName} took={took} onIssue={() => setIssuing(app)} onClose={() => setOpen(undefined)} /> : null}
-      {originsOpen ? <Origins api={api} reload={() => load()} onClose={() => setOriginsOpen(false)} /> : null}
+      <div data-installs>
+        <Button kind="secondary" size="sm" onPress={() => openUpgrades('/apps')}>
+          {`Install apps in ${upgradesName}`}
+        </Button>
+      </div>
+      {app ? <AppDetails key={app.id} api={api} app={app} deploys={deploys} ins={ins} openUpgrades={openUpgrades} upgradesName={upgradesName} took={took} onIssue={() => setIssuing(app)} onClose={() => setOpen(undefined)} /> : null}
+      {originsOpen ? <Origins api={api} deploys={deploys} reload={() => load()} onClose={() => setOriginsOpen(false)} /> : null}
       {issuing ? (
         <Dialog
           open
@@ -96,7 +105,7 @@ export function Apps({ api, openUpgrades, upgradesName }: { api: AdminApi; openU
 }
 
 /** One app opened: what it is, whether it's offered, its limits, settings and previews, where it's on, its versions and its runner. */
-function AppDetails({ api, app, ins, openUpgrades, upgradesName, took, onIssue, onClose }: { api: AdminApi; app: CatalogueApp; ins: Installs; openUpgrades: () => void; upgradesName: string; took: (a: CatalogueApp) => void; onIssue: () => void; onClose: () => void }) {
+function AppDetails({ api, app, deploys, ins, openUpgrades, upgradesName, took, onIssue, onClose }: { api: AdminApi; app: CatalogueApp; deploys: boolean; ins: Installs; openUpgrades: () => void; upgradesName: string; took: (a: CatalogueApp) => void; onIssue: () => void; onClose: () => void }) {
   const [problem, setProblem] = useState('');
   const ships = shipsWithAugur(app);
   const shipped = app.platform || ships;
@@ -181,10 +190,10 @@ function AppDetails({ api, app, ins, openUpgrades, upgradesName, took, onIssue, 
       {app.platform ? null : <Deliveries api={api} app={app} />}
       {app.handles?.length ? <p>Answers {app.handles.join(', ')}.</p> : null}
       {ships ? <p data-pillar>It ships with AUGUR and changes version with it. Turn it off here or floor by floor; it can’t be removed, and its sign-in is in the server’s settings.</p> : null}
-      {shipped ? null : <Versions api={api} app={app} took={took} />}
+      {shipped ? null : <Versions api={api} app={app} deploys={deploys} took={took} />}
       {shipped ? null : (
         <div>
-          <Button kind="tertiary" size="sm" onPress={onIssue}>
+          <Button kind="tertiary" size="sm" disabled={!deploys} reason={NEEDS_DEPLOYMENT_ADMIN} onPress={onIssue}>
             Issue a new sign-in
           </Button>
         </div>
@@ -384,7 +393,7 @@ function Floors({ api, app }: { api: AdminApi; app: CatalogueApp }) {
 }
 
 /** The versions kept for an app, and which one the shell is given. */
-function Versions({ api, app, took }: { api: AdminApi; app: CatalogueApp; took: (a: CatalogueApp) => void }) {
+function Versions({ api, app, deploys, took }: { api: AdminApi; app: CatalogueApp; deploys: boolean; took: (a: CatalogueApp) => void }) {
   const { value: versions, setValue, error } = useLoaded<AppVersion[]>(() => api.appVersions(app.id));
   const [choice, setChoice] = useState(app.pinnedVersion ?? NEWEST);
   const [saving, setSaving] = useState(false);
@@ -424,7 +433,7 @@ function Versions({ api, app, took }: { api: AdminApi; app: CatalogueApp; took: 
       {note ? <p>{note}</p> : null}
       <Problem>{saveError}</Problem>
       <div>
-        <Button kind="secondary" size="sm" disabled={choice === current} reason="That’s what it uses now. Choose another version first." busy={saving} onPress={() => void use()}>
+        <Button kind="secondary" size="sm" disabled={!deploys || choice === current} reason={deploys ? 'That’s what it uses now. Choose another version first.' : NEEDS_DEPLOYMENT_ADMIN} busy={saving} onPress={() => void use()}>
           {choice === NEWEST ? 'Follow new versions' : `Use version ${choice}`}
         </Button>
       </div>
@@ -433,7 +442,7 @@ function Versions({ api, app, took }: { api: AdminApi; app: CatalogueApp; took: 
 }
 
 /** Sites apps may load from besides AUGUR itself: allow one, and remove one. */
-function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promise<void>; onClose: () => void }) {
+function Origins({ api, deploys, reload, onClose }: { api: AdminApi; deploys: boolean; reload: () => Promise<void>; onClose: () => void }) {
   const { value: origins, setValue, error, setError } = useLoaded<AllowedOrigin[]>(() => api.origins());
   const [working, setWorking] = useState(false);
   const [round, setRound] = useState(0);
@@ -457,7 +466,7 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
       eyebrow="Apps"
       heading="Where apps load from"
       summary="Apps on AUGUR’s own address can always load. An app whose entry is on another site can only register, and only open, if that site is here."
-      actionLabel="Allow"
+      actionLabel={deploys ? 'Allow' : undefined}
       busyLabel="Allowing…"
       cancelLabel="Done"
       onSubmit={async (values) => {
@@ -470,7 +479,7 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
         return false as const;
       }}
       onClose={onClose}
-      fields={<TextField key={round} name="origin" label="Allow a site" placeholder="https://apps.example.org" required />}
+      fields={deploys ? <TextField key={round} name="origin" label="Allow a site" placeholder="https://apps.example.org" required /> : undefined}
     >
       <div data-origins className="admin-stack">
         <Problem>{error}</Problem>
@@ -483,7 +492,7 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
             <Line
               key={o.origin}
               end={
-                <AskTwice size="sm" busy={working} confirm="Press again: apps from here stop loading" onPress={() => void remove(o.origin)}>
+                <AskTwice size="sm" busy={working} disabled={!deploys} reason={NEEDS_DEPLOYMENT_ADMIN} confirm="Press again: apps from here stop loading" onPress={() => void remove(o.origin)}>
                   Remove
                 </AskTwice>
               }
@@ -495,6 +504,7 @@ function Origins({ api, reload, onClose }: { api: AdminApi; reload: () => Promis
           <p>No other sites yet, so apps can only load from AUGUR’s own address.</p>
         )}
       </div>
+      {deploys ? null : <p>{NEEDS_DEPLOYMENT_ADMIN}</p>}
       <p>The server must allow a site too, so the browser will run its code; see Deploy in AUGUR’s guides.</p>
     </Dialog>
   );

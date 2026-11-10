@@ -5,7 +5,8 @@ import { callerHeaders, frontendDigest, packFrontend, type FloorPlace } from '@a
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { addressProblem } from './upstreams.ts';
-import { frontendHandedOver } from './apps3.ts';
+import { frontendHandedOver, manifest3Problems, ownServed } from './apps3.ts';
+import { platformApps, platformManifests3 } from './manifest.ts';
 import { MemoryFrontendFiles } from './frontends.ts';
 import { exampleRelease, releaseOf } from './release3.testing.ts';
 
@@ -244,5 +245,27 @@ describe.runIf(DATABASE_URL)('a frontend bundle on contract 3', () => {
     expect(frontendHandedOver([job('1.3.0', 'install', 'failed'), job('1.3.0', 'install', 'cancelled')], 'notes', '1.3.0', d)).toBeUndefined();
     expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'notes', '1.3.0', 'sha256:' + 'e'.repeat(64))).toBeUndefined();
     expect(frontendHandedOver([job('1.3.0', 'install', 'done')], 'other', '1.3.0', d)).toBeUndefined();
+  });
+});
+
+describe('AUGUR’s own apps on contract 3 (ADR 0083)', () => {
+  const own = platformApps.find((a) => a.id === 'upgrades')!;
+  const manifest = { id: own.id, name: own.name, version: own.version, contract: 3, frontend: { entry: 'entry.js' }, contributes: { places: [{ id: 'overview', label: 'Overview', path: '/' }] } } as const;
+
+  it('are sent as their manifest, with their role, their kind and the gauge resting', () => {
+    expect(ownServed(own, manifest as never, { maxUpload: 10 })).toEqual({ ...manifest, maxUpload: 10, requiredRole: own.requiredRole, category: 'platform', sameOnEveryFloor: true });
+  });
+
+  it('each have a manifest the contract takes, at the version and name of their entry', () => {
+    for (const [id, m] of Object.entries(platformManifests3)) {
+      expect(manifest3Problems(m), id).toEqual([]);
+      const entry = platformApps.find((a) => a.id === id)!;
+      expect({ id: m.id, name: m.name, version: m.version }).toEqual({ id: entry.id, name: entry.name, version: entry.version });
+    }
+  });
+
+  it('are sent as their entry while they have no manifest, as before', () => {
+    expect(ownServed(own, undefined, { maxUpload: 10 })).toBe(own);
+    expect(ownServed(own, undefined, { maxUpload: 10, previewsOn: ['urgent-letterbox'] })).toEqual({ ...own, previewsOn: ['urgent-letterbox'] });
   });
 });

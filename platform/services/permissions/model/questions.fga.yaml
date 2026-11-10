@@ -1,0 +1,202 @@
+name: AUGUR permissions, the questions from the seed cast
+model_file: ./examples.fga.mod
+
+# The seed cast (scripts/seed/cast.json), plus what the cast doesn't say yet: positions and who holds them,
+# who leads each floor, two admin personas, one org role, one floor role, three documents. Positions, leads, personas and roles are proposed
+# additions to the cast, so augur-run can ask the same questions on a live deployment.
+tuples:
+  # The org and its floors (identity's workspaces, as events project them).
+  - { user: org:org, relation: org, object: deployment:this }
+  - { user: org:org, relation: parent, object: floor:operations }
+  - { user: org:org, relation: parent, object: floor:finance }
+  - { user: org:org, relation: parent, object: floor:compliance }
+  - { user: floor:operations, relation: parent, object: floor:port-services }
+  - { user: floor:operations, relation: parent, object: floor:fleet }
+  - { user: floor:finance, relation: parent, object: floor:payroll }
+  - { user: floor:operations, relation: child, object: org:org }
+  - { user: floor:finance, relation: child, object: org:org }
+  - { user: floor:compliance, relation: child, object: org:org }
+  - { user: floor:port-services, relation: child, object: floor:operations }
+  - { user: floor:fleet, relation: child, object: floor:operations }
+  - { user: floor:payroll, relation: child, object: floor:finance }
+  - { user: person:tomas, relation: owner, object: floor:personal-tomas }
+  # Everyone is in the org.
+  - { user: person:amara, relation: member, object: org:org }
+  - { user: person:tomas, relation: member, object: org:org }
+  - { user: person:priya, relation: member, object: org:org }
+  - { user: person:jonah, relation: member, object: org:org }
+  - { user: person:lucia, relation: member, object: org:org }
+  - { user: person:hamid, relation: member, object: org:org }
+  - { user: person:grace, relation: member, object: org:org }
+  - { user: person:mei, relation: member, object: org:org }
+  - { user: person:owen, relation: member, object: org:org }
+  - { user: person:sofia, relation: member, object: org:org }
+  # Positions (ADR 0089): floors are joined by positions, and people hold positions. Owen holds two.
+  - { user: person:amara, relation: holder, object: persona:head-of-operations }
+  - { user: person:tomas, relation: holder, object: persona:port-services-lead }
+  - { user: person:priya, relation: holder, object: persona:berth-planner }
+  - { user: person:jonah, relation: holder, object: persona:fleet-lead }
+  - { user: person:lucia, relation: holder, object: persona:fleet-officer }
+  - { user: person:hamid, relation: holder, object: persona:head-of-finance }
+  - { user: person:grace, relation: holder, object: persona:payroll-clerk }
+  - { user: person:mei, relation: holder, object: persona:head-of-compliance }
+  - { user: person:owen, relation: holder, object: persona:compliance-officer }
+  - { user: person:owen, relation: holder, object: persona:operations-analyst }
+  - { user: persona:head-of-operations#holder, relation: lead, object: floor:operations }
+  - { user: persona:port-services-lead#holder, relation: lead, object: floor:port-services }
+  - { user: persona:berth-planner#holder, relation: member, object: floor:port-services }
+  - { user: persona:fleet-lead#holder, relation: lead, object: floor:fleet }
+  - { user: persona:fleet-officer#holder, relation: member, object: floor:fleet }
+  - { user: persona:head-of-finance#holder, relation: lead, object: floor:finance }
+  - { user: persona:payroll-clerk#holder, relation: member, object: floor:payroll }
+  - { user: persona:head-of-compliance#holder, relation: lead, object: floor:compliance }
+  - { user: persona:compliance-officer#holder, relation: member, object: floor:compliance }
+  - { user: persona:operations-analyst#holder, relation: member, object: floor:operations }
+  # A block is on the person, so it holds whichever position they are in.
+  - { user: person:owen, relation: blocked, object: floor:operations }
+  # Harbour master is vacant: it keeps its grant on the berth plan until someone holds it.
+  - { user: persona:harbour-master#holder, relation: editor, object: document:berth-plan }
+  # Platform roles held by people (publisher stays a person's role).
+  - { user: person:amara, relation: publisher, object: org:org }
+  - { user: person:hamid, relation: publisher, object: org:org }
+  - { user: person:mei, relation: publisher, object: org:org }
+  # Personas: Sofia runs the deployment, Amara is an org admin. Only as the persona.
+  - { user: person:sofia, relation: holder, object: persona:sofia-admin }
+  - { user: person:amara, relation: holder, object: persona:amara-admin }
+  - { user: persona:sofia-admin, relation: admin, object: deployment:this }
+  - { user: persona:sofia-admin, relation: admin, object: org:org }
+  - { user: persona:amara-admin, relation: admin, object: org:org }
+  # An org role made by an admin: Records officer reads the audit log.
+  - { user: org:org, relation: scope, object: role:records-officer }
+  - { user: person:mei, relation: assignee, object: role:records-officer }
+  - { user: role:records-officer#assignee, relation: audit_reader, object: org:org }
+  # A floor role made by Operations' lead: Duty planner, an approver in Mandate and a reader of the fleet roster.
+  - { user: floor:operations, relation: scope, object: role:ops-duty-planner }
+  - { user: persona:berth-planner#holder, relation: assignee, object: role:ops-duty-planner }
+  - { user: role:ops-duty-planner#assignee, relation: mandate_approver, object: floor:operations }
+  # Documents (Artifacts' own module).
+  - { user: floor:port-services, relation: floor, object: document:berth-plan }
+  - { user: persona:port-services-lead#holder, relation: owner, object: document:berth-plan }
+  - { user: person:lucia, relation: editor, object: document:berth-plan, condition: { name: not_expired, context: { grant_expires: "2026-12-01T00:00:00Z" } } }
+  - { user: floor:fleet, relation: floor, object: document:fleet-roster }
+  - { user: role:ops-duty-planner#assignee, relation: viewer, object: document:fleet-roster }
+  - { user: floor:fleet, relation: floor, object: document:fleet-incident }
+  - { user: person:lucia, relation: blocked, object: document:fleet-incident }
+  # The knowledge graph's floor roles (ADR 0095): Fleet's settler is a position, its raiser a person; Operations'
+  # settler is the duty-planner role; Owen, blocked on Operations, is named its raiser.
+  - { user: persona:fleet-lead#holder, relation: settler, object: floor:fleet }
+  - { user: person:lucia, relation: raiser, object: floor:fleet }
+  - { user: role:ops-duty-planner#assignee, relation: settler, object: floor:operations }
+  - { user: person:owen, relation: raiser, object: floor:operations }
+
+tests:
+  - name: Standing goes up the floors, never sideways or down
+    check:
+      - { user: person:tomas, object: floor:port-services, assertions: { stands: true } }      # Q1
+      - { user: person:tomas, object: floor:operations, assertions: { stands: true } }         # Q2
+      - { user: person:tomas, object: org:org, assertions: { stands: true } }                  # Q3
+      - { user: person:tomas, object: floor:fleet, assertions: { stands: false } }             # Q4
+      - { user: person:tomas, object: floor:finance, assertions: { stands: false } }           # Q5
+      - { user: person:grace, object: floor:finance, assertions: { stands: true } }            # Q6
+      - { user: person:amara, object: floor:port-services, assertions: { stands: false } }     # Q7
+      - { user: person:tomas, object: floor:personal-tomas, assertions: { stands: true } }     # Q8
+    list_objects:
+      - user: person:tomas
+        type: floor
+        assertions:
+          stands: [floor:port-services, floor:operations, floor:personal-tomas]
+
+  - name: An admin sees every floor only as their persona, and never stands on someone's own floor
+    check:
+      - { user: person:sofia, object: floor:operations, assertions: { stands: false, can_see: false } }             # Q9
+      - { user: persona:sofia-admin, object: floor:operations, assertions: { stands: false, can_see: true } }       # Q10
+      - { user: persona:sofia-admin, object: floor:personal-tomas, assertions: { stands: false, can_see: false } }  # Q11
+
+  - name: Managing goes down to the floors below; leading stays on the floor itself
+    check:
+      - { user: person:amara, object: floor:port-services, assertions: { can_manage_members: true, can_act_as_lead: false } }  # Q12
+      - { user: person:tomas, object: floor:port-services, assertions: { can_manage_members: true, can_act_as_lead: true } }   # Q13
+      - { user: person:tomas, object: floor:operations, assertions: { can_manage_members: false } }                            # Q14
+      - { user: persona:amara-admin, object: floor:payroll, assertions: { can_manage_members: true } }                         # Q15
+      - { user: person:grace, object: floor:finance, assertions: { can_act_as_lead: false } }                                  # Q16
+
+  - name: A block on a floor wins over membership there, and only there
+    check:
+      - { user: person:owen, object: floor:operations, assertions: { stands: false } }   # Q17
+      - { user: person:owen, object: floor:compliance, assertions: { stands: true } }    # Q18
+      - { user: person:owen, object: org:org, assertions: { stands: true } }             # Q19
+
+  - name: The deployment is run only by a deployment admin's persona (ADR 0084)
+    check:
+      - { user: person:sofia, object: deployment:this, assertions: { can_upgrade: false, can_remove_apps: false } }                    # Q20
+      - { user: persona:sofia-admin, object: deployment:this, assertions: { can_upgrade: true, can_remove_apps: true, can_set_app_secrets: true, can_pin_versions: true, can_allow_sites: true } }  # Q21
+      - { user: persona:amara-admin, object: deployment:this, assertions: { can_upgrade: false, can_remove_apps: false, can_set_app_secrets: false } }  # Q22
+      - { user: persona:amara-admin, object: deployment:this, assertions: { can_read_health: true, can_read_settings: false } }         # Q23
+
+  - name: Org administration needs the persona, not the person
+    check:
+      - { user: persona:amara-admin, object: org:org, assertions: { can_manage_people: true, can_manage_apps: true, can_manage_org: true } }  # Q24
+      - { user: person:amara, object: org:org, assertions: { can_manage_people: false, can_manage_org: false } }                             # Q25
+      - { user: person:amara, object: org:org, assertions: { can_publish_to_org: true } }                                                    # Q26
+      - { user: person:tomas, object: org:org, assertions: { can_publish_to_org: false } }                                                   # Q27
+
+  - name: Roles made in AUGUR give what they were given, where they were given it
+    check:
+      - { user: person:mei, object: org:org, assertions: { can_read_audit: true } }       # Q28
+      - { user: person:owen, object: org:org, assertions: { can_read_audit: false } }     # Q29
+      - { user: person:hamid, object: org:org, assertions: { can_read_audit: false } }    # Q30
+      - { user: person:priya, object: floor:operations, assertions: { can_approve_intent: true } }   # Q31
+      - { user: person:priya, object: floor:fleet, assertions: { can_approve_intent: false } }       # Q32
+      - { user: person:amara, object: floor:operations, assertions: { can_approve_intent: true } }   # Q33
+      - { user: person:jonah, object: floor:operations, assertions: { can_approve_intent: false } }  # Q34
+
+  - name: Who can make and hand out a role
+    check:
+      - { user: person:amara, object: floor:operations, assertions: { can_create_role: true } }      # Q35
+      - { user: person:priya, object: floor:operations, assertions: { can_create_role: false } }     # Q36
+      - { user: person:amara, object: role:ops-duty-planner, assertions: { can_assign: true } }      # Q37
+      - { user: person:tomas, object: role:ops-duty-planner, assertions: { can_assign: false } }     # Q38
+      - { user: persona:amara-admin, object: role:records-officer, assertions: { can_assign: true } } # Q39
+      - { user: person:mei, object: role:records-officer, assertions: { can_assign: false } }        # Q40
+
+  - name: Documents follow the floor, peer grants expire, and only owners and leads reshare
+    check:
+      - { user: person:priya, object: document:berth-plan, assertions: { can_view: true, can_edit: false, can_share: false } }   # Q41
+      - { user: person:amara, object: document:berth-plan, assertions: { can_view: false } }                                     # Q42
+      - { user: person:tomas, object: document:berth-plan, assertions: { can_edit: true, can_share: true } }                     # Q43
+      - { user: person:lucia, object: document:berth-plan, context: { current_time: "2026-11-20T09:00:00Z" }, assertions: { can_edit: true, can_share: false } }  # Q44
+      - { user: person:lucia, object: document:berth-plan, context: { current_time: "2026-12-02T09:00:00Z" }, assertions: { can_edit: false, can_view: false } } # Q45
+      - { user: person:priya, object: document:fleet-roster, assertions: { can_view: true } }    # Q46 (person to role)
+      - { user: person:tomas, object: document:fleet-roster, assertions: { can_view: false } }   # Q47
+      - { user: person:lucia, object: document:fleet-incident, assertions: { can_view: false } } # Q48 (a block wins)
+      - { user: person:jonah, object: document:fleet-incident, assertions: { can_view: true } }  # Q49
+      - { user: persona:sofia-admin, object: document:berth-plan, assertions: { can_view: false } }  # Q50 (a persona carries none of the person's reach)
+
+  - name: A position keeps what it was given when its holder changes (ADR 0089)
+    check:
+      - { user: person:hamid, object: document:berth-plan, assertions: { can_edit: false } }   # Q51 (Harbour master is vacant)
+      - { user: persona:harbour-master, object: document:berth-plan, assertions: { can_edit: false } }  # Q52 (the position itself acts only through a holder)
+
+  - name: The next holder of a position has its floors and grants at once
+    tuples:
+      - { user: person:hamid, relation: holder, object: persona:harbour-master }
+      - { user: person:jonah, relation: holder, object: persona:port-services-lead }
+    check:
+      - { user: person:hamid, object: document:berth-plan, assertions: { can_edit: true } }     # Q53
+      - { user: person:jonah, object: floor:port-services, assertions: { stands: true, can_act_as_lead: true, can_manage_members: true } }  # Q54
+      - { user: person:jonah, object: document:berth-plan, assertions: { can_share: true } }    # Q55 (the document is the position's)
+
+  - name: A floor's settler and raiser are positions, people or roles, and leading gives neither (ADR 0095)
+    check:
+      - { user: person:jonah, object: floor:fleet, assertions: { can_settle: true, can_raise: false } }         # Q56 (through the Fleet lead position)
+      - { user: person:lucia, object: floor:fleet, assertions: { can_settle: false, can_raise: true } }         # Q57 (named herself)
+      - { user: person:priya, object: floor:operations, assertions: { can_settle: true } }                      # Q58 (through the duty-planner role)
+      - { user: person:amara, object: floor:operations, assertions: { can_settle: false, can_raise: false } }   # Q59 (leading isn't settling)
+      - { user: person:owen, object: floor:operations, assertions: { can_raise: false } }                       # Q60 (a block wins)
+      - { user: person:jonah, object: floor:port-services, assertions: { can_settle: false } }                  # Q61 (only on that floor)
+
+  - name: The next holder of a settling position settles at once
+    tuples:
+      - { user: person:hamid, relation: holder, object: persona:fleet-lead }
+    check:
+      - { user: person:hamid, object: floor:fleet, assertions: { can_settle: true } }                           # Q62

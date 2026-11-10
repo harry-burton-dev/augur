@@ -5,12 +5,12 @@ import type pg from 'pg';
 import { Problem } from '@augur/service-kit';
 import { entityId, entityUuid, isUuid } from './ids.ts';
 
-type FloorKind = 'personal' | 'team' | 'org';
-type Modality = 'reported' | 'expected' | 'planned' | 'possible' | 'denied';
-type Value = { v: number | string | boolean; unit?: string; approx?: boolean; asked?: string };
-const iso = (d: Date | null | undefined) => (d ? d.toISOString() : undefined);
+export type FloorKind = 'personal' | 'team' | 'org';
+export type Modality = 'reported' | 'expected' | 'planned' | 'possible' | 'denied';
+export type Value = { v: number | string | boolean; unit?: string; approx?: boolean; asked?: string };
+export const iso = (d: Date | null | undefined) => (d ? d.toISOString() : undefined);
 /** Leaves out the keys whose value is undefined, so an optional field is absent rather than null. */
-const defined = <T extends Record<string, unknown>>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+export const defined = <T extends Record<string, unknown>>(o: T) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
 const where = (kind: FloorKind) => (kind === 'org' ? 'the organisation’s floor' : 'a team’s floor');
 
 export const notFound = (what: string) => new Problem(404, 'not_found', `There is no such ${what}, or none you may know exists.`);
@@ -35,7 +35,7 @@ export const unseenElsewhere = (kind: 'entity' | 'observation' | 'source', id: s
 
 // ---- Entities
 
-interface EntityRow {
+export interface EntityRow {
   id: string;
   class: string;
   state: 'active' | 'retired' | 'merged';
@@ -43,11 +43,11 @@ interface EntityRow {
   occurrent: boolean | null;
   names: { name: string; label: boolean; floor: string }[];
 }
-const ENTITY_COLUMNS = `e.id, e.class, e.state, e.merged_into, kg.is_occurrent(e.class) as occurrent,
+export const ENTITY_COLUMNS = `e.id, e.class, e.state, e.merged_into, kg.is_occurrent(e.class) as occurrent,
   coalesce((select jsonb_agg(jsonb_build_object('name', n.name, 'label', n.is_label, 'floor', n.floor)) from kg.entity_names n where n.entity = e.id), '[]') as names`;
 
 /** An entity as the floors in sight know it: the label from the nearest floor that names it, the rest as aliases. */
-const toEntity = (e: EntityRow, sight: string[]) => {
+export const toEntity = (e: EntityRow, sight: string[]) => {
   const near = (floor: string) => (sight.indexOf(floor) === -1 ? sight.length : sight.indexOf(floor));
   const byNearness = [...e.names].sort((a, b) => near(a.floor) - near(b.floor));
   const label = byNearness.find((n) => n.label) ?? byNearness[0]!;
@@ -68,7 +68,7 @@ export const readEntity = async (db: pg.PoolClient, sight: string[], uuid: strin
   return e ? toEntity(e, sight) : undefined;
 };
 
-const likeText = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+export const likeText = (text: string) => `%${text.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 /** A page of entities in sight, by id order, with what to pass for the next page. */
 export const listEntities = async (
@@ -109,7 +109,7 @@ export const entityEvents = async (db: pg.PoolClient, sight: string[], uuid: str
 
 // ---- Beliefs
 
-interface BeliefRow {
+export interface BeliefRow {
   id: string;
   home_floor: string;
   reach: string[];
@@ -130,23 +130,62 @@ interface BeliefRow {
   sources_behind: string;
   evidence_unseen: string;
   by_floor: { floor: string; floorKind: FloorKind; observations: number }[];
+  seen: string[];
 }
-const BELIEF_COLUMNS = `b.id, b.home_floor, array(select r.floor from kg.belief_reach r where r.belief = b.id order by r.raised_at) as reach,
+export const BELIEF_COLUMNS = `b.id, b.home_floor, array(select r.floor from kg.belief_reach r where r.belief = b.id order by r.raised_at) as reach,
   b.subject, b.predicate, b.value, b.object, b.modality, lower(b.valid) as valid_from, upper(b.valid) as valid_to,
   b.recorded_at, b.ended_at, b.superseded_at, b.superseded_by, b.held_by,
   exists (select 1 from kg.disputes d where d.belief = b.id and d.settled_at is null) as disputed,
   kg.stands(b.id) as stands, kg.sources_behind(b.id) as sources_behind, kg.evidence_unseen(b.id) as evidence_unseen,
   coalesce((select jsonb_agg(jsonb_build_object('floor', x.floor, 'floorKind', x.kind, 'observations', x.n) order by x.floor)
             from (select o.floor, f.kind, count(*)::int as n from kg.belief_evidence be join kg.observations o on o.id = be.observation
-                  join kg.floors f on f.id = o.floor where be.belief = b.id group by o.floor, f.kind) x), '[]') as by_floor`;
+                  join kg.floors f on f.id = o.floor where be.belief = b.id group by o.floor, f.kind) x), '[]') as by_floor,
+  array(select be.observation::text from kg.belief_evidence be where be.belief = b.id order by 1) as seen`;
 /** Believed now: neither superseded nor ended, and still standing on some evidence. */
-const LIVE = 'b.superseded_at is null and b.ended_at is null and kg.stands(b.id)';
+export const LIVE = 'b.superseded_at is null and b.ended_at is null and kg.stands(b.id)';
 
-const toBelief = (b: BeliefRow) => {
+/** The two clocks a belief is read on: valid (`at`, so in the world then) and recorded (`known`, as the floors had it then). */
+export interface Clocks {
+  at?: string;
+  known?: string;
+  includeSuperseded?: boolean;
+}
+/**
+ * The condition on beliefs (as b) for a read on two clocks, its values pushed onto params. With neither clock,
+ * it is LIVE: what is believed now, whatever time it is about. `at` keeps what is so at that moment, and
+ * `known` what had been recorded by then and stood on its evidence then (what was forgotten never stood).
+ */
+/**
+ * A clock's moment as Postgres takes it: in UTC, since an RFC 3339 offset can be wider than Postgres allows,
+ * and before year 1 (Postgres has no year 0) as the start of time, before anything was recorded.
+ */
+export const instant = (v: string) => {
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) || d.getUTCFullYear() < 1 ? '-infinity' : d.toISOString();
+};
+
+export const onClocks = ({ at, known, includeSuperseded = false }: Clocks, params: unknown[]) => {
+  const p = (v: string) => `$${params.push(instant(v))}::timestamptz`;
+  const k = known === undefined ? undefined : p(known);
+  const a = at === undefined ? undefined : p(at);
+  return [
+    k ? `b.recorded_at <= ${k}` : undefined,
+    includeSuperseded ? undefined : k ? `(b.superseded_at is null or b.superseded_at > ${k})` : 'b.superseded_at is null',
+    a ? `b.valid @> ${a} and (b.ended_at is null or b.ended_at > ${a})` : 'b.ended_at is null',
+    k ? `kg.stood_at(b.id, ${k})` : 'kg.stands(b.id)',
+  ]
+    .filter(Boolean)
+    .join(' and ');
+};
+
+export const toBelief = (b: BeliefRow, { at, known }: Clocks = {}) => {
   const seen = b.by_floor.reduce((n, f) => n + f.observations, 0);
-  const state = b.superseded_at
+  // Read as of a moment, what happened to it after that moment hadn't happened yet.
+  const superseded = b.superseded_at && (known === undefined || b.superseded_at <= new Date(known));
+  const ended = b.ended_at && b.ended_at <= (at === undefined ? new Date() : new Date(at));
+  const state = superseded
     ? ('superseded' as const)
-    : b.ended_at
+    : ended
       ? ('ended' as const)
       : !b.stands
         ? ('fallen' as const)
@@ -173,13 +212,17 @@ const toBelief = (b: BeliefRow) => {
     supersededBy: b.superseded_by ?? undefined,
     state,
     heldBy: b.held_by,
-    evidence: { observations: seen + Number(b.evidence_unseen), sources: Number(b.sources_behind), unseen: Number(b.evidence_unseen), byFloor: b.by_floor },
+    evidence: { observations: seen + Number(b.evidence_unseen), sources: Number(b.sources_behind), unseen: Number(b.evidence_unseen), byFloor: b.by_floor, seen: b.seen },
   });
 };
 
-/** What the floors in sight believe now about an entity. */
-export const entityBeliefs = async (db: pg.PoolClient, uuid: string) =>
-  (await db.query<BeliefRow>(`select ${BELIEF_COLUMNS} from kg.beliefs b where b.subject = $1 and ${LIVE} order by b.predicate, b.recorded_at`, [uuid])).rows.map(toBelief);
+/** What the floors in sight believe about an entity, now or on the clocks given. */
+export const entityBeliefs = async (db: pg.PoolClient, uuid: string, clocks: Clocks = {}) => {
+  const params: unknown[] = [uuid];
+  const when = onClocks(clocks, params);
+  const { rows } = await db.query<BeliefRow>(`select ${BELIEF_COLUMNS} from kg.beliefs b where b.subject = $1 and ${when} order by b.predicate, b.recorded_at`, params);
+  return rows.map((b) => toBelief(b, clocks));
+};
 
 /** One belief in sight, whatever became of it, with its disputes. */
 export const readBelief = async (db: pg.PoolClient, uuid: string) => {
@@ -341,7 +384,8 @@ export const readObservation = async (db: pg.PoolClient, uuid: string) => {
 export const readRun = async (db: pg.PoolClient, person: string, actionId: string) => {
   const r = (await db.query<{ action: string; answer: { effects?: Record<string, string[]> }; at: Date }>('select * from kg.my_run($1)', [actionId])).rows[0];
   if (!r) throw new Problem(404, 'not_found', 'You took no action with that id.');
-  return { actionId, action: r.action, by: person, at: r.at.toISOString(), effects: r.answer.effects ?? {}, undone: false };
+  const undone = (await db.query<{ t: Date | null }>('select kg.run_undone($1) as t', [actionId])).rows[0]?.t;
+  return { actionId, action: r.action, by: person, at: r.at.toISOString(), effects: r.answer.effects ?? {}, undone: !!undone };
 };
 
 // ---- The ontology: the same for every floor
@@ -351,8 +395,10 @@ export const readOntology = async (db: pg.Pool | pg.PoolClient) => {
     db.query<{ iri: string; label: string; parent: string | null; kind: 'continuant' | 'occurrent'; status: 'base' | 'accepted' | 'proposed' | 'dismissed'; pack_term: string | null; since_version: number | null }>(
       'select iri, label, parent, kind, status, pack_term, since_version from kg.classes order by iri',
     ),
-    db.query<{ iri: string; label: string; kind: 'property' | 'link'; domain: string | null; range: string | null; datatype: string | null; unit: string | null; single_valued: boolean; status: 'base' | 'accepted' | 'proposed' | 'dismissed' }>(
-      'select iri, label, kind, domain, range, datatype, unit, single_valued, status from kg.predicates order by iri',
+    db.query<{ iri: string; label: string; kind: 'property' | 'link'; domain: string | null; range: string | null; datatype: string | null; unit: string | null; single_valued: boolean; status: 'base' | 'accepted' | 'proposed' | 'dismissed'; since_version: number | null; asked_as: string[] }>(
+      `select p.iri, p.label, p.kind, p.domain, p.range, p.datatype, p.unit, p.single_valued, p.status, p.since_version,
+              array(select t.term from kg.predicate_terms t where t.predicate = p.iri order by t.term) as asked_as
+       from kg.predicates p order by p.iri`,
     ),
     db.query<{ v: number | null }>('select max(version)::int as v from kg.ontology_versions'),
   ]);
@@ -360,7 +406,19 @@ export const readOntology = async (db: pg.Pool | pg.PoolClient) => {
     version: String(v.rows[0]?.v ?? 1),
     classes: classes.rows.map(toClass),
     predicates: predicates.rows.map((p) =>
-      defined({ iri: p.iri, label: p.label, kind: p.kind, domain: p.domain ?? undefined, range: p.range ?? undefined, datatype: p.datatype ?? undefined, unit: p.unit ?? undefined, singleValued: p.single_valued, status: p.status }),
+      defined({
+        iri: p.iri,
+        label: p.label,
+        kind: p.kind,
+        domain: p.domain ?? undefined,
+        range: p.range ?? undefined,
+        datatype: p.datatype ?? undefined,
+        unit: p.unit ?? undefined,
+        singleValued: p.single_valued,
+        status: p.status,
+        sinceVersion: p.since_version === null ? undefined : String(p.since_version),
+        askedAs: p.asked_as.length ? p.asked_as : undefined,
+      }),
     ),
   };
 };
@@ -382,7 +440,18 @@ export const readClass = async (db: pg.Pool, iriOrName: string) => {
 /** Terms extraction asked for that the ontology lacks, from sources in sight. */
 export const listCandidates = async (db: pg.PoolClient) =>
   (
-    await db.query<{ term: string; kind: 'class' | 'predicate'; suggested_parent: string | null; why: string; asked_by: number; status: 'proposed' | 'adopted' | 'dismissed' }>(
-      'select term, kind, suggested_parent, why, asked_by, status from kg.candidates order by asked_by desc, term',
+    await db.query<{ term: string; kind: 'class' | 'predicate'; suggested_parent: string | null; why: string; asked_by: number; status: 'proposed' | 'adopted' | 'dismissed'; decided_as: string | null; decided_why: string | null }>(
+      'select term, kind, suggested_parent, why, asked_by, status, decided_as, decided_why from kg.candidates order by asked_by desc, term',
     )
-  ).rows.map((c) => defined({ term: c.term, kind: c.kind, suggestedParent: c.suggested_parent ?? undefined, why: c.why || undefined, askedBy: c.asked_by, status: c.status }));
+  ).rows.map((c) =>
+    defined({
+      term: c.term,
+      kind: c.kind,
+      suggestedParent: c.suggested_parent ?? undefined,
+      why: c.why || undefined,
+      askedBy: c.asked_by,
+      status: c.status,
+      adoptedAs: c.decided_as ?? undefined,
+      dismissedWhy: c.decided_why ?? undefined,
+    }),
+  );

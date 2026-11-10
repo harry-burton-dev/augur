@@ -410,6 +410,10 @@ export const commonSettings: {
         about: string;
         required: true;
     };
+    permissions: {
+        name: string;
+        about: string;
+    };
     gateway: {
         name: string;
         about: string;
@@ -1224,6 +1228,9 @@ export interface NewNotification {
     urgent?: boolean;
 }
 
+// @public
+export const noShadow: Shadow;
+
 // @public (undocumented)
 export interface NotificationAction {
     intent: {
@@ -1302,6 +1309,9 @@ export interface PeopleOptions {
 // @public
 export class PeopleUnavailable extends Error {
 }
+
+// @public (undocumented)
+export const permissionsShadow: (input: ShadowOptions) => Shadow;
 
 // @public
 export const PERSONAL_DETAIL_KEYS: readonly ["username", "email", "firstName", "lastName", "name", "ip", "ips", "message", "note"];
@@ -1554,7 +1564,7 @@ export const SCOPE_PATTERN: RegExp;
 export const SCOPE_WORDS: Record<Scope, string>;
 
 // @public
-export const SCOPES: readonly ["notifications:send", "audit:write", "models:use", "events:publish", "events:subscribe", "people:read", "inbox:write"];
+export const SCOPES: readonly ["notifications:send", "audit:write", "models:use", "events:publish", "events:subscribe", "people:read", "inbox:write", "knowledge:read", "knowledge:act", "knowledge:extract"];
 
 // @public
 export const scopeWords: (scope: string) => string;
@@ -1698,6 +1708,54 @@ export interface SettingState {
     source: SettingSource;
     // (undocumented)
     value?: string;
+}
+
+// @public (undocumented)
+export interface Shadow {
+    check(site: string, caller: Pick<Caller, 'id'>, question: ShadowQuestion | readonly ShadowQuestion[], today: boolean): void;
+    settled(): Promise<void>;
+}
+
+// @public
+export const shadowFromEnv: (credentials: ServiceCredentials | undefined, log: ShadowLog, env?: Record<string, string | undefined>) => Shadow;
+
+// @public
+export interface ShadowLog {
+    // (undocumented)
+    warn(message: string, fields?: Record<string, unknown>): void;
+}
+
+// @public
+export interface ShadowMeter {
+    // (undocumented)
+    createCounter(name: string, options?: {
+        description?: string;
+    }): {
+        add(value: number, attributes?: Record<string, string>): void;
+    };
+}
+
+// @public (undocumented)
+export interface ShadowOptions {
+    credentials: ServiceCredentials;
+    // (undocumented)
+    fetchImpl?: typeof fetch;
+    // (undocumented)
+    log: ShadowLog;
+    maxInFlight?: number;
+    // (undocumented)
+    meter?: ShadowMeter;
+    permissionsUrl: string;
+}
+
+// @public
+export interface ShadowQuestion {
+    action: string;
+    as?: 'person' | 'persona';
+    resource: {
+        type: string;
+        id: string;
+    };
 }
 
 // @public

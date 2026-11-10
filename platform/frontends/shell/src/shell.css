@@ -16,10 +16,6 @@ body { background: var(--slate-deep); color: var(--ink); font-family: var(--font
 }
 .loading { color: var(--ink-muted); }
 /* A person's own Reduce motion: preferences.ts puts data-motion="reduce" on <html>. Bringing the motion and travel tokens to nothing under it, and under the system setting, was the Lit kit's base.css; it belongs in Common's tokens, and until a kit release has it only the parts that check it themselves keep still. */
-/* Compact: the larger steps of the spacing scale come down one notch, so more fits on screen. */
-html[data-density='compact'] {
-  --space-5: 20px; --space-6: 28px; --space-7: 44px; --space-8: 72px;
-}
 /* A developer on a pull request's preview of the open app: always said, with the way back. */
 .preview-badge {
   position: fixed;
@@ -51,29 +47,28 @@ html[data-density='compact'] {
   min-height: 40px;
   border-bottom: 1px solid var(--hairline);
 }
-/* The Account area (account/AccountArea.tsx): over whatever was on screen, on the still ground, in an app's frame. */
-.account-area { position: fixed; inset: 0; z-index: var(--layer-view); background: var(--slate-deep); overflow: auto; }
-.account-close { display: flex; justify-content: flex-end; }
-.account-fields { display: flex; flex-direction: column; gap: var(--space-4); }
-.account-pair { flex-direction: row; flex-wrap: wrap; }
-.account-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4); min-height: var(--target-md); padding-block: var(--space-2); }
-.account-line > span { flex: 1 1 14em; min-width: 0; }
-.account-sub { margin: var(--space-4) 0 var(--space-1); font-size: var(--type-meta); font-weight: 500; color: var(--ink); }
-.account-line small, .account-native small { color: var(--ink-muted); }
+/* The Account dialog (account/AccountArea.tsx): Common's SectionDialog over the menu; each section's parts in FitParts. */
+.account-panel, .account-sub-page { min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.account-panel > .augur-fit-parts, .account-sub-page > .augur-fit-parts, .account-panel > .account-sub-page { flex: 1 1 0; }
+.account-back { display: flex; }
+.account-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(10em, 1fr)); gap: var(--space-3); }
+.account-wide { grid-column: 1 / -1; }
+.account-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-1) var(--space-3); min-height: var(--target-md); padding-block: var(--space-1); border-bottom: 1px solid var(--hairline); }
+.account-line > span { flex: 1 1 10em; min-width: 0; display: flex; flex-direction: column; }
+.account-line > :not(span) { flex: none; width: auto; }
+.account-line b { font-weight: 500; }
+.account-sub { margin: var(--space-2) 0 0; font-size: var(--type-meta); font-weight: 500; color: var(--ink); }
+.account-line small, .account-native small { color: var(--ink-muted); font-size: var(--type-small); line-height: var(--leading-small); }
 .account-line[data-kind='failed'] b { color: var(--danger); }
-.account-creds ul, .account-sessions { list-style: none; margin: 0; padding: 0; }
-.account-creds .account-line, .account-sessions .account-line { border-bottom: 1px solid var(--hairline); }
 .account-native { display: flex; flex-direction: column; gap: var(--space-1); font-size: var(--type-meta); }
 .account-native input { font: inherit; font-size: var(--type-body); color: var(--ink); background: none; border: 0; border-bottom: 1px solid var(--hairline-strong); padding: var(--space-2) 0; color-scheme: dark; }
 .account-native input:focus-visible { outline: none; border-bottom-color: var(--focus); }
-.account-keys { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-2) var(--space-4); margin: 0; }
-.account-keys dd { margin: 0; color: var(--ink-muted); }
-.account-news-summary { margin: 0 0 var(--space-3); }
-.account-news { display: grid; gap: var(--space-3); margin: 0; }
-.account-news dt { font-weight: 500; color: var(--ink); }
-.account-news dd { margin: 0; color: var(--ink-muted); }
-.account-kinds { padding-left: var(--space-5); border-left: 1px solid var(--hairline); }
-.account-recent { margin: 0; padding-left: var(--space-5); color: var(--ink-muted); }
+.account-keys { display: grid; gap: var(--space-2); margin: 0; }
+.account-keys > div { display: grid; grid-template-columns: 9em 1fr; gap: var(--space-3); align-items: baseline; }
+.account-keys dt, .account-keys dd { margin: 0; }
+.account-keys dd { color: var(--ink-muted); font-size: var(--type-meta); }
+.account-news-summary { margin: 0; color: var(--ink-muted); font-size: var(--type-meta); }
+.account-kinds { padding-left: var(--space-4); border-left: 1px solid var(--hairline); }
 .account-app-settings:empty { display: none; }
 
 /* The Inbox (ADR 0026): rows of work that waits, each with Open and a menu. */
@@ -95,10 +90,7 @@ html[data-density='compact'] {
 .inbox-actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
 .inbox-empty, .inbox-stale { color: var(--ink-muted); margin: var(--space-4) 0; }
 .inbox-found { list-style: none; margin: var(--space-2) 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
-/* An app on the contract: its pane in the main column and, when it declares sections, the About panel beside it on the right. */
-.app-pane-host, .app-frame { display: flex; min-height: 0; height: 100%; }
-.app-frame > .app-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.app-pane-screen { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--scrollbar) transparent; }
-.aerie-frame-pane { display: contents; }
+/* An app on the contract: its pane in the layout it chose, drawn by Aerie's PaneLayout, which keeps the inset contract. */
+.app-pane-host { display: flex; min-height: 0; height: 100%; }
 /* An app's canvas fills the main column where its screen would be (spec 6.11). */
 .app-canvas { flex: 1; min-height: 0; width: 100%; border: 0; display: block; background: var(--surface-pane); }

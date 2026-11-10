@@ -6,11 +6,11 @@
  * the pane: its heading, its actions and its states. An app that fails, hangs or draws past its
  * budget stops only its own pane.
  */
-import { PageHead, QuillRemote, State, createQuillReceiver, type QuillReceiver } from '@augur/app-kit';
+import { PageHead, QuillRemote, State, createQuillReceiver, readerPicturePath, type QuillReceiver, type QuillRemoteHost } from '@augur/app-kit';
 import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
-import type { FrameState, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
+import type { FrameDensity, FrameInset, FrameLayout, FrameState, FrameWidth, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireFile, type WireRequest, type WireResponse } from '@augur/mfe-sdk/sdk3/host';
-import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
+import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, PaneLayout, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
 import { createRoot, type Root } from 'react-dom/client';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import { DEFAULT_BUDGETS, NodeBudget, RateBudget, type Budgets, type Overrun } from './budget.js';
@@ -77,6 +77,26 @@ const STOP_GRACE_MS = 1000;
 const UNDER_MAX = 200;
 
 const WIDTHS = new Set(['read', 'wide', 'full']);
+const LAYOUTS = new Set(['focus', 'aside', 'split', 'canvas']);
+const DENSITIES = new Set(['comfortable', 'compact']);
+const INSETS = new Set(['standard', 'flush']);
+const oneOf = <T extends string>(names: ReadonlySet<string>, v: unknown) => (typeof v === 'string' && names.has(v) ? (v as T) : undefined);
+
+/** The layouts with the About panel beside the main column. */
+/**
+ * The pane's layout as the shell draws it: what the page set, else the manifest's defaults, else `aside`
+ * for an app with About sections and `focus` for one without, at reading width, comfortable and inset.
+ * Each is one of the shell's named layouts; an app never sets a distance.
+ */
+export function paneLayout(app: WorkerApp, frame: FrameState): Required<Pick<FrameState, 'layout' | 'width' | 'density' | 'inset'>> {
+  const given = app.manifest.contributes?.frame ?? {};
+  return {
+    layout: frame.layout ?? oneOf<FrameLayout>(LAYOUTS, given.layout) ?? (app.manifest.contributes?.about?.length ? 'aside' : 'focus'),
+    width: frame.width ?? oneOf<FrameWidth>(WIDTHS, given.width) ?? 'read',
+    density: frame.density ?? oneOf<FrameDensity>(DENSITIES, given.density) ?? 'comfortable',
+    inset: frame.inset ?? oneOf<FrameInset>(INSETS, given.inset) ?? 'standard',
+  };
+}
 
 /** The page every canvas opens in: the shell's own, served with the canvas's policy (vite.config.ts, nginx.conf). */
 export const CANVAS_PAGE = '/sandbox/canvas.html';
@@ -129,7 +149,10 @@ function frameFrom(was: FrameState, v: unknown): FrameState {
   const next: FrameState = { ...was };
   if ('title' in v) next.title = text(v.title, 120);
   if ('busy' in v) next.busy = v.busy === true;
-  if ('width' in v) next.width = typeof v.width === 'string' && WIDTHS.has(v.width) ? (v.width as FrameState['width']) : undefined;
+  if ('width' in v) next.width = oneOf<FrameWidth>(WIDTHS, v.width);
+  if ('layout' in v) next.layout = oneOf<FrameLayout>(LAYOUTS, v.layout);
+  if ('density' in v) next.density = oneOf<FrameDensity>(DENSITIES, v.density);
+  if ('inset' in v) next.inset = oneOf<FrameInset>(INSETS, v.inset);
   if ('actions' in v)
     next.actions = Array.isArray(v.actions)
       ? v.actions.filter(isPlain).slice(0, 8).flatMap((a) => (typeof a.command === 'string' ? [{ command: a.command, label: text(a.label, 60), unavailable: text(a.unavailable, 200) }] : []))
@@ -274,6 +297,35 @@ export class AppSession {
     this.#channel?.call('drop', wire).catch((err: Error) => this.#ctx.notify({ title: `${this.app.name} couldn’t take those files: ${err.message}` }));
   }
 
+  /**
+   * A reader's picture (ADR 0092): fetched here, never by the sandbox, and only under the app's own API,
+   * with the person's token. Answers an object URL the page shows, kept until the app stops.
+   */
+  readonly picture = async (path: string): Promise<string | undefined> => {
+    const named = readerPicturePath(path);
+    if (!named || this.#stopping) return undefined;
+    const ctx = this.#ctx;
+    try {
+      const res = await ctx.fetchImpl(`/api/${encodeURIComponent(this.app.id)}/${named}`, {
+        headers: { authorization: `Bearer ${await ctx.getToken()}`, [WORKSPACE_HEADER]: ctx.workspace.id, [APP_HEADER]: this.app.id, accept: 'image/*' },
+        credentials: 'omit',
+        redirect: 'error',
+      });
+      if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image/')) return undefined;
+      const blob = await res.blob();
+      // No bigger than the app may take in at once, where its manifest says.
+      const mb = this.app.manifest.maxUpload;
+      if (this.#stopping || (mb !== undefined && blob.size > mb * 1024 * 1024)) return undefined;
+      const url = URL.createObjectURL(blob);
+      this.#pictures.push(url);
+      return url;
+    } catch {
+      return undefined;
+    }
+  };
+
+  #pictures: string[] = [];
+
   /** Ends the run, giving the app's own stop a moment first. Meanwhile it is answered nothing. */
   async stop() {
     this.#stopping = true;
@@ -295,6 +347,8 @@ export class AppSession {
     this.#channel = undefined;
     this.#worker?.terminate();
     this.#worker = undefined;
+    for (const url of this.#pictures) URL.revokeObjectURL(url);
+    this.#pictures = [];
   }
 
   /** Counts each message against the app's rate; past it, the app is stopped and the message dropped. */
@@ -511,6 +565,15 @@ const overrunReason = (name: string, over: Overrun) => {
 const isPaletteKey = (e: KeyboardEvent) => isCommandKey(e, COMMAND_KEY) || (e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === 'KeyP');
 
 /**
+ * What the host does for the kit's elements in this app's pane: fetch a reader's pictures, and take a
+ * file button's files as a drop, while the app takes drops (`ctx.files.onDrop`); otherwise the button
+ * says it can't.
+ */
+function usePaneHost(session: AppSession, takesFiles: boolean): QuillRemoteHost {
+  return useMemo(() => ({ picture: session.picture, ...(takesFiles ? { files: (files: File[]) => void session.drop(files) } : {}) }), [session, takesFiles]);
+}
+
+/**
  * The frame round the pane (spec 6.4, 6.8): the command palette over the app's commands, the radial
  * menu on the things it marks, and the About panel with the sections it declares. The shell draws them
  * all from the manifest; the app only fills them and handles the commands.
@@ -521,7 +584,8 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
   const contributes = app.manifest.contributes;
   const stopped = state.phase === 'failed' || state.phase === 'unresponsive';
   const [palette, setPalette] = useState(false);
-  const [about, setAbout] = useState(false);
+  const [about, setAbout] = useState(contributes?.frame?.about === 'open');
+  const layout = paneLayout(app, state.frame);
   const source = useMemo<CommandSource>(
     () => ({ app: { id: app.id, name: app.name }, commands: contributes?.commands ?? [], radial: contributes?.radial, handled: stopped ? [] : state.handled, onScreen: true }),
     [app, contributes, stopped, state.handled],
@@ -541,20 +605,64 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [contributes, stopped]);
+  const host = usePaneHost(session, state.drops === true && !stopped);
   const sections = contributes?.about ?? [];
   const content = Object.fromEntries(
     sections.flatMap((s) => {
       const receiver = state.drawn.has(aboutRoot(s.id)) ? session.receiverOf(aboutRoot(s.id)) : undefined;
-      return receiver ? [[s.id, <QuillRemote receiver={receiver} />]] : [];
+      return receiver ? [[s.id, <QuillRemote receiver={receiver} host={host} />]] : [];
     }),
   );
+  const actions = stopped ? [] : actionsOf(app, state.frame.actions, state.handled);
+  const [dropping, setDropping] = useState(false);
+  // Files from the desktop land here, in the host, only while the app has a handler for them (spec 6.10).
+  const takes = (e: DragEvent) => !stopped && state.drops === true && [...(e.dataTransfer?.types ?? [])].includes('Files');
+  const open = !stopped && state.phase === 'open';
   return (
-    <div className="app-frame" data-app={app.id} ref={frame}>
-      <Pane session={session} state={state} stopped={stopped} onRetry={onRetry} source={source} />
-      <AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />
-      <CommandPalette open={palette && !stopped} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />
-    </div>
+    <PaneLayout
+      {...layout}
+      className="app-frame"
+      frame={{ ref: frame, 'data-app': app.id }}
+      pane={{
+        className: 'app-pane',
+        'data-app': app.id,
+        'data-phase': state.phase,
+        'data-dropping': dropping ? '' : undefined,
+        'aria-busy': state.frame.busy || state.phase === 'opening' || state.phase === 'slow',
+        onDragOver: (e) => {
+          if (!takes(e)) return;
+          e.preventDefault();
+          setDropping(true);
+        },
+        onDragLeave: () => setDropping(false),
+        onDrop: (e) => {
+          setDropping(false);
+          if (!takes(e)) return;
+          e.preventDefault();
+          void session.drop([...(e.dataTransfer?.files ?? [])]);
+        },
+      }}
+      head={<PageHead heading={state.frame.title || app.name} actions={actions} onAction={(a) => session.command(a.id)} />}
+      status={paneStatus(app.name, state, stopped, onRetry)}
+      canvas={open && state.canvas ? <CanvasFrame key={state.canvas.opened} name={app.name} canvas={state.canvas} /> : undefined}
+      screenHidden={!open || !!state.canvas}
+      about={<AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />}
+      overlay={<CommandPalette open={palette && !stopped} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />}
+    >
+      {!stopped && (
+        <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
+          <QuillRemote receiver={session.screen} host={host} />
+        </FrameRadial>
+      )}
+    </PaneLayout>
   );
+}
+
+/** What the pane says in place of the app's screen: why it stopped, with Try again, or that it is still opening. */
+function paneStatus(name: string, state: PaneState, stopped: boolean, onRetry: () => void) {
+  if (stopped) return <State kind="error" heading={state.phase === 'unresponsive' ? `${name} was stopped` : `${name} stopped`} body={state.reason} action="Try again" onAction={onRetry} />;
+  if (state.phase === 'open') return undefined;
+  return <State kind="loading" heading={state.phase === 'slow' ? `${name} is taking a while to open` : `Opening ${name}`} body={state.phase === 'slow' ? 'It’s still starting. The rest of the shell works meanwhile.' : undefined} />;
 }
 
 /**
@@ -577,48 +685,6 @@ function CanvasFrame({ name, canvas }: { name: string; canvas: NonNullable<PaneS
 
 /** A radial command's detail: the thing it was opened on, as the app marked it. */
 const thingDetail = (thing: FrameThing) => ({ thing: { kind: thing.kind, ...(thing.id ? { id: thing.id } : {}), label: thing.label } });
-
-/** The pane: the heading the shell draws from what the app set, and the app's screen or why it isn't there. */
-function Pane({ session, state, stopped, onRetry, source }: { session: AppSession; state: PaneState; stopped: boolean; onRetry: () => void; source: CommandSource }) {
-  const { app } = session;
-  const actions = stopped ? [] : actionsOf(app, state.frame.actions, state.handled);
-  const [dropping, setDropping] = useState(false);
-  // Files from the desktop land here, in the host, only while the app has a handler for them (spec 6.10).
-  const takes = (e: DragEvent) => !stopped && state.drops === true && [...(e.dataTransfer?.types ?? [])].includes('Files');
-  return (
-    <section
-      onDragOver={(e) => {
-        if (!takes(e)) return;
-        e.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={() => setDropping(false)}
-      onDrop={(e) => {
-        setDropping(false);
-        if (!takes(e)) return;
-        e.preventDefault();
-        void session.drop([...(e.dataTransfer?.files ?? [])]);
-      }}
-      data-dropping={dropping ? '' : undefined} className="app-pane" data-app={app.id} data-width={state.frame.width ?? 'read'} data-phase={state.phase} aria-busy={state.frame.busy || state.phase === 'opening' || state.phase === 'slow'}>
-      <PageHead heading={state.frame.title || app.name} actions={actions} onAction={(a) => session.command(a.id)} />
-      {stopped ? (
-        <State kind="error" heading={state.phase === 'unresponsive' ? `${app.name} was stopped` : `${app.name} stopped`} body={state.reason} action="Try again" onAction={onRetry} />
-      ) : (
-        <>
-          {state.phase !== 'open' && (
-            <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while to open` : `Opening ${app.name}`} body={state.phase === 'slow' ? 'It’s still starting. The rest of the shell works meanwhile.' : undefined} />
-          )}
-          {state.canvas && state.phase === 'open' && <CanvasFrame key={state.canvas.opened} name={app.name} canvas={state.canvas} />}
-          <div className="app-pane-screen" hidden={state.phase !== 'open' || !!state.canvas}>
-            <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
-              <QuillRemote receiver={session.screen} />
-            </FrameRadial>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
 
 /**
  * An app's card on Home (spec 6.15), as the surface Home's tile takes: the app runs in a worker of
@@ -667,6 +733,8 @@ export function workerCard(app: WorkerApp, ctx: WorkerContext, options: WorkerHo
 /** The card as the app draws it, and its states: opening, and stopped with why (a failed card is never blank, spec 6.13). */
 function CardPane({ session }: { session: AppSession }) {
   const state = useSyncExternalStore(session.subscribe, () => session.state);
+  // A card shows pictures but takes no files: those go to the app's own pane.
+  const host = usePaneHost(session, false);
   const receiver = session.receiverOf(CARD_ROOT);
   const { app } = session;
   return (
@@ -676,7 +744,7 @@ function CardPane({ session }: { session: AppSession }) {
       ) : state.phase !== 'open' ? (
         <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while` : `Opening ${app.name}`} />
       ) : (
-        receiver && <QuillRemote receiver={receiver} />
+        receiver && <QuillRemote receiver={receiver} host={host} />
       )}
     </div>
   );

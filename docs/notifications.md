@@ -46,7 +46,7 @@ People who choose a digest in Account, Notifications get one email gathering wha
 
 ## What AUGUR itself tells people
 
-The registry tells people about updates, from the Upgrade Centre's overview, once a minute:
+The registry tells people about updates, from Deployment's overview, once a minute:
 
 | When | Who | Level |
 | --- | --- | --- |
@@ -56,6 +56,6 @@ The registry tells people about updates, from the Upgrade Centre's overview, onc
 | It failed, or went back by itself after the 10-minute watch | deployment admins and admins | failed |
 | The publisher halted the release this server runs | deployment admins | needs |
 
-Opening one goes to that unit's page in the Upgrade Centre. Nothing is offered while a unit is on hold or an upgrade is under way. Only people holding the `deployment-admin` role (Admin, People) hear about new releases.
+Opening one goes to that component's page in Deployment. Nothing is offered while a unit is on hold or an upgrade is under way. Only people holding the `deployment-admin` role (Admin, People) hear about new releases.
 
 The API is in [contracts/events.openapi.yaml](../contracts/events.openapi.yaml).
