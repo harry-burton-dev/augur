@@ -65,10 +65,11 @@ describe.skipIf(!url)('OpenFGA itself', () => {
       personal: [],
       positions: [{ id: 'harbour-master', team: 'port', role: 'lead' as const, holder: 'p1' }],
       people,
+      roles: { admin: ['p0'], 'deployment-admin': [], publisher: [] },
     };
     // More than one page to read and more than one call to write.
-    expect(await project({ engine, store, modelId, relationships: async () => identity })).toMatchObject({ added: 134, removed: 0 });
-    expect((await engine.readAll(store, 50)).length).toBe(134);
+    expect(await project({ engine, store, modelId, relationships: async () => identity })).toMatchObject({ added: 137, removed: 0 });
+    expect((await engine.readAll(store, 50)).length).toBe(137);
     expect(await project({ engine, store, modelId, relationships: async () => identity })).toMatchObject({ added: 0, removed: 0 });
     const now = { current_time: new Date().toISOString() };
     expect(await engine.check(store, modelId, { user: 'person:p1', relation: 'can_act_as_lead', object: 'floor:port' }, now, 'HIGHER_CONSISTENCY')).toBe(true);
@@ -76,5 +77,12 @@ describe.skipIf(!url)('OpenFGA itself', () => {
     expect(await project({ engine, store, modelId, relationships: async () => handedOver })).toMatchObject({ added: 1, removed: 1 });
     expect(await engine.check(store, modelId, { user: 'person:p1', relation: 'can_act_as_lead', object: 'floor:port' }, now, 'HIGHER_CONSISTENCY')).toBe(false);
     expect(await engine.check(store, modelId, { user: 'person:p2', relation: 'stands', object: 'org:o' }, now, 'HIGHER_CONSISTENCY')).toBe(true);
+
+    // Today's admin is copied as an admin persona: it can manage people, the person as themselves can't.
+    expect(await engine.listObjects(store, modelId, { user: 'person:p0', relation: 'holder', type: 'persona' }, now, 'HIGHER_CONSISTENCY')).toEqual(['persona:admin.p0']);
+    expect(await engine.check(store, modelId, { user: 'persona:admin.p0', relation: 'can_manage_people', object: 'org:o' }, now, 'HIGHER_CONSISTENCY')).toBe(true);
+    expect(await engine.check(store, modelId, { user: 'persona:admin.p0', relation: 'admin', object: 'floor:port' }, now, 'HIGHER_CONSISTENCY')).toBe(true);
+    expect(await engine.check(store, modelId, { user: 'persona:admin.p0', relation: 'can_upgrade', object: 'deployment:this' }, now, 'HIGHER_CONSISTENCY')).toBe(false);
+    expect(await engine.check(store, modelId, { user: 'person:p0', relation: 'can_manage_people', object: 'org:o' }, now, 'HIGHER_CONSISTENCY')).toBe(false);
   });
 });

@@ -10,8 +10,8 @@ const verifyService = async (headers: Record<string, string | string[] | undefin
 describe.runIf(DATABASE_URL)('GET /v1/relationships', () => {
   it('gives the permissions service the floors, positions and holders, and who is in the org', async () => {
     const directory = new MemoryDirectory();
-    const jo = await directory.createPerson({ username: 'jo', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: [], departments: [] });
-    const kim = await directory.createPerson({ username: 'kim', firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org', roles: [], departments: [] });
+    const jo = await directory.createPerson({ username: 'jo', firstName: 'Jo', lastName: 'Smith', email: 'jo@example.org', roles: ['admin', 'publisher'], departments: [] });
+    const kim = await directory.createPerson({ username: 'kim', firstName: 'Kim', lastName: 'Lee', email: 'kim@example.org', roles: ['admin', 'deployment-admin'], departments: [] });
     await directory.updatePerson(kim.id, { enabled: false });
     const org = await db.workspaces.org();
     const port = await db.workspaces.createTeam('Port');
@@ -42,6 +42,8 @@ describe.runIf(DATABASE_URL)('GET /v1/relationships', () => {
         { id: planner.id, team: berths.id, role: 'member' },
       ],
       people: [jo.id],
+      // Kim's sign-in is off, so her roles aren't copied either.
+      roles: { admin: [jo.id], 'deployment-admin': [], publisher: [jo.id] },
     });
   });
 });

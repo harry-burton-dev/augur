@@ -2,7 +2,7 @@ import Type from 'typebox';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { identifyService, ServiceAuthUnavailable, type ServiceVerifier } from '@augur/service-kit';
-import type { Directory } from './directory.ts';
+import { DEPLOYMENT_ADMIN_ROLE, PUBLISHER_ROLE, type Directory } from './directory.ts';
 import { refused } from './schemas.ts';
 import type { WorkspaceStore } from './workspaces.ts';
 
@@ -21,9 +21,27 @@ export const Relationships = Type.Object(
       { description: 'Positions on live teams; a vacant one has no holder' },
     ),
     people: Type.Optional(Type.Array(Type.String(), { description: 'Everyone whose sign-in is on. Absent where identity has no directory to ask.' })),
+    roles: Type.Optional(
+      Type.Object(
+        {
+          admin: Type.Array(Type.String()),
+          'deployment-admin': Type.Array(Type.String()),
+          publisher: Type.Array(Type.String()),
+        },
+        { description: 'Who holds each of the Keycloak roles AUGUR still checks today, among those whose sign-in is on. Copied until each check moves to the permissions service (ADR 0085). Absent with people.' },
+      ),
+    ),
   },
   { description: 'Who and what the permissions service copies from identity' },
 );
+
+/** The Keycloak roles today's checks read (`caller.roles.includes(...)`), which shadow mode compares against. */
+const COPIED_ROLES = ['admin', DEPLOYMENT_ADMIN_ROLE.name, PUBLISHER_ROLE.name] as const;
+
+const withRoles = (people: { id: string; roles: string[] }[]) => {
+  const holding = (role: (typeof COPIED_ROLES)[number]) => people.filter((p) => p.roles.includes(role)).map((p) => p.id);
+  return { people: people.map((p) => p.id), roles: { admin: holding('admin'), 'deployment-admin': holding('deployment-admin'), publisher: holding('publisher') } };
+};
 
 export interface RelationshipOptions {
   workspaces: WorkspaceStore;
@@ -71,7 +89,7 @@ export const relationshipRoutes =
           teams: teams.map((t) => ({ id: t.id, parent: t.parentId ?? org.id })),
           personal,
           positions: positions.filter((p) => live.has(p.workspace)).map((p) => ({ id: p.id, team: p.workspace, role: p.role, ...(p.holder ? { holder: p.holder } : {}) })),
-          ...(people ? { people: people.filter((p) => p.enabled).map((p) => p.id) } : {}),
+          ...(people ? withRoles(people.filter((p) => p.enabled)) : {}),
         };
       },
     );

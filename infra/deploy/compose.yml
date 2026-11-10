@@ -523,6 +523,8 @@ services:
       <<: *env
       PORT: 8084
       SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}"
+      # Asked beside each admin and lead check, to compare answers before checks move there (shadow mode, docs/permissions.md).
+      PERMISSIONS_URL: http://permissions:8087
       # Its own login, owning only the events schema: the audit log, notifications and domain events.
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).

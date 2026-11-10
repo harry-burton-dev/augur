@@ -64,3 +64,19 @@ export const Evaluations = Type.Object(
 export type Evaluations = Static<typeof Evaluations>;
 
 export const Decisions = Type.Object({ evaluations: Type.Array(Decision) }, { $id: 'Decisions' });
+
+export const ResourceSearch = Type.Object(
+  {
+    subject: Subject,
+    action: Action,
+    resource: Type.Object({ type: Name }, { description: 'The type of resource to find.' }),
+    context: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  },
+  { $id: 'ResourceSearch', additionalProperties: false, description: 'Which resources of a type the subject may do this to (AuthZEN resource search).' },
+);
+export type ResourceSearch = Static<typeof ResourceSearch>;
+
+export const ResourceResults = Type.Object(
+  { results: Type.Array(Type.Object({ type: Type.String(), id: Type.String() })) },
+  { $id: 'ResourceResults' },
+);
