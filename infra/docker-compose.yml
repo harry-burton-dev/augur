@@ -211,7 +211,7 @@ services:
   # Permissions (ADR 0085): OpenFGA holds the relationships, in memory here, so they go with the
   # container; the permissions service copies floors and positions in from identity as each changes.
   openfga:
-    image: openfga/openfga:v1.11.2
+    image: openfga/openfga:v1.19.0
     command: ["run"]
     ports: ["127.0.0.1:8088:8080"]
   permissions:

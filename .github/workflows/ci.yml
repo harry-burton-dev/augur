@@ -255,7 +255,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       # Started by hand, not as a job service: a service can't be given OpenFGA's `run` command.
       - name: OpenFGA, in memory
-        run: docker run -d --name openfga -p 8080:8080 openfga/openfga:v1.11.2 run
+        run: docker run -d --name openfga -p 8080:8080 openfga/openfga:v1.19.0 run
       - name: OpenFGA's CLI, pinned and checked
         run: |
           curl -sSfL -o fga.tar.gz "https://github.com/openfga/cli/releases/download/v${FGA_VERSION}/fga_${FGA_VERSION}_linux_amd64.tar.gz"
