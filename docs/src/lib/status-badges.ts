@@ -1,5 +1,5 @@
-// Puts each page's status on its sidebar link, so Beta and Planned pages are marked wherever they're listed.
-// A Stable page carries no badge: that's what a reader assumes.
+// Marks Planned pages on their sidebar links, so nobody mistakes them for what AUGUR does today. Stable and
+// Beta show only under the page's title: while all of AUGUR is in beta, a Beta badge on every link says nothing.
 import { defineRouteMiddleware } from '@astrojs/starlight/route-data';
 import { getCollection } from 'astro:content';
 import { STATUS_LABEL, STATUS_VARIANT, type Status } from './status';
@@ -24,7 +24,7 @@ export const onRequest = defineRouteMiddleware(async (context) => {
       if (entry.type === 'group') mark(entry.entries);
       else if (!entry.badge) {
         const status = statuses!.get(slug(entry.href, base));
-        if (status && status !== 'stable') entry.badge = { text: STATUS_LABEL[status], variant: STATUS_VARIANT[status] };
+        if (status === 'planned') entry.badge = { text: STATUS_LABEL[status], variant: STATUS_VARIANT[status] };
       }
     }
   };
