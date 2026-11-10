@@ -1,5 +1,18 @@
 # @augur/clients
 
+## 0.2.0
+
+### Minor Changes
+
+- 7044a09: The knowledge graph's client: `connectKnowledge` reads the action catalogue when it connects and binds each action the deployment offers, with a fresh Idempotency-Key per call, and an action it doesn't offer answers a problem naming those it does. `KnowledgeBaseClass` types the base profile's classes. The knowledge API's meta read now lists those classes (`ontology.baseClasses`), its contract names them (`BaseClass`), and an action's body is documented as an object with any fields, as its input schema in GET /actions says.
+- 2a581f5: The knowledge graph's contract is now checked against the running service: Schemathesis sends it the requests the contract allows, on main, and CI stops a pull request that would break a contract's callers within a major (oasdiff). What the first run found is fixed: a clock with an offset wider than Postgres takes, or before year 1, no longer fails a read; a floor id or IRI as long as the contract allows no longer answers 414; a NUL character in a text answers 422, not 500; and errors are documented as `application/problem+json`, as they were always sent. A source text goes in a body to the new POST /floors/{floor}/known-entities, since a long one doesn't fit a URL; the GET stays, deprecated, until /v2.
+
+  Not breaking: knowledge.openapi.yaml no longer lists Turtle and TriG for the export's and the shapes' errors, which the service never sent: they were always `application/problem+json`.
+
+- d2ce7c9: Apps can ask for the knowledge graph in their manifest's `scopes`: `knowledge:read` to read it as the person they act for, `knowledge:act` for its actions apps are granted, and `knowledge:extract` to add what a source says (retain). The gateway lets an app's calls to the knowledge graph through on those scopes, Admin names them when an admin allows an app, and an app's catalog entry names the knowledge API. The knowledge graph itself still refuses apps until its next release, which checks each action's own scope.
+
+  Not breaking: registry.openapi.yaml lists three more scopes an app's entry may carry. The list grows as AUGUR adds what apps can be granted, and its readers (Admin, the shell and the registry client) show a scope they don't know by its name.
+
 ## 0.1.1
 
 ### Patch Changes
