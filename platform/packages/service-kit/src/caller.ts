@@ -28,6 +28,12 @@ export interface Caller {
   app?: string;
   /** With `app`: the scopes the app is granted on this floor, which bound what the call may do. */
   scopes?: string[];
+  /**
+   * The admin persona the person is acting as (ADR 0086, PDR-024 "Act as"): set by the gateway only while
+   * the permissions service has a live session for it. `id` stays the person, so both are recorded. Absent
+   * means the person as themselves.
+   */
+  persona?: string;
 }
 
 export interface CallerWorkspace {
@@ -44,7 +50,14 @@ export const CALLER_HEADERS = {
   departments: 'x-user-departments',
   roles: 'x-user-roles',
   signedInAt: 'x-user-signed-in-at',
+  persona: 'x-user-persona',
 } as const;
+
+/**
+ * The header the shell sends while someone is acting as an admin persona: its id. The gateway checks the
+ * permissions service has a live session for it before the caller carries it, and strips it before forwarding.
+ */
+export const PERSONA_HEADER = 'x-augur-persona';
 
 /**
  * The header the shell's host sets on a call it makes for an app (contract 3, spec 8.5): the app's id,
@@ -67,7 +80,7 @@ export const WORKSPACE_HEADERS = {
   role: 'x-workspace-role',
 } as const;
 
-const HEADER_NAMES: readonly string[] = [...Object.values(CALLER_HEADERS), ...Object.values(WORKSPACE_HEADERS), ...Object.values(DELEGATION_HEADERS), APP_HEADER, 'x-augur-delegation'];
+const HEADER_NAMES: readonly string[] = [...Object.values(CALLER_HEADERS), ...Object.values(WORKSPACE_HEADERS), ...Object.values(DELEGATION_HEADERS), APP_HEADER, PERSONA_HEADER, 'x-augur-delegation'];
 const KINDS: readonly string[] = ['personal', 'team', 'org'];
 
 type Headers = Record<string, string | string[] | undefined>;
@@ -94,6 +107,7 @@ export const callerHeaders = (caller: Caller): Record<string, string> => ({
   [CALLER_HEADERS.departments]: caller.departments.map(encodeURIComponent).join(','),
   [CALLER_HEADERS.roles]: caller.roles.map(encodeURIComponent).join(','),
   ...(caller.signedInAt ? { [CALLER_HEADERS.signedInAt]: caller.signedInAt } : {}),
+  ...(caller.persona ? { [CALLER_HEADERS.persona]: encodeURIComponent(caller.persona) } : {}),
   ...(caller.workspace
     ? {
         [WORKSPACE_HEADERS.id]: encodeURIComponent(caller.workspace.id),
@@ -126,6 +140,7 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
   const floor = one(headers[WORKSPACE_HEADERS.id]);
   const kind = one(headers[WORKSPACE_HEADERS.kind]);
   const app = one(headers[DELEGATION_HEADERS.app]);
+  const persona = one(headers[CALLER_HEADERS.persona]);
   return {
     id: decode(id),
     name: decode(one(headers[CALLER_HEADERS.name]) ?? id),
@@ -137,6 +152,7 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
       ? { workspace: { id: decode(floor), kind: kind as CallerWorkspace['kind'], role: one(headers[WORKSPACE_HEADERS.role]) === 'lead' ? 'lead' : 'member' } }
       : {}),
     ...(app ? { app: decode(app), scopes: list(one(headers[DELEGATION_HEADERS.scopes])) } : {}),
+    ...(persona ? { persona: decode(persona) } : {}),
   };
 };
 

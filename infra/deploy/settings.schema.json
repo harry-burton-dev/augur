@@ -1303,7 +1303,8 @@
         "models",
         "storage",
         "knowledge",
-        "knowledge-migrate"
+        "knowledge-migrate",
+        "permissions"
       ]
     },
     "IDENTITY_URL": {
@@ -1357,10 +1358,11 @@
     },
     "PERMISSIONS_URL": {
       "type": "string",
-      "description": "Where the permissions service is: for who settles and raises on each floor, and asked beside other services' admin and lead checks to compare answers (shadow mode).",
+      "description": "Where the permissions service is: for who settles and raises on each floor, asked beside other services' admin and lead checks to compare answers (shadow mode), and asked by the gateway whether someone is acting as an admin persona.",
       "x-internal": "compose",
       "x-services": [
         "events",
+        "gateway",
         "identity",
         "knowledge",
         "models",
@@ -1960,6 +1962,24 @@
       "type": "string",
       "description": "How often the permissions service copies floors, positions and who holds them whole from identity, in seconds, to put right anything an event missed. Each change identity announces is copied as it happens.",
       "default": "300",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/whats-running.md#permissions"
+    },
+    "PERSONA_DEPLOYMENT_ADMIN_MINUTES": {
+      "type": "string",
+      "description": "The longest someone may act as a deployment admin persona at a time, in minutes. They sign in again and give a reason each time (ADR 0086).",
+      "default": "60",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/whats-running.md#permissions"
+    },
+    "PERSONA_ORG_ADMIN_MINUTES": {
+      "type": "string",
+      "description": "The longest someone may act as an org admin persona at a time, in minutes. They sign in again and give a reason each time (ADR 0086).",
+      "default": "480",
       "x-services": [
         "permissions"
       ],

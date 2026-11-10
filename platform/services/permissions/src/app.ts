@@ -11,10 +11,13 @@ import {
   serviceFastifyOptions,
   signedCallers,
   type CallerCheck,
+  type NewAuditEntry,
   type ServiceVerifier,
 } from '@augur/service-kit';
 import { relationsOf, type AuthorizationModel, type CheckKey, type Consistency, type OpenFga } from './openfga.ts';
 import type { ProjectionRun } from './projection.ts';
+import { grantRoutes, MemoryGrantStore, type GrantStore } from './grants.ts';
+import { MemorySessionStore, sessionRoutes, type PersonaQuestions, type SessionLimits, type SessionStore } from './sessions.ts';
 import { Decision, Decisions, Evaluation, Evaluations, ResourceResults, ResourceSearch } from './schemas.ts';
 
 class OrgUnknown extends Error {}
@@ -38,6 +41,14 @@ export interface PermissionsOptions {
   projection?: () => ProjectionRun | undefined;
   /** The org's id, once identity has been asked: `org:this` means it, since a caller rarely knows it. */
   org?: () => string | undefined;
+  /** Who is acting as which admin persona (sessions.ts). In memory without one, as in tests. */
+  sessions?: SessionStore;
+  /** How long a persona session may last (PERSONA_*_MINUTES). */
+  sessionLimits?: SessionLimits;
+  /** Roles made in AUGUR and the grants ledger (grants.ts). In memory without one, as in tests. */
+  grants?: GrantStore;
+  /** Where starting and ending a persona session, and every role and grant, is recorded. */
+  audit?: (entry: NewAuditEntry) => Promise<void>;
   now?: () => Date;
 }
 
@@ -59,7 +70,7 @@ export const consistencyFor = (key: CheckKey): Consistency =>
  * the relationships OpenFGA holds. Only the gateway and AUGUR's own services may ask; a person never calls
  * it directly. When OpenFGA can't answer, the answer is a refusal that says so (D9), never a yes.
  */
-export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, projection, org = () => undefined, now = () => new Date() }: PermissionsOptions) => {
+export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, projection, org = () => undefined, sessions = new MemorySessionStore(), grants = new MemoryGrantStore(), sessionLimits, audit, now = () => new Date() }: PermissionsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   app.addHook('onRequest', signedCallers(callers));
@@ -106,6 +117,35 @@ export const buildApp = async ({ engine, store, modelId, model, verifyService, c
     reply.log.warn({ err }, 'a check could not be answered');
     return sendProblem(reply, 503, 'unavailable', 'Permissions can’t be checked right now. Nothing is allowed until they can. A deployment admin can see why on Status.');
   };
+
+  /** What persona sessions need to know from OpenFGA, always fresh: a persona taken away stops at once. */
+  const questions: PersonaQuestions = {
+    held: async (person) =>
+      (await engine.listObjects(store, modelId, { user: `person:${person}`, relation: 'holder', type: 'persona' }, contextNow(), 'HIGHER_CONSISTENCY')).map((o) => o.slice('persona:'.length)),
+    powers: async (persona) => {
+      const known = org();
+      const keys: CheckKey[] = [{ user: `persona:${persona}`, relation: 'admin', object: 'deployment:this' }];
+      if (known) keys.push({ user: `persona:${persona}`, relation: 'admin', object: `org:${known}` });
+      const answers = await engine.batchCheck(store, modelId, keys, contextNow(), 'HIGHER_CONSISTENCY');
+      const failed = answers.find((a) => 'error' in a);
+      if (failed) throw new Error('error' in failed ? failed.error : 'unknown');
+      const allowed = answers.map((a) => 'allowed' in a && a.allowed);
+      return { deploymentAdmin: allowed[0] === true, orgAdmin: allowed[1] === true };
+    },
+  };
+  await app.register(
+    grantRoutes({
+      grants,
+      engine: {
+        check: (key) => engine.check(store, modelId, key, contextNow(), 'HIGHER_CONSISTENCY'),
+        write: (writes, deletes) => engine.write(store, modelId, writes, deletes),
+      },
+      org,
+      ...(audit ? { audit } : {}),
+      now,
+    }),
+  );
+  await app.register(sessionRoutes({ sessions, questions, ...(sessionLimits ? { limits: sessionLimits } : {}), mayAsk, ...(audit ? { audit } : {}), now }));
 
   await app.register(
     async (plain) => {

@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### OpenFGA moves to 1.19
+
+**From** unreleased
+
+OpenFGA (`openfga`, the store behind the permissions service) moves from 1.11.2 to 1.19.0, which fixes critical flaws in the libraries it was built with. It brings its tables up to date on its first start, as it always has; nothing to do. Going back to an earlier release leaves the newer tables in place, which the deploy test checks.
+
 ### No role needs a one-time code to sign in
 
 **From** augur@0.25.0

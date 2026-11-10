@@ -34,6 +34,12 @@ admin persona. For now the events, identity, registry and models services ask it
 lead checks and compare the answers, without acting on its answer
 ([Observability](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#what-the-alert-rules-read)).
 
+Admin personas are kept here too. Someone who holds one signs in again, gives a reason, and acts as it for at
+most `PERSONA_DEPLOYMENT_ADMIN_MINUTES` (60) as a deployment admin or `PERSONA_ORG_ADMIN_MINUTES` (480) as an
+org admin. Starting and ending one is in the audit log. While someone acts as one, the shell says so on every
+call, and the gateway checks the session is still live before it passes the persona on beside the person; an
+ended session, or a call made for an app, is refused.
+
 ## Apps
 
 Home, Admin and Deployment come with AUGUR. No other app does: an admin installs each from the app feed, and
