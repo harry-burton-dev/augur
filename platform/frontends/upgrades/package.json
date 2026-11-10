@@ -4,27 +4,19 @@
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Upgrade Centre (at /upgrades): what this deployment runs, what's on offer, and upgrading, pinning, holding and going back, for AUGUR and each app. Built as one ES module the shell imports from the registry's entry URL.",
+  "description": "Deployment (at /upgrades): what this deployment runs, what's available, and upgrading, rolling back and the update policy, for AUGUR and each app. A contract 3 app: one ES module the shell runs in a web worker.",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && vite build && vite build -c vite.sandbox.config.ts",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.17.0",
     "@augur/mfe-sdk": "workspace:*",
-    "react": "catalog:",
-    "react-dom": "catalog:",
     "semver": "catalog:"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "catalog:",
-    "@types/react": "catalog:",
-    "@types/react-dom": "catalog:",
+    "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.17.0",
     "@types/semver": "catalog:",
-    "@vitejs/plugin-react": "catalog:",
-    "happy-dom": "catalog:",
-    "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"

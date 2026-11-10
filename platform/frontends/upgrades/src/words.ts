@@ -1,6 +1,6 @@
-import type { Outcome } from '../model/history.js';
-import type { UnitState } from '../model/states.js';
-import type { Channel, Policy, UpgradeStep } from '../model/types.js';
+import type { Outcome } from './model/history.js';
+import type { UnitState } from './model/states.js';
+import type { Channel, Policy, UpgradeStep } from './model/types.js';
 
 /**
  * The words Deployment uses: the ones release and operations people use (update available, breaking
@@ -42,5 +42,4 @@ export const STEP: Record<UpgradeStep['step'], string> = {
   'roll-back': 'Roll back',
 };
 
-/** Said wherever a change needs deployment-admin and the person doesn't hold it (ADR 0022, 0084). */
-export const NEEDS_DEPLOYMENT_ADMIN = 'Needs the deployment-admin role. Ask a deployment admin.';
+export { NEEDS_DEPLOYMENT_ADMIN } from './model/roles.js';

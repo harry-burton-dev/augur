@@ -1,11 +1,11 @@
 import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
-import { historyOf, type HistoryEntry } from '../model/history.js';
-import { pinChoices } from '../model/levels.js';
-import { DAY_NAMES, desiredProblems, MAX_WINDOWS, policySentence, timeZones } from '../model/sentence.js';
-import { formatWhen, nextWindows } from '../model/time.js';
-import type { AutomaticLevel, Channel, DesiredState, DesiredStateInput, OverviewUnit, Policy, ReportingView, Ring, Window } from '../model/types.js';
-import { channelsFor, RING_WORDS } from '../model/words.js';
-import { AUGUR } from '../units.js';
+import { historyOf, type HistoryEntry } from './model/history.js';
+import { pinChoices } from './model/levels.js';
+import { DAY_NAMES, desiredProblems, MAX_WINDOWS, policySentence, timeZones } from './model/sentence.js';
+import { formatWhen, nextWindows } from './model/time.js';
+import type { AutomaticLevel, Channel, DesiredState, DesiredStateInput, OverviewUnit, Policy, ReportingView, Ring, Window } from './model/types.js';
+import { channelsFor, RING_WORDS } from './model/words.js';
+import { AUGUR } from './units.js';
 import { quill } from './quill.js';
 import { pathOf } from './routes.js';
 import { HISTORY_STEP, when, type View } from './view.js';

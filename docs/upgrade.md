@@ -8,7 +8,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 ## Before you start
 
-The **Upgrade Centre** (`/upgrades`) shows whether a newer release is out, what changes in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking changes, and apps that won't open on the new SDK. It fills in the version for the steps below. The registry checks once a day; **Check now** checks straight away.
+**Deployment** (`/upgrades`, once the Upgrade Centre) shows whether a newer release is out, what changes in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking changes, and apps that won't open on the new SDK. It fills in the version for the steps below. The registry checks once a day; **Check now** checks straight away.
 
 **Upgrade to …** on that page asks the deployment's updater to run these steps for you: it asks for your password again, then the updater takes a backup, pulls, restarts each part and goes back by itself if anything fails, and the page follows each step. The updater is optional: until you've set it up ([The updater](#the-updater)), an upgrade you ask for just waits; cancel it there and use the steps below. When a release changes the deploy files (`infra/deploy`), such as a new service or a new Keycloak setting, the updater writes them too, and a new required setting that's a secret it makes up itself ([The updater](#the-updater)). The steps below are for a server without the updater, or for when the page says an upgrade has to be done by hand.
 
@@ -55,6 +55,12 @@ Every release has been through the [deploy test](https://drive.google.com/drive/
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
+
+### The Upgrade Centre is now Deployment
+
+**From** unreleased
+
+The Upgrade Centre is now called **Deployment** and runs on the app contract, in a worker of its own, like any installed app. Its address stays `/upgrades`. Its pages are Overview, AUGUR, Apps and Settings, and each keeps its own history, so there is no History page. Nothing to do on the server: the web image serves the new page. If Deployment won't open after upgrading, `/recover/` still goes back.
 
 ### Removing apps, pinning, sites and app sign-ins need a deployment admin
 
