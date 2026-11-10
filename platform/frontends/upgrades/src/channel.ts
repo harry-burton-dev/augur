@@ -2,8 +2,7 @@ import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
 import type { DesiredState, PipelineLine, Stage } from './model/types.js';
 import { RING_WORDS } from './model/words.js';
 import { quill } from './quill.js';
-import { pathOf } from './routes.js';
-import type { SettingsView } from './settings.js';
+import { channelSelect, type SettingsView } from './settings.js';
 import { HISTORY_STEP, paged, when } from './view.js';
 import { CHANNEL } from './words.js';
 
@@ -99,24 +98,9 @@ export const channelPage = (v: SettingsView): RemoteNode => {
           { label: 'Server', value: RING_WORDS[o.ring], note: 'The kind of server (SERVER_RING) bounds which channels it may follow.' },
         ],
       }),
-      quill('quill-table', {
-        label: 'Each component’s channel',
-        noun: 'component',
-        columns: [
-          { key: 'component', label: 'Component' },
-          { key: 'channel', label: 'Release channel' },
-          { key: 'running', label: 'Running' },
-        ],
-        rows: o.units.map((x) => ({ id: x.unit, component: x.name, channel: CHANNEL[x.desired.channel], running: x.running })),
-        ...paged(o.units.length),
-      }),
-      quill('quill-button', {
-        label: 'Change in Settings',
-        kind: 'secondary',
-        disabled: !v.may,
-        ...(v.may ? {} : { reason: 'Only someone with the deployment-admin role can change the release channel.' }),
-        onPress: () => v.on.go(pathOf({ page: 'settings' })),
-      }),
+      // Each component's channel inline, saved as soon as it changes.
+      ...o.units.map((x) => channelSelect(v, x, o.ring, x.name)),
+      v.quick?.error ? quill('quill-notice', { tone: 'refused' }, v.quick.error) : null,
     ]),
     quill('quill-section', { label: 'Path to stable' }, theLine(v, u.line)),
     quill('quill-section', { label: 'Channel changes', count: changes?.length || undefined }, [
