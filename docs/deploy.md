@@ -56,7 +56,7 @@ Open `infra/deploy/.env` and fill in these, which only you know:
 | `PLATFORM_ADMIN_FIRST_NAME` | That person's first name. |
 | `PLATFORM_ADMIN_LAST_NAME` | That person's last name. |
 
-The preflight (step 3) fills in these 18 secrets, each with 64 random hex characters: `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `KNOWLEDGE_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `FRONTENDS_BUCKET_SECRET`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `MODELS_CLIENT_SECRET`, `KNOWLEDGE_CLIENT_SECRET`, `GRAFANA_ADMIN_PASSWORD`, `ALERT_WEBHOOK_TOKEN`.
+The preflight (step 3) fills in these 21 secrets, each with 64 random hex characters: `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `PERMISSIONS_DATABASE_PASSWORD`, `KNOWLEDGE_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `FRONTENDS_BUCKET_SECRET`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `MODELS_CLIENT_SECRET`, `KNOWLEDGE_CLIENT_SECRET`, `PERMISSIONS_CLIENT_SECRET`, `GRAFANA_ADMIN_PASSWORD`, `ALERT_WEBHOOK_TOKEN`, `OPENFGA_TOKEN`.
 <!-- /settings -->
 
 - `PLATFORM_VERSION` is the release you checked out, without `augur@`, for example `0.19.0`.
@@ -290,7 +290,7 @@ Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, Min
 
 - **Take one now**: `pc exec backup /bin/sh /backup/backup.sh --once` (it skips a day that already has one; delete today's file first to force it).
 - **Test a restore now**: `pc exec backup /bin/sh /backup/backup.sh --restore-test`. The result is in `infra/deploy/backups/status/restore-test.json`.
-- **Restore**: stop everything but Postgres (the apps that ship with AUGUR and the updater too, so nothing writes while the dump loads), wait for Postgres to say `healthy`, load the dump, then start again. The dump drops and recreates each database itself. Anything saved since that backup is lost, in every app and in sign-in: check Admin → Activity first. `pc stop` stops AUGUR's own Tailscale node too, so reach the server some other way. After an upgrade that went back, follow [upgrade-went-back.md](upgrade-went-back.md) instead: it says which file and when.
+- **Restore**: stop everything but Postgres (the apps that ship with AUGUR and the updater too, so nothing writes while the dump loads), wait for Postgres to say `healthy`, load the dump, then start again. The dump drops and recreates each database itself. Anything saved since that backup is lost, in every app and in sign-in: check Admin → Activity first. What people forgot in the knowledge graph since then stays forgotten: the graph keeps a ledger of each forget on a volume of its own (`knowledge-ledger`), outside the database, and forgets those again when `pc up -d` starts it. Its log says how many (`pc logs knowledge-migrate`). The same holds after [a restore to a point in time](#restore-to-a-point-in-time). `pc stop` stops AUGUR's own Tailscale node too, so reach the server some other way. After an upgrade that went back, follow [upgrade-went-back.md](upgrade-went-back.md) instead: it says which file and when.
   ```sh
   pc stop
   pc up -d postgres
@@ -361,7 +361,7 @@ When the server and its disk are gone, everything comes back from the off-server
    restic restore <augur-db id> --target /restore
    restic restore <augur-files id> --target /restore
    ```
-   `infra/deploy/restore/` now has `deploy/.env` and `deploy/secrets/`, `backups/platform-<date>.sql.gz` and `objects/{data,meta}`.
+   `infra/deploy/restore/` now has `deploy/.env` and `deploy/secrets/`, `backups/platform-<date>.sql.gz`, `objects/{data,meta}` and, once the knowledge graph has had something forgotten, `knowledge-ledger/forget-ledger.jsonl`.
 4. **Put the settings back**, and the release they name:
    ```sh
    install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env
@@ -378,6 +378,11 @@ When the server and its disk are gone, everything comes back from the off-server
    pc ps postgres            # again until it says healthy
    gunzip -c infra/deploy/restore/backups/platform-<date>.sql.gz | pc exec -T postgres psql -U platform -d postgres
    ```
+   Then put the knowledge graph's forget ledger back, if the copy has one, so what people forgot before that night stays forgotten when AUGUR starts (the knowledge service runs as user 1000):
+   ```sh
+   [ ! -d infra/deploy/restore/knowledge-ledger ] || pc run --rm --no-deps -v platform_knowledge-ledger:/r -v "$PWD/infra/deploy/restore/knowledge-ledger:/from:ro" \
+     --entrypoint sh backup -c 'cp -a /from/. /r/ && chown -R 1000:1000 /r'
+   ```
 6. **Put apps' files back** into Garage's volumes, with the newest metadata snapshot as its database:
    ```sh
    pc run --rm --no-deps -v platform_garage-meta:/r/meta -v platform_garage-data:/r/data -v "$PWD/infra/deploy/restore/objects:/from:ro" \
@@ -392,6 +397,7 @@ When the server and its disk are gone, everything comes back from the off-server
 ## What's in it
 
 - **Platform services**: identity, registry, events, models (the model gateway, off until you set a model and turn it on; see [Agents and models](agents.md)) and the gateway. Only the gateway is reachable, and only through `/api`. Services talk to each other on the compose network, each signed in as itself: the realm job makes each platform service's Keycloak client from its `*_CLIENT_SECRET` on every `up`.
+- **Permissions**: the permissions service answers who may do what (ADR 0085), from relationships OpenFGA keeps in Postgres. It copies the floors, the positions on them and who holds each from identity every `PERMISSIONS_COPY_SECONDS` (30), so a handover counts within that time; a copy that would take away more than half of what it holds at once is held back and logged, and Status shows how the last copy went.
 - **Apps**: Home, Admin and the Upgrade Centre come with AUGUR. No other app does (ADR 0075): an admin installs each from the app feed, and the app runner gives it its own container, sign-in, schema and bucket ([Ship an app](ship-an-app.md)).
 - **The front door** (`web`): nginx serving the shell and the apps' frontends, with `/api` and `/sso` behind it. Each build of an app's frontend is kept in Garage's `augur-frontends` bucket and served from a folder of its own, `/apps/<id>/<version>_<digest>/`, so it never changes under someone using it, and a new build of the same version (on the workbench, say) reaches browsers straight away. The shell's page has a Content Security Policy: the browser runs only scripts from the platform's own address, the shell's own inline scripts (its import map and the note shown if the kit can't be loaded), the kit's site when `KIT_URL` names another, and the sites in `APP_ORIGINS`, and the page talks only to the platform (plus those sites). Fonts come from Google Fonts.
 - **Storage**: Postgres (with pgvector) holds every service's and app's schema. Garage holds apps' files, reachable only inside the compose network; the `storage` container gives each app in `APP_STORAGE` its own login, schema and bucket ([App storage](app-storage.md)).
@@ -417,6 +423,7 @@ The front door (`web`) holds every caller to a few limits, set in `.env` and app
 - **Timeouts between services**: one AUGUR service waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`) before it gives up and answers that the other can't be reached right now, so a hung service slows only what needs it instead of every request through the gateway. Identity waits up to 15 seconds for Keycloak's admin API, and calls to the model gateway up to 3 minutes. Raise it only if `pc logs` shows a slow but working server giving up.
 - **Query time limits**: Postgres cancels any one query from an AUGUR service after a minute (`DATABASE_STATEMENT_TIMEOUT_SECONDS`; 0 for no limit), so a query stuck on a lock or a bad plan fails its request instead of holding a connection until the service runs out. Migrations are never limited.
 - **Pages of the knowledge graph**: a read that lists, such as the entities in sight from a floor, gives at most `KNOWLEDGE_PAGE_LIMIT` (100) a page whatever it asks for, and says when it cut a page shorter, so one call can't hold the service for long. Callers page on with the cursor each answer gives. A subgraph, what links to an entity, goes at most `KNOWLEDGE_SUBGRAPH_DEPTH` (3) hops from it, and says when it stopped short.
+- **Knowledge graph summaries**: with models turned on, the knowledge graph writes each floor's summary of an entity from that floor's own beliefs, once they have been quiet for `KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS` (600). It writes at most `KNOWLEDGE_REFLECT_DAILY_BUDGET` (400) a day for the deployment and `KNOWLEDGE_REFLECT_FLOOR_BUDGET` (100) for any one floor; what waits is shown as older than its beliefs, never hidden. Each summary is a call to the models service, counted against its daily limit with extraction, so keep the daily budget under that limit (Admin → Models). As a guide, 2,000 people retaining six texts a day each need about 85,000 summaries and 12,000 extractions a day: raise the models limit to its highest, 100,000, and the daily budget to 85,000. A floor where models are refused shows its entities' beliefs without a summary.
 
 ### The UI kit
 

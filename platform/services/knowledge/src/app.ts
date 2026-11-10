@@ -8,7 +8,8 @@ import { callerFromHeaders, delegationAllows, health, packageVersion, Problem, p
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type ActionDecl as Declared, type Effects, type RetainInputOf } from './actions.ts';
 import { extractionContext, extractionMessages, ExtractionRefused, newFence, PROMPT_VERSION, toRetain, type Dropped } from './extract.ts';
 import { describeApi } from './contract.ts';
-import { EXPORT_TYPES, exportFloor, type ExportFormat } from './export.ts';
+import { RolesUnavailable, type RolesLookup } from './permissions.ts';
+import { EXPORT_TYPES, exportFloor, exportOntology, type ExportFormat } from './export.ts';
 import { BASE_CLASSES } from './profile.ts';
 import {
   entityBeliefs,
@@ -57,6 +58,7 @@ import {
   UnseenObject,
 } from './schemas.ts';
 import { SHAPES } from './shapes.ts';
+import type { ForgetLedger } from './ledger.ts';
 import type { StandingLookup } from './standing.ts';
 import { asPerson } from './store.ts';
 
@@ -82,6 +84,15 @@ export interface KnowledgeOptions {
   callers?: CallerCheck;
   /** Asks the model, through the models service, for what a text says (MODELS_URL). Without it, retain takes no text. */
   extract?: (messages: { role: 'system' | 'user'; content: string }[], floor: string | undefined) => Promise<string>;
+  /** Where each forget is also written, outside Postgres, so a restore forgets it again. Without it, nowhere. */
+  ledger?: ForgetLedger;
+  /**
+   * Who settles and raises where, from the permissions service (PERMISSIONS_URL). Without it the store's own
+   * floor roles stand as they are, as in tests and local dev.
+   */
+  roles?: RolesLookup;
+  /** Told when the permissions service couldn't say, so the person held no role on this request. */
+  onRolesUnavailable?: (err: Error) => void;
   /** The most a page of a read gives, whatever it asks for (KNOWLEDGE_PAGE_LIMIT). */
   pageLimit?: number;
   /** The most hops a subgraph goes from its entity, whatever it asks for (KNOWLEDGE_SUBGRAPH_DEPTH). */
@@ -97,13 +108,20 @@ const KEY = /^[\x21-\x7e]{8,200}$/;
 const NOT_ON_FLOOR = 'You can’t stand on that floor, or it no longer exists.';
 const WHO_ADDS = 'A lead of the team, or an admin, who can add you to it.';
 const WHO_GRANTS = 'An admin, who can grant the app the scope in Admin, once its manifest asks for it.';
+const WHO_SETS_ROLES = 'An admin, who sets who settles and raises on each floor, a position or a person, in Admin.';
+/**
+ * Who is an ontology admin: AUGUR's admins, by identity's admin role, as the other services check it. The
+ * ontology is the deployment's, not a floor's, so no floor role decides it.
+ */
+export const ONTOLOGY_ADMIN_ROLE = 'admin';
+const WHO_ADMINS = 'A deployment admin, who can give you the admin role in Admin.';
 
 /** An error from the store, as a problem: a refusal says why, a bad reference says what to fix. */
 const fromStore = (err: unknown): unknown => {
   const e = err as { code?: string; message?: string; constraint?: string };
   if (e.code === '42501' && e.message?.startsWith('refused: ')) {
     const why = e.message.slice('refused: '.length);
-    return new Problem(403, 'not_allowed', `Not done: ${why}.`, { extensions: { why } });
+    return new Problem(403, 'not_allowed', `Not done: ${why}.`, { extensions: { why }, ...(/settler|raiser/.test(why) ? { whoCanChange: WHO_SETS_ROLES } : {}) });
   }
   if (e.code === '23505') return new Problem(409, 'conflict', 'That is already in the graph, so nothing was added.');
   if (e.code && /^(23503|23514|22P02|22007|22008|22003|22021|22P05)$/.test(e.code)) return new Problem(422, 'invalid_input', 'The input names something the graph doesn’t have, or a value it can’t take.');
@@ -115,7 +133,7 @@ const fromStore = (err: unknown): unknown => {
  * action, and reads, each answered as the person calling on the floor they stand on. The store's fence does
  * the deciding (migrations 003 and 004); this only says who is asking and where.
  */
-export const buildApp = async ({ store, standing, callers, extract, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
+export const buildApp = async ({ store, standing, callers, extract, ledger, roles, onRolesUnavailable, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
   // A path parameter may be as long as the contract lets it be once percent-encoded (an IRI of 200 characters,
   // say), not only Fastify's default of 100, which answered a longer one with a 414 the contract doesn't name.
   const app = Fastify({ ...serviceFastifyOptions(), routerOptions: { maxParamLength: 1024 } }).withTypeProvider<TypeBoxTypeProvider>();
@@ -155,12 +173,21 @@ export const buildApp = async ({ store, standing, callers, extract, pageLimit = 
     const { person, here, personal } = personOn(req, floor, options);
     if (!standing) throw new StandingUnavailable('The knowledge service has no way to ask identity where people stand.');
     const where = await standing(person);
+    // Asked before the transaction, which a slow answer would hold open. No answer is no role (ADR 0085, D9).
+    const held = roles
+      ? await roles(person, where.floors).catch((err: Error) => {
+          if (!(err instanceof RolesUnavailable)) throw err;
+          onRolesUnavailable?.(err);
+          return [];
+        })
+      : undefined;
     return asPerson(
       store,
       // Everyone stands on the org, so a read that names no floor is made from there.
       { person, floor: here ?? where.memberOf[0]! },
       async (db) => {
         await db.query('select kg.sync_person($1, $2::jsonb, $3::text[], $4)', [person, JSON.stringify(where.floors), where.memberOf, personal ?? null]);
+        if (held) await db.query('select kg.sync_roles($1, $2::jsonb)', [person, JSON.stringify(held)]);
         const sight = (await db.query<{ sight: string[] }>('select kg.my_sight() as sight')).rows[0]!.sight;
         if (!sight.length) throw new Problem(403, 'not_on_floor', NOT_ON_FLOOR, { whoCanChange: WHO_ADDS });
         try {
@@ -244,6 +271,10 @@ export const buildApp = async ({ store, standing, callers, extract, pageLimit = 
         async (req) => {
           const action = actionNamed(req.params.action);
           if (!action) throw unknown(req.params.action);
+          // The ontology belongs to no floor: an ontology admin acts on it from wherever they stand.
+          const onOntology = action.role === 'ontology-admin';
+          if (onOntology && !callerFor(req, action).roles.includes(ONTOLOGY_ADMIN_ROLE))
+            throw new Problem(403, 'not_allowed', `${action.name} is for an ontology admin, and you aren’t one.`, { whoCanChange: WHO_ADMINS });
           const key = req.headers['idempotency-key'];
           if (typeof key !== 'string' || !KEY.test(key)) throw new Problem(400, 'idempotency_key_required', 'Send an Idempotency-Key header of 8 to 200 printable characters, new for each change you mean.');
           let input;
@@ -297,6 +328,7 @@ export const buildApp = async ({ store, standing, callers, extract, pageLimit = 
                 return { ...(prior.answer as { action: string; actionId: string; effects: Effects }), replayed: true };
               }
               const actionId = `run_${ulid()}`;
+              if (onOntology) await db.query(`select set_config('kg.ontology_admin', 'true', true)`);
               if (dryRun) {
                 await db.query('savepoint dry');
                 try {
@@ -316,11 +348,13 @@ export const buildApp = async ({ store, standing, callers, extract, pageLimit = 
                 if (err instanceof InvalidInput) throw new Problem(422, 'invalid_input', `The input doesn’t fit ${action.name}.`, { extensions: { problems: err.problems } });
                 throw err;
               }
+              // On disk before the forget commits: a forget the file missed could come back with a restore.
+              if (action.ledgered && ledger) await ledger.append(effects.observations ?? []);
               const answer = { action: action.name, actionId, effects, ...(extraction ? { extraction } : {}) };
               await db.query('select kg.keep_answer($1, $2, $3, $4::jsonb)', [key, action.name, sha, JSON.stringify(answer)]);
               return answer;
             },
-            { keep: !dryRun, action },
+            { keep: !dryRun, action, orOrg: onOntology },
           );
         },
       );
@@ -654,6 +688,21 @@ export const buildApp = async ({ store, standing, callers, extract, pageLimit = 
         signedIn(req);
         return { base: BASE_PROFILE, ...(await readOntology(store)) };
       });
+      app.get(
+        '/ontology/owl',
+        {
+          schema: {
+            summary: 'The deployment’s ontology now as OWL, in Turtle',
+            description: 'The base profile and the terms adopted since, never a candidate, with each term’s status, its pack term as skos:exactMatch, and the other names extraction asks a predicate by as skos:hiddenLabel.',
+            produces: ['text/turtle'],
+            response: { 200: Type.String({ description: 'Turtle.' }), 401: problem('No signed-in caller') },
+          },
+        },
+        async (req, reply) => {
+          signedIn(req);
+          return reply.type('text/turtle; charset=utf-8').send(await exportOntology(store, BASE_PROFILE));
+        },
+      );
       app.get(
         '/ontology/shapes',
         { schema: { summary: 'The SHACL shapes the store is checked against', produces: ['text/turtle'], response: { 200: Type.String({ description: 'Turtle.' }), 401: problem('No signed-in caller') } } },

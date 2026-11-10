@@ -42,6 +42,10 @@ const PLATFORM_FIRST: Row[] = [
   // The knowledge graph's schema first, as Postgres's admin login, then the service, which signs in as kg_app.
   ['knowledge-migrate', 'job'],
   ['knowledge', 'service', 'http://knowledge:8086/healthz'],
+  // OpenFGA, after storage has made its login: it brings its tables up to date, then serves. Its /healthz
+  // says nothing of AUGUR's version, so it is back once it stays running. Then the service that asks it.
+  ['openfga', 'worker'],
+  ['permissions', 'service', 'http://permissions:8087/healthz'],
 ];
 const PLATFORM_LAST: Row[] = [
   ['gateway', 'service', 'http://gateway:8080/healthz'],

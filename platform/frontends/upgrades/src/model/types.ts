@@ -113,6 +113,36 @@ export interface PlatformUpdates {
   feedTrust?: FeedTrust;
   /** Whether a halted release may be installed here for a test (ADR 0051), and why not. Absent from an older registry. */
   haltedInstall?: HaltedInstall;
+  /** Each unit on its way from main to stable, from the pipeline feed, with what this server runs of it. */
+  line?: PipelineLine;
+}
+
+/** A pipeline stage: dev is main, preview each unit's newest release, production its newest stable one. */
+export type Stage = 'dev' | 'preview' | 'production';
+export interface PipelinePull {
+  number: number;
+  title: string;
+  url: string;
+}
+
+/** The pipeline feed (docs/release-channels.md, The pipeline feed), as the registry passes it on. */
+export interface PipelineLine {
+  feed: 'on' | 'off';
+  checkedAt?: string;
+  problem?: string;
+  generatedAt?: string;
+  repository?: string;
+  units: {
+    id: string;
+    name: string;
+    versions: Record<Stage, string | null>;
+    devBuild?: { version: string; released?: string };
+    waiting: string[];
+    previews: { pr: number; version: string }[];
+    running?: string;
+  }[];
+  steps: { from: Stage; to: Stage; merged: number; pulls: { number: number; title: string; mergedAt?: string }[] }[];
+  pulls?: { versionPackages?: PipelinePull; promoteToPreview?: PipelinePull; promoteToProduction: (PipelinePull & { unit: string; version: string })[] };
 }
 
 /** Only dev and preview servers install a halted release, on request, to test going back (ADR 0051). */
@@ -260,4 +290,68 @@ export interface AppInstalls {
   channelNote?: string;
   installed: InstalledApp[];
   available: AvailableApp[];
+}
+
+/** One part of AUGUR as the gateway last checked it (the gateway's GET /status). */
+export interface ComponentStatus {
+  name: string;
+  kind: 'gateway' | 'service' | 'app' | 'sign-in';
+  state: 'up' | 'slow' | 'down' | 'checking';
+  version?: string;
+  api?: string;
+  latencyMs?: number;
+  checkedAt?: string;
+  seenAt?: string;
+  problem?: string;
+}
+
+/** Whether backups can be relied on, from what the backup container last wrote. */
+export interface BackupStatus {
+  state: 'ok' | 'attention';
+  problem?: string;
+  lastBackup?: { at: string; ok: boolean; file?: string; bytes?: number; problem?: string };
+  /** The last copy off the server (ADR 0060); absent while backups stay on the server only. */
+  offsite?: { at: string; ok: boolean; snapshot?: string; keepDays?: number; problem?: string };
+  /** Restoring to a point in time (ADR 0064); absent where Postgres doesn't archive yet. */
+  pointInTime?: { at: string; ok: boolean; bases?: number; earliest?: string; archivedAt?: string; copiedAt?: string; lastTest?: { at: string; ok: boolean }; problem?: string };
+  lastRestoreTest?: { at: string; ok: boolean; from?: 'local' | 'offsite'; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
+}
+
+/** Whether AUGUR can send email through the organisation's relay. */
+export interface EmailStatus {
+  state: 'off' | 'ok' | 'attention';
+  problem?: string;
+  relay?: string;
+  from?: string;
+  checkedAt?: string;
+}
+
+/** The gateway's GET /status: every part, backups, email and whether AUGUR is open to the internet. */
+export interface PlatformStatus {
+  components: ComponentStatus[];
+  backups?: BackupStatus;
+  publicAccess?: { open: boolean; until?: string };
+  email?: EmailStatus;
+}
+
+/** How one app's part is taking the events pushed to it (the events service's GET /deliveries). */
+export interface EventDelivery {
+  app: string;
+  failures: number;
+  nextAt: string | null;
+  lastError: string | null;
+  failingSince: string | null;
+  deliveredAt: string | null;
+  dropped: number;
+  droppedAt: string | null;
+  state: 'ok' | 'retrying' | 'stalled';
+  words: string;
+}
+
+/** Whether events are pushed to apps' parts at all, and when not, why and who can change that. */
+export type EventPushing = { on: true; problem?: string } | { on: false; why: string; whoCanChange: string };
+
+export interface Deliveries {
+  deliveries: EventDelivery[];
+  pushing: EventPushing;
 }

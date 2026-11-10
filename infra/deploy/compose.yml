@@ -197,6 +197,8 @@ services:
       - wal-archive:/wal-archive
       # The deploy folder, read only: .env and secrets/ go into the off-server copy with the backups, encrypted.
       - ./:/deploy:ro
+      # The knowledge graph's forget ledger, read only: copied off the server with apps' files.
+      - knowledge-ledger:/knowledge-ledger:ro
     depends_on:
       postgres: { condition: service_healthy }
       backup-tools: { condition: service_completed_successfully }
@@ -254,7 +256,7 @@ services:
       RETIRED_APPS: folio atlas mandate auspex
       # The platform's services that get a login owning only their own schema, each with its
       # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
-      PLATFORM_DATABASE_LOGINS: identity registry events models
+      PLATFORM_DATABASE_LOGINS: identity registry events models permissions
       # The most connections each app's login may hold at once (30 when empty), so one app can't take AUGUR's (ADR 0073).
       APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
     depends_on:
@@ -333,7 +335,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Each platform service's sign-in in Keycloak, made or set to these secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-}
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-permissions=${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
@@ -578,6 +580,10 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
+      KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
+    # After a restore, it forgets again what the forget ledger names (docs/deploy.md, "Restore").
+    volumes:
+      - knowledge-ledger:/var/lib/augur/knowledge
     depends_on: *own-login
 
   # The knowledge graph of each floor (ADR 0079): what AUGUR knows of the entities in people's work, and
@@ -597,10 +603,72 @@ services:
       PORT: 8086
       KNOWLEDGE_PAGE_LIMIT: ${KNOWLEDGE_PAGE_LIMIT:-100}
       KNOWLEDGE_SUBGRAPH_DEPTH: ${KNOWLEDGE_SUBGRAPH_DEPTH:-3}
+      KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS: ${KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS:-600}
+      KNOWLEDGE_REFLECT_DAILY_BUDGET: ${KNOWLEDGE_REFLECT_DAILY_BUDGET:-400}
+      KNOWLEDGE_REFLECT_FLOOR_BUDGET: ${KNOWLEDGE_REFLECT_FLOOR_BUDGET:-100}
       SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
       DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
+      # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
+      # knowledge asks on each request. While it can't answer, nobody settles or raises.
+      PERMISSIONS_URL: http://permissions:8087
+    # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
+    volumes:
+      - knowledge-ledger:/var/lib/augur/knowledge
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
+      identity: { condition: service_healthy }
+
+  # OpenFGA (ADR 0085): it holds who may do what to what, as relationships, and answers the permissions
+  # service's checks. AUGUR's image of it brings its tables up to date before it serves. They live in the
+  # permissions schema, which the storage job gives the permissions login (PLATFORM_DATABASE_LOGINS). Only
+  # the permissions service calls it, with OPENFGA_TOKEN. A check may be answered from its cache for up to
+  # 10 seconds; the service asks for a fresh answer where a revoke must land at once (ADR 0085, D8).
+  openfga:
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/openfga:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=127.0.0.1:8081"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      OPENFGA_DATASTORE_ENGINE: postgres
+      OPENFGA_DATASTORE_URI: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      OPENFGA_AUTHN_METHOD: preshared
+      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+      OPENFGA_PLAYGROUND_ENABLED: "false"
+      OPENFGA_LOG_FORMAT: json
+      OPENFGA_CHECK_QUERY_CACHE_ENABLED: "true"
+      OPENFGA_CHECK_QUERY_CACHE_TTL: 10s
+    depends_on: *own-login
+
+  # The permissions service (ADR 0085): it answers whether a person, through the positions they hold, or an
+  # admin persona may do something, from what OpenFGA holds. Only the gateway and AUGUR's own services ask it.
+  # Nothing asks it yet: this release runs it so its store and model are in place.
+  permissions:
+    logging: *logging
+    <<: *service
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/permissions:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      <<: *env
+      PORT: 8087
+      OPENFGA_URL: http://openfga:8080
+      OPENFGA_TOKEN: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+      # Its own sign-in, to copy floors, positions and who holds them from identity (ADR 0089).
+      SERVICE_CLIENT_SECRET: ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
+      PERMISSIONS_COPY_SECONDS: ${PERMISSIONS_COPY_SECONDS:-30}
+    depends_on:
+      openfga: { condition: service_healthy }
       identity: { condition: service_healthy }
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
@@ -705,4 +773,6 @@ volumes:
   backup-tools:
   # Postgres's archived changes (WAL), gzipped: postgres writes them, the backup container prunes and copies them.
   wal-archive:
+  # The knowledge graph's forget ledger (ids only): the knowledge service writes it, its migrate job reads it.
+  knowledge-ledger:
   otel-lgtm:

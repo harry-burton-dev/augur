@@ -64,6 +64,13 @@ type floor
     define can_manage_members: manager or admin
     define can_act_as_lead: lead but not blocked
     define can_create_role: manager or admin
+    # The knowledge graph's floor roles (ADR 0079, amended by 0095): who settles a floor's disputes and holds what
+    # its people retained, and who raises its beliefs to the floor above. A position or a person, set in Admin's
+    # settings for the floor; a position's next holder has it at once. Leading a floor doesn't give either.
+    define settler: [person, persona#holder, role#assignee]
+    define raiser: [person, persona#holder, role#assignee]
+    define can_settle: settler but not blocked
+    define can_raise: raiser but not blocked
 
 # A role made inside AUGUR (by an admin, a lead, or an app) for one floor or the org. Roles hold people,
 # positions (their holders, or an admin persona itself), other roles' holders, or a whole floor's members. A role is a set of holders; what it gives

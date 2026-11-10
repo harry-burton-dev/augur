@@ -98,7 +98,7 @@ export interface Files {
   upload(blob: Blob, path: string): Promise<Response>;
   /** Fetches the bytes through the host, or asks the host to save them for the person. */
   download(path: string, options?: { save?: boolean }): Promise<Blob | undefined>;
-  /** Files dropped on the app's pane from the desktop land in the host, which forwards them here. */
+  /** Files dropped on the app's pane from the desktop, or chosen with a `quill-file-button`, land in the host, which forwards them here. */
   onDrop(handler: (files: File[]) => void | Promise<void>): () => void;
 }
 

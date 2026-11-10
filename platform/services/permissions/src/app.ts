@@ -14,6 +14,7 @@ import {
   type ServiceVerifier,
 } from '@augur/service-kit';
 import { relationsOf, type AuthorizationModel, type CheckKey, type Consistency, type OpenFga } from './openfga.ts';
+import type { ProjectionRun } from './projection.ts';
 import { Decision, Decisions, Evaluation, Evaluations } from './schemas.ts';
 
 /** The major version of the evaluation API, as AuthZEN names it: /access/v1. */
@@ -31,6 +32,8 @@ export interface PermissionsOptions {
   verifyService?: ServiceVerifier;
   /** Checks the caller the gateway signed (callerCheckFromEnv). */
   callers?: CallerCheck;
+  /** How the copy of identity's floors and positions last went, for Status (projection.ts). */
+  projection?: () => ProjectionRun | undefined;
   now?: () => Date;
 }
 
@@ -49,7 +52,7 @@ export const consistencyFor = (key: CheckKey): Consistency =>
  * the relationships OpenFGA holds. Only the gateway and AUGUR's own services may ask; a person never calls
  * it directly. When OpenFGA can't answer, the answer is a refusal that says so (D9), never a yes.
  */
-export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, now = () => new Date() }: PermissionsOptions) => {
+export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, projection, now = () => new Date() }: PermissionsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   app.addHook('onRequest', signedCallers(callers));
@@ -58,7 +61,8 @@ export const buildApp = async ({ engine, store, modelId, model, verifyService, c
 
   app.get('/healthz', async (_req, reply) => {
     if (!(await engine.healthy())) return sendProblem(reply, 503, 'unavailable', 'OpenFGA isn’t answering, so permissions can’t be checked.');
-    return { ...health('permissions', version, API_VERSION), model: modelId };
+    const copied = projection?.();
+    return { ...health('permissions', version, API_VERSION), model: modelId, ...(copied ? { projection: copied } : {}) };
   });
 
   /** Only the gateway, signing for whoever it checked, and AUGUR's own services may ask. */

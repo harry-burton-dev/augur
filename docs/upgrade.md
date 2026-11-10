@@ -56,6 +56,32 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Who settles and raises on a floor comes from the permissions service
+
+**From** unreleased
+
+The knowledge graph now asks the permissions service who settles a floor's disputes and holds what its people retained, and who raises its beliefs to the floor above. A position or a person holds each, as set for the floor. Nothing is carried over: until someone is set, nobody on a team floor can hold, settle, retract, raise, end, merge, split or retire there. Retaining, confirming, disputing and personal floors are unchanged. While the permissions service can't answer, nobody holds either role; the knowledge service's log says so on each request. Set `PERMISSIONS_CLIENT_SECRET` (the permissions service's own sign-in note) before upgrading.
+
+### The permissions service's own sign-in
+
+**From** unreleased
+
+The permissions service now copies floors, positions and who holds them from identity, so it signs in as itself. It needs one new setting, `PERMISSIONS_CLIENT_SECRET`, which the realm job turns into its Keycloak client. The Upgrade Centre makes it up for you. If you upgrade by hand, add it to `.env` first (`openssl rand -hex 32`). Within 30 seconds of starting, `pc logs permissions` says how many relationships it copied in.
+
+### The knowledge graph's forget ledger
+
+**From** unreleased
+
+Nothing to do. Compose makes a new volume, `knowledge-ledger`, where the knowledge graph writes the id of each observation someone forgets. After any restore, from a nightly backup or to a point in time, the knowledge graph's migrate job forgets those again when AUGUR starts, so a restore can't bring back what people asked to forget. The backup container copies the ledger off the server with each night's dump; [Restore a lost server](deploy.md#restore-a-lost-server) has a step that puts it back.
+
+### The permissions service and OpenFGA
+
+**From** unreleased
+
+This release adds the permissions service (`permissions`) and OpenFGA (`openfga`), which holds the relationships it answers from (ADR 0085). Nothing asks the service yet, so nothing changes for people. It needs two new settings. `PERMISSIONS_DATABASE_PASSWORD` is the service's own Postgres login, `platform_permissions`, which the storage job makes. `OPENFGA_TOKEN` is the key the service sends OpenFGA. Deployment makes both up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`).
+
+On the first `up`, the storage job makes the login and its `permissions` schema. OpenFGA then makes its tables there and starts, and the service makes its store and model. Going back to an earlier release stops both, and leaves the `permissions` schema and its login in place, unused.
+
 ### The Upgrade Centre is now Deployment
 
 **From** unreleased

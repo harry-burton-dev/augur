@@ -1,7 +1,10 @@
 import pg from 'pg';
 import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog } from '@augur/service-kit';
 import { buildApp } from './app.ts';
+import { fileLedger } from './ledger.ts';
 import { outboxRelay } from './outbox.ts';
+import { permissionsRoles, type RolesLookup } from './permissions.ts';
+import { DEFAULT_BUDGETS, reflectScheduler } from './reflect.ts';
 import { identityStanding } from './standing.ts';
 
 const log = startupLog('knowledge');
@@ -18,6 +21,11 @@ loadConfigOrExit('knowledge', [
   { ...commonSettings.models, required: false, about: 'where the model gateway is, such as http://models:8085. Without it, retain takes no text to extract from.' },
   { name: 'KNOWLEDGE_PAGE_LIMIT', about: 'the most one page of a read gives, such as 100.' },
   { name: 'KNOWLEDGE_SUBGRAPH_DEPTH', about: 'the most hops a subgraph read goes from its entity, such as 3.' },
+  { name: 'KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS', about: 'how long an entity’s beliefs must be quiet before reflect summarises it, such as 600.' },
+  { name: 'KNOWLEDGE_REFLECT_DAILY_BUDGET', about: 'the most summaries reflect writes a day for the whole deployment, such as 400; keep it under the models service’s daily limit, with room for extraction.' },
+  { name: 'KNOWLEDGE_REFLECT_FLOOR_BUDGET', about: 'the most summaries reflect writes a day on any one floor, such as 100.' },
+  { name: 'PERMISSIONS_URL', about: 'where the permissions service is, such as http://permissions:8087, asked who settles and raises on each floor. Without it nobody does.' },
+  { name: 'KNOWLEDGE_LEDGER_DIR', about: 'the folder, on a volume of its own, where each forget is written so a restore from backup forgets it again.', required: true },
 ]);
 
 const port = Number(process.env.PORT ?? 8086);
@@ -50,6 +58,33 @@ const extract =
     ? async (messages: { role: 'system' | 'user'; content: string }[], floor: string | undefined) =>
         (await askModel({ modelsUrl: MODELS_URL, credentials, workspace: floor, messages })).message.content
     : undefined;
-const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, pageLimit, subgraphDepth });
+const { KNOWLEDGE_LEDGER_DIR } = process.env;
+if (!KNOWLEDGE_LEDGER_DIR) log.warn('KNOWLEDGE_LEDGER_DIR is not set: what people forget is forgotten, but a restore from backup would bring its words back.');
+const ledger = KNOWLEDGE_LEDGER_DIR ? fileLedger(KNOWLEDGE_LEDGER_DIR) : undefined;
+// Who settles and raises comes from the permissions service; without it, or without the service's sign-in, nobody does.
+const { PERMISSIONS_URL } = process.env;
+const roles: RolesLookup = PERMISSIONS_URL && credentials ? permissionsRoles({ permissionsUrl: PERMISSIONS_URL, credentials }) : async () => [];
+if (!PERMISSIONS_URL) log.warn('PERMISSIONS_URL is not set: nobody settles or raises on any floor until it is.');
+const onRolesUnavailable = (err: Error) => app.log.warn({ err: err.message }, 'the permissions service could not say who settles and raises; nobody does on this request');
+const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, ledger, roles, onRolesUnavailable, pageLimit, subgraphDepth });
 await app.listen({ port, host: '0.0.0.0' });
+// Reflect writes each floor's summaries from its own beliefs, through the models service, within its budgets.
+if (MODELS_URL && credentials) {
+  const budgets = {
+    debounceSeconds: positive('KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS', DEFAULT_BUDGETS.debounceSeconds) ?? DEFAULT_BUDGETS.debounceSeconds,
+    daily: positive('KNOWLEDGE_REFLECT_DAILY_BUDGET', DEFAULT_BUDGETS.daily) ?? DEFAULT_BUDGETS.daily,
+    perFloor: positive('KNOWLEDGE_REFLECT_FLOOR_BUDGET', DEFAULT_BUDGETS.perFloor) ?? DEFAULT_BUDGETS.perFloor,
+  };
+  reflectScheduler({
+    pool: store,
+    budgets,
+    ask: async (messages, floor) => {
+      const answer = await askModel({ modelsUrl: MODELS_URL, credentials, workspace: floor, messages });
+      return { content: answer.message.content, model: answer.model };
+    },
+    log: (msg, detail) => app.log.info(detail ?? {}, msg),
+  }).start();
+} else {
+  log.warn('Reflect is off: without MODELS_URL and the service’s sign-in, entities show their beliefs without summaries.');
+}
 if (credentials) outboxRelay({ pool: store, eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err }, 'the outbox could not be sent') }).start();

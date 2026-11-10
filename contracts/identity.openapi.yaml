@@ -523,6 +523,34 @@ components:
           items:
             type: string
           description: Ids of its own members
+    Position:
+      type: object
+      required:
+        - id
+        - department
+        - name
+        - role
+      properties:
+        id:
+          type: string
+        department:
+          type: string
+          description: The department it is on
+        name:
+          type: string
+          description: What the job is called, such as Harbour master
+        role:
+          anyOf:
+            - type: string
+              enum:
+                - member
+            - type: string
+              enum:
+                - lead
+          description: Whether whoever holds it leads the department
+        holder:
+          type: string
+          description: Who holds it now; absent while it is vacant
     Caller:
       type: object
       required:
@@ -1373,6 +1401,95 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "503":
           description: The caller's token or the app's grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /relationships:
+    get:
+      summary: Floors, positions and who holds them, for the permissions service (platform services only)
+      description: Everything the permissions service copies into OpenFGA, as it is now. It asks for it whole and writes what changed.
+      responses:
+        "200":
+          description: Who and what the permissions service copies from identity
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - org
+                  - teams
+                  - personal
+                  - positions
+                properties:
+                  org:
+                    type: string
+                    description: The organisation floor
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - parent
+                      properties:
+                        id:
+                          type: string
+                        parent:
+                          type: string
+                          description: The team or the org right above it
+                    description: Live teams, parents first
+                  personal:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - owner
+                      properties:
+                        id:
+                          type: string
+                        owner:
+                          type: string
+                    description: Live personal floors
+                  positions:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - team
+                        - role
+                      properties:
+                        id:
+                          type: string
+                        team:
+                          type: string
+                        role:
+                          anyOf:
+                            - type: string
+                              enum:
+                                - member
+                            - type: string
+                              enum:
+                                - lead
+                        holder:
+                          type: string
+                    description: Positions on live teams; a vacant one has no holder
+                  people:
+                    type: array
+                    items:
+                      type: string
+                    description: Everyone whose sign-in is on. Absent where identity has no directory to ask.
+                description: Who and what the permissions service copies from identity
+        "403":
+          description: Not one of AUGUR’s own services
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Service sign-in can’t be checked now
           content:
             application/problem+json:
               schema:
@@ -3732,6 +3849,271 @@ paths:
                 $ref: "#/components/schemas/Refusal"
         "404":
           description: No such person or department
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/departments/{id}/positions:
+    get:
+      summary: The positions on a department, each with who holds it now
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Position"
+                description: Positions
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Add a vacant position to a department, audited as position.created
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - role
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  description: What the job is called
+                role:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - member
+                    - type: string
+                      enum:
+                        - lead
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "201":
+          description: Added, vacant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "400":
+          description: The name is empty or too long
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such department
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/positions/{id}:
+    patch:
+      summary: Rename a position, or change whether it leads its department, audited as position.changed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  description: What the job is called
+                role:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - member
+                    - type: string
+                      enum:
+                        - lead
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "400":
+          description: The name is empty or too long
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such position
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take a position away, audited as position.retired; whoever holds it stops
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Taken away
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/positions/{id}/holder:
+    put:
+      summary: Hand a position to someone, or leave it vacant, audited as position.handed-over
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - person
+              properties:
+                person:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 100
+                    - type: "null"
+                  description: Who holds it from now; null leaves it vacant
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Handed over
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such position or person
           content:
             application/problem+json:
               schema:

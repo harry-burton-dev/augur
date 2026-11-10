@@ -130,6 +130,7 @@ The knowledge graph service publishes its own as each action commits, from its o
 | --- | --- | --- |
 | `platform.knowledge.entity.created` | `{ entity, floor }` | An entity is first named, on that floor |
 | `platform.knowledge.observation.retained` | `{ observation, floor }` | A claim read in a source is kept |
+| `platform.knowledge.ontology.changed` | `{ version }` | An ontology admin adopts a new class or predicate. The ontology is the deployment's, so it is on no floor |
 
 Person events are on no floor, so they reach services, not browsers; team and membership events are on the team's floor, so its screens hear them too. Changes a person makes to their own profile in their account (`PATCH /v1/me/profile`, docs/account.md) aren't sent yet.
 

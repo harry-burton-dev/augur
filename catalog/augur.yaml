@@ -363,7 +363,12 @@ spec:
   lifecycle: experimental
   owner: group:default/augur-core
   system: augur-platform
-  consumesApis: []
+  consumesApis:
+    - api:default/events-api
+    - api:default/gateway-api
+    - api:default/identity-api
+    - api:default/models-api
+    - api:default/registry-api
   dependsOn: []
 ---
 apiVersion: backstage.io/v1alpha1
@@ -515,7 +520,7 @@ metadata:
     Every read draft 4 of the spec asks for is served. Actions are added as their releases come; within version 1 the API only adds, and a change that would break a caller is served as /v2 beside it.
   annotations:
     github.com/project-slug: harry-burton-dev/augur
-    augur.dev/contract-version: 1.7.0
+    augur.dev/contract-version: 1.10.0
 spec:
   type: openapi
   lifecycle: production

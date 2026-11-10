@@ -28,6 +28,8 @@ export interface ActionDecl<T extends TSchema = TSchema> {
   role?: 'settler' | 'raiser' | 'ontology-admin' | 'owner' | 'author' | 'member';
   grantedToAppsByDefault: boolean;
   undoable: boolean;
+  /** What it forgets is written to the forget ledger too, before it commits (ledger.ts). */
+  ledgered?: true;
   emits: string[];
   run(db: pg.ClientBase, input: Static<T>): Promise<Effects>;
 }
@@ -271,7 +273,7 @@ const hold: ActionDecl<typeof HoldInput> = {
       (input.supersedes ?? []).map((b) => uuidOf(b, 'A superseded belief')),
       input.into ? uuidOf(input.into, 'The belief to add to') : null,
     ]);
-    return { beliefs: [rows[0]!.id] };
+    return { beliefs: [rows[0]!.id], observations: input.observations };
   },
 };
 
@@ -314,8 +316,329 @@ const confirmFaithful: ActionDecl<typeof ConfirmInput> = {
   },
 };
 
+const Why = (description = 'Why, in a sentence: kept with the action.') => Type.String({ minLength: 1, maxLength: 500, description });
+
+const PublishInput = Type.Object(
+  { source: Id('A source of yours, on your own floor'), to: Type.String({ minLength: 1, maxLength: 120, description: 'The shared floor to publish it to' }) },
+  { additionalProperties: false },
+);
+const publish: ActionDecl<typeof PublishInput> = {
+  name: 'publish',
+  since: '1.8',
+  summary: 'Publish your own source to a shared floor you are on',
+  input: PublishInput,
+  who: 'The source’s author, standing on their own floor, to a shared floor they are on.',
+  scope: 'knowledge:act',
+  role: 'author',
+  grantedToAppsByDefault: true,
+  undoable: false,
+  emits: ['platform.knowledge.source.published'],
+  // The shared floor gets a source of its own, derived from yours, with what you kept of it: flagged text you
+  // didn't keep, and anything retracted or forgotten, stays behind. Nothing is held there until its settler holds it.
+  async run(db, input) {
+    const { rows } = await db.query<{ id: string }>('select kg.act_publish($1, $2) as id', [uuidOf(input.source, 'The source'), input.to]);
+    const observations = (await db.query<{ id: string }>('select id from kg.observations where source = $1 order by recorded_at', [rows[0]!.id])).rows.map((r) => r.id);
+    return { sources: [rows[0]!.id], observations };
+  },
+};
+
+const DisputeInput = Type.Object({ belief: Id('A belief in sight from your floor'), reason: Why('What is wrong with it.') }, { additionalProperties: false });
+const dispute: ActionDecl<typeof DisputeInput> = {
+  name: 'dispute',
+  since: '1.8',
+  summary: 'Say a belief in sight is wrong, for its floor’s settler to settle',
+  input: DisputeInput,
+  who: 'Anyone on a floor that sees the belief.',
+  scope: 'knowledge:act',
+  role: 'member',
+  grantedToAppsByDefault: true,
+  undoable: false,
+  emits: ['platform.knowledge.belief.disputed'],
+  async run(db, input) {
+    const { rows } = await db.query<{ id: string }>('select kg.act_dispute($1, $2) as id', [uuidOf(input.belief, 'The belief'), input.reason]);
+    return { disputes: [rows[0]!.id], beliefs: [input.belief] };
+  },
+};
+
+const SettleInput = Type.Object(
+  {
+    dispute: Id('An open dispute'),
+    outcome: Type.Union([Type.Literal('upheld'), Type.Literal('retracted'), Type.Literal('withdrawn')], {
+      description: 'upheld: the belief stands. retracted: its evidence is retracted, everywhere it reached. withdrawn: the one who disputed takes it back.',
+    }),
+    note: Type.Optional(Type.String({ maxLength: 500 })),
+  },
+  { additionalProperties: false },
+);
+const settle: ActionDecl<typeof SettleInput> = {
+  name: 'settle',
+  since: '1.8',
+  summary: 'Settle a dispute on a belief your floor holds',
+  input: SettleInput,
+  who: 'The settler of the belief’s home floor; the one who disputed may withdraw it.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    const id = uuidOf(input.dispute, 'The dispute');
+    await db.query('select kg.act_settle($1, $2, $3)', [id, input.outcome, input.note ?? '']);
+    const { rows } = await db.query<{ belief: string }>('select belief from kg.disputes where id = $1', [id]);
+    return { disputes: [id], beliefs: rows.map((r) => r.belief) };
+  },
+};
+
+const RetractInput = Type.Object({ observation: Id('An observation'), why: Why() }, { additionalProperties: false });
+const retract: ActionDecl<typeof RetractInput> = {
+  name: 'retract',
+  since: '1.8',
+  summary: 'Take back an observation: it stops counting, everywhere it reached',
+  input: RetractInput,
+  who: 'Its source’s author, or the settler of the floor it is on.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: ['platform.knowledge.observation.retracted'],
+  async run(db, input) {
+    await db.query('select kg.act_retract($1, $2)', [uuidOf(input.observation, 'The observation'), input.why]);
+    return { observations: [input.observation] };
+  },
+};
+
+const RaiseInput = Type.Object(
+  { belief: Id('A belief your floor holds'), why: Why(), citeSources: Type.Optional(Type.Boolean({ description: 'Let the floor above see which sources it rests on.' })) },
+  { additionalProperties: false },
+);
+const raise: ActionDecl<typeof RaiseInput> = {
+  name: 'raise',
+  since: '1.8',
+  summary: 'Let the floor above see a belief this floor holds',
+  input: RaiseInput,
+  who: 'The floor’s raiser, for a held, current, undisputed belief.',
+  scope: 'knowledge:act',
+  role: 'raiser',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: ['platform.knowledge.belief.raised'],
+  // Nothing is copied: the belief's reach grows by one floor, and a retraction later falls from both.
+  async run(db, input) {
+    await db.query('select kg.act_raise($1, $2, $3)', [uuidOf(input.belief, 'The belief'), input.why, input.citeSources ?? false]);
+    return { beliefs: [input.belief] };
+  },
+};
+
+const EndInput = Type.Object(
+  { belief: Id('A belief your floor holds'), at: Type.String({ format: 'date-time', description: 'When it stopped being so.' }), why: Why() },
+  { additionalProperties: false },
+);
+const end: ActionDecl<typeof EndInput> = {
+  name: 'end',
+  since: '1.8',
+  summary: 'Say a belief stopped being so at a time; it is kept, as history',
+  input: EndInput,
+  who: 'The settler of its home floor, or the owner on their own floor.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    await db.query('select kg.act_end($1, $2, $3)', [uuidOf(input.belief, 'The belief'), input.at, input.why]);
+    return { beliefs: [input.belief] };
+  },
+};
+
+const ForgetInput = Type.Object({ observation: Id('An observation on your own floor') }, { additionalProperties: false });
+const forget: ActionDecl<typeof ForgetInput> = {
+  name: 'forget',
+  since: '1.8',
+  summary: 'Forget an observation on your own floor: its words are cleared, for good',
+  input: ForgetInput,
+  who: 'The owner of the personal floor it is on.',
+  scope: 'knowledge:act',
+  role: 'owner',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  // The ledger keeps only which observation was forgotten, so a restore from backup forgets it again.
+  ledgered: true,
+  emits: [],
+  async run(db, input) {
+    await db.query('select kg.act_forget($1)', [uuidOf(input.observation, 'The observation')]);
+    return { observations: [input.observation] };
+  },
+};
+
+const MergeInput = Type.Object({ senior: Id('The entity that stays'), junior: Id('The entity that is the same real thing'), why: Why() }, { additionalProperties: false });
+const merge: ActionDecl<typeof MergeInput> = {
+  name: 'merge',
+  since: '1.9',
+  summary: 'Say two entities are one real thing: the junior points to the senior, and nothing moves',
+  input: MergeInput,
+  who: 'The floor’s settler.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    const senior = entityOf(input.senior, new Map(), 'The senior');
+    const junior = entityOf(input.junior, new Map(), 'The junior');
+    if (senior === junior) throw new InvalidInput(['An entity can’t be merged into itself.']);
+    const { rows } = await db.query<{ id: string }>('select kg.act_merge($1, $2, $3) as id', [senior, junior, input.why]);
+    return { merges: [rows[0]!.id], entities: [entityId(senior), entityId(junior)] };
+  },
+};
+
+const SplitInput = Type.Object({ merge: Id('A merge'), why: Why() }, { additionalProperties: false });
+const split: ActionDecl<typeof SplitInput> = {
+  name: 'split',
+  since: '1.9',
+  summary: 'Undo a merge exactly: the junior is its own entity again',
+  input: SplitInput,
+  who: 'The settler of the floor that merged them.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    const id = uuidOf(input.merge, 'The merge');
+    await db.query('select kg.act_split($1, $2)', [id, input.why]);
+    return { merges: [id] };
+  },
+};
+
+const RetireInput = Type.Object({ entity: Id('An active entity'), why: Why() }, { additionalProperties: false });
+const retire: ActionDecl<typeof RetireInput> = {
+  name: 'retire',
+  since: '1.9',
+  summary: 'Take an entity out of use; it stays, with everything said of it',
+  input: RetireInput,
+  who: 'The floor’s settler.',
+  scope: 'knowledge:act',
+  role: 'settler',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    await db.query('select kg.act_retire($1, $2)', [entityOf(input.entity, new Map(), 'The entity'), input.why]);
+    return { entities: [input.entity] };
+  },
+};
+
+const UndoInput = Type.Object({ action: Id('One of your own actions, by the actionId its answer gave'), why: Why() }, { additionalProperties: false });
+const undo: ActionDecl<typeof UndoInput> = {
+  name: 'undo',
+  since: '1.9',
+  summary: 'Undo one of your own actions that can be undone: retain, hold or keep',
+  input: UndoInput,
+  who: 'Whoever took the action, while they may still take it.',
+  scope: 'knowledge:act',
+  role: 'author',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  // Undoing retain retracts what it kept; undoing hold withdraws the belief, or only the evidence it added;
+  // undoing keep flags the observation again. Each goes through the store, which checks you may.
+  async run(db, input) {
+    const run = (await db.query<{ action: string; answer: { effects?: Effects } }>('select action, answer from kg.my_run($1)', [input.action])).rows[0];
+    if (!run) throw new InvalidInput(['You took no action with that id.']);
+    if ((await db.query<{ t: Date | null }>('select kg.run_undone($1) as t', [input.action])).rows[0]!.t) throw new InvalidInput(['That action was already undone.']);
+    const effects = run.answer.effects ?? {};
+    const observations = effects.observations ?? [];
+    switch (run.action) {
+      case 'retain':
+        for (const o of observations) await db.query('select kg.act_retract($1, $2)', [o, `undone: ${input.why}`]);
+        break;
+      case 'hold':
+        if (!observations.length) throw new InvalidInput(['That hold was taken before holds could be undone: retract its evidence instead.']);
+        for (const b of effects.beliefs ?? []) await db.query('select kg.act_unhold($1, $2::uuid[], $3)', [b, observations, input.why]);
+        break;
+      case 'keep':
+        for (const o of observations) await db.query('select kg.act_unkeep($1, $2)', [o, input.why]);
+        break;
+      default:
+        throw new InvalidInput([`${run.action} can’t be undone.`]);
+    }
+    await db.query('select kg.act_mark_undone($1, $2)', [input.action, input.why]);
+    return { actions: [input.action], ...(observations.length ? { observations } : {}), ...(effects.beliefs?.length && run.action !== 'retain' ? { beliefs: effects.beliefs } : {}) };
+  },
+};
+
+const Term = Type.String({ minLength: 1, maxLength: 120, pattern: '^(kg:)?[A-Za-z][A-Za-z0-9]*$', description: 'The term as extraction asked for it, as GET /ontology/candidates lists it.' });
+const TermKind = Type.Union([Type.Literal('class'), Type.Literal('predicate')]);
+const Iri = (description: string) => Type.String({ minLength: 1, maxLength: 300, description });
+
+const AdoptInput = Type.Object(
+  {
+    term: Term,
+    kind: TermKind,
+    iri: Iri('The IRI it is adopted as: a new one (kg: and a name, or a pack term’s IRI), or one the ontology has, to take the term as another name for it.'),
+    label: Type.String({ minLength: 1, maxLength: 200, description: 'What people read for it. Kept only when the IRI is new.' }),
+    parent: Type.Optional(Iri('A class: the class it sits under. kg:Entity when left out.')),
+    classKind: Type.Optional(Type.Union([Type.Literal('continuant'), Type.Literal('occurrent')], { description: 'A class: occurrent for an event. continuant when left out.' })),
+    domain: Type.Optional(Iri('A predicate: the class its subjects are. kg:Entity when left out.')),
+    range: Type.Optional(Iri('A link: the class its objects are. A predicate with a range is a link; without one, a property.')),
+    datatype: Type.Optional(Type.Union([Type.Literal('quantity'), Type.Literal('date'), Type.Literal('text'), Type.Literal('boolean')], { description: 'A property: what its values are.' })),
+    unit: Type.Optional(Type.String({ minLength: 1, maxLength: 40, description: 'A quantity: the unit a value takes when its source gives none.' })),
+    singleValued: Type.Optional(Type.Boolean({ description: 'A predicate: whether a subject has one current value of it.' })),
+  },
+  { additionalProperties: false },
+);
+const adopt: ActionDecl<typeof AdoptInput> = {
+  name: 'adopt',
+  since: '1.10',
+  summary: 'Adopt a term extraction asked for: as a class or predicate of its own, or as another name for one the ontology has',
+  input: AdoptInput,
+  who: 'An ontology admin: one of AUGUR’s admins.',
+  scope: 'knowledge:act',
+  role: 'ontology-admin',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: ['platform.knowledge.ontology.changed'],
+  // A new term is a new ontology version; another name for one the ontology has is not, since the ontology is
+  // the same. Either way, a claim that falls to kg:note asking for the term is kept under it from then on.
+  // What was kept before stays as it was: a claim is never edited.
+  async run(db, input) {
+    const { rows } = await db.query<{ v: number }>('select kg.act_adopt($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) as v', [
+      input.term,
+      input.kind,
+      input.iri,
+      input.label,
+      input.parent ?? null,
+      input.classKind ?? null,
+      input.domain ?? null,
+      input.range ?? null,
+      input.datatype ?? null,
+      input.unit ?? null,
+      input.singleValued ?? null,
+    ]);
+    return { [input.kind === 'class' ? 'classes' : 'predicates']: [input.iri], ontologyVersions: [String(rows[0]!.v)] };
+  },
+};
+
+const DismissInput = Type.Object({ term: Term, kind: TermKind, why: Why('Why the ontology won’t take it: kept with the candidate, for whoever asks next.') }, { additionalProperties: false });
+const dismiss: ActionDecl<typeof DismissInput> = {
+  name: 'dismiss',
+  since: '1.10',
+  summary: 'Dismiss a term extraction asked for, saying why: it is no longer counted',
+  input: DismissInput,
+  who: 'An ontology admin: one of AUGUR’s admins.',
+  scope: 'knowledge:act',
+  role: 'ontology-admin',
+  grantedToAppsByDefault: false,
+  undoable: false,
+  emits: [],
+  async run(db, input) {
+    await db.query('select kg.act_dismiss($1, $2, $3)', [input.term, input.kind, input.why]);
+    return { candidates: [input.term] };
+  },
+};
+
 /** Every action, by name. */
-export const CATALOGUE: ActionDecl[] = [retain, hold, keep, confirmFaithful] as ActionDecl[];
+export const CATALOGUE: ActionDecl[] = [retain, hold, keep, confirmFaithful, publish, dispute, settle, retract, raise, end, forget, merge, split, retire, undo, adopt, dismiss] as ActionDecl[];
 export const actionNamed = (name: string) => CATALOGUE.find((a) => a.name === name);
 
 const checkers = new Map(CATALOGUE.map((a) => [a.name, Compile(a.input)]));

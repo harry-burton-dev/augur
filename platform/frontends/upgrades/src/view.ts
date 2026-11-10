@@ -1,4 +1,5 @@
 import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
+import { backupLine, healthLine } from './health.js';
 import { historyOf, tookWords, type HistoryEntry } from './model/history.js';
 import { levelFrom } from './model/levels.js';
 import { needsYou } from './model/needs-you.js';
@@ -11,10 +12,8 @@ import { quill } from './quill.js';
 import { pathOf, unitPath, type Route } from './routes.js';
 import { CHANNEL, NEEDS_DEPLOYMENT_ADMIN, OUTCOME, STATE, STEP } from './words.js';
 
-/** What the app keeps between draws that isn't the registry's: paging, and how the last thing it tried went. */
+/** What the app keeps between draws that isn't the registry's: how the last thing it tried went. */
 export interface Ui {
-  /** How many history entries each page shows, by unit. */
-  shown: Record<string, number>;
   /** The open question's state: working on it, or why it didn't work. */
   dialog: { busy?: boolean; error?: string };
   checking?: boolean;
@@ -28,7 +27,6 @@ export interface Actions {
   checkNow: () => void;
   markSeen: (kind: 'upgrade' | 'app-job', id: string) => void;
   cancel: () => void;
-  more: (unit: string) => void;
   upgrade: (version: string, settings: Record<string, string>) => void;
   rollBack: (version: string) => void;
   test: (version: string, reason: string) => void;
@@ -50,8 +48,12 @@ export interface View {
   nameOf: (id: string, given?: string) => string;
 }
 
-/** History entries a page shows at first, and how many more each press of "more" adds. */
+/** History entries on each page of a history list. */
 export const HISTORY_STEP = 10;
+
+/** Rows a table shows a page at a time, and offers a filter beyond: a deployment may run dozens of apps. */
+export const TABLE_PAGE = 10;
+export const paged = (rows: number) => (rows > TABLE_PAGE ? { pageSize: TABLE_PAGE, filterable: true } : {});
 
 export const when = (v: Pick<View, 'zone' | 'now'>, at?: string | Date) => (at ? formatWhen(at, v.zone, v.now) : 'Not yet');
 
@@ -78,16 +80,15 @@ export const statusOf = (v: Pick<View, 'zone' | 'now'>, row: UnitRow, unit?: Ove
 
 /** One unit's upgrades or installs, newest first, a page at a time. */
 export const historyList = (v: View, unit: string, label: string, entries: HistoryEntry[], missing?: string): RemoteNode => {
-  const shown = v.ui.shown[unit] ?? HISTORY_STEP;
   const mine = entries.filter((e) => e.unit === unit);
   return quill('quill-section', { label, count: mine.length || undefined }, [
     missing ? quill('quill-notice', { tone: 'warning' }, `Some of this history couldn’t be read: ${missing}`) : null,
-    quill('quill-list', {
+    quill('quill-paged-list', {
       label,
-      noun: ['change', 'changes'],
-      density: 'compact',
+      noun: 'changes',
+      pageSize: HISTORY_STEP,
       empty: 'Nothing has changed here yet.',
-      items: mine.slice(0, shown).map((e) => ({
+      items: mine.map((e) => ({
         id: e.id,
         title: [e.how, e.from && `from ${e.from}`, e.to && `to ${e.to}`].filter(Boolean).join(' '),
         detail: [e.by, e.tookMs !== undefined && `took ${tookWords(e.tookMs)}`, e.backup && `backup ${e.backup}`, e.message].filter(Boolean).join(' · '),
@@ -95,7 +96,6 @@ export const historyList = (v: View, unit: string, label: string, entries: Histo
         status: OUTCOME[e.outcome].status,
       })),
     }),
-    mine.length > shown ? quill('quill-more', { shown, total: mine.length, noun: 'changes', step: HISTORY_STEP, onMore: () => v.on.more(unit) }) : null,
   ]);
 };
 
@@ -166,6 +166,7 @@ export const installedTable = (v: View, label: string, rows: UnitRow[], empty: s
       status: statusOf(v, r, units.find((x) => x.unit === r.id)),
     })),
     empty,
+    ...paged(rows.length),
     onOpen: (id: string) => v.on.go(unitPath(id, AUGUR)),
   });
 };
@@ -200,6 +201,8 @@ export const overviewPage = (v: View): RemoteNode => {
     quill('quill-section', { label: 'Status' }, [
       quill('quill-details', {
         items: [
+          { label: 'Health', value: v.data.status ? healthLine(v.data.status.components).words : (v.data.statusError ? 'Not known: the gateway didn’t answer' : 'Reading') },
+          { label: 'Last backup', value: v.data.status ? backupLine(v, v.data.status.backups) : 'Reading' },
           { label: 'Release channel', value: CHANNEL[u.channel], ...(u.channelNote ? { note: u.channelNote } : {}) },
           { label: 'Server', value: RING_WORDS[o.ring] },
           {
