@@ -7,6 +7,7 @@ import { sql as service } from './migrations/004-service.ts';
 import { sql as reads } from './migrations/005-reads.ts';
 import { sql as queries } from './migrations/006-queries.ts';
 import { sql as undo } from './migrations/007-undo.ts';
+import { sql as forgetAgain } from './migrations/008-forget-again.ts';
 
 /** The knowledge service's schema in the platform database. */
 export const SCHEMA = 'kg';
@@ -30,6 +31,7 @@ export const migrations: Migration[] = [
   { id: '005-reads', sql: reads },
   { id: '006-queries', sql: queries },
   { id: '007-undo', sql: undo },
+  { id: '008-forget-again', sql: forgetAgain },
 ];
 
 /**

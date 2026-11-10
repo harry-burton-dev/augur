@@ -57,6 +57,7 @@ import {
   UnseenObject,
 } from './schemas.ts';
 import { SHAPES } from './shapes.ts';
+import type { ForgetLedger } from './ledger.ts';
 import type { StandingLookup } from './standing.ts';
 import { asPerson } from './store.ts';
 
@@ -82,6 +83,8 @@ export interface KnowledgeOptions {
   callers?: CallerCheck;
   /** Asks the model, through the models service, for what a text says (MODELS_URL). Without it, retain takes no text. */
   extract?: (messages: { role: 'system' | 'user'; content: string }[], floor: string | undefined) => Promise<string>;
+  /** Where each forget is also written, outside Postgres, so a restore forgets it again. Without it, nowhere. */
+  ledger?: ForgetLedger;
   /** The most a page of a read gives, whatever it asks for (KNOWLEDGE_PAGE_LIMIT). */
   pageLimit?: number;
   /** The most hops a subgraph goes from its entity, whatever it asks for (KNOWLEDGE_SUBGRAPH_DEPTH). */
@@ -115,7 +118,7 @@ const fromStore = (err: unknown): unknown => {
  * action, and reads, each answered as the person calling on the floor they stand on. The store's fence does
  * the deciding (migrations 003 and 004); this only says who is asking and where.
  */
-export const buildApp = async ({ store, standing, callers, extract, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
+export const buildApp = async ({ store, standing, callers, extract, ledger, pageLimit = DEFAULT_PAGE_LIMIT, subgraphDepth = DEFAULT_SUBGRAPH_DEPTH }: KnowledgeOptions) => {
   // A path parameter may be as long as the contract lets it be once percent-encoded (an IRI of 200 characters,
   // say), not only Fastify's default of 100, which answered a longer one with a 414 the contract doesn't name.
   const app = Fastify({ ...serviceFastifyOptions(), routerOptions: { maxParamLength: 1024 } }).withTypeProvider<TypeBoxTypeProvider>();
@@ -316,6 +319,8 @@ export const buildApp = async ({ store, standing, callers, extract, pageLimit = 
                 if (err instanceof InvalidInput) throw new Problem(422, 'invalid_input', `The input doesn’t fit ${action.name}.`, { extensions: { problems: err.problems } });
                 throw err;
               }
+              // On disk before the forget commits: a forget the file missed could come back with a restore.
+              if (action.ledgered && ledger) await ledger.append(effects.observations ?? []);
               const answer = { action: action.name, actionId, effects, ...(extraction ? { extraction } : {}) };
               await db.query('select kg.keep_answer($1, $2, $3, $4::jsonb)', [key, action.name, sha, JSON.stringify(answer)]);
               return answer;

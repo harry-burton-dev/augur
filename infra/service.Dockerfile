@@ -106,6 +106,9 @@ COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/augur/
 WORKDIR /app
 COPY --from=build /out .
 ENV NODE_ENV=production
+# A folder the user owns, for a service that keeps a file on a volume of its own (the knowledge graph's
+# forget ledger): a new volume takes the folder's owner.
+RUN mkdir -p /var/lib/augur/knowledge && chown -R node:node /var/lib/augur
 # The image's own unprivileged user: the service only reads its files and talks over the network.
 USER node
 CMD ["node", "dist/index.js"]

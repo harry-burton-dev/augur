@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog } from '@augur/service-kit';
 import { buildApp } from './app.ts';
+import { fileLedger } from './ledger.ts';
 import { outboxRelay } from './outbox.ts';
 import { identityStanding } from './standing.ts';
 
@@ -18,6 +19,7 @@ loadConfigOrExit('knowledge', [
   { ...commonSettings.models, required: false, about: 'where the model gateway is, such as http://models:8085. Without it, retain takes no text to extract from.' },
   { name: 'KNOWLEDGE_PAGE_LIMIT', about: 'the most one page of a read gives, such as 100.' },
   { name: 'KNOWLEDGE_SUBGRAPH_DEPTH', about: 'the most hops a subgraph read goes from its entity, such as 3.' },
+  { name: 'KNOWLEDGE_LEDGER_DIR', about: 'the folder, on a volume of its own, where each forget is written so a restore from backup forgets it again.', required: true },
 ]);
 
 const port = Number(process.env.PORT ?? 8086);
@@ -50,6 +52,9 @@ const extract =
     ? async (messages: { role: 'system' | 'user'; content: string }[], floor: string | undefined) =>
         (await askModel({ modelsUrl: MODELS_URL, credentials, workspace: floor, messages })).message.content
     : undefined;
-const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, pageLimit, subgraphDepth });
+const { KNOWLEDGE_LEDGER_DIR } = process.env;
+if (!KNOWLEDGE_LEDGER_DIR) log.warn('KNOWLEDGE_LEDGER_DIR is not set: what people forget is forgotten, but a restore from backup would bring its words back.');
+const ledger = KNOWLEDGE_LEDGER_DIR ? fileLedger(KNOWLEDGE_LEDGER_DIR) : undefined;
+const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, ledger, pageLimit, subgraphDepth });
 await app.listen({ port, host: '0.0.0.0' });
 if (credentials) outboxRelay({ pool: store, eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err }, 'the outbox could not be sent') }).start();

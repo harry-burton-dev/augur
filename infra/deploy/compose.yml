@@ -197,6 +197,8 @@ services:
       - wal-archive:/wal-archive
       # The deploy folder, read only: .env and secrets/ go into the off-server copy with the backups, encrypted.
       - ./:/deploy:ro
+      # The knowledge graph's forget ledger, read only: copied off the server with apps' files.
+      - knowledge-ledger:/knowledge-ledger:ro
     depends_on:
       postgres: { condition: service_healthy }
       backup-tools: { condition: service_completed_successfully }
@@ -578,6 +580,10 @@ services:
       NODE_ENV: production
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
+      KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
+    # After a restore, it forgets again what the forget ledger names (docs/deploy.md, "Restore").
+    volumes:
+      - knowledge-ledger:/var/lib/augur/knowledge
     depends_on: *own-login
 
   # The knowledge graph of each floor (ADR 0079): what AUGUR knows of the entities in people's work, and
@@ -599,6 +605,10 @@ services:
       KNOWLEDGE_SUBGRAPH_DEPTH: ${KNOWLEDGE_SUBGRAPH_DEPTH:-3}
       SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
       DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
+    # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
+    volumes:
+      - knowledge-ledger:/var/lib/augur/knowledge
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
       identity: { condition: service_healthy }
@@ -753,4 +763,6 @@ volumes:
   backup-tools:
   # Postgres's archived changes (WAL), gzipped: postgres writes them, the backup container prunes and copies them.
   wal-archive:
+  # The knowledge graph's forget ledger (ids only): the knowledge service writes it, its migrate job reads it.
+  knowledge-ledger:
   otel-lgtm:

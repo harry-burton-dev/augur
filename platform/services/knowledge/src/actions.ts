@@ -28,6 +28,8 @@ export interface ActionDecl<T extends TSchema = TSchema> {
   role?: 'settler' | 'raiser' | 'ontology-admin' | 'owner' | 'author' | 'member';
   grantedToAppsByDefault: boolean;
   undoable: boolean;
+  /** What it forgets is written to the forget ledger too, before it commits (ledger.ts). */
+  ledgered?: true;
   emits: string[];
   run(db: pg.ClientBase, input: Static<T>): Promise<Effects>;
 }
@@ -459,8 +461,9 @@ const forget: ActionDecl<typeof ForgetInput> = {
   role: 'owner',
   grantedToAppsByDefault: false,
   undoable: false,
-  emits: [],
   // The ledger keeps only which observation was forgotten, so a restore from backup forgets it again.
+  ledgered: true,
+  emits: [],
   async run(db, input) {
     await db.query('select kg.act_forget($1)', [uuidOf(input.observation, 'The observation')]);
     return { observations: [input.observation] };

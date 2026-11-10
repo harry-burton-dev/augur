@@ -1242,6 +1242,15 @@
         "gateway": "default"
       }
     },
+    "KNOWLEDGE_LEDGER_DIR": {
+      "type": "string",
+      "description": "Where the knowledge graph writes each forget, on a volume of its own outside Postgres, so a restore forgets it again.",
+      "x-internal": "compose",
+      "x-services": [
+        "knowledge",
+        "knowledge-migrate"
+      ]
+    },
     "DATABASE_URL": {
       "type": "string",
       "writeOnly": true,

@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The knowledge graph's forget ledger
+
+**From** unreleased
+
+Nothing to do. Compose makes a new volume, `knowledge-ledger`, where the knowledge graph writes the id of each observation someone forgets. After any restore, from a nightly backup or to a point in time, the knowledge graph's migrate job forgets those again when AUGUR starts, so a restore can't bring back what people asked to forget. The backup container copies the ledger off the server with each night's dump; [Restore a lost server](deploy.md#restore-a-lost-server) has a step that puts it back.
+
 ### The permissions service and OpenFGA
 
 **From** unreleased
