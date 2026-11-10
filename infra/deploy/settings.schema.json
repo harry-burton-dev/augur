@@ -1342,7 +1342,8 @@
         "identity",
         "registry",
         "models",
-        "knowledge"
+        "knowledge",
+        "permissions"
       ]
     },
     "MODELS_URL": {
@@ -1953,8 +1954,8 @@
     },
     "PERMISSIONS_COPY_SECONDS": {
       "type": "string",
-      "description": "How often the permissions service copies floors, positions and who holds them from identity, in seconds. A change in identity reaches permission checks within this time.",
-      "default": "30",
+      "description": "How often the permissions service copies floors, positions and who holds them whole from identity, in seconds, to put right anything an event missed. Each change identity announces is copied as it happens.",
+      "default": "300",
       "x-services": [
         "permissions"
       ],

@@ -104,28 +104,55 @@ export const identityRelationships =
   };
 
 /**
- * Runs `once` now and then every `everyMs`, one run at a time, keeping the last result for Status. A run that
- * fails is kept as the error it gave; the next run tries again.
+ * Runs `once` now, again soon after each `request()` (an identity change heard as an event; several close
+ * together make one run), and every `everyMs` in any case, to put right anything an event missed. One run
+ * at a time; a request during a run makes one more after it. The last result is kept for Status, and a run
+ * that fails is kept as the error it gave.
  */
-export const keepProjecting = (once: () => Promise<ProjectionRun>, everyMs: number, onRun: (run: ProjectionRun) => void = () => {}) => {
+export const keepProjecting = (once: () => Promise<ProjectionRun>, everyMs: number, onRun: (run: ProjectionRun) => void = () => {}, settleMs = 500) => {
   let last: ProjectionRun | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let running = false;
+  let again = false;
   let stopped = false;
-  const tick = async () => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let settle: ReturnType<typeof setTimeout> | undefined;
+  const run = async (): Promise<void> => {
+    if (running) {
+      again = true;
+      return;
+    }
+    running = true;
+    clearTimeout(timer);
     try {
       last = await once();
     } catch (err) {
       last = { at: new Date().toISOString(), added: 0, removed: 0, error: (err as Error).message };
     }
     onRun(last);
-    if (!stopped) timer = setTimeout(() => void tick(), everyMs);
+    running = false;
+    if (stopped) return;
+    if (again) {
+      again = false;
+      return run();
+    }
+    timer = setTimeout(() => void run(), everyMs);
   };
-  void tick();
+  void run();
   return {
     last: () => last,
+    /** Copy again soon: something changed in identity. */
+    request: () => {
+      if (stopped) return;
+      clearTimeout(settle);
+      settle = setTimeout(() => void run(), settleMs);
+    },
     stop: () => {
       stopped = true;
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
+      clearTimeout(settle);
     },
   };
 };
+
+/** The events that mean identity's floors, positions or people changed (docs/domain-events.md). */
+export const COPY_TOPICS = ['platform.position.*', 'platform.team.*', 'platform.person.*'];
