@@ -1,7 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck } from '@augur/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck, type Shadow } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
 import type { LifecycleStore } from './lifecycle.ts';
 import { describeApi } from './contract.ts';
@@ -55,6 +55,8 @@ export interface IdentityOptions {
   organisation: OrganisationStore;
   /** What identity keeps about each account's life (ADR 0040). */
   lifecycle: LifecycleStore;
+  /** Compares this service's own admin checks with the permissions service (shadow mode, ADR 0085). */
+  shadow?: Shadow;
 }
 
 /** Records audit entries with the events service, as identity. */
@@ -68,7 +70,7 @@ export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (
  * admins manage people in the provider and departments as teams (admin.ts),
  * so no one needs the provider's own console.
  */
-export const buildApp = async ({ store, workspaces, directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation, lifecycle, redact }: IdentityOptions) => {
+export const buildApp = async ({ store, workspaces, directory, accounts, appClients, audit, verifyService, callers, grants, tell, dataFrom, languages, organisation, lifecycle, redact, shadow }: IdentityOptions) => {
   const teams = directory ? new TeamDirectory(directory, workspaces) : undefined;
   // The languages offered, the default first: an admin's choice in Admin → Organisation, else REALM_LANGUAGES.
   const offered = async () => offeredLanguages(await organisationSettings(workspaces, organisation, languages));
@@ -172,7 +174,7 @@ export const buildApp = async ({ store, workspaces, directory, accounts, appClie
       await app.register(relationshipRoutes({ workspaces, directory, verifyService }));
       await app.register(appRunnerRoutes({ clients: appClients, audit, verifyService }), { prefix: '/admin/apps' });
       await app.register(
-        organisationRoutes({ workspaces, store: organisation, audit, verifyService, languages, askEveryone: directory?.askEveryone ? () => directory.askEveryone!(TERMS_ACTION) : undefined }),
+        organisationRoutes({ workspaces, store: organisation, audit, verifyService, languages, askEveryone: directory?.askEveryone ? () => directory.askEveryone!(TERMS_ACTION) : undefined, shadow }),
       );
       await app.register(noticeSettingsRoutes({ store, accounts, workspaces, organisation, verifyService, languages: offered }));
     },
@@ -311,8 +313,8 @@ export const buildApp = async ({ store, workspaces, directory, accounts, appClie
         },
       );
 
-      await app.register(adminRoutes({ directory: teams, workspaces, audit, store, lifecycle, organisation, redact }), { prefix: '/admin' });
-      await app.register(appClientRoutes({ clients: appClients, audit }), { prefix: '/admin/apps' });
+      await app.register(adminRoutes({ directory: teams, workspaces, audit, store, lifecycle, organisation, redact, shadow }), { prefix: '/admin' });
+      await app.register(appClientRoutes({ clients: appClients, audit, shadow }), { prefix: '/admin/apps' });
     },
     { prefix: `/${API_VERSION}` },
   );

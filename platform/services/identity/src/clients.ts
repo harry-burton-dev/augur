@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { appClientId, callerFromHeaders, identifyService, reservedIdProblem, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
+import { appClientId, callerFromHeaders, identifyService, noShadow, reservedIdProblem, ServiceAuthUnavailable, SERVICES_AUDIENCE, type NewAuditEntry, type ServiceVerifier, type Shadow } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type KeycloakDirectory } from './directory.ts';
 import { AppParams, empty, refused } from './schemas.ts';
 
@@ -153,6 +153,8 @@ export class MemoryAppClients implements AppClients {
 }
 
 interface ClientRoutesOptions {
+  /** Compares this service's own admin checks with the permissions service (shadow mode, ADR 0085). */
+  shadow?: Shadow;
   clients?: AppClients;
   audit?: (entry: NewAuditEntry) => Promise<void>;
   /** Checks platform services' own sign-ins, for the app runner setting an app's sign-in. */
@@ -170,7 +172,7 @@ const signInServiceFailed = {
 
 /** Admins issue an app's sign-in, and replace it when it may have leaked. Audited, never with the secret. */
 export const appClientRoutes =
-  ({ clients, audit }: ClientRoutesOptions) =>
+  ({ clients, audit, shadow = noShadow }: ClientRoutesOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     app.post(
@@ -200,7 +202,9 @@ export const appClientRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN_ROLE.name)) return reply.code(403).send({ error: 'forbidden', requiredRole: DEPLOYMENT_ADMIN_ROLE.name, message: 'Only a deployment admin can issue an app’s sign-in. Ask someone who holds the deployment-admin role (Admin, People).' });
+        const held = Boolean(caller?.roles.includes(DEPLOYMENT_ADMIN_ROLE.name));
+        if (caller) shadow.check('identity.app-sign-ins', caller, { action: 'can_set_app_secrets', resource: { type: 'deployment', id: 'this' }, as: 'persona' }, held);
+        if (!caller || !held) return reply.code(403).send({ error: 'forbidden', requiredRole: DEPLOYMENT_ADMIN_ROLE.name, message: 'Only a deployment admin can issue an app’s sign-in. Ask someone who holds the deployment-admin role (Admin, People).' });
         const reserved = reservedIdProblem(req.params.id);
         if (reserved) return reply.code(400).send({ error: 'invalid', message: reserved });
         if (!clients) return reply.code(503).send({ error: 'unavailable', message: 'Identity isn’t connected to the sign-in service, so apps’ sign-ins can’t be issued here yet.' });

@@ -1361,6 +1361,7 @@
       "x-internal": "compose",
       "x-services": [
         "events",
+        "identity",
         "knowledge"
       ]
     },
