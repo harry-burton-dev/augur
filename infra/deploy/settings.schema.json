@@ -1286,7 +1286,8 @@
       "description": "Where the model gateway is.",
       "x-internal": "compose",
       "x-services": [
-        "gateway"
+        "gateway",
+        "knowledge"
       ]
     },
     "KNOWLEDGE_URL": {

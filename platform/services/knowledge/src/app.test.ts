@@ -163,7 +163,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
   it('serves its catalogue and versions', async () => {
     const catalogue = (await app.inject({ url: '/v1/actions' })).json();
     expect(catalogue.actions.map((a: { name: string }) => a.name)).toEqual(['retain', 'hold', 'keep', 'confirm-faithful']);
-    expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: expect.arrayContaining(['source', 'entities', 'observations']) });
+    expect(catalogue.actions[0].input).toMatchObject({ type: 'object', required: ['source'], properties: { text: expect.any(Object) } });
     expect((await app.inject({ url: '/v1/meta' })).json()).toMatchObject({ apiMajor: 1, ontology: { version: '1', classes: expect.arrayContaining(['kg:Ship']) }, speaks: { knowledge: [1] } });
   });
 

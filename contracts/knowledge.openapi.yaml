@@ -5,10 +5,11 @@
 openapi: 3.1.0
 info:
   title: Knowledge
-  version: 1.6.0
+  version: 1.7.0
   description: |-
     The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
     A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. An app acting for a person reaches it the same way, through its client, held to the scopes it is granted (knowledge:read, an action’s own).
+    Retain takes either what was extracted from a source or the source’s text. Given text, the service asks the model what it claims, through the models service, for the floor it is retained on: what fits is kept as observations, never as belief, a term the ontology lacks becomes a candidate, text that speaks to the system is kept only flagged, and the answer says what was dropped and why.
     Every read draft 4 of the spec asks for is served. Actions are added as their releases come; within version 1 the API only adds, and a change that would break a caller is served as /v2 beside it.
 components:
   schemas:
@@ -232,6 +233,33 @@ components:
         why:
           type: string
           description: On a dry run that would be refused, why.
+        extraction:
+          type: object
+          required:
+            - promptVersion
+            - flagged
+            - dropped
+          properties:
+            promptVersion:
+              type: string
+            flagged:
+              type: integer
+              minimum: 0
+              description: "Observations kept flagged, because their text speaks to the system: none is believed until its owner keeps it."
+            dropped:
+              type: array
+              items:
+                type: object
+                required:
+                  - item
+                  - why
+                properties:
+                  item:
+                    type: string
+                  why:
+                    type: string
+              description: What the model said that didn’t fit, each with why. Nothing of it was kept.
+          description: "When retain was sent text: what the extraction kept back."
     ActionRecord:
       type: object
       required:
