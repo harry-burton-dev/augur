@@ -1,7 +1,7 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { APP_RELEASES_KEPT, appRepos, asListed, AUGUR_RELEASES_KEPT, BUNDLE_MEDIA_TYPE, buildFeed, chooseReleases, deployTestHaltOf, DEV_BUILDS_KEPT, FEED_MEDIA_TYPE, FEED_VALID_DAYS, haltedOf, ownReleases, pushCommand } from './publish-feed.mjs';
+import { APP_RELEASES_KEPT, appRepos, appReposFrom, asListed, AUGUR_RELEASES_KEPT, BUNDLE_MEDIA_TYPE, buildFeed, chooseReleases, deployTestHaltOf, DEV_BUILDS_KEPT, FEED_MEDIA_TYPE, FEED_VALID_DAYS, haltedOf, ownReleases, pushCommand } from './publish-feed.mjs';
 
 const release = (tag, more = {}) => ({ tag_name: tag, draft: false, prerelease: false, html_url: `https://github.com/o/r/releases/tag/${tag}`, assets: [{ name: tag.startsWith('augur@') ? 'augur-release.json' : 'app-release.json', url: `asset:${tag}` }], ...more });
 
@@ -154,6 +154,14 @@ test('an app in its own repository is listed only from there, and only as signed
 test('the app repositories file maps app ids to owner/repo and nothing else', () => {
   assert.deepEqual(appRepos({ apps: { notes: 'o/notes', Bad: 'o/x', odd: 'nope' } }), { notes: 'o/notes' });
   assert.deepEqual(appRepos(undefined), {});
+});
+
+test('the APP_REPOS variable, when set, is the list of apps in their own repositories', () => {
+  const file = { apps: { notes: 'o/notes' } };
+  assert.deepEqual(appReposFrom('', file), { notes: 'o/notes' });
+  assert.deepEqual(appReposFrom(undefined, file), { notes: 'o/notes' });
+  assert.deepEqual(appReposFrom(' folio=o/augur-folio,\nmandate=o/augur-mandate ', file), { folio: 'o/augur-folio', mandate: 'o/augur-mandate' });
+  assert.throws(() => appReposFrom('folio=o/augur-folio Bad=o/x odd', file), /"Bad=o\/x", "odd" isn’t one/);
 });
 
 test('a feed already signed and checked is pushed as it is, with its signature, and never without one', () => {

@@ -2,6 +2,8 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import {
   callerFromHeaders,
+  noShadow,
+  type Shadow,
   GrantsUnavailable,
   health,
   delegationRefusal,
@@ -52,6 +54,8 @@ export interface ModelsOptions {
   now?: () => Date;
   /** Checks the caller the gateway signed (callerCheckFromEnv). Without it `x-user-*` headers are believed as they come, as in local dev. */
   callers?: CallerCheck;
+  /** Compares the admin check with the permissions service (shadow mode, ADR 0085). */
+  shadow?: Shadow;
 }
 
 /** Records audit entries with the events service, as the model gateway. */
@@ -77,7 +81,7 @@ type Asker = { app: string; actor: NewAuditEntry['actor']; workspace?: string };
  * call in the audit log before making it, and holds each app to a number of
  * calls a day. It is off until an admin turns it on.
  */
-export const buildApp = async ({ store, provider, verifyService, grants, requiredRole, audit, now = () => new Date(), callers }: ModelsOptions) => {
+export const buildApp = async ({ store, provider, verifyService, grants, requiredRole, audit, now = () => new Date(), callers, shadow = noShadow }: ModelsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
@@ -92,10 +96,12 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
   await app.register(
     async (plain) => {
       const app = plain.withTypeProvider<TypeBoxTypeProvider>();
-      const admin = (req: FastifyRequest, reply: FastifyReply): Caller | undefined => {
+      const admin = (req: FastifyRequest, reply: FastifyReply, site: string): Caller | undefined => {
         const caller = callerFromHeaders(req.headers);
+        const held = Boolean(caller?.roles.includes('admin'));
+        if (caller) shadow.check(site, caller, { action: 'admin', resource: { type: 'org', id: 'this' }, as: 'persona' }, held);
         if (!caller) void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
-        else if (!caller.roles.includes('admin')) void reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see or change how models are used.' });
+        else if (!held) void reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see or change how models are used.' });
         else return caller;
         return undefined;
       };
@@ -197,7 +203,7 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
           },
         },
         async (req, reply) => {
-          if (!admin(req, reply)) return reply;
+          if (!admin(req, reply, 'models.settings.read')) return reply;
           return { ...(await store.settings()), ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
         },
       );
@@ -219,7 +225,7 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
           },
         },
         async (req, reply) => {
-          const caller = admin(req, reply);
+          const caller = admin(req, reply, 'models.settings.change');
           if (!caller) return reply;
           const before = await store.settings();
           const next = { enabled: req.body.enabled ?? before.enabled, dailyLimit: req.body.dailyLimit ?? before.dailyLimit };
@@ -251,7 +257,7 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
           },
         },
         async (req, reply) => {
-          if (!admin(req, reply)) return reply;
+          if (!admin(req, reply, 'models.usage')) return reply;
           const { dailyLimit } = await store.settings();
           return { dailyLimit, days: await store.usage(daysAgo(6)) };
         },

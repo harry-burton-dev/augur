@@ -166,6 +166,25 @@ export const ownReleases = (releases, app, repository) =>
 export const appRepos = (json) =>
   Object.fromEntries(Object.entries(json?.apps ?? {}).filter(([id, repo]) => /^[a-z][a-z0-9-]{1,39}$/.test(id) && /^[\w.-]+\/[\w.-]+$/.test(String(repo))));
 
+/**
+ * The apps in their own repositories, as app id → owner/repo: the repository's APP_REPOS variable when it
+ * is set (`folio=owner/augur-folio mandate=owner/augur-mandate`, split by spaces, commas or lines), so the
+ * list is changed in GitHub's settings with no pull request; else release/app-repos.json. A pair that isn't
+ * `id=owner/repo` is a mistake to stop on, not to skip, since it would quietly drop an app from every feed.
+ */
+export const appReposFrom = (variable, file) => {
+  const text = variable?.trim();
+  if (!text) return appRepos(file);
+  const pairs = text.split(/[\s,]+/).filter(Boolean).map((pair) => pair.split('='));
+  const bad = pairs.filter((p) => p.length !== 2 || !appRepos({ apps: { [p[0]]: p[1] } })[p[0]]);
+  if (bad.length) throw new Error(`APP_REPOS lists apps as id=owner/repo, split by spaces, commas or lines; ${bad.map((p) => `"${p.join('=')}"`).join(', ')} isn’t one.`);
+  return Object.fromEntries(pairs);
+};
+
+/** The apps in their own repositories, as this run is told them (APP_REPOS, else release/app-repos.json). */
+export const ownAppRepos = (root = new URL('..', import.meta.url)) =>
+  appReposFrom(process.env.APP_REPOS, JSON.parse(readFileSync(new URL('release/app-repos.json', root), 'utf8')));
+
 /** The ORAS push of the feed at `out` (and its signature, when signed) to <images>/feed:latest. */
 export const pushCommand = ({ out, images, repo, signed, requireSigned = false }) => {
   if (requireSigned && !signed) throw new Error(`${out} has no signature (${basename(out)}${BUNDLE_SUFFIX}): sign it and check it before it is pushed.`);
@@ -205,10 +224,10 @@ const main = async (args) => {
     return all;
   };
   const releases = await releasesOf(REPO);
-  const own = appRepos(JSON.parse(readFileSync(new URL('../release/app-repos.json', import.meta.url), 'utf8')));
+  const own = ownAppRepos();
   // Trimmed: a secret pasted through a shell can carry a line ending, which breaks the header.
   const appToken = process.env.APP_RELEASES_TOKEN?.trim();
-  if (Object.keys(own).length && !appToken) throw new Error('release/app-repos.json lists apps in their own repositories, but APP_RELEASES_TOKEN isn’t set to read their releases (docs/ship-an-app.md, "An app in its own repository").');
+  if (Object.keys(own).length && !appToken) throw new Error('APP_REPOS or release/app-repos.json lists apps in their own repositories, but APP_RELEASES_TOKEN isn’t set to read their releases (docs/ship-an-app.md, "An app in its own repository").');
   // An app that moved out is listed from its own repository only; its older releases here are left out.
   const here = releases.filter((r) => !(APP_TAG.exec(r.tag_name ?? '')?.[1] in own));
   for (const [app, repo] of Object.entries(own)) here.push(...ownReleases(await releasesOf(repo, appToken), app, repo));

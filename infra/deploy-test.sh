@@ -258,10 +258,16 @@ on_version() {
   if [ -n "$wrong" ]; then echo "Not on $want:"$'\n'"$wrong" >&2; return 1; fi
 }
 
-# The containers that aren't running well: restarting, stopped or unhealthy (one-off jobs aside), one
-# "<service> is <state> <status>" line each.
+# The services that run once and stop: the compose file in use marks them `restart: on-failure`
+# (storage, keycloak-config, backup-tools, knowledge-migrate, and whatever a release adds).
+one_off_jobs() {
+  pc config --format json | jq -c '[.services | to_entries[] | select((.value.restart // "") | startswith("on-failure")) | .key]'
+}
+
+# The containers that aren't running well, one "<service> is <state> <status>" line each: restarting,
+# stopped or unhealthy, except a one-off job, which is well when it has exited with 0.
 not_running() {
-  pc ps -a --format json | jq -rs 'flatten | map(select((.Service != "storage") and (.Service != "keycloak-config") and (.Service != "backup-tools") and ((.State != "running") or (.Health == "unhealthy")))) | map("\(.Service) is \(.State) \(.Status)") | .[]'
+  pc ps -a --format json | jq -rs --argjson jobs "$(one_off_jobs)" 'flatten | map(select(if (.Service as $s | $jobs | index($s)) != null then (.State == "exited" and .ExitCode != 0) else ((.State != "running") or (.Health == "unhealthy")) end)) | map("\(.Service) is \(.State) \(.Status)") | .[]'
 }
 
 # A container that keeps restarting is a failure even when its neighbours look fine. Services named after

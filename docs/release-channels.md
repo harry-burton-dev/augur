@@ -48,7 +48,7 @@ Units move independently: an app can become stable while AUGUR stays where it is
 
 ### An app in its own repository
 
-An app listed in `release/app-repos.json` (ADR 0047) is promoted from here too: give its id as the unit. The workflow marks its release stable in the app's own repository, with `promotion.json`, and the feed that follows lists it as stable. It does this with the `APP_PROMOTE_TOKEN` secret, which only this workflow reads: a fine-grained token with Contents read and write on the app repositories, nothing else, expiring after 90 days. Without it, promoting such an app fails and says so. The feed's `APP_RELEASES_TOKEN` stays read-only.
+An app listed in the `APP_REPOS` variable, or `release/app-repos.json` while it is unset (ADR 0047, docs/ship-an-app.md), is promoted from here too: give its id as the unit. The workflow marks its release stable in the app's own repository, with `promotion.json`, and the feed that follows lists it as stable. It does this with the `APP_PROMOTE_TOKEN` secret, which only this workflow reads: a fine-grained token with Contents read and write on the app repositories, nothing else, expiring after 90 days. Without it, promoting such an app fails and says so. The feed's `APP_RELEASES_TOKEN` stays read-only.
 
 ## Halting a release
 

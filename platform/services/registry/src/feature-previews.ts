@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import { callerFromHeaders, type NewAuditEntry, type ServiceIdentity } from '@augur/service-kit';
+import { roleChecks, type RoleChecks } from './roles.ts';
 import { platformApps, type AppEntry, type FeaturePreview } from './manifest.ts';
 import { empty, FeaturePreview as FeaturePreviewSchema, FeaturePreviewMode as FeaturePreviewModeSchema, FeaturePreviewsAdmin, params, ref, refused } from './schemas.ts';
 import type { Ring } from './ring.ts';
@@ -64,6 +65,8 @@ export const MAX_PREVIEW_FLOORS = 100;
 export interface FeaturePreviewRouteOptions {
   store: AppStore;
   ring: Ring;
+  /** Today's admin roles, each check compared with the permissions service (shadow mode). */
+  roles?: RoleChecks;
   now?: () => Date;
   serviceOf: (req: FastifyRequest, reply: FastifyReply) => Promise<ServiceIdentity | null | undefined>;
   record: (req: FastifyRequest, entry: NewAuditEntry) => unknown;
@@ -81,7 +84,7 @@ export interface FeaturePreviewRouteOptions {
  * off for everyone, and Admin says the app should drop it or make it everyone's.
  */
 export const featurePreviewRoutes =
-  ({ store, ring, now = () => new Date(), serviceOf, record, chainOf }: FeaturePreviewRouteOptions) =>
+  ({ store, ring, roles = roleChecks(), now = () => new Date(), serviceOf, record, chainOf }: FeaturePreviewRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     /** Every app's record, AUGUR's own with previews first. */
@@ -212,7 +215,7 @@ export const featurePreviewRoutes =
         },
       },
       async (req, reply) => {
-        if (!callerFromHeaders(req.headers)?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see who gets an app’s previews.' });
+        if (!roles.admin('registry.feature-previews.read', callerFromHeaders(req.headers))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see who gets an app’s previews.' });
         const found = await findApp(req.params.id);
         if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
         return adminView(found);
@@ -257,7 +260,7 @@ export const featurePreviewRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose who gets an app’s previews.' });
+        if (!roles.admin('registry.feature-previews.change', caller)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose who gets an app’s previews.' });
         const found = await findApp(req.params.id);
         const preview = found?.entry.previews?.find((p) => p.id === req.params.preview);
         if (!found || !preview) return reply.code(404).send({ error: 'not_found', message: `${found ? found.entry.name : req.params.id} has no preview "${req.params.preview}".` });
@@ -310,7 +313,7 @@ export const featurePreviewRoutes =
         const service = await serviceOf(req, reply);
         if (service === undefined) return reply;
         const own = service?.kind === 'app' && service.app === req.params.id;
-        if (!own && !callerFromHeaders(req.headers)?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only the app itself or an admin can ask whose previews are on.' });
+        if (!own && !roles.admin('registry.feature-previews.whose', callerFromHeaders(req.headers))) return reply.code(403).send({ error: 'forbidden', message: 'Only the app itself or an admin can ask whose previews are on.' });
         const found = await findApp(req.params.id);
         if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
         const [optIns, chain] = await Promise.all([store.featureOptIns({ person: req.params.person, app: found.entry.id }), chainAt(req.query.workspace)]);

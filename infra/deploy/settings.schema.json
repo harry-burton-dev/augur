@@ -1362,7 +1362,9 @@
       "x-services": [
         "events",
         "identity",
-        "knowledge"
+        "knowledge",
+        "models",
+        "registry"
       ]
     },
     "KNOWLEDGE_URL": {

@@ -50,7 +50,7 @@ checkedAgainst: 0.24.0  # the release you last checked the page against; none on
 ---
 ```
 
-The status shows beside the title and in the sidebar. A Planned page says only what has been decided,
+The status shows under the title, and a Planned page is also marked in the sidebar. A Planned page says only what has been decided,
 and nothing about when.
 
 Write for the reader, not about how AUGUR was made: no decision record numbers, no names of the people
