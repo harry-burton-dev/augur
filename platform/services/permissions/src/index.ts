@@ -32,9 +32,16 @@ log.info(`answering from model ${modelId}`);
 // Identity's floors, positions and holders (ADR 0089): copied in now, again as soon as identity announces a
 // change, and whole every PERMISSIONS_COPY_SECONDS to put right anything an event missed.
 const credentials = platformCredentialsFromEnv('permissions');
-const relationships = credentials
+const fromIdentity = credentials
   ? identityRelationships({ identityUrl: process.env.IDENTITY_URL!, credentials })
   : () => Promise.reject(new Error('SERVICE_CLIENT_SECRET is not set, so identity can’t be asked.'));
+// The org's id, as identity last gave it, for questions about `org:this`.
+let org: string | undefined;
+const relationships = async () => {
+  const answer = await fromIdentity();
+  org = answer.org;
+  return answer;
+};
 const copy = keepProjecting(
   () => project({ engine, store, modelId, relationships }),
   Math.max(5, Number(process.env.PERMISSIONS_COPY_SECONDS) || 300) * 1000,
@@ -62,5 +69,5 @@ if (credentials) {
   }).start();
 }
 
-const app = await buildApp({ engine, store, modelId, model, verifyService: serviceVerifierFromEnv(), callers: callerCheckFromEnv('permissions'), projection: copy.last });
+const app = await buildApp({ engine, store, modelId, model, verifyService: serviceVerifierFromEnv(), callers: callerCheckFromEnv('permissions'), projection: copy.last, org: () => org });
 await app.listen({ port, host: '0.0.0.0' });

@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, createJobs, DEFAULT_GATEWAY_URL, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, createJobs, DEFAULT_GATEWAY_URL, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, shadowFromEnv, startupLog } from '@augur/service-kit';
 import { Mailer, mailRelayFromEnv, organisationSender } from '@augur/service-kit/mail';
 import { buildApp } from './app.ts';
 import { eventDeliverer, sendThroughGateway, type PushingState } from './deliver.ts';
@@ -19,6 +19,7 @@ loadConfigOrExit('events', [
   commonSettings.issuerInside,
   commonSettings.clientSecret,
   commonSettings.gateway,
+  commonSettings.permissions,
   { name: 'DOMAIN_EVENTS_KEEP_DAYS', about: 'how many days apps’ domain events are kept (default 30).' },
   { name: 'INBOX_KEEP_DAYS', about: 'how many days closed inbox items are kept (default 90).' },
   { name: 'INBOX_DONE_DAYS', about: 'how many days back the Inbox’s Done tab looks (default 30).' },
@@ -80,7 +81,9 @@ const deliverer =
 const notPushing = 'SERVICE_CLIENT_SECRET is not set, so the events service can’t sign in to reach apps’ parts.';
 if (!deliverer) log.warn(`${notPushing} Events aren’t pushed to apps; they can still be pulled from /v1/domain-events.`);
 const pushing = (): PushingState => (deliverer ? { on: true, ...(deliverer.problem ? { problem: deliverer.problem } : {}) } : { on: false, why: notPushing, whoCanChange: 'Whoever runs this deployment sets it in .env.' });
-const app = await buildApp({ callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, pushing });
+// Each admin and lead check is also asked of the permissions service, to compare (shadow mode, ADR 0085).
+const shadow = shadowFromEnv(credentials, log);
+const app = await buildApp({ shadow, callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, pushing });
 await app.listen({ port, host: '0.0.0.0' });
 deliverer?.start();
 

@@ -1,5 +1,28 @@
 # @augur/updater
 
+## 0.11.0
+
+### Minor Changes
+
+- f59617f: An app names what it needs of the knowledge graph in its `augur-floor-graphs` resource: `classes` (class IRIs) and `actions` (action names). The registry asks the deployment's knowledge graph what it offers when an app is installed, and refuses an install that needs a class or action it lacks, saying which and who can adopt a class. When the knowledge graph can't be asked, it only warns. The knowledge graph's `GET /meta` now lists every class it has (`ontology.classes`), and Admin's review of an install names the classes and actions.
+
+### Patch Changes
+
+- 4e3f47a: The knowledge graph service runs. It answers at `/api/knowledge/v1`: where you stand (`/floors`), its
+  action catalogue, the actions retain, hold, keep and confirm-faithful (each needs an Idempotency-Key and
+  can be a dry run), and an entity and its beliefs as the floors in sight know them. It follows identity
+  on every call, so someone taken off a team loses that floor within 30 seconds, and it relays its events
+  as `platform.knowledge.*`. Compose runs it beside a `knowledge-migrate` job, and the updater knows both.
+- 6553017: Deployments run the permissions service and OpenFGA (ADR 0085). OpenFGA keeps its tables in a `permissions` schema on AUGUR's Postgres, under the permissions service's own login, and AUGUR ships its own OpenFGA image, which brings those tables up to date before it serves. The updater restarts both. Nothing asks the service yet.
+- Updated dependencies [f59617f]
+- Updated dependencies [d2ce7c9]
+- Updated dependencies [e60b45e]
+- Updated dependencies [7e6b12b]
+- Updated dependencies [12064f5]
+- Updated dependencies [cc7aa74]
+  - @augur/app-tools@0.6.0
+  - @augur/service-kit@0.19.0
+
 ## 0.10.0
 
 ### Minor Changes

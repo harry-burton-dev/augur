@@ -1,5 +1,24 @@
 # @augur/app-tools
 
+## 0.6.0
+
+### Minor Changes
+
+- f59617f: An app names what it needs of the knowledge graph in its `augur-floor-graphs` resource: `classes` (class IRIs) and `actions` (action names). The registry asks the deployment's knowledge graph what it offers when an app is installed, and refuses an install that needs a class or action it lacks, saying which and who can adopt a class. When the knowledge graph can't be asked, it only warns. The knowledge graph's `GET /meta` now lists every class it has (`ontology.classes`), and Admin's review of an install names the classes and actions.
+- d2ce7c9: Apps can ask for the knowledge graph in their manifest's `scopes`: `knowledge:read` to read it as the person they act for, `knowledge:act` for its actions apps are granted, and `knowledge:extract` to add what a source says (retain). The gateway lets an app's calls to the knowledge graph through on those scopes, Admin names them when an admin allows an app, and an app's catalog entry names the knowledge API. The knowledge graph itself still refuses apps until its next release, which checks each action's own scope.
+
+  Not breaking: registry.openapi.yaml lists three more scopes an app's entry may carry. The list grows as AUGUR adds what apps can be granted, and its readers (Admin, the shell and the registry client) show a scope they don't know by its name.
+
+- e60b45e: An app on contract 3 chooses its pane's layout from the shell's named ones: `focus`, `aside` (with the About panel), `split` and `canvas`, with `density` and `inset` beside `width`. `contributes.frame` in the manifest sets the defaults, and `ctx.frame.set` changes them for a page. The shell takes the choice and shows the About panel only in `aside`; an app with About sections and no choice keeps `aside`, so nothing it shows today moves. The spacing of each layout follows in the next kit release.
+
+### Patch Changes
+
+- Updated dependencies [d2ce7c9]
+- Updated dependencies [7e6b12b]
+- Updated dependencies [12064f5]
+- Updated dependencies [cc7aa74]
+  - @augur/service-kit@0.19.0
+
 ## 0.5.0
 
 ### Minor Changes

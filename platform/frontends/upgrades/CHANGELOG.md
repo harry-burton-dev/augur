@@ -1,5 +1,33 @@
 # @augur/upgrades
 
+## 0.2.0
+
+### Minor Changes
+
+- b1ec856: Deployment gains Health (each part's health, email and event deliveries) and Backups (the last backup, the copy off the server, point in time and restore tests). Each page's history is now the kit's paged list, and an upgrade's watch checks a check list.
+- 3875cc9: Deployment gains its Release channel page: the channel this deployment and each component tracks, each component's path from main to stable from the pipeline feed, and every change of channel.
+- fd78adb: Deployment, the Upgrade Centre's new name, is built as a contract 3 app beside the current page: Overview, AUGUR and Apps, each with its own history. The shell starts using it once the registry lists its manifest.
+- 793cd6a: Deployment's contract 3 app gains its Settings page: each component's release channel, update policy, version pin and maintenance windows, reporting to Backstage, and the settings history.
+- 71c250a: Deployment (once the Upgrade Centre) now runs on the app contract: the registry lists its contract 3 manifest, the web image serves its `sandbox.js`, and the React page is gone.
+
+### Patch Changes
+
+- 523cbc6: Account is a dialog over the shell's menu, on kit 0.5.13. Its sections are tabs down the side, with a new Overview first (who you are, and an account check with Something's wrong? to secure the account). Each section's parts sit side by side while they fit and wait behind a switch when they don't, and long lists page, so nothing in it scrolls at 1280×720, 1024×768 or 800×600. It opens only from the menu, or on coming back from one of Keycloak's screens; an address alone no longer opens it.
+- 3a37126: Deployment's release channel and update policy are inline choices on each component, saved as soon as they change, on Settings and on Release channel; maintenance windows and the version pin stay in the editor.
+- dfad5d2: Install new apps from Deployment's Apps page: what the app feed offers, installing from a release file's address, the settings an install must be given, what's in progress, default apps waiting and apps removed with their data kept. Admin's Apps no longer installs; it links to Deployment.
+
+  An installed app's own settings in Admin are inline fields, each saved as soon as it changes, instead of a dialog.
+
+- 79da23c: Deployment holds up with many apps: tables of components page ten at a time with a filter, Settings lists every component in one table and opens one to change it, and Health lists only the apps whose events are in trouble.
+- 7f0d097: On kit 0.5.12, an app on the app contract can describe dialogs whose work it does itself, ask-twice buttons, choices, checkbox groups, dates, tag pickers, steps, progress and status, which the shell draws with the kit.
+- 318926c: On kit 0.5.14, an app on the app contract can describe a list of checks, steps through one job and a list a page at a time (`quill-check-list`, `quill-step-list`, `quill-paged-list`), which the shell draws with the kit.
+- d6f1a93: On kit 0.5.15, an app on the app contract can describe what a documents app needs: `quill-reader`, `quill-file-button`, `quill-people-picker`, `quill-floor-path` and `quill-filter-bar`. The shell fetches a reader's pictures itself, only under the app's own `/api/<id>/` and with the person's token, and frees them when the app stops (ADR 0092). A file button's files reach the app's `ctx.files.onDrop` handler as a drop does; while the app has no handler, the button says it can't take files.
+- Updated dependencies [d6f1a93]
+- Updated dependencies [e60b45e]
+- Updated dependencies [7adc7fc]
+- Updated dependencies [7f0d097]
+  - @augur/mfe-sdk@3.1.0
+
 ## 0.1.7
 
 ### Patch Changes

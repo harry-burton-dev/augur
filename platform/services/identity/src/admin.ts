@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { callerFromHeaders, signedInRecently, type NewAuditEntry } from '@augur/service-kit';
+import { callerFromHeaders, noShadow, signedInRecently, type NewAuditEntry, type Shadow } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE, DirectoryError, type Directory, type NewPerson, type Person as DirectoryPerson } from './directory.ts';
 import { choice, Department, departmentName, empty, IdParams, LevelNames, NewPerson as NewPersonSchema, Person, PersonChanges, Position, PositionRole, positionName, ref, refused, Role, TeamLevels } from './schemas.ts';
 import { withLifecycle, type IdlePolicy, type LifecycleStore } from './lifecycle.ts';
@@ -33,6 +33,8 @@ export const usernameFrom = (address: string) =>
     .slice(0, 60) || 'person';
 
 interface AdminOptions {
+  /** Compares this service's own admin checks with the permissions service (shadow mode, ADR 0085). */
+  shadow?: Shadow;
   directory?: Directory;
   /** Where the names of the levels of team are kept. */
   workspaces?: WorkspaceStore;
@@ -63,11 +65,14 @@ const LEAVER_NOTE = 500;
  * can give or take away that role, or change a deployment admin's sign-in.
  */
 export const adminRoutes =
-  ({ directory, workspaces, audit, store, lifecycle, organisation, redact }: AdminOptions) =>
+  ({ directory, workspaces, audit, store, lifecycle, organisation, redact, shadow = noShadow }: AdminOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     app.addHook('onRequest', async (req, reply) => {
-      if (!callerFromHeaders(req.headers)?.roles.includes('admin')) {
+      const caller = callerFromHeaders(req.headers);
+      const admin = Boolean(caller?.roles.includes('admin'));
+      if (caller) shadow.check('identity.people', caller, { action: 'can_manage_people', resource: { type: 'org', id: 'this' }, as: 'persona' }, admin);
+      if (!admin) {
         return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can manage people and departments.' });
       }
       if (!directory) {
@@ -89,7 +94,12 @@ export const adminRoutes =
 
     const dir = () => directory!;
     const DEPLOYMENT_ADMIN = DEPLOYMENT_ADMIN_ROLE.name;
-    const isDeploymentAdmin = (req: FastifyRequest) => callerFromHeaders(req.headers)!.roles.includes(DEPLOYMENT_ADMIN);
+    const isDeploymentAdmin = (req: FastifyRequest) => {
+      const caller = callerFromHeaders(req.headers)!;
+      const held = caller.roles.includes(DEPLOYMENT_ADMIN);
+      shadow.check('identity.deployment-admins', caller, { action: 'admin', resource: { type: 'deployment', id: 'this' }, as: 'persona' }, held);
+      return held;
+    };
     // Only a deployment admin may make one, or change one's role or sign-in, so an admin can't take the deployment over.
     const deploymentAdminsOnly = (reply: FastifyReply) =>
       reply.code(403).send({ error: 'forbidden', message: 'Only a deployment admin can give or take away that role, or change a deployment admin’s sign-in.' });

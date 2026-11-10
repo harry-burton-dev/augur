@@ -1,5 +1,28 @@
 # @augur/shell
 
+## 0.21.0
+
+### Minor Changes
+
+- 523cbc6: Account is a dialog over the shell's menu, on kit 0.5.13. Its sections are tabs down the side, with a new Overview first (who you are, and an account check with Something's wrong? to secure the account). Each section's parts sit side by side while they fit and wait behind a switch when they don't, and long lists page, so nothing in it scrolls at 1280×720, 1024×768 or 800×600. It opens only from the menu, or on coming back from one of Keycloak's screens; an address alone no longer opens it.
+- 7f0d097: On kit 0.5.12, an app on the app contract can describe dialogs whose work it does itself, ask-twice buttons, choices, checkbox groups, dates, tag pickers, steps, progress and status, which the shell draws with the kit.
+- 318926c: On kit 0.5.14, an app on the app contract can describe a list of checks, steps through one job and a list a page at a time (`quill-check-list`, `quill-step-list`, `quill-paged-list`), which the shell draws with the kit.
+- d6f1a93: On kit 0.5.15, an app on the app contract can describe what a documents app needs: `quill-reader`, `quill-file-button`, `quill-people-picker`, `quill-floor-path` and `quill-filter-bar`. The shell fetches a reader's pictures itself, only under the app's own `/api/<id>/` and with the person's token, and frees them when the app stops (ADR 0092). A file button's files reach the app's `ctx.files.onDrop` handler as a drop does; while the app has no handler, the button says it can't take files.
+- b6c737c: An app's pane keeps an inset in every layout: the shell draws it with Aerie's PaneLayout (kit 0.5.16), so the page heading and the app's screen share one inset from the pane's edges, sit clear of the rail, the About panel and the stage's fade, and the screen's parts are spaced with the kit's section gap. Compact density now comes from the kit's tokens rather than the shell's own override.
+- e60b45e: An app on contract 3 chooses its pane's layout from the shell's named ones: `focus`, `aside` (with the About panel), `split` and `canvas`, with `density` and `inset` beside `width`. `contributes.frame` in the manifest sets the defaults, and `ctx.frame.set` changes them for a page. The shell takes the choice and shows the About panel only in `aside`; an app with About sections and no choice keeps `aside`, so nothing it shows today moves. The spacing of each layout follows in the next kit release.
+- 8a180e7: The way back: `/recover/` is a page that needs nothing from the shell, the kit or any app, so a deployment admin can still see what the server runs and go back to an earlier release when the usual screens won't open. It signs in on its own with the shell's client, always asking for the password, and asks the registry for the same go-back as the Upgrade Centre.
+- 7f0d097: SDK 3.1: `ctx.signInAgain()` lets an app on the contract ask for a fresh sign-in when the platform turns a call down with `sign_in_again`, and comes back to where the app was. The shell sends the person through its `/auth/again`.
+
+### Patch Changes
+
+- 5ef8329: AUGUR's own apps can be on the app contract (ADR 0083): the registry sends such an app's contract 3 manifest, with its role, its kind and whether the floor gauge rests, and the front door serves its frontend from the image at /apps/<id>/<version>/ before the frontends bucket. No own app uses it yet.
+- 9eccfb9: Sign-in no longer asks admins and deployment admins for a one-time code. The realm job takes the two-step role out of `admin` and `deployment-admin`; code apps and passkeys stay on offer to everyone, and Admin → Organisation can still ask everyone for one ("Optional" or "Everyone"). Account and Admin say so in those words. The sign-in pages and emails move to the Endstate look on Common 0.15: the shell's still horizon and band, one solid square panel, Keycap buttons, Well fields and Instrument Sans, in the horizon greys.
+- Updated dependencies [d6f1a93]
+- Updated dependencies [e60b45e]
+- Updated dependencies [7adc7fc]
+- Updated dependencies [7f0d097]
+  - @augur/mfe-sdk@3.1.0
+
 ## 0.20.0
 
 ### Minor Changes

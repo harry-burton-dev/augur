@@ -58,7 +58,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### No role needs a one-time code to sign in
 
-**From** unreleased
+**From** augur@0.25.0
 
 Admins and deployment admins no longer have to sign in with a code app or a passkey. On the next `pc up -d` the realm job takes the two-step role out of `admin` and `deployment-admin`, and its log says so. Code apps and passkeys stay on offer to everyone, and Admin → Organisation, Security and retention, can still ask everyone for one.
 
@@ -68,43 +68,43 @@ Admins and deployment admins no longer have to sign in with a code app or a pass
 
 ### The knowledge graph isn't connected to models yet
 
-**From** unreleased
+**From** augur@0.25.0
 
 Compose leaves the knowledge service's `MODELS_URL` empty for now. So retain takes only claims an app has already extracted, never raw text to read, and entities show their beliefs without written summaries. Each refusal says so. Nothing for you to do: when models are connected to it, a note here will say how.
 
 ### Apps are installed from Deployment
 
-**From** unreleased
+**From** augur@0.25.0
 
 Installing a new app moved from Admin → Apps to Deployment → Apps (`/upgrades/apps`): what the app feed offers, **Check for new apps**, **Install from an address**, what's in progress, default apps waiting and apps removed with their data kept. The install asks for the settings an app can't start without, as before. Admin → Apps keeps each installed app's settings, internet, developers, previews and **Remove from the server**, and links to Deployment for installing. An app's own settings are now fields right on the app, each saved as soon as it changes, with no **Change its settings** dialog. Nothing to do on the server.
 
 ### Going back from 0.24.0 needs new bucket secrets
 
-**From** unreleased
+**From** augur@0.25.0
 
 augur@0.24.0 took the retired apps' buckets away with their keys. Garage never takes a deleted key's id back, and an app's key id comes from its bucket secret, so a server that has run 0.24.0 can't go back to 0.23.1 as it is: 0.23.1's storage job stops at the Artifacts key with `KeyAlreadyExists`, and everything waits on it. To go back, set new `FOLIO_BUCKET_SECRET`, `ATLAS_BUCKET_SECRET` and `MANDATE_BUCKET_SECRET` values in `.env` (`openssl rand -hex 32` each) first; those apps' data is gone unless you restore the backup the upgrade took. From this release on, taking a bucket away leaves the app's keys, so going back works without this, and the storage job says in words when a secret's key was deleted before.
 
 ### Who settles and raises on a floor comes from the permissions service
 
-**From** unreleased
+**From** augur@0.25.0
 
 The knowledge graph now asks the permissions service who settles a floor's disputes and holds what its people retained, and who raises its beliefs to the floor above. A position or a person holds each, as set for the floor. Nothing is carried over: until someone is set, nobody on a team floor can hold, settle, retract, raise, end, merge, split or retire there. Retaining, confirming, disputing and personal floors are unchanged. While the permissions service can't answer, nobody holds either role; the knowledge service's log says so on each request. Set `PERMISSIONS_CLIENT_SECRET` (the permissions service's own sign-in note) before upgrading.
 
 ### The permissions service's own sign-in
 
-**From** unreleased
+**From** augur@0.25.0
 
 The permissions service now copies floors, positions and who holds them from identity, so it signs in as itself. It needs one new setting, `PERMISSIONS_CLIENT_SECRET`, which the realm job turns into its Keycloak client. The Upgrade Centre makes it up for you. If you upgrade by hand, add it to `.env` first (`openssl rand -hex 32`). Once it starts, `pc logs permissions` says how many relationships it copied in.
 
 ### The knowledge graph's forget ledger
 
-**From** unreleased
+**From** augur@0.25.0
 
 Nothing to do. Compose makes a new volume, `knowledge-ledger`, where the knowledge graph writes the id of each observation someone forgets. After any restore, from a nightly backup or to a point in time, the knowledge graph's migrate job forgets those again when AUGUR starts, so a restore can't bring back what people asked to forget. The backup container copies the ledger off the server with each night's dump; [Restore a lost server](deploy.md#restore-a-lost-server) has a step that puts it back.
 
 ### The permissions service and OpenFGA
 
-**From** unreleased
+**From** augur@0.25.0
 
 This release adds the permissions service (`permissions`) and OpenFGA (`openfga`), which holds the relationships it answers from (ADR 0085). Nothing asks the service yet, so nothing changes for people. It needs two new settings. `PERMISSIONS_DATABASE_PASSWORD` is the service's own Postgres login, `platform_permissions`, which the storage job makes. `OPENFGA_TOKEN` is the key the service sends OpenFGA. Deployment makes both up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`).
 
@@ -112,25 +112,25 @@ On the first `up`, the storage job makes the login and its `permissions` schema.
 
 ### The Upgrade Centre is now Deployment
 
-**From** unreleased
+**From** augur@0.25.0
 
 The Upgrade Centre is now called **Deployment** and runs on the app contract, in a worker of its own, like any installed app. Its address stays `/upgrades`. Its pages are Overview, AUGUR, Apps, Health, Backups, Release channel and Settings, and each keeps its own history, so there is no History page. Nothing to do on the server: the web image serves the new page. If Deployment won't open after upgrading, `/recover/` still goes back.
 
 ### Removing apps, pinning, sites and app sign-ins need a deployment admin
 
-**From** unreleased
+**From** augur@0.25.0
 
 Removing an app, holding it at a version or letting go of that hold, allowing or stopping a site apps load from, and issuing an app's sign-in now need the `deployment-admin` role, not just `admin` (ADR 0084). They change what the server runs and trusts. A plain admin still sees these buttons in Admin, turned off, saying a deployment admin can do it. Before you upgrade, check that whoever does these jobs holds `deployment-admin` (Admin, People); the first admin already does.
 
 ### A way back that works when the screens don't
 
-**From** unreleased
+**From** augur@0.25.0
 
 The web container now serves `/recover/`, a page that needs nothing from the shell, the kit or any app. When the Upgrade Centre won't open after an upgrade, a deployment admin opens `/recover/`, signs in (it always asks for the password) and sees what the server runs, the latest change step by step, and **Go back** for each release the Upgrade Centre would offer, with the same reasons for one it can't. Nothing to do: bookmark it for the night something goes wrong.
 
 ### The knowledge graph service
 
-**From** unreleased
+**From** augur@0.25.0
 
 This release adds the knowledge graph service (`knowledge`) and the job that keeps its schema (`knowledge-migrate`). It needs two new settings, `KNOWLEDGE_DATABASE_PASSWORD` (the service's own Postgres login, `kg_app`) and `KNOWLEDGE_CLIENT_SECRET` (its sign-in, which the realm job makes). The Upgrade Centre makes both up for you. If you upgrade by hand, add each to `.env` first (`openssl rand -hex 32`).
 

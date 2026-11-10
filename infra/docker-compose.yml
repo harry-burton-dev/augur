@@ -136,6 +136,7 @@ services:
       # client, which keycloak-config makes and gives its rights.
       KEYCLOAK_URL: http://keycloak:8080
       SERVICE_CLIENT_SECRET: platform-local-only-identity
+      PERMISSIONS_URL: http://permissions:8087
       <<: *internal
     depends_on:
       postgres: { condition: service_started }
@@ -158,6 +159,7 @@ services:
       PORT: 8084
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-events
+      PERMISSIONS_URL: http://permissions:8087
       # Notice emails land in Mailpit (http://localhost:8025), never out.
       PLATFORM_URL: http://localhost:5173
       SMTP_HOST: mailpit

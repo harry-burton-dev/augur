@@ -3,7 +3,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type, { type Static } from 'typebox';
 import pg from 'pg';
 import { createHash } from 'node:crypto';
-import { callerFromHeaders, identifyService, ServiceAuthUnavailable, signedInRecently, type Migration, type NewAuditEntry, type ServiceVerifier } from '@augur/service-kit';
+import { callerFromHeaders, identifyService, noShadow, ServiceAuthUnavailable, signedInRecently, type Migration, type NewAuditEntry, type ServiceVerifier, type Shadow } from '@augur/service-kit';
 import { DEPLOYMENT_ADMIN_ROLE } from './directory.ts';
 import { refused } from './schemas.ts';
 import type { WorkspaceStore } from './workspaces.ts';
@@ -400,6 +400,8 @@ export const offeredLanguages = (o: Pick<Organisation, 'languages' | 'defaultLan
 export const SECURITY_SIGN_IN_MS = 10 * 60_000;
 
 interface OrganisationOptions {
+  /** Compares this service's own admin checks with the permissions service (shadow mode, ADR 0085). */
+  shadow?: Shadow;
   workspaces: WorkspaceStore;
   store: OrganisationStore;
   audit?: (entry: NewAuditEntry, workspace?: string) => Promise<void>;
@@ -419,7 +421,7 @@ const FIELDS = ['name', 'timeZone', 'sender', 'idle', 'notice', 'languages', 'de
  * for AUGUR's own services; and the logo at `/public/organisation/logo` for anyone, signed in or not.
  */
 export const organisationRoutes =
-  ({ workspaces, store, audit, verifyService, languages: deploymentLanguages = ['en'], askEveryone, now = () => new Date() }: OrganisationOptions) =>
+  ({ workspaces, store, audit, verifyService, languages: deploymentLanguages = ['en'], askEveryone, now = () => new Date(), shadow = noShadow }: OrganisationOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const settings = () => organisationSettings(workspaces, store, deploymentLanguages);
@@ -442,7 +444,9 @@ export const organisationRoutes =
     const admins = async (req: FastifyRequest, reply: FastifyReply) => {
       const caller = callerFromHeaders(req.headers);
       if (!caller) return reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
-      if (!caller.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change the organisation’s settings.', whoCanChange: 'An admin' });
+      const admin = caller.roles.includes('admin');
+      shadow.check('identity.organisation', caller, { action: 'can_manage_org', resource: { type: 'org', id: 'this' }, as: 'persona' }, admin);
+      if (!admin) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change the organisation’s settings.', whoCanChange: 'An admin' });
     };
 
     app.get(
@@ -550,7 +554,9 @@ export const organisationRoutes =
         const caller = callerFromHeaders(req.headers)!;
         const bad = (message: string) => reply.code(400).send({ error: 'bad_request', message });
         if (changes.security) {
-          if (!caller.roles.includes(DEPLOYMENT_ADMIN_ROLE.name)) {
+          const held = caller.roles.includes(DEPLOYMENT_ADMIN_ROLE.name);
+          shadow.check('identity.organisation.security', caller, { action: 'admin', resource: { type: 'deployment', id: 'this' }, as: 'persona' }, held);
+          if (!held) {
             return reply.code(403).send({ error: 'forbidden', message: 'Only a deployment admin can change security and retention.', whoCanChange: 'A deployment admin' });
           }
           if (!signedInRecently(caller, SECURITY_SIGN_IN_MS, now().getTime())) {

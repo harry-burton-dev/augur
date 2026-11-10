@@ -1,5 +1,23 @@
 # @augur/gateway
 
+## 0.14.0
+
+### Minor Changes
+
+- d2ce7c9: Apps can ask for the knowledge graph in their manifest's `scopes`: `knowledge:read` to read it as the person they act for, `knowledge:act` for its actions apps are granted, and `knowledge:extract` to add what a source says (retain). The gateway lets an app's calls to the knowledge graph through on those scopes, Admin names them when an admin allows an app, and an app's catalog entry names the knowledge API. The knowledge graph itself still refuses apps until its next release, which checks each action's own scope.
+
+  Not breaking: registry.openapi.yaml lists three more scopes an app's entry may carry. The list grows as AUGUR adds what apps can be granted, and its readers (Admin, the shell and the registry client) show a scope they don't know by its name.
+
+- cc7aa74: Platform scopes (ADR 0083): AUGUR's own admin APIs get scopes of their own (`people:manage`, `apps:manage`, `org:manage`, `audit:read`, `deployment:upgrade`, `deployment:apps`, `deployment:health`, `deployment:settings`). The registry gives them only to AUGUR's own frontends (Admin holds who and what is allowed; the Upgrade Centre what runs and changing it), and the gateway lets a person's call made through one of those frontends reach the matching API with them. No app from a feed can ask for one. The service still checks the person's roles.
+
+### Patch Changes
+
+- Updated dependencies [d2ce7c9]
+- Updated dependencies [7e6b12b]
+- Updated dependencies [12064f5]
+- Updated dependencies [cc7aa74]
+  - @augur/service-kit@0.19.0
+
 ## 0.13.0
 
 ### Minor Changes

@@ -183,3 +183,44 @@ describe('the model', () => {
     }
   });
 });
+
+describe('this org and this deployment', () => {
+  it('answers about org:this as the org identity names, and deployment:this as itself', async () => {
+    const { asked, engine } = fakeOpenFga();
+    const app = await buildApp({ engine, store: 'S', modelId: 'M', model, now, org: () => 'acme' });
+    await app.inject({ method: 'POST', url: '/access/v1/evaluation', headers: asGateway, payload: { subject: { type: 'persona', id: 'admin.amara' }, action: { name: 'can_manage_people' }, resource: { type: 'org', id: 'this' } } });
+    await app.inject({ method: 'POST', url: '/access/v1/evaluation', headers: asGateway, payload: { subject: { type: 'persona', id: 'admin.amara' }, action: { name: 'can_upgrade' }, resource: { type: 'deployment', id: 'this' } } });
+    expect(asked.map((a) => (a.body.tuple_key as { object: string }).object)).toEqual(['org:acme', 'deployment:this']);
+  });
+
+  it('can’t answer about org:this before identity has been asked, and says so', async () => {
+    const { asked, engine } = fakeOpenFga();
+    const app = await build(engine);
+    const res = await app.inject({ method: 'POST', url: '/access/v1/evaluation', headers: asGateway, payload: { ...ask, action: { name: 'can_see' }, resource: { type: 'org', id: 'this' } } });
+    expect(res.statusCode).toBe(503);
+    expect(asked).toEqual([]);
+  });
+});
+
+describe('POST /access/v1/search/resource', () => {
+  it('lists what the subject has the relation to, as OpenFGA’s ListObjects says', async () => {
+    const { asked, engine } = fakeOpenFga(() => ({ objects: ['persona:admin.amara', 'persona:ops-head'] }));
+    const app = await build(engine);
+    const res = await app.inject({ method: 'POST', url: '/access/v1/search/resource', headers: asGateway, payload: { subject: { type: 'person', id: 'amara' }, action: { name: 'holder' }, resource: { type: 'persona' } } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ results: [{ type: 'persona', id: 'admin.amara' }, { type: 'persona', id: 'ops-head' }] });
+    expect(asked[0]).toEqual({
+      path: '/stores/S/list-objects',
+      body: { authorization_model_id: 'M', user: 'person:amara', relation: 'holder', type: 'persona', context: { current_time: '2026-11-20T09:00:00.000Z' }, consistency: 'MINIMIZE_LATENCY' },
+    });
+  });
+
+  it('refuses a relation the type doesn’t have, and a caller that isn’t the gateway or a platform service', async () => {
+    const { engine } = fakeOpenFga();
+    const app = await build(engine);
+    const bad = await app.inject({ method: 'POST', url: '/access/v1/search/resource', headers: asGateway, payload: { subject: { type: 'person', id: 'amara' }, action: { name: 'nope' }, resource: { type: 'persona' } } });
+    expect(bad.statusCode).toBe(400);
+    const stranger = await app.inject({ method: 'POST', url: '/access/v1/search/resource', payload: { subject: { type: 'person', id: 'amara' }, action: { name: 'holder' }, resource: { type: 'persona' } } });
+    expect(stranger.statusCode).toBe(403);
+  });
+});
