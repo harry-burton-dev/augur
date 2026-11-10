@@ -10,7 +10,7 @@ import { PageHead, QuillRemote, State, createQuillReceiver, readerPicturePath, t
 import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
 import type { FrameDensity, FrameInset, FrameLayout, FrameState, FrameWidth, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireFile, type WireRequest, type WireResponse } from '@augur/mfe-sdk/sdk3/host';
-import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
+import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, PaneLayout, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
 import { createRoot, type Root } from 'react-dom/client';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import { DEFAULT_BUDGETS, NodeBudget, RateBudget, type Budgets, type Overrun } from './budget.js';
@@ -83,8 +83,6 @@ const INSETS = new Set(['standard', 'flush']);
 const oneOf = <T extends string>(names: ReadonlySet<string>, v: unknown) => (typeof v === 'string' && names.has(v) ? (v as T) : undefined);
 
 /** The layouts with the About panel beside the main column. */
-const WITH_ABOUT = new Set(['aside']);
-
 /**
  * The pane's layout as the shell draws it: what the page set, else the manifest's defaults, else `aside`
  * for an app with About sections and `focus` for one without, at reading width, comfortable and inset.
@@ -615,13 +613,56 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
       return receiver ? [[s.id, <QuillRemote receiver={receiver} host={host} />]] : [];
     }),
   );
+  const actions = stopped ? [] : actionsOf(app, state.frame.actions, state.handled);
+  const [dropping, setDropping] = useState(false);
+  // Files from the desktop land here, in the host, only while the app has a handler for them (spec 6.10).
+  const takes = (e: DragEvent) => !stopped && state.drops === true && [...(e.dataTransfer?.types ?? [])].includes('Files');
+  const open = !stopped && state.phase === 'open';
   return (
-    <div className="app-frame" data-app={app.id} data-layout={layout.layout} data-density={layout.density} data-inset={layout.inset} ref={frame}>
-      <Pane session={session} state={state} stopped={stopped} onRetry={onRetry} source={source} />
-      {WITH_ABOUT.has(layout.layout) && <AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />}
-      <CommandPalette open={palette && !stopped} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />
-    </div>
+    <PaneLayout
+      {...layout}
+      className="app-frame"
+      frame={{ ref: frame, 'data-app': app.id }}
+      pane={{
+        className: 'app-pane',
+        'data-app': app.id,
+        'data-phase': state.phase,
+        'data-dropping': dropping ? '' : undefined,
+        'aria-busy': state.frame.busy || state.phase === 'opening' || state.phase === 'slow',
+        onDragOver: (e) => {
+          if (!takes(e)) return;
+          e.preventDefault();
+          setDropping(true);
+        },
+        onDragLeave: () => setDropping(false),
+        onDrop: (e) => {
+          setDropping(false);
+          if (!takes(e)) return;
+          e.preventDefault();
+          void session.drop([...(e.dataTransfer?.files ?? [])]);
+        },
+      }}
+      head={<PageHead heading={state.frame.title || app.name} actions={actions} onAction={(a) => session.command(a.id)} />}
+      status={paneStatus(app.name, state, stopped, onRetry)}
+      canvas={open && state.canvas ? <CanvasFrame key={state.canvas.opened} name={app.name} canvas={state.canvas} /> : undefined}
+      screenHidden={!open || !!state.canvas}
+      about={<AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />}
+      overlay={<CommandPalette open={palette && !stopped} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />}
+    >
+      {!stopped && (
+        <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
+          <QuillRemote receiver={session.screen} host={host} />
+        </FrameRadial>
+      )}
+    </PaneLayout>
   );
+}
+
+/** What the pane says in place of the app's screen: why it stopped, with Try again, or that it is still opening. */
+function paneStatus(name: string, state: PaneState, stopped: boolean, onRetry: () => void) {
+  if (stopped) return <State kind="error" heading={state.phase === 'unresponsive' ? `${name} was stopped` : `${name} stopped`} body={state.reason} action="Try again" onAction={onRetry} />;
+  if (state.phase === 'open') return undefined;
+  return <State kind="loading" heading={state.phase === 'slow' ? `${name} is taking a while to open` : `Opening ${name}`} body={state.phase === 'slow' ? 'It’s still starting. The rest of the shell works meanwhile.' : undefined} />;
 }
 
 /**
@@ -644,49 +685,6 @@ function CanvasFrame({ name, canvas }: { name: string; canvas: NonNullable<PaneS
 
 /** A radial command's detail: the thing it was opened on, as the app marked it. */
 const thingDetail = (thing: FrameThing) => ({ thing: { kind: thing.kind, ...(thing.id ? { id: thing.id } : {}), label: thing.label } });
-
-/** The pane: the heading the shell draws from what the app set, and the app's screen or why it isn't there. */
-function Pane({ session, state, stopped, onRetry, source }: { session: AppSession; state: PaneState; stopped: boolean; onRetry: () => void; source: CommandSource }) {
-  const { app } = session;
-  const actions = stopped ? [] : actionsOf(app, state.frame.actions, state.handled);
-  const host = usePaneHost(session, state.drops === true && !stopped);
-  const [dropping, setDropping] = useState(false);
-  // Files from the desktop land here, in the host, only while the app has a handler for them (spec 6.10).
-  const takes = (e: DragEvent) => !stopped && state.drops === true && [...(e.dataTransfer?.types ?? [])].includes('Files');
-  return (
-    <section
-      onDragOver={(e) => {
-        if (!takes(e)) return;
-        e.preventDefault();
-        setDropping(true);
-      }}
-      onDragLeave={() => setDropping(false)}
-      onDrop={(e) => {
-        setDropping(false);
-        if (!takes(e)) return;
-        e.preventDefault();
-        void session.drop([...(e.dataTransfer?.files ?? [])]);
-      }}
-      data-dropping={dropping ? '' : undefined} className="app-pane" data-app={app.id} data-width={paneLayout(app, state.frame).width} data-phase={state.phase} aria-busy={state.frame.busy || state.phase === 'opening' || state.phase === 'slow'}>
-      <PageHead heading={state.frame.title || app.name} actions={actions} onAction={(a) => session.command(a.id)} />
-      {stopped ? (
-        <State kind="error" heading={state.phase === 'unresponsive' ? `${app.name} was stopped` : `${app.name} stopped`} body={state.reason} action="Try again" onAction={onRetry} />
-      ) : (
-        <>
-          {state.phase !== 'open' && (
-            <State kind="loading" heading={state.phase === 'slow' ? `${app.name} is taking a while to open` : `Opening ${app.name}`} body={state.phase === 'slow' ? 'It’s still starting. The rest of the shell works meanwhile.' : undefined} />
-          )}
-          {state.canvas && state.phase === 'open' && <CanvasFrame key={state.canvas.opened} name={app.name} canvas={state.canvas} />}
-          <div className="app-pane-screen" hidden={state.phase !== 'open' || !!state.canvas}>
-            <FrameRadial source={source} onRun={(command, thing) => session.command(command, thingDetail(thing))}>
-              <QuillRemote receiver={session.screen} host={host} />
-            </FrameRadial>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
 
 /**
  * An app's card on Home (spec 6.15), as the surface Home's tile takes: the app runs in a worker of
