@@ -4,6 +4,8 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import {
   callerFromHeaders,
+  noShadow,
+  type Shadow,
   frontendDigest,
   isGatewayCaller,
   FrontendProblem,
@@ -77,7 +79,7 @@ import {
   type CategoryInForce,
 } from './manifest.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
-import { DEPLOYMENT_ADMIN, needsDeploymentAdmin } from './roles.ts';
+import { needsDeploymentAdmin, roleChecks } from './roles.ts';
 import { LiveOverrides } from './live.ts';
 import type { PipelineReader } from './pipeline.ts';
 import { UpdateChecker } from './updates.ts';
@@ -152,6 +154,8 @@ export interface RegistryOptions {
   alerts?: AlertRouteOptions;
   /** The deployment's time zone (DEPLOYMENT_TIME_ZONE), which upgrade windows are in unless a unit names its own. */
   timeZone?: string;
+  /** Compares today's admin role checks with the permissions service (shadow mode, ADR 0085). */
+  shadow?: Shadow;
   now?: () => Date;
 }
 
@@ -229,8 +233,10 @@ export const buildApp = async ({
   tailnet,
   alerts = {},
   timeZone = 'UTC',
+  shadow = noShadow,
   now = () => new Date(),
 }: RegistryOptions) => {
+  const roles = roleChecks(shadow);
   /** The apps the app runner installed from the signed app feed, whose kind is honoured too. */
   const feedApps = async () => new Set((await store.installedApps()).map((i) => i.app));
   const kindOf = (entry: Pick<AppEntry, 'id' | 'category'>, feed: ReadonlySet<string>) => categoryOf(entry, { fromFeed: feed.has(entry.id) });
@@ -452,7 +458,7 @@ export const buildApp = async ({
         },
       );
 
-      const isAdmin = (req: FastifyRequest) => callerFromHeaders(req.headers)?.roles.includes('admin') ?? false;
+      const isAdmin = (req: FastifyRequest, site: string) => roles.admin(site, callerFromHeaders(req.headers));
 
       /** The running previews someone chose, by app id: theirs alone, or everyone's (person id → app id) with no one named. */
       const chosenPreviews = async (person?: string) => {
@@ -479,7 +485,7 @@ export const buildApp = async ({
           },
         },
         async (req, reply) => {
-          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
+          if (!isAdmin(req, 'registry.catalogue')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see the whole catalogue.' });
           const platform = platformApps.filter((a) => !unbuiltApps.has(a.id)).map((entry) => ({ ...entry, platform: true, enabled: true }));
           const allowed = await allowedOrigins();
           const kept = await store.frontends();
@@ -512,7 +518,7 @@ export const buildApp = async ({
           },
         },
         async (req, reply) => {
-          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see an app’s versions.' });
+          if (!isAdmin(req, 'registry.app-versions')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see an app’s versions.' });
           const record = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!record) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const kept = await store.frontends(req.params.id);
@@ -523,7 +529,7 @@ export const buildApp = async ({
       /** Serve one kept version and hold the app there, whatever registers next; or let go and serve the newest. */
       const pin = async (req: FastifyRequest, reply: FastifyReply, id: string, version: string | null) => {
         const caller = callerFromHeaders(req.headers);
-        if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('choose an app’s version'));
+        if (!roles.deploymentAdmin('registry.app-pin', caller, 'can_pin_versions')) return reply.code(403).send(needsDeploymentAdmin('choose an app’s version'));
         if (platformApps.some((a) => a.id === id)) {
           return reply.code(409).send({ error: 'conflict', message: 'AUGUR’s own apps change with AUGUR’s own release.' });
         }
@@ -611,7 +617,7 @@ export const buildApp = async ({
         }
         if (service) return { id: service.name, kind: 'service' };
         const caller = callerFromHeaders(req.headers);
-        if (caller?.roles.includes('admin')) return { id: caller.id, kind: 'user' };
+        if (roles.admin('registry.register', caller)) return { id: caller.id, kind: 'user' };
         void reply.code(403).send({ error: 'forbidden', message: 'Only an app’s own service or an admin can register apps.' });
         return undefined;
       };
@@ -830,13 +836,13 @@ export const buildApp = async ({
             }
           }
         : undefined;
-      await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
-      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}), ...(defaultApps ? { defaultApps } : {}), ...(knowledge ? { knowledge } : {}) }));
-      await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
+      await app.register(featurePreviewRoutes({ store, roles, ring: updates.ring, serviceOf, record, chainOf }));
+      await app.register(appRunnerRoutes({ store, roles, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}), ...(defaultApps ? { defaultApps } : {}), ...(knowledge ? { knowledge } : {}) }));
+      await app.register(overviewRoutes({ store, roles, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
       const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });
       const sender = new ReportSender({ reporting, store, overview, fetchImpl: reportFetch, now, log: { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) } });
-      await app.register(reportRoutes({ reporting, store, sender, overview, now }));
+      await app.register(reportRoutes({ reporting, roles, store, sender, overview, now }));
       sender.start();
       app.addHook('onClose', async () => sender.stop());
       // Grafana's alerts, told to deployment admins (ADR 0059).
@@ -1078,7 +1084,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!isGatewayCaller(caller ?? undefined) && !caller?.roles.includes('admin')) {
+          if (!isGatewayCaller(caller ?? undefined) && !roles.admin('registry.upstreams', caller)) {
             return reply.code(403).send({ error: 'forbidden', message: 'Only the gateway and admins can see where apps’ services are.' });
           }
           const records = (await store.records()).filter((r) => r.upstream);
@@ -1119,7 +1125,7 @@ export const buildApp = async ({
           if (service === undefined) return reply;
           const caller = callerFromHeaders(req.headers);
           const by: NewAuditEntry['actor'] | undefined =
-            service?.kind === 'platform' ? { id: service.name, kind: 'service' } : !service && caller?.roles.includes('admin') ? { id: caller.id, kind: 'user' } : undefined;
+            service?.kind === 'platform' ? { id: service.name, kind: 'service' } : !service && roles.admin('registry.upstream.set', caller) ? { id: caller.id, kind: 'user' } : undefined;
           if (!by) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the AUGUR service that runs an app can say where it is.' });
           if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: `"${req.params.id}" is one of AUGUR’s own apps.` });
           const problem = req.body.url === null ? undefined : upstreamProblem(req.body.url, await store.ownNetworks());
@@ -1155,7 +1161,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can turn apps on or off.' });
+          if (!roles.admin('registry.app-enabled', caller)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can turn apps on or off.' });
           const platform = platformApps.find((a) => a.id === req.params.id);
           if (platform) return reply.code(409).send({ error: 'conflict', message: `${platform.name} is part of AUGUR and can’t be turned off.` });
           const before = (await store.records()).find((r) => r.entry.id === req.params.id);
@@ -1185,7 +1191,7 @@ export const buildApp = async ({
           },
         },
         async (req, reply) => {
-          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where an app is on.' });
+          if (!isAdmin(req, 'registry.app-floors.read')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where an app is on.' });
           if (!(await store.records()).some((r) => r.entry.id === req.params.id)) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           return store.rules(req.params.id);
         },
@@ -1232,7 +1238,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where an app is on.' });
+          if (!roles.admin('registry.app-floors.change', caller)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose where an app is on.' });
           if (platformApps.some((a) => a.id === req.params.id)) return reply.code(409).send({ error: 'conflict', message: 'Built-in apps are on everywhere.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
@@ -1277,7 +1283,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose what an app may do.' });
+          if (!roles.admin('registry.app-scopes', caller)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose what an app may do.' });
           const changed = await store.grant(req.params.id, req.body.scopes);
           if (!changed) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, scopes: req.body.scopes, by: caller.id }, 'app scopes granted');
@@ -1311,7 +1317,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change how much an app may be sent.' });
+          if (!roles.admin('registry.app-limits', caller)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change how much an app may be sent.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const { mb } = req.body;
@@ -1348,7 +1354,7 @@ export const buildApp = async ({
           const service = await serviceOf(req, reply);
           if (service === undefined) return reply;
           const own = service?.kind === 'app' && service.app === req.params.id;
-          if (!own && !isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the app itself can see its settings.' });
+          if (!own && !isAdmin(req, 'registry.app-settings.read')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin or the app itself can see its settings.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           return settingsOf(found);
@@ -1374,7 +1380,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes('admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change an app’s settings.' });
+          if (!roles.admin('registry.app-settings.change', caller)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can change an app’s settings.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           const setting = found.entry.settings?.find((s) => s.id === req.params.setting);
@@ -1403,7 +1409,7 @@ export const buildApp = async ({
           },
         },
         async (req, reply) => {
-          if (!isAdmin(req)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where apps may load from.' });
+          if (!isAdmin(req, 'registry.allowed-sites.read')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see where apps may load from.' });
           return store.origins();
         },
       );
@@ -1424,7 +1430,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('choose where apps may load from'));
+          if (!roles.deploymentAdmin('registry.allowed-sites.add', caller, 'can_allow_sites')) return reply.code(403).send(needsDeploymentAdmin('choose where apps may load from'));
           const parsed = parseOrigin(req.body.origin);
           if ('problem' in parsed) return reply.code(400).send({ error: 'bad_request', message: parsed.problem });
           if (await store.allowOrigin(parsed.origin, caller.id)) {
@@ -1454,7 +1460,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('choose where apps may load from'));
+          if (!roles.deploymentAdmin('registry.allowed-sites.remove', caller, 'can_allow_sites')) return reply.code(403).send(needsDeploymentAdmin('choose where apps may load from'));
           if (!(await store.removeOrigin(req.params.origin))) return reply.code(404).send({ error: 'not_found', message: `${req.params.origin} isn't allowed.` });
           req.log.info({ origin: req.params.origin, by: caller.id }, 'origin removed');
           await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'origin.removed', target: req.params.origin });
@@ -1462,7 +1468,7 @@ export const buildApp = async ({
         },
       );
 
-      await app.register(platformUpgradeRoutes({ store, updates, pipeline, portalUrl, timeZone, now, serviceOf, record }));
+      await app.register(platformUpgradeRoutes({ store, roles, updates, pipeline, portalUrl, timeZone, now, serviceOf, record }));
 
 
       app.delete(
@@ -1482,7 +1488,7 @@ export const buildApp = async ({
         },
         async (req, reply) => {
           const caller = callerFromHeaders(req.headers);
-          if (!caller?.roles.includes(DEPLOYMENT_ADMIN)) return reply.code(403).send(needsDeploymentAdmin('remove apps'));
+          if (!roles.deploymentAdmin('registry.app-remove', caller, 'can_remove_apps')) return reply.code(403).send(needsDeploymentAdmin('remove apps'));
           if (defaultApps?.includes(req.params.id)) return reply.code(409).send({ error: 'conflict', message: defaultRemoveProblem(req.params.id) });
           if (!(await store.remove(req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
           req.log.info({ app: req.params.id, by: caller.id }, 'app removed');
