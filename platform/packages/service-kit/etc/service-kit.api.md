@@ -234,6 +234,7 @@ export interface Caller {
     id: string;
     // (undocumented)
     name: string;
+    persona?: string;
     // (undocumented)
     roles: string[];
     scopes?: string[];
@@ -249,6 +250,7 @@ export const CALLER_HEADERS: {
     readonly departments: "x-user-departments";
     readonly roles: "x-user-roles";
     readonly signedInAt: "x-user-signed-in-at";
+    readonly persona: "x-user-persona";
 };
 
 // @public
@@ -1312,6 +1314,9 @@ export class PeopleUnavailable extends Error {
 
 // @public (undocumented)
 export const permissionsShadow: (input: ShadowOptions) => Shadow;
+
+// @public
+export const PERSONA_HEADER = "x-augur-persona";
 
 // @public
 export const PERSONAL_DETAIL_KEYS: readonly ["username", "email", "firstName", "lastName", "name", "ip", "ips", "message", "note"];

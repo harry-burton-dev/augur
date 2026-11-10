@@ -7,6 +7,7 @@ import type { Static } from 'typebox';
 import { createLocalJWKSet } from 'jose';
 import {
   APP_HEADER,
+  PERSONA_HEADER,
   appCallerId,
   appClientId,
   CALLER_KEYS_PATH,
@@ -38,6 +39,7 @@ import { appFailure, appLimitsFromEnv, InFlight, poolOptions, type AppLimits } f
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
+import { PERSONA_ID, permissionsPersonaSessions, PersonaSessionsUnavailable, type PersonaSessionCheck } from './personas.ts';
 import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
 import { Traffic, TRAFFIC_PATH, type TrafficPart } from './traffic.ts';
 import { GatewayMetrics } from './metrics.ts';
@@ -65,7 +67,7 @@ export const parseUpstreams = (spec = ''): Upstreams =>
   );
 
 /** The platform's own services, by the name they are reached at. */
-export const PLATFORM_SERVICES = ['identity', 'registry', 'events', 'models', 'knowledge'];
+export const PLATFORM_SERVICES = ['identity', 'registry', 'events', 'models', 'knowledge', 'permissions'];
 
 /** The platform's own services, then each app's service from APP_UPSTREAMS. The gateway knows no app by name. */
 export const defaultUpstreams = (env = process.env): Upstreams => {
@@ -79,6 +81,7 @@ export const defaultUpstreams = (env = process.env): Upstreams => {
     events: env.EVENTS_URL ?? 'http://localhost:8084',
     models: env.MODELS_URL ?? 'http://localhost:8085',
     knowledge: env.KNOWLEDGE_URL ?? 'http://localhost:8086',
+    permissions: env.PERMISSIONS_URL ?? 'http://localhost:8087',
     ...apps,
   };
 };
@@ -170,6 +173,8 @@ export interface GatewayOptions {
   limits?: AppLimits;
   /** How long a delegated caller lasts (spec 8.5). Defaults to APP_DELEGATION_SECONDS, or 300. */
   delegationSeconds?: number;
+  /** Whether a person is acting as an admin persona now (ADR 0086). Defaults to asking the permissions upstream. */
+  personaSessions?: PersonaSessionCheck;
 }
 
 /**
@@ -187,7 +192,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv() }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions }: GatewayOptions = {}) => {
   // Mail comes from the organisation's sender (Admin → Organisation), read from identity as the gateway.
   const sender = upstreams.identity
     ? organisationSender({
@@ -209,6 +214,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const grantsOf = appGrants ?? (upstreams.registry ? registryGrantsFor({ registryUrl: upstreams.registry, signer }) : undefined);
+  const actingAs = personaSessions ?? (upstreams.permissions ? permissionsPersonaSessions({ permissionsUrl: upstreams.permissions, signer, fetchImpl }) : undefined);
   const inFlight = new InFlight(limits.concurrentCalls);
   // A part sends back the delegated caller the gateway signed; it is checked against the gateway's own key.
   const checkDelegation = delegationCheck({ keys: async (header, token) => createLocalJWKSet(await signer.keys())(header, token) });
@@ -372,6 +378,26 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     if (acting !== undefined) {
       if (!APP_ID.test(acting)) return reply.code(400).send({ error: 'bad_request', message: `${APP_HEADER} must be an app’s id.` });
       req.actingApp = acting;
+    }
+
+    // The admin persona the shell says the person is acting as (PDR-024): only while the permissions service has
+    // a live session for it, and never on a call made for an app.
+    const sentPersona = req.headers[PERSONA_HEADER];
+    const persona = Array.isArray(sentPersona) ? sentPersona[0] : sentPersona;
+    if (persona !== undefined) {
+      if (!PERSONA_ID.test(persona)) return reply.code(400).send({ error: 'bad_request', message: `${PERSONA_HEADER} must be a persona’s id.` });
+      if (req.actingApp) return reply.code(403).send({ error: 'forbidden', message: 'An app never acts as your admin persona. Stop “Act as” to use apps, or use AUGUR itself.' });
+      if (!actingAs) return reply.code(503).send({ error: 'unavailable', message: 'You can’t act as a persona here: this deployment has no permissions service.' });
+      try {
+        if (!(await actingAs(req.caller.id, persona))) {
+          return reply.code(403).send({ error: 'persona_ended', message: `You’re no longer acting as ${persona}: its time ran out or it was stopped. Choose “Act as” again to carry on.` });
+        }
+      } catch (err) {
+        if (!(err instanceof PersonaSessionsUnavailable)) throw err;
+        req.log.error({ err: err.message }, 'persona session check failed');
+        return reply.code(503).send({ error: 'unavailable', message: 'Whether you’re acting as a persona can’t be checked right now. A deployment admin can see why on Status.' });
+      }
+      req.caller = { ...req.caller, persona };
     }
 
     if (!asked) return;
