@@ -74,6 +74,39 @@ const behavesLikeAWorkspaceStore = (make: () => WorkspaceStore, reset: () => Pro
     await expect(store.setMember('gone', 'u-1', 'member')).rejects.toMatchObject({ status: 404 });
   });
 
+  it('puts people on teams through the positions they hold, and hands a position on whole (ADR 0089)', async () => {
+    const port = await store.createTeam('Port Services');
+    const master = await store.createPosition(port.id, '  Harbour   master ', 'lead');
+    expect(master).toMatchObject({ workspace: port.id, role: 'lead', name: 'Harbour master' });
+    expect(master.holder).toBeUndefined();
+    // Vacant: it keeps its place, and nobody stands on the team through it.
+    expect(await store.memberships({ workspace: port.id })).toEqual([]);
+    await store.handOver(master.id, 'u-1');
+    expect(await store.memberships({ workspace: port.id })).toEqual([{ workspace: port.id, person: 'u-1', role: 'lead' }]);
+    // The next holder has it at once, and the one before doesn't.
+    expect(await store.handOver(master.id, 'u-2')).toMatchObject({ id: master.id, holder: 'u-2' });
+    expect(await store.memberships({ workspace: port.id })).toEqual([{ workspace: port.id, person: 'u-2', role: 'lead' }]);
+    expect(await store.positions({ holder: 'u-1' })).toEqual([]);
+    // Taking someone off the team by person leaves a position an admin named, vacant, for the next holder.
+    await store.setMember(port.id, 'u-2', null);
+    expect(await store.positions({ workspace: port.id })).toEqual([{ id: master.id, workspace: port.id, role: 'lead', name: 'Harbour master' }]);
+    expect(await store.updatePosition(master.id, { name: 'Port master', role: 'member' })).toMatchObject({ name: 'Port master', role: 'member' });
+    await store.retirePosition(master.id);
+    expect(await store.positions({ workspace: port.id })).toEqual([]);
+    await expect(store.handOver(master.id, 'u-3')).rejects.toMatchObject({ status: 404 });
+    await expect(store.createPosition(port.id, ' ', 'member')).rejects.toMatchObject({ status: 400 });
+    await expect(store.createPosition('gone', 'X', 'member')).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('counts someone once on a team where they hold two positions, as lead if either leads', async () => {
+    const port = await store.createTeam('Port Services');
+    const a = await store.createPosition(port.id, 'Berth planner', 'member');
+    const b = await store.createPosition(port.id, 'Duty lead', 'lead');
+    await store.handOver(a.id, 'u-1');
+    await store.handOver(b.id, 'u-1');
+    expect(await store.memberships({ person: 'u-1' })).toEqual([{ workspace: port.id, person: 'u-1', role: 'lead' }]);
+  });
+
   it('imports once, parents first, with members', async () => {
     const load = vi.fn(async () => [
       { key: 'kc-payroll', name: 'Payroll', parentKey: 'kc-finance', members: ['u-1'] },
@@ -143,6 +176,45 @@ describe.runIf(DATABASE_URL)('PgWorkspaceStore', () => {
     const parent = await store.createTeam('Ops');
     const made = await Promise.all(['A', 'a!', 'A.', 'a?'].map((n) => store.createTeam(n, parent.id)));
     expect(new Set(made.map((t) => t.slug)).size).toBe(4);
+  });
+
+  it('makes a position for each place people had on a team before positions, held from when they joined', async () => {
+    const finance = await db.workspaces.createTeam('Finance');
+    // As an earlier release left it: people on teams directly, and no positions yet.
+    await db.pool.query('drop table identity.position_holders, identity.positions');
+    await db.pool.query("delete from identity.migrations where id = 'workspaces_004_positions'");
+    await db.pool.query(`insert into identity.workspace_members (workspace_id, person, role, added_at) values ($1, 'u-1', 'lead', '2026-01-01'), ($1, 'u-2', 'member', '2026-02-01')`, [finance.id]);
+    await db.store.migrate();
+    expect(await db.workspaces.memberships({ workspace: finance.id })).toEqual([
+      { workspace: finance.id, person: 'u-1', role: 'lead' },
+      { workspace: finance.id, person: 'u-2', role: 'member' },
+    ]);
+    expect((await db.workspaces.positions({ workspace: finance.id })).map((p) => [p.name, p.holder])).toEqual([['Lead', 'u-1'], ['Member', 'u-2']]);
+  });
+
+  it('still writes who is on each team the old way, so going back a release finds it as it is now', async () => {
+    const port = await db.workspaces.createTeam('Port');
+    const old = async () => (await db.pool.query('select person, role from identity.workspace_members where workspace_id = $1 order by person', [port.id])).rows;
+    await db.workspaces.setMember(port.id, 'u-1', 'member');
+    const master = await db.workspaces.createPosition(port.id, 'Harbour master', 'lead');
+    await db.workspaces.handOver(master.id, 'u-2');
+    expect(await old()).toEqual([{ person: 'u-1', role: 'member' }, { person: 'u-2', role: 'lead' }]);
+    await db.workspaces.handOver(master.id, 'u-1');
+    expect(await old()).toEqual([{ person: 'u-1', role: 'lead' }]);
+    await db.workspaces.updatePosition(master.id, { role: 'member' });
+    expect(await old()).toEqual([{ person: 'u-1', role: 'member' }]);
+    await db.workspaces.retirePosition(master.id);
+    await db.workspaces.setMember(port.id, 'u-1', null);
+    expect(await old()).toEqual([]);
+  });
+
+  it('forgets who a deleted person held, and keeps the positions, vacant', async () => {
+    const port = await db.workspaces.createTeam('Port');
+    const master = await db.workspaces.createPosition(port.id, 'Harbour master', 'lead');
+    await db.workspaces.handOver(master.id, 'u-1');
+    await db.workspaces.forgetPerson('u-1', 'Deleted person');
+    expect((await db.pool.query("select 1 from identity.position_holders where person = 'u-1'")).rowCount).toBe(0);
+    expect(await db.workspaces.positions({ workspace: port.id })).toEqual([{ id: master.id, workspace: port.id, role: 'lead', name: 'Harbour master' }]);
   });
 });
 

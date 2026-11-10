@@ -251,6 +251,21 @@ export const Department = Type.Object(
   { $id: 'Department' },
 );
 
+/** A position on a department (ADR 0089): people are on departments through the positions they hold. */
+export const Position = Type.Object(
+  {
+    id: Type.String(),
+    department: Type.String({ description: 'The department it is on' }),
+    name: Type.String({ description: 'What the job is called, such as Harbour master' }),
+    role: Type.Union([Type.Literal('member'), Type.Literal('lead')], { description: 'Whether whoever holds it leads the department' }),
+    holder: Type.Optional(Type.String({ description: 'Who holds it now; absent while it is vacant' })),
+  },
+  { $id: 'Position' },
+);
+
+export const positionName = () => Type.String({ minLength: 1, maxLength: 80, description: 'What the job is called' });
+export const PositionRole = Type.Union([Type.Literal('member'), Type.Literal('lead')]);
+
 /** A department's name: not blank, and no "/". */
 export const departmentName = () => Type.String({ minLength: 1, maxLength: 60, pattern: '^[^/]*[^/\\s][^/]*$', description: 'No /' });
 

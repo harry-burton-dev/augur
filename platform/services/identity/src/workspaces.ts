@@ -14,6 +14,26 @@ import { DirectoryError } from './directory.ts';
 export type WorkspaceKind = 'org' | 'personal' | 'team';
 export type MemberRole = 'member' | 'lead';
 
+/**
+ * A position (ADR 0089): a job on a team, such as Harbour master, that a person holds. Teams are joined by
+ * positions, not people: whoever holds a position now is a member (or lead) of its team, and the next holder is
+ * at once. A position with nobody in it keeps its place. A person's own floor is the only one they're on directly.
+ */
+export interface Position {
+  id: string;
+  workspace: string;
+  role: MemberRole;
+  name: string;
+  /** Who holds it now; absent while it's vacant. */
+  holder?: string;
+}
+
+/** A position's name at most this long. */
+export const MAX_POSITION_NAME = 80;
+
+/** What a position made from someone's place on a team is called until an admin names it (by its role). */
+export const UNNAMED_POSITION: Record<MemberRole, string> = { member: 'Member', lead: 'Lead' };
+
 /** Teams nest at most this deep below the org. */
 export const MAX_TEAM_DEPTH = 5;
 
@@ -95,8 +115,24 @@ export interface WorkspaceStore {
   levels(): Promise<string[]>;
   /** Renames the levels; the names are checked with checkLevels. */
   setLevels(names: string[]): Promise<string[]>;
-  /** Adds someone to a team or changes their role; `null` takes them off it. */
+  /**
+   * Adds someone to a team or changes their role; `null` takes them off it. Kept for callers that think in
+   * people: it gives the person a position of their own on the team (or changes or empties it).
+   */
   setMember(team: string, person: string, role: MemberRole | null): Promise<void>;
+  /** The positions on a team, or every team's, that aren't retired, each with who holds it now. */
+  positions(filter?: { workspace?: string; holder?: string }): Promise<Position[]>;
+  /** A new, vacant position on a team. */
+  createPosition(team: string, name: string, role: MemberRole): Promise<Position>;
+  /** Renames a position, or changes whether it leads its team. */
+  updatePosition(id: string, change: { name?: string; role?: MemberRole }): Promise<Position>;
+  /**
+   * Hands a position to `person`, or leaves it vacant with `null`: the holder before stops holding it at that
+   * moment, and everything given to the position goes with it to the next holder (ADR 0089).
+   */
+  handOver(id: string, person: string | null): Promise<Position>;
+  /** Takes a vacant position away. One that someone holds is handed over first. */
+  retirePosition(id: string): Promise<void>;
   /** A deleted person (ADR 0072): out of every team, and their own floor archived under a name that isn't theirs. */
   forgetPerson(person: string, name: string): Promise<void>;
   /**
@@ -215,6 +251,42 @@ export const workspaceMigrations: Migration[] = [
   },
 ];
 
+/**
+ * Positions (ADR 0089), run last of identity's migrations. Each place someone had on a team becomes a position
+ * on that team, named by its role until an admin names it, that the person holds from when they joined.
+ * workspace_members is no longer read, but every change still writes it for one major, so going back to an
+ * earlier release finds who is on each team as it is now.
+ */
+export const positionMigrations: Migration[] = [
+  {
+    id: 'workspaces_004_positions',
+    sql: `
+      create table identity.positions (
+        id text primary key,
+        workspace_id text not null references identity.workspaces (id),
+        role text not null check (role in ('member', 'lead')),
+        name text not null,
+        created_at timestamptz not null default now(),
+        retired_at timestamptz
+      );
+      create index positions_workspace on identity.positions (workspace_id) where retired_at is null;
+      create table identity.position_holders (
+        position_id text not null references identity.positions (id),
+        person text not null,
+        since timestamptz not null default now(),
+        until timestamptz,
+        check (until is null or until >= since)
+      );
+      create unique index position_holders_now on identity.position_holders (position_id) where until is null;
+      create index position_holders_person on identity.position_holders (person) where until is null;
+      insert into identity.positions (id, workspace_id, role, name, created_at)
+        select md5(workspace_id || '/' || person), workspace_id, role, case role when 'lead' then 'Lead' else 'Member' end, added_at
+        from identity.workspace_members;
+      insert into identity.position_holders (position_id, person, since)
+        select md5(workspace_id || '/' || person), person, added_at from identity.workspace_members;`,
+  },
+];
+
 interface Row {
   id: string;
   kind: WorkspaceKind;
@@ -227,6 +299,26 @@ interface Row {
 }
 
 const COLUMNS = 'id, kind, parent_id, path::text as path, owner, name, slug, archived_at';
+
+type Queryable = Pick<pg.Pool, 'query'> | pg.PoolClient;
+
+interface PositionRow {
+  id: string;
+  workspace_id: string;
+  role: MemberRole;
+  name: string;
+  holder: string | null;
+}
+const POSITION_COLUMNS = 'p.id, p.workspace_id, p.role, p.name, h.person as holder';
+const POSITION_FROM = 'from identity.positions p left join identity.position_holders h on h.position_id = p.id and h.until is null';
+const fromPositionRow = (r: PositionRow): Position => ({ id: r.id, workspace: r.workspace_id, role: r.role, name: r.name, ...(r.holder ? { holder: r.holder } : {}) });
+
+/** A position's tidied name, or why it can't be used. */
+export const checkPositionName = (name: string) => {
+  const tidy = name.trim().replace(/\s+/g, ' ');
+  if (!tidy || tidy.length > MAX_POSITION_NAME) throw new DirectoryError(`A position needs a name of up to ${MAX_POSITION_NAME} characters.`, 400);
+  return tidy;
+};
 
 const fromRow = (r: Row): Workspace => ({
   id: r.id,
@@ -324,13 +416,104 @@ export class PgWorkspaceStore implements WorkspaceStore {
   }
 
   async memberships(filter: { person?: string; workspace?: string } = {}) {
-    const { rows } = await this.pool.query<{ workspace_id: string; person: string; role: MemberRole }>(
-      `select workspace_id, person, role from identity.workspace_members
-       where ($1::text is null or person = $1) and ($2::text is null or workspace_id = $2)
-       order by added_at, person`,
+    // Where people stand comes from the positions they hold (ADR 0089). Someone holding two on one team is
+    // on it once, as its lead if either leads it; they're listed from when they first held one there.
+    const { rows } = await this.pool.query<{ workspace_id: string; person: string; lead: boolean }>(
+      `select p.workspace_id, h.person, bool_or(p.role = 'lead') as lead
+       from identity.positions p join identity.position_holders h on h.position_id = p.id and h.until is null
+       where p.retired_at is null and ($1::text is null or h.person = $1) and ($2::text is null or p.workspace_id = $2)
+       group by p.workspace_id, h.person
+       order by min(h.since), h.person`,
       [filter.person ?? null, filter.workspace ?? null],
     );
-    return rows.map((r) => ({ workspace: r.workspace_id, person: r.person, role: r.role }));
+    return rows.map((r) => ({ workspace: r.workspace_id, person: r.person, role: (r.lead ? 'lead' : 'member') as MemberRole }));
+  }
+
+  async positions(filter: { workspace?: string; holder?: string } = {}) {
+    const { rows } = await this.pool.query<PositionRow>(
+      `select ${POSITION_COLUMNS} ${POSITION_FROM}
+       where p.retired_at is null and ($1::text is null or p.workspace_id = $1) and ($2::text is null or h.person = $2)
+       order by p.created_at, p.id`,
+      [filter.workspace ?? null, filter.holder ?? null],
+    );
+    return rows.map(fromPositionRow);
+  }
+
+  async createPosition(team: string, name: string, role: MemberRole) {
+    await this.liveTeam(team);
+    const position = { id: newId(), workspace: team, role, name: checkPositionName(name) };
+    await this.pool.query('insert into identity.positions (id, workspace_id, role, name) values ($1, $2, $3, $4)', [position.id, team, role, position.name]);
+    return position;
+  }
+
+  updatePosition(id: string, change: { name?: string; role?: MemberRole }) {
+    const name = change.name === undefined ? null : checkPositionName(change.name);
+    return this.inTransaction(async (q) => {
+      const { rows } = await q.query<{ workspace_id: string }>(
+        `update identity.positions set name = coalesce($2, name), role = coalesce($3, role) where id = $1 and retired_at is null returning workspace_id`,
+        [id, name, change.role ?? null],
+      );
+      if (!rows[0]) throw new DirectoryError('That position no longer exists.', 404);
+      await this.mirror(q, rows[0].workspace_id);
+      return (await this.position(id, q))!;
+    });
+  }
+
+  handOver(id: string, person: string | null) {
+    return this.inTransaction(async (q) => {
+      const { rows } = await q.query<{ workspace_id: string }>('select workspace_id from identity.positions where id = $1 and retired_at is null for update', [id]);
+      if (!rows[0]) throw new DirectoryError('That position no longer exists.', 404);
+      await q.query('update identity.position_holders set until = now() where position_id = $1 and until is null', [id]);
+      if (person) await q.query('insert into identity.position_holders (position_id, person) values ($1, $2)', [id, person]);
+      await this.mirror(q, rows[0].workspace_id);
+      return (await this.position(id, q))!;
+    });
+  }
+
+  retirePosition(id: string) {
+    return this.inTransaction(async (q) => {
+      await q.query('update identity.position_holders set until = now() where position_id = $1 and until is null', [id]);
+      const { rows } = await q.query<{ workspace_id: string }>('update identity.positions set retired_at = coalesce(retired_at, now()) where id = $1 returning workspace_id', [id]);
+      if (rows[0]) await this.mirror(q, rows[0].workspace_id);
+    });
+  }
+
+  /** Writes workspace_members for one team from who holds its positions now, for a release before positions. */
+  private async mirror(q: Querier, team: string) {
+    await q.query('delete from identity.workspace_members where workspace_id = $1', [team]);
+    await q.query(
+      `insert into identity.workspace_members (workspace_id, person, role, added_at)
+       select p.workspace_id, h.person, case when bool_or(p.role = 'lead') then 'lead' else 'member' end, min(h.since)
+       from identity.positions p join identity.position_holders h on h.position_id = p.id and h.until is null
+       where p.workspace_id = $1 and p.retired_at is null
+       group by p.workspace_id, h.person`,
+      [team],
+    );
+  }
+
+  private async position(id: string, q: Queryable = this.pool) {
+    const { rows } = await q.query<PositionRow>(`select ${POSITION_COLUMNS} ${POSITION_FROM} where p.id = $1 and p.retired_at is null`, [id]);
+    return rows[0] && fromPositionRow(rows[0]);
+  }
+
+  private async liveTeam(team: string, q: Queryable = this.pool) {
+    const { rowCount } = await q.query(`select 1 from identity.workspaces where id = $1 and kind = 'team' and archived_at is null`, [team]);
+    if (!rowCount) throw new DirectoryError('That department no longer exists.', 404);
+  }
+
+  private async inTransaction<T>(work: (q: pg.PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const result = await work(client);
+      await client.query('commit');
+      return result;
+    } catch (err) {
+      await client.query('rollback');
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   async levels() {
@@ -381,21 +564,35 @@ export class PgWorkspaceStore implements WorkspaceStore {
     });
   }
 
-  async setMember(team: string, person: string, role: MemberRole | null) {
-    const { rowCount } = await this.pool.query(`select 1 from identity.workspaces where id = $1 and kind = 'team' and archived_at is null`, [team]);
-    if (!rowCount) throw new DirectoryError('That department no longer exists.', 404);
-    if (role) {
-      await this.pool.query(
-        `insert into identity.workspace_members (workspace_id, person, role) values ($1, $2, $3)
-         on conflict (workspace_id, person) do update set role = excluded.role`,
-        [team, person, role],
+  setMember(team: string, person: string, role: MemberRole | null) {
+    return this.inTransaction(async (q) => {
+      await this.liveTeam(team, q);
+      const { rows } = await q.query<{ id: string; role: MemberRole }>(
+        `select p.id, p.role from identity.positions p join identity.position_holders h on h.position_id = p.id and h.until is null
+         where p.workspace_id = $1 and h.person = $2 and p.retired_at is null order by h.since`,
+        [team, person],
       );
-    } else {
-      await this.pool.query('delete from identity.workspace_members where workspace_id = $1 and person = $2', [team, person]);
-    }
+      if (!role) {
+        // Off the team: they stop holding its positions. One still named for its role was made for them alone
+        // and goes too; one an admin named stays, vacant, for whoever holds it next.
+        for (const p of rows) {
+          await q.query('update identity.position_holders set until = now() where position_id = $1 and until is null', [p.id]);
+          await q.query('update identity.positions set retired_at = now() where id = $1 and name = $2', [p.id, UNNAMED_POSITION[p.role]]);
+        }
+      } else if (rows.some((p) => p.role === role)) return;
+      else if (rows[0]) await q.query('update identity.positions set role = $2 where id = $1', [rows[0].id, role]);
+      else {
+        const id = newId();
+        await q.query('insert into identity.positions (id, workspace_id, role, name) values ($1, $2, $3, $4)', [id, team, role, UNNAMED_POSITION[role]]);
+        await q.query('insert into identity.position_holders (position_id, person) values ($1, $2)', [id, person]);
+      }
+      await this.mirror(q, team);
+    });
   }
 
   async forgetPerson(person: string, name: string) {
+    // A deleted person leaves no trace in who held what (ADR 0072); the positions they held stay, vacant.
+    await this.pool.query('delete from identity.position_holders where person = $1', [person]);
     await this.pool.query('delete from identity.workspace_members where person = $1', [person]);
     await this.pool.query(`update identity.workspaces set name = $2, archived_at = coalesce(archived_at, now()) where kind = 'personal' and owner = $1`, [person, name]);
   }
@@ -415,8 +612,11 @@ export class PgWorkspaceStore implements WorkspaceStore {
         const team = await this.insertTeam(q, t.name, (t.parentKey && ids.get(t.parentKey)) || org, taken);
         ids.set(t.key, team);
         for (const person of new Set(t.members)) {
-          await q.query(`insert into identity.workspace_members (workspace_id, person, role) values ($1, $2, 'member')`, [team.id, person]);
+          const id = newId();
+          await q.query(`insert into identity.positions (id, workspace_id, role, name) values ($1, $2, 'member', $3)`, [id, team.id, UNNAMED_POSITION.member]);
+          await q.query('insert into identity.position_holders (position_id, person) values ($1, $2)', [id, person]);
         }
+        await this.mirror(q, team.id);
       }
       await q.query('insert into identity.imports (source) values ($1)', [source]);
       return true;
