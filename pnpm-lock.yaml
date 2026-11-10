@@ -737,6 +737,31 @@ importers:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(happy-dom@21.0.4)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
 
+  platform/services/permissions:
+    dependencies:
+      '@augur/service-kit':
+        specifier: workspace:*
+        version: link:../../packages/service-kit
+      '@fastify/type-provider-typebox':
+        specifier: 'catalog:'
+        version: 6.3.0(ajv-formats@3.0.1(ajv@8.20.0))(typebox@1.4.3)
+      fastify:
+        specifier: 'catalog:'
+        version: 5.12.7
+      typebox:
+        specifier: 'catalog:'
+        version: 1.4.3
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 22.20.5
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.12(@opentelemetry/api@1.10.0)(@types/node@22.20.5)(@vitest/coverage-v8@4.1.12)(happy-dom@21.0.4)(msw@2.15.0(@types/node@22.20.5)(typescript@5.9.3))(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.1))
+
   platform/services/registry:
     dependencies:
       '@augur/app-tools':
