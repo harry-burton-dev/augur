@@ -1,0 +1,90 @@
+﻿CommonKADS follow-up: what F1 and D1 to D6 add up to
+10 Nov 2026, v3 (adds D2 and D3; Harry took every default at 01:16Z and accepted the resulting records at 06:48Z). Input to the architecture stage. Sources:
+
+
+* Audit: https://docs.google.com/document/d/1eZUZ1P1hxbosZpF8319jDs_pXzdzCmYieBvotJMSTqQ
+* Prompts: https://docs.google.com/document/d/1Ogbsj722CGJAJXm5Dw0QRKKEKUW0s08_Tmwre_jfsB8
+* F1 planner outcomes, synthetic: https://docs.google.com/document/d/1qFxTwmxfw8YAk_UkZOIaYMK17cJ4dIRLfH6iLYmWkBY, with scores at https://docs.google.com/spreadsheets/d/1O8atAJWyYaZ10IPn-LwNN_LAeuahTKHPyWqGoNERsZ4
+* D1 methods: https://docs.google.com/document/d/1Vghs-5E8A2REiAjw-x0K_kL8iQtclqz0OQp6zg2x_cw
+* D5 knowledge base as USP: https://docs.google.com/document/d/1RK5hx2fz7_uoMISwEFzRvHmo_JTg1dZSA2Ngf2io_eo
+* D4 tasks as things in Mandate: https://docs.google.com/document/d/1q4qADbqcYkScYctTMP3oBW0wQVDqryzgEMc32sYpCy4
+* D6 hand-offs and transfer functions: https://docs.google.com/document/d/1WIIL6RkdBaXhjPKfVgnGL9oF6g9BwcOPlbp46BcprkA
+* D2 decision rules and tacit knowledge: https://docs.google.com/document/d/1geDXSWnf6tB9nnZRvlOUchxQjDIBH9M0psm-UsQQSuE
+* D3 competence and routing: https://docs.google.com/document/d/175OuBpisQzEkG5cTaj5Ed0Y5u0Nt3jQv5y9ZzL_Lvfo
+* Accepted records: PDR-025, PDR-026 (present truth by default), PDR-027 (a method's model output waits to be kept), ADR 0090 (hand-offs), ADR 0091 (restsOn, stop-standing events, dependents read), Mandate ADR 0001 (key tasks are things). They are in the Decision register.
+One screen
+The seven results point at one USP, and at one shared concept: "rests on".
+
+
+Run
+	What it found
+	F1 (synthetic planners)
+	The most under-served need is that a plan doesn't know which beliefs it rests on. When an input changes, nothing finds the plan or the confirmations built on it. Opportunity score 12 to 14. The audit didn't name this.
+	D1 (methods)
+	Methods declared in manifests, with typed knowledge roles. Each step writes observations, with the run as the source. That makes the step's inputs (belief ids) and outputs (the plan) a recorded fact.
+	D4 (tasks in Mandate)
+	A key task becomes a small object with a stable id and typed in/out bindings, with belief ids as a new input kind. "Rests on" is written at issue and at back-brief, as belief ids with the time they were seen. When a belief stops standing, only the parts whose commitment rested on it are re-checked, reusing Mandate's re-check (rules.ts:66). Signals sit beside the holder's rating and never set it. Fills D1's boundTo.
+	D6 (hand-offs)
+	"Answers that know what they rest on." Inbox kinds declare answers, and the answer is retained as an observation with restsOn: belief ids with roles. A condition is the role "condition", so "ready if the gearbox arrives" needs no new modality. One re-check item per dependent, keyed so bursts collapse. The Inbox item points at a decision view, so no content goes through events. Nearest competitor: Camunda's conditional boundary event, which works on variables.
+	D2 (rules)
+	Rules are held on floors like facts. A rule version is a source, and "the floor applies version n" is a belief, with the same life as any other: retain, faithful check by a non-author, settler hold, dispute, supersede, end, two clocks. Each rule is split row by row: DMN decision tables for the exact part (feelin and dmn-moddle, which needs an ADR) and marked heuristics for the rough part. Outputs are observations only. restsOn runs both ways: an output rests on the rule (role "rule", with the rows matched), and the rule rests on what it assumes (role "assumes"). So a change in crane rate makes the rule stale and its settler is asked. Against XCON's maintenance failure: ripple-down discipline, with exceptions proposed from departures in D1 and checked against cornerstone cases, plus drift per row measured from actuals. In the synthetic interviews, half of what planners called rules were really facts, conditions or constraints.
+	D3 (competence)
+	"Work goes to positions; agents earn autonomy." Access stays in OpenFGA and authority in floor relations, and competence never feeds a "may" check. Positions declare what they answer for, set by the floor lead and typed by ontology IRIs and template inferences. People get no competence score. An agent's competence is derived from the floor's faithful-check verdicts per method@version/step, with no new store, and a new version starts supervised. In the Inbox, a position is an added field, with the owner resolved on read. Low priority, as F1 found.
+	D5 (knowledge base)
+	The storage is commodity. The differentiator is the epistemics: modality, faithful then held, reach without copies, visible disputes. As-of reads only partly work today (gaps G1 to G3).
+	
+
+Combined candidate USP: a held plan knows what it rests on (facts, conditions and the rules that shaped it), as of when, why and who vouched. When any of them changes, the position that relied on it is asked to re-confirm, while a planner sees only today's truth unless they ask. Agents earn the right to act alone from the floor's own verdicts.
+
+
+None of the five vendors documents this, per the dated tables in D1 and D5. Palantir's decision lineage is the closest.
+
+
+Kill criterion: a survey of real planners scores F1's dependency outcomes (M3, Mo2, Mo5) below 10, or Palantir or Microsoft documents per-claim provenance with as-of reads and re-confirmation. The F1 scores are synthetic and partly circular, so the USP is a hypothesis until that check is made.
+
+
+What it means for the architecture:
+
+
+1. Fix the knowledge base's clocks first (D5 option B): the recorded clock, then a belief account read and a "changes between dates" read. This needs no new record, and every later piece depends on it.
+2. Method runs bind roles to belief ids (D1). Inputs are bound to belief ids at run time, so a superseded or disputed belief can find every run and plan that used it. This is the dependency edge F1 asks for. It adds one concept to D1's sketch: a "rests on" link from an output to the beliefs bound as its inputs.
+3. Re-confirmation is a hand-off (for D6). When a belief a plan rests on changes, an Inbox item goes to whoever holds the plan. This also covers F1's "conditional readiness" finding: "ready if the gearbox arrives" is a belief with a condition, and the condition is a dependency.
+4. Lower priority: D3 (competence) scored low in F1. D2 (rules of thumb) is middling, with 5 of 9 outcomes above 10.
+What D4 and D6 settle
+One concept, three users. D1's run inputs, D4's key-task inputs and D6's answers all use the same restsOn shape: belief id, role, and time seen. It should be defined once, in the knowledge service's contract, and used by all three.
+
+
+One platform gap, found twice, and the first thing to build. The knowledge service emits nothing when a belief is superseded, ended or settled, or falls by retraction (001-store.ts:403, :475, :535; belief.held carries only the new id). A dispute is already emitted as kg.belief.disputed (001-store.ts:486), a correction from D2. ADR 0091 is now Accepted for the rest. Until it does, nothing can hear that something a plan rests on has fallen. The fix:
+
+
+* add topics for belief superseded, ended and dispute settled;
+* add a "dependents of this belief" read.
+
+
+This is additive.
+
+
+Build order this implies:
+
+
+1. D5 option B: fix the recorded clock and add the as-of reads.
+2. Belief-change topics and the dependents read.
+3. restsOn in the contract.
+4. Mandate key tasks and re-check (D4).
+5. Inbox answers and decision views (D6).
+6. Methods (D1), which then write restsOn for free.
+
+
+Steps 1 and 2 need no new record. Steps 3 to 5 are covered by the Accepted ADR 0090, ADR 0091 and Mandate ADR 0001. Step 6 needs the methods-capability ADR. Then: 7. Rules as floor-held sources with DMN segments (D2). Needs an ADR for the DMN libraries. 8. Positions as Inbox owners, and agents earning autonomy (D3). Re-checks under ADR 0090 go to the position, not the person.
+
+
+Mismatch to fix (D3 F-1): settler and raiser are still held per person (001-store.ts:28-31), against ADR 0089 (persona as job position). This goes to Records and the knowledge graph thread.
+Decisions waiting for Harry
+Answered with the defaults at 01:16Z, except where marked open. Each doc keeps its own.
+
+
+* D1 Q1 to Q3 taken (Q1 is now PDR-027). Q2 and Q3 wait for the methods-capability ADR. Q4 open: accept ADR 0014 (agent runtime) before any agent runs a method. Methods run by people need only jobs and the Inbox.
+* D5 U1 to U5 and Q1 to Q4, in its section 10.
+* D4 Q1 to Q5, in its section 8.
+* D6 Q1 to Q4 taken: the direct holder is re-asked (the position, after D3), no quick answers in v1, a met condition is news, and Mandate stops sending its needs notification.
+* New and open: D2 Q1 to Q4 (section 9) and D3 Q1 to Q5 (section 8).
