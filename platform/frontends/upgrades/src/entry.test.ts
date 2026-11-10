@@ -1,6 +1,6 @@
 import type { AppContext, FrameState, PlaceItem, RemoteElement, RemoteNode } from '@augur/mfe-sdk/sdk3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AppInstalls, AppJob, Overview, OverviewUnit, PlatformUpdates } from './model/types.js';
+import type { AppInstalls, AppJob, Deliveries, Overview, OverviewUnit, PlatformStatus, PlatformUpdates } from './model/types.js';
 import start, { COMMANDS, PLACE_APPS } from './entry.js';
 import { pathOf, routeFor } from './routes.js';
 
@@ -118,12 +118,36 @@ const installs = (over: Partial<AppInstalls> = {}): AppInstalls => ({
 
 const jobs: AppJob[] = [{ id: 'j1', app: 'mandate', action: 'install', release: { version: '1.4.0', channel: 'beta' }, requestedBy: 'p2', requestedAt: '2026-11-01T00:00:00Z', state: 'done', finishedAt: '2026-11-01T00:01:00Z' }];
 
-/** The registry, answering each read from what a test gives it, and each change as it says. */
+const status = (over: Partial<PlatformStatus> = {}): PlatformStatus => ({
+  components: [
+    { name: 'gateway', kind: 'gateway', state: 'up', version: '0.25.0', latencyMs: 3, seenAt: '2026-11-09T22:29:00Z' },
+    { name: 'registry', kind: 'service', state: 'up', version: '0.25.0', latencyMs: 8, seenAt: '2026-11-09T22:29:00Z' },
+    { name: 'knowledge', kind: 'service', state: 'down', problem: 'It didn’t answer.' },
+  ],
+  backups: {
+    state: 'attention',
+    problem: 'No copy off the server yet.',
+    lastBackup: { at: '2026-11-09T03:00:00Z', ok: true, bytes: 5_242_880 },
+    pointInTime: { at: '2026-11-09T03:00:00Z', ok: true, earliest: '2026-11-03T03:00:00Z', lastTest: { at: '2026-11-09T03:10:00Z', ok: true } },
+    lastRestoreTest: { at: '2026-11-08T04:00:00Z', ok: true, from: 'local', people: 12 },
+  },
+  email: { state: 'off', problem: 'No relay is set (SMTP_HOST).' },
+  ...over,
+});
+
+const deliveries: Deliveries = {
+  pushing: { on: true },
+  deliveries: [{ app: 'mandate', failures: 3, nextAt: null, lastError: 'HTTP 502', failingSince: '2026-11-09T22:00:00Z', deliveredAt: null, dropped: 0, droppedAt: null, state: 'retrying', words: 'Retrying: 3 tries so far.' }],
+};
+
+/** The registry and the gateway, answering each read from what a test gives it, and each change as it says. */
 const registry =
-  (given: { overview?: Overview; updates?: PlatformUpdates; installs?: AppInstalls; change?: Answer } = {}): Answer =>
+  (given: { overview?: Overview; updates?: PlatformUpdates; installs?: AppInstalls; status?: PlatformStatus | null; change?: Answer } = {}): Answer =>
   (path, init) => {
     const method = init?.method ?? 'GET';
     if (method !== 'GET' && given.change) return given.change(path, init);
+    if (path === '/api/gateway/v1/status') return given.status === null ? [502, { message: 'Bad gateway.' }] : [200, given.status ?? status()];
+    if (path === '/api/events/v1/deliveries') return [200, deliveries];
     if (path.endsWith('/platform/overview')) return [200, given.overview ?? overview()];
     if (path.endsWith('/platform/updates')) return [200, given.updates ?? updates()];
     if (path.endsWith('/app-runner/apps')) return [200, given.installs ?? installs()];
@@ -162,6 +186,8 @@ describe('routes', () => {
       { page: 'apps' },
       { page: 'app', app: 'mandate' },
       { page: 'app', app: 'mandate', install: '1.4.1' },
+      { page: 'health' },
+      { page: 'backups' },
     ] as const)
       expect(routeFor(pathOf(r))).toEqual(r);
     expect(routeFor('/nonsense')).toEqual({ page: 'overview' });
@@ -209,7 +235,7 @@ describe('Deployment', () => {
     expect(text(offer)).toContain('1 breaking change');
     const back = find(shell.screen, 'quill-list', (p) => p.label === 'Roll back');
     expect(back?.props?.items).toMatchObject([{ id: '0.23.1', actions: [{ label: 'Roll back to 0.23.1' }] }]);
-    const history = find(shell.screen, 'quill-list', (p) => p.label === 'Upgrade history');
+    const history = find(shell.screen, 'quill-paged-list', (p) => p.label === 'Upgrade history');
     expect(history?.props?.items).toMatchObject([{ id: 'h1', title: 'Upgrade now from 0.23.1 to 0.24.0', status: 'done' }]);
     expect(text(history)).toContain('Sam Admin');
   });
@@ -268,7 +294,7 @@ describe('Deployment', () => {
     const { shell } = await open(registry({ change: () => [200, jobs[0]] }), '/apps/mandate');
     expect(shell.pane.title).toBe('Mandate');
     expect(find(shell.screen, 'quill-list', (p) => p.label === 'Roll back')?.props?.items).toMatchObject([{ actions: [{ disabled: true, reason: 'Rolling an app back is done in Admin, Apps, for now.' }] }]);
-    expect(find(shell.screen, 'quill-list', (p) => p.label === 'Install history')?.props?.items).toMatchObject([{ id: 'j1', status: 'done' }]);
+    expect(find(shell.screen, 'quill-paged-list', (p) => p.label === 'Install history')?.props?.items).toMatchObject([{ id: 'j1', status: 'done' }]);
     handler(find(shell.screen, 'quill-list', (p) => p.label === 'Available updates'), 'onAction')({ item: '1.4.1', action: 'install' });
     handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({});
     await settle();
@@ -301,12 +327,38 @@ describe('Deployment', () => {
     expect(find(shell.screen, 'quill-section', (p) => p.label === 'AUGUR')).toBeDefined();
     expect(find(shell.screen, 'quill-section', (p) => p.label === 'Mandate')).toBeDefined();
     expect(find(shell.screen, 'quill-text-field', (p) => p.label === 'Public key')?.props).toMatchObject({ value: 'ssh-ed25519 AAAA', readOnly: true });
-    const history = find(shell.screen, 'quill-list', (p) => p.label === 'Settings history');
+    const history = find(shell.screen, 'quill-paged-list', (p) => p.label === 'Settings history');
     expect(history?.props?.items).toMatchObject([{ title: 'AUGUR: settings changed', meta: expect.stringContaining('Sam Admin') }]);
     expect(text(history)).toContain('Before: Ask first');
     handler(find(shell.screen, 'quill-button', (p) => p.label === 'Export the record'), 'onPress')();
     await settle();
     expect(shell.downloads).toEqual(['/api/registry/v1/platform/reporting/export']);
+  });
+
+  it('shows every part’s health, email and how apps take their events', async () => {
+    const { shell } = await open(registry(), '/health');
+    expect(shell.pane.title).toBe('Health');
+    expect(find(shell.screen, 'quill-check-list', (p) => p.label === '1 of 3 parts down')?.props?.rows).toMatchObject([{ id: 'knowledge', tone: 'problem' }]);
+    expect(find(shell.screen, 'quill-table', (p) => p.label === 'Services')?.props?.rows).toMatchObject([{ part: 'gateway', state: 'Healthy, 3 ms' }, { part: 'registry' }, { part: 'knowledge', state: 'Down' }]);
+    expect(find(shell.screen, 'quill-check-list', (p) => p.label === 'Email')?.props?.rows).toMatchObject([{ title: 'Email is off', tone: 'info' }]);
+    expect(find(shell.screen, 'quill-check-list', (p) => p.label === 'Event deliveries')?.props?.rows).toMatchObject([{ id: 'mandate', tone: 'needs' }]);
+    const home = await open(registry());
+    expect(text(find(home.shell.screen, 'quill-details'))).toContain('1 of 3 parts down');
+  });
+
+  it('shows backups, and says when the gateway can’t be read', async () => {
+    const { shell } = await open(registry(), '/backups');
+    expect(shell.pane.title).toBe('Backups');
+    expect(text(find(shell.screen, 'quill-notice', (p) => p.heading === 'Backups need a look'))).toContain('No copy off the server yet.');
+    expect(find(shell.screen, 'quill-check-list')?.props?.rows).toMatchObject([
+      { id: 'last', tone: 'ok', detail: expect.stringContaining('5.0 MB') },
+      { id: 'offsite', tone: 'needs', detail: expect.stringContaining('OFFSITE_REPOSITORY') },
+      { id: 'pit', tone: 'ok' },
+      { id: 'replay', tone: 'ok' },
+      { id: 'restore', tone: 'ok', detail: expect.stringContaining('12 people') },
+    ]);
+    const down = await open(registry({ status: null }), '/backups');
+    expect(find(down.shell.screen, 'quill-state')?.props).toMatchObject({ kind: 'error', heading: 'The gateway didn’t say how backups are doing' });
   });
 
   it('changes a component’s settings, showing the effect before saving', async () => {

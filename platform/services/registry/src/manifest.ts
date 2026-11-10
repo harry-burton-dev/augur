@@ -451,6 +451,8 @@ export const platformManifests3: Readonly<Record<string, AppManifest3>> = {
         { id: 'overview', label: 'Overview', icon: 'gauge', path: '/', detail: 'What needs you, and what is installed' },
         { id: 'augur', label: 'AUGUR', icon: 'server', path: '/augur', detail: 'Updates, upgrade and roll back' },
         { id: 'apps', label: 'Apps', icon: 'apps', path: '/apps', detail: 'Each installed app', fills: true },
+        { id: 'health', label: 'Health', icon: 'pulse', path: '/health', detail: 'Services, email and event deliveries' },
+        { id: 'backups', label: 'Backups', icon: 'archive', path: '/backups', detail: 'Last backup, copy off the server and restore tests' },
         { id: 'settings', label: 'Settings', icon: 'settings', path: '/settings', detail: 'Update policy and maintenance windows' },
       ],
       commands: [{ id: 'deployment.check', label: 'Check for updates', icon: 'download', keywords: 'release feed new version upgrade' }],

@@ -261,3 +261,67 @@ export interface AppInstalls {
   installed: InstalledApp[];
   available: AvailableApp[];
 }
+
+/** One part of AUGUR as the gateway last checked it (the gateway's GET /status). */
+export interface ComponentStatus {
+  name: string;
+  kind: 'gateway' | 'service' | 'app' | 'sign-in';
+  state: 'up' | 'slow' | 'down' | 'checking';
+  version?: string;
+  api?: string;
+  latencyMs?: number;
+  checkedAt?: string;
+  seenAt?: string;
+  problem?: string;
+}
+
+/** Whether backups can be relied on, from what the backup container last wrote. */
+export interface BackupStatus {
+  state: 'ok' | 'attention';
+  problem?: string;
+  lastBackup?: { at: string; ok: boolean; file?: string; bytes?: number; problem?: string };
+  /** The last copy off the server (ADR 0060); absent while backups stay on the server only. */
+  offsite?: { at: string; ok: boolean; snapshot?: string; keepDays?: number; problem?: string };
+  /** Restoring to a point in time (ADR 0064); absent where Postgres doesn't archive yet. */
+  pointInTime?: { at: string; ok: boolean; bases?: number; earliest?: string; archivedAt?: string; copiedAt?: string; lastTest?: { at: string; ok: boolean }; problem?: string };
+  lastRestoreTest?: { at: string; ok: boolean; from?: 'local' | 'offsite'; file?: string; seconds?: number; people?: number; apps?: number; auditEntries?: number; problem?: string };
+}
+
+/** Whether AUGUR can send email through the organisation's relay. */
+export interface EmailStatus {
+  state: 'off' | 'ok' | 'attention';
+  problem?: string;
+  relay?: string;
+  from?: string;
+  checkedAt?: string;
+}
+
+/** The gateway's GET /status: every part, backups, email and whether AUGUR is open to the internet. */
+export interface PlatformStatus {
+  components: ComponentStatus[];
+  backups?: BackupStatus;
+  publicAccess?: { open: boolean; until?: string };
+  email?: EmailStatus;
+}
+
+/** How one app's part is taking the events pushed to it (the events service's GET /deliveries). */
+export interface EventDelivery {
+  app: string;
+  failures: number;
+  nextAt: string | null;
+  lastError: string | null;
+  failingSince: string | null;
+  deliveredAt: string | null;
+  dropped: number;
+  droppedAt: string | null;
+  state: 'ok' | 'retrying' | 'stalled';
+  words: string;
+}
+
+/** Whether events are pushed to apps' parts at all, and when not, why and who can change that. */
+export type EventPushing = { on: true; problem?: string } | { on: false; why: string; whoCanChange: string };
+
+export interface Deliveries {
+  deliveries: EventDelivery[];
+  pushing: EventPushing;
+}

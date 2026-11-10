@@ -9,10 +9,12 @@ export type Route =
   | { page: 'augur'; ask?: Ask }
   | { page: 'apps' }
   | { page: 'app'; app: string; install?: string }
+  | { page: 'health' }
+  | { page: 'backups' }
   | { page: 'settings'; edit?: string };
 
 /** The places the manifest declares, by id; each is a path below `/<id>`. */
-export const PLACES = { overview: '/', augur: '/augur', apps: '/apps', settings: '/settings' } as const;
+export const PLACES = { overview: '/', augur: '/augur', apps: '/apps', health: '/health', backups: '/backups', settings: '/settings' } as const;
 
 const ASKS = new Set<Ask['kind']>(['upgrade', 'roll-back', 'test']);
 
@@ -37,6 +39,8 @@ export const routeFor = (path: string): Route => {
     if (!second) return { page: 'apps' };
     return third === 'install' && fourth ? { page: 'app', app: second, install: fourth } : { page: 'app', app: second };
   }
+  if (first === 'health') return { page: 'health' };
+  if (first === 'backups') return { page: 'backups' };
   if (first === 'settings') return second ? { page: 'settings', edit: second } : { page: 'settings' };
   return { page: 'overview' };
 };
@@ -53,6 +57,10 @@ export const pathOf = (r: Route): string => {
       return PLACES.apps;
     case 'app':
       return r.install ? `/apps/${e(r.app)}/install/${e(r.install)}` : `/apps/${e(r.app)}`;
+    case 'health':
+      return PLACES.health;
+    case 'backups':
+      return PLACES.backups;
     case 'settings':
       return r.edit ? `/settings/${e(r.edit)}` : PLACES.settings;
   }

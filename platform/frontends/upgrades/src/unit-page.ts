@@ -37,8 +37,9 @@ const following = (v: View, up: Upgrade, running: string): RemoteNode => {
     // A failed step shows as where it stopped; the ending below says what happened.
     quill('quill-steps', { label: 'Steps', steps: steps.map((s) => ({ label: s.message ? `${STEP[s.step]}: ${s.message}` : STEP[s.step], state: s.state === 'failed' ? 'now' : s.state })) }),
     up.watch?.checks.length
-      ? quill('quill-rows', {
-          items: up.watch.checks.map((c) => ({ label: c.name, value: `${String(c.value)} (limit ${String(c.threshold)})${c.ok ? '' : ', over the limit'}` })),
+      ? quill('quill-check-list', {
+          label: 'Watch checks',
+          rows: up.watch.checks.map((c) => ({ id: c.name, title: c.name, detail: `${String(c.value)} (limit ${String(c.threshold)})${c.ok ? '' : ', over the limit'}`, tone: c.ok ? ('ok' as const) : ('problem' as const) })),
         })
       : null,
     ending

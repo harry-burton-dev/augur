@@ -4,11 +4,12 @@ import { reasonProblem } from './model/halted.js';
 import type { DesiredState, PlatformUpdates } from './model/types.js';
 import { AUGUR } from './units.js';
 import { reader, type Data } from './data.js';
+import { backupsPage, healthPage } from './health.js';
 import { quill } from './quill.js';
 import { pathOf, PLACES, routeFor, type Route } from './routes.js';
 import { draftOf, settingsPage, type Draft, type SettingsData, type SettingsView } from './settings.js';
 import { appPage, augurPage } from './unit-page.js';
-import { appsPage, HISTORY_STEP, overviewPage, rowsOf, staleNotice, type Actions, type Ui } from './view.js';
+import { appsPage, overviewPage, rowsOf, staleNotice, type Actions, type Ui } from './view.js';
 
 /** The commands and places Deployment handles: each is declared in its manifest, which the shell draws from. */
 export const COMMANDS = { check: 'deployment.check' } as const;
@@ -25,6 +26,10 @@ const titleOf = (route: Route, data: Data): string => {
       return 'AUGUR';
     case 'apps':
       return 'Apps';
+    case 'health':
+      return 'Health';
+    case 'backups':
+      return 'Backups';
     case 'settings':
       return 'Settings';
     case 'app':
@@ -44,6 +49,10 @@ export const screen = (v: SettingsView): RemoteNode => {
         ? augurPage(v, v.route.ask)
         : v.route.page === 'apps'
           ? appsPage(v)
+          : v.route.page === 'health'
+            ? healthPage(v)
+            : v.route.page === 'backups'
+              ? backupsPage(v)
           : v.route.page === 'settings'
             ? settingsPage(v, v.route.edit)
             : appPage(v, v.route.app, v.route.install);
@@ -59,7 +68,7 @@ export const screen = (v: SettingsView): RemoteNode => {
 export default defineApp((ctx: AppContext) => {
   const api = upgradesApi(ctx);
   let path = ctx.path || PLACES.overview;
-  const ui: Ui = { shown: {}, dialog: {} };
+  const ui: Ui = { dialog: {} };
   let under = '';
   // The Settings page's own reads, its draft and how saving and exporting went.
   let settings: SettingsData = { missing: [] };
@@ -198,10 +207,6 @@ export default defineApp((ctx: AppContext) => {
     },
     markSeen: (kind, id) => void press('seen', async () => data.took({ overview: await api.markSeen(kind, id) })),
     cancel: () => void press('cancel', async () => data.took({ updates: await api.cancel() })),
-    more: (unit) => {
-      ui.shown[unit] = (ui.shown[unit] ?? HISTORY_STEP) + HISTORY_STEP;
-      draw();
-    },
     upgrade: (version, settings) => {
       const given = Object.fromEntries(Object.entries(settings).map(([k, val]) => [k, val.trim()]).filter(([, val]) => val));
       void answer(augur, () => api.upgrade(version, given));
