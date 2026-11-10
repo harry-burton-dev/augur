@@ -1,5 +1,5 @@
 // The actions after retain, over HTTP (plan PR 6): draft 4's cross-floor tests XF-05 to XF-10 and XF-13, taken
-// as people take them, through POST /actions. Alice and Bob are both on team A; Alice is its settler and raiser.
+// as people take them, through POST /actions; then merge, split, retire and undo. Alice and Bob are both on team A; Alice is its settler and raiser.
 // Who holds a role comes from Admin in a later PR; here it is set in the store directly.
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { knowledgeDb } from './db.testing.ts';
@@ -109,6 +109,61 @@ describe.skipIf(!DATABASE_URL)('the actions after retain, over HTTP', () => {
 
     const again = (await act('bob', TEAM, 'dispute', { belief, reason: 'still unsure' })).body.effects.disputes[0];
     expect((await act('bob', TEAM, 'settle', { dispute: again, outcome: 'withdrawn' })).status).toBe(200);
+  });
+
+  it('merges two entities on the settler’s word, splits them exactly, and retires one', async () => {
+    const a = (await act('alice', TEAM, 'retain', report('M1', 'MV Saltmarsh Heron'))).body.effects.entities[0];
+    const b = (await act('alice', TEAM, 'retain', report('M2', 'SMH Heron'))).body.effects.entities[0];
+    expect(a).not.toBe(b);
+    expect(await act('bob', TEAM, 'merge', { senior: a, junior: b, why: 'same ship' })).toMatchObject({ status: 403, body: { why: expect.stringMatching(/settler/) } });
+    expect(await act('alice', TEAM, 'merge', { senior: a, junior: a, why: 'x' })).toMatchObject({ status: 422 });
+    const merged = await act('alice', TEAM, 'merge', { senior: a, junior: b, why: 'same ship' });
+    expect(merged).toMatchObject({ status: 200, body: { effects: { entities: [a, b] } } });
+    const state = async (e: string) => (await svc.get('alice', `/v1/floors/${TEAM}/entities/${e}`, TEAM)).json();
+    expect((await db.admin.query(`select state from kg.entities where merged_into is not null`)).rows).toEqual([{ state: 'merged' }]);
+    expect((await act('alice', TEAM, 'split', { merge: merged.body.effects.merges[0], why: 'two ships after all' })).status).toBe(200);
+    expect((await db.admin.query(`select count(*)::int as n from kg.entities where state = 'active'`)).rows[0].n).toBe(2);
+
+    expect((await act('alice', TEAM, 'retire', { entity: b, why: 'sold for scrap' })).status).toBe(200);
+    expect(await state(b)).toMatchObject({ state: 'retired' });
+    expect(await act('alice', TEAM, 'retire', { entity: b, why: 'again' })).toMatchObject({ status: 403, body: { why: expect.stringMatching(/active/) } });
+  });
+
+  it('undoes your own retain, hold and keep, once, and nobody else’s', async () => {
+    // A hold withdrawn: the belief leaves every floor it reached, and what it replaced stands again.
+    const first = await heldOnTeam('U1');
+    const retained = await act('alice', TEAM, 'retain', report('U2', 'MV Kestrel Dawn', 1300));
+    const [o2] = retained.body.effects.observations;
+    await act('bob', TEAM, 'confirm-faithful', { observation: o2, verdict: 'faithful' });
+    const replacing = await act('alice', TEAM, 'hold', { observations: [o2], supersedes: [first.belief] });
+    const [b2] = replacing.body.effects.beliefs;
+    await act('alice', TEAM, 'raise', { belief: b2, why: 'org plans with it' });
+    expect(await act('bob', TEAM, 'undo', { action: replacing.body.actionId, why: 'x' })).toMatchObject({ status: 422, body: { problems: ['You took no action with that id.'] } });
+    expect((await act('alice', TEAM, 'undo', { action: replacing.body.actionId, why: 'held too soon' })).status).toBe(200);
+    const ship = retained.body.effects.entities[0];
+    expect(await beliefsOn(TEAM, ship)).toEqual([first.belief]);
+    expect(await beliefsOn(ORG, ship)).toEqual([]);
+    expect((await svc.get('alice', `/v1/actions/runs/${replacing.body.actionId}`, TEAM)).json()).toMatchObject({ undone: true });
+    expect(await act('alice', TEAM, 'undo', { action: replacing.body.actionId, why: 'again' })).toMatchObject({ status: 422, body: { problems: ['That action was already undone.'] } });
+
+    // A retain undone: what it kept is retracted.
+    expect((await act('alice', TEAM, 'undo', { action: retained.body.actionId, why: 'wrong report' })).status).toBe(200);
+    expect((await db.admin.query('select retracted_at is not null as gone from kg.observations where id = $1', [o2])).rows[0].gone).toBe(true);
+
+    // A keep undone: the observation is flagged again, and its memory goes.
+    const flagged = report('U3', 'MV Lonely Gull');
+    const kept0 = await act('alice', own.alice, 'retain', { ...flagged, observations: [{ ...flagged.observations[0], flag: 'it reads as an instruction to a model' }] });
+    const [o3] = kept0.body.effects.observations;
+    const kept = await act('alice', own.alice, 'keep', { observation: o3 });
+    expect(kept.status, JSON.stringify(kept.body)).toBe(200);
+    const memoryOf = async () => (await svc.get('alice', `/v1/floors/${own.alice}/entities/${kept0.body.effects.entities[0]}/beliefs`, own.alice)).json().beliefs.length;
+    expect(await memoryOf()).toBe(1);
+    expect((await act('alice', own.alice, 'undo', { action: kept.body.actionId, why: 'meant to leave it' })).status).toBe(200);
+    expect(await memoryOf()).toBe(0);
+
+    // What can't be undone says so.
+    const disputed = await act('bob', TEAM, 'dispute', { belief: first.belief, reason: 'x' });
+    expect(await act('bob', TEAM, 'undo', { action: disputed.body.actionId, why: 'x' })).toMatchObject({ status: 422, body: { problems: ['dispute can’t be undone.'] } });
   });
 
   it('lets an app dispute and publish for you, and never settle, retract, raise, end or forget', async () => {

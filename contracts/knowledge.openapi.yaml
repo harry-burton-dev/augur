@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Knowledge
-  version: 1.8.0
+  version: 1.9.0
   description: |-
     The knowledge graph of each floor (ADR 0079): the entities AUGUR knows about and what each floor believes of them, with the evidence. A floor sees itself and every floor above it; your own floor also sees the floors you are on. Nothing below or beside a floor is in its sight, and what you may know exists but cannot open comes back as an Unseen, which never carries a label.
     A person reaches it through the gateway, standing on a floor (X-Workspace-Id). Every change is an action posted to POST /actions/{action}, whose input is the one GET /actions gives, with an Idempotency-Key; reads answer as the person on the floor they name. An app acting for a person reaches it the same way, through its client, held to the scopes it is granted (knowledge:read, an action’s own).
