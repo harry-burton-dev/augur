@@ -1554,7 +1554,7 @@ export const SCOPE_PATTERN: RegExp;
 export const SCOPE_WORDS: Record<Scope, string>;
 
 // @public
-export const SCOPES: readonly ["notifications:send", "audit:write", "models:use", "events:publish", "events:subscribe", "people:read", "inbox:write"];
+export const SCOPES: readonly ["notifications:send", "audit:write", "models:use", "events:publish", "events:subscribe", "people:read", "inbox:write", "knowledge:read", "knowledge:act", "knowledge:extract"];
 
 // @public
 export const scopeWords: (scope: string) => string;

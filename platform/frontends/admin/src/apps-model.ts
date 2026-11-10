@@ -69,6 +69,9 @@ export const SCOPE_WORDS: Record<string, string> = {
   'events:subscribe': 'Hear what other services did',
   'people:read': 'Look up people and teams',
   'inbox:write': 'Put work in people’s inboxes',
+  'knowledge:read': 'Read the knowledge graph',
+  'knowledge:act': 'Change what the knowledge graph holds',
+  'knowledge:extract': 'Add what documents say to the knowledge graph',
 };
 
 /** What an app may do on AUGUR, as a fact's value. */
