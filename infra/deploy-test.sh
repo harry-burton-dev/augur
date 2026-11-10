@@ -42,16 +42,14 @@ cleanup() {
     pc ps -a || true
     pc logs --no-color --tail 80 || true
     if [ -n "${starter_id:-}" ]; then
-      for app in $(docker ps -aq --filter label=com.docker.compose.project=augur-apps); do docker logs --tail 40 "$app" 2>&1 | sed "s|^|$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$app") |" || true; done
+      for app in $(docker ps -aq --filter "label=augur.app=$starter_id"); do docker logs --tail 40 "$app" 2>&1 | sed "s|^|$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$app") |" || true; done
     fi
     echo "::endgroup::"
   fi
   if [ -n "${starter_id:-}" ]; then starter_cleanup; fi
   pc down -v --remove-orphans >/dev/null 2>&1 || true
-  if [ -n "${starter_id:-}" ]; then
-    { docker network ls -q --filter "label=augur.app=$starter_id"; docker network ls -q --filter label=com.docker.compose.project=augur-apps; } |
-      sort -u | xargs -r docker network rm >/dev/null 2>&1 || true
-  fi
+  # Its networks once AUGUR's own containers, which the runner joined to them, are gone.
+  if [ -n "${starter_id:-}" ]; then docker network ls -q --filter "label=augur.app=$starter_id" | xargs -r docker network rm >/dev/null 2>&1 || true; fi
   if [ -n "${read_key_written:-}" ]; then
     as_root 'rm -f /d/secrets/github-read-key' >/dev/null 2>&1 || true
     if [ -e "$work/github-read-key.saved" ]; then as_root 'cat > /d/secrets/github-read-key' < "$work/github-read-key.saved" >/dev/null 2>&1 || true; fi
@@ -64,15 +62,14 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
-# The app runner's Compose project (augur-apps) and its folder (apps/), which `pc down` doesn't know of. Only
-# when this test made them: it never starts when the machine runs apps of its own (see broken mode's app).
+# What the app runner made of the test's app, which `pc down` doesn't know of: its containers and volumes (each
+# labelled augur.app=<id>), and the apps folder, which the test made. Nothing of any other app: the test never
+# starts when this machine has anything of that app already, or runs apps of its own.
 starter_cleanup() {
-  docker ps -aq --filter label=com.docker.compose.project=augur-apps | xargs -r docker rm -f >/dev/null 2>&1 || true
-  { docker volume ls -q --filter label=com.docker.compose.project=augur-apps; docker volume ls -q --filter "label=augur.app=$starter_id"; } |
-    sort -u | xargs -r docker volume rm >/dev/null 2>&1 || true
-  as_root 'rm -rf /d/apps' >/dev/null 2>&1 || true
+  docker ps -aq --filter "label=augur.app=$starter_id" | xargs -r docker rm -f >/dev/null 2>&1 || true
+  docker volume ls -q --filter "label=augur.app=$starter_id" | xargs -r docker volume rm >/dev/null 2>&1 || true
+  if [ -n "$apps_made" ]; then as_root 'rm -rf /d/apps' >/dev/null 2>&1 || true; fi
 }
-
 # Every secret in .env.example gets a new random value; the rest are what a small server would set.
 # An upgrade starts from the release's own deploy files, as a server that checked out its tag has them.
 dir=$deploy
@@ -120,23 +117,49 @@ notice() { if [ "${GITHUB_ACTIONS:-}" = true ]; then echo "::notice::$1" >&2; el
 
 # Broken mode then installs an app through the app runner (the updater, with APP_SECRETS_KEY): STARTER_RELEASE is
 # its release file, which the Deploy test workflow builds from the app template (Starter) and signs as itself, only
-# on main or a release/* branch, where the runner can check that signature. The app is opened in the browser, its
+# on a branch the runner takes signatures from (main, release/<unit>-<major>.<minor>). The app is opened in the browser, its
 # parts are stopped and its pane must say it failed, then it is removed and its sign-in must be refused. Its id and
-# parts come from the release file. Anything that keeps it from running here is said, and the rest of the mode runs.
+# parts come from the release file. What keeps it from running here fails the run in GitHub Actions; by hand it is said, and the rest runs.
 starter_id=''
 starter_skip=''
+apps_made=''
+# Why the app runner's part can't run here. With STARTER_RELEASE set in GitHub Actions, that fails the run: the
+# workflow asked for it. Elsewhere (by hand) it is said, and the rest of the mode runs.
+cannot_run() {
+  if [ "${GITHUB_ACTIONS:-}" = true ] && [ -n "${STARTER_RELEASE:-}" ]; then
+    echo "::error::The app runner's part of the deploy test can't run: $1"
+    exit 1
+  fi
+  starter_skip=$1
+}
+# The app's containers, volumes and networks: the runner labels each with augur.app=<id>.
+app_things() {
+  docker ps -aq --filter "label=augur.app=$1"
+  docker volume ls -q --filter "label=augur.app=$1"
+  docker network ls -q --filter "label=augur.app=$1"
+}
 if [ "$mode" = broken ]; then
   if [ -z "${STARTER_RELEASE:-}" ]; then
-    starter_skip="STARTER_RELEASE isn't set. The Deploy test workflow sets it once it has built Starter, which it does only on main or a release/* branch, where the app runner can check its signature."
+    if [ "${STARTER_SIGNED:-}" = false ]; then
+      starter_skip="Starter isn't built on ${GITHUB_REF:-this ref}: the app runner trusts only signatures made on main or a release/<unit>-<major>.<minor> branch."
+    elif [ -n "${STARTER_BUILD:-}" ]; then
+      # Signed here, so it should have been built: the starter job says why it wasn't.
+      echo "::error::The app runner's part of the deploy test can't run: building Starter ended ${STARTER_BUILD} (its job's log says why)."
+      exit 1
+    else
+      starter_skip="STARTER_RELEASE isn't set, so there's no app to install (the Deploy test workflow builds Starter and sets it)."
+    fi
   elif [ ! -s "$STARTER_RELEASE" ]; then
     echo "STARTER_RELEASE names $STARTER_RELEASE, which isn't there or is empty." >&2
     exit 1
   elif [ "${BROWSER_CHECK:-1}" != 1 ]; then
-    starter_skip="BROWSER_CHECK=0, and opening the app is half of it."
+    cannot_run "BROWSER_CHECK=0, and opening the app is half of it."
   elif [ -e "$deploy/apps" ]; then
-    starter_skip="$deploy/apps is there already: this deploy folder runs apps of its own, which the test leaves alone."
+    cannot_run "$deploy/apps is there already: this deploy folder runs apps of its own, which the test leaves alone."
   elif [ -n "$(docker ps -aq --filter label=com.docker.compose.project=augur-apps)" ]; then
-    starter_skip="this machine already runs apps (Compose project augur-apps), which the test leaves alone."
+    cannot_run "this machine already runs apps (Compose project augur-apps), which the test leaves alone."
+  elif [ -n "$(app_things "$(jq -er .id "$STARTER_RELEASE")")" ]; then
+    cannot_run "this machine has containers, volumes or networks of $(jq -r .id "$STARTER_RELEASE") already, which the test leaves alone."
   fi
   if [ -z "$starter_skip" ]; then
     # Mounted into the browser check's container, so by its full path.
@@ -155,8 +178,10 @@ if [ "$mode" = broken ]; then
       read_key_written=1
       printf %s "$STARTER_READ_KEY" | as_root 'mkdir -p /d/secrets && cat > /d/secrets/github-read-key && chmod 644 /d/secrets/github-read-key'
     fi
-    # The runner writes the apps' project here as the updater's user.
+    # The runner writes the apps' project (compose.yml, state.json, files/) here as the updater's user. It wasn't
+    # there (above), so the test made it and removes it.
     as_root 'mkdir -p /d/apps && chown 1000:1000 /d/apps && chmod 700 /d/apps'
+    apps_made=1
   fi
 fi
 
@@ -365,15 +390,14 @@ browser_check() {
 }
 
 # The app's parts that keep running (its service and worker parts; a job part has run to its end), as the running
-# containers of the runner's project: app-<id>-<part>-<slot>, whichever slot it is in.
+# containers the runner labels with the app and the part (augur.app, augur.part), matched by name exactly.
 app_containers() {
-  local id=$1 part service container
-  for part in $(jq -r '.parts[] | select(.metadata.annotations["augur.dev/part"] // "worker" | . != "job") | .metadata.name' "$STARTER_RELEASE"); do
-    docker ps --filter label=com.docker.compose.project=augur-apps --format '{{.ID}} {{.Label "com.docker.compose.service"}}' |
-      while read -r container service; do
-        case "$service" in "app-$id-$part-"*) echo "$container" ;; esac
-      done
-  done
+  local id=$1 parts container part
+  parts=$(jq -r '.parts[] | select(.metadata.annotations["augur.dev/part"] // "worker" | . != "job") | .metadata.name' "$STARTER_RELEASE")
+  docker ps --filter "label=augur.app=$id" --filter label=com.docker.compose.project=augur-apps --format '{{.ID}} {{.Label "augur.part"}}' |
+    while read -r container part; do
+      if grep -qxF -- "$part" <<<"$parts"; then echo "$container"; fi
+    done
 }
 
 # The app's own sign-in secret, as the runner works it out from APP_SECRETS_KEY: with the release's own updater code
@@ -391,9 +415,10 @@ app_secret() {
 # to be stopped by writing <id>.stop; they are stopped here, which writes <id>.stopped ("ok", or why not).
 through_the_runner() {
   if [ -n "$starter_skip" ]; then notice "The app runner's part of the deploy test was skipped: $starter_skip"; return 0; fi
-  # A release from before the runner took contract 3 releases can't install it: said, not failed.
+  # A release from before the runner took contract 3 releases can't install it (a failure where it was asked for).
   if ! pc exec -T updater node -e 'process.exit(require("fs").readFileSync("dist/runner.js", "utf8").includes("export const appSecrets") ? 0 : 3)' >/dev/null 2>&1; then
-    notice "The app runner's part of the deploy test was skipped: this release's updater can't install a release on app contract 3."
+    cannot_run "this release's updater can't install a release on app contract 3."
+    notice "The app runner's part of the deploy test was skipped: $starter_skip"
     return 0
   fi
   local id=$starter_id name secret issuer shots="${BROWSER_CHECK_OUT:-$work/browser-check}" check status=0 containers=()

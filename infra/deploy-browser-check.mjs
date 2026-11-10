@@ -77,7 +77,18 @@ page.on('response', (res) => {
 });
 const shot = (name) => page.screenshot({ path: join(out, `${name}.png`) });
 // What the first admin ends up signing in with, for the sign-in pages the device grant may show again.
-const account = { password, totp: undefined };
+const account = { password, totp: undefined, signedInAt: 0 };
+// Keycloak takes each one-time code once: the 30-second step last used, so the next code waits for a new one.
+let lastTotpStep = -1;
+async function freshTotp(secret) {
+  while (Math.floor(Date.now() / 30_000) <= lastTotpStep) await sleep(1_000);
+  lastTotpStep = Math.floor(Date.now() / 30_000);
+  return totp(secret);
+}
+// Every call to AUGUR from here gives up after this long, so one that hangs fails the check rather than the job.
+const CALL_MS = 30_000;
+// How long after a sign-in a job is still asked for on it: well inside the registry's 10 minutes.
+const SIGN_IN_FRESH_MS = 3 * 60_000;
 
 try {
   // Sign in with the first admin's starting password. Keycloak then asks for whatever the account still
@@ -100,13 +111,14 @@ try {
       await page.locator('#mode-manual').click();
       const secret = (await page.locator('#kc-totp-secret-key').innerText()).replace(/\s+/g, '');
       account.totp = secret;
-      await page.locator('#totp').fill(totp(secret));
+      await page.locator('#totp').fill(await freshTotp(secret));
       await page.locator('#userLabel').fill('deploy test');
       await page.locator('[type=submit]').first().click();
     }
     await page.waitForURL((url) => signedIn(url) || url.href !== before, { timeout: 30_000 }).catch(() => {});
   }
   await page.waitForURL(signedIn, { timeout: 30_000 });
+  account.signedInAt = Date.now();
   pass('the first admin signs in, sets a password and a one-time-code app');
 
   // The kit: where the page says it comes from, and that every kit file came from there.
@@ -162,7 +174,7 @@ function endpoint(path) {
   return `${process.env.ISSUER.replace(/\/$/, '')}/protocol/openid-connect/${path}`;
 }
 async function form(path, fields) {
-  const res = await fetch(endpoint(path), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields) });
+  const res = await fetch(endpoint(path), { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields), signal: AbortSignal.timeout(CALL_MS) });
   return { status: res.status, body: await res.json().catch(() => ({})) };
 }
 function sleep(ms) {
@@ -171,9 +183,8 @@ function sleep(ms) {
 
 /**
  * Signs the admin in from the command line, as `pnpm seed` does (the device grant on the realm's command-line
- * client), approving the code in this browser, which is signed in already. Installing an app needs a deployment
- * admin who entered their password in the last 10 minutes, so this comes straight after the browser's sign-in, and
- * its tokens are refreshed rather than asked for again. Gives a fresh access token on each call.
+ * client), approving the code in this browser: on its session, or with the password and a one-time code once
+ * freshSignIn has cleared it. Gives a fresh access token on each call, refreshed, which keeps the sign-in's auth_time.
  */
 async function commandLineSignIn() {
   const clientId = process.env.CLI_CLIENT ?? 'platform-cli';
@@ -186,13 +197,18 @@ async function commandLineSignIn() {
     let interval = (code.interval ?? 5) * 1000;
     while (Date.now() < until) {
       await sleep(interval);
-      const res = await form('token', { grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: code.device_code, client_id: clientId });
+      const res = await form('token', { grant_type: 'urn:ietf:params:oauth:grant-type:device_code', device_code: code.device_code, client_id: clientId }).catch(
+        // A look that timed out: the next one may answer.
+        () => ({ status: 0, body: { error: 'authorization_pending' } }),
+      );
       if (res.status === 200) return (tokens = res.body);
       if (res.body.error === 'slow_down') interval += 5000;
       else if (res.body.error !== 'authorization_pending') throw new Error(`the device sign-in failed (${res.body.error ?? res.status})`);
     }
     throw new Error('the device sign-in code ran out before it was approved');
   })();
+  // Awaited below; until then a rejection is held here, not left unhandled.
+  poll.catch(() => {});
   // Keycloak's pages for the code, read by their fields: the code to confirm, a grant to accept, or a sign-in again.
   await page.goto(code.verification_uri_complete ?? code.verification_uri);
   for (let step = 0; step < 8 && !tokens; step++) {
@@ -205,7 +221,7 @@ async function commandLineSignIn() {
       await page.locator('#kc-login').click();
     } else if (await has('#otp')) {
       if (!account.totp) throw new Error('the device sign-in asks for a one-time code the check doesn’t have');
-      await page.locator('#otp').fill(totp(account.totp));
+      await page.locator('#otp').fill(await freshTotp(account.totp));
       await page.locator('[type=submit]').first().click();
     } else if (await has('input[name="device_user_code"], #device-user-code')) {
       await page.locator('input[name="device_user_code"], #device-user-code').first().fill(code.user_code);
@@ -232,19 +248,35 @@ async function commandLineSignIn() {
   };
 }
 
+/**
+ * A command-line sign-in on a fresh browser session: its cookies cleared, so the device code is approved with the
+ * password and a one-time code again, and the token's auth_time is now. Installing or removing an app needs a
+ * sign-in from the last 10 minutes, and a refreshed token, or a device grant on the old session, keeps the old one.
+ */
+async function freshSignIn() {
+  await page.context().clearCookies();
+  const token = await commandLineSignIn();
+  account.signedInAt = Date.now();
+  return token;
+}
 /** Asks the app runner for a job (POST /app-runner/jobs) and waits until it has finished; returns the job. */
 async function runnerJob(token, body, minutes) {
   const api = new URL('/api/registry/v1/app-runner/jobs', base).href;
   const headers = async () => ({ authorization: `Bearer ${await token()}`, 'content-type': 'application/json' });
-  const asked = await fetch(api, { method: 'POST', headers: await headers(), body: JSON.stringify(body) });
+  const asked = await fetch(api, { method: 'POST', headers: await headers(), body: JSON.stringify(body), signal: AbortSignal.timeout(CALL_MS) });
   const job = await asked.json().catch(() => ({}));
   if (asked.status !== 202) throw new Error(`the registry refused to ${body.action} ${body.app ?? body.release?.id} (HTTP ${asked.status}): ${job.message ?? JSON.stringify(job)}`);
   const until = Date.now() + minutes * 60_000;
   let seen = job;
   while (Date.now() < until) {
     await sleep(5_000);
-    const res = await fetch(`${api}?app=${encodeURIComponent(job.app)}`, { headers: await headers() });
-    if (res.ok) seen = (await res.json()).jobs.find((j) => j.id === job.id) ?? seen;
+    try {
+      const res = await fetch(`${api}?app=${encodeURIComponent(job.app)}`, { headers: await headers(), signal: AbortSignal.timeout(CALL_MS) });
+      if (res.ok) seen = (await res.json()).jobs.find((j) => j.id === job.id) ?? seen;
+    } catch (err) {
+      // One look that timed out or failed: the next one may answer.
+      console.error(`  (the job's state couldn't be read: ${err.message})`);
+    }
     if (['done', 'failed', 'cancelled'].includes(seen.state)) break;
   }
   const steps = (seen.steps ?? []).map((s) => `${s.step} ${s.state}${s.message ? `: ${s.message}` : ''}`).join('; ');
@@ -275,7 +307,7 @@ async function openApp(id) {
 async function throughTheRunner(r) {
   const id = r.id;
   const name = r.manifest?.name ?? id;
-  const token = await commandLineSignIn();
+  const token = Date.now() - account.signedInAt > SIGN_IN_FRESH_MS ? await freshSignIn() : await commandLineSignIn();
   pass('the first admin signs in from the command line too (device grant)');
 
   await runnerJob(token, { action: 'install', release: r }, 8);
@@ -315,7 +347,9 @@ async function throughTheRunner(r) {
     await shot(`${id}-stopped`);
   }
 
-  await runnerJob(token, { action: 'remove', app: id }, 3);
+  // Signed in afresh for the removal: the install and the stop may have taken most of the 10 minutes.
+  await runnerJob(await freshSignIn(), { action: 'remove', app: id }, 3);
+  pass('the first admin signs in again, with a password and a one-time code, to remove it');
   const after = await appSignIn(id);
   if (!after.ok && after.said.includes('invalid_client')) pass(`once removed, ${name}'s own sign-in is refused (${after.said})`);
   else fail(`once removed, ${name}'s own sign-in still answers ${after.said}, not invalid_client`);
