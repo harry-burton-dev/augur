@@ -283,25 +283,23 @@ const settingsHistory = (v: SettingsView): RemoteNode => {
   const entries: HistoryEntry[] = v.settings.history
     ? historyOf({ upgrades: [], jobs: [], settings: v.settings.history, names: Object.fromEntries(units.map((u) => [u.unit, u.name])), augur: AUGUR, zone: v.zone, nameOf: v.nameOf })
     : [];
-  const key = 'settings';
-  const shown = v.ui.shown[key] ?? HISTORY_STEP;
   const missing = v.settings.missing.map((u) => units.find((x) => x.unit === u)?.name ?? u);
   return quill('quill-section', { label: 'Settings history', count: entries.length || undefined }, [
     missing.length ? quill('quill-notice', { tone: 'warning' }, `The settings history of ${missing.join(', ')} couldn’t be read, so it’s missing below. The rest is complete.`) : null,
-    quill('quill-list', {
+    !v.settings.history
+      ? quill('quill-state', { kind: 'loading', heading: 'Reading the settings history', size: 'line' })
+      : quill('quill-paged-list', {
       label: 'Settings history',
-      noun: ['change', 'changes'],
-      density: 'compact',
-      loading: !v.settings.history,
+      noun: 'changes',
+      pageSize: HISTORY_STEP,
       empty: 'Nobody has changed the settings on this deployment yet.',
-      items: entries.slice(0, shown).map((e) => ({
+      items: entries.map((e) => ({
         id: e.id,
         title: `${e.unitName}: settings changed`,
         detail: [e.before && `Before: ${e.before}`, `After: ${e.after ?? ''}`].filter(Boolean).join(' '),
         meta: `${e.by}, ${when(v, e.at)}`,
       })),
     }),
-    entries.length > shown ? quill('quill-more', { shown, total: entries.length, noun: 'changes', step: HISTORY_STEP, onMore: () => v.on.more(key) }) : null,
   ]);
 };
 

@@ -1,5 +1,5 @@
 import { pollEvery, type UpgradesApi } from './api.js';
-import type { AppInstalls, AppJob, Overview, PlatformUpdates } from './model/types.js';
+import type { AppInstalls, AppJob, Deliveries, Overview, PlatformStatus, PlatformUpdates } from './model/types.js';
 
 /** Everything Deployment shows, as last read from the registry. Earlier data stays when a read fails. */
 export interface Data {
@@ -11,6 +11,13 @@ export interface Data {
   installs?: AppInstalls;
   /** Every app's installs and removals, newest first, for each app's history. */
   jobs?: AppJob[];
+  /** Every part, backups and email, as the gateway last checked them, for Health, Backups and the overview. */
+  status?: PlatformStatus;
+  /** The gateway's status couldn't be read, so Health and Backups say so. */
+  statusError?: string;
+  /** How each app's part is taking its events, for Health. */
+  deliveries?: Deliveries;
+  deliveriesError?: string;
   /** Why the last read failed, in words. */
   error?: string;
   /** The app jobs couldn't be read, so each app's history says so. */
@@ -27,7 +34,7 @@ export const isRunning = (d: Data): boolean =>
   Boolean(d.overview?.units.some((u) => u.open) || open(d.updates?.upgrade?.state) || d.installs?.installed.some((a) => open(a.job?.state)));
 
 /**
- * Reads the registry, and again on a timer: every 2 s while something runs, every 30 s otherwise. A job
+ * Reads the registry and the gateway's status, and again on a timer: every 2 s while something runs, every 30 s otherwise. A job
  * keeps going on the server whatever this app does, so another admin, or this one after a reload,
  * sees the same. `changed` runs after every read. `stop` ends the timer.
  */
@@ -43,7 +50,14 @@ export const reader = (api: UpgradesApi, changed: (d: Data) => void, timers: { s
 
   const read = async () => {
     try {
-      const [overview, updates, installs, jobs] = await Promise.all([api.overview(), api.updates(), api.installs().catch(words), api.appJobs().catch(words)]);
+      const [overview, updates, installs, jobs, status, deliveries] = await Promise.all([
+        api.overview(),
+        api.updates(),
+        api.installs().catch(words),
+        api.appJobs().catch(words),
+        api.status().catch(words),
+        api.deliveries().catch(words),
+      ]);
       // Installs that can't be read keep the ones last read: an app's page would otherwise say it's up to date.
       put({
         overview,
@@ -52,6 +66,11 @@ export const reader = (api: UpgradesApi, changed: (d: Data) => void, timers: { s
         jobs: typeof jobs === 'string' ? data.jobs : jobs,
         ...(typeof installs === 'string' ? { error: `The apps’ versions couldn’t be read: ${installs}` } : {}),
         ...(typeof jobs === 'string' ? { jobsError: jobs } : {}),
+        // Health and Backups keep what they last read, and say why it's old.
+        status: typeof status === 'string' ? data.status : status,
+        ...(typeof status === 'string' ? { statusError: status } : {}),
+        deliveries: typeof deliveries === 'string' ? data.deliveries : deliveries,
+        ...(typeof deliveries === 'string' ? { deliveriesError: deliveries } : {}),
         loading: false,
         readAt: new Date(),
       });
