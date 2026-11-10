@@ -372,8 +372,8 @@ importers:
         version: 7.8.5
     devDependencies:
       '@augur/app-kit':
-        specifier: npm:@harry-burton-dev/augur-app-kit@^0.17.0
-        version: '@harry-burton-dev/augur-app-kit@0.17.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
+        specifier: npm:@harry-burton-dev/augur-app-kit@^0.18.0
+        version: '@harry-burton-dev/augur-app-kit@0.18.0(@floating-ui/dom@1.8.0)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
       '@types/semver':
         specifier: 'catalog:'
         version: 7.8.0
