@@ -31,7 +31,7 @@ const open = (state?: string) => state === 'requested' || state === 'running';
 
 /** Whether something is under way, so the next read comes sooner. */
 export const isRunning = (d: Data): boolean =>
-  Boolean(d.overview?.units.some((u) => u.open) || open(d.updates?.upgrade?.state) || d.installs?.installed.some((a) => open(a.job?.state)));
+  Boolean(d.overview?.units.some((u) => u.open) || open(d.updates?.upgrade?.state) || [...(d.installs?.installed ?? []), ...(d.installs?.available ?? [])].some((a) => open(a.job?.state)));
 
 /**
  * Reads the registry and the gateway's status, and again on a timer: every 2 s while something runs, every 30 s otherwise. A job
@@ -94,7 +94,7 @@ export const reader = (api: UpgradesApi, changed: (d: Data) => void, timers: { s
     /** Reads now: after a change, so the page shows it at once. */
     again: () => read().then(schedule),
     /** Takes what a change answered with, so the page shows it before the next read. */
-    took: (patch: Partial<Pick<Data, 'overview' | 'updates'>>) => put({ ...data, ...patch, error: undefined, readAt: new Date() }),
+    took: (patch: Partial<Pick<Data, 'overview' | 'updates' | 'installs'>>) => put({ ...data, ...patch, error: undefined, readAt: new Date() }),
     stop: () => {
       stopped = true;
       timers.clear(timer);

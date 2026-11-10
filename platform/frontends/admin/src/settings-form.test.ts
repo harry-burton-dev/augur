@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AppSettingView } from './api.js';
-import { givenSettings, mustFill, settingChanges, settingNow } from './settings-form.js';
+import { settingChanges, settingNow } from './settings-form.js';
 
 const retention: AppSettingView = { id: 'retentionDays', label: 'Keep archived notes for', type: 'number', unit: 'days', min: 7, max: 3650, default: 365, required: false, set: false };
 const theme: AppSettingView = { id: 'theme', label: 'Note colour', type: 'enum', options: ['plain', 'warm'], default: 'plain', required: false, set: true, value: 'warm' };
@@ -27,11 +27,5 @@ describe('an app’s settings in Admin', () => {
       { id: 'allowSharing', value: true },
       { id: 'exportKey', value: 'new-key' },
     ]);
-  });
-
-  it('asks an install for the required settings with no default, each as its own type', () => {
-    const fill = mustFill([key, retention]);
-    expect(fill.map((s) => s.id)).toEqual(['exportKey']);
-    expect(givenSettings([key, retention], { 'setting:exportKey': 'k', 'setting:retentionDays': '30' })).toEqual({ exportKey: 'k', retentionDays: 30 });
   });
 });
