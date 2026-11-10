@@ -12,7 +12,7 @@ It is a contract 3 app (ADR 0075, 0076). Its frontend is one ES module, `dist/sa
 | Health | `/health` | Each part's health and what to check when one is down, email, how each app takes its events, and why there's no incident history yet |
 | Backups | `/backups` | The last backup, the copy off the server, point in time and the restore tests, and how restoring is done |
 | Release channel | `/release-channel` | The channel this deployment and each component tracks, each component's path from main to stable from the pipeline feed, and every change of channel |
-| Settings | `/settings`, `/settings/<unit>` | Each component's release channel, update policy, version pin and maintenance windows, with the sentence now and after saving side by side; reporting to Backstage; and the settings history |
+| Settings | `/settings`, `/settings/<unit>` | Every component in one table, opening one to change its release channel, update policy, version pin and maintenance windows, with the sentence now and after saving side by side; reporting to Backstage; and the settings history |
 
 Each page keeps its own history, a page at a time in the kit's paged list: there's no History page. The words are the ones release and operations people use: update available, breaking change, roll back, release channel, maintenance window.
 

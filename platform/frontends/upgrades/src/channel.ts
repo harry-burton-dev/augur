@@ -4,7 +4,7 @@ import { RING_WORDS } from './model/words.js';
 import { quill } from './quill.js';
 import { pathOf } from './routes.js';
 import type { SettingsView } from './settings.js';
-import { HISTORY_STEP, when } from './view.js';
+import { HISTORY_STEP, paged, when } from './view.js';
 import { CHANNEL } from './words.js';
 
 /** The pipeline's stages in the channels' words: main, then the newest beta or stable, then the newest stable. */
@@ -63,6 +63,7 @@ const theLine = (v: SettingsView, l?: PipelineLine): RemoteNode => {
         };
       }),
       empty: 'The pipeline feed lists nothing yet.',
+      ...paged(l.units.length),
     }),
     quill('quill-check-list', {
       label: 'Between the stages',
@@ -107,6 +108,7 @@ export const channelPage = (v: SettingsView): RemoteNode => {
           { key: 'running', label: 'Running' },
         ],
         rows: o.units.map((x) => ({ id: x.unit, component: x.name, channel: CHANNEL[x.desired.channel], running: x.running })),
+        ...paged(o.units.length),
       }),
       quill('quill-button', {
         label: 'Change in Settings',
