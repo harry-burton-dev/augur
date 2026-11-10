@@ -204,7 +204,7 @@ services:
       knowledge-migrate: { condition: service_completed_successfully }
 
   # Permissions (ADR 0085): OpenFGA holds the relationships, in memory here, so they go with the
-  # container; the permissions service copies floors and positions in from identity every 30 seconds.
+  # container; the permissions service copies floors and positions in from identity as each changes.
   openfga:
     image: openfga/openfga:v1.11.2
     command: ["run"]
