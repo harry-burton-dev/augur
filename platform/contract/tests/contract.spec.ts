@@ -220,7 +220,7 @@ for (const [width, height] of [[1440, 900], [1100, 800], [800, 700]] as const) {
     await page.goto(`/${id}`);
     await expect(check(page, 'person')).toBeVisible();
     const box = (sel: string) => page.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
-    const [paneBox, head, screen, stage] = await Promise.all([box(`.aerie-app-pane[data-app="${id}"]`), box('.aerie-app-head :is(h1, h2, h3)'), box('.aerie-app-screen .aerie-frame-pane > *'), box('.aerie-stage')]);
+    const [paneBox, head, screen, stage] = await Promise.all([box(`.aerie-app-pane[data-app="${id}"]`), box('.aerie-app-head [role="heading"]'), box('.aerie-app-screen .aerie-frame-pane > *'), box('.aerie-stage')]);
     const tight = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--edge-tight')));
     const fade = await page.evaluate(() => Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--space-4')));
     // Every region pads itself: the pane's own inset, never its neighbour's.
