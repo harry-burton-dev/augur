@@ -172,8 +172,10 @@ describe('the model', () => {
   it('compares equal whatever order OpenFGA gives its keys in, or empty fields it adds', () => {
     const reversed = (v: unknown): unknown =>
       Array.isArray(v) ? v.map(reversed) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).reverse().map(([k, x]) => [k, reversed(x)])) : v;
-    const shuffled = reversed(model) as AuthorizationModel;
-    expect(sameModel({ ...shuffled, conditions: {} }, model)).toBe(true);
+    expect(sameModel(reversed(model) as AuthorizationModel, model)).toBe(true);
+    // A model with no conditions, as OpenFGA gives it back with an empty set of them.
+    const { conditions: _none, ...unconditioned } = model;
+    expect(sameModel({ ...(reversed(unconditioned) as AuthorizationModel), conditions: {} }, unconditioned)).toBe(true);
   });
 
   it('gives admin on the deployment and the org only to personas (ADR 0086)', () => {

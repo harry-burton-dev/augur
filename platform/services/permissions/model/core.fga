@@ -74,10 +74,16 @@ type floor
 
 # A role made inside AUGUR (by an admin, a lead, or an app) for one floor or the org. Roles hold people,
 # positions (their holders, or an admin persona itself), other roles' holders, or a whole floor's members. A role is a set of holders; what it gives
-# is written where it applies (OpenFGA's custom-roles pattern).
+# is written where it applies (OpenFGA's custom-roles pattern). A person or a position may be given a role until a
+# time (ADR 0085, D7): the grant stops answering at that time, whatever the grants ledger's sweep has done.
 type role
   relations
     define scope: [floor, org]
-    define assignee: [person, persona, persona#holder, role#assignee, floor#member]
+    define assignee: [person, person with not_expired, persona, persona#holder, persona#holder with not_expired, role#assignee, floor#member]
     define can_assign: manager from scope or admin from scope
     define can_grant_with: can_assign
+
+# A grant that ends at a time (ADR 0085, D7). The service sends `current_time` with every check; apps' modules use it too.
+condition not_expired(current_time: timestamp, grant_expires: timestamp) {
+  current_time < grant_expires
+}

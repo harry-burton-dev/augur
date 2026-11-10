@@ -28,6 +28,14 @@ describe('signed caller', () => {
     expect(res.json()).toEqual({ caller: sam, floor: 'w1' });
   });
 
+  it('signs the admin persona someone is acting as beside the person', async () => {
+    const gateway = callerSigner();
+    const app = await service(callerCheckFor(gateway, 'identity'));
+    const acting = { ...sam, persona: 'admin.u1' };
+    const res = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: await signedCallerHeaders(gateway, acting, 'identity') });
+    expect(res.json().caller).toEqual(acting);
+  });
+
   it('drops x-user-* headers that come without a signature', async () => {
     const app = await service(callerCheckFor(callerSigner(), 'identity'));
     const res = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: callerHeaders({ ...sam, roles: ['admin'] }) });

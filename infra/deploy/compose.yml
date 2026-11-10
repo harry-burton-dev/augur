@@ -386,6 +386,8 @@ services:
       EVENTS_URL: http://events:8084
       MODELS_URL: http://models:8085
       KNOWLEDGE_URL: http://knowledge:8086
+      # Asked whether someone is acting as an admin persona, when the shell says they are (ADR 0086).
+      PERMISSIONS_URL: http://permissions:8087
       # Tokens name the platform's public address; signing keys are fetched inside the compose network.
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/sso/realms/platform/protocol/openid-connect/certs
@@ -659,7 +661,7 @@ services:
 
   # The permissions service (ADR 0085): it answers whether a person, through the positions they hold, or an
   # admin persona may do something, from what OpenFGA holds. Only the gateway and AUGUR's own services ask it.
-  # Nothing asks it yet: this release runs it so its store and model are in place.
+  # Services ask it beside their admin checks (shadow mode), and it keeps who is acting as an admin persona.
   permissions:
     logging: *logging
     <<: *service
@@ -674,6 +676,10 @@ services:
       <<: *env
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
+      # Its own login, the one OpenFGA keeps its tables under: persona sessions sit beside them (ADR 0086).
+      DATABASE_URL: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      PERSONA_DEPLOYMENT_ADMIN_MINUTES: ${PERSONA_DEPLOYMENT_ADMIN_MINUTES:-60}
+      PERSONA_ORG_ADMIN_MINUTES: ${PERSONA_ORG_ADMIN_MINUTES:-480}
       OPENFGA_TOKEN: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
       # Its own sign-in, to copy floors, positions and who holds them from identity (ADR 0089), at once
       # when identity announces a change (platform.position.*, .team.*, .person.*) and whole every few minutes.

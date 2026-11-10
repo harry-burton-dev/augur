@@ -29,6 +29,12 @@ describe('caller headers', () => {
     expect(withoutCallerHeaders({ 'x-user-signed-in-at': fresh.signedInAt, accept: '*/*' })).toEqual({ accept: '*/*' });
   });
 
+  it('carries the admin persona someone is acting as, which a client can never claim itself', () => {
+    const acting: Caller = { ...caller, persona: 'admin.u1' };
+    expect(callerFromHeaders(callerHeaders(acting))).toEqual(acting);
+    expect(withoutCallerHeaders({ 'x-user-persona': 'admin.u1', 'X-Augur-Persona': 'admin.u1', accept: '*/*' })).toEqual({ accept: '*/*' });
+  });
+
   it('reads no caller from a request without one', () => {
     expect(callerFromHeaders({ accept: 'application/json' })).toBeUndefined();
   });

@@ -200,3 +200,11 @@ tests:
       - { user: person:hamid, relation: holder, object: persona:fleet-lead }
     check:
       - { user: person:hamid, object: floor:fleet, assertions: { can_settle: true } }                           # Q62
+
+  - name: A role given until a time stops at that time (ADR 0085, D7)
+    tuples:
+      - { user: person:hamid, relation: assignee, object: role:records-officer, condition: { name: not_expired, context: { grant_expires: "2026-12-01T00:00:00Z" } } }
+    check:
+      - { user: person:hamid, object: org:org, context: { current_time: "2026-11-20T09:00:00Z" }, assertions: { can_read_audit: true } }   # Q63
+      - { user: person:hamid, object: org:org, context: { current_time: "2026-12-02T09:00:00Z" }, assertions: { can_read_audit: false } }  # Q64
+      - { user: person:mei, object: org:org, context: { current_time: "2026-12-02T09:00:00Z" }, assertions: { can_read_audit: true } }     # Q65 (given for good)

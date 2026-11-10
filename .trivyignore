@@ -9,5 +9,6 @@ CVE-2025-68121
 
 # openssh-client in restic/restic:0.19.1, the newest restic image. backup-tools only copies the restic
 # binary out of that image and stops; ssh never runs, and the backup container doesn't have it. Look again
-# when restic publishes a newer image (checked 2026-11-05).
+# when restic publishes a newer image (checked 2026-11-10: 0.19.1, pushed 2026-07-05, is still the newest).
 CVE-2026-60002
+CVE-2026-123158
