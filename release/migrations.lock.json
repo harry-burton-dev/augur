@@ -51,6 +51,10 @@
   "@augur/models": {
     "001-settings-and-usage": "87d553574bfafe1d"
   },
+  "@augur/permissions": {
+    "001-persona-sessions": "92b49d3234edf3cd",
+    "002-roles-and-grants": "c643e966d8b56994"
+  },
   "@augur/registry": {
     "001_apps": "2ba5efd9c0ea7950",
     "002_enabled": "82a8d499a58bc896",

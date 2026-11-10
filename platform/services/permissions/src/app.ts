@@ -16,6 +16,7 @@ import {
 } from '@augur/service-kit';
 import { relationsOf, type AuthorizationModel, type CheckKey, type Consistency, type OpenFga } from './openfga.ts';
 import type { ProjectionRun } from './projection.ts';
+import { grantRoutes, MemoryGrantStore, type GrantStore } from './grants.ts';
 import { MemorySessionStore, sessionRoutes, type PersonaQuestions, type SessionLimits, type SessionStore } from './sessions.ts';
 import { Decision, Decisions, Evaluation, Evaluations, ResourceResults, ResourceSearch } from './schemas.ts';
 
@@ -44,7 +45,9 @@ export interface PermissionsOptions {
   sessions?: SessionStore;
   /** How long a persona session may last (PERSONA_*_MINUTES). */
   sessionLimits?: SessionLimits;
-  /** Where starting and ending a persona session is recorded. */
+  /** Roles made in AUGUR and the grants ledger (grants.ts). In memory without one, as in tests. */
+  grants?: GrantStore;
+  /** Where starting and ending a persona session, and every role and grant, is recorded. */
   audit?: (entry: NewAuditEntry) => Promise<void>;
   now?: () => Date;
 }
@@ -67,7 +70,7 @@ export const consistencyFor = (key: CheckKey): Consistency =>
  * the relationships OpenFGA holds. Only the gateway and AUGUR's own services may ask; a person never calls
  * it directly. When OpenFGA can't answer, the answer is a refusal that says so (D9), never a yes.
  */
-export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, projection, org = () => undefined, sessions = new MemorySessionStore(), sessionLimits, audit, now = () => new Date() }: PermissionsOptions) => {
+export const buildApp = async ({ engine, store, modelId, model, verifyService, callers, projection, org = () => undefined, sessions = new MemorySessionStore(), grants = new MemoryGrantStore(), sessionLimits, audit, now = () => new Date() }: PermissionsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   await app.register(problemDetails());
   app.addHook('onRequest', signedCallers(callers));
@@ -130,6 +133,18 @@ export const buildApp = async ({ engine, store, modelId, model, verifyService, c
       return { deploymentAdmin: allowed[0] === true, orgAdmin: allowed[1] === true };
     },
   };
+  await app.register(
+    grantRoutes({
+      grants,
+      engine: {
+        check: (key) => engine.check(store, modelId, key, contextNow(), 'HIGHER_CONSISTENCY'),
+        write: (writes, deletes) => engine.write(store, modelId, writes, deletes),
+      },
+      org,
+      ...(audit ? { audit } : {}),
+      now,
+    }),
+  );
   await app.register(sessionRoutes({ sessions, questions, ...(sessionLimits ? { limits: sessionLimits } : {}), mayAsk, ...(audit ? { audit } : {}), now }));
 
   await app.register(

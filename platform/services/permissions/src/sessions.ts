@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
 import pg from 'pg';
-import { callerFromHeaders, runMigrations, sendProblem, signedInRecently, steadyPool, type Caller, type Migration, type NewAuditEntry } from '@augur/service-kit';
+import { callerFromHeaders, runMigrations, sendProblem, signedInRecently, steadyPool, type Caller, type NewAuditEntry } from '@augur/service-kit';
 
 /**
  * Persona sessions (ADR 0086, amended by 0089; PDR-024 "Act as"). An everyday persona works through holding
@@ -34,22 +34,9 @@ export interface SessionStore {
   end(person: string, now: Date): Promise<PersonaSession | undefined>;
 }
 
-export const migrations: Migration[] = [
-  {
-    id: '001-persona-sessions',
-    sql: `
-      create table permissions.persona_sessions (
-        id uuid primary key,
-        person text not null,
-        persona text not null,
-        reason text not null,
-        started_at timestamptz not null,
-        ends_at timestamptz not null,
-        ended_at timestamptz
-      );
-      create index persona_sessions_live on permissions.persona_sessions (person) where ended_at is null;`,
-  },
-];
+import { migrations } from './store.ts';
+
+export { migrations };
 
 type Row = { id: string; person: string; persona: string; reason: string; started_at: Date; ends_at: Date; ended_at: Date | null };
 const fromRow = (r: Row): PersonaSession => ({

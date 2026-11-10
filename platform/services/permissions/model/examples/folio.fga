@@ -13,7 +13,3 @@ type document
     define can_view: viewer but not blocked
     define can_edit: editor but not blocked
     define can_share: (owner or lead from floor) but not blocked
-
-condition not_expired(current_time: timestamp, grant_expires: timestamp) {
-  current_time < grant_expires
-}

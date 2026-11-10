@@ -112,7 +112,7 @@ describe.runIf(DATABASE_URL)('PgSessionStore', () => {
   let store: PgSessionStore;
   beforeAll(async () => {
     admin = new pg.Pool({ connectionString: DATABASE_URL });
-    await admin.query('drop table if exists permissions.persona_sessions, permissions.migrations');
+    await admin.query('drop table if exists permissions.persona_sessions, permissions.roles, permissions.grants, permissions.migrations');
     store = await PgSessionStore.connect(DATABASE_URL!);
   });
   afterAll(async () => {
@@ -129,6 +129,6 @@ describe.runIf(DATABASE_URL)('PgSessionStore', () => {
     expect(await store.live('amara', new Date('2026-11-20T10:11:00Z'))).toBeUndefined();
     expect(await store.end('amara', new Date('2026-11-20T09:30:00Z'))).toMatchObject({ id: second.started.id });
     expect(await store.live('amara', new Date('2026-11-20T09:31:00Z'))).toBeUndefined();
-    expect(migrations.map((m) => m.id)).toEqual(['001-persona-sessions']);
+    expect(migrations.map((m) => m.id)).toEqual(['001-persona-sessions', '002-roles-and-grants']);
   });
 });
