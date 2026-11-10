@@ -149,6 +149,7 @@ services:
       PORT: 8082
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-registry
+      PERMISSIONS_URL: http://permissions:8087
       <<: *internal
     depends_on: [postgres]
 
