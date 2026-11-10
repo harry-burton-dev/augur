@@ -77,7 +77,7 @@ export function AdminApp({ api, me, roles = [], path: start }: { api: AdminApi; 
   const upgrades = catalogue.find((a) => a.id === UPGRADES_ID);
   // The floor's prefix is what's left of the base once Admin's own route comes off it.
   const prefix = self && base.endsWith(self.route) ? base.slice(0, base.length - self.route.length) : base.replace(/\/[^/]*$/, '');
-  const openUpgrades = () => shellTo(`${prefix}${upgrades?.route ?? `/${UPGRADES_ID}`}`);
+  const openUpgrades = (to = '') => shellTo(`${prefix}${upgrades?.route ?? `/${UPGRADES_ID}`}${to}`);
   const { screen, adding } = screenFor(path);
 
   return (
@@ -91,7 +91,7 @@ export function AdminApp({ api, me, roles = [], path: start }: { api: AdminApi; 
             {RAIL.map((r) => (
               <RailLink key={r.screen} icon={r.icon} label={r.label} current={screen === r.screen} onPress={() => go(`/${r.screen}`)} />
             ))}
-            {upgrades ? <RailLink icon={iconOf(upgrades.icon, 'download')} label={upgrades.name} onPress={openUpgrades} /> : null}
+            {upgrades ? <RailLink icon={iconOf(upgrades.icon, 'download')} label={upgrades.name} onPress={() => openUpgrades()} /> : null}
           </>
         }
         screen={screen}
@@ -101,7 +101,7 @@ export function AdminApp({ api, me, roles = [], path: start }: { api: AdminApi; 
         ) : screen === 'departments' ? (
           <Departments key={path} api={api} adding={adding} />
         ) : screen === 'apps' ? (
-          <Apps api={api} openUpgrades={openUpgrades} upgradesName={upgrades?.name ?? 'Upgrade Centre'} roles={roles} />
+          <Apps api={api} openUpgrades={openUpgrades} upgradesName={upgrades?.name ?? 'Deployment'} roles={roles} />
         ) : screen === 'organisation' ? (
           <Organisation api={api} roles={roles} />
         ) : screen === 'status' ? (

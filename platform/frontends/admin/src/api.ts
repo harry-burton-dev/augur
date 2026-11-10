@@ -607,20 +607,6 @@ export interface AppSettingView extends AppSettingDecl {
   newIn?: string;
 }
 
-/** Values for a release's settings, by id, given with its install. */
-export type GivenSettings = Record<string, string | number | boolean>;
-
-/** A release file read from an address an admin pasted, checked as the feed's are. */
-export interface PastedRelease {
-  release: { id: string; version: string; manifest?: { name?: string } } & Record<string, unknown>;
-  /** Why it can't install here; empty when it can. */
-  refusals: string[];
-  warnings: string[];
-  asks?: AppAsks;
-  signer?: { repository: string; workflow: string };
-  review?: AppReview;
-}
-
 /** An app the feed offers that isn't installed. */
 export interface AvailableApp {
   app: string;
@@ -855,19 +841,9 @@ export class AdminApi {
   /** Asks the updater to go back to an earlier release Updates offers. Turned down with `sign_in_again` too. */
   goBack = (version: string) => this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/go-back', { version });
   installs = () => this.call<AppInstalls>('GET', '/api/registry/v1/app-runner/apps');
-  /** Reads the app feed now, starting any automatic updates it finds. */
-  checkInstalls = () => this.call<AppInstalls>('POST', '/api/registry/v1/app-runner/check');
-  /** Asks the app runner to install a release from the feed. Turned down with `sign_in_again` unless the admin just entered their password. */
-  installApp = (app: string, version: string, settings?: GivenSettings) =>
-    this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', app, version, ...(settings && Object.keys(settings).length ? { settings } : {}) });
   /** Gives one of an app's settings a value, or with null puts it back to its default. A secret needs the password just entered. */
   setRunnerSetting = (app: string, setting: string, value: string | number | boolean | null) =>
     this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/settings/${encodeURIComponent(setting)}`, { value });
-  /** Reads a release file from an address an admin pasted, for one no feed lists. Needs the password just entered too. */
-  readRelease = (url: string) => this.call<PastedRelease>('POST', '/api/registry/v1/app-runner/releases/read', { url });
-  /** Asks the app runner to install a release given whole, such as one read from a pasted address. */
-  installRelease = (release: PastedRelease['release'], settings?: GivenSettings) =>
-    this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'install', release, ...(settings && Object.keys(settings).length ? { settings } : {}) });
   /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
   uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
   /** Lets an app's parts that ask for it reach the internet, or takes that away. Needs the password just entered too. */

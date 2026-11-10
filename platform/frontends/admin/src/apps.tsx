@@ -1,7 +1,7 @@
 import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TagPicker, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
 import type { AdminApi, AllowedOrigin, AppSettingValue, AppVersion, CatalogueApp, EventDelivery, EventPushing, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
-import { InstallsSection, RunnerControls, useInstalls, type Installs } from './app-runner.js';
+import { RunnerControls, useInstalls, type Installs } from './app-runner.js';
 import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, inboxWords, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
 import { featureHint, featureModeChoices } from './installs.js';
 import { day, Line, Page, Problem, Quiet, Secret } from './parts.js';
@@ -19,7 +19,7 @@ const columns: TableColumn[] = [
 ];
 
 /** Every app in the catalogue with its version, a switch to stop offering one, and its kept versions to go back to. */
-export function Apps({ api, openUpgrades, upgradesName, roles = [] }: { api: AdminApi; openUpgrades: () => void; upgradesName: string; roles?: string[] }) {
+export function Apps({ api, openUpgrades, upgradesName, roles = [] }: { api: AdminApi; openUpgrades: (to?: string) => void; upgradesName: string; roles?: string[] }) {
   // Choosing a version, issuing a sign-in and choosing where apps load from need deployment-admin (ADR 0084).
   const deploys = roles.includes(DEPLOYMENT_ADMIN);
   const [apps, setApps] = useState<CatalogueApp[]>([]);
@@ -58,12 +58,16 @@ export function Apps({ api, openUpgrades, upgradesName, roles = [] }: { api: Adm
   return (
     <Page
       heading="Apps"
-      summary="Every app in the catalogue. Turn one off to stop offering it, or go back to an earlier version, without removing it. Install new apps from their releases below."
+      summary={`Every app in the catalogue. Turn one off to stop offering it, or go back to an earlier version, without removing it. New apps are installed in ${upgradesName}, Apps.`}
       actions={[{ id: 'origins', label: 'Where apps load from' }]}
       onAction={() => setOriginsOpen(true)}
     >
       <Table noun="apps" columns={columns} rows={rows} loading={loading} error={error} empty="No apps are registered." onOpen={(row) => setOpen(row.id)} onRetry={() => void load()} />
-      <InstallsSection ins={ins} />
+      <div data-installs>
+        <Button kind="secondary" size="sm" onPress={() => openUpgrades('/apps')}>
+          {`Install apps in ${upgradesName}`}
+        </Button>
+      </div>
       {app ? <AppDetails key={app.id} api={api} app={app} deploys={deploys} ins={ins} openUpgrades={openUpgrades} upgradesName={upgradesName} took={took} onIssue={() => setIssuing(app)} onClose={() => setOpen(undefined)} /> : null}
       {originsOpen ? <Origins api={api} deploys={deploys} reload={() => load()} onClose={() => setOriginsOpen(false)} /> : null}
       {issuing ? (

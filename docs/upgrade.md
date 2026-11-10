@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Apps are installed from Deployment
+
+**From** unreleased
+
+Installing a new app moved from Admin → Apps to Deployment → Apps (`/upgrades/apps`): what the app feed offers, **Check for new apps**, **Install from an address**, what's in progress, default apps waiting and apps removed with their data kept. The install asks for the settings an app can't start without, as before. Admin → Apps keeps each installed app's settings, internet, developers, previews and **Remove from the server**, and links to Deployment for installing. An app's own settings are now fields right on the app, each saved as soon as it changes, with no **Change its settings** dialog. Nothing to do on the server.
+
 ### Going back from 0.24.0 needs new bucket secrets
 
 **From** unreleased
@@ -92,7 +98,7 @@ On the first `up`, the storage job makes the login and its `permissions` schema.
 
 **From** unreleased
 
-The Upgrade Centre is now called **Deployment** and runs on the app contract, in a worker of its own, like any installed app. Its address stays `/upgrades`. Its pages are Overview, AUGUR, Apps and Settings, and each keeps its own history, so there is no History page. Nothing to do on the server: the web image serves the new page. If Deployment won't open after upgrading, `/recover/` still goes back.
+The Upgrade Centre is now called **Deployment** and runs on the app contract, in a worker of its own, like any installed app. Its address stays `/upgrades`. Its pages are Overview, AUGUR, Apps, Health, Backups, Release channel and Settings, and each keeps its own history, so there is no History page. Nothing to do on the server: the web image serves the new page. If Deployment won't open after upgrading, `/recover/` still goes back.
 
 ### Removing apps, pinning, sites and app sign-ins need a deployment admin
 

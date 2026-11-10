@@ -264,6 +264,41 @@ export interface InstalledApp {
   older?: { version: string; channel: Channel }[];
 }
 
+/** What a contract 3 release asks an admin to agree to (spec 9.4). */
+export interface AppAsks {
+  scopes: string[];
+  /** Each resource a part asks for, with its params. */
+  resources: { part: string; type: string; params?: Record<string, unknown> }[];
+  /** Each part's limits, by part name. */
+  limits: Record<string, { memory: string; cpu: string }>;
+  floors: string[];
+  maxUpload: number;
+  /** The ids of the settings it offers. */
+  settings: string[];
+  canvas?: boolean;
+}
+
+/** A setting an app offers admins (spec 5.2), as its manifest declares it. */
+export interface AppSettingDecl {
+  id: string;
+  label: string;
+  /** string, number, boolean, enum or secret. */
+  type: string;
+  required: boolean;
+  detail?: string;
+  unit?: string;
+  min?: number;
+  max?: number;
+  options?: string[];
+  default?: string | number | boolean;
+}
+
+/** What the review shows beyond the asks: each part's kind, and each setting. */
+export interface AppReview {
+  kinds: Record<string, string>;
+  settings: AppSettingDecl[];
+}
+
 /** An app the feed offers that isn't installed. */
 export interface AvailableApp {
   app: string;
@@ -272,10 +307,26 @@ export interface AvailableApp {
   version: string;
   channel: Channel;
   notesUrl?: string;
-  signer: { repository: string; workflow: string };
-  asks: { scopes: string[]; storage: { database?: boolean; bucket?: boolean }; maxUpload: number };
+  /** The feed it is listed in, one of APP_FEEDS. */
+  feed?: string;
+  /** Missing for a release that can't install here. */
+  signer?: { repository: string; workflow: string };
+  asks?: AppAsks;
+  review?: AppReview;
+  /** Why it can't install in this AUGUR. */
   problem?: string;
   job?: AppJob;
+}
+
+/** A release file read from an address an admin pasted, checked as the feed's are. */
+export interface PastedRelease {
+  release: { id: string; version: string; manifest?: { name?: string } } & Record<string, unknown>;
+  /** Why it can't install here; empty when it can. */
+  refusals: string[];
+  warnings: string[];
+  asks?: AppAsks;
+  signer?: { repository: string; workflow: string };
+  review?: AppReview;
 }
 
 /** GET /api/registry/v1/app-runner/apps */
@@ -288,6 +339,12 @@ export interface AppInstalls {
   ring?: Ring;
   previewsAllowed?: boolean;
   channelNote?: string;
+  /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS). */
+  dataGraceDays?: number;
+  /** The deployment's default apps (DEFAULT_APPS) and where each stands: a waiting one says why. */
+  defaultApps?: { app: string; state: 'installed' | 'asked' | 'waiting'; problem?: string }[];
+  /** Apps removed from the server whose data is still kept, and until when. */
+  removed?: { app: string; name: string; removedAt: string; deleteAt: string; failures?: number; problem?: string }[];
   installed: InstalledApp[];
   available: AvailableApp[];
 }
