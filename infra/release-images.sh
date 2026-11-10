@@ -74,12 +74,14 @@ build() {
 }
 
 build web -f infra/web.Dockerfile --target web
-for service in gateway identity events models knowledge storage; do
+for service in gateway identity events models knowledge permissions storage; do
   build "$service" -f infra/service.Dockerfile --build-arg "PACKAGE=@augur/$service" --target service
 done
 build registry -f infra/service.Dockerfile --build-arg PACKAGE=@augur/registry --target registry
 build updater -f infra/service.Dockerfile --build-arg PACKAGE=@augur/updater --target updater
 # Keycloak with AUGUR's sign-in and email theme (ADR 0041).
 build keycloak -f infra/service.Dockerfile --target keycloak
+# OpenFGA, started so that it brings its tables up to date first (ADR 0085).
+build openfga -f infra/service.Dockerfile --target openfga
 
 jq -s 'add' "$out"/*.ref.json
