@@ -81,6 +81,20 @@ const setup = async () => {
   return { app, directory, audit, store, lifecycle, call };
 };
 
+describe.runIf(DATABASE_URL)('admin: shadow mode', () => {
+  it('asks the permissions service each admin check too, and still answers as it always has', async () => {
+    const asked: { site: string; caller: string; today: boolean }[] = [];
+    const shadow = { check: (site: string, caller: { id: string }, _q: unknown, today: boolean) => void asked.push({ site, caller: caller.id, today }), settled: async () => {} };
+    const app = await db.app({ directory: new MemoryDirectory(), store: db.store, shadow });
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/people', headers: admin })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/admin/people', headers: editor })).statusCode).toBe(403);
+    expect(asked).toEqual([
+      { site: 'identity.people', caller: 'admin-1', today: true },
+      { site: 'identity.people', caller: 'u-2', today: false },
+    ]);
+  });
+});
+
 describe.runIf(DATABASE_URL)('admin: deployment admins', () => {
   const deployer = callerHeaders({ id: 'admin-9', name: 'Harry', departments: [], roles: ['admin', 'deployment-admin'] });
 

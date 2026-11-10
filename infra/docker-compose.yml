@@ -136,6 +136,7 @@ services:
       # client, which keycloak-config makes and gives its rights.
       KEYCLOAK_URL: http://keycloak:8080
       SERVICE_CLIENT_SECRET: platform-local-only-identity
+      PERMISSIONS_URL: http://permissions:8087
       <<: *internal
     depends_on:
       postgres: { condition: service_started }
