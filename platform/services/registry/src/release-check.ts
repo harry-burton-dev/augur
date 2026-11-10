@@ -41,7 +41,40 @@ export interface Offered {
   resources?: readonly string[];
   /** The contract majors it serves. */
   contracts?: readonly number[];
+  /** What its knowledge graph offers, when it was asked: an install that needs more is refused. */
+  knowledge?: KnowledgeOffer;
 }
+
+/** What a deployment's knowledge graph offers (its GET /actions and GET /meta), or why it couldn't be asked. */
+export type KnowledgeOffer = { actions: readonly string[]; classes: readonly string[] } | { unavailable: string };
+
+/** What a release needs of the knowledge graph: the classes and actions its parts' augur-floor-graphs name. */
+export const knowledgeNeeds = (release: AppRelease2): { classes: string[]; actions: string[] } => {
+  const asks = release.parts.flatMap((p) => resources(p).filter(([, r]) => r.type === 'augur-floor-graphs').map(([, r]) => r.params ?? {}));
+  const all = (key: string) => [...new Set(asks.flatMap((a) => (Array.isArray(a[key]) ? (a[key] as unknown[]).filter((x): x is string => typeof x === 'string') : [])))];
+  return { classes: all('classes'), actions: all('actions') };
+};
+
+/** Words for a list: "a", "a and b", "a, b and c". */
+const words = (items: readonly string[]) => (items.length < 2 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+
+/** Why the deployment's knowledge graph can't meet what a release needs of it, and what to say when it couldn't be asked. */
+const knowledgeCheck = (release: AppRelease2, offer: KnowledgeOffer | undefined): ReleaseCheck => {
+  const needs = knowledgeNeeds(release);
+  if (!offer || (!needs.classes.length && !needs.actions.length)) return { refusals: [], warnings: [] };
+  const name = release.manifest.name;
+  if ('unavailable' in offer) return { refusals: [], warnings: [`${name} needs things of the knowledge graph that couldn’t be checked: ${offer.unavailable}`] };
+  const refusals: string[] = [];
+  const actions = needs.actions.filter((a) => !offer.actions.includes(a));
+  if (actions.length) {
+    refusals.push(`${name} takes the knowledge graph’s ${actions.length === 1 ? 'action' : 'actions'} ${words(actions)}, which this deployment’s doesn’t offer. It offers ${words(offer.actions) || 'none'}.`);
+  }
+  const classes = needs.classes.filter((c) => !offer.classes.includes(c));
+  if (classes.length) {
+    refusals.push(`${name} needs the ${classes.length === 1 ? 'class' : 'classes'} ${words(classes)}, which this deployment’s knowledge graph doesn’t have. An ontology admin can adopt ${classes.length === 1 ? 'it' : 'them'}, and then it can be installed.`);
+  }
+  return { refusals, warnings: [] };
+};
 
 export interface ReleaseCheck {
   /** Why it can't install, each in plain words; empty when it can. */
@@ -95,7 +128,7 @@ export const stable = (v: unknown): string =>
 const repeated = (ids: (string | undefined)[]) => [...new Set(ids.filter((id, i) => id !== undefined && ids.indexOf(id) !== i))] as string[];
 
 /** The rules of 9.2 that a schema can't say. */
-const ruleRefusals = (release: AppRelease2, offered: Required<Offered>): string[] => {
+const ruleRefusals = (release: AppRelease2, offered: Required<Omit<Offered, 'knowledge'>>): string[] => {
   const out: string[] = [];
   const m = release.manifest;
   const c = (m.contributes ?? {}) as Record<string, unknown>;
@@ -192,5 +225,9 @@ export const checkRelease = (release: unknown, offered: Offered = {}): ReleaseCh
   const problems = [...schema, ...score];
   if (problems.length) return { refusals: problems.slice(0, SCHEMA_REASONS), warnings: [] };
   const r = release as AppRelease2;
-  return { refusals: ruleRefusals(r, { resources: offered.resources ?? RESOURCE_TYPES, contracts: served }), warnings: ruleWarnings(r) };
+  const knowledge = knowledgeCheck(r, offered.knowledge);
+  return {
+    refusals: [...ruleRefusals(r, { resources: offered.resources ?? RESOURCE_TYPES, contracts: served }), ...knowledge.refusals],
+    warnings: [...ruleWarnings(r), ...knowledge.warnings],
+  };
 };

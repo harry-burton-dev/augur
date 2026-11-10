@@ -56,7 +56,7 @@ const resourceWords = ({ type, params = {} }: NonNullable<AvailableApp['asks']>[
     case 'augur-bucket':
       return 'keeps files on the server';
     case 'augur-floor-graphs':
-      return 'reads the floors’ graphs';
+      return `reads the floors’ graphs${params.classes ? ` of ${list(params.classes)}` : ''}${params.actions ? `, and takes ${list(params.actions)}` : ''}`;
     case 'augur-telemetry':
       return 'sends its telemetry to the deployment’s collector';
     case 'augur-scratch':

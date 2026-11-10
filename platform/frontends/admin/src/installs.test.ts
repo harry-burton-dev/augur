@@ -28,6 +28,11 @@ describe('what a release asks for, as the review says it', () => {
     expect(words).toContainEqual(expect.stringMatching(/^Its web part \(256Mi of memory, 500m CPU\)/));
     expect(words).toContain('Offers a setting: apiKey');
   });
+
+  it('names the classes and actions an app needs of the knowledge graph', () => {
+    const graphs = { ...asks, resources: [{ part: 'web', type: 'augur-floor-graphs', params: { classes: ['kg:Ship', 'kg:Port'], actions: ['retain'] } }] };
+    expect(asksWords(graphs, scopes).join(' ')).toContain('reads the floors’ graphs of kg:Ship and kg:Port, and takes retain');
+  });
 });
 
 describe('who gets a feature preview', () => {

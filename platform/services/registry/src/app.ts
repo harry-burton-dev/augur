@@ -84,7 +84,7 @@ import { UpdateChecker } from './updates.ts';
 import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
-import { SERVED_CONTRACTS } from './release-check.ts';
+import { SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
 import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
@@ -132,6 +132,8 @@ export interface RegistryOptions {
   releaseFetch?: ReleaseFetch;
   /** Where this deployment is (PLATFORM_URL): never read from as a pasted address. */
   platformUrl?: string;
+  /** Asks the deployment's knowledge graph what it offers, for the install check (KNOWLEDGE_URL). */
+  knowledge?: () => Promise<KnowledgeOffer>;
   /** How many days an app removed from the server keeps its data (APP_DATA_GRACE_DAYS, 30 by default). */
   dataGraceDays?: number;
   /** The apps this deployment installs by default (DEFAULT_APPS, spec 9.7). */
@@ -218,6 +220,7 @@ export const buildApp = async ({
   platformUrl,
   dataGraceDays,
   defaultApps,
+  knowledge,
   allowPrPreviews = true,
   pipeline,
   portalUrl,
@@ -828,7 +831,7 @@ export const buildApp = async ({
           }
         : undefined;
       await app.register(featurePreviewRoutes({ store, ring: updates.ring, serviceOf, record, chainOf }));
-      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}), ...(defaultApps ? { defaultApps } : {}) }));
+      await app.register(appRunnerRoutes({ store, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}), ...(defaultApps ? { defaultApps } : {}), ...(knowledge ? { knowledge } : {}) }));
       await app.register(overviewRoutes({ store, updates, appUpdates, timeZone, record, now, reporting }));
       // What this deployment runs, reported to Backstage (ADR 0019).
       const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });

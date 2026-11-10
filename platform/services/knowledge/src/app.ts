@@ -172,8 +172,12 @@ export const buildApp = async ({ store, standing, callers, pageLimit = DEFAULT_P
       const ObjectParams = Type.Object({ floor: Type.String({ minLength: 1, maxLength: 120, description: 'A floor id as identity gives it.' }), id: Type.String({ minLength: 1, maxLength: 80 }) });
 
       app.get('/meta', { schema: { summary: 'The majors this service speaks, its version and the ontology version', response: { 200: ref(Meta) } } }, async () => {
-        const { rows } = await store.query<{ v: number }>('select max(version)::int as v from kg.ontology_versions');
-        return { apiMajor: 1 as const, version, ontology: { base: BASE_PROFILE, version: String(rows[0]?.v ?? 1), baseClasses: [...BASE_CLASSES] }, speaks: { knowledge: [1] } };
+        const [{ rows }, held] = await Promise.all([
+          store.query<{ v: number }>('select max(version)::int as v from kg.ontology_versions'),
+          store.query<{ iri: string }>("select iri from kg.classes where status in ('base', 'accepted') order by iri"),
+        ]);
+        const ontology = { base: BASE_PROFILE, version: String(rows[0]?.v ?? 1), baseClasses: [...BASE_CLASSES], classes: held.rows.map((r) => r.iri) };
+        return { apiMajor: 1 as const, version, ontology, speaks: { knowledge: [1] } };
       });
 
       app.get(
