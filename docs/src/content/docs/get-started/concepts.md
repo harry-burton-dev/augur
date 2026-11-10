@@ -66,8 +66,8 @@ Behind the gateway sit AUGUR's own services:
 No app ships inside AUGUR. Every app, even Home and Admin, is installed from an **app feed** and reaches AUGUR
 only through the gateway, its manifest and events. There are two kinds:
 
-- **Platform apps** help people use and manage AUGUR. Home, Admin and the Upgrade Centre come with every
-  deployment.
+- **Platform apps** help people use and manage AUGUR. Home, Admin and Deployment (where admins upgrade
+  AUGUR) come with every deployment.
 - **Pillar apps** are the foundation of what the organisation produces with it.
 
 An app is made of:

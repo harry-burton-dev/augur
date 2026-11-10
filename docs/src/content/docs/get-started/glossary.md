@@ -48,6 +48,11 @@ Which releases a deployment is offered: **stable**, **beta** or **dev**.
 
 One install of AUGUR, on one server.
 
+### Deployment (app)
+
+The platform app where deployment admins see what's new, upgrade, and go back to an earlier release. It was
+called the Upgrade Centre.
+
 ### Domain event
 
 A record that something happened, published on a **topic** for others to follow.
@@ -107,7 +112,3 @@ A private Tailscale network. Today a deployment is reached only from devices on 
 ### Updater
 
 The optional container that applies upgrades and installs apps from their releases.
-
-### Upgrade Centre
-
-Where admins see what's new, upgrade, and go back to an earlier release.

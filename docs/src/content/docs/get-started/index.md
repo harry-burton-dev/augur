@@ -26,7 +26,7 @@ phone layout yet.
   through the gateway, with only the permissions it asked for and was granted.
 - **Many deployments, one product.** The same release runs on a developer's workbench, a staging server and
   production. Names, addresses and limits come from each deployment's settings.
-- **Upgrades that look after themselves.** Admin's Upgrade Centre takes a backup, upgrades every part, checks
+- **Upgrades that look after themselves.** The Deployment app takes a backup, upgrades every part, checks
   it came up, and goes back by itself if it didn't.
 
 ## How it fits together
