@@ -26,6 +26,10 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/knowledge" } }
   knowledge-migrate:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/knowledge" } }
+  permissions:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/permissions" } }
+  openfga:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, target: openfga }
   storage:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/storage" } }
   keycloak:

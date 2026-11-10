@@ -85,6 +85,18 @@ COPY --from=sign-in-theme /repo/platform/frontends/sign-in-theme/dist_keycloak/a
 # attacker could fill someone's inbox with them.
 ENV KC_SPI_EVENTS_LISTENER__EMAIL__EXCLUDE_EVENTS=LOGIN_ERROR
 
+# The OpenFGA AUGUR runs (ADR 0085): OpenFGA's own binary, started so that it brings its tables up to date
+# first, then serves. One part, so it can't serve before its tables are ready. An OpenFGA upgrade is a change
+# to this line (docs/upgrade.md).
+FROM openfga/openfga:v1.11.2 AS openfga-upstream
+FROM alpine:3.22 AS openfga
+LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/augur"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+COPY --from=openfga-upstream /openfga /usr/local/bin/openfga
+COPY --from=openfga-upstream /usr/local/bin/grpc_health_probe /usr/local/bin/grpc_health_probe
+USER 65532
+ENTRYPOINT ["/bin/sh", "-c", "openfga migrate && exec openfga run"]
+
 # The default target, and so the last stage: a service by package name (the top of this file).
 FROM node:22-alpine AS service
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/augur"
