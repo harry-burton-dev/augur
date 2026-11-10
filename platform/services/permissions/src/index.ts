@@ -1,12 +1,14 @@
-import { callerCheckFromEnv, commonSettings, followEvents, loadConfigOrExit, platformCredentialsFromEnv, serviceVerifierFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, followEvents, loadConfigOrExit, platformCredentialsFromEnv, recordAudit, serviceVerifierFromEnv, startupLog, type NewAuditEntry } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { loadModel, OpenFga } from './openfga.ts';
 import { COPY_TOPICS, identityRelationships, keepProjecting, project } from './projection.ts';
+import { DEFAULT_LIMITS, PgSessionStore } from './sessions.ts';
 
 const log = startupLog('permissions');
 
 // Every setting the permissions service reads, checked before it starts.
 loadConfigOrExit('permissions', [
+  { ...commonSettings.database, about: 'the Postgres address and login (platform_permissions) the service keeps persona sessions under, beside OpenFGA’s tables.' },
   commonSettings.issuer,
   commonSettings.issuerInside,
   commonSettings.gateway,
@@ -16,6 +18,8 @@ loadConfigOrExit('permissions', [
   { name: 'OPENFGA_URL', about: 'where OpenFGA’s HTTP API is reached, which holds the relationships (ADR 0085).', required: true },
   { name: 'OPENFGA_TOKEN', about: 'OpenFGA’s preshared key.', secret: true },
   { name: 'PERMISSIONS_STORE', about: 'the name of the OpenFGA store this deployment’s permissions are kept in (default augur).' },
+  { name: 'PERSONA_DEPLOYMENT_ADMIN_MINUTES', about: 'the longest someone may act as a deployment admin persona at a time (default 60).' },
+  { name: 'PERSONA_ORG_ADMIN_MINUTES', about: 'the longest someone may act as an org admin persona at a time (default 480).' },
   { name: 'PERMISSIONS_COPY_SECONDS', about: 'how often floors, positions and who holds them are copied whole from identity, besides after each change it announces (default 300).' },
 ]);
 
@@ -69,5 +73,25 @@ if (credentials) {
   }).start();
 }
 
-const app = await buildApp({ engine, store, modelId, model, verifyService: serviceVerifierFromEnv(), callers: callerCheckFromEnv('permissions'), projection: copy.last, org: () => org });
+const minutes = (name: string, fallback: number) => Math.max(1, Math.floor(Number(process.env[name]) || fallback));
+const sessionLimits = {
+  deploymentAdminMinutes: minutes('PERSONA_DEPLOYMENT_ADMIN_MINUTES', DEFAULT_LIMITS.deploymentAdminMinutes),
+  orgAdminMinutes: minutes('PERSONA_ORG_ADMIN_MINUTES', DEFAULT_LIMITS.orgAdminMinutes),
+};
+const sessions = await PgSessionStore.connect(process.env.DATABASE_URL!);
+const audit = credentials ? (entry: NewAuditEntry) => recordAudit({ eventsUrl: process.env.EVENTS_URL!, credentials, entry }) : undefined;
+
+const app = await buildApp({
+  engine,
+  store,
+  modelId,
+  model,
+  verifyService: serviceVerifierFromEnv(),
+  callers: callerCheckFromEnv('permissions'),
+  projection: copy.last,
+  org: () => org,
+  sessions,
+  sessionLimits,
+  ...(audit ? { audit } : {}),
+});
 await app.listen({ port, host: '0.0.0.0' });
