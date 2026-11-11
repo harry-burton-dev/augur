@@ -551,7 +551,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     it('gives AUGUR’s own frontends their platform scopes, and no app from anywhere else', async () => {
       const app = await db.app({ verifyService, floors });
       const grants = async (id: string) => (await app.inject({ method: 'GET', url: `/v1/apps/${id}/grants?workspace=w1`, headers: callerHeaders(GATEWAY_CALLER) })).json();
-      expect(await grants('upgrades')).toMatchObject({ app: 'upgrades', on: true, scopes: [], platformScopes: ['deployment:upgrade', 'deployment:apps', 'deployment:health', 'deployment:settings'] });
+      expect(await grants('upgrades')).toMatchObject({ app: 'upgrades', on: true, scopes: ['people:read'], platformScopes: ['deployment:upgrade', 'deployment:apps', 'deployment:health', 'deployment:settings'] });
       expect((await grants('admin')).platformScopes).toEqual(['people:manage', 'apps:manage', 'org:manage', 'audit:read']);
       await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
       expect(await grants('library')).not.toHaveProperty('platformScopes');

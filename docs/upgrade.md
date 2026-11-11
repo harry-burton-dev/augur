@@ -22,7 +22,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
    docker run --rm -v "$PWD:/augur:ro" -w /augur node:22-alpine node scripts/preflight.mjs
    ```
    It reads your `.env`. It stops you if your version can't upgrade straight to this one (and names the release to go through first) or a setting this release needs isn't set, and it lists what the release breaks. Run it again until it says **Ready**.
-3. **Check Admin → Status.** Everything should be Running and the heading shouldn't say "Backups need a look". Fix that first, so a problem afterwards is clearly the upgrade's.
+3. **Check Deployment → Health and Backups.** Everything should be Running, and Backups shouldn't need a look. Fix that first, so a problem afterwards is clearly the upgrade's.
 4. **Take a backup and test it**, so you can go back:
    ```sh
    pc exec backup /bin/sh /backup/backup.sh --now
@@ -46,7 +46,7 @@ The pull fetches that release's images before anything stops. Each service migra
 Every release has been through the [deploy test](https://drive.google.com/drive/folders/1m2NCsXrXQxhsbnDfIqgezh8nmKY6XBa2) in CI: the release before it is upgraded to it with data, and gone back to. Your server can still differ, so check it yourself too.
 
 - `pc ps` shows each of AUGUR's services as `healthy` about a minute after it starts: Compose asks each one's `/healthz` every 30 seconds. One that stays `unhealthy` or `starting` is the one to look at in `pc logs`.
-- Open **Admin → Status**. Give it a minute: every part should be Running, with the new versions in the Version column.
+- Open **Deployment → Health**. Give it a minute: every part should be Running, with the new versions in the Version column.
 - Sign in as yourself and as someone without the admin role, and open an app or two.
 - `pc logs --since 10m gateway identity registry events` shouldn't show errors. Every log line carries a `requestId`; the same id is in the `x-request-id` header of the response, so a problem someone reports can be found across every service's logs.
 
@@ -55,6 +55,12 @@ Every release has been through the [deploy test](https://drive.google.com/drive/
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
+
+### Admin's Status and Dev to production pages moved to Deployment
+
+**From** unreleased
+
+Admin no longer has **Status** or **Dev to production**: Deployment's **Health**, **Backups** and **Release channel** show the same. What the server runs for an installed app moved from Admin → Apps to the app's page in Deployment → Apps: rolling it back (installing an earlier release, which puts it on hold), its internet, its settings, its developers and previews, a new sign-in for its service and **Remove from the server**. **Where apps load from** is on Deployment → Apps too. Turning an app on or off, its floors, feature previews, upload limit and scopes stay in Admin → Apps. Nothing to do on the server.
 
 ### OpenFGA moves to 1.19
 

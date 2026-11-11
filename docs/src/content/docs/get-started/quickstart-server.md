@@ -79,7 +79,7 @@ The first start takes a few minutes. `pc ps` shows every container as `healthy`,
 
 1. From a device on your tailnet, open your `PLATFORM_URL` and sign in with `PLATFORM_ADMIN_USER` and
    `PLATFORM_ADMIN_PASSWORD`. Choose your own password when asked.
-2. Open **Admin → Status**. Every part should say it's working. Backups take a few minutes to run for the
+2. Open **Deployment → Health**. Every part should say it's working. Backups take a few minutes to run for the
    first time.
 
 AUGUR is running.

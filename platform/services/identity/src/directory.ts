@@ -639,7 +639,7 @@ export class KeycloakDirectory implements Directory {
     const q = new URLSearchParams({ lifespan: String(lifespanSeconds), ...(this.config.invite ? { client_id: this.config.invite.clientId, redirect_uri: this.config.invite.redirectUri } : {}) });
     await this.call('PUT', `/users/${encodeURIComponent(id)}/execute-actions-email?${q}`, INVITE_ACTIONS, 'That person isn’t in the directory.').catch((err: unknown) => {
       // Keycloak answers 500 when its relay refuses the mail: say what that means here.
-      if (err instanceof DirectoryError && err.status === 503) throw new DirectoryError('The sign-in service couldn’t send the invite email. Check Admin → Status, Email.', 503);
+      if (err instanceof DirectoryError && err.status === 503) throw new DirectoryError('The sign-in service couldn’t send the invite email. Check Deployment, Health, Email.', 503);
       throw err;
     });
   }

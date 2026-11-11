@@ -3,7 +3,7 @@
  * the React Email templates in `mail-templates.tsx`. The relay settings are the same `SMTP_*` ones the realm job
  * gives Keycloak. Mail comes from the organisation's sender (Admin → Organisation, kept by identity, ADR 0042) when one
  * is set, else from SMTP_FROM under the product's name. Without a relay the sender says so instead of failing, so a
- * screen that would email can fall back and Admin → Status can say why.
+ * screen that would email can fall back and Deployment, Health can say why.
  *
  * Import it from `@augur/service-kit/mail`, so services that never email don't load Nodemailer or React.
  */
