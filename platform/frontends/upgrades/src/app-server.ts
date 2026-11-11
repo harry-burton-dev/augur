@@ -189,27 +189,79 @@ export const appQuestion = (v: View, app: InstalledApp, ask: AppAsk, dataGraceDa
         signIn,
       );
     }
-    case 'new-sign-in': {
-      if (why && !v.ui.dialog.busy) return refused(`A new sign-in for ${app.name} can’t be issued now`, why);
-      const issued = v.ui.issued?.app === app.app ? v.ui.issued : undefined;
-      if (issued)
-        return quill(
-          'quill-dialog',
-          { ...common, heading: `Give ${app.name}’s service this secret`, summary: `Set it as SERVICE_CLIENT_SECRET where the service runs, then restart it. It signs in as ${issued.clientId}.`, cancelLabel: 'Done' },
-          [quill('quill-text-field', { label: 'Secret', value: issued.secret, readOnly: true }), quill('quill-notice', { tone: 'warning' }, 'It won’t be shown again. If it’s lost, issue a new one.')],
-        );
-      return quill('quill-dialog', {
-        ...common,
-        danger: true,
-        heading: 'Issue a new sign-in?',
-        summary: 'The app’s service signs in to AUGUR with a secret. A new one stops the old one working straight away, so the service can’t register, notify or write to the log until it’s given the new one.',
-        actionLabel: 'Issue a new sign-in',
-        busyLabel: 'Issuing',
-        cancelLabel: 'Keep the old one',
-        onSubmit: () => v.on.issueSignIn(app.app),
-      });
-    }
+    case 'new-sign-in':
+      return signInQuestion(v, app.app, app.name);
   }
+};
+
+/** Issuing a new sign-in for an app's service, at `/apps/<id>/new-sign-in`: the question, then the secret, shown once. */
+export const signInQuestion = (v: View, id: string, name: string): RemoteNode => {
+  const close = () => v.on.closeDialog(pathOf({ page: 'app', app: id }));
+  const common = { open: true, size: 'glance' as const, eyebrow: name, busy: v.ui.dialog.busy, cancelLabel: 'Not now', ...(v.ui.dialog.error ? { error: v.ui.dialog.error } : {}), onClose: close };
+  if (!v.may && !v.ui.dialog.busy) return quill('quill-notice', { tone: 'refused', heading: `A new sign-in for ${name} can’t be issued now`, action: 'Close', onAction: close }, NEEDS_DEPLOYMENT_ADMIN);
+  const issued = v.ui.issued?.app === id ? v.ui.issued : undefined;
+  if (issued)
+    return quill(
+      'quill-dialog',
+      { ...common, heading: `Give ${name}’s service this secret`, summary: `Set it as SERVICE_CLIENT_SECRET where the service runs, then restart it. It signs in as ${issued.clientId}.`, cancelLabel: 'Done' },
+      [quill('quill-text-field', { label: 'Secret', value: issued.secret, readOnly: true }), quill('quill-notice', { tone: 'warning' }, 'It won’t be shown again. If it’s lost, issue a new one.')],
+    );
+  return quill('quill-dialog', {
+    ...common,
+    danger: true,
+    heading: 'Issue a new sign-in?',
+    summary: 'The app’s service signs in to AUGUR with a secret. A new one stops the old one working straight away, so the service can’t register, notify or write to the log until it’s given the new one.',
+    actionLabel: 'Issue a new sign-in',
+    busyLabel: 'Issuing',
+    cancelLabel: 'Keep the old one',
+    onSubmit: () => v.on.issueSignIn(id),
+  });
+};
+
+/**
+ * An app registered by its own service rather than installed by the app runner, such as one a developer runs:
+ * the versions the registry keeps and which one the shell is given, and its service's sign-in.
+ */
+export const registeredPage = (v: View, id: string, ask?: AppAsk): RemoteNode => {
+  const r = v.ui.registered?.app === id ? v.ui.registered : undefined;
+  if (!r?.versions && !r?.error) return quill('quill-state', { kind: 'loading', heading: `Looking ${id} up`, size: 'region' });
+  if (!r.versions) return quill('quill-state', { kind: 'error', heading: `${id}’s versions couldn’t be read`, body: r.error, size: 'region' });
+  if (!r.versions.length)
+    return quill('quill-state', { kind: 'empty', heading: `Nothing called “${id}” is installed on this deployment`, action: 'See installed apps', onAction: () => v.on.go(pathOf({ page: 'apps' })) });
+  const serving = r.versions.find((x) => x.serving) ?? r.versions[0]!;
+  const name = serving.entry.name ?? id;
+  const why = v.may ? undefined : NEEDS_DEPLOYMENT_ADMIN;
+  const held = r.pinned;
+  return [
+    quill('quill-details', {
+      items: [
+        { label: 'Runs', value: `${serving.version}${held ? ', held' : ''}` },
+        { label: 'Registered by', value: v.nameOf(serving.registeredBy), note: when(v, serving.registeredAt) },
+        { label: 'Installed', value: 'By its own service, not the app runner: new versions arrive as it registers them.' },
+      ],
+    }),
+    quill('quill-section', { label: 'Version the shell is given' }, [
+      quill('quill-list', {
+        label: 'Versions kept',
+        noun: ['version', 'versions'],
+        density: 'compact',
+        items: r.versions.map((x) => ({
+          id: x.version,
+          title: x.version,
+          detail: [`Registered ${when(v, x.registeredAt)}`, x.serving ? 'in use' : '', x.version !== serving.version && x.entry.entry === serving.entry.entry ? `loads from the same address as ${serving.version}, so it gets that version’s menu and settings but runs whatever code is there now` : ''].filter(Boolean).join(' · '),
+          ...(x.serving ? { status: 'done' } : {}),
+          actions: x.serving && held ? [] : [{ id: 'hold', label: `Use ${x.version}, and hold it`, ...off(why) }],
+        })),
+        onAction: ({ item }: { item: string }) => v.on.pin(id, item),
+      }),
+      held ? quill('quill-button', { label: 'Follow new versions', kind: 'secondary', size: 'sm', ...off(why), onPress: () => v.on.pin(id, null) }) : null,
+      r.problem ? quill('quill-notice', { tone: 'refused' }, r.problem) : null,
+    ]),
+    quill('quill-section', { label: 'On the server' }, [
+      quill('quill-button', { label: 'Issue a new sign-in', kind: 'tertiary', size: 'sm', ...off(why), onPress: () => v.on.go(pathOf({ page: 'app', app: id, ask: { kind: 'new-sign-in' } })) }),
+    ]),
+    ask?.kind === 'new-sign-in' ? signInQuestion(v, id, name) : null,
+  ];
 };
 
 /** The sites apps may load from besides AUGUR's own address, on Apps: allow one, and remove one. */

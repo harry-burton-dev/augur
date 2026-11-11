@@ -7,7 +7,7 @@ import { gateFor } from './model/roles.js';
 import type { AppJob, GoBackTarget, InstalledApp, OverviewUnit, Upgrade } from './model/types.js';
 import { AUGUR } from './units.js';
 import { quill } from './quill.js';
-import { appQuestion, serverSections } from './app-server.js';
+import { appQuestion, registeredPage, serverSections } from './app-server.js';
 import { pathOf, type AppAsk, type Ask } from './routes.js';
 import { entriesOf, historyList, rowsOf, statusOf, when, type View } from './view.js';
 import { CHANNEL, NEEDS_DEPLOYMENT_ADMIN, STEP } from './words.js';
@@ -285,7 +285,8 @@ const jobWords = (job: AppJob): string => {
 export const appPage = (v: View, id: string, install?: string, ask?: AppAsk): RemoteNode => {
   const unit = v.data.overview!.units.find((x) => x.unit === id);
   const app: InstalledApp | undefined = v.data.installs?.installed.find((a) => a.app === id);
-  if (!unit && !app) return quill('quill-state', { kind: 'empty', heading: `Nothing called “${id}” is installed on this deployment`, action: 'See installed apps', onAction: () => v.on.go(pathOf({ page: 'apps' })) });
+  // Not installed by the app runner: an app its own service registers, or nothing.
+  if (!unit && !app) return registeredPage(v, id, ask);
   const running = app?.version ?? unit!.running;
   const jobBusy = busy(app?.job?.state);
   const installWhyNot = !v.may ? NEEDS_DEPLOYMENT_ADMIN : jobBusy ? 'Wait for the server to finish its current job with this app.' : !app ? 'The app runner hasn’t answered, so nothing can be installed now.' : undefined;

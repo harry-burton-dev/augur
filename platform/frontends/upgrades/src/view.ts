@@ -4,7 +4,7 @@ import { historyOf, tookWords, type HistoryEntry } from './model/history.js';
 import { levelFrom } from './model/levels.js';
 import { needsYou } from './model/needs-you.js';
 import { formatWhen } from './model/time.js';
-import type { AllowedOrigin, AppSettingDecl, OverviewUnit, PastedRelease, Principal } from './model/types.js';
+import type { AllowedOrigin, AppSettingDecl, AppVersion, OverviewUnit, PastedRelease, Principal } from './model/types.js';
 import { originsSection } from './app-server.js';
 import { addressQuestion, installSections, newInstallQuestion } from './install.js';
 import { RING_WORDS } from './model/words.js';
@@ -30,6 +30,8 @@ export interface Ui {
   found?: { query: string; items?: Principal[]; error?: string };
   /** People's names by id, for the developers already chosen. */
   names?: Record<string, string>;
+  /** An app registered by its own service, once its page reads the versions kept; `pinned` once known. */
+  registered?: { app: string; versions?: AppVersion[]; error?: string; pinned?: boolean; problem?: string };
   /** The sites apps may load from, once Apps reads them; what's being allowed, and why it wasn't. */
   origins?: { list?: AllowedOrigin[]; error?: string; busy?: boolean; typed?: string; problem?: string; removing?: string };
 }
@@ -57,6 +59,8 @@ export interface Actions {
   findPeople: (query: string) => void;
   setDevelopers: (app: string, people: { id: string; name: string }[]) => void;
   allowOrigin: (origin: string) => void;
+  /** Holds an app registered by its own service at a version, or with null follows new versions again. */
+  pin: (app: string, version: string | null) => void;
   /** Opens the question that removes a site, or with nothing, closes it. */
   askRemoveOrigin: (origin: string | undefined) => void;
   removeOrigin: (origin: string) => void;

@@ -24,7 +24,7 @@ const HISTORY_PAGES = new Set<Route['page']>(['settings', 'channel']);
 const words = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** The pane's heading for a route. */
-const titleOf = (route: Route, data: Data): string => {
+const titleOf = (route: Route, data: Data, registeredName?: string): string => {
   switch (route.page) {
     case 'overview':
       return 'Overview';
@@ -42,7 +42,7 @@ const titleOf = (route: Route, data: Data): string => {
       return 'Settings';
     case 'app':
       if (route.install && !data.installs?.installed.some((a) => a.app === route.app)) return 'Apps';
-      return data.overview?.units.find((u) => u.unit === route.app)?.name ?? data.installs?.installed.find((a) => a.app === route.app)?.name ?? route.app;
+      return data.overview?.units.find((u) => u.unit === route.app)?.name ?? data.installs?.installed.find((a) => a.app === route.app)?.name ?? registeredName ?? route.app;
   }
 };
 
@@ -139,7 +139,7 @@ export default defineApp((ctx: AppContext) => {
 
   const draw = () => {
     const v = view();
-    ctx.frame.set({ title: titleOf(v.route, v.data), busy: v.data.loading && Boolean(v.data.overview), width: 'wide', actions: [{ command: COMMANDS.check, ...(v.data.overview?.feed === 'off' ? { unavailable: 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' } : {}) }] });
+    ctx.frame.set({ title: titleOf(v.route, v.data, registeredName(v.route)), busy: v.data.loading && Boolean(v.data.overview), width: 'wide', actions: [{ command: COMMANDS.check, ...(v.data.overview?.feed === 'off' ? { unavailable: 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' } : {}) }] });
     ctx.frame.screen.render(screen(v));
     // Each installed app sits under Apps in the rail.
     const items = rowsOf(v)
@@ -186,10 +186,39 @@ export default defineApp((ctx: AppContext) => {
       () => undefined,
     );
   };
+  /** The versions of an app its own service registered, once its page opens: it isn't in what the runner installs. */
+  const registeredName = (r: Route) => {
+    const x = r.page === 'app' && ui.registered?.app === r.app ? ui.registered.versions : undefined;
+    return (x?.find((y) => y.serving) ?? x?.[0])?.entry.name;
+  };
+  const readRegistered = (force = false) => {
+    const r = routeFor(path);
+    if (r.page !== 'app' || r.install || !data.data.installs || !data.data.overview) return;
+    if (data.data.installs.installed.some((a) => a.app === r.app) || data.data.overview.units.some((u) => u.unit === r.app)) return;
+    if (!force && ui.registered?.app === r.app) return;
+    const app = r.app;
+    ui.registered = ui.registered?.app === app ? ui.registered : { app };
+    api.versions(app).then(
+      (versions) => {
+        if (ui.registered?.app !== app) return;
+        // Kept newest first: held when the shell is given an older one than the newest.
+        const pinned = ui.registered.pinned ?? Boolean(versions.length && !versions[0]!.serving);
+        ui.registered = { ...ui.registered, versions, pinned };
+        draw();
+      },
+      (e: unknown) => {
+        if (ui.registered?.app !== app) return;
+        if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
+        ui.registered = e instanceof ApiError && e.status === 404 ? { app, versions: [] } : { app, error: words(e) };
+        draw();
+      },
+    );
+  };
   const reads = () => {
     void readSettings();
     readOrigins();
     readNames();
+    readRegistered();
   };
 
   const data = reader(api, () => {
@@ -357,6 +386,23 @@ export default defineApp((ctx: AppContext) => {
     closeDialog: (back) => go(back),
     removeApp: (app) => void answer(pathOf({ page: 'apps' }), async () => void (await api.remove(app))),
     setInternet: (app, allowed) => void answer(pathOf({ page: 'app', app }), async () => void data.took({ installs: await api.setInternet(app, allowed) })),
+    pin: (app, version) => {
+      if (ui.registered?.app !== app) return;
+      ui.registered = { ...ui.registered, problem: undefined };
+      api.pin(app, version).then(
+        (held) => {
+          if (ui.registered?.app !== app) return;
+          ui.registered = { ...ui.registered, pinned: Boolean(held?.pinnedVersion) };
+          readRegistered(true);
+          draw();
+        },
+        (e: unknown) => {
+          if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
+          if (ui.registered?.app === app) ui.registered = { ...ui.registered, problem: words(e) };
+          draw();
+        },
+      );
+    },
     issueSignIn: (app) => {
       ui.dialog = { busy: true };
       draw();

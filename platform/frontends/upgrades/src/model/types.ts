@@ -300,6 +300,16 @@ export interface AllowedOrigin {
   addedAt: string;
 }
 
+/** One version the registry keeps of an app registered by its own service. */
+export interface AppVersion {
+  version: string;
+  entry: { name?: string; entry: string };
+  registeredBy: string;
+  registeredAt: string;
+  /** The one the shell is given now. */
+  serving: boolean;
+}
+
 /** A new sign-in for an app's service, shown once. */
 export interface IssuedSignIn {
   clientId: string;

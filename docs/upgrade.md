@@ -60,7 +60,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 **From** unreleased
 
-Admin no longer has **Status** or **Dev to production**: Deployment's **Health**, **Backups** and **Release channel** show the same. What the server runs for an installed app moved from Admin → Apps to the app's page in Deployment → Apps: rolling it back (installing an earlier release, which puts it on hold), its internet, its settings, its developers and previews, a new sign-in for its service and **Remove from the server**. **Where apps load from** is on Deployment → Apps too. Turning an app on or off, its floors, feature previews, upload limit and scopes stay in Admin → Apps. Nothing to do on the server.
+Admin no longer has **Status** or **Dev to production**: Deployment's **Health**, **Backups** and **Release channel** show the same. What the server runs for an installed app moved from Admin → Apps to the app's page in Deployment → Apps: rolling it back (installing an earlier release, which puts it on hold), its internet, its settings, its developers and previews, a new sign-in for its service and **Remove from the server**. An app its own service registers, rather than the app runner, has a page there too: which kept version the shell is given, holding it there or following new versions, and a new sign-in. **Where apps load from** is on Deployment → Apps too. Turning an app on or off, its floors, feature previews, upload limit and scopes stay in Admin → Apps. Nothing to do on the server.
 
 ### OpenFGA moves to 1.19
 
