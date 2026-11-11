@@ -665,136 +665,113 @@ export class ApiError extends Error {
   }
 }
 
+/** What Admin's calls go through: the shell's `ctx.fetch`, which adds the token, the floor and the app header. */
+export type Fetch = (path: string, init?: RequestInit) => Promise<Response>;
+
+const UNREACHABLE = 'AUGUR can’t be reached. Check your connection; nothing was changed.';
+
 /**
- * Admin's calls, all through the gateway: people and departments to identity
- * (which talks to the sign-in service), apps to the registry, activity to events, status to the gateway itself. The browser never
- * calls the sign-in service's admin API itself.
+ * Admin's calls, all through the gateway with `ctx.fetch`: people and departments to identity (which talks to the
+ * sign-in service), apps to the registry, activity to events. The gateway lets each through only for the platform
+ * scopes Admin holds (ADR 0083), and each service still checks the person's roles.
  */
-export class AdminApi {
-  private readonly getToken: () => Promise<string>;
-  private readonly fetchImpl: typeof fetch;
-
-  constructor(getToken: () => Promise<string>, fetchImpl: typeof fetch = (...args) => fetch(...args)) {
-    this.getToken = getToken;
-    this.fetchImpl = fetchImpl;
-  }
-
-  private async call<T>(method: string, url: string, body?: unknown): Promise<T> {
-    let res: Response;
+export const adminApi = (fetchImpl: Fetch) => {
+  const send = async (method: string, url: string, init: RequestInit = {}) => {
     try {
-      res = await this.fetchImpl(url, {
-        method,
-        headers: { authorization: `Bearer ${await this.getToken()}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
+      return await fetchImpl(url, { method, ...init });
     } catch {
-      throw new Error('AUGUR can’t be reached. Check your connection; nothing was changed.');
+      throw new Error(UNREACHABLE);
     }
+  };
+  const call = async <T>(method: string, url: string, body?: unknown): Promise<T> => {
+    const res = await send(method, url, body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     if (res.status === 204) return undefined as T;
-    const data = (await res.json().catch(() => ({}))) as T & { message?: string };
-    if (!res.ok) throw new ApiError(data.message ?? `That didn’t work (${res.status}). Nothing was changed.`, res.status, (data as { error?: string }).error);
-    return data;
-  }
-
-  people = () => this.call<Person[]>('GET', '/api/identity/v1/admin/people');
-  addPerson = (person: NewPerson) => this.call<{ person: Person; invite?: InviteResult; temporaryPassword?: string }>('POST', '/api/identity/v1/admin/people', person);
-  /** A new invite email for someone who hasn't set up yet. */
-  resendInvite = (id: string) => this.call<{ invite: InviteResult }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/invite`);
-  /** What the account lifecycle can do here: whether invites can be emailed, and today's date for a last day. */
-  lifecycle = () => this.call<LifecycleInfo>('GET', '/api/identity/v1/admin/lifecycle');
-  /** One person, with whether they're locked out as the sign-in service has it now. */
-  person = (id: string) => this.call<Person>('GET', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`);
-  /** Lifts a lockout for wrong passwords. */
-  unlock = (id: string) => this.call<void>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/unlock`);
-  /** Deletes a leaver's account now (deployment admins only). Turned down with `sign_in_again` unless the admin just entered their password. */
-  deletePerson = (id: string) => this.call<{ deleted: true }>('DELETE', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`);
-  /** Cancels a leaver flow set for after their last day. */
-  cancelLeave = (id: string) => this.call<Person>('DELETE', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`);
-  updatePerson = (id: string, changes: PersonChanges) => this.call<Person>('PATCH', `/api/identity/v1/admin/people/${encodeURIComponent(id)}`, changes);
-  resetPassword = (id: string) => this.call<{ temporaryPassword: string }>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/password`);
-  leaveRequests = () => this.call<LeaveRequest[]>('GET', '/api/identity/v1/admin/leave-requests');
-  /** The leaver flow: their sign-in off, signed out everywhere, and apps told to hand on what they own. */
-  leave = (id: string, how: { handOverTo?: string; note?: string; lastDay?: string }) => this.call<Person>('POST', `/api/identity/v1/admin/people/${encodeURIComponent(id)}/leave`, how);
-  roles = () => this.call<Role[]>('GET', '/api/identity/v1/admin/roles');
-
-  departments = () => this.call<Department[]>('GET', '/api/identity/v1/admin/departments');
-  addDepartment = (name: string, parentId?: string) =>
-    this.call<Department>('POST', '/api/identity/v1/admin/departments', { name, ...(parentId ? { parentId } : {}) });
-  /** What each level of department is called, from the top, and how many levels there can be. */
-  levels = () => this.call<TeamLevels>('GET', '/api/identity/v1/admin/levels');
-  setLevels = (levels: string[]) => this.call<TeamLevels>('PUT', '/api/identity/v1/admin/levels', { levels });
-  renameDepartment = (id: string, name: string) => this.call<Department>('PATCH', `/api/identity/v1/admin/departments/${encodeURIComponent(id)}`, { name });
-  addMember = (department: string, person: string) =>
-    this.call<void>('PUT', `/api/identity/v1/admin/departments/${encodeURIComponent(department)}/members/${encodeURIComponent(person)}`);
-  removeMember = (department: string, person: string) =>
-    this.call<void>('DELETE', `/api/identity/v1/admin/departments/${encodeURIComponent(department)}/members/${encodeURIComponent(person)}`);
-
-  organisation = () => this.call<Organisation>('GET', '/api/identity/v1/organisation');
-  setOrganisation = (changes: OrganisationChanges) => this.call<Organisation>('PATCH', '/api/identity/v1/admin/organisation', changes);
-  /** The time zones an admin can choose, UTC first. */
-  timeZones = () => this.call<string[]>('GET', '/api/identity/v1/admin/organisation/time-zones');
-  /** The languages the sign-in pages have words in, which an admin can offer. */
-  signInLanguages = () => this.call<string[]>('GET', '/api/identity/v1/admin/organisation/languages');
-  /** Keeps a PNG as the organisation's logo; identity says why when it can't be one. */
-  setLogo = async (png: Blob) => {
-    let res: Response;
-    try {
-      res = await this.fetchImpl('/api/identity/v1/admin/organisation/logo', { method: 'PUT', headers: { authorization: `Bearer ${await this.getToken()}`, 'content-type': 'image/png' }, body: png });
-    } catch {
-      throw new Error('AUGUR can’t be reached. Check your connection; nothing was changed.');
-    }
-    const data = (await res.json().catch(() => ({}))) as NonNullable<Organisation['logo']> & { message?: string; error?: string };
-    if (res.status === 413) throw new ApiError('The logo is too large. Save it smaller and try again.', 413, data.error);
+    const data = (await res.json().catch(() => ({}))) as T & { message?: string; error?: string };
     if (!res.ok) throw new ApiError(data.message ?? `That didn’t work (${res.status}). Nothing was changed.`, res.status, data.error);
     return data;
   };
-  removeLogo = () => this.call<void>('DELETE', '/api/identity/v1/admin/organisation/logo');
+  const e = encodeURIComponent;
+  const ID = '/api/identity/v1';
+  const REG = '/api/registry/v1';
+  const search = (query: object) => new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)])).toString();
 
-  apps = () => this.call<CatalogueApp[]>('GET', '/api/registry/v1/apps');
-  setAppEnabled = (id: string, enabled: boolean) => this.call<CatalogueApp>('PATCH', `/api/registry/v1/apps/${encodeURIComponent(id)}`, { enabled });
-  appFloors = (id: string) => this.call<FloorRule[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/floors`);
-  setAppFloor = (id: string, workspace: string, state: FloorChoice) =>
-    this.call<{ rules: FloorRule[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/floors/${encodeURIComponent(workspace)}`, { state });
-  /** Lowers how much an app may be sent at once, in MB, or with `null` gives it what it asks again. */
-  limitUploads = (id: string, mb: number | null) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/upload-limit`, { mb });
-  appSettings = async (id: string) => (await this.call<{ settings: AppSettingValue[] }>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/settings`)).settings;
-  /** Sets one of an app's settings; `null` puts it back to its default. */
-  setAppSetting = async (id: string, setting: string, value: number | null) =>
-    (await this.call<{ settings: AppSettingValue[] }>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/settings/${encodeURIComponent(setting)}`, { value })).settings;
-  /** Who gets each of an app's feature previews, and how many turned each on. */
-  featurePreviews = (id: string) => this.call<FeaturePreviews>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews`);
-  /** Sets who gets one of an app's feature previews; `null` goes back to the server's default. */
-  /** With mode `floors`, `floors` says which: it's on there and on the floors beneath them. */
-  setFeaturePreview = (id: string, preview: string, mode: FeaturePreviewMode | null, floors?: string[]) =>
-    this.call<FeaturePreviews>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/feature-previews/${encodeURIComponent(preview)}`, { mode, ...(floors ? { floors } : {}) });
-  grantScopes = (id: string, scopes: string[]) => this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/scopes`, { scopes });
-  /** The org's own floor, which every app rule starts from. */
-  org = async () => {
-    const { workspaces } = await this.call<{ workspaces: { id: string; kind: string; name: string }[] }>('GET', '/api/identity/v1/me/workspaces');
-    const org = workspaces.find((w) => w.kind === 'org');
-    if (!org) throw new Error('The org’s floor couldn’t be found.');
-    return { id: org.id, name: org.name };
-  };
+  return {
+    people: () => call<Person[]>('GET', `${ID}/admin/people`),
+    addPerson: (person: NewPerson) => call<{ person: Person; invite?: InviteResult; temporaryPassword?: string }>('POST', `${ID}/admin/people`, person),
+    /** A new invite email for someone who hasn't set up yet. */
+    resendInvite: (id: string) => call<{ invite: InviteResult }>('POST', `${ID}/admin/people/${e(id)}/invite`),
+    /** What the account lifecycle can do here: whether invites can be emailed, and today's date for a last day. */
+    lifecycle: () => call<LifecycleInfo>('GET', `${ID}/admin/lifecycle`),
+    /** One person, with whether they're locked out as the sign-in service has it now. */
+    person: (id: string) => call<Person>('GET', `${ID}/admin/people/${e(id)}`),
+    /** Lifts a lockout for wrong passwords. */
+    unlock: (id: string) => call<void>('POST', `${ID}/admin/people/${e(id)}/unlock`),
+    /** Deletes a leaver's account now (deployment admins only). Turned down with `sign_in_again` unless the admin just entered their password. */
+    deletePerson: (id: string) => call<{ deleted: true }>('DELETE', `${ID}/admin/people/${e(id)}`),
+    /** Cancels a leaver flow set for after their last day. */
+    cancelLeave: (id: string) => call<Person>('DELETE', `${ID}/admin/people/${e(id)}/leave`),
+    updatePerson: (id: string, changes: PersonChanges) => call<Person>('PATCH', `${ID}/admin/people/${e(id)}`, changes),
+    resetPassword: (id: string) => call<{ temporaryPassword: string }>('POST', `${ID}/admin/people/${e(id)}/password`),
+    leaveRequests: () => call<LeaveRequest[]>('GET', `${ID}/admin/leave-requests`),
+    /** The leaver flow: their sign-in off, signed out everywhere, and apps told to hand on what they own. */
+    leave: (id: string, how: { handOverTo?: string; note?: string; lastDay?: string }) => call<Person>('POST', `${ID}/admin/people/${e(id)}/leave`, how),
+    roles: () => call<Role[]>('GET', `${ID}/admin/roles`),
 
-  /** The entries the filters show, as a CSV file (the events service's GET /audit/export; each export is recorded). */
-  exportAudit = async (query: Omit<AuditQuery, 'before' | 'limit'>): Promise<{ blob: Blob; filename: string }> => {
-    const url = `/api/events/v1/audit/export?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`;
-    let res: Response;
-    try {
-      res = await this.fetchImpl(url, { method: 'GET', headers: { authorization: `Bearer ${await this.getToken()}` } });
-    } catch {
-      throw new Error('AUGUR can’t be reached. Check your connection and try again.');
-    }
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-      throw new ApiError(data.message ?? `The export didn’t work (${res.status}). Try again.`, res.status, data.error);
-    }
-    const filename = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'activity.csv';
-    return { blob: await res.blob(), filename };
+    departments: () => call<Department[]>('GET', `${ID}/admin/departments`),
+    addDepartment: (name: string, parentId?: string) => call<Department>('POST', `${ID}/admin/departments`, { name, ...(parentId ? { parentId } : {}) }),
+    /** What each level of department is called, from the top, and how many levels there can be. */
+    levels: () => call<TeamLevels>('GET', `${ID}/admin/levels`),
+    setLevels: (levels: string[]) => call<TeamLevels>('PUT', `${ID}/admin/levels`, { levels }),
+    renameDepartment: (id: string, name: string) => call<Department>('PATCH', `${ID}/admin/departments/${e(id)}`, { name }),
+    addMember: (department: string, person: string) => call<void>('PUT', `${ID}/admin/departments/${e(department)}/members/${e(person)}`),
+    removeMember: (department: string, person: string) => call<void>('DELETE', `${ID}/admin/departments/${e(department)}/members/${e(person)}`),
+
+    organisation: () => call<Organisation>('GET', `${ID}/organisation`),
+    setOrganisation: (changes: OrganisationChanges) => call<Organisation>('PATCH', `${ID}/admin/organisation`, changes),
+    /** The time zones an admin can choose, UTC first. */
+    timeZones: () => call<string[]>('GET', `${ID}/admin/organisation/time-zones`),
+    /** The languages the sign-in pages have words in, which an admin can offer. */
+    signInLanguages: () => call<string[]>('GET', `${ID}/admin/organisation/languages`),
+    /** Keeps a PNG as the organisation's logo; identity says why when it can't be one. */
+    setLogo: async (png: Blob) => {
+      const res = await send('PUT', `${ID}/admin/organisation/logo`, { headers: { 'content-type': 'image/png' }, body: png });
+      const data = (await res.json().catch(() => ({}))) as NonNullable<Organisation['logo']> & { message?: string; error?: string };
+      if (res.status === 413) throw new ApiError('The logo is too large. Save it smaller and try again.', 413, data.error);
+      if (!res.ok) throw new ApiError(data.message ?? `That didn’t work (${res.status}). Nothing was changed.`, res.status, data.error);
+      return data;
+    },
+    removeLogo: () => call<void>('DELETE', `${ID}/admin/organisation/logo`),
+
+    apps: () => call<CatalogueApp[]>('GET', `${REG}/apps`),
+    setAppEnabled: (id: string, enabled: boolean) => call<CatalogueApp>('PATCH', `${REG}/apps/${e(id)}`, { enabled }),
+    appFloors: (id: string) => call<FloorRule[]>('GET', `${REG}/apps/${e(id)}/floors`),
+    setAppFloor: (id: string, workspace: string, state: FloorChoice) => call<{ rules: FloorRule[] }>('PUT', `${REG}/apps/${e(id)}/floors/${e(workspace)}`, { state }),
+    /** Lowers how much an app may be sent at once, in MB, or with `null` gives it what it asks again. */
+    limitUploads: (id: string, mb: number | null) => call<CatalogueApp>('PUT', `${REG}/apps/${e(id)}/upload-limit`, { mb }),
+    appSettings: async (id: string) => (await call<{ settings: AppSettingValue[] }>('GET', `${REG}/apps/${e(id)}/settings`)).settings,
+    /** Sets one of an app's settings; `null` puts it back to its default. */
+    setAppSetting: async (id: string, setting: string, value: number | null) => (await call<{ settings: AppSettingValue[] }>('PUT', `${REG}/apps/${e(id)}/settings/${e(setting)}`, { value })).settings,
+    /** Who gets each of an app's feature previews, and how many turned each on. */
+    featurePreviews: (id: string) => call<FeaturePreviews>('GET', `${REG}/apps/${e(id)}/feature-previews`),
+    /** Sets who gets one of an app's feature previews; `null` goes back to the server's default. With mode `floors`, `floors` says which. */
+    setFeaturePreview: (id: string, preview: string, mode: FeaturePreviewMode | null, floors?: string[]) =>
+      call<FeaturePreviews>('PUT', `${REG}/apps/${e(id)}/feature-previews/${e(preview)}`, { mode, ...(floors ? { floors } : {}) }),
+    grantScopes: (id: string, scopes: string[]) => call<CatalogueApp>('PUT', `${REG}/apps/${e(id)}/scopes`, { scopes }),
+    /** The org's own floor, which every app rule starts from. */
+    org: async () => {
+      const { workspaces } = await call<{ workspaces: { id: string; kind: string; name: string }[] }>('GET', `${ID}/me/workspaces`);
+      const org = workspaces.find((w) => w.kind === 'org');
+      if (!org) throw new Error('The org’s floor couldn’t be found.');
+      return { id: org.id, name: org.name };
+    },
+
+    audit: (query: AuditQuery) => call<AuditEntry[]>('GET', `/api/events/v1/audit?${search(query)}`),
+    /** Where the entries the filters show are exported as a CSV file (each export is recorded). */
+    exportPath: (query: Omit<AuditQuery, 'before' | 'limit'>) => `/api/events/v1/audit/export?${search(query)}`,
   };
-  audit = (query: AuditQuery) =>
-    this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
-}
+};
+
+export type AdminApi = ReturnType<typeof adminApi>;
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;
 

@@ -360,48 +360,7 @@ export const platformApps: AppEntry[] = [
     category: 'platform',
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
-    areas: [
-      { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People, departments and its settings' },
-      { id: 'system', label: 'System', icon: 'server', detail: 'Apps and activity' },
-    ],
-    menu: [
-      {
-        label: 'People',
-        icon: 'people',
-        area: 'organisation',
-        items: [
-          { label: 'Everyone', icon: 'list', path: '/people', detail: 'Roles, departments, sign-in', keywords: 'users accounts roles disable' },
-          { label: 'Add a person', icon: 'user-plus', path: '/people/new', keywords: 'invite create user' },
-        ],
-      },
-      {
-        label: 'Departments',
-        icon: 'department',
-        area: 'organisation',
-        items: [
-          { label: 'All departments', icon: 'list', path: '/departments', detail: 'Names and members', keywords: 'groups teams' },
-          { label: 'New department', icon: 'plus', path: '/departments/new', keywords: 'create group team' },
-        ],
-      },
-      {
-        label: 'Settings',
-        icon: 'settings',
-        area: 'organisation',
-        items: [{ label: 'Name, time zone and email', icon: 'org', path: '/organisation', detail: 'The organisation’s own settings', keywords: 'organisation organization name timezone time zone sender email from' }],
-      },
-      {
-        label: 'Apps',
-        icon: 'apps',
-        area: 'system',
-        items: [{ label: 'All apps', icon: 'list', path: '/apps', detail: 'Versions, on or off', keywords: 'catalogue registry enable disable' }],
-      },
-      {
-        label: 'AUGUR',
-        icon: 'pulse',
-        area: 'system',
-        items: [{ label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' }],
-      },
-    ],
+    // its sections are its places (platformManifests3)
   },
   {
     id: 'upgrades',
@@ -431,6 +390,26 @@ export const platformApps: AppEntry[] = [
  * frontend is in AUGUR's web image at /apps/<id>/<version>/, and it runs in the shell's worker host like any app.
  */
 export const platformManifests3: Readonly<Record<string, AppManifest3>> = {
+  // Admin: who and what is allowed. Each person, department and app opens a page of its own below its place.
+  admin: {
+    id: 'admin',
+    name: 'Admin',
+    version: PLATFORM_APP_VERSIONS.admin,
+    contract: 3,
+    description: 'People, departments, apps and activity',
+    icon: 'admin',
+    floors: ['personal', 'team', 'org'],
+    frontend: { entry: 'sandbox.js' },
+    contributes: {
+      places: [
+        { id: 'people', label: 'People', icon: 'people', path: '/people', detail: 'Roles, departments, sign-in' },
+        { id: 'departments', label: 'Departments', icon: 'department', path: '/departments', detail: 'Names, members and level names' },
+        { id: 'organisation', label: 'Organisation', icon: 'org', path: '/organisation', detail: 'Name, time zone, email, sign-in notice and rules' },
+        { id: 'apps', label: 'Apps', icon: 'apps', path: '/apps', detail: 'On or off, and where' },
+        { id: 'activity', label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what' },
+      ],
+    },
+  },
   // Deployment: what this deployment runs, and upgrading it (ADR 0030). Its pages are its places; each installed app
   // sits under Apps, filled in at run time.
   upgrades: {
@@ -453,6 +432,8 @@ export const platformManifests3: Readonly<Record<string, AppManifest3>> = {
         { id: 'settings', label: 'Settings', icon: 'settings', path: '/settings', detail: 'Update policy and maintenance windows' },
       ],
       commands: [{ id: 'deployment.check', label: 'Check for updates', icon: 'download', keywords: 'release feed new version upgrade' }],
+      // Admin opens an app's page here, for what the server runs for it.
+      intents: { handles: ['deployment.app.open'] },
     },
     // The urgent path (PER-283, ADR 0044 D3), as in the entry above.
     previews: [
