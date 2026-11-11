@@ -631,7 +631,7 @@ describe('the upgrade’s journal, for a restart partway through', () => {
     };
     const { outcome, last } = await resume(target(), fake.server);
     expect(outcome).toBe('failed');
-    expect(last.message).toBe('The updater restarted partway through the upgrade to 0.3.0, and what it wrote down couldn’t be read (Unexpected end of JSON input). Check Admin → Status, and docs/upgrade-went-back.md.');
+    expect(last.message).toBe('The updater restarted partway through the upgrade to 0.3.0, and what it wrote down couldn’t be read (Unexpected end of JSON input). Check Deployment, Health, and docs/upgrade-went-back.md.');
     expect(fake.did).toEqual([]);
   });
 });

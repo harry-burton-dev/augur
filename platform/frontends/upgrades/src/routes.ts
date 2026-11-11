@@ -4,12 +4,14 @@
  * address, and only the path survives the trip.
  */
 export type Ask = { kind: 'upgrade' | 'roll-back' | 'test'; version: string };
+/** A question on an app's page: rolling it back to a version, removing it, its internet, or a new sign-in for its service. */
+export type AppAsk = { kind: 'roll-back'; version: string } | { kind: 'remove' | 'internet' | 'new-sign-in' };
 export type Route =
   | { page: 'overview' }
   | { page: 'augur'; ask?: Ask }
   /** `address` opens installing from a release file's address: empty asks for one. */
   | { page: 'apps'; address?: string }
-  | { page: 'app'; app: string; install?: string }
+  | { page: 'app'; app: string; install?: string; ask?: AppAsk }
   | { page: 'health' }
   | { page: 'backups' }
   | { page: 'channel' }
@@ -22,6 +24,7 @@ export const PLACES = { overview: '/', augur: '/augur', apps: '/apps', health: '
 const FROM_ADDRESS = 'install-from-address';
 
 const ASKS = new Set<Ask['kind']>(['upgrade', 'roll-back', 'test']);
+const APP_ASKS = new Set(['remove', 'internet', 'new-sign-in'] as const);
 
 const segments = (path: string) =>
   path
@@ -42,7 +45,10 @@ export const routeFor = (path: string): Route => {
   if (first === 'augur') return second && third && ASKS.has(second as Ask['kind']) ? { page: 'augur', ask: { kind: second as Ask['kind'], version: third } } : { page: 'augur' };
   if (first === 'apps') {
     if (!second) return { page: 'apps' };
-    return third === 'install' && fourth ? { page: 'app', app: second, install: fourth } : { page: 'app', app: second };
+    if (third === 'install' && fourth) return { page: 'app', app: second, install: fourth };
+    if (third === 'roll-back' && fourth) return { page: 'app', app: second, ask: { kind: 'roll-back', version: fourth } };
+    const plain = [...APP_ASKS].find((k) => k === third);
+    return plain && !fourth ? { page: 'app', app: second, ask: { kind: plain } } : { page: 'app', app: second };
   }
   if (first === FROM_ADDRESS) return { page: 'apps', address: second ?? '' };
   if (first === 'health') return { page: 'health' };
@@ -63,7 +69,9 @@ export const pathOf = (r: Route): string => {
     case 'apps':
       return r.address === undefined ? PLACES.apps : `/${FROM_ADDRESS}${r.address ? `/${e(r.address)}` : ''}`;
     case 'app':
-      return r.install ? `/apps/${e(r.app)}/install/${e(r.install)}` : `/apps/${e(r.app)}`;
+      if (r.install) return `/apps/${e(r.app)}/install/${e(r.install)}`;
+      if (r.ask) return `/apps/${e(r.app)}/${r.ask.kind}${r.ask.kind === 'roll-back' ? `/${e(r.ask.version)}` : ''}`;
+      return `/apps/${e(r.app)}`;
     case 'health':
       return PLACES.health;
     case 'backups':

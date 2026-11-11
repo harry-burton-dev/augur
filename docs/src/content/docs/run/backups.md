@@ -22,7 +22,7 @@ Everything lives in that dump: AUGUR's own data, apps' schemas, people's prefere
 Apps' files go beside it as `objects-YYYY-MM-DD.tar.gz`. The backups hold everyone's data and every login's
 password hash, so only root can read them (the commands below read them through a container). What each run
 found goes in `infra/deploy/backups/status/`, readable by anyone, and that folder alone is what the gateway
-sees, for Admin → Status.
+sees, for Deployment → Backups.
 
 Once a week (Sunday, after the backup; `RESTORE_TEST_WEEKDAY` changes the day) it also **tests a restore**:
 it loads the newest backup into a throwaway database inside the backup container, checks AUGUR's tables and
@@ -35,11 +35,11 @@ result under `appsNotRestored`, and Status says which app, but it doesn't fail t
 never stops an AUGUR upgrade. Look at it all the same: until it's fixed, that app's data isn't safely backed
 up.
 
-**Admin → Status** shows the last backup and the last restore test. Its heading says "Backups need a look"
+**Deployment → Backups** shows the last backup and the last restore test. Its heading says "Backups need a look"
 when the last backup failed or is over a day old, or the last restore test failed or is over a week old.
 
 The backups sit on the same disk as the database, so a lost server loses them too. The off-server copy,
-below, fixes that; until it's set up, Admin → Status says backups are kept on this server only.
+below, fixes that; until it's set up, Deployment → Backups says backups are kept on this server only.
 
 ## Off-server copy
 
@@ -50,7 +50,7 @@ loaded on a new server (the database logins' passwords are in it) and apps' secr
 
 restic encrypts everything on the server before it leaves, keeps 30 days of copies (`OFFSITE_KEEP_DAILY`),
 and sends only what changed since the night before. The weekly restore test then restores the newest dump
-**from the bucket**, so it proves the copy, not only the file on this disk. Admin → Status shows the last copy
+**from the bucket**, so it proves the copy, not only the file on this disk. Deployment → Backups shows the last copy
 and where the last restore came from, and says "Backups need a look" when a copy failed or is over a day old.
 
 Any S3-compatible bucket works (AWS S3, Backblaze B2, Wasabi, Cloudflare R2, MinIO, a second Garage, or the

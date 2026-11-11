@@ -29,7 +29,7 @@ address drops for a few seconds.
 - **It closes by itself** when the time is up. The time is kept in `infra/deploy/tailscale/public-until`, which
   the `tailscale` container checks every 10 seconds, so it holds over a restart or a reboot, and a time gone by
   is private. Run `on` again before then to keep it open longer.
-- **It's said, not hidden**: while it's open, Admin → Status says *Open to the internet until …* above
+- **It's said, not hidden**: while it's open, Deployment → Health says *Open to the internet until …* above
   everything else.
 - **Who gets in**: anyone with the address reaches the sign-in page, and only people with an account get past
   it. Sign-in keeps its [limits](../limits/#limits-at-the-front-door), and Keycloak makes each wrong password

@@ -28,7 +28,7 @@ describe('a value for a setting', () => {
   it('names each required setting an app can’t start without', () => {
     const missing = missingRequired([retention, archiveKey], () => false);
     expect(missing.map((s) => s.id)).toEqual(['archiveKey']);
-    expect(missingMessage('Notes', missing)).toBe('Notes needs Archive service key before it can start. A deployment admin fills it in under Admin → Apps.');
+    expect(missingMessage('Notes', missing)).toBe('Notes needs Archive service key before it can start. A deployment admin fills it in on its page in Deployment, Apps.');
   });
 });
 
@@ -65,7 +65,7 @@ describe.runIf(DATABASE_URL)('an app’s settings, as Admin gives them (spec 5.2
     const { ask, finish, view, said } = await setup();
     const without = await ask({ action: 'install', release: withKey() });
     expect(without.statusCode).toBe(400);
-    expect(without.json().message).toBe('Notes needs Archive service key before it can start. A deployment admin fills it in under Admin → Apps.');
+    expect(without.json().message).toBe('Notes needs Archive service key before it can start. A deployment admin fills it in on its page in Deployment, Apps.');
     expect((await ask({ action: 'install', release: withKey(), settings: { archiveKey: 'k-1', retentionDays: 2 } })).json().message).toMatch(/from 7 to 3650 days/);
     expect((await ask({ action: 'install', release: withKey(), settings: { archiveKey: 'k-1', nothing: 1 } })).json().message).toMatch(/has no setting nothing/);
     const job = (await ask({ action: 'install', release: withKey(), settings: { archiveKey: 'k-1', retentionDays: 30 } })).json();

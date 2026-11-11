@@ -1,6 +1,6 @@
 import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { isRefusal, type Refusal } from './model/roles.js';
-import type { AppInstalls, AppJob, Deliveries, PastedRelease, DesiredState, DesiredStateInput, Overview, PlatformStatus, PlatformUpdates, ReportingView } from './model/types.js';
+import type { AllowedOrigin, AppInstalls, AppJob, Deliveries, IssuedSignIn, PastedRelease, Principal, DesiredState, DesiredStateInput, Overview, PlatformStatus, PlatformUpdates, ReportingView } from './model/types.js';
 
 /** A call the platform turned down, with the refusal when it explained itself. */
 export class ApiError extends Error {
@@ -68,7 +68,27 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     /** Installs a release given whole, such as one read from an address. */
     installRelease: (release: PastedRelease['release'], settings: GivenSettings = {}) =>
       call<AppJob>('POST', '/app-runner/jobs', { action: 'install', release, ...(Object.keys(settings).length ? { settings } : {}) }),
-    remove: (app: string) => call('POST', '/app-runner/jobs', { action: 'remove', app }),
+    /** Stops and removes an app's containers, its data kept for a while. Needs the password just entered too. */
+    remove: (app: string) => call<AppJob>('POST', '/app-runner/jobs', { action: 'remove', app }),
+    /** Gives one of an app's settings a value, or with null puts it back to its default. A secret needs the password just entered. */
+    setSetting: (app: string, setting: string, value: string | number | boolean | null) =>
+      call<AppInstalls>('PUT', `/app-runner/apps/${encodeURIComponent(app)}/settings/${encodeURIComponent(setting)}`, { value }),
+    /** Lets an app's parts that ask for it reach the internet, or takes that away. Needs the password just entered too. */
+    setInternet: (app: string, allowed: boolean) => call<AppInstalls>('PUT', `/app-runner/apps/${encodeURIComponent(app)}/internet`, { allowed }),
+    /** Who may try an app's previews, by person id. */
+    setDevelopers: (app: string, people: string[]) => call<AppInstalls>('PUT', `/app-runner/apps/${encodeURIComponent(app)}/developers`, { people }),
+    /** A new secret for an app's service to sign in with; the old one stops working at once. */
+    issueSignIn: (app: string) => call<IssuedSignIn>('POST', `/admin/apps/${encodeURIComponent(app)}/credential`, undefined, '/api/identity/v1'),
+    /** The sites apps may load from besides AUGUR's own address. */
+    origins: () => call<AllowedOrigin[]>('GET', '/origins'),
+    allowOrigin: (origin: string) => call<AllowedOrigin>('POST', '/origins', { origin }),
+    removeOrigin: (origin: string) => call('DELETE', `/origins/${encodeURIComponent(origin)}`),
+    /** People by name, or named by id, from the directory (people:read). */
+    people: async (query: { q: string } | { ids: string[] }): Promise<Principal[]> => {
+      const search = 'q' in query ? `q=${encodeURIComponent(query.q)}` : `ids=${query.ids.map(encodeURIComponent).join(',')}`;
+      const found = await call<{ people: { id: string; name: string; email?: string }[] }>('GET', `/directory?${search}`, undefined, '/api/identity/v1');
+      return found.people.map((p) => ({ kind: 'person' as const, id: p.id, name: p.name, ...(p.email ? { detail: p.email } : {}) }));
+    },
     /** The apps this person can open, for this app's own name and icon and each app's icon. */
     manifest: () => call<AppManifestEntry[]>('GET', '/manifest'),
     /** Every unit, its desired state, what's next and what needs an admin: the same shape Backstage's card reads. */

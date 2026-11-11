@@ -96,7 +96,7 @@ export const missingRequired = (declared: DeclaredSetting[], has: (id: string) =
 
 /** Why an app can't start for want of its settings, naming each one and where to fill it in. */
 export const missingMessage = (name: string, missing: DeclaredSetting[]) =>
-  `${name} needs ${missing.map((s) => s.label).join(', ')} before it can start. A deployment admin fills ${missing.length === 1 ? 'it' : 'them'} in under Admin → Apps.`;
+  `${name} needs ${missing.map((s) => s.label).join(', ')} before it can start. A deployment admin fills ${missing.length === 1 ? 'it' : 'them'} in on its page in Deployment, Apps.`;
 
 /**
  * Each setting as Admin → Apps draws its form: what the manifest says of it, and the admin's value, if one
