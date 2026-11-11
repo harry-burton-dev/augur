@@ -2,13 +2,13 @@
 
 `@augur/upgrades` is Deployment (it was the Upgrade Centre; its id and route stay `upgrades`): a platform app at `/upgrades`, for admins (ADR 0030). It shows what this deployment runs, what's available and how each component (AUGUR and each installed app) takes new releases, and it upgrades, rolls back and installs them.
 
-It is a contract 3 app (ADR 0075, 0076). Its frontend is one ES module, `dist/sandbox.js`, which the shell runs in a web worker. It draws Quill's remote elements by name and reaches the registry, the gateway's status and the events service's deliveries, through the gateway. The registry lists its manifest (`platformManifests3` in the registry's `manifest.ts`), and the web image serves the module at `/apps/upgrades/<version>/`.
+It is a contract 3 app (ADR 0075, 0076). Its frontend is one ES module, `dist/sandbox.js`, which the shell runs in a web worker. It draws Quill's remote elements by name and reaches the registry, the gateway's status, the events service's deliveries and the directory (`people:read`, to name an app's developers), through the gateway. The registry lists its manifest (`platformManifests3` in the registry's `manifest.ts`), and the web image serves the module at `/apps/upgrades/<version>/`.
 
 | Page | Path | What it shows |
 | --- | --- | --- |
 | Overview | `/` | The one thing that needs you, lit, with one action; Installed (component, running, available, status); and Status (release channel, server, next maintenance window, release feed and its signature, updater), with Check for updates |
 | AUGUR | `/augur` | Available updates and their breaking changes, upgrade, install a halted release for a test, roll back, following an upgrade step by step, and the upgrade history |
-| Apps | `/apps`, `/apps/<id>` | Each installed app, also under Apps in the rail: its update, install, roll back (Admin's for now, and it says so), and its install history. Below, installing new apps: what the app feed offers (`/apps/<id>/install/<version>`), installing from a release file's address (`/install-from-address/<address>`), what's in progress, default apps waiting and apps removed with their data kept |
+| Apps | `/apps`, `/apps/<id>` | Each installed app, also under Apps in the rail: its update, install, roll back (`/apps/<id>/roll-back/<version>`), what the server runs for it (its internet, its own settings saved as they change, developers and previews running, a new sign-in for its service, removing it: `/apps/<id>/internet`, `/new-sign-in`, `/remove`), and its install history. Below, installing new apps: what the app feed offers (`/apps/<id>/install/<version>`), installing from a release file's address (`/install-from-address/<address>`), what's in progress, default apps waiting, apps removed with their data kept, and where apps load from |
 | Health | `/health` | Each part's health and what to check when one is down, email, how each app takes its events, and why there's no incident history yet |
 | Backups | `/backups` | The last backup, the copy off the server, point in time and the restore tests, and how restoring is done |
 | Release channel | `/release-channel` | The channel this deployment tracks, each component's as an inline choice, each component's path from main to stable from the pipeline feed, and every change of channel |
@@ -26,6 +26,7 @@ Whether the person may change anything comes from the overview's `you.deployment
 | `src/routes.ts` | Pages and questions, to and from their paths. |
 | `src/data.ts` | Reads the overview, AUGUR's updates, the apps and their jobs, the gateway's status and event deliveries: every 2 s while something runs, every 30 s otherwise. |
 | `src/view.ts` | Overview and Apps, the Installed table, and each page's history. |
+| `src/app-server.ts` | What the server runs for an installed app, its questions, and where apps load from. These were Admin's; they need the deployment scopes (ADR 0083). |
 | `src/install.ts` | Installing new apps on Apps: the feed's offers, installing from an address, and the settings an install must be given. |
 | `src/unit-page.ts` | AUGUR's and each app's page, following an upgrade, and the upgrade, roll back, test and install questions. |
 | `src/health.ts` | Health and Backups, from the gateway's `GET /status` and the events service's `GET /deliveries`. |

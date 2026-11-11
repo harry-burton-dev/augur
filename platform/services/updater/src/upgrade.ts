@@ -638,7 +638,7 @@ export const afterRestart = async (target: Target, server: Server, report: Repor
     return undefined;
   });
   if (unreadable !== undefined) {
-    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `The updater restarted partway through the upgrade to ${target.version}, and what it wrote down couldn’t be read (${unreadable}). Check Admin → Status, and docs/upgrade-went-back.md.` });
+    await report({ step: 'roll-back', state: 'failed', outcome: 'failed', message: `The updater restarted partway through the upgrade to ${target.version}, and what it wrote down couldn’t be read (${unreadable}). Check Deployment, Health, and docs/upgrade-went-back.md.` });
     return 'failed';
   }
   try {

@@ -4,7 +4,8 @@ import { historyOf, tookWords, type HistoryEntry } from './model/history.js';
 import { levelFrom } from './model/levels.js';
 import { needsYou } from './model/needs-you.js';
 import { formatWhen } from './model/time.js';
-import type { AppSettingDecl, OverviewUnit, PastedRelease } from './model/types.js';
+import type { AllowedOrigin, AppSettingDecl, AppVersion, OverviewUnit, PastedRelease, Principal } from './model/types.js';
+import { originsSection } from './app-server.js';
 import { addressQuestion, installSections, newInstallQuestion } from './install.js';
 import { RING_WORDS } from './model/words.js';
 import { AUGUR, rowOf, type UnitRow } from './units.js';
@@ -20,9 +21,19 @@ export interface Ui {
   checking?: boolean;
   checkingApps?: boolean;
   /** Why the last check, mark as reviewed or cancel didn't work, shown where it was pressed. */
-  problem?: { where: 'check' | 'seen' | 'cancel' | 'apps'; words: string };
+  problem?: { where: 'check' | 'seen' | 'cancel' | 'apps' | 'server'; words: string };
   /** A release file read from an address, waiting to be installed. */
   pasted?: { url: string; read: PastedRelease };
+  /** A new sign-in for an app's service, shown once in its question. */
+  issued?: { app: string; clientId: string; secret: string };
+  /** What the developers picker found for what was typed. */
+  found?: { query: string; items?: Principal[]; error?: string };
+  /** People's names by id, for the developers already chosen. */
+  names?: Record<string, string>;
+  /** An app registered by its own service, once its page reads the versions kept; `pinned` once known. */
+  registered?: { app: string; versions?: AppVersion[]; error?: string; pinned?: boolean; problem?: string };
+  /** The sites apps may load from, once Apps reads them; what's being allowed, and why it wasn't. */
+  origins?: { list?: AllowedOrigin[]; error?: string; busy?: boolean; typed?: string; problem?: string; removing?: string };
 }
 
 /** What the person can do from a page; each one goes through the registry, which decides. */
@@ -40,6 +51,19 @@ export interface Actions {
   readAddress: (url: string) => void;
   installPasted: (fill: AppSettingDecl[], values: Record<string, string>) => void;
   closeDialog: (back: string) => void;
+  removeApp: (app: string) => void;
+  setInternet: (app: string, allowed: boolean) => void;
+  issueSignIn: (app: string) => void;
+  /** Saves one of an app's settings as soon as its field changes, if it differs from what it is. */
+  saveSetting: (app: string, setting: string, raw: string) => void;
+  findPeople: (query: string) => void;
+  setDevelopers: (app: string, people: { id: string; name: string }[]) => void;
+  allowOrigin: (origin: string) => void;
+  /** Holds an app registered by its own service at a version, or with null follows new versions again. */
+  pin: (app: string, version: string | null) => void;
+  /** Opens the question that removes a site, or with nothing, closes it. */
+  askRemoveOrigin: (origin: string | undefined) => void;
+  removeOrigin: (origin: string) => void;
 }
 
 export interface View {
@@ -256,6 +280,7 @@ export const appsPage = (v: View): RemoteNode => {
       ),
     ),
     installSections(v),
+    originsSection(v),
     r.page === 'apps' && r.address !== undefined ? addressQuestion(v, r.address) : null,
     r.page === 'app' && r.install ? newInstallQuestion(v, v.data.installs?.available.find((a) => a.app === r.app && a.version === r.install), r.app, r.install) : null,
   ];

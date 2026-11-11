@@ -1018,7 +1018,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       if (problem) {
         const why = `${release.manifest.name} ${release.version}: ${problem}`;
         if (!old.manifest) {
-          throw new StepFailed(`${why} It didn’t go back by itself: ${old.version} was installed before the runner kept what it needs to go back. Install ${old.version} again from Admin → Apps.`);
+          throw new StepFailed(`${why} It didn’t go back by itself: ${old.version} was installed before the runner kept what it needs to go back. Install ${old.version} again from its page in Deployment, Apps.`);
         }
         // Written first as a switch not finished, so a runner that restarts from here goes back too, and never stops the old one.
         await save({ ...state, apps: { ...state.apps, [app]: { active: old, retiring: candidate } } }, env);
@@ -1173,7 +1173,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       state: 'done',
       outcome: 'done',
       message: running
-        ? `Its containers are gone and ${signIn}. Its data, settings and floors are kept for a while: install it again before then to keep them (Admin → Apps says until when).`
+        ? `Its containers are gone and ${signIn}. Its data, settings and floors are kept for a while: install it again before then to keep them (Deployment, Apps says until when).`
         : `Nothing of it was running; ${signIn}.`,
     });
   };
@@ -1213,7 +1213,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
           step: 'watch',
           state: 'failed',
           outcome: 'failed',
-          message: `The app runner restarted while watching ${active.version}. ${active.version} is serving, without the rest of its watch; ${started.version} keeps running until ${started.until.slice(11, 16)} UTC, and Admin → Apps can go back to it.`,
+          message: `The app runner restarted while watching ${active.version}. ${active.version} is serving, without the rest of its watch; ${started.version} keeps running until ${started.until.slice(11, 16)} UTC, and its page in Deployment, Apps can roll back to it.`,
         });
         return 'failed';
       }

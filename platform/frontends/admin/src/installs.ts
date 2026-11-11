@@ -1,22 +1,5 @@
 import type { SelectOption } from '@augur/app-kit';
-import type { AppJob, AppJobStepState, FeaturePreviewMode, FeaturePreviews } from './api.js';
-
-/** How often Apps asks again while the app runner has a job waiting or under way. */
-export const JOB_REFRESH_MS = 4_000;
-
-export const jobOpen = (job?: AppJob) => job?.state === 'requested' || job?.state === 'running';
-
-export const STEP_WORDS: Record<AppJobStepState['step'], string> = {
-  verify: 'Check its signature',
-  storage: 'Make its database and bucket',
-  'sign-in': 'Give it a sign-in',
-  start: 'Start the new version beside the old',
-  health: 'Wait for it to answer',
-  switch: 'Switch people over to it',
-  watch: 'Watch it for 5 minutes',
-  retire: 'Stop the old version a little later',
-  remove: 'Stop and remove its containers',
-};
+import type { FeaturePreviewMode, FeaturePreviews } from './api.js';
 
 const MODE_LABELS: Record<FeaturePreviewMode, string> = { off: 'Off', 'opt-in': 'For those who turn it on', everyone: 'On for everyone', floors: 'On for chosen floors' };
 
@@ -44,19 +27,6 @@ export const featureHint = (preview: FeaturePreviews['previews'][number], floorN
   ]
     .filter(Boolean)
     .join(' ');
-
-/** Where a job stands, in a few words. */
-export const jobWords = (job: AppJob): string => {
-  const what = job.action === 'install' ? `Installing ${job.release?.version ?? ''}`.trim() : job.action === 'purge' ? 'Deleting its data' : 'Removing';
-  if (job.state === 'requested') return `${what}: waiting for the app runner`;
-  if (job.state === 'running') {
-    const at = job.steps.at(-1);
-    return `${what}: ${at ? STEP_WORDS[at.step].toLowerCase() : 'starting'}`;
-  }
-  if (job.state === 'failed') return `${job.action === 'install' ? `${job.release?.version ?? 'The install'} didn’t install` : job.action === 'purge' ? 'Its data wasn’t deleted, and is tried again later' : 'Not removed'}: ${job.message ?? 'see its steps'}`;
-  if (job.state === 'cancelled') return `${what} was cancelled`;
-  return job.message ?? (job.action === 'install' ? `Installed ${job.release?.version ?? ''}`.trim() : job.action === 'purge' ? 'Its data is deleted' : 'Removed');
-};
 
 /** Names as a person says them: "A", "A and B", "A, B and C". */
 export const listWords = (names: string[]) => (names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`);

@@ -1,7 +1,7 @@
 import type { SelectOption, StatusName } from '@augur/app-kit';
 import { APP_CATEGORIES, SDK_VERSION, type AppCategory } from '@augur/mfe-sdk';
 import semver from 'semver';
-import type { AppVersion, CatalogueApp, Department, FloorRule } from './api.js';
+import type { CatalogueApp, Department, FloorRule } from './api.js';
 
 /** Where an app stands: off, on, or on but unable to open on this deployment. */
 export const appStatus = (app: CatalogueApp, sdkVersion = SDK_VERSION): { status: StatusName; label: string; why?: string } => {
@@ -50,15 +50,6 @@ export const refusedKindNote = (app: Pick<CatalogueApp, 'categoryRefused'>): str
   if (!asked) return '';
   return `Its manifest says it’s ${KIND_WORDS[asked].a}. Only apps that ship with AUGUR or come from its app feed can be one, so it’s listed as an app.`;
 };
-
-/** "Follow new versions" in the version picker. */
-export const NEWEST = '';
-
-/** Why rolling back might not be all it seems: the manifest changes, the code at the entry address may not. */
-export const rollbackNote = (current: CatalogueApp, target?: AppVersion): string =>
-  target && target.version !== current.version && target.entry.entry === current.entry
-    ? `Version ${target.version} loads from the same address as ${current.version}, so the shell gets that version’s menu and settings but runs whatever code is there now. Redeploy that version’s service to run its code too.`
-    : '';
 
 /** What each scope lets an app's service do, in words. */
 export const SCOPE_WORDS: Record<string, string> = {

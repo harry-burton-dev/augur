@@ -105,6 +105,9 @@ const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
   // Roles made in AUGUR and the grants that give them (ADR 0085). Never the persona routes: only the shell starts "Act as".
   { method: /^(GET|POST|DELETE)$/, path: /^\/api\/permissions\/v1\/(roles|grants)(\/|$)/, scope: 'people:manage' },
   { method: /^(GET|PATCH|PUT|DELETE)$/, path: /^\/api\/identity\/v1\/admin\/organisation(\/|$)/, scope: 'org:manage' },
+  // The organisation's settings as everyone reads them, and the org's floor, which an app's floor rules start from.
+  { method: /^GET$/, path: /^\/api\/identity\/v1\/organisation\/?$/, scope: 'org:manage' },
+  { method: /^GET$/, path: /^\/api\/identity\/v1\/me\/workspaces\/?$/, scope: 'apps:manage' },
   { method: /^(GET|PUT)$/, path: /^\/api\/models\/v1\/settings\/?$/, scope: 'org:manage' },
   { method: /^GET$/, path: /^\/api\/models\/v1\/usage\/?$/, scope: 'org:manage' },
   { method: /^GET$/, path: /^\/api\/events\/v1\/audit(\/export)?\/?$/, scope: 'audit:read' },

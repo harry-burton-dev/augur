@@ -457,6 +457,7 @@ describe.runIf(DATABASE_URL)('events', () => {
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'position.created', target: 'pos-1', detail: { department: 'w-legal', name: 'Counsel', role: 'lead' } });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'position.handed-over', target: 'pos-1', detail: { from: null, to: 'u-2' } });
       await audit(platform, { actor: { id: 'u-1', kind: 'user' }, app: 'identity', action: 'position.retired', target: 'pos-1', detail: {} });
+      await audit(registry, { actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'app.registered', target: 'notes', detail: { version: '1.0.0' } });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.disabled', target: 'notes' });
       await audit(registry, { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.blocked', target: 'notes' }, 'w-legal');
       // Followers see an event once every earlier transaction on the database has settled.
@@ -472,6 +473,7 @@ describe.runIf(DATABASE_URL)('events', () => {
         { topic: 'platform.position.created', publisher: 'identity', payload: { position: 'pos-1', team: 'w-legal' } },
         { topic: 'platform.position.handed-over', publisher: 'identity', payload: { position: 'pos-1', to: 'u-2' } },
         { topic: 'platform.position.retired', publisher: 'identity', payload: { position: 'pos-1' } },
+        { topic: 'platform.app.added', publisher: 'registry', payload: { app: 'notes' } },
         { topic: 'platform.app.turned-off', publisher: 'registry', payload: { app: 'notes' } },
         { topic: 'platform.app.blocked', payload: { app: 'notes' }, workspace: { id: 'w-legal' } },
       ]);
@@ -482,7 +484,7 @@ describe.runIf(DATABASE_URL)('events', () => {
       const url = await app.listen({ port: 0, host: '127.0.0.1' });
       const onFinance = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: ['editor'], workspace: { id: 'w-finance', kind: 'team', role: 'member' } });
       const controller = new AbortController();
-      const res = await fetch(`${url}/v1/domain-events/stream?topics=folio.document.*,platform.team.renamed`, { headers: onFinance, signal: controller.signal });
+      const res = await fetch(`${url}/v1/domain-events/stream?topics=folio.document.*,platform.team.renamed,platform.app.*`, { headers: onFinance, signal: controller.signal });
       expect(res.headers.get('content-type')).toBe('text/event-stream');
       const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
       expect((await reader.read()).value).toContain(': connected');
@@ -497,6 +499,10 @@ describe.runIf(DATABASE_URL)('events', () => {
       const data = text.split('\n').find((l) => l.startsWith('data: '))!;
       expect(JSON.parse(data.slice(6))).toMatchObject({ topic: 'folio.document.published', id: 'd7', publisher: 'folio', payload: { document: 'd7' }, workspace: { id: 'w-finance' } });
       expect(text).not.toMatch(/legal|nowhere|payroll|l1/);
+      // An app added to the whole deployment is on no floor, and still reaches every floor's shell.
+      await app.inject({ method: 'POST', url: '/v1/audit', headers: await serviceHeaders({ name: 'registry', getToken: async () => 'platform-registry' }), payload: { actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'app.registered', target: 'notes' } });
+      while (!text.includes('platform.app.added')) text += (await reader.read()).value;
+      expect(text).toContain('"payload":{"app":"notes"}');
       controller.abort();
     });
 

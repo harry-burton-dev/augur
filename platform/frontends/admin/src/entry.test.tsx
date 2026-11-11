@@ -3,11 +3,9 @@ import { createEventBus, type MountContext } from '@augur/mfe-sdk';
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
-import { departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type ComponentStatus, type Department, type Person } from './api.js';
-import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kindWords, refusedKindNote, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
-import { headline, stateOf } from './status.js';
+import { departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type Department, type Person } from './api.js';
+import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kindWords, refusedKindNote, scopeWords, uploadChoices } from './apps-model.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
-import { placeOf, portalLink } from './line.js';
 import { changesFrom, daysCheck, languageLabel, noticeChangesFrom, orgNameCheck, securityChangesFrom, zoneLabel } from './organisation.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -88,7 +86,6 @@ const press = async (b: Element | null | undefined) => {
 };
 /** A button by its words, anywhere on the page: dialogs draw outside the app. */
 const button = (words: string, inside: ParentNode = document) => [...inside.querySelectorAll('button')].find((b) => b.textContent?.trim().replace(/^Esc/, '') === words);
-const reasonOf = (b: Element | undefined) => document.getElementById(b?.getAttribute('aria-describedby') ?? '')?.textContent ?? '';
 const shut = (b: Element | undefined) => b?.getAttribute('aria-disabled') === 'true' || (b as HTMLButtonElement | undefined)?.disabled === true;
 /** A table's rows, each as its cells' words. */
 const rowsOf = (el: ParentNode) => [...el.querySelectorAll('.quill-table-row')].map((r) => [...r.querySelectorAll('.quill-table-cell')].map((c) => c.textContent?.trim()));
@@ -103,13 +100,6 @@ const type = async (input: HTMLInputElement, text: string) => {
     input.dispatchEvent(new Event('input', { bubbles: true }));
   });
 };
-/** Leaves a field, which commits what was typed. */
-const leave = async (input: HTMLInputElement) => {
-  await act(async () => {
-    input.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
-    input.dispatchEvent(new FocusEvent('blur'));
-  });
-};
 const title = (el: Element) => el.querySelector('.quill-page-head-title')?.textContent;
 
 describe('admin', () => {
@@ -117,7 +107,8 @@ describe('admin', () => {
     expect(screenFor('/people')).toEqual({ screen: 'people', adding: false });
     expect(screenFor('/people/new')).toEqual({ screen: 'people', adding: true });
     expect(screenFor('/departments/new')).toEqual({ screen: 'departments', adding: true });
-    expect(screenFor('/updates')).toEqual({ screen: 'updates', adding: false });
+    // Status and Dev to production moved to Deployment's Health and Release channel.
+    expect(screenFor('/updates')).toEqual({ screen: 'people', adding: false });
     expect(screenFor('/organisation')).toEqual({ screen: 'organisation', adding: false });
     expect(screenFor('/')).toEqual({ screen: 'people', adding: false });
   });
@@ -416,52 +407,6 @@ describe('Organisation', () => {
   });
 });
 
-describe('Status', () => {
-  const part = (name: string, state: ComponentStatus['state'], extra: Partial<ComponentStatus> = {}): ComponentStatus => ({ name, kind: 'service', state, ...extra });
-
-  it('heads the screen with what needs a look first, in words that don’t rely on colour', () => {
-    expect(headline([part('gateway', 'up'), part('registry', 'up')]).heading).toBe('Everything is running');
-    expect(headline([part('gateway', 'up'), part('events', 'slow')]).heading).toBe('1 part is slow');
-    expect(headline([part('events', 'slow'), part('registry', 'down'), part('sign-in', 'down')]).heading).toBe('2 parts are down');
-    const stale = { state: 'attention' as const, problem: 'No backup has been test-restored yet.' };
-    expect(headline([part('gateway', 'up')], stale)).toEqual({ heading: 'Backups need a look', summary: 'No backup has been test-restored yet.' });
-    expect(['up', 'slow', 'down', 'checking'].map((state) => stateOf({ state: state as ComponentStatus['state'] }).label)).toEqual(['Running', 'Slow', 'Down', 'Checking']);
-  });
-
-  it('shows every part, what to check for one that’s down, that AUGUR is open to the internet, and that a release is out', async () => {
-    const components = [part('gateway', 'up', { kind: 'gateway', version: '0.2.0' }), part('library', 'down', { kind: 'app', problem: 'It can’t be reached.' })];
-    const backups = {
-      state: 'ok',
-      lastBackup: { at: '2026-10-22T02:00:00Z', ok: true, bytes: 52_000 },
-      offsite: { at: '2026-10-22T02:01:00Z', ok: true, keepDays: 30 },
-      pointInTime: { at: '2026-10-22T11:00:00Z', ok: true, earliest: '2026-10-16T02:01:00Z', lastTest: { at: '2026-10-19T02:03:00Z', ok: true } },
-      lastRestoreTest: { at: '2026-10-19T02:01:00Z', ok: true, from: 'offsite', people: 3 },
-    };
-    gateway((_m, url) =>
-      url === '/api/gateway/v1/status'
-        ? Response.json({ components, backups, publicAccess: { open: true, until: '2026-10-28T18:00:00Z' }, email: { state: 'attention', relay: 'relay.example.org:587', from: 'augur@example.org', problem: 'AUGUR can’t reach the relay. Check SMTP_HOST.' } })
-        : url === '/api/registry/v1/platform/updates'
-          ? Response.json({ running: { version: '0.13.1', channel: 'stable' }, channel: 'stable', feed: 'on', newer: [], needsYou: [], available: { version: '0.13.2', channel: 'stable', breaking: [], parts: [] } })
-          : undefined,
-    );
-    const el = await open('/status');
-    expect(title(el)).toBe('1 part is down');
-    expect(el.textContent).toContain('Backups restore cleanly');
-    expect(el.textContent).toContain('30 days kept');
-    expect(el.textContent).toContain('Restored from the copy off the server, 3 people');
-    expect(el.textContent).toContain('Any moment since');
-    expect(el.querySelector('[data-public]')!.textContent).toContain('infra/deploy/public.sh off');
-    expect(el.textContent).toContain('AUGUR 0.13.2 is out.');
-    expect(el.querySelector('[data-email]')!.textContent).toContain('Email needs a look');
-    expect(el.textContent).toContain('relay.example.org:587');
-    expect(el.textContent).toContain('Check SMTP_HOST.');
-    await openRow(el, 'library');
-    const dialog = document.querySelector('.augur-dialog')!;
-    expect(dialog.textContent).toContain('It can’t be reached.');
-    expect(dialog.textContent).toContain('People can’t use library while its service is down');
-  });
-});
-
 describe('Activity', () => {
   const names = namesFrom([alex, sam], [finance, payroll], [{ id: 'library', name: 'Library' } as CatalogueApp]);
   const entry = (action: string, extra: Partial<AuditEntry> = {}): AuditEntry => ({ id: '1', at: '2026-10-22T10:00:00.000Z', actor: { id: 'u-1', kind: 'user' }, app: 'identity', action, ...extra });
@@ -563,9 +508,6 @@ describe('Apps', () => {
     expect(inboxWords({ scopes: ['inbox:write'], grantedScopes: ['inbox:write'], inbox: kinds })).toBe('Assigned to you, To review');
     expect(inboxWords({ scopes: ['inbox:write'], grantedScopes: [], inbox: kinds })).toMatch(/until it’s allowed to put work in people’s inboxes/);
     expect(inboxWords({ scopes: [] })).toBeUndefined();
-    const kept = (version: string, entry = library.entry) => ({ version, entry: { ...library, version, entry }, registeredBy: 'library', registeredAt: '', serving: false });
-    expect(rollbackNote(library, kept('0.1.0'))).toMatch(/loads from the same address as 0.2.0/);
-    expect(rollbackNote(library, kept('0.1.0', '/apps/library/0.1.0/entry.js'))).toBe('');
   });
 
   it('says what kind of app each is, from the kind in force, and why a claimed kind isn’t used', () => {
@@ -615,34 +557,6 @@ describe('Apps', () => {
     expect(floorStatus(library, tree[0]!, [], names)).toEqual({ on: true, words: 'On' });
   });
 
-  it('issues a new sign-in and shows its secret once', async () => {
-    const { sent } = gateway((_m, url) =>
-      url === '/api/registry/v1/apps'
-        ? Response.json([library])
-        : url.endsWith('/credential')
-          ? Response.json({ app: 'library', clientId: 'app-library', secret: 's3cret-value' }, { status: 201 })
-          : url.endsWith('/versions') || url.endsWith('/floors')
-            ? Response.json([])
-            : undefined,
-    );
-    const el = await open('/apps', ['admin', 'deployment-admin']);
-    await openRow(el, 'Library');
-    expect(document.querySelector('.augur-dialog')!.textContent).toContain('Notify people');
-    await press(button('Issue a new sign-in'));
-    await press(button('Issue a new sign-in', document.querySelectorAll('.augur-dialog')[1] ?? document));
-    expect(sent).toContainEqual({ method: 'POST', url: '/api/identity/v1/admin/apps/library/credential', body: undefined });
-    expect(document.querySelector('[data-secret]')?.textContent).toBe('s3cret-value');
-  });
-
-  it('leaves issuing a sign-in to deployment admins, and says who can (ADR 0084)', async () => {
-    gateway((_m, url) => (url === '/api/registry/v1/apps' ? Response.json([library]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
-    const el = await open('/apps');
-    await openRow(el, 'Library');
-    const issue = button('Issue a new sign-in');
-    expect(shut(issue)).toBe(true);
-    expect(reasonOf(issue)).toContain('Only a deployment admin can do this.');
-  });
-
   describe('installs from releases', () => {
     const installs: AppInstalls = {
       feed: 'on',
@@ -662,88 +576,17 @@ describe('Apps', () => {
       expect(window.location.pathname).toBe('/upgrades/apps');
     });
 
-    it('says an app asks for the internet, off until a deployment admin allows it, and allows it on confirming', async () => {
+    it('sends what the server runs for an app to its page in Deployment', async () => {
       const notes = { ...library, id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js' };
-      const asking: AppInstalls = { ...installs, installed: [{ ...installs.installed[0]!, update: undefined, internet: { allowed: false, why: ['Fetches map tiles'], hosts: ['tiles.example.org'] } }] };
-      const { sent } = gateway((method, url) =>
-        url === '/api/registry/v1/apps'
-          ? Response.json([notes])
-          : url.startsWith('/api/registry/v1/app-runner/') && method === 'GET'
-            ? Response.json(asking)
-            : url.endsWith('/internet')
-              ? Response.json(asking)
-              : url.endsWith('/versions') || url.endsWith('/floors')
-                ? Response.json([])
-                : undefined,
-      );
+      const { sent } = gateway((_method, url) => (url === '/api/registry/v1/apps' ? Response.json([notes]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
       const el = await open('/apps');
       await openRow(el, 'Notes');
-      const said = document.querySelector('[data-internet]');
-      expect(said?.textContent).toContain('Asks to reach the internet, which is off until a deployment admin allows it: Fetches map tiles (it names tiles.example.org).');
-      await press(button('Allow the internet', said!));
-      await press(button('Allow it', document.querySelectorAll('.augur-dialog')[1] ?? document));
-      expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/internet', body: { allowed: true } });
+      expect(document.querySelector('[data-moved]')?.textContent).toContain('Its versions, rolling it back, its sign-in, its internet, settings on the server, developers and removing it are in Deployment');
+      expect(button('Issue a new sign-in')).toBeUndefined();
+      await press(button('Open it in Deployment', document.querySelector('[data-moved]')!));
+      expect(window.location.pathname).toBe('/upgrades/apps/notes');
+      // Admin no longer reads the app runner, the event deliveries, where apps load from or an app's kept versions.
+      expect(sent.some((r) => /app-runner|deliveries|origins|versions/.test(r.url))).toBe(false);
     });
-
-    it('shows an app’s own settings and changes one, never showing a secret', async () => {
-      const notes = { ...library, id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js' };
-      const withSettings: AppInstalls = {
-        ...installs,
-        installed: [
-          {
-            ...installs.installed[0]!,
-            update: undefined,
-            settings: [
-              { id: 'retentionDays', label: 'Keep archived notes for', type: 'number', unit: 'days', min: 7, max: 3650, default: 365, required: false, set: false },
-              { id: 'exportKey', label: 'Export key', type: 'secret', required: true, set: true, setAt: '2026-11-09T10:00:00Z' },
-            ],
-          },
-        ],
-      };
-      const { sent } = gateway((method, url) =>
-        url === '/api/registry/v1/apps'
-          ? Response.json([notes])
-          : url.startsWith('/api/registry/v1/app-runner/') && (method === 'GET' || url.includes('/settings/'))
-            ? Response.json(withSettings)
-            : url.endsWith('/versions') || url.endsWith('/floors')
-              ? Response.json([])
-              : undefined,
-      );
-      const el = await open('/apps');
-      await openRow(el, 'Notes');
-      const said = document.querySelector('[data-settings]');
-      expect(said?.textContent).toContain('Empty is its default, 365 days');
-      expect(said?.textContent).toContain('Given already');
-      // Inline: no table row or dialog to open, saved as soon as the field is left.
-      expect(button('Change its settings', said!)).toBeUndefined();
-      await type(fieldNamed('Keep archived notes for (days)'), '30');
-      await leave(fieldNamed('Keep archived notes for (days)'));
-      expect(sent).toContainEqual({ method: 'PUT', url: '/api/registry/v1/app-runner/apps/notes/settings/retentionDays', body: { value: 30 } });
-      // The secret left empty stays as it was.
-      expect(sent.some((r) => r.url.endsWith('/settings/exportKey'))).toBe(false);
-    });
-  });
-});
-
-describe('the line', () => {
-  const unit = { id: 'augur', name: 'AUGUR', versions: { dev: '0.14.0-dev.3', preview: '0.13.2', production: '0.13.1' }, waiting: ['a'], previews: [] };
-
-  it('puts this server on the branch it runs, links each part to the portal, and sends upgrades to the Upgrade Centre', async () => {
-    expect(placeOf({ ...unit, running: '0.13.2' })).toBe('preview');
-    expect(placeOf({ ...unit, running: '0.14.0-dev.7' })).toBe('dev');
-    expect(placeOf({ ...unit, running: '0.9.0' })).toBeUndefined();
-    expect(portalLink('https://portal.example', 'augur')).toBe('https://portal.example/catalog/default/system/augur-platform');
-    expect(portalLink(undefined, 'augur')).toBeUndefined();
-    gateway((_m, url) =>
-      url === '/api/registry/v1/platform/updates'
-        ? Response.json({ running: { version: '0.13.2', channel: 'beta' }, channel: 'beta', feed: 'on', newer: [], needsYou: [], line: { feed: 'on', repository: 'o/r', units: [{ ...unit, running: '0.13.2' }], steps: [{ from: 'dev', to: 'preview', merged: 2, pulls: [] }] } })
-        : undefined,
-    );
-    const el = await open('/updates');
-    expect(el.querySelector('[data-unit="augur"] [data-here]')?.textContent).toContain('0.13.2');
-    expect(el.querySelector('[data-step="dev-preview"]')?.textContent).toContain('2 pull requests on Dev that Preview hasn’t got');
-    expect(button('Open Deployment', el)).toBeDefined();
-    expect(shut(button('Open Deployment', el))).toBe(false);
-    expect(reasonOf(button('Open Deployment', el))).toBe('');
   });
 });

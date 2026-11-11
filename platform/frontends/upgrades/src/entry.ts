@@ -10,6 +10,7 @@ import { quill } from './quill.js';
 import { pathOf, PLACES, routeFor, type Route } from './routes.js';
 import { draftOf, settingsPage, type Draft, type SettingsData, type SettingsView } from './settings.js';
 import { givenFrom } from './install.js';
+import { settingChange } from './model/app-settings.js';
 import { appPage, augurPage } from './unit-page.js';
 import { appsPage, overviewPage, rowsOf, staleNotice, type Actions, type Ui } from './view.js';
 
@@ -23,7 +24,7 @@ const HISTORY_PAGES = new Set<Route['page']>(['settings', 'channel']);
 const words = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /** The pane's heading for a route. */
-const titleOf = (route: Route, data: Data): string => {
+const titleOf = (route: Route, data: Data, registeredName?: string): string => {
   switch (route.page) {
     case 'overview':
       return 'Overview';
@@ -41,7 +42,7 @@ const titleOf = (route: Route, data: Data): string => {
       return 'Settings';
     case 'app':
       if (route.install && !data.installs?.installed.some((a) => a.app === route.app)) return 'Apps';
-      return data.overview?.units.find((u) => u.unit === route.app)?.name ?? data.installs?.installed.find((a) => a.app === route.app)?.name ?? route.app;
+      return data.overview?.units.find((u) => u.unit === route.app)?.name ?? data.installs?.installed.find((a) => a.app === route.app)?.name ?? registeredName ?? route.app;
   }
 };
 
@@ -69,7 +70,7 @@ export const screen = (v: SettingsView): RemoteNode => {
                   : // An app that isn't installed yet is installed over Apps.
                     r.install && !v.data.installs?.installed.some((a) => a.app === r.app) && !v.data.overview.units.some((u) => u.unit === r.app)
                     ? appsPage(v)
-                    : appPage(v, r.app, r.install);
+                    : appPage(v, r.app, r.install, r.ask);
   return [staleNotice(v), page];
 };
 
@@ -138,7 +139,7 @@ export default defineApp((ctx: AppContext) => {
 
   const draw = () => {
     const v = view();
-    ctx.frame.set({ title: titleOf(v.route, v.data), busy: v.data.loading && Boolean(v.data.overview), width: 'wide', actions: [{ command: COMMANDS.check, ...(v.data.overview?.feed === 'off' ? { unavailable: 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' } : {}) }] });
+    ctx.frame.set({ title: titleOf(v.route, v.data, registeredName(v.route)), busy: v.data.loading && Boolean(v.data.overview), width: 'wide', actions: [{ command: COMMANDS.check, ...(v.data.overview?.feed === 'off' ? { unavailable: 'The release feed is off on this deployment (RELEASE_FEED_URL=off).' } : {}) }] });
     ctx.frame.screen.render(screen(v));
     // Each installed app sits under Apps in the rail.
     const items = rowsOf(v)
@@ -151,9 +152,78 @@ export default defineApp((ctx: AppContext) => {
     }
   };
 
+  /** Reads the sites apps may load from, once Apps opens. */
+  let originsRead = false;
+  const readOrigins = () => {
+    if (originsRead || routeFor(path).page !== 'apps') return;
+    originsRead = true;
+    ui.origins = {};
+    api.origins().then(
+      (list) => {
+        ui.origins = { ...ui.origins, list };
+        draw();
+      },
+      (e: unknown) => {
+        ui.origins = { ...ui.origins, error: `The sites apps may load from couldn’t be read: ${words(e)}` };
+        draw();
+      },
+    );
+  };
+  /** Names the developers of the app the page shows, once, from the directory. */
+  const naming = new Set<string>();
+  const readNames = () => {
+    const r = routeFor(path);
+    if (r.page !== 'app') return;
+    const ids = (data.data.installs?.installed.find((a) => a.app === r.app)?.developers ?? []).filter((id) => !ui.names?.[id] && !naming.has(id));
+    if (!ids.length) return;
+    ids.forEach((id) => naming.add(id));
+    api.people({ ids }).then(
+      (people) => {
+        ui.names = { ...ui.names, ...Object.fromEntries(people.map((p) => [p.id, p.name])) };
+        draw();
+      },
+      // Unnamed, a developer shows by id; nothing else depends on it.
+      () => undefined,
+    );
+  };
+  /** The versions of an app its own service registered, once its page opens: it isn't in what the runner installs. */
+  const registeredName = (r: Route) => {
+    const x = r.page === 'app' && ui.registered?.app === r.app ? ui.registered.versions : undefined;
+    return (x?.find((y) => y.serving) ?? x?.[0])?.entry.name;
+  };
+  const readRegistered = (force = false) => {
+    const r = routeFor(path);
+    if (r.page !== 'app' || r.install || !data.data.installs || !data.data.overview) return;
+    if (data.data.installs.installed.some((a) => a.app === r.app) || data.data.overview.units.some((u) => u.unit === r.app)) return;
+    if (!force && ui.registered?.app === r.app) return;
+    const app = r.app;
+    ui.registered = ui.registered?.app === app ? ui.registered : { app };
+    api.versions(app).then(
+      (versions) => {
+        if (ui.registered?.app !== app) return;
+        // Kept newest first: held when the shell is given an older one than the newest.
+        const pinned = ui.registered.pinned ?? Boolean(versions.length && !versions[0]!.serving);
+        ui.registered = { ...ui.registered, versions, pinned };
+        draw();
+      },
+      (e: unknown) => {
+        if (ui.registered?.app !== app) return;
+        if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
+        ui.registered = e instanceof ApiError && e.status === 404 ? { app, versions: [] } : { app, error: words(e) };
+        draw();
+      },
+    );
+  };
+  const reads = () => {
+    void readSettings();
+    readOrigins();
+    readNames();
+    readRegistered();
+  };
+
   const data = reader(api, () => {
     draw();
-    void readSettings();
+    reads();
   });
 
   const moveTo = (to: string) => {
@@ -173,8 +243,11 @@ export default defineApp((ctx: AppContext) => {
       exporting = undefined;
     }
     if (!HISTORY_PAGES.has(now.page)) settingsRead = false;
+    if (now.page !== 'apps') originsRead = false;
+    if (now.page !== 'app' || now.ask?.kind !== 'new-sign-in') ui.issued = undefined;
+    ui.found = undefined;
     draw();
-    void readSettings();
+    reads();
   };
   const go = (to: string) => {
     ctx.navigate(to);
@@ -311,6 +384,129 @@ export default defineApp((ctx: AppContext) => {
       });
     },
     closeDialog: (back) => go(back),
+    removeApp: (app) => void answer(pathOf({ page: 'apps' }), async () => void (await api.remove(app))),
+    setInternet: (app, allowed) => void answer(pathOf({ page: 'app', app }), async () => void data.took({ installs: await api.setInternet(app, allowed) })),
+    pin: (app, version) => {
+      if (ui.registered?.app !== app) return;
+      ui.registered = { ...ui.registered, problem: undefined };
+      api.pin(app, version).then(
+        (held) => {
+          if (ui.registered?.app !== app) return;
+          ui.registered = { ...ui.registered, pinned: Boolean(held?.pinnedVersion) };
+          readRegistered(true);
+          draw();
+        },
+        (e: unknown) => {
+          if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
+          if (ui.registered?.app === app) ui.registered = { ...ui.registered, problem: words(e) };
+          draw();
+        },
+      );
+    },
+    issueSignIn: (app) => {
+      ui.dialog = { busy: true };
+      draw();
+      api.issueSignIn(app).then(
+        (issued) => {
+          ui.issued = { app, ...issued };
+          ui.dialog = {};
+          draw();
+        },
+        (e: unknown) => {
+          if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
+          ui.dialog = { error: words(e) };
+          draw();
+        },
+      );
+    },
+    saveSetting: (app, id, raw) => {
+      const installed = data.data.installs?.installed.find((a) => a.app === app);
+      const setting = installed?.settings?.find((x) => x.id === id);
+      const change = setting && settingChange(setting, raw);
+      if (!installed || !setting || !change) return;
+      if ('problem' in change) {
+        ui.problem = { where: 'server', words: change.problem };
+        draw();
+        return;
+      }
+      ui.problem = undefined;
+      api.setSetting(app, id, change.value).then(
+        (installs) => {
+          data.took({ installs });
+        },
+        (e: unknown) => {
+          // Signing in again comes back to this page; a secret is typed again there.
+          if (e instanceof ApiError && e.code === 'sign_in_again') return ctx.signInAgain();
+          ui.problem = { where: 'server', words: `${setting.label} wasn’t changed: ${words(e)}` };
+          draw();
+        },
+      );
+    },
+    findPeople: (query) => {
+      ui.found = { query };
+      draw();
+      api.people({ q: query }).then(
+        (items) => {
+          if (ui.found?.query !== query) return;
+          ui.found = { query, items };
+          ui.names = { ...ui.names, ...Object.fromEntries(items.map((p) => [p.id, p.name])) };
+          draw();
+        },
+        (e: unknown) => {
+          if (ui.found?.query !== query) return;
+          ui.found = { query, error: words(e) };
+          draw();
+        },
+      );
+    },
+    setDevelopers: (app, people) => {
+      ui.names = { ...ui.names, ...Object.fromEntries(people.map((p) => [p.id, p.name])) };
+      ui.problem = undefined;
+      api.setDevelopers(
+        app,
+        people.map((p) => p.id),
+      ).then(
+        (installs) => data.took({ installs }),
+        (e: unknown) => {
+          ui.problem = { where: 'server', words: `The developers weren’t changed: ${words(e)}` };
+          draw();
+        },
+      );
+    },
+    allowOrigin: (origin) => {
+      ui.origins = { ...ui.origins, busy: true, typed: origin, problem: undefined };
+      draw();
+      api.allowOrigin(origin).then(
+        (added) => {
+          ui.origins = { list: [...(ui.origins?.list ?? []).filter((o) => o.origin !== added.origin), added], typed: '' };
+          // An app registered from it before is offered again.
+          void data.again();
+          draw();
+        },
+        (e: unknown) => {
+          ui.origins = { ...ui.origins, busy: false, problem: words(e) };
+          draw();
+        },
+      );
+    },
+    askRemoveOrigin: (origin) => {
+      ui.origins = { ...ui.origins, removing: origin, problem: undefined };
+      draw();
+    },
+    removeOrigin: (origin) => {
+      ui.origins = { ...ui.origins, busy: true, problem: undefined };
+      draw();
+      api.removeOrigin(origin).then(
+        () => {
+          ui.origins = { list: (ui.origins?.list ?? []).filter((o) => o.origin !== origin) };
+          draw();
+        },
+        (e: unknown) => {
+          ui.origins = { ...ui.origins, busy: false, removing: undefined, problem: `${origin} wasn’t removed: ${words(e)}` };
+          draw();
+        },
+      );
+    },
   };
 
   const act: SettingsView['act'] = {
@@ -378,6 +574,7 @@ export default defineApp((ctx: AppContext) => {
   ctx.frame.onCommand(COMMANDS.check, () => on.checkNow());
   const stopNavigating = ctx.onNavigate(moveTo);
   draw();
+  readOrigins();
   void data.start();
   return () => {
     stopNavigating();

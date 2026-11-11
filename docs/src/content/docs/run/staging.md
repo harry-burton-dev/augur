@@ -24,7 +24,7 @@ Follow [Install AUGUR](../install/), with these differences:
 ## Sample data
 
 A dev, staging or demo server can be filled with synthetic people, floors, documents and entities by
-`pnpm seed`. It works only where `.env` sets `SEED_ALLOWED=true`, and Admin → Status says whether it is
+`pnpm seed`. It works only where `.env` sets `SEED_ALLOWED=true`, and the gateway’s status (`GET /api/gateway/v1/status`, `seeding.allowed`) says whether it is
 allowed. The run suite (`augur-run`) runs only where it's allowed too. Never set it where real people work.
 
 Set `SEED_ALLOWED=true`, run `pc up -d`, then fill the server with the seed's cast, as the

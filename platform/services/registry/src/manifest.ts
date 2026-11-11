@@ -6,7 +6,7 @@
 import Type, { type Static } from 'typebox';
 import semver from 'semver';
 import { APP_CATEGORIES, type AppCategory } from '@augur/mfe-sdk';
-import { reservedIdProblem, SCOPES, type PlatformScope } from '@augur/service-kit';
+import { reservedIdProblem, SCOPES, type PlatformScope, type Scope } from '@augur/service-kit';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import { PLATFORM_APP_VERSIONS } from './platform-app-versions.js';
 
@@ -355,14 +355,14 @@ export const platformApps: AppEntry[] = [
     version: PLATFORM_APP_VERSIONS.admin,
     sdk: '^2.0.0 || ^3.0.0',
     icon: 'admin',
-    description: 'People, departments, apps, status, updates and activity',
+    description: 'People, departments, apps and activity',
     requiredRole: 'admin',
     category: 'platform',
     // people, departments, apps and the system are the organisation's, whichever floor you stand on
     sameOnEveryFloor: true,
     areas: [
       { id: 'organisation', label: 'Organisation', icon: 'structure', detail: 'People, departments and its settings' },
-      { id: 'system', label: 'System', icon: 'server', detail: 'Apps, status, updates and activity' },
+      { id: 'system', label: 'System', icon: 'server', detail: 'Apps and activity' },
     ],
     menu: [
       {
@@ -399,11 +399,7 @@ export const platformApps: AppEntry[] = [
         label: 'AUGUR',
         icon: 'pulse',
         area: 'system',
-        items: [
-          { label: 'Status', icon: 'gauge', path: '/status', detail: 'Is everything running', keywords: 'health services down up uptime' },
-          { label: 'Upgrade Centre', icon: 'download', path: '/updates', detail: 'From dev to production, and upgrading', keywords: 'updates upgrade release version new dev preview production pipeline' },
-          { label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' },
-        ],
+        items: [{ label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what', keywords: 'audit log history changes' }],
       },
     ],
   },
@@ -474,6 +470,14 @@ export const platformManifests3: Readonly<Record<string, AppManifest3>> = {
 export const PLATFORM_APP_SCOPES: Readonly<Record<string, readonly PlatformScope[]>> = {
   admin: ['people:manage', 'apps:manage', 'org:manage', 'audit:read'],
   upgrades: ['deployment:upgrade', 'deployment:apps', 'deployment:health', 'deployment:settings'],
+};
+
+/**
+ * The ordinary app scopes AUGUR's own frontends hold beside their platform ones, also only from here. Deployment
+ * looks people up (people:read) to name an app's developers and find new ones.
+ */
+export const PLATFORM_APP_OWN_SCOPES: Readonly<Record<string, readonly Scope[]>> = {
+  upgrades: ['people:read'],
 };
 
 /** Why an app's own claim to a kind isn't used. */

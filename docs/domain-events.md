@@ -100,7 +100,7 @@ You don't get your own events, nor events on floors where your app isn't on or l
 
 ## In the browser
 
-People's screens hear domain events too, so what an app shows can refresh when it changes instead of polling. The events service serves `GET /v1/domain-events/stream?topics=…` to signed-in people: server-sent events named `domain-event`, each one a domain event on the topics asked for, **on the floor the person stands on** (`X-Workspace-Id`, which the gateway checks they're on). Events on no floor, or on another floor, never reach it, and nothing else is added: the browser hears what services hear, ids and a little context.
+People's screens hear domain events too, so what an app shows can refresh when it changes instead of polling. The events service serves `GET /v1/domain-events/stream?topics=…` to signed-in people: server-sent events named `domain-event`, each one a domain event on the topics asked for, **on the floor the person stands on** (`X-Workspace-Id`, which the gateway checks they're on). Events on another floor never reach it, nor do events on no floor except `platform.app.*`, which are about the whole deployment and carry only the app's id. Nothing else is added: the browser hears what services hear, ids and a little context.
 
 The shell follows it once per page, for the floor the person is on and the topics of the apps they have there (`<app id>.*` for each, and `platform.*`), and puts each event on `ctx.bus` under its topic. So an app hears another app's events only when the person has that app here too. In an app, `useData(key, load, { refreshOn: ['folio.document.published'] })` from the app kit reloads when one arrives, or listen yourself with `ctx.bus.on(topic, (event) => …)`; the event is `{ seq, topic, id, publisher, at, workspace, payload }`. Under `pnpm dev:app` the stand-in stream carries what you send from the console ([build-an-app.md](build-an-app.md#2-run-it)).
 
@@ -122,6 +122,7 @@ The events service publishes these as identity and the registry record the chang
 | `platform.position.created` | `{ position, team }` | An admin adds a position, a job such as Harbour master, to a team (ADR 0089) |
 | `platform.position.changed`, `platform.position.retired` | `{ position }` | A position is renamed, made lead or member, or taken away; whoever held one taken away stops holding it |
 | `platform.position.handed-over` | `{ position, from?, to? }` | A position changes holder. The next holder has what the position has at once; `from` or `to` is missing when it was or is now vacant |
+| `platform.app.added`, `platform.app.updated` | `{ app }` | An app's service registers it for the first time, or registers a new version. On no floor: it is about the whole deployment, and every shell hears it and loads its app list again |
 | `platform.app.turned-off`, `platform.app.turned-on`, `platform.app.removed` | `{ app }` | An admin turns an app off or on, everywhere or on one floor (the event's floor), or removes it |
 | `platform.app.blocked`, `platform.app.rule-cleared` | `{ app }` | An admin blocks an app on a floor and every floor below it, or clears a floor's rule so it follows the floor above |
 | `platform.inbox.taken`, `.released`, `.declined`, `.done` | `{ item, app, key, by }` | Someone takes a team's inbox item, gives it back, declines it or marks it done ([The Inbox](inbox.md)) |

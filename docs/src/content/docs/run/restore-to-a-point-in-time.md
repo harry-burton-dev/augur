@@ -29,7 +29,7 @@ snapshots.
 
 Once a week the restore test also proves this: it marks a moment on the live database, restores the newest
 base backup into a throwaway Postgres, replays every archived change since, and checks the result reached the
-mark and that AUGUR's and Keycloak's tables are there. **Admin → Status** shows "Point in time" with how far
+mark and that AUGUR's and Keycloak's tables are there. **Deployment → Backups** shows "Point in time" with how far
 back the database can go and the last test. It says "Backups need a look" when Postgres isn't archiving or its
 archiving fails, a base backup failed, the copy off the server failed, or the test failed or is over a week
 old. The results are in `infra/deploy/backups/status/pitr.json` and `pitr-test.json`.

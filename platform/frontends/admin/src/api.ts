@@ -189,27 +189,11 @@ export interface FloorRule {
 /** What an admin can set on a floor; `inherit` takes the floor's rule away. */
 export type FloorChoice = FloorRule['state'] | 'inherit';
 
-/** An app's own sign-in, straight after it is issued: the secret is shown this once. */
-export interface IssuedSignIn {
-  clientId: string;
-  secret: string;
-}
-
 /** A site apps may load from besides the platform itself. */
 export interface AllowedOrigin {
   origin: string;
   addedBy: string;
   addedAt: string;
-}
-
-/** One kept version of an app. */
-export interface AppVersion {
-  version: string;
-  entry: AppManifestEntry;
-  registeredBy: string;
-  registeredAt: string;
-  /** The one the shell is given now. */
-  serving: boolean;
 }
 
 /** One part of the platform as the gateway last saw it (see contracts/gateway.openapi.yaml). */
@@ -791,15 +775,6 @@ export class AdminApi {
     if (!org) throw new Error('The org’s floor couldn’t be found.');
     return { id: org.id, name: org.name };
   };
-  appVersions = (id: string) => this.call<AppVersion[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/versions`);
-  /** Serve one kept version and hold the app there; `null` follows new versions again. */
-  pinApp = (id: string, version: string | null) =>
-    version === null
-      ? this.call<CatalogueApp>('DELETE', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`)
-      : this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`, { version });
-
-  /** A new secret for the app's own sign-in; the old one stops working. */
-  issueSignIn = (id: string) => this.call<IssuedSignIn>('POST', `/api/identity/v1/admin/apps/${encodeURIComponent(id)}/credential`);
 
   /** The entries the filters show, as a CSV file (the events service's GET /audit/export; each export is recorded). */
   exportAudit = async (query: Omit<AuditQuery, 'before' | 'limit'>): Promise<{ blob: Blob; filename: string }> => {
@@ -819,38 +794,6 @@ export class AdminApi {
   };
   audit = (query: AuditQuery) =>
     this.call<AuditEntry[]>('GET', `/api/events/v1/audit?${new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)]))}`);
-
-  /** How each subscribing app's part is taking the events pushed to it (admins). */
-  deliveries = () => this.call<{ deliveries: EventDelivery[]; pushing: EventPushing }>('GET', '/api/events/v1/deliveries');
-
-  origins = () => this.call<AllowedOrigin[]>('GET', '/api/registry/v1/origins');
-  allowOrigin = (origin: string) => this.call<AllowedOrigin>('POST', '/api/registry/v1/origins', { origin });
-  removeOrigin = (origin: string) => this.call<void>('DELETE', `/api/registry/v1/origins/${encodeURIComponent(origin)}`);
-
-  status = () => this.call<PlatformStatus>('GET', '/api/gateway/v1/status');
-
-  updates = () => this.call<PlatformUpdates>('GET', '/api/registry/v1/platform/updates');
-  /** Reads the release feed now rather than waiting for the daily check. */
-  checkUpdates = () => this.call<PlatformUpdates>('POST', '/api/registry/v1/platform/updates/check');
-  /**
-   * Asks the updater to move to `version`, with any new settings entered for .env. Turned down with
-   * `sign_in_again` unless the admin just entered their password.
-   */
-  upgrade = (version: string, settings: Record<string, string> = {}) =>
-    this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/upgrade', Object.keys(settings).length ? { version, settings } : { version });
-  /** Asks the updater to go back to an earlier release Updates offers. Turned down with `sign_in_again` too. */
-  goBack = (version: string) => this.call<PlatformUpdates>('PUT', '/api/registry/v1/platform/go-back', { version });
-  installs = () => this.call<AppInstalls>('GET', '/api/registry/v1/app-runner/apps');
-  /** Gives one of an app's settings a value, or with null puts it back to its default. A secret needs the password just entered. */
-  setRunnerSetting = (app: string, setting: string, value: string | number | boolean | null) =>
-    this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/settings/${encodeURIComponent(setting)}`, { value });
-  /** Asks the app runner to stop and remove an app's containers. Needs the password just entered too. */
-  uninstallApp = (app: string) => this.call<AppJob>('POST', '/api/registry/v1/app-runner/jobs', { action: 'remove', app });
-  /** Lets an app's parts that ask for it reach the internet, or takes that away. Needs the password just entered too. */
-  setInternet = (app: string, allowed: boolean) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/internet`, { allowed });
-  setDevelopers = (app: string, people: string[]) => this.call<AppInstalls>('PUT', `/api/registry/v1/app-runner/apps/${encodeURIComponent(app)}/developers`, { people });
-  /** Takes back an upgrade the updater hasn't started. */
-  cancelUpgrade = () => this.call<PlatformUpdates>('DELETE', '/api/registry/v1/platform/upgrade');
 }
 
 export const fullName = (p: Pick<Person, 'firstName' | 'lastName' | 'username'>) => `${p.firstName} ${p.lastName}`.trim() || p.username;
