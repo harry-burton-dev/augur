@@ -23,8 +23,8 @@ stable changes only its label, so production runs exactly what staging ran.
 ## The shell
 
 The **shell** is the web page people open. It signs them in, shows the apps they can open, and draws each
-app's frame: the app bar along the top, the rail of the app's places down one side, and the About panel on
-the other. It draws all of that from the app's manifest before any of the app's own code runs, so every app
+app's frame: the app bar along the top, the rail of the app's places down one side, and a pane at the window's
+right edge with the clock, notifications and the app's own sections. It draws all of that from the app's manifest before any of the app's own code runs, so every app
 starts the same way and looks the same.
 
 An app's own screen runs in a sandbox inside the shell, with no network and no sign-in token of its own. It

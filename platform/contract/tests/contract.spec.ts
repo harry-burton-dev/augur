@@ -230,6 +230,24 @@ for (const [width, height] of [[1440, 900], [1100, 800], [800, 700]] as const) {
     // The title starts below the stage's fade, so it is drawn at full strength.
     expect(head.top - stage.top).toBeGreaterThanOrEqual(fade);
   });
+
+  test(`at ${width}px the app's pane is flush with the window's right edge, and the stage, band and floor picker end where it starts`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto(`/${id}`);
+    await expect(check(page, 'person')).toBeVisible();
+    const box = (sel: string) => page.locator(sel).first().evaluate((el) => el.getBoundingClientRect().toJSON() as DOMRect);
+    const pane = page.locator('.aerie-pane-slot .aerie-pane');
+    await expect(pane).toBeVisible();
+    // The clock and the notification indicator are in the pane while it is drawn, not in the band.
+    await expect(pane.locator('.aerie-clock')).toBeVisible();
+    await expect(page.locator('.aerie-band .aerie-clock')).toHaveCount(0);
+    const [slot, stage, band] = await Promise.all([box('.aerie-pane-slot'), box('.aerie-stage'), box('.aerie-band')]);
+    expect(Math.abs(slot.right - width)).toBeLessThanOrEqual(1);
+    expect(stage.right).toBeLessThanOrEqual(slot.left + 1);
+    expect(band.right).toBeLessThanOrEqual(slot.left + 1);
+    const gauge = page.locator('.aerie-gauge, .aerie-floor-picker');
+    if (await gauge.count()) expect((await gauge.first().evaluate((el) => el.getBoundingClientRect().right))).toBeLessThanOrEqual(slot.left);
+  });
 }
 
 test('leaving the app through Home in the rail takes its pane off the stage', async ({ page }) => {
