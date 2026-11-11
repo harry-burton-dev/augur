@@ -111,6 +111,9 @@ services:
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
       # How focus is drawn: scrim for desktops without a GPU (AUGUR's docs, What browsers load); each app's choice unless set.
       FOCUS_DEPTH: ${FOCUS_DEPTH:-}
+      # The mark on the logo button and the app drawn on the desktop (AUGUR's docs, Install AUGUR).
+      ORG_LOGO_URL: ${ORG_LOGO_URL:-}
+      DESKTOP_APP: ${DESKTOP_APP-home}
       # The front door's limits (AUGUR's docs, Limits and health); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}

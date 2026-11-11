@@ -43,7 +43,18 @@ case "$FOCUS_DEPTH" in
   *) echo "kit-url: FOCUS_DEPTH ($FOCUS_DEPTH) must be veil, lens or scrim. Leaving it to each app." >&2; FOCUS_DEPTH="" ;;
 esac
 
-sed -e "s#@KIT_URL@#${KIT_URL}#g" -e "s#@PRODUCT_NAME@#${PRODUCT_NAME}#g" -e "s#@FOCUS_DEPTH@#${FOCUS_DEPTH}#g" "$template" > "$page"
+# The deployment's mark on the logo button (ORG_LOGO_URL), for the page's augur-logo meta: this site's path,
+# a data: URL or an address in APP_ORIGINS, as the CSP allows images. Empty draws the kit's placeholder mark.
+LOGO_URL=$(printf '%s' "${ORG_LOGO_URL:-}" | tr -d '\n\r' | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g' -e 's/"/\&quot;/g' -e "s/'/\&#39;/g" -e 's/[#&\\]/\\&/g')
+
+# The app drawn on the desktop (DESKTOP_APP, default home), for the page's augur-desktop meta: an app id,
+# so letters, digits and dashes. Anything else is ignored, and said, and the desktop stays bare.
+DESKTOP_APP="${DESKTOP_APP-home}"
+case "$DESKTOP_APP" in
+  *[!a-z0-9-]*) echo "kit-url: DESKTOP_APP ($DESKTOP_APP) must be an app id. Leaving the desktop bare." >&2; DESKTOP_APP="" ;;
+esac
+
+sed -e "s#@KIT_URL@#${KIT_URL}#g" -e "s#@PRODUCT_NAME@#${PRODUCT_NAME}#g" -e "s#@FOCUS_DEPTH@#${FOCUS_DEPTH}#g" -e "s#@LOGO_URL@#${LOGO_URL}#g" -e "s#@DESKTOP_APP@#${DESKTOP_APP}#g" "$template" > "$page"
 
 # The hash of each inline script in the page (the import map, and the note shown if the kit can't be
 # loaded), as the CSP takes it: base64 of the sha256 of its exact text. busybox has sha256sum but no

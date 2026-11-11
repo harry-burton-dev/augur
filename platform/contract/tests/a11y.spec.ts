@@ -33,10 +33,11 @@ test('an app has nothing serious for axe, and its name in the page title', async
   expect(await serious(page)).toEqual([]);
 });
 
-test('a start menu has nothing serious for axe', async ({ page }) => {
+// With Home on the desktop, Reference is the one app the bar offers, as a tile, so no start menu opens here.
+test('the desktop, holding Home behind the logo button, has nothing serious for axe', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('navigation', { name: 'App bar', exact: true }).locator('.aerie-bar-tile').first().click();
-  await expect(page.getByRole('menu')).toBeVisible();
+  await expect(page.locator('[data-app="home"]')).toHaveCount(1);
+  await expect(page.getByRole('navigation', { name: 'App bar', exact: true }).locator('.aerie-bar-logo')).toBeVisible();
   expect(await serious(page)).toEqual([]);
 });
 

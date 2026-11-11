@@ -1,6 +1,7 @@
 import type { AppArea, AppCategory, AppManifestEntry } from '@augur/mfe-sdk';
 import type { ShellApp, ShellAppGroup, ShellFindResult, ShellPage } from '@augur/shell-kit';
 import { isWorkerApp, placePath } from './apps3.js';
+import { incompatibility } from './manifest.js';
 import { hrefFor, matchRoute } from './routes.js';
 import { BAR_WORDS } from './words.js';
 
@@ -102,6 +103,26 @@ export function areaOf(app: AppManifestEntry, path: string): AppArea | undefined
 export function productName(doc: Pick<Document, 'querySelector'> | undefined = typeof document === 'undefined' ? undefined : document): string {
   return doc?.querySelector<HTMLMetaElement>('meta[name="augur-product"]')?.content.trim() || 'AUGUR';
 }
+
+/** A meta the web container fills in, empty when it's missing or still its placeholder (`@NAME@`). */
+const pageMeta = (name: string, doc: Pick<Document, 'querySelector'> | undefined) => {
+  const value = doc?.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content.trim() ?? '';
+  return /^@[A-Z_]+@$/.test(value) ? '' : value;
+};
+const page = (): Pick<Document, 'querySelector'> | undefined => (typeof document === 'undefined' ? undefined : document);
+
+/** The mark on the logo button, as the deployment sets it (ORG_LOGO_URL, the `augur-logo` meta). Empty for the kit's placeholder. */
+export const logoUrl = (doc = page()): string => pageMeta('augur-logo', doc);
+
+/** The id of the app drawn on the desktop, as the deployment sets it (DESKTOP_APP, the `augur-desktop` meta). Empty for a bare desktop. */
+export const desktopAppId = (doc = page()): string => pageMeta('augur-desktop', doc);
+
+/**
+ * The app drawn on the desktop, when this person can open it on this floor: the desktop then holds it
+ * at "/", under the bar and over the background. Otherwise the desktop stays bare.
+ */
+export const desktopApp = (manifest: AppManifestEntry[], id = desktopAppId()): AppManifestEntry | undefined =>
+  id ? manifest.find((a) => a.id === id && !incompatibility(a)) : undefined;
 
 /**
  * The tab's title, most specific first: the page, the app, the floor, the

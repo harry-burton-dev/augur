@@ -15,9 +15,9 @@
   },
   "dependencies": {
     "@augur/app-kit": "npm:@harry-burton-dev/augur-app-kit@^0.20.1",
-    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.17.0",
+    "@augur/kit-common": "npm:@harry-burton-dev/augur-kit-common@^0.19.0",
     "@augur/mfe-sdk": "workspace:*",
-    "@augur/shell-kit": "npm:@harry-burton-dev/augur-shell-kit@^0.11.1",
+    "@augur/shell-kit": "npm:@harry-burton-dev/augur-shell-kit@^0.12.0",
     "@grafana/faro-transport-otlp-http": "^2.13.0",
     "@grafana/faro-web-sdk": "^2.13.0",
     "@grafana/faro-web-tracing": "^2.13.0",
@@ -27,7 +27,7 @@
     "semver": "catalog:"
   },
   "devDependencies": {
-    "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.5.17",
+    "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.6.0",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
