@@ -55,7 +55,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(ids(forAdmin)).toContain('admin');
     const served = forAdmin.find((a: { id: string }) => a.id === 'admin');
     expect(served.contract).toBe(3);
-    expect(served.contributes.places.map((p: { label: string }) => p.label)).toEqual(['People', 'Departments', 'Organisation', 'Apps', 'Activity']);
+    expect(served.contributes.places.map((p: { label: string }) => p.label)).toEqual(['People', 'Departments', 'Roles', 'Organisation', 'Apps', 'Activity']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).not.toContain('admin');
   });
 
