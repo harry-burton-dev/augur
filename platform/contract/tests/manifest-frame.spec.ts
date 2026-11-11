@@ -22,8 +22,8 @@ const COLD = 120_000;
 test('the shell draws Starter’s frame from its manifest before any of its code runs', async ({ page }) => {
   await page.goto('/');
   const desk = page.getByRole('navigation', { name: 'App bar', exact: true });
-  await desk.getByRole('button', { name: 'Apps', exact: true }).click({ timeout: COLD });
-  await page.getByRole('menu', { name: 'Apps' }).getByRole('menuitem', { name: new RegExp(starter.name) }).click();
+  // The desktop holds Home, so Starter is the one other app, offered as a tile beside the logo.
+  await desk.getByRole('button', { name: new RegExp(`^${starter.name}`) }).click({ timeout: COLD });
   await expect(page).toHaveURL(new RegExp(`/@me/${starter.id}$`));
   const rail = page.getByRole('navigation', { name: `App bar: ${starter.name}` });
   await expect(rail.getByRole('button', { name: `${starter.name}, you’re here` })).toBeVisible();

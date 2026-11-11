@@ -55,6 +55,10 @@ ENV ORG_PRODUCT_NAME=AUGUR
 # How focus is drawn (FOCUS_DEPTH: veil, lens or scrim), as the shell's augur-depth meta, also written by
 # kit-url.envsh. Empty leaves it to each app.
 ENV FOCUS_DEPTH=
+# The deployment's mark on the logo button (ORG_LOGO_URL) and the app drawn on the desktop (DESKTOP_APP),
+# as the shell's augur-logo and augur-desktop metas, also written by kit-url.envsh.
+ENV ORG_LOGO_URL=
+ENV DESKTOP_APP=home
 COPY --chmod=755 infra/deploy/kit-url.envsh /docker-entrypoint.d/16-kit-url.envsh
 # What the front door holds callers to (infra/deploy/nginx.conf). Requests a second from one address,
 # and the burst let through at once, for the API and for sign-in; the largest upload in MB; and

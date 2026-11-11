@@ -76,7 +76,9 @@ AUGUR's own Keycloak image (`keycloak`, built and signed with each release) carr
 theme, and the realm job turns it on.
 
 - The pages show the organisation's name and logo as Admin → Organisation keeps them (`ORG_NAME` until the
-  realm job first runs). `ORG_LOGO_URL`, if set, replaces the logo.
+  realm job first runs). `ORG_LOGO_URL`, if set, replaces the logo. The shell's logo button, which starts
+  the app bar and goes to the desktop, shows `ORG_LOGO_URL` too: from this site, a `data:` URL or an
+  address in `APP_ORIGINS`, as the page's security policy allows. Unset, it shows a placeholder mark.
 - The product's name is the realm's display name, which the realm job sets from `ORG_PRODUCT_NAME` (default
   `AUGUR`), so emails' subjects and passkey prompts show it too.
 - They are offered in the languages an admin chooses in Admin → Organisation, else those in `REALM_LANGUAGES`
