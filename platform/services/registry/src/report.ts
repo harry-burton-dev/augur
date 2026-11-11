@@ -250,7 +250,7 @@ export const reportRoutes =
         },
       },
       async (req, reply) => {
-        if (!isAdmin(req, 'registry.reporting')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how this server reports what it runs.' });
+        if (!(await isAdmin(req, 'registry.reporting'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how this server reports what it runs.' });
         const key = reporting.mode === 'off' ? undefined : await deploymentKey(store);
         const view: ReportingView = { mode: reporting.mode, why: reporting.why, ...(reporting.deployment ? { deployment: reporting.deployment } : {}), ...(key ? { publicKey: publicKeyLine(key) } : {}), ...(sender.last ? { last: sender.last } : {}) };
         return view;
@@ -275,7 +275,7 @@ export const reportRoutes =
         },
       },
       async (req, reply) => {
-        if (!isAdmin(req, 'registry.report-export')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can export what this server runs.' });
+        if (!(await isAdmin(req, 'registry.report-export'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can export what this server runs.' });
         if (reporting.mode === 'off' || !reporting.deployment) return reply.code(409).send({ error: 'reporting_off', message: reporting.why });
         const at = now();
         const signed = signReport(reportOf(await overview(), { deployment: reporting.deployment, reason: 'export', now: at }), await deploymentKey(store));

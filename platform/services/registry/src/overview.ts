@@ -233,9 +233,9 @@ export const overviewRoutes =
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const ring = updates.ring;
-    const adminOf = (req: FastifyRequest, site: string) => {
+    const adminOf = async (req: FastifyRequest, site: string) => {
       const caller = callerFromHeaders(req.headers);
-      return roles.admin(site, caller, 'admin') ? caller : undefined;
+      return caller && (await roles.admin(site, caller, 'admin')) ? caller : undefined;
     };
 
     const built = overviewBuilder({ store, updates, appUpdates, timeZone, now });
@@ -265,7 +265,7 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
-        if (!adminOf(req, 'registry.overview')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
+        if (!(await adminOf(req, 'registry.overview'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
         return forCaller(req);
       },
     );
@@ -302,7 +302,7 @@ export const overviewRoutes =
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
         // Policies, pins and windows decide what the server runs, so they need the deployment's own role (ADR 0022).
-        if (!roles.deploymentAdmin('registry.update-policy', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
+        if (!caller || !(await roles.deploymentAdmin('registry.update-policy', caller, 'can_upgrade'))) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
         // And a password entered just now, as for an upgrade (ADR 0022).
         if (!signedInRecently(caller, CHANGE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how updates are taken. It’s asked for anything this drastic.' });
@@ -348,7 +348,7 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
-        if (!adminOf(req, 'registry.update-history')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how updates were set.' });
+        if (!(await adminOf(req, 'registry.update-history'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how updates were set.' });
         if (!(await knownUnit(req.params.unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${req.params.unit}.` });
         return { unit: req.params.unit, history: await store.desiredStateHistory(req.params.unit) };
       },
@@ -370,7 +370,7 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
-        const caller = adminOf(req, 'registry.result-seen');
+        const caller = await adminOf(req, 'registry.result-seen');
         if (!caller) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can mark a result looked at.' });
         if (!(await store.markSeen(req.params.kind, req.params.id, caller.id))) return reply.code(404).send({ error: 'not_found', message: 'There’s no finished upgrade or install with that id.' });
         await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.result-seen', target: req.params.id, detail: { kind: req.params.kind } });
