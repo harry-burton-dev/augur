@@ -329,6 +329,8 @@ export const PLATFORM_TOPICS = {
   teamRenamed: 'platform.team.renamed',
   memberAdded: 'platform.team.member-added',
   memberRemoved: 'platform.team.member-removed',
+  appAdded: 'platform.app.added',
+  appUpdated: 'platform.app.updated',
   appTurnedOff: 'platform.app.turned-off',
   appTurnedOn: 'platform.app.turned-on',
   appRemoved: 'platform.app.removed',
