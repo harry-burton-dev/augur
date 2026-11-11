@@ -1353,6 +1353,8 @@ export const PLATFORM_TOPICS: {
     readonly teamRenamed: "platform.team.renamed";
     readonly memberAdded: "platform.team.member-added";
     readonly memberRemoved: "platform.team.member-removed";
+    readonly appAdded: "platform.app.added";
+    readonly appUpdated: "platform.app.updated";
     readonly appTurnedOff: "platform.app.turned-off";
     readonly appTurnedOn: "platform.app.turned-on";
     readonly appRemoved: "platform.app.removed";

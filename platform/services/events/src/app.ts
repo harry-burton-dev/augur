@@ -144,6 +144,9 @@ const PLATFORM_EVENTS: Record<string, { topic: string; payload: (e: NewAuditEntr
     payload: (e) => ({ position: e.target, ...(typeof e.detail?.from === 'string' ? { from: e.detail.from } : {}), ...(typeof e.detail?.to === 'string' ? { to: e.detail.to } : {}) }),
   },
   'identity position.retired': { topic: 'platform.position.retired', payload: (e) => ({ position: e.target }) },
+  // A new app or a new version of one, once its service has registered it: the shell loads its app list again.
+  'registry app.registered': { topic: 'platform.app.added', payload: (e) => ({ app: e.target }) },
+  'registry app.updated': { topic: 'platform.app.updated', payload: (e) => ({ app: e.target }) },
   'registry app.disabled': { topic: 'platform.app.turned-off', payload: (e) => ({ app: e.target }) },
   'registry app.enabled': { topic: 'platform.app.turned-on', payload: (e) => ({ app: e.target }) },
   'registry app.removed': { topic: 'platform.app.removed', payload: (e) => ({ app: e.target }) },
@@ -180,6 +183,9 @@ const topicList = (raw: string): { topics: string[] } | { bad: string } => {
 };
 
 /** What a browser hears of a domain event: who published what, where, with the publisher's ids. */
+/** Events on no floor that still reach every browser: an app added, changed or turned off for the whole deployment. Ids only. */
+const isDeploymentWide = (topic: string) => topic.startsWith('platform.app.');
+
 const forBrowser = ({ seq, topic, id, publisher, at, workspace, payload }: DomainEvent) => ({ seq, topic, id, publisher, at, ...(workspace ? { workspace } : {}), payload });
 
 /** What the Shell receives: a person never sees whom else a notification went to. */
@@ -637,7 +643,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             description: [
               'Each domain event on the topics asked for, published on the floor the caller',
               'stands on (x-workspace-id, checked by the gateway), as it is published.',
-              'Events on no floor or on another floor never reach it. Events are named',
+              'Events on another floor never reach it, nor do events on no floor, except',
+              'platform.app.* ones, which are about the whole deployment. Events are named',
               '"domain-event" and carry a DomainEvent as JSON. It is a hint to refresh what',
               'is on screen, not a record: there is no catching up, so after a reconnect',
               'load fresh. Comment lines are keep-alives. Read with fetch so the sign-in',
@@ -667,7 +674,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
           res.write(': connected\n\n');
           const stop = store.onEvent((e) => {
-            if (e.workspace?.id === floor && topicMatches(e.topic, topics)) res.write(`event: domain-event\ndata: ${JSON.stringify(forBrowser(e))}\n\n`);
+            if ((e.workspace?.id === floor || (!e.workspace && isDeploymentWide(e.topic))) && topicMatches(e.topic, topics)) res.write(`event: domain-event\ndata: ${JSON.stringify(forBrowser(e))}\n\n`);
           });
           const heartbeat = setInterval(() => res.write(': still here\n\n'), heartbeatMs);
           const finished = () => {
