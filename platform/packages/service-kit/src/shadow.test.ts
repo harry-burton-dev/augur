@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { noShadow, permissionsShadow, shadowFromEnv, type ShadowMeter } from './shadow.js';
+import { decidesFrom, noShadow, permissionsShadow, PermissionsUnavailable, shadowFromEnv, type ShadowMeter } from './shadow.js';
 
 const credentials = { name: 'events', getToken: async () => 'the-token' };
 
@@ -106,5 +106,40 @@ describe('shadow checks', () => {
     expect(shadowFromEnv(credentials, logs().log, {})).toBe(noShadow);
     expect(shadowFromEnv(undefined, logs().log, { PERMISSIONS_URL: 'http://permissions:8087' })).toBe(noShadow);
     expect(shadowFromEnv(credentials, logs().log, { PERMISSIONS_URL: 'http://permissions:8087' })).not.toBe(noShadow);
+  });
+});
+
+describe('moving a site over', () => {
+  const question = { action: 'admin', resource: { type: 'org', id: 'this' }, as: 'persona' as const };
+
+  it('lets the permissions service decide the sites the deployment names, and only compares the rest', async () => {
+    const { counted, meter } = counting();
+    const { fetchImpl } = permissions(new Set(['persona:admin.amara admin org:this']), { amara: ['admin.amara'], tomas: [] });
+    const shadow = permissionsShadow({ permissionsUrl: 'http://permissions:8087', credentials, log: logs().log, meter, fetchImpl, decides: new Set(['models.usage']) });
+    // Today's role says no to Amara and yes to Tomas; the permissions service decides the other way.
+    expect(await shadow.decide('models.usage', { id: 'amara' }, question, false)).toBe(true);
+    expect(await shadow.decide('models.usage', { id: 'tomas' }, question, true)).toBe(false);
+    // A site not moved over keeps today's answer, and is compared.
+    expect(await shadow.decide('models.settings.read', { id: 'tomas' }, question, true)).toBe(true);
+    await shadow.settled();
+    expect(counted).toEqual([
+      { name: 'augur.permissions.decided', attrs: { site: 'models.usage', outcome: 'allowed' } },
+      { name: 'augur.permissions.decided', attrs: { site: 'models.usage', outcome: 'refused' } },
+      { name: 'augur.permissions.shadow.checks', attrs: { site: 'models.settings.read', outcome: 'disagree' } },
+      { name: 'augur.permissions.shadow.disagreements', attrs: { site: 'models.settings.read' } },
+    ]);
+  });
+
+  it('refuses, never falling back to today’s answer, when the permissions service can’t decide', async () => {
+    const { fetchImpl } = permissions(new Set(), {}, 503);
+    const shadow = permissionsShadow({ permissionsUrl: 'http://permissions:8087', credentials, log: logs().log, meter: counting().meter, fetchImpl, decides: 'all' });
+    await expect(shadow.decide('models.usage', { id: 'amara' }, question, true)).rejects.toBeInstanceOf(PermissionsUnavailable);
+  });
+
+  it('reads the sites to move from PERMISSIONS_DECIDES, and keeps today’s checks without a permissions service', async () => {
+    expect(decidesFrom(undefined)).toEqual(new Set());
+    expect(decidesFrom(' models.usage, models.settings.read ,')).toEqual(new Set(['models.usage', 'models.settings.read']));
+    expect(decidesFrom('models.usage,all')).toBe('all');
+    expect(await shadowFromEnv(credentials, logs().log, { PERMISSIONS_DECIDES: 'all' }).decide('models.usage', { id: 'amara' }, question, true)).toBe(true);
   });
 });

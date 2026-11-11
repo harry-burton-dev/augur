@@ -379,7 +379,7 @@ describe.runIf(DATABASE_URL)('events', () => {
 
     it('asks the permissions service each admin and lead check too, and still answers as it always has', async () => {
       const asked: { site: string; caller: string; question: unknown; today: boolean }[] = [];
-      const shadow = { check: (site: string, caller: { id: string }, question: unknown, today: boolean) => void asked.push({ site, caller: caller.id, question, today }), settled: async () => {} };
+      const shadow = { check: (site: string, caller: { id: string }, question: unknown, today: boolean) => void asked.push({ site, caller: caller.id, question, today }), decide: async (_s: string, _c: unknown, _q: unknown, today: boolean) => today, settled: async () => {} };
       const app = await db.app({ verifyService, floors, shadow });
       expect((await app.inject({ method: 'GET', url: '/v1/team-notices/w-finance', headers: on('w-finance') })).statusCode).toBe(403);
       expect((await app.inject({ method: 'GET', url: '/v1/audit/export', headers: alex })).statusCode).toBe(200);

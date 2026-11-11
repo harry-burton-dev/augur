@@ -472,6 +472,9 @@ export interface DatabaseResult<R extends DatabaseRow = DatabaseRow> {
 export type DatabaseRow = Record<string, unknown>;
 
 // @public
+export const decidesFrom: (value: string | undefined) => ReadonlySet<string> | "all";
+
+// @public
 export const DEFAULT_CACHE_ENTRIES = 5000;
 
 // @public
@@ -1316,6 +1319,11 @@ export class PeopleUnavailable extends Error {
 export const permissionsShadow: (input: ShadowOptions) => Shadow;
 
 // @public
+export class PermissionsUnavailable extends Error {
+    constructor();
+}
+
+// @public
 export const PERSONA_HEADER = "x-augur-persona";
 
 // @public
@@ -1720,6 +1728,7 @@ export interface SettingState {
 // @public (undocumented)
 export interface Shadow {
     check(site: string, caller: Pick<Caller, 'id'>, question: ShadowQuestion | readonly ShadowQuestion[], today: boolean): void;
+    decide(site: string, caller: Pick<Caller, 'id'>, question: ShadowQuestion | readonly ShadowQuestion[], today: boolean): Promise<boolean>;
     settled(): Promise<void>;
 }
 
@@ -1745,6 +1754,7 @@ export interface ShadowMeter {
 // @public (undocumented)
 export interface ShadowOptions {
     credentials: ServiceCredentials;
+    decides?: ReadonlySet<string> | 'all';
     // (undocumented)
     fetchImpl?: typeof fetch;
     // (undocumented)

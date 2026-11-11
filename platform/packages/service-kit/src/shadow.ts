@@ -26,6 +26,13 @@ export interface ShadowQuestion {
   as?: 'person' | 'persona';
 }
 
+/** The permissions service couldn't answer a check it decides: the caller is refused, and told why. */
+export class PermissionsUnavailable extends Error {
+  constructor() {
+    super('Who may do this can’t be checked right now, so nothing was changed. Try again in a minute; a deployment admin can see why on Status.');
+  }
+}
+
 export interface Shadow {
   /**
    * Compares `today` (the answer the service just gave) with the permissions service's answer to the same
@@ -33,12 +40,18 @@ export interface Shadow {
    * mean today's check allows any of them, as "a lead of the team, or an admin" does.
    */
   check(site: string, caller: Pick<Caller, 'id'>, question: ShadowQuestion | readonly ShadowQuestion[], today: boolean): void;
+  /**
+   * Step 2 of moving over: the answer at `site`. Where the deployment has moved the site over
+   * (`PERMISSIONS_DECIDES`), the permissions service's answer, or `PermissionsUnavailable` when it can't give
+   * one: a check that decides never falls back to the old one. Anywhere else, `today`, compared as `check` does.
+   */
+  decide(site: string, caller: Pick<Caller, 'id'>, question: ShadowQuestion | readonly ShadowQuestion[], today: boolean): Promise<boolean>;
   /** Resolves once every comparison started so far is done: for tests and a clean stop. */
   settled(): Promise<void>;
 }
 
-/** No shadow: where no permissions service is named. */
-export const noShadow: Shadow = { check: () => {}, settled: async () => {} };
+/** No shadow: where no permissions service is named. Today's checks decide. */
+export const noShadow: Shadow = { check: () => {}, decide: async (_site, _caller, _question, today) => today, settled: async () => {} };
 
 /** A service's own log (startupLog). */
 export interface ShadowLog {
@@ -57,6 +70,8 @@ export interface ShadowOptions {
   credentials: ServiceCredentials;
   log: ShadowLog;
   meter?: ShadowMeter;
+  /** The sites the permissions service decides, or `all`; every other site is only compared. */
+  decides?: ReadonlySet<string> | 'all';
   /** The most comparisons in flight; more are skipped and counted, so shadow mode can't load a busy service. */
   maxInFlight?: number;
   fetchImpl?: typeof fetch;
@@ -67,7 +82,7 @@ type Outcome = 'agree' | 'disagree' | 'unanswered' | 'skipped';
 /** The most evaluations one call to the permissions service may carry. */
 const BATCH = 50;
 
-export const permissionsShadow = ({ permissionsUrl, credentials, log, meter = metrics.getMeter('permissions-shadow'), maxInFlight = 20, fetchImpl }: ShadowOptions): Shadow => {
+export const permissionsShadow = ({ permissionsUrl, credentials, log, meter = metrics.getMeter('permissions-shadow'), decides = new Set(), maxInFlight = 20, fetchImpl }: ShadowOptions): Shadow => {
   const base = `${permissionsUrl.replace(/\/$/, '')}/access/v1`;
   const checks = meter.createCounter('augur.permissions.shadow.checks', {
     description: 'Checks compared with the permissions service, by site and outcome (agree, disagree, unanswered, skipped)',
@@ -103,16 +118,34 @@ export const permissionsShadow = ({ permissionsUrl, credentials, log, meter = me
   };
 
   const count = (site: string, outcome: Outcome) => checks.add(1, { site, outcome });
+  const decided = meter.createCounter('augur.permissions.decided', {
+    description: 'Checks the permissions service decided, by site and outcome (allowed, refused, unanswered)',
+  });
+  const listOf = (question: ShadowQuestion | readonly ShadowQuestion[]): readonly ShadowQuestion[] => (Array.isArray(question) ? question : [question as ShadowQuestion]);
+  const anyOf = async (caller: Pick<Caller, 'id'>, questions: readonly ShadowQuestion[]) => {
+    for (const q of questions) if (await answer(caller, q)) return true;
+    return false;
+  };
 
-  return {
+  const shadow: Shadow = {
+    async decide(site, caller, question, today) {
+      if (decides !== 'all' && !decides.has(site)) {
+        shadow.check(site, caller, question, today);
+        return today;
+      }
+      try {
+        const allowed = await anyOf(caller, listOf(question));
+        decided.add(1, { site, outcome: allowed ? 'allowed' : 'refused' });
+        return allowed;
+      } catch {
+        decided.add(1, { site, outcome: 'unanswered' });
+        throw new PermissionsUnavailable();
+      }
+    },
     check(site, caller, question, today) {
       if (inFlight.size >= maxInFlight) return count(site, 'skipped');
-      const questions: readonly ShadowQuestion[] = Array.isArray(question) ? question : [question as ShadowQuestion];
-      const anyOf = async () => {
-        for (const q of questions) if (await answer(caller, q)) return true;
-        return false;
-      };
-      const compared: Promise<void> = anyOf()
+      const questions = listOf(question);
+      const compared: Promise<void> = anyOf(caller, questions)
         .then((theirs) => {
           if (theirs === today) return count(site, 'agree');
           count(site, 'disagree');
@@ -130,8 +163,21 @@ export const permissionsShadow = ({ permissionsUrl, credentials, log, meter = me
       while (inFlight.size) await Promise.all(inFlight);
     },
   };
+  return shadow;
 };
 
-/** The shadow a service runs: against PERMISSIONS_URL when it is set and the service can sign in, otherwise none. */
+/** The sites `PERMISSIONS_DECIDES` names: a comma-separated list such as `models.settings,models.usage`, or `all`. */
+export const decidesFrom = (value: string | undefined): ReadonlySet<string> | 'all' => {
+  const sites = (value ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return sites.includes('all') ? 'all' : new Set(sites);
+};
+
+/**
+ * The shadow a service runs: against PERMISSIONS_URL when it is set and the service can sign in, otherwise none.
+ * It decides the sites PERMISSIONS_DECIDES names; without a permissions service, today's checks still decide.
+ */
 export const shadowFromEnv = (credentials: ServiceCredentials | undefined, log: ShadowLog, env: Record<string, string | undefined> = process.env): Shadow =>
-  env.PERMISSIONS_URL && credentials ? permissionsShadow({ permissionsUrl: env.PERMISSIONS_URL, credentials, log }) : noShadow;
+  env.PERMISSIONS_URL && credentials ? permissionsShadow({ permissionsUrl: env.PERMISSIONS_URL, credentials, log, decides: decidesFrom(env.PERMISSIONS_DECIDES) }) : noShadow;

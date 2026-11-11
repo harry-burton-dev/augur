@@ -3,6 +3,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import {
   callerFromHeaders,
   noShadow,
+  PermissionsUnavailable,
   type Shadow,
   GrantsUnavailable,
   health,
@@ -96,14 +97,23 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
   await app.register(
     async (plain) => {
       const app = plain.withTypeProvider<TypeBoxTypeProvider>();
-      const admin = (req: FastifyRequest, reply: FastifyReply, site: string): Caller | undefined => {
+      /** The admin calling, or undefined once the reply is sent. Where the deployment moved the site over, the permissions service decides. */
+      const admin = async (req: FastifyRequest, reply: FastifyReply, site: string): Promise<Caller | undefined> => {
         const caller = callerFromHeaders(req.headers);
-        const held = Boolean(caller?.roles.includes('admin'));
-        if (caller) shadow.check(site, caller, { action: 'admin', resource: { type: 'org', id: 'this' }, as: 'persona' }, held);
-        if (!caller) void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
-        else if (!held) void reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see or change how models are used.' });
-        else return caller;
-        return undefined;
+        if (!caller) {
+          void reply.code(401).send({ error: 'unauthenticated', message: 'Sign in to continue.' });
+          return undefined;
+        }
+        let held: boolean;
+        try {
+          held = await shadow.decide(site, caller, { action: 'admin', resource: { type: 'org', id: 'this' }, as: 'persona' }, caller.roles.includes('admin'));
+        } catch (err) {
+          if (!(err instanceof PermissionsUnavailable)) throw err;
+          void reply.code(503).send({ error: 'unavailable', message: err.message });
+          return undefined;
+        }
+        if (!held) void reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see or change how models are used.' });
+        return held ? caller : undefined;
       };
 
       /** Whether an app may use the model on the floor a call is for. Undefined when the reply has been sent. */
@@ -203,7 +213,7 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
           },
         },
         async (req, reply) => {
-          if (!admin(req, reply, 'models.settings.read')) return reply;
+          if (!(await admin(req, reply, 'models.settings.read'))) return reply;
           return { ...(await store.settings()), ready: !!provider, ...(provider ? { provider: provider.name, model: provider.model, ...(provider.embeddingModel ? { embeddingModel: provider.embeddingModel } : {}) } : {}) };
         },
       );
@@ -225,7 +235,7 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
           },
         },
         async (req, reply) => {
-          const caller = admin(req, reply, 'models.settings.change');
+          const caller = await admin(req, reply, 'models.settings.change');
           if (!caller) return reply;
           const before = await store.settings();
           const next = { enabled: req.body.enabled ?? before.enabled, dailyLimit: req.body.dailyLimit ?? before.dailyLimit };
@@ -257,7 +267,7 @@ export const buildApp = async ({ store, provider, verifyService, grants, require
           },
         },
         async (req, reply) => {
-          if (!admin(req, reply, 'models.usage')) return reply;
+          if (!(await admin(req, reply, 'models.usage'))) return reply;
           const { dailyLimit } = await store.settings();
           return { dailyLimit, days: await store.usage(daysAgo(6)) };
         },
