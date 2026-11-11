@@ -4,6 +4,22 @@ import { Channel, type Port } from '@augur/mfe-sdk/sdk3/host';
 import { fromCatalogue3, type Catalogue3, type WorkerApp } from './apps3.js';
 import { WorkerMounter, inAppPath, workerCard, type WorkerContext } from './worker-host.js';
 import { NodeBudget, RateBudget } from './budget.js';
+import { PaneSlot } from './pane-target.js';
+import { createRoot, type Root } from 'react-dom/client';
+
+/** The slot the Shell draws at the window's right edge, with a stand-in clock at its top. */
+let slotRoot: Root | undefined;
+const drawSlot = () => {
+  const el = document.createElement('div');
+  document.body.append(el);
+  slotRoot = createRoot(el);
+  act(() => slotRoot!.render(<PaneSlot top={<span className="test-clock">09:41</span>} over={false} />));
+  return el;
+};
+afterEach(() => {
+  act(() => slotRoot?.unmount());
+  slotRoot = undefined;
+});
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -619,18 +635,27 @@ describe('the frame round an app’s pane', () => {
     expect(ran).toEqual([['note.pin', { thing: { kind: 'note', id: 'n7', label: 'Shopping list' } }]]);
   });
 
-  it('draws the About panel’s sections, each saying so until the app fills it', async () => {
+  it('draws the app’s sections in the pane at the edge, each saying so until the app fills it', async () => {
+    const slot = drawSlot();
     const self = run();
     await flush();
-    const open = [...stage.querySelectorAll('button')].find((b) => b.textContent?.includes('About'))!;
-    act(() => open.click());
+    const pane = slot.querySelector('.aerie-pane')!;
+    expect(pane.querySelector('.test-clock')).not.toBeNull();
+    const titles = [...pane.querySelectorAll<HTMLButtonElement>('.aerie-pane-title')];
+    expect(titles.map((t) => t.textContent)).toEqual(['Details', 'History']);
+    act(() => titles[0]!.click());
     await flush();
-    expect(stage.textContent).toContain('Details');
-    expect(stage.textContent).toContain('History');
-    expect(stage.textContent).toContain('Nothing here yet');
+    expect(pane.textContent).toContain('Nothing here yet');
     self().mutate('about:details', [notice('d1', 'Made by Ada')]);
     await flush();
-    expect(stage.textContent).toContain('Made by Ada');
+    expect(pane.textContent).toContain('Made by Ada');
+    expect(stage.querySelector('.aerie-pane')).toBeNull();
+  });
+
+  it('draws no pane while the Shell has no slot for one', async () => {
+    run();
+    await flush();
+    expect(document.querySelector('.aerie-pane')).toBeNull();
   });
 
   it('lays the pane out as the manifest says until a page sets another layout, keeping only the names the shell knows', async () => {
@@ -645,22 +670,20 @@ describe('the frame round an app’s pane', () => {
     await flush();
     const pane = () => stage.querySelector<HTMLElement>('.app-frame')!;
     expect([pane().dataset.layout, pane().dataset.density, pane().dataset.inset]).toEqual(['split', 'compact', 'standard']);
-    expect(stage.querySelector('.aerie-about, .aerie-about-open')).toBeNull();
     self.post('frame.set', { layout: 'aside', inset: 'flush', width: 'wide' });
     await flush();
     expect([pane().dataset.layout, pane().dataset.inset]).toEqual(['aside', 'flush']);
     expect(stage.querySelector('[data-width]')?.getAttribute('data-width')).toBe('wide');
-    expect(stage.querySelector('.aerie-about, .aerie-about-open')).not.toBeNull();
     // A layout the shell doesn't know is left out, so the manifest's default stands.
     self.post('frame.set', { layout: 'three-column', density: '4px' });
     await flush();
     expect([pane().dataset.layout, pane().dataset.density]).toEqual(['split', 'compact']);
   });
 
-  it('defaults to the About panel beside the main column for an app with sections, and to one column without', async () => {
+  it('defaults to one column, with sections or without: the sections are in the pane at the edge', async () => {
     run();
     await flush();
-    expect(stage.querySelector<HTMLElement>('.app-frame')!.dataset.layout).toBe('aside');
+    expect(stage.querySelector<HTMLElement>('.app-frame')!.dataset.layout).toBe('focus');
     act(() => mounter.unmount());
     const stub = stubApp((self, method) => method === 'start' && self.mutate('screen', [notice('n1', 'Ready')]));
     mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
@@ -669,12 +692,14 @@ describe('the frame round an app’s pane', () => {
     expect(stage.querySelector<HTMLElement>('.app-frame')!.dataset.layout).toBe('focus');
   });
 
-  it('has no About panel for an app that declares no sections', async () => {
+  it('keeps the pane’s strip, with no titles, for an app that declares no sections', async () => {
+    const slot = drawSlot();
     const stub = stubApp((self, method) => method === 'start' && self.mutate('screen', [notice('n1', 'Ready')]));
     mounter = new WorkerMounter(stage, { createWorker: () => stub.worker as unknown as Worker });
     act(() => void mounter.mount(app, ctxFor()));
     await flush();
-    expect(stage.querySelector('.aerie-about, .aerie-about-open')).toBeNull();
+    expect(slot.querySelector('.aerie-pane')).not.toBeNull();
+    expect(slot.querySelector('.aerie-pane-title')).toBeNull();
   });
 });
 
