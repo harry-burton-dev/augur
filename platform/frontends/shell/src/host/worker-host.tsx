@@ -10,11 +10,13 @@ import { PageHead, QuillRemote, State, createQuillReceiver, readerPicturePath, t
 import type { Intent, IntentReply, NotifyMessage, Surface } from '@augur/mfe-sdk';
 import type { FrameDensity, FrameInset, FrameLayout, FrameState, FrameWidth, Person, PlaceItem, Workspace } from '@augur/mfe-sdk/sdk3';
 import { CARD_ROOT, Channel, SCREEN_ROOT, aboutRoot, isHostHeader, pathProblem, responseToWire, type Message, type Port, type StartInit, type WireFile, type WireRequest, type WireResponse } from '@augur/mfe-sdk/sdk3/host';
-import { AboutPanel, COMMAND_KEY, CommandPalette, FrameRadial, PaneLayout, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
+import { AppPane as EdgePane, COMMAND_KEY, CommandPalette, FrameRadial, PaneLayout, isCommandKey, type CommandSource, type FrameThing } from '@augur/shell-kit';
 import { createRoot, type Root } from 'react-dom/client';
+import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import { DEFAULT_BUDGETS, NodeBudget, RateBudget, type Budgets, type Overrun } from './budget.js';
 import { APP_HEADER, actionsOf, type WorkerApp } from './apps3.js';
+import { usePaneTarget } from './pane-target.js';
 
 export const WORKSPACE_HEADER = 'x-workspace-id';
 
@@ -82,16 +84,16 @@ const DENSITIES = new Set(['comfortable', 'compact']);
 const INSETS = new Set(['standard', 'flush']);
 const oneOf = <T extends string>(names: ReadonlySet<string>, v: unknown) => (typeof v === 'string' && names.has(v) ? (v as T) : undefined);
 
-/** The layouts with the About panel beside the main column. */
 /**
- * The pane's layout as the shell draws it: what the page set, else the manifest's defaults, else `aside`
- * for an app with About sections and `focus` for one without, at reading width, comfortable and inset.
+ * The pane's layout as the shell draws it: what the page set, else the manifest's defaults, else `focus`,
+ * at reading width, comfortable and inset. The About sections are no longer a column beside the page: they
+ * are in the pane at the window's right edge, whatever the layout.
  * Each is one of the shell's named layouts; an app never sets a distance.
  */
 export function paneLayout(app: WorkerApp, frame: FrameState): Required<Pick<FrameState, 'layout' | 'width' | 'density' | 'inset'>> {
   const given = app.manifest.contributes?.frame ?? {};
   return {
-    layout: frame.layout ?? oneOf<FrameLayout>(LAYOUTS, given.layout) ?? (app.manifest.contributes?.about?.length ? 'aside' : 'focus'),
+    layout: frame.layout ?? oneOf<FrameLayout>(LAYOUTS, given.layout) ?? 'focus',
     width: frame.width ?? oneOf<FrameWidth>(WIDTHS, given.width) ?? 'read',
     density: frame.density ?? oneOf<FrameDensity>(DENSITIES, given.density) ?? 'comfortable',
     inset: frame.inset ?? oneOf<FrameInset>(INSETS, given.inset) ?? 'standard',
@@ -575,7 +577,7 @@ function usePaneHost(session: AppSession, takesFiles: boolean): QuillRemoteHost 
 
 /**
  * The frame round the pane (spec 6.4, 6.8): the command palette over the app's commands, the radial
- * menu on the things it marks, and the About panel with the sections it declares. The shell draws them
+ * menu on the things it marks, and the pane at the window's right edge with the sections it declares. The shell draws them
  * all from the manifest; the app only fills them and handles the commands.
  */
 export function AppPane({ session, onRetry }: { session: AppSession; onRetry: () => void }) {
@@ -584,7 +586,10 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
   const contributes = app.manifest.contributes;
   const stopped = state.phase === 'failed' || state.phase === 'unresponsive';
   const [palette, setPalette] = useState(false);
-  const [about, setAbout] = useState(contributes?.frame?.about === 'open');
+  const sections = contributes?.about ?? [];
+  // The section open in the pane at the edge: the first one when the app asks for it open, else none.
+  const [about, setAbout] = useState<string | undefined>(contributes?.frame?.about === 'open' ? sections[0]?.id : undefined);
+  const target = usePaneTarget();
   const layout = paneLayout(app, state.frame);
   const source = useMemo<CommandSource>(
     () => ({ app: { id: app.id, name: app.name }, commands: contributes?.commands ?? [], radial: contributes?.radial, handled: stopped ? [] : state.handled, onScreen: true }),
@@ -606,7 +611,6 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
     return () => window.removeEventListener('keydown', onKey);
   }, [contributes, stopped]);
   const host = usePaneHost(session, state.drops === true && !stopped);
-  const sections = contributes?.about ?? [];
   const content = Object.fromEntries(
     sections.flatMap((s) => {
       const receiver = state.drawn.has(aboutRoot(s.id)) ? session.receiverOf(aboutRoot(s.id)) : undefined;
@@ -619,6 +623,7 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
   const takes = (e: DragEvent) => !stopped && state.drops === true && [...(e.dataTransfer?.types ?? [])].includes('Files');
   const open = !stopped && state.phase === 'open';
   return (
+    <>
     <PaneLayout
       {...layout}
       className="app-frame"
@@ -646,7 +651,6 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
       status={paneStatus(app.name, state, stopped, onRetry)}
       canvas={open && state.canvas ? <CanvasFrame key={state.canvas.opened} name={app.name} canvas={state.canvas} /> : undefined}
       screenHidden={!open || !!state.canvas}
-      about={<AboutPanel app={app.name} sections={sections} content={content} open={about} onOpenChange={setAbout} />}
       overlay={<CommandPalette open={palette && !stopped} onClose={() => setPalette(false)} sources={[source]} onRun={(_, command) => session.command(command)} />}
     >
       {!stopped && (
@@ -655,6 +659,14 @@ export function AppPane({ session, onRetry }: { session: AppSession; onRetry: ()
         </FrameRadial>
       )}
     </PaneLayout>
+      {/* The pane at the window's right edge, in the slot the Shell draws for it (pane-target.tsx). */}
+      {target.el
+        ? createPortal(
+            <EdgePane app={{ name: app.name, icon: app.icon }} sections={sections} content={content} open={about} onOpenChange={setAbout} top={target.top} over={target.over} />,
+            target.el,
+          )
+        : null}
+    </>
   );
 }
 
@@ -767,7 +779,7 @@ export class WorkerMounter {
     return this.#current?.app ?? null;
   }
 
-  /** The running session, for the shell's other parts (the palette, the About panel) to reach. */
+  /** The running session, for the shell's other parts (the palette, the pane at the edge) to reach. */
   get session(): AppSession | null {
     return this.#current?.session ?? null;
   }

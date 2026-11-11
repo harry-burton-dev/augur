@@ -87,6 +87,8 @@ import { dayAndTime } from './account/words.js';
 import { desktopApp, logoUrl, productName } from './host/menus.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
+import { isWorkerApp } from './host/apps3.js';
+import { PaneSlot } from './host/pane-target.js';
 import { InboxView } from './inbox/InboxView.js';
 
 /** The apps this shell can open: an intent goes to one of them, and Find asks only them. One it can't open still says why where it is listed. */
@@ -1103,7 +1105,7 @@ export function Host({
   const featuresOn = openApp?.previewsOn?.length ? featureApps.find((a) => a.app === openApp.id)?.previews.filter((p) => p.on) : undefined;
 
   return (
-    <Shell model={shellModel}>
+    <Shell model={shellModel} pane={openApp && isWorkerApp(openApp) ? ({ top, over }) => <PaneSlot top={top} over={over} /> : undefined}>
       {actingSession ? (
         <aside className="preview-badge" role="status" data-acting>
           <span>
