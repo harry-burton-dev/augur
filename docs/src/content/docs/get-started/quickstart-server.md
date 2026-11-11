@@ -86,7 +86,7 @@ AUGUR is running.
 
 ## What's next
 
-- Set up email, the off-server backup copy and alerts: the
-  [full install guide](https://github.com/harry-burton-dev/augur/blob/main/docs/deploy.md#6-finish-setting-up) has each step.
+- Set up email, the off-server backup copy and alerts: [Install AUGUR](../../run/install/#6-finish-setting-up)
+  has each step.
 - Add people in **Admin → People**.
 - [Build your first app](../quickstart-app/).

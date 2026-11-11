@@ -117,7 +117,7 @@ export interface MailTransport {
 }
 
 // @public (undocumented)
-export const NO_RELAY = "No mail relay is set, so AUGUR sends no email. A deployment admin sets SMTP_HOST and SMTP_FROM in the server\u2019s .env (docs/deploy.md, Email).";
+export const NO_RELAY = "No mail relay is set, so AUGUR sends no email. A deployment admin sets SMTP_HOST and SMTP_FROM in the server\u2019s .env (AUGUR\u2019s docs, Set up email).";
 
 // @public
 export interface NoticeEmailProps {

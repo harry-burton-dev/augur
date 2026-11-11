@@ -67,4 +67,4 @@ The gateway makes a new key each time it starts. A service sees a key id it does
 
 ## From inside a container
 
-A call from the service's own container (`localhost`) is believed as it comes. Only someone who can already run commands there can make one, and it is how a server admin acts when nobody can sign in, as in [deploy.md](deploy.md)'s command for removing an app.
+A call from the service's own container (`localhost`) is believed as it comes. Only someone who can already run commands there can make one, and it is how a server admin acts when nobody can sign in, as in the command for [removing an app](src/content/docs/run/day-to-day.md#remove-an-app-from-the-catalogue).

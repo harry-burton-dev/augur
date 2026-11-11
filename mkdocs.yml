@@ -13,7 +13,6 @@ nav:
   - App storage: app-storage.md
   - Build an app: build-an-app.md
   - The catalog: catalog.md
-  - Running AUGUR on your own server: deploy.md
   - Domain events: domain-events.md
   - The Inbox: inbox.md
   - Background and scheduled jobs: jobs.md

@@ -92,7 +92,7 @@ if (ownSecret || keycloakAdmin) {
         if (!ok) {
           log.error(
             `identity's own sign-in (${IDENTITY_CLIENT}) doesn't have the rights it needs in the ${KEYCLOAK_REALM} realm (${IDENTITY_RIGHTS.join(', ')}), so admins can't manage people. ` +
-              'Run the realm job, which gives them: pc run --rm keycloak-config (docs/deploy.md, "The realm job").',
+              'Run the realm job, which gives them: pc run --rm keycloak-config (AUGUR’s docs, Settings and secrets, The realm job).',
           );
         }
       })

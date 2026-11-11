@@ -67,7 +67,7 @@ The first comparison only takes note: accounts already off then are kept as off 
 
 ## Signing in with the organisation's Entra
 
-Where a deployment has set up Entra (docs/deploy.md, Entra), someone's first sign-in through it links them to the account with the same email, or makes one when nobody has it, with no AUGUR password asked for. An account that must sign in with two steps (everyone, when two steps for everyone is on) is never linked this way: the sign-in is refused and says why, and they go on signing in with their password and second step. From then on `source` is `federated` and their dialog says they sign in with the organisation's sign-in; their name and email follow Entra. An account made this way is recorded as `person.added` with `method: 'federated'` by Keycloak (Activity: "Sam joined through the organisation's sign-in"), so followers hear `platform.person.joined` as for anyone an admin adds; it starts with no roles or teams.
+Where a deployment has set up Entra ([Sign in with Entra](src/content/docs/run/entra.md)), someone's first sign-in through it links them to the account with the same email, or makes one when nobody has it, with no AUGUR password asked for. An account that must sign in with two steps (everyone, when two steps for everyone is on) is never linked this way: the sign-in is refused and says why, and they go on signing in with their password and second step. From then on `source` is `federated` and their dialog says they sign in with the organisation's sign-in; their name and email follow Entra. An account made this way is recorded as `person.added` with `method: 'federated'` by Keycloak (Activity: "Sam joined through the organisation's sign-in"), so followers hear `platform.person.joined` as for anyone an admin adds; it starts with no roles or teams.
 
 ## Deleting leavers' accounts
 
@@ -106,7 +106,7 @@ Every entry also keeps `at` (when Keycloak recorded it) and `keycloakEvent`. Cop
 
 ## Invites need email
 
-Keycloak sends the invite, through the realm's relay (`SMTP_*` in `.env`, docs/deploy.md, Email). Without one, Admin offers only the one-time password and says why, and `start: email` answers 400. The link ends in AUGUR: the shell's sign-in at the address in `OIDC_ISSUER`.
+Keycloak sends the invite, through the realm's relay (`SMTP_*` in `.env`, [Set up email](src/content/docs/run/email.md)). Without one, Admin offers only the one-time password and says why, and `start: email` answers 400. The link ends in AUGUR: the shell's sign-in at the address in `OIDC_ISSUER`.
 
 ## The API
 

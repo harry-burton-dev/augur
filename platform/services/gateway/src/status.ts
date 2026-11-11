@@ -249,7 +249,7 @@ export const publicAccess = async (file: string, now = Date.now()): Promise<Publ
 };
 
 /** Where an admin turns the off-server copy on or fixes it. */
-const OFFSITE_HOW = 'Set OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key in .env on the server (docs/deploy.md, "Off-server copy").';
+const OFFSITE_HOW = 'Set OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key in .env on the server (AUGUR’s docs, Backups, Off-server copy).';
 
 /**
  * What the backup container last wrote beside the backups: the night's dump (expected within a day), its

@@ -35,7 +35,7 @@ export interface MailStatus {
 export type MailResult = { sent: true; id: string } | { sent: false; reason: string };
 
 export const NO_RELAY =
-  'No mail relay is set, so AUGUR sends no email. A deployment admin sets SMTP_HOST and SMTP_FROM in the server’s .env (docs/deploy.md, Email).';
+  'No mail relay is set, so AUGUR sends no email. A deployment admin sets SMTP_HOST and SMTP_FROM in the server’s .env (AUGUR’s docs, Set up email).';
 
 /** How long a relay check is trusted before it is asked again. */
 export const MAIL_CHECK_MS = 5 * 60_000;

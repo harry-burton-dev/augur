@@ -30,7 +30,7 @@
 #   backup.sh --restore-test --offsite   the same, from the newest in the off-server copy
 #   backup.sh --offsite        copies the newest backup and apps' files off the server now, then stops
 #   backup.sh --adopt-offsite  takes the off-server copy as this server's own (a lost server set up again
-#                              from it, docs/deploy.md), then copies the newest backup there
+#                              from it, AUGUR's docs, Backups), then copies the newest backup there
 #   backup.sh --pitr-test      restores the newest base backup and replays every archived change since
 set -eu
 # Without it a failed pg_dumpall would look like success, since gzip ends the pipe.
@@ -161,7 +161,7 @@ offsite() {
   [ "$code" != 10 ] || { restic init >/dev/null 2>"$errors" && code=0 || code=$?; }
   if [ "$code" != 0 ]; then
     echo "backup: off-server copy FAILED: $(said "$errors")" >&2
-    offnoted false "" "Backups could not be copied off this server: $(said "$errors"). Check OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key in .env (docs/deploy.md, "Off-server copy")."
+    offnoted false "" "Backups could not be copied off this server: $(said "$errors"). Check OFFSITE_REPOSITORY, OFFSITE_PASSWORD and the bucket key in .env (AUGUR's docs, Backups, Off-server copy)."
     rm -f "$errors"
     return 1
   fi
@@ -184,7 +184,7 @@ offsite() {
   fi
   if [ "$code" != 0 ]; then
     echo "backup: the off-server copy holds backups this server didn't make, so nothing was copied" >&2
-    offnoted false "" "The off-server copy already holds backups this server didn't make, so nothing was copied, and they stay as they are. If this server is the same deployment set up again, restore from them first (docs/deploy.md, Restore a lost server), then run backup.sh --adopt-offsite. If not, give this server its own OFFSITE_REPOSITORY."
+    offnoted false "" "The off-server copy already holds backups this server didn't make, so nothing was copied, and they stay as they are. If this server is the same deployment set up again, restore from them first (AUGUR's docs, Restore a lost server), then run backup.sh --adopt-offsite. If not, give this server its own OFFSITE_REPOSITORY."
     rm -f "$errors"
     return 1
   fi
@@ -372,7 +372,7 @@ EOF
   if [ -z "$mode" ]; then
     problem="Postgres could not be asked how its archiving is going."
   elif [ "$mode" != on ]; then
-    problem="Postgres is not archiving its changes yet, so the database can only go back to a nightly backup. Start it again with pc up -d postgres (docs/deploy.md, Restore to a point in time)."
+    problem="Postgres is not archiving its changes yet, so the database can only go back to a nightly backup. Start it again with pc up -d postgres (AUGUR's docs, Restore to a point in time)."
   elif [ "$failing" = t ]; then
     problem="Postgres could not archive its latest changes ($failedwal). Check the postgres container's log."
   elif [ -e "$BACKUP_DIR/base.problem" ]; then

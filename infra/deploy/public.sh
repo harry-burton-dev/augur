@@ -6,8 +6,8 @@
 # Only the front door (the web container: the shell, apps, /api and sign-in) is opened, at the
 # address AUGUR already has; Keycloak's own console stays closed to the internet whatever
 # KEYCLOAK_CONSOLE says. It closes by itself when the time is up, even over a restart.
-# The tailnet's policy must allow Funnel for this machine first: docs/deploy.md, "Open AUGUR to
-# the internet for a while".
+# The tailnet's policy must allow Funnel for this machine first: AUGUR's docs, Open AUGUR to
+# the internet for a while.
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
@@ -31,7 +31,7 @@ case "${1:-status}" in
     fi
     if ! ts status --self --json 2>/dev/null | grep -q '"funnel"'; then
       echo "Your tailnet's policy doesn't allow Funnel for this machine yet, so it can't be opened." >&2
-      echo "Add the funnel attribute for it in the Tailscale admin console (docs/deploy.md, \"Open AUGUR to the internet for a while\"), then try again." >&2
+      echo "Add the funnel attribute for it in the Tailscale admin console (AUGUR's docs, Open AUGUR to the internet for a while), then try again." >&2
       exit 1
     fi
     pc exec -T tailscale rm -f /var/lib/tailscale/augur-public-failed || true

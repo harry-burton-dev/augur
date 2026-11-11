@@ -33,7 +33,12 @@ export interface CheckKey {
   user: string;
   relation: string;
   object: string;
+  /** A relationship's condition, such as a grant's end (`not_expired`): only when writing one. */
+  condition?: { name: string; context: Record<string, unknown> };
 }
+
+/** The key alone, as checks and deletes take it. */
+const bare = ({ user, relation, object }: CheckKey) => ({ user, relation, object });
 
 /** How fresh an answer must be (D8 in the spec): HIGHER_CONSISTENCY skips OpenFGA's caches. */
 export type Consistency = 'MINIMIZE_LATENCY' | 'HIGHER_CONSISTENCY';
@@ -102,7 +107,7 @@ export class OpenFga {
 
   async check(store: string, model: string, key: CheckKey, context: Record<string, unknown>, consistency: Consistency): Promise<boolean> {
     const { allowed } = await this.call<{ allowed?: boolean }>('POST', `/stores/${store}/check`, {
-      tuple_key: key,
+      tuple_key: bare(key),
       authorization_model_id: model,
       context,
       consistency,
@@ -117,7 +122,7 @@ export class OpenFga {
     const { result = {} } = await this.call<{ result?: Record<string, { allowed?: boolean; error?: { message?: string } }> }>(
       'POST',
       `/stores/${store}/batch-check`,
-      { authorization_model_id: model, consistency, checks: keys.map((tuple_key, i) => ({ tuple_key, context, correlation_id: ids[i] })) },
+      { authorization_model_id: model, consistency, checks: keys.map((key, i) => ({ tuple_key: bare(key), context, correlation_id: ids[i] })) },
     );
     return ids.map((id) => {
       const r = result[id];
@@ -162,7 +167,7 @@ export class OpenFga {
     for (let i = 0; i < changes.length; i += perCall) {
       const chunk = changes.slice(i, i + perCall);
       const adds = chunk.filter((c) => c.write).map((c) => c.key);
-      const removes = chunk.filter((c) => !c.write).map((c) => c.key);
+      const removes = chunk.filter((c) => !c.write).map((c) => bare(c.key));
       await this.call('POST', `/stores/${store}/write`, {
         authorization_model_id: model,
         ...(adds.length ? { writes: { tuple_keys: adds, on_duplicate: 'ignore' } } : {}),
