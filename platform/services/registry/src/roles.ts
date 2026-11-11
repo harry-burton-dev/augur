@@ -22,16 +22,18 @@ export const CHANGE_SIGN_IN_MS = 10 * 60 * 1000;
 
 /**
  * Today's two realm roles, each check compared with the permissions service's answer to the same question
- * (shadow mode, ADR 0085). Today's role still decides. `admin` runs the organisation's apps (the org's
+ * (shadow mode, ADR 0085). Today's role decides, except at a site the deployment has moved over
+ * (`PERMISSIONS_DECIDES`), where the permissions service does; when it can't answer there, the check throws
+ * `PermissionsUnavailable`, which the service answers as a 503. `admin` runs the organisation's apps (the org's
  * `can_manage_apps`, or `admin` where the check is about the server's state); `deployment-admin` runs the
  * server (one of the deployment's relations, such as `can_upgrade`). Both are asked as any persona the caller
  * holds, which is how today's roles are copied in (one admin persona each).
  */
 export interface RoleChecks {
   /** Whether the caller holds `admin`. `site` names the check, the same at every call, such as `registry.catalogue`. */
-  admin(site: string, caller: Caller | undefined, action?: OrgAction): caller is Caller;
+  admin(site: string, caller: Caller | undefined, action?: OrgAction): Promise<boolean>;
   /** Whether the caller holds `deployment-admin`, for one of the deployment's relations. */
-  deploymentAdmin(site: string, caller: Caller | undefined, action: DeploymentAction): caller is Caller;
+  deploymentAdmin(site: string, caller: Caller | undefined, action: DeploymentAction): Promise<boolean>;
 }
 
 /** What `admin` lets someone do, in the model: manage the org's apps, or be its admin. */
@@ -40,11 +42,9 @@ export type OrgAction = 'can_manage_apps' | 'admin';
 export type DeploymentAction = 'can_upgrade' | 'can_install_apps' | 'can_remove_apps' | 'can_pin_versions' | 'can_allow_sites' | 'can_set_app_secrets';
 
 export const roleChecks = (shadow: Shadow = noShadow): RoleChecks => {
-  const holds = (site: string, caller: Caller | undefined, role: string, question: ShadowQuestion): caller is Caller => {
+  const holds = async (site: string, caller: Caller | undefined, role: string, question: ShadowQuestion): Promise<boolean> => {
     if (!caller) return false;
-    const held = caller.roles.includes(role);
-    shadow.check(site, caller, question, held);
-    return held;
+    return shadow.decide(site, caller, question, caller.roles.includes(role));
   };
   return {
     admin: (site, caller, action = 'can_manage_apps') => holds(site, caller, 'admin', { action, resource: { type: 'org', id: 'this' }, as: 'persona' }),

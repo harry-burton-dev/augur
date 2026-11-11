@@ -475,6 +475,8 @@ services:
       PORT: 8082
       # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
       PERMISSIONS_URL: http://permissions:8087
+      # The checks it decides instead, once moved over: empty, every check is only compared.
+      PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
       SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}"
       # Its own login, owning only the registry schema.
       DATABASE_URL: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform

@@ -810,7 +810,8 @@
       "description": "The checks the permissions service decides instead of the service's own (ADR 0085), comma-separated by site, such as models.settings.read,models.usage, or all. Move a site only once shadow mode has shown no disagreement there for 7 days. Empty: every check is only compared.",
       "default": "",
       "x-services": [
-        "models"
+        "models",
+        "registry"
       ],
       "x-docs": "docs/observability.md#what-the-alert-rules-read"
     },

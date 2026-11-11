@@ -215,7 +215,7 @@ export const featurePreviewRoutes =
         },
       },
       async (req, reply) => {
-        if (!roles.admin('registry.feature-previews.read', callerFromHeaders(req.headers))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see who gets an app’s previews.' });
+        if (!(await roles.admin('registry.feature-previews.read', callerFromHeaders(req.headers)))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see who gets an app’s previews.' });
         const found = await findApp(req.params.id);
         if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
         return adminView(found);
@@ -260,7 +260,7 @@ export const featurePreviewRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!roles.admin('registry.feature-previews.change', caller)) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose who gets an app’s previews.' });
+        if (!caller || !(await roles.admin('registry.feature-previews.change', caller))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can choose who gets an app’s previews.' });
         const found = await findApp(req.params.id);
         const preview = found?.entry.previews?.find((p) => p.id === req.params.preview);
         if (!found || !preview) return reply.code(404).send({ error: 'not_found', message: `${found ? found.entry.name : req.params.id} has no preview "${req.params.preview}".` });
@@ -313,7 +313,7 @@ export const featurePreviewRoutes =
         const service = await serviceOf(req, reply);
         if (service === undefined) return reply;
         const own = service?.kind === 'app' && service.app === req.params.id;
-        if (!own && !roles.admin('registry.feature-previews.whose', callerFromHeaders(req.headers))) return reply.code(403).send({ error: 'forbidden', message: 'Only the app itself or an admin can ask whose previews are on.' });
+        if (!own && !(await roles.admin('registry.feature-previews.whose', callerFromHeaders(req.headers)))) return reply.code(403).send({ error: 'forbidden', message: 'Only the app itself or an admin can ask whose previews are on.' });
         const found = await findApp(req.params.id);
         if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
         const [optIns, chain] = await Promise.all([store.featureOptIns({ person: req.params.person, app: found.entry.id }), chainAt(req.query.workspace)]);

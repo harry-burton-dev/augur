@@ -72,7 +72,7 @@ The service's own answer still decides, until the site moves over: a deployment 
 
 - `augur_permissions_decided_total`: the checks the permissions service decided, by `site` and `outcome`: `allowed`, `refused` or `unanswered`.
 
-To move a site back, take it out of `PERMISSIONS_DECIDES` and run `pc up -d`. The model gateway reads it so far (sites `models.settings.read`, `models.settings.change` and `models.usage`); the other services follow. Today's Keycloak admins are copied in as one admin persona each, so an admin check is asked of the personas the person holds.
+To move a site back, take it out of `PERMISSIONS_DECIDES` and run `pc up -d`. The model gateway (sites `models.settings.read`, `models.settings.change` and `models.usage`) and the registry (every `registry.*` site, such as `registry.catalogue` or `registry.upgrades.start`) read it so far; identity and events follow. Today's Keycloak admins are copied in as one admin persona each, so an admin check is asked of the personas the person holds.
 
 ## Activity
 
