@@ -3,7 +3,7 @@
  * its own, and a change that may need the password again has a path of its own too, so signing in again comes
  * back to it open: the host owns the address, and only the path survives the trip.
  */
-export type Section = 'people' | 'departments' | 'organisation' | 'apps' | 'activity';
+export type Section = 'people' | 'departments' | 'roles' | 'organisation' | 'apps' | 'activity';
 
 /** A security or retention change, asked before it's made: which rule, and the value it changes to. */
 export type SecurityAsk = { key: 'twoStepForAll' | 'leaverRetentionDays' | 'activityRetentionDays'; value: string };
@@ -15,6 +15,9 @@ export type Route =
   | { page: 'departments' }
   | { page: 'department-new' }
   | { page: 'department'; id: string }
+  | { page: 'roles' }
+  | { page: 'role-new' }
+  | { page: 'role'; id: string; takeBack?: string }
   | { page: 'organisation'; ask?: SecurityAsk }
   | { page: 'apps' }
   | { page: 'app'; id: string }
@@ -22,7 +25,7 @@ export type Route =
   | { page: 'entry'; id: string };
 
 /** The places the manifest declares, by id; each is a path below `/<id>`. */
-export const PLACES: Record<Section, string> = { people: '/people', departments: '/departments', organisation: '/organisation', apps: '/apps', activity: '/activity' };
+export const PLACES: Record<Section, string> = { people: '/people', departments: '/departments', roles: '/roles', organisation: '/organisation', apps: '/apps', activity: '/activity' };
 
 const SECURITY_KEYS = new Set<SecurityAsk['key']>(['twoStepForAll', 'leaverRetentionDays', 'activityRetentionDays']);
 
@@ -45,6 +48,8 @@ export const routeFor = (path: string): Route => {
   switch (first) {
     case 'departments':
       return !second ? { page: 'departments' } : second === 'new' ? { page: 'department-new' } : { page: 'department', id: second };
+    case 'roles':
+      return !second ? { page: 'roles' } : second === 'new' ? { page: 'role-new' } : third === 'take-back' && fourth ? { page: 'role', id: second, takeBack: fourth } : { page: 'role', id: second };
     case 'organisation':
       return second === 'security' && third && fourth !== undefined && SECURITY_KEYS.has(third as SecurityAsk['key'])
         ? { page: 'organisation', ask: { key: third as SecurityAsk['key'], value: fourth } }
@@ -76,6 +81,12 @@ export const pathOf = (r: Route): string => {
       return '/departments/new';
     case 'department':
       return `/departments/${e(r.id)}`;
+    case 'roles':
+      return PLACES.roles;
+    case 'role-new':
+      return '/roles/new';
+    case 'role':
+      return `/roles/${e(r.id)}${r.takeBack ? `/take-back/${e(r.takeBack)}` : ''}`;
     case 'organisation':
       return r.ask ? `/organisation/security/${r.ask.key}/${e(r.ask.value)}` : PLACES.organisation;
     case 'apps':
@@ -95,8 +106,10 @@ export const sectionOf = (r: Route): Section =>
     ? 'people'
     : r.page.startsWith('department')
       ? 'departments'
-      : r.page === 'organisation'
-        ? 'organisation'
-        : r.page === 'app' || r.page === 'apps'
-          ? 'apps'
-          : 'activity';
+      : r.page.startsWith('role')
+        ? 'roles'
+        : r.page === 'organisation'
+          ? 'organisation'
+          : r.page === 'app' || r.page === 'apps'
+            ? 'apps'
+            : 'activity';

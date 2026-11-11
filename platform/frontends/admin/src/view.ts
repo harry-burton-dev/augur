@@ -1,5 +1,5 @@
 import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
-import type { AdminApi, AppSettingValue, AuditEntry, CatalogueApp, Department, FeaturePreviews, FloorRule, LeaveRequest, LifecycleInfo, Organisation, Person, Role, TeamLevels } from './api.js';
+import type { AdminApi, AppSettingValue, AuditEntry, CatalogueApp, Department, FeaturePreviews, FloorRule, LeaveRequest, LifecycleInfo, MadeRole, Organisation, Person, Role, RoleDetail, TeamLevels } from './api.js';
 import type { Route } from './routes.js';
 
 /** Something Admin read, or why it couldn't; neither while it's on its way. */
@@ -22,13 +22,17 @@ export interface Reads {
   apps: Slot<CatalogueApp[]>;
   /** The org's own floor, which every app rule starts from. */
   floor: Slot<{ id: string; name: string }>;
+  /** The roles made in AUGUR for the org and each department, which the permissions service keeps. */
+  madeRoles: Slot<MadeRole[]>;
+  /** One made role, who holds it and what it gives. */
+  role(id: string): Slot<RoleDetail>;
   floors(app: string): Slot<FloorRule[]>;
   settings(app: string): Slot<AppSettingValue[]>;
   previews(app: string): Slot<FeaturePreviews>;
 }
 
 /** The keys of what's read once for everyone, which a change can put back or read again. */
-export type ReadKey = Exclude<keyof Reads, 'floors' | 'settings' | 'previews'>;
+export type ReadKey = Exclude<keyof Reads, 'floors' | 'settings' | 'previews' | 'role'>;
 
 /** Activity's filters, as its selects hold them. */
 export interface Filters {
@@ -52,7 +56,21 @@ export interface Ui {
   /** The open question's state. */
   dialog: { busy?: boolean; error?: string };
   /** What's being chosen on the page before it's saved: a new person's roles, the leaver flow's choices, the languages. */
-  draft: { roles?: string[]; heir?: string; note?: string; lastDay?: string; offered?: string[]; picking?: string };
+  draft: {
+    roles?: string[];
+    heir?: string;
+    note?: string;
+    lastDay?: string;
+    offered?: string[];
+    picking?: string;
+    /** A made role's page: who it's given to and until when, what it gives and where, and why each. */
+    holder?: string;
+    until?: string;
+    why?: string;
+    relation?: string;
+    on?: string;
+    why2?: string;
+  };
   activity: { filters: Filters; entries?: AuditEntry[]; more?: boolean; loading?: boolean; older?: boolean; error?: string; exporting?: boolean; exportError?: string };
 }
 
@@ -80,8 +98,8 @@ export interface Actions {
   answer(back: string | (() => string), change: () => Promise<void>): void;
   /** Puts what a change answered back in place of what was read. */
   put<K extends ReadKey>(key: K, value: NonNullable<Reads[K]['value']>): void;
-  /** Reads something again. */
-  again(key: ReadKey): void;
+  /** Reads something again: one of the reads, or a made role (`role:<id>`). */
+  again(key: ReadKey | `role:${string}`): void;
   putApp(kind: 'floors' | 'settings' | 'previews', app: string, value: unknown): void;
   /** Activity: reads the first page for the filters, or the next older one. */
   audit(older?: boolean): void;

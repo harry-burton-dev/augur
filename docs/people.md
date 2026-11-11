@@ -22,6 +22,17 @@ People don't delete their own account. They ask to leave in their account (Priva
 
 Rules that hold for every step: an admin can't turn off their own sign-in, take away their own admin role or run the leaver flow on themselves, and only a deployment admin can do any of these to a deployment admin. Work is handed only to someone else whose sign-in is on.
 
+## Roles made in Admin → Roles
+
+Besides the sign-in roles People gives (such as admin), admins make roles of their own in Admin → Roles (ADR 0085). The permissions service keeps them, and OpenFGA checks them.
+
+- **Make one** for the org or for a department. Whoever manages it can give it and change what it gives.
+- **Give it** to a person, until a day if one is chosen (it stops at the end of that day, UTC), or to everyone in a department, for good. Positions can't be chosen in Admin yet.
+- **Say what it gives** its holders: on a department, to lead it, be a member, settle its disputes or raise its beliefs to the floor above; on the org, to publish for it or read its Activity. Someone can give only what they could give themselves, where they manage it, and a role never makes anyone an admin.
+- **Take it back**, saying why. Anything a holder gave that they could give only because of it is taken back too.
+
+Each step is recorded in Activity with its reason: `role.created`, `role.given`, `role.gives` and `grant.revoked`. Making and giving the org's roles needs an admin persona: Admin says so when it's turned down, and Act as (in Account, Sign-in and security, see [account.md](account.md)) starts one.
+
 ## Where each account stands
 
 People shows each person's state and their last sign-in. Identity works the state out from Keycloak (is their sign-in on, have they chosen a password) and from what it keeps in `identity.person_lifecycle`: first and last sign-in (from the sign-ins it copies, below), why the sign-in went off, and that they left.

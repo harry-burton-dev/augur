@@ -5,12 +5,13 @@ import { appPage, appsPage, DEPLOYMENT_APP } from './apps.js';
 import { departmentPage, departmentsPage } from './departments.js';
 import { organisationPage } from './organisation.js';
 import { DEPLOYMENT_ADMIN, personPage, peoplePage } from './people.js';
+import { rolePage, rolesPage } from './roles.js';
 import { routeFor, sectionOf, type Route, type Section } from './routes.js';
 import type { ReadKey, Reads, Slot, Ui, View } from './view.js';
 import { words } from './view.js';
 
 /** Each section's heading, as its place in the manifest names it. */
-const TITLES: Record<Section, string> = { people: 'People', departments: 'Departments', organisation: 'Organisation', apps: 'Apps', activity: 'Activity' };
+const TITLES: Record<Section, string> = { people: 'People', departments: 'Departments', roles: 'Roles', organisation: 'Organisation', apps: 'Apps', activity: 'Activity' };
 
 /** The pane's heading for a route: the section, or the person, department or app the page is about. */
 const titleOf = (v: View): string => {
@@ -20,6 +21,8 @@ const titleOf = (v: View): string => {
     return p ? fullName(p) : TITLES.people;
   }
   if (r.page === 'department') return v.r.departments.value?.find((x) => x.id === r.id)?.name ?? TITLES.departments;
+  if (r.page === 'role') return v.r.role(r.id).value?.role.name ?? TITLES.roles;
+  if (r.page === 'role-new') return 'New role';
   if (r.page === 'app') return v.r.apps.value?.find((x) => x.id === r.id)?.name ?? TITLES.apps;
   if (r.page === 'person-new') return 'Add a person';
   if (r.page === 'department-new') return 'New department';
@@ -42,6 +45,12 @@ export const screen = (v: View): RemoteNode => {
       return departmentsPage(v, true);
     case 'department':
       return departmentPage(v, r.id);
+    case 'roles':
+      return rolesPage(v);
+    case 'role-new':
+      return rolesPage(v, true);
+    case 'role':
+      return rolePage(v, r.id, r.takeBack);
     case 'organisation':
       return organisationPage(v, r.ask);
     case 'apps':
@@ -56,7 +65,7 @@ export const screen = (v: View): RemoteNode => {
 };
 
 /** The pages that are a list to look through, as wide as the pane; the rest are read at reading width. */
-const WIDE = new Set<Route['page']>(['people', 'person-new', 'departments', 'department-new', 'apps', 'activity']);
+const WIDE = new Set<Route['page']>(['people', 'person-new', 'departments', 'department-new', 'roles', 'role-new', 'apps', 'activity']);
 
 /**
  * Admin: people, departments, the organisation's settings, apps and activity, so nobody needs the sign-in
@@ -107,6 +116,12 @@ export default defineApp((ctx: AppContext) => {
     languages: () => api.signInLanguages().catch(() => []),
     apps: api.apps,
     floor: api.org,
+    // The org's roles, then each department's: a department whose roles can't be read is left out, not the whole list.
+    madeRoles: async () => {
+      const [org, departments] = await Promise.all([api.madeRoles('org:this'), api.departments()]);
+      const floors = await Promise.all(departments.map((d) => api.madeRoles(`floor:${d.id}`).catch(() => [])));
+      return [...org, ...floors.flat()];
+    },
   };
   const reads: Reads = {
     get people() { return slot('people', LOADS.people); },
@@ -120,6 +135,8 @@ export default defineApp((ctx: AppContext) => {
     get languages() { return slot('languages', LOADS.languages); },
     get apps() { return slot('apps', LOADS.apps); },
     get floor() { return slot('floor', LOADS.floor); },
+    get madeRoles() { return slot('madeRoles', LOADS.madeRoles); },
+    role: (id) => slot(`role:${id}`, () => api.madeRole(id)),
     floors: (app) => slot(`floors:${app}`, () => api.appFloors(app)),
     settings: (app) => slot(`settings:${app}`, () => api.appSettings(app)),
     previews: (app) => slot(`previews:${app}`, () => api.featurePreviews(app)),
@@ -143,6 +160,7 @@ export default defineApp((ctx: AppContext) => {
     const s = sectionOf(r);
     if (s === 'people') void [reads.roles, reads.leaving, reads.lifecycle];
     if (s === 'departments') void [reads.levels, reads.people];
+    if (s === 'roles') void [reads.people, reads.departments, reads.floor];
     if (s === 'organisation') void [reads.people, reads.zones, reads.languages];
     if (s === 'apps' && r.page === 'app') void [reads.floor, reads.departments];
     if (s === 'activity') void [reads.people, reads.departments, reads.apps, reads.floor];
@@ -165,7 +183,9 @@ export default defineApp((ctx: AppContext) => {
     // What a question did is said on the page it comes back to; any other move clears it.
     if (!keep) ui.done = undefined;
     keep = false;
-    if (!(was.page === 'person' && now.page === 'person' && was.id === now.id)) ui.draft = {};
+    // What's typed on a person's or a role's page stays while a question on that page opens and closes.
+    const samePage = (was.page === 'person' && now.page === 'person' && was.id === now.id) || (was.page === 'role' && now.page === 'role' && was.id === now.id);
+    if (!samePage) ui.draft = {};
     if (now.page !== 'person' && now.page !== 'people') ui.shown = undefined;
     prefetch(now);
     draw();

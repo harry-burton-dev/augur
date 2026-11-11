@@ -373,7 +373,17 @@ export const grantRoutes =
         schema: {
           summary: 'A role, who holds it, and what it gives',
           params: Type.Object({ role: Type.String({ pattern: ID }) }),
-          response: { 200: Type.Object({ role: RoleView, holders: Type.Array(GrantView), gives: Type.Array(GrantView) }), 401: Problem, 403: Problem, 404: Problem, 503: Problem },
+          response: {
+            200: Type.Object({
+              role: RoleView,
+              holders: Type.Array(GrantView),
+              gives: Type.Array(GrantView),
+              offers: Type.Object(
+                { floor: Type.Array(Type.String()), org: Type.Array(Type.String()) },
+                { description: 'What a role’s holders may be given on a floor and on the org' },
+              ),
+            }),
+            401: Problem, 403: Problem, 404: Problem, 503: Problem },
         },
       },
       async (req, reply) => {
@@ -387,7 +397,7 @@ export const grantRoutes =
           const of = `role:${role.id}`;
           const holders = (await grants.live(at, of)).map(view);
           const gives = (await grants.live(at)).filter((g) => g.subject === `${of}#assignee`).map(view);
-          return { role, holders, gives };
+          return { role, holders, gives, offers: { floor: Object.keys(GIVES.floor), org: Object.keys(GIVES.org) } };
         } catch (err) {
           return unavailable(reply, err);
         }

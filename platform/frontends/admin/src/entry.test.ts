@@ -6,6 +6,7 @@ import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kind
 import { levelsFrom, nameProblem } from './departments.js';
 import start from './entry.js';
 import { daysProblem, languageLabel, orgNameProblem, securityChange, zoneLabel } from './organisation.js';
+import { endOf, grantProblem, holderName, placeName, roleNameProblem } from './roles.js';
 import { pathOf, routeFor, type Route } from './routes.js';
 
 // The shell, as Admin sees it from its worker: what it draws, what it sets on its pane, where it moves, the
@@ -145,6 +146,10 @@ describe('routes', () => {
       { page: 'departments' },
       { page: 'department-new' },
       { page: 'department', id: 'd-1' },
+      { page: 'roles' },
+      { page: 'role-new' },
+      { page: 'role', id: 'r-1' },
+      { page: 'role', id: 'r-1', takeBack: 'g-1' },
       { page: 'organisation' },
       { page: 'organisation', ask: { key: 'activityRetentionDays', value: '400' } },
       { page: 'apps' },
@@ -322,6 +327,114 @@ describe('Departments', () => {
     expect(labelled(shell.screen, 'quill-list', 'Members')?.props?.items).toMatchObject([{ id: 'u-2', title: 'Sam Okafor' }]);
   });
 });
+
+describe('Roles', () => {
+  const night = { id: 'r-1', name: 'Night cover', scope: 'org:o', madeBy: 'u-1', madeAs: 'admin.u-1', madeAt: '2026-11-10T09:00:00Z' };
+  const payrollRole = { id: 'r-2', name: 'Payroll checks', scope: 'floor:d-2', madeBy: 'u-1', madeAt: '2026-11-10T10:00:00Z' };
+  const toSam = { id: 'g-1', giver: 'u-1', subject: 'person:u-2', relation: 'assignee', object: 'role:r-1', reason: 'Covering nights', madeAt: '2026-11-10T11:00:00Z', expiresAt: '2026-12-01T23:59:59.000Z' };
+  const settles = { id: 'g-2', giver: 'u-1', subject: 'role:r-1#assignee', relation: 'settler', object: 'floor:d-1', reason: 'Night disputes', madeAt: '2026-11-10T12:00:00Z' };
+  const offers = { floor: ['lead', 'member', 'settler', 'raiser'], org: ['publisher', 'audit_reader'] };
+  const permissions =
+    (more: Answer = () => undefined): Answer =>
+    (method, path, body) =>
+      more(method, path, body) ??
+      (path === '/api/permissions/v1/roles?scope=org%3Athis'
+        ? [200, { roles: [night] }]
+        : path === '/api/permissions/v1/roles?scope=floor%3Ad-2'
+          ? [200, { roles: [payrollRole] }]
+          : path === '/api/permissions/v1/roles?scope=floor%3Ad-1'
+            ? [403, { error: 'forbidden', message: 'You can see the roles only of floors you stand on.' }]
+            : path === '/api/permissions/v1/roles/r-1' && method === 'GET'
+              ? [200, { role: night, holders: [toSam], gives: [settles], offers }]
+              : services()(method, path, body));
+  const names = { people: [alex, sam], departments: [finance, payroll], org: { id: 'o', name: 'Northwind' } };
+
+  it('names who holds a role and where it gives, says why a name or a grant won’t do, and ends on the day chosen', () => {
+    expect(holderName('person:u-2', names)).toBe('Sam Okafor');
+    expect(holderName('floor:d-2#member', names)).toBe('Everyone in Finance / Payroll');
+    expect(holderName('persona:berth-planner#holder', names)).toBe('Whoever holds the position berth-planner');
+    expect(holderName('person:gone', names)).toBe('someone no longer here');
+    expect(placeName('org:o', names)).toBe('Northwind');
+    expect(placeName('floor:d-1', names)).toBe('Finance');
+    expect(roleNameProblem([night], ' night COVER ', 'org:o')).toMatch(/already a role called “Night cover”/);
+    expect(roleNameProblem([night], 'Night cover', 'floor:d-1')).toBeUndefined();
+    expect(roleNameProblem([], '  ', 'org:o')).toMatch(/needs a name/);
+    expect(grantProblem({ why: 'no' }, '2026-11-11')).toMatch(/Say why/);
+    expect(grantProblem({ why: 'Covering', until: '2026-11-10' }, '2026-11-11')).toMatch(/passed/);
+    expect(grantProblem({ why: 'Covering', until: '2026-11-11' }, '2026-11-11')).toBeUndefined();
+    expect(endOf('2026-12-01')).toBe('2026-12-01T23:59:59.000Z');
+  });
+
+  it('lists the org’s roles and each department’s it can read, and makes a new one from a question of its own', async () => {
+    const made = { ...payrollRole, id: 'r-3', name: 'Auditors', scope: 'floor:d-1' };
+    const { shell } = await open(permissions((m, p) => (m === 'POST' && p === '/api/permissions/v1/roles' ? [201, made] : undefined)), '/roles');
+    expect(shell.pane).toMatchObject({ title: 'Roles', width: 'wide' });
+    expect(text(shell.screen)).toContain('sign-in roles People gives');
+    expect(labelled(shell.screen, 'quill-table', 'Roles')?.props?.rows).toMatchObject([
+      { id: 'r-1', name: 'Night cover', for: 'Northwind' },
+      { id: 'r-2', name: 'Payroll checks', for: 'Finance / Payroll' },
+    ]);
+    handler(find(labelled(shell.screen, 'quill-table', 'Roles')?.children, 'quill-button'), 'onPress')();
+    const dialog = find(shell.screen, 'quill-dialog');
+    expect(dialog?.props).toMatchObject({ heading: 'New role' });
+    handler(dialog, 'onSubmit')({ name: 'night cover', scope: 'org:this' });
+    expect(find(shell.screen, 'quill-dialog')?.props?.error).toMatch(/already a role/);
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({ name: 'Auditors', scope: 'floor:d-1' });
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'POST')?.body).toEqual({ name: 'Auditors', scope: { type: 'floor', id: 'd-1' } });
+    expect(shell.moved.at(-1)).toBe('/roles/r-3');
+  });
+
+  it('shows who holds a role and what it gives, gives it until a day, and lets a department hold it only for good', async () => {
+    const { shell } = await open(permissions((m, p) => (m === 'POST' && p === '/api/permissions/v1/roles/r-1/holders' ? [201, { ...toSam, id: 'g-3' }] : undefined)), '/roles/r-1');
+    expect(shell.pane.title).toBe('Night cover');
+    expect(labelled(shell.screen, 'quill-list', 'Holders')?.props?.items).toMatchObject([{ id: 'g-1', title: 'Sam Okafor', detail: expect.stringContaining('Covering nights') }]);
+    expect(labelled(shell.screen, 'quill-list', 'What it gives')?.props?.items).toMatchObject([{ id: 'g-2', title: 'Settle its disputes: Finance' }]);
+    handler(labelled(shell.screen, 'quill-select', 'Give it to'), 'onChange')('floor:d-2');
+    expect(labelled(shell.screen, 'quill-date-field', 'Until')?.props).toMatchObject({ disabled: true, reason: expect.stringContaining('for good') });
+    handler(labelled(shell.screen, 'quill-select', 'Give it to'), 'onChange')('person:u-1');
+    expect(labelled(shell.screen, 'quill-date-field', 'Until')?.props?.disabled).toBeUndefined();
+    handler(labelled(shell.screen, 'quill-date-field', 'Until'), 'onChange')('2099-01-31');
+    handler(find(shell.screen, 'quill-text-field', (p) => p.label === 'Why'), 'onChange')('Weekend cover');
+    handler(find(shell.screen, 'quill-button', (p) => p.label === 'Give it'), 'onPress')();
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'POST')?.body).toEqual({ to: { type: 'person', id: 'u-1' }, reason: 'Weekend cover', expiresAt: '2099-01-31T23:59:59.000Z' });
+    expect(text(shell.screen)).toContain('Given. It works from their next request.');
+  });
+
+  it('says why the service turned a gift down where it was pressed', async () => {
+    const { shell } = await open(
+      permissions((m, p) => (m === 'POST' && p === '/api/permissions/v1/roles/r-1/gives' ? [403, { error: 'forbidden', message: 'You can give Night cover only what you could give yourself, where you manage it.' }] : undefined)),
+      '/roles/r-1',
+    );
+    handler(labelled(shell.screen, 'quill-select', 'Give its holders'), 'onChange')('org:publisher');
+    expect(labelled(shell.screen, 'quill-select', 'In')?.props).toMatchObject({ disabled: true, reason: 'That one is for Northwind as a whole.' });
+    handler(find(shell.screen, 'quill-text-field', (p) => p.label === 'Why' && p.value === ''), 'onChange')('x');
+    const press = () => handler(elements(shell.screen).filter((e) => e.type === 'quill-button' && e.props?.label === 'Give it').at(-1), 'onPress')();
+    press();
+    expect(text(shell.screen)).toContain('Say why');
+    shellWhy(shell.screen, 'Publishes the rota');
+    press();
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'POST')?.body).toEqual({ relation: 'publisher', on: { type: 'org', id: 'this' }, reason: 'Publishes the rota' });
+    expect(text(shell.screen)).toContain('only what you could give yourself');
+  });
+
+  it('takes a grant back from a question at its own path, with why', async () => {
+    const { shell } = await open(permissions((m) => (m === 'DELETE' ? [204, null] : undefined)), '/roles/r-1');
+    handler(labelled(shell.screen, 'quill-list', 'Holders'), 'onAction')({ item: 'g-1', action: 'take-back' });
+    expect(shell.moved.at(-1)).toBe('/roles/r-1/take-back/g-1');
+    const dialog = find(shell.screen, 'quill-dialog');
+    expect(dialog?.props).toMatchObject({ heading: 'Take Night cover back from Sam Okafor?', danger: true });
+    handler(dialog, 'onSubmit')({ why: 'Back on days' });
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'DELETE')?.path).toBe('/api/permissions/v1/grants/g-1?reason=Back+on+days');
+    expect(shell.moved.at(-1)).toBe('/roles/r-1');
+  });
+});
+
+/** Types into the second Why on a role's page: what its holders are given. */
+const shellWhy = (screen: RemoteNode, why: string) => handler(elements(screen).filter((e) => e.type === 'quill-text-field' && e.props?.label === 'Why').at(-1), 'onChange')(why);
 
 describe('Organisation', () => {
   it('names time zones and languages, and checks names and days as identity does', () => {

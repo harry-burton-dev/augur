@@ -85,6 +85,7 @@ describe('giving a role', () => {
     expect((await grants.live(at)).map((g) => g.needs)).toEqual([`can_assign role:${role.id}`, `can_assign role:${role.id}`]);
     const shown = (await app.inject({ method: 'GET', url: `/v1/roles/${role.id}`, headers: person('amara') })).json();
     expect(shown.holders.map((h: { subject: string }) => h.subject)).toEqual(['person:priya', 'persona:berth-planner#holder']);
+    expect(shown.offers).toEqual({ floor: ['lead', 'member', 'settler', 'raiser'], org: ['publisher', 'audit_reader'] });
   });
 
   it('refuses someone who can’t give it, a time already past, and an end on a whole floor', async () => {
