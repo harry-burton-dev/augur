@@ -246,7 +246,7 @@ for (const [width, height] of [[1440, 900], [1100, 800], [800, 700]] as const) {
     expect(stage.right).toBeLessThanOrEqual(slot.left + 1);
     expect(band.right).toBeLessThanOrEqual(slot.left + 1);
     const gauge = page.locator('.aerie-gauge, .aerie-floor-picker');
-    if (await gauge.count()) expect((await gauge.first().evaluate((el) => el.getBoundingClientRect().right)) ).toBeLessThanOrEqual(slot.left);
+    if (await gauge.count()) expect((await gauge.first().evaluate((el) => el.getBoundingClientRect().right))).toBeLessThanOrEqual(slot.left);
   });
 }
 
