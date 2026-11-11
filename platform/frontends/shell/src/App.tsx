@@ -82,7 +82,7 @@ import { DomainEventStream, topicsFor } from './host/domain-events.js';
 import { ACTION_STATUS, SIGN_IN_AGAIN_PATH } from './host/session.js';
 import { ActingAs, PersonaClient, withPersona, type HeldPersona } from './host/personas.js';
 import { dayAndTime } from './account/words.js';
-import { productName } from './host/menus.js';
+import { desktopApp, logoUrl, productName } from './host/menus.js';
 import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { InboxView } from './inbox/InboxView.js';
@@ -668,7 +668,9 @@ export function Host({
       setProblem({ title: 'Nothing here', summary: `No app you can open lives at ${where.path} on ${floor.name}. An app can be on one floor and not another.`, retry: () => navigate('/') });
       return;
     }
-    if (screen.kind !== 'app') {
+    // The desktop holds its own app (DESKTOP_APP, Home) when there is one: under the bar, over the background.
+    const desk = screen.kind === 'desk' ? desktopApp(manifest) : undefined;
+    if (screen.kind !== 'app' && !desk) {
       void mounter.current.unmount();
       appOnScreen(null);
       shellRef.current?.settleStage();
@@ -677,7 +679,7 @@ export function Host({
       if (shellRef.current) shellRef.current.current = '';
       return;
     }
-    const { app, path } = screen;
+    const { app, path } = screen.kind === 'app' ? screen : { app: desk!, path: '/' };
     const intent = pendingIntent.current;
     pendingIntent.current = undefined;
     const ctx = contextFor(app, path, intent);
@@ -823,6 +825,9 @@ export function Host({
     if (!shell) return;
     shell.apps = (catalogue?.apps ?? []).map(toShellApp);
     shell.groups = groupsFor(catalogue?.apps ?? []);
+    // The logo button's mark, and the app the desktop holds, as the deployment sets them.
+    shell.logo = logoUrl();
+    shell.desktop = desktopApp(catalogue?.apps ?? [])?.id ?? '';
     shell.user = { name: session.user.name, email: session.user.email };
     shell.floors = session.floors;
     shell.floor = floor?.id ?? '';
@@ -1110,7 +1115,7 @@ export function Host({
         me={session.user.name}
         onOpen={(id) => homeAsks.current?.open(id)}
       />
-      <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app'} />
+      <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app' && !(screen?.kind === 'desk' && manifest && desktopApp(manifest))} />
       {accountSection ? (
         <AccountArea
           section={accountSection}

@@ -3,6 +3,7 @@ import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it } from 'vitest';
 import { fromCatalogue3 } from './apps3.js';
 import { areaOf, findPages, groupOf, groupsFor, pageAt, pagesOf, productName, screenFor, titleFor, toShellApp } from './index.js';
+import { desktopApp, desktopAppId, logoUrl } from './menus.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -94,6 +95,23 @@ describe('the rail’s pages', () => {
   it('finds the area a page is in, for the band', () => {
     expect(areaOf(desk, '/apps')?.label).toBe('System');
     expect(areaOf(board, '/labels')).toBeUndefined();
+  });
+});
+
+describe('the logo and the desktop’s app', () => {
+  const page = (metas: Record<string, string>) => ({ querySelector: (q: string) => { const name = /name="([^"]+)"/.exec(q)?.[1] ?? ''; return name in metas ? { content: metas[name] } : null; } }) as unknown as Pick<Document, 'querySelector'>;
+  it('reads the deployment’s, and nothing from a placeholder the container didn’t fill', () => {
+    expect(logoUrl(page({ 'augur-logo': ' /brand/mark.svg ' }))).toBe('/brand/mark.svg');
+    expect(logoUrl(page({ 'augur-logo': '@LOGO_URL@' }))).toBe('');
+    expect(logoUrl(page({}))).toBe('');
+    expect(desktopAppId(page({ 'augur-desktop': 'home' }))).toBe('home');
+    expect(desktopAppId(page({ 'augur-desktop': '@DESKTOP_APP@' }))).toBe('');
+  });
+  it('holds the app on the desktop only when it can be opened', () => {
+    expect(desktopApp(manifest, 'home')).toBe(home);
+    expect(desktopApp(manifest, '')).toBeUndefined();
+    expect(desktopApp(manifest, 'missing')).toBeUndefined();
+    expect(desktopApp([app('home', '/home', { sdk: '^0.1.0' })], 'home')).toBeUndefined();
   });
 });
 

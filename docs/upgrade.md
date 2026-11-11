@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Home is the desktop, behind one logo button
+
+**From** unreleased
+
+The app bar's Home and Apps become one logo button, and the desktop holds Home: Home sits on the background, under a bar that rests at the top or bottom like a taskbar. Nothing to do. The button shows `ORG_LOGO_URL` if you set it (the shell can show it from this site, a `data:` URL or an address in `APP_ORIGINS`), else a placeholder mark. To keep a bare desktop, set `DESKTOP_APP=` (empty) in `.env`, or another app's id to hold that one instead ([Install AUGUR](src/content/docs/run/install.md#2-fill-in-the-settings)).
+
 ### OpenFGA moves to 1.19
 
 **From** unreleased

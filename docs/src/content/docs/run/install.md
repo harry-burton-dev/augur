@@ -105,6 +105,9 @@ The preflight (step 3) fills in these 21 secrets, each with 64 random hex charac
 - `ORG_PRODUCT_NAME`, optional: what people see the product called, in the browser tab, on the sign-in pages
   and in emails (`AUGUR` unless you set it, for example `Example, built on AUGUR`). It takes effect at the next
   `pc up -d`.
+- `DESKTOP_APP`, optional: the app drawn on the desktop, under the app bar and over the background, by its id
+  (`home` unless you set it). Set it empty for a bare desktop. The logo button at the start of the app bar
+  goes there. It takes effect at the next `pc up -d`.
 
 The secrets are made for you in step 3. Each is a long random string, different from every other, and
 Compose refuses to start without the required ones. To set one yourself instead, `openssl rand -hex 32` makes

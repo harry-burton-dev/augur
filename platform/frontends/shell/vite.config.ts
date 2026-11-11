@@ -84,6 +84,14 @@ const DEFAULT_PRODUCT_NAME = 'AUGUR';
  * fills it in from FOCUS_DEPTH. index.html and dev leave it empty, so each app chooses.
  */
 export const FOCUS_DEPTH_PLACEHOLDER = '@FOCUS_DEPTH@';
+/**
+ * The mark on the logo button and the app drawn on the desktop, in the page's `augur-logo` and
+ * `augur-desktop` metas: the web container fills them in from ORG_LOGO_URL and DESKTOP_APP. index.html
+ * and dev have no mark (the kit's placeholder) and Home.
+ */
+export const LOGO_URL_PLACEHOLDER = '@LOGO_URL@';
+export const DESKTOP_APP_PLACEHOLDER = '@DESKTOP_APP@';
+const DEFAULT_DESKTOP_APP = 'home';
 const kit = readKit();
 /** Every module the SDK promises apps must come from the kit: since SDK 2 nothing else serves one. */
 const notInKit = sharedModules.filter((s) => !(s in kit.imports));
@@ -167,7 +175,7 @@ const sharedModulesMap = (): Plugin => {
         })),
         { tag: 'script', children: KIT_FAILED, injectTo: 'head-prepend' },
       ];
-      return { html: dev ? html.replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME).replaceAll(FOCUS_DEPTH_PLACEHOLDER, '') : html, tags };
+      return { html: dev ? html.replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME).replaceAll(FOCUS_DEPTH_PLACEHOLDER, '').replaceAll(LOGO_URL_PLACEHOLDER, '').replaceAll(DESKTOP_APP_PLACEHOLDER, DEFAULT_DESKTOP_APP) : html, tags };
     },
     // index.template.html keeps the placeholders for the web container; index.html has the defaults.
     writeBundle() {
@@ -175,7 +183,7 @@ const sharedModulesMap = (): Plugin => {
       if (dev || !existsSync(page)) return;
       const html = readFileSync(page, 'utf8');
       writeFileSync(join(outDir, 'index.template.html'), html);
-      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/').replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME).replaceAll(FOCUS_DEPTH_PLACEHOLDER, ''));
+      writeFileSync(page, html.replaceAll(KIT_URL_PLACEHOLDER, '/kit/').replaceAll(PRODUCT_NAME_PLACEHOLDER, DEFAULT_PRODUCT_NAME).replaceAll(FOCUS_DEPTH_PLACEHOLDER, '').replaceAll(LOGO_URL_PLACEHOLDER, '').replaceAll(DESKTOP_APP_PLACEHOLDER, DEFAULT_DESKTOP_APP));
     },
   };
 };
