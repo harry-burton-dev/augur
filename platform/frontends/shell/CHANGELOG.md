@@ -1,5 +1,18 @@
 # @augur/shell
 
+## 0.22.0
+
+### Minor Changes
+
+- 74897fc: "Act as" in Account → Sign-in and security: someone holding an admin persona acts as it for a while, for a reason, after entering their password again. A badge says so on every screen, with Stop, and Admin and Deployment send the persona on their calls.
+- 054c31c: The open app's pane at the window's right edge: the clock and the notification indicator at its top (they leave the band while it is drawn), the app's icon, then a title for each About section. Closed, it is a strip with the titles running down it; a title opens its section, one at a time. The floor picker sits to its left. The About panel beside the main column is gone, and an app with About sections now defaults to the `focus` layout.
+- f4cc615: One logo button replaces Home and Apps in the app bar: it starts the bar on the desktop and ends the rail in an app, and goes to the desktop. It shows `ORG_LOGO_URL` (the logo the sign-in pages already take), or a placeholder mark. The desktop now holds Home (`DESKTOP_APP`, default `home`): Home sits on the background, the bar stays across the screen and rests at an edge like a taskbar, and Home is no longer a tile of its own.
+
+### Patch Changes
+
+- 317dfbd: Kit 0.5.17: Common's size tokens for marks, controls, rows and column minimums (no visual change), and PaneLayout's frame takes its parent's width itself, so the shell no longer sets it.
+- 4442766: The task bar shows an app as soon as it is installed. The registry's app.registered and app.updated now reach everyone as platform.app.added and platform.app.updated, and the shell loads its app list again when any platform.app event arrives, keeping the open app open.
+
 ## 0.21.0
 
 ### Minor Changes

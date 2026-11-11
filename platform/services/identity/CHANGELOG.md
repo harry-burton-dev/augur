@@ -1,5 +1,20 @@
 # @augur/identity
 
+## 1.7.1
+
+### Patch Changes
+
+- 1176abf: What the server runs for an installed app moves from Admin to its page in Deployment: rolling it back (installing an earlier release, which puts it on hold), its internet, its own settings saved as they change, its developers and previews, a new sign-in for its service, and removing it. Where apps load from moves to Deployment's Apps. Deployment may look people up (`people:read`) to name and find developers. Admin's Status and Dev to production pages go: Deployment's Health, Backups and Release channel show the same. Messages that sent people to Admin for these now name Deployment.
+- 5243f84: Messages that sent people to the old install guide (docs/deploy.md) now name the page in AUGUR's docs that says what to do, such as "AUGUR's docs, Set up email". The install guide is now the docs site's Run AUGUR section.
+
+  Not breaking: only the wording of `NO_RELAY`, the message shown when no mail relay is set, changed.
+
+- Updated dependencies [5243f84]
+- Updated dependencies [e5a1e2b]
+- Updated dependencies [eb53688]
+- Updated dependencies [4442766]
+  - @augur/service-kit@0.20.0
+
 ## 1.7.0
 
 ### Minor Changes

@@ -1,5 +1,20 @@
 # @augur/models
 
+## 0.5.0
+
+### Minor Changes
+
+- e5a1e2b: A deployment can let the permissions service decide a check instead of the service's own, site by site, with `PERMISSIONS_DECIDES` (ADR 0085, step 2). The model gateway's admin checks read it first. A site that has moved over is refused with 503 when the permissions service can't answer, never falling back to the old check. Empty, as it is unless set, every check is only compared, as before.
+- 1767e42: Shadow mode reaches the model gateway (ADR 0085): its admin check (models' settings and usage) is also asked of the permissions service, after it has answered as it always has, and disagreements are counted and logged (docs/observability.md). Its own answer still decides.
+
+### Patch Changes
+
+- Updated dependencies [5243f84]
+- Updated dependencies [e5a1e2b]
+- Updated dependencies [eb53688]
+- Updated dependencies [4442766]
+  - @augur/service-kit@0.20.0
+
 ## 0.4.1
 
 ### Patch Changes
