@@ -10,7 +10,7 @@ export const DEFAULT_SERVICE_TIMEOUT_MS = 5_000;
 
 /**
  * How long a call to another service may take, start to end of its answer: SERVICE_CALL_TIMEOUT_SECONDS
- * (docs/deploy.md), or five seconds when it is unset, empty or not a positive number.
+ * (AUGUR’s docs, Limits and health), or five seconds when it is unset, empty or not a positive number.
  */
 export const serviceTimeoutMs = (env: Record<string, string | undefined> = process.env): number => {
   const seconds = Number(env.SERVICE_CALL_TIMEOUT_SECONDS);

@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 /** The guides in docs/ that ship with a release. */
 export const GUIDES = [
   'account', 'agents', 'api-contracts', 'app-previews', 'app-storage', 'build-an-app',
-  'catalog', 'deploy', 'domain-events', 'inbox', 'jobs', 'licensing', 'mirror', 'notifications',
+  'catalog', 'domain-events', 'inbox', 'jobs', 'licensing', 'mirror', 'notifications',
   'observability', 'people', 'release-channels', 'seed', 'ship-an-app', 'signed-caller', 'upgrade-went-back',
   'upgrade', 'versioning',
 ].map((name) => `docs/${name}.md`);

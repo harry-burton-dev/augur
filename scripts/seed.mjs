@@ -344,7 +344,7 @@ export const parseArgs = (argv) => {
   return args;
 };
 
-/** Where the gateway and the sign-in realm are: the local stack, or a deployment's address (deploy.md). */
+/** Where the gateway and the sign-in realm are: the local stack, or a deployment's address (AUGUR’s docs, Install AUGUR). */
 export const addressesOf = ({ url, issuer }) =>
   url
     ? { gateway: url.replace(/\/$/, ''), issuer: issuer ?? `${url.replace(/\/$/, '')}/sso/realms/platform` }

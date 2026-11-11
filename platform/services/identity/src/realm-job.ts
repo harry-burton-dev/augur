@@ -35,7 +35,7 @@ loadConfigOrExit('realm job', [
   { name: 'SMTP_REPLY_TO', about: 'where replies go, if not to SMTP_FROM.' },
   { name: 'SMTP_USER', about: 'the relay sign-in, if it wants one.' },
   { name: 'SMTP_PASSWORD', about: 'that sign-in’s password.', secret: true },
-  { name: 'ENTRA_TENANT_ID', about: 'the organisation’s Entra tenant id, for signing in with the organisation’s account (all three ENTRA_* or none; docs/deploy.md, Entra).' },
+  { name: 'ENTRA_TENANT_ID', about: 'the organisation’s Entra tenant id, for signing in with the organisation’s account (all three ENTRA_* or none; AUGUR’s docs, Sign in with Entra).' },
   { name: 'ENTRA_CLIENT_ID', about: 'the AUGUR app registration’s client id in that tenant.' },
   { name: 'ENTRA_CLIENT_SECRET', about: 'that app registration’s client secret.', secret: true },
   { name: 'DATABASE_URL', about: 'identity’s database, read for the organisation’s settings in Admin → Organisation (email sender, idle-account days, sign-in notice, languages, two steps for everyone); without it Keycloak’s email comes from SMTP_FROM under the product’s name, and the idle-account Workflow is left as it is.', secret: true },

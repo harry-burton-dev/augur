@@ -1,5 +1,5 @@
 #!/bin/sh
-# Puts the database back as it was at a moment (ADR 0064; docs/deploy.md, "Restore to a point in time").
+# Puts the database back as it was at a moment (ADR 0064; AUGUR's docs, Restore to a point in time).
 # Run with Postgres stopped and its data volume mounted at /pgdata, from the backup service:
 #   pc run --rm --no-deps -v platform_pgdata:/pgdata --entrypoint /bin/sh backup \
 #     /backup/restore-to-time.sh "2026-11-05 10:30:00"

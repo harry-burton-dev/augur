@@ -58,7 +58,7 @@ test('the registry is told which release it ships in', () => {
 });
 
 test('the deploy files are the server’s own, by hash, without .env.example or the build overlay', () => {
-  const files = deployFiles(['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'docs/deploy.md']);
+  const files = deployFiles(['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'docs/src/content/docs/run/install.md']);
   assert.deepEqual(Object.keys(files), ['backup/backup.sh', 'compose.yml']);
   assert.match(files['compose.yml'], /^[0-9a-f]{64}$/);
 });

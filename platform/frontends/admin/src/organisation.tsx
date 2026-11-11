@@ -316,7 +316,7 @@ export function Organisation({ api, roles = [] }: { api: AdminApi; roles?: strin
               </Notice>
             ) : (
               <Notice tone="info" heading="Only a deployment admin can change these.">
-                They change how everyone signs in and what AUGUR keeps, so they need the deployment-admin role and the password entered again. Password and session lengths are set in the server’s .env (docs/deploy.md).
+                They change how everyone signs in and what AUGUR keeps, so they need the deployment-admin role and the password entered again. Password and session lengths are set in the server’s .env (AUGUR’s docs, Settings and secrets).
               </Notice>
             )}
           </Section>
