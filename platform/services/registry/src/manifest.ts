@@ -404,6 +404,7 @@ export const platformManifests3: Readonly<Record<string, AppManifest3>> = {
       places: [
         { id: 'people', label: 'People', icon: 'people', path: '/people', detail: 'Roles, departments, sign-in' },
         { id: 'departments', label: 'Departments', icon: 'department', path: '/departments', detail: 'Names, members and level names' },
+        { id: 'roles', label: 'Roles', icon: 'key', path: '/roles', detail: 'Made here: who holds each, and what it gives' },
         { id: 'organisation', label: 'Organisation', icon: 'org', path: '/organisation', detail: 'Name, time zone, email, sign-in notice and rules' },
         { id: 'apps', label: 'Apps', icon: 'apps', path: '/apps', detail: 'On or off, and where' },
         { id: 'activity', label: 'Activity', icon: 'clock', path: '/activity', detail: 'Who changed what' },

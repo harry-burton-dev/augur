@@ -654,6 +654,44 @@ export interface InviteResult {
 
 export type PersonChanges = Partial<Pick<Person, 'firstName' | 'lastName' | 'email' | 'enabled' | 'roles' | 'departments'>>;
 
+/**
+ * A role made in AUGUR (ADR 0085): a set of holders, made for the org or one floor (`org:<id>` or `floor:<id>`).
+ * Not one of the sign-in service's roles that People gives, such as admin.
+ */
+export interface MadeRole {
+  id: string;
+  name: string;
+  scope: string;
+  madeBy: string;
+  madeAs?: string;
+  madeAt: string;
+}
+
+/** One thing given, as the permissions service records it: to whom, what, on what, why and until when. */
+export interface RoleGrant {
+  id: string;
+  giver: string;
+  giverAs?: string;
+  /** `person:x`, `persona:x#holder`, `floor:x#member` or `role:x#assignee`. */
+  subject: string;
+  relation: string;
+  object: string;
+  reason: string;
+  madeAt: string;
+  expiresAt?: string;
+}
+
+/** A role, who holds it, what it gives, and what it could be given on a floor and on the org. */
+export interface RoleDetail {
+  role: MadeRole;
+  holders: RoleGrant[];
+  gives: RoleGrant[];
+  offers: { floor: string[]; org: string[] };
+}
+
+/** Who a role is given to: a person, a position's holders, or a floor's members. */
+export type RoleHolder = { type: 'person' | 'position' | 'floor'; id: string };
+
 /** A call the platform turned down; `code` is its `error`, such as `sign_in_again`. */
 export class ApiError extends Error {
   constructor(
@@ -693,6 +731,7 @@ export const adminApi = (fetchImpl: Fetch) => {
   const e = encodeURIComponent;
   const ID = '/api/identity/v1';
   const REG = '/api/registry/v1';
+  const PERM = '/api/permissions/v1';
   const search = (query: object) => new URLSearchParams(Object.entries(query).map(([k, v]) => [k, String(v)])).toString();
 
   return {
@@ -764,6 +803,16 @@ export const adminApi = (fetchImpl: Fetch) => {
       if (!org) throw new Error('The org’s floor couldn’t be found.');
       return { id: org.id, name: org.name };
     },
+
+    /** The roles made for the org (`org:this`) or a floor (`floor:<id>`). */
+    madeRoles: async (scope: string) => (await call<{ roles: MadeRole[] }>('GET', `${PERM}/roles?${search({ scope })}`)).roles,
+    makeRole: (name: string, scope: { type: 'org' | 'floor'; id: string }) => call<MadeRole>('POST', `${PERM}/roles`, { name, scope }),
+    madeRole: (id: string) => call<RoleDetail>('GET', `${PERM}/roles/${e(id)}`),
+    giveRole: (id: string, to: RoleHolder, reason: string, expiresAt?: string) => call<RoleGrant>('POST', `${PERM}/roles/${e(id)}/holders`, { to, reason, ...(expiresAt ? { expiresAt } : {}) }),
+    /** Gives a role's holders something on the org or a floor, such as settling a floor's disputes. */
+    roleGives: (id: string, relation: string, on: { type: 'org' | 'floor'; id: string }, reason: string) => call<RoleGrant>('POST', `${PERM}/roles/${e(id)}/gives`, { relation, on, reason }),
+    /** Takes a grant back, and with it whatever its holders gave that they could give only because of it. */
+    takeBack: (grant: string, reason: string) => call<void>('DELETE', `${PERM}/grants/${e(grant)}?${search({ reason })}`),
 
     audit: (query: AuditQuery) => call<AuditEntry[]>('GET', `/api/events/v1/audit?${search(query)}`),
     /** Where the entries the filters show are exported as a CSV file (each export is recorded). */
