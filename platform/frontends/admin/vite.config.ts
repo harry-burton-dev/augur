@@ -1,17 +1,25 @@
 import { isSharedModule } from '@augur/mfe-sdk/build';
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
+import { defineConfig, type Plugin } from 'vitest/config';
 
-// One ES module at dist/entry.js: the registry's entry URL for Admin. React and
-// the kits stay external; the shell serves them through its import map. Its
-// stylesheet is inlined and added to the page when it mounts.
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  build: {
-    lib: { entry: 'src/entry.tsx', formats: ['es'], fileName: () => 'entry.js' },
-    target: 'es2022',
-    rollupOptions: { external: isSharedModule },
+// Admin, an app on the app contract (contract 3): one ES module, dist/sandbox.js, which the shell runs in a web
+// worker of its own: no DOM, no network, no token. The worker has no import map, so what the entry imports is
+// bundled into it, and React and the kits, which only the shell's page has, can't be imported at all: the app
+// draws Quill's remote elements by name (`@augur/app-kit/remote` types them).
+const pageOnly = (): Plugin => ({
+  name: 'page-only-modules',
+  enforce: 'pre',
+  resolveId(id) {
+    if (isSharedModule(id)) {
+      this.error(`${id} is only on the shell's page, and Admin's frontend runs in a worker: draw Quill's remote elements by name (\`@augur/app-kit/remote\`).`);
+    }
   },
-  test: { environment: 'happy-dom' },
+});
+
+export default defineConfig({
+  plugins: [pageOnly()],
+  build: {
+    lib: { entry: 'src/entry.ts', formats: ['es'], fileName: () => 'sandbox.js' },
+    target: 'es2022',
+  },
+  test: { environment: 'node' },
 });

@@ -1,5 +1,5 @@
-import type { SelectOption } from '@augur/app-kit';
 import type { FeaturePreviewMode, FeaturePreviews } from './api.js';
+import type { SelectOption } from './parts.js';
 
 const MODE_LABELS: Record<FeaturePreviewMode, string> = { off: 'Off', 'opt-in': 'For those who turn it on', everyone: 'On for everyone', floors: 'On for chosen floors' };
 

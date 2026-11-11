@@ -1,7 +1,7 @@
-import type { SelectOption, StatusName } from '@augur/app-kit';
 import { APP_CATEGORIES, SDK_VERSION, type AppCategory } from '@augur/mfe-sdk';
 import semver from 'semver';
 import type { CatalogueApp, Department, FloorRule } from './api.js';
+import type { SelectOption, StatusName } from './parts.js';
 
 /** Where an app stands: off, on, or on but unable to open on this deployment. */
 export const appStatus = (app: CatalogueApp, sdkVersion = SDK_VERSION): { status: StatusName; label: string; why?: string } => {

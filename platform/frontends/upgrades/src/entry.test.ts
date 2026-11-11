@@ -1,7 +1,7 @@
 import type { AppContext, FrameState, PlaceItem, RemoteElement, RemoteNode } from '@augur/mfe-sdk/sdk3';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AppInstalls, AppJob, Deliveries, DesiredState, Overview, OverviewUnit, PlatformStatus, PlatformUpdates } from './model/types.js';
-import start, { COMMANDS, PLACE_APPS } from './entry.js';
+import start, { COMMANDS, OPEN_APP, PLACE_APPS, pathForIntent } from './entry.js';
 import { pathOf, routeFor } from './routes.js';
 
 // The shell, as Deployment sees it from its worker: what it draws, what it sets on its pane, what sits
@@ -176,6 +176,13 @@ const open = async (answer: Answer, path = '/') => {
 afterEach(() => vi.useRealTimers());
 
 describe('routes', () => {
+  it('opens the app another app asks for, or the list when it names none', () => {
+    expect(pathForIntent({ type: OPEN_APP, payload: { app: 'atlas' } })).toBe(pathOf({ page: 'app', app: 'atlas' }));
+    expect(pathForIntent({ type: OPEN_APP, payload: {} })).toBe(pathOf({ page: 'apps' }));
+    expect(pathForIntent({ type: 'something.else', payload: {} })).toBeUndefined();
+    expect(pathForIntent(undefined)).toBeUndefined();
+  });
+
   it('reads every page and question back from its path', () => {
     for (const r of [
       { page: 'overview' },

@@ -17,6 +17,15 @@ import { appsPage, overviewPage, rowsOf, staleNotice, type Actions, type Ui } fr
 /** The commands and places Deployment handles: each is declared in its manifest, which the shell draws from. */
 export const COMMANDS = { check: 'deployment.check' } as const;
 export const PLACE_APPS = 'apps';
+/** The intent Admin raises to open an app's page here: what the server runs for it. */
+export const OPEN_APP = 'deployment.app.open';
+
+/** Where an intent opens Deployment: the app's page, or Apps when it names none. */
+export const pathForIntent = (intent: AppContext['intent']): string | undefined => {
+  if (intent?.type !== OPEN_APP) return undefined;
+  const app = (intent.payload as { app?: unknown } | undefined)?.app;
+  return typeof app === 'string' && app ? pathOf({ page: 'app', app }) : pathOf({ page: 'apps' });
+};
 
 /** The pages that show the settings history: Settings itself, and Release channel's channel changes. */
 const HISTORY_PAGES = new Set<Route['page']>(['settings', 'channel']);
@@ -82,7 +91,9 @@ export const screen = (v: SettingsView): RemoteNode => {
  */
 export default defineApp((ctx: AppContext) => {
   const api = upgradesApi(ctx);
-  let path = ctx.path || PLACES.overview;
+  const opened = pathForIntent(ctx.intent);
+  let path = opened ?? (ctx.path || PLACES.overview);
+  if (opened) ctx.navigate(opened);
   const ui: Ui = { dialog: {} };
   let under = '';
   // The Settings page's own reads, its draft and how saving and exporting went.

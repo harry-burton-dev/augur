@@ -1,10 +1,13 @@
-import { Button, DateField, Details, Dialog, Select, Table, type SelectOption, type TableColumn, type TableRow } from '@augur/app-kit';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { fullName, type AdminApi, type AuditEntry, type AuditQuery, type CatalogueApp, type Department, type Person } from './api.js';
+import type { RemoteNode } from '@augur/mfe-sdk/sdk3';
+import { fullName, type AuditEntry, type AuditQuery, type CatalogueApp, type Department, type Person } from './api.js';
 import { floorTree } from './apps-model.js';
-import { day as shortDay, Page, Problem } from './parts.js';
+import { off } from './common.js';
+import { day as shortDay, type SelectOption } from './parts.js';
+import { quill } from './quill.js';
+import { pathOf } from './routes.js';
+import type { Filters, View } from './view.js';
 
-const PAGE = 50;
+export const PAGE = 50;
 const ANYONE = '*';
 
 /** The names Activity writes sentences with, looked up by id. */
@@ -174,7 +177,7 @@ export const describe = (e: AuditEntry, names: Names): string => {
   }
 };
 
-export type Period = 'today' | 'week' | 'month' | 'all' | 'custom';
+export type Period = Filters['period'];
 
 /** The time range a period covers, ending now; a custom range runs from the start of `from` to the end of `to`. */
 export const rangeFor = (period: Period, now: Date, from = '', to = ''): Pick<AuditQuery, 'since' | 'until'> => {
@@ -212,189 +215,127 @@ const kinds: SelectOption[] = [
   { value: ANYONE, label: 'Everything' },
 ];
 
-const columns: TableColumn[] = [
-  { key: 'at', label: 'When', kind: 'date', sortable: true, sortFirst: 'desc' },
-  { key: 'what', label: 'What happened', wrap: true },
-  { key: 'area', label: 'Where', sortable: true },
-];
+/** What Activity's filters start at: this week's changes, by anyone, anywhere. */
+export const FIRST_FILTERS: Filters = { kind: 'change', who: ANYONE, area: ANYONE, floor: ANYONE, period: 'week', from: '', to: '' };
 
-type Filters = { kind: string; who: string; area: string; floor: string; period: Period; from: string; to: string };
-
-const queryFor = (f: Filters, before?: string): AuditQuery => ({
+/** The audit query for the filters, from the start or before an entry. */
+export const queryFor = (f: Filters, before?: string, now = new Date()): AuditQuery => ({
   ...(f.kind === 'change' || f.kind === 'sign-in' ? { kind: f.kind } : {}),
   // A person's sign-ins are about them, so "who" asks for anything by or about them there.
   ...(f.who !== ANYONE ? (f.kind === 'change' ? { actor: f.who } : { person: f.who }) : {}),
   ...(f.area !== ANYONE ? { app: f.area } : {}),
   ...(f.floor !== ANYONE ? { workspace: f.floor } : {}),
-  ...rangeFor(f.period, new Date(), f.from, f.to),
+  ...rangeFor(f.period, now, f.from, f.to),
   ...(before ? { before } : {}),
   limit: PAGE,
 });
 
-/** The audit log, readable: who did what, where and when, newest first. */
-export function Activity({ api }: { api: AdminApi }) {
-  const [entries, setEntries] = useState<AuditEntry[]>([]);
-  const [names, setNames] = useState<Names>(() => namesFrom([], [], []));
-  const [options, setOptions] = useState<{ people: SelectOption[]; areas: SelectOption[]; floors: SelectOption[] }>({ people: [], areas: [], floors: [] });
-  const [filters, setFilters] = useState<Filters>({ kind: 'change', who: ANYONE, area: ANYONE, floor: ANYONE, period: 'week', from: '', to: '' });
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [more, setMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState('');
-  const [open, setOpen] = useState<string>();
-  /** Answers to an older ask are dropped when filters change mid-flight. */
-  const ask = useRef(0);
-  const key = JSON.stringify(filters);
+/** Whether the filters are ready to ask: between dates waits for one of them. */
+export const ready = (f: Filters) => f.period !== 'custom' || Boolean(f.from || f.to);
 
-  // Names for the sentences and the filters. Without them the log still shows, with ids.
-  useEffect(() => {
-    let live = true;
-    void Promise.all([
-      api.people().catch(() => [] as Person[]),
-      api.departments().catch(() => [] as Department[]),
-      api.apps().catch(() => [] as CatalogueApp[]),
-      api.org().catch(() => undefined),
-    ]).then(([people, departments, apps, org]) => {
-      if (!live) return;
-      // The org's name reads like a department's in sentences about floors.
-      setNames(namesFrom(people, org ? [...departments, { id: org.id, name: org.name, members: [] }] : departments, apps));
-      const floors = org ? floorTree(org, departments) : [];
-      setOptions({
-        people: [{ value: ANYONE, label: 'Anyone' }, ...people.map((p) => ({ value: p.id, label: fullName(p) })).sort((a, b) => a.label.localeCompare(b.label))],
-        areas: [
-          { value: ANYONE, label: 'Anywhere' },
-          { value: 'identity', label: 'People and departments' },
-          { value: 'registry', label: 'App catalogue' },
-          ...apps.filter((a) => !a.platform).map((a) => ({ value: a.id, label: a.name })),
-        ],
-        floors: [
-          { value: ANYONE, label: 'Any floor' },
-          ...floors.map((f) => ({ value: f.id, label: f.path.map((id) => floors.find((x) => x.id === id)?.name ?? '').join(' / '), detail: f.path.length > 1 ? 'and below' : 'everything on a floor' })),
-        ],
-      });
+/** The names Activity writes with, from what's been read; ids stand in until they are. */
+const namesOf = (v: View): Names => {
+  const org = v.r.floor.value;
+  const departments = v.r.departments.value ?? [];
+  return namesFrom(v.r.people.value ?? [], org ? [...departments, { id: org.id, name: org.name, members: [] }] : departments, v.r.apps.value ?? []);
+};
+
+/** The audit log, readable: who did what, where and when, newest first. Each entry opens its own page. */
+export const activityPage = (v: View): RemoteNode => {
+  const a = v.ui.activity;
+  const f = a.filters;
+  const names = namesOf(v);
+  const people = v.r.people.value ?? [];
+  const apps = v.r.apps.value ?? [];
+  const floors = v.r.floor.value && v.r.departments.value ? floorTree(v.r.floor.value, v.r.departments.value) : [];
+  const set = (key: keyof Filters) => (value: string) => {
+    a.filters = { ...a.filters, [key]: value } as Filters;
+    v.on.audit();
+  };
+  const select = (label: string, key: keyof Filters, options: SelectOption[]) => quill('quill-select', { label, options, value: f[key], onChange: set(key) });
+  const rows = (a.entries ?? []).map((e) => ({ id: e.id, at: e.at, what: describe(e, names), area: areaName(e.app, names) }));
+  return [
+    quill('quill-notice', { tone: 'info' }, 'Every change made through AUGUR, and every sign-in: who, what, where and when. Nothing here can be edited or removed by hand; entries older than the organisation’s retention period go each night.'),
+    quill('quill-grid', { label: 'Filters' }, [
+      select('Kind', 'kind', kinds),
+      select('Who', 'who', [{ value: ANYONE, label: 'Anyone' }, ...people.map((p) => ({ value: p.id, label: fullName(p) })).sort((x, y) => x.label.localeCompare(y.label))]),
+      select('Where', 'area', [
+        { value: ANYONE, label: 'Anywhere' },
+        { value: 'identity', label: 'People and departments' },
+        { value: 'registry', label: 'App catalogue' },
+        ...apps.filter((x) => !x.platform).map((x) => ({ value: x.id, label: x.name })),
+      ]),
+      select('Floor', 'floor', [
+        { value: ANYONE, label: 'Any floor' },
+        ...floors.map((fl) => ({ value: fl.id, label: fl.path.map((id) => floors.find((x) => x.id === id)?.name ?? '').join(' / '), detail: fl.path.length > 1 ? 'and below' : 'everything on a floor' })),
+      ]),
+      select('When', 'period', periods),
+      f.period === 'custom' ? quill('quill-date-field', { label: 'From', value: f.from, quick: [], onChange: set('from') }) : null,
+      f.period === 'custom' ? quill('quill-date-field', { label: 'To', value: f.to, quick: [], onChange: set('to') }) : null,
+    ]),
+    !ready(f)
+      ? quill('quill-state', { kind: 'empty', heading: 'Choose a day to start or end at', size: 'region' })
+      : quill(
+          'quill-table',
+          {
+            label: 'Activity',
+            noun: 'changes',
+            columns: [
+              { key: 'at', label: 'When', kind: 'date', sortable: true, sortFirst: 'desc' },
+              { key: 'what', label: 'What happened', wrap: true },
+              { key: 'area', label: 'Where', sortable: true },
+            ],
+            rows,
+            loading: Boolean(a.loading),
+            ...(a.error ? { error: a.error } : {}),
+            empty: f.kind === 'sign-in' ? 'Nobody signed in in this time.' : 'Nothing was changed in this time.',
+            onOpen: (id: string) => v.on.go(pathOf({ page: 'entry', id })),
+            onRetry: () => v.on.audit(),
+          },
+          [
+            quill('quill-button', {
+              slot: 'actions',
+              label: 'Download CSV',
+              kind: 'secondary',
+              size: 'sm',
+              busy: Boolean(a.exporting),
+              busyLabel: 'Making the file',
+              ...off((a.loading && 'Wait for Activity to load.') || (a.error && 'Activity couldn’t be loaded. Try again first.')),
+              onPress: () => v.on.exportAudit(),
+            }),
+          ],
+        ),
+    a.exportError ? quill('quill-notice', { tone: 'refused' }, a.exportError) : null,
+    a.more && !a.loading ? quill('quill-more', { shown: rows.length, total: rows.length + 1, noun: 'changes', step: PAGE, busy: Boolean(a.older), onMore: () => v.on.audit(true) }) : null,
+  ];
+};
+
+/** One entry, on a page of its own: everything recorded about it. */
+export const entryPage = (v: View, id: string): RemoteNode => {
+  const e = v.ui.activity.entries?.find((x) => x.id === id);
+  if (!e)
+    return quill('quill-state', {
+      kind: 'empty',
+      heading: v.ui.activity.loading ? 'Reading Activity' : 'That entry isn’t among those shown',
+      body: 'Open it from Activity, with the filters it’s under.',
+      action: 'Open Activity',
+      size: 'page',
+      onAction: () => v.on.go(pathOf({ page: 'activity' })),
     });
-    return () => {
-      live = false;
-    };
-  }, [api]);
-
-  const load = useCallback(async () => {
-    const f = JSON.parse(key) as Filters;
-    // Between dates with neither day chosen yet: wait for one.
-    if (f.period === 'custom' && !f.from && !f.to) return;
-    const mine = ++ask.current;
-    setLoading(true);
-    setError('');
-    setOpen(undefined);
-    try {
-      const page = await api.audit(queryFor(f));
-      if (mine !== ask.current) return;
-      setEntries(page);
-      setMore(page.length === PAGE);
-    } catch (err) {
-      if (mine === ask.current) setError((err as Error).message);
-    } finally {
-      if (mine === ask.current) setLoading(false);
-    }
-  }, [api, key]);
-  useEffect(() => void load(), [load]);
-
-  const loadOlder = async () => {
-    const last = entries.at(-1);
-    if (!last) return;
-    const mine = ask.current;
-    setLoadingMore(true);
-    try {
-      const page = await api.audit(queryFor(filters, last.id));
-      if (mine !== ask.current) return;
-      setEntries((all) => [...all, ...page]);
-      setMore(page.length === PAGE);
-    } catch (err) {
-      if (mine === ask.current) setError((err as Error).message);
-    } finally {
-      setLoadingMore(false);
-    }
-  };
-
-  const set = (k: keyof Filters) => (value: string) => setFilters((f) => ({ ...f, [k]: value }));
-
-  /** Everything the filters show, not only the pages loaded, as a spreadsheet file. */
-  const download = async () => {
-    setExporting(true);
-    setExportError('');
-    try {
-      const query = Object.fromEntries(Object.entries(queryFor(filters)).filter(([k]) => k !== 'before' && k !== 'limit')) as Omit<AuditQuery, 'before' | 'limit'>;
-      const { blob, filename } = await api.exportAudit(query);
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      link.click();
-      URL.revokeObjectURL(link.href);
-    } catch (err) {
-      setExportError((err as Error).message);
-    } finally {
-      setExporting(false);
-    }
-  };
-  const rows: TableRow[] = entries.map((e) => ({ id: e.id, at: e.at, what: describe(e, names), area: areaName(e.app, names) }));
-  const e = entries.find((x) => x.id === open);
-
-  return (
-    <Page heading="Activity" summary="Every change made through AUGUR, and every sign-in: who, what, where and when. Nothing here can be edited or removed by hand; entries older than the organisation’s retention period go each night.">
-      <div className="admin-filters" data-filters>
-        <Select label="Kind" options={kinds} value={filters.kind} onChange={set('kind')} />
-        <Select label="Who" options={options.people} value={filters.who} onChange={set('who')} />
-        <Select label="Where" options={options.areas} value={filters.area} onChange={set('area')} />
-        <Select label="Floor" options={options.floors} value={filters.floor} onChange={set('floor')} />
-        <Select label="When" options={periods} value={filters.period} onChange={set('period')} />
-        {filters.period === 'custom' ? (
-          <>
-            <DateField label="From" value={filters.from} onChange={set('from')} quick={[]} />
-            <DateField label="To" value={filters.to} onChange={set('to')} quick={[]} />
-          </>
-        ) : null}
-      </div>
-      <Table
-        noun="changes"
-        columns={columns}
-        rows={rows}
-        loading={loading}
-        error={error}
-        empty={filters.kind === 'sign-in' ? 'Nobody signed in in this time.' : 'Nothing was changed in this time.'}
-        onOpen={(row) => setOpen(row.id)}
-        onRetry={() => void load()}
-        actions={
-          <Button kind="secondary" size="sm" busy={exporting} busyLabel="Making the file…" disabled={loading || Boolean(error)} reason={error ? 'Activity couldn’t be loaded. Try again first.' : 'Wait for Activity to load.'} onPress={() => void download()}>
-            Download CSV
-          </Button>
-        }
-      />
-      <Problem>{exportError}</Problem>
-      {more && !loading ? (
-        <div className="admin-more">
-          <Button kind="secondary" size="sm" busy={loadingMore} onPress={() => void loadOlder()}>
-            Show older
-          </Button>
-        </div>
-      ) : null}
-      {e ? (
-        <Dialog open light size="read" eyebrow="Activity" heading={describe(e, names)} summary="Everything recorded about this change. Entries can’t be edited or removed." cancelLabel="Close" onClose={() => setOpen(undefined)}>
-          <Details
-            limit={0}
-            items={[
-              { label: 'When', value: new Date(e.at).toLocaleString() },
-              { label: 'Who', value: e.actor.kind === 'user' ? names.person(e.actor.id) : `${names.app(e.actor.id)} (a service)` },
-              { label: 'Where', value: areaName(e.app, names) },
-              { label: 'Action', value: e.action },
-              ...(e.target ? [{ label: 'About', value: e.target }] : []),
-              ...(e.workspace ? [{ label: 'Floor', value: e.workspace.path.map((id) => names.department(id)).join(' / ') }] : []),
-              ...Object.entries(e.detail ?? {}).map(([k, v]) => ({ label: k, value: typeof v === 'string' ? v : JSON.stringify(v) })),
-            ]}
-          />
-        </Dialog>
-      ) : null}
-    </Page>
-  );
-}
+  const names = namesOf(v);
+  return [
+    quill('quill-notice', { tone: 'info', heading: describe(e, names) }, 'Everything recorded about this change. Entries can’t be edited or removed.'),
+    quill('quill-details', {
+      limit: 0,
+      items: [
+        { label: 'When', value: new Date(e.at).toLocaleString() },
+        { label: 'Who', value: e.actor.kind === 'user' ? names.person(e.actor.id) : `${names.app(e.actor.id)} (a service)` },
+        { label: 'Where', value: areaName(e.app, names) },
+        { label: 'Action', value: e.action },
+        ...(e.target ? [{ label: 'About', value: e.target }] : []),
+        ...(e.workspace ? [{ label: 'Floor', value: e.workspace.path.map((x) => names.department(x)).join(' / ') }] : []),
+        ...Object.entries(e.detail ?? {}).map(([k, val]) => ({ label: k, value: typeof val === 'string' ? val : JSON.stringify(val) })),
+      ],
+    }),
+  ];
+};
