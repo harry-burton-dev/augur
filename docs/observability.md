@@ -68,7 +68,11 @@ While admin and lead checks move to the permissions service (ADR 0085), each ser
 - `augur_permissions_shadow_checks_total`: the checks compared, by `site` (such as `events.audit.export`) and `outcome`: `agree`, `disagree`, `unanswered` (the permissions service couldn't say) or `skipped` (too many in flight).
 - `augur_permissions_shadow_disagreements_total`: the checks where the two answers differed, by `site`. Each one is also logged as a warning that starts `permissions shadow:`, with both answers and what was asked.
 
-The service's own answer still decides. A site moves over once it has shown no disagreement for 7 days. Today's Keycloak admins are copied in as one admin persona each, so an admin check is asked of the personas the person holds.
+The service's own answer still decides, until the site moves over: a deployment names the sites the permissions service decides in `PERMISSIONS_DECIDES` (comma-separated, or `all`), once each has shown no disagreement for 7 days. A site that has moved over is no longer compared. When the permissions service can't answer it, the call is refused with 503 and says why, and never falls back to the old check. It records:
+
+- `augur_permissions_decided_total`: the checks the permissions service decided, by `site` and `outcome`: `allowed`, `refused` or `unanswered`.
+
+To move a site back, take it out of `PERMISSIONS_DECIDES` and run `pc up -d`. The model gateway reads it so far (sites `models.settings.read`, `models.settings.change` and `models.usage`); the other services follow. Today's Keycloak admins are copied in as one admin persona each, so an admin check is asked of the personas the person holds.
 
 ## Activity
 

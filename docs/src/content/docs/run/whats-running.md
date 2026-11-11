@@ -31,7 +31,8 @@ back and logged, and Status shows how the last copy went.
 
 It also copies who holds the Keycloak roles `admin`, `deployment-admin` and `publisher`, with each admin as an
 admin persona. For now the events, identity, registry and models services ask it beside each of their own admin and
-lead checks and compare the answers, without acting on its answer
+lead checks and compare the answers. A deployment lets it decide instead, check by check, with
+`PERMISSIONS_DECIDES`, once a check has shown no disagreement for 7 days; the model gateway reads it so far
 ([Observability](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#what-the-alert-rules-read)).
 
 Admin personas are kept here too. Someone who holds one signs in again, gives a reason, and acts as it for at

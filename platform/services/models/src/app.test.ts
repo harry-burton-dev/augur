@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { callerHeaders, GrantsUnavailable, serviceHeaders, type NewAuditEntry, type Scope } from '@augur/service-kit';
+import { callerHeaders, GrantsUnavailable, PermissionsUnavailable, serviceHeaders, type NewAuditEntry, type Scope } from '@augur/service-kit';
 import { buildApp, type ModelsOptions } from './app.ts';
 import { standIn, type ModelProvider } from './provider.ts';
 import { DATABASE_URL, modelsDb } from './db.testing.ts';
@@ -166,9 +166,13 @@ describe.runIf(DATABASE_URL)('models', () => {
     expect((await none.app.inject({ method: 'GET', url: '/v1/status', headers: sam })).json()).toEqual({ enabled: false, ready: false });
   });
 
-  it('compares the admin check with the permissions service, still deciding by today’s role (shadow mode)', async () => {
+  it('asks the shadow for the admin check, which decides by today’s role until the site is moved over', async () => {
     const asked: { site: string; caller: string; today: boolean }[] = [];
-    const shadow = { check: (site: string, caller: { id: string }, _q: unknown, today: boolean) => void asked.push({ site, caller: caller.id, today }), settled: async () => {} };
+    const shadow = {
+      check: () => undefined,
+      decide: async (site: string, caller: { id: string }, _q: unknown, today: boolean) => (asked.push({ site, caller: caller.id, today }), today),
+      settled: async () => {},
+    };
     const { app } = await start({ shadow });
     expect((await app.inject({ method: 'GET', url: '/v1/settings', headers: sam })).statusCode).toBe(403);
     expect((await app.inject({ method: 'GET', url: '/v1/usage', headers: alex })).statusCode).toBe(200);
@@ -176,6 +180,26 @@ describe.runIf(DATABASE_URL)('models', () => {
       { site: 'models.settings.read', caller: 'u-2', today: false },
       { site: 'models.usage', caller: 'u-1', today: true },
     ]);
+  });
+
+  it('lets the permissions service decide a moved-over site, and says why when it can’t answer', async () => {
+    let up = true;
+    const shadow = {
+      check: () => undefined,
+      decide: async (site: string) => {
+        if (!up) throw new PermissionsUnavailable();
+        return site === 'models.usage';
+      },
+      settled: async () => {},
+    };
+    const { app } = await start({ shadow });
+    // Sam holds no admin role, but the permissions service says yes; Alex holds it, and it says no.
+    expect((await app.inject({ method: 'GET', url: '/v1/usage', headers: sam })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/settings', headers: alex })).statusCode).toBe(403);
+    up = false;
+    const down = await app.inject({ method: 'GET', url: '/v1/usage', headers: alex });
+    expect(down.statusCode).toBe(503);
+    expect(down.json().message).toMatch(/can’t be checked right now/);
   });
 
   it('lets only admins turn models on and off and set the limit, recording each change', async () => {

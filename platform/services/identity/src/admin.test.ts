@@ -84,7 +84,7 @@ const setup = async () => {
 describe.runIf(DATABASE_URL)('admin: shadow mode', () => {
   it('asks the permissions service each admin check too, and still answers as it always has', async () => {
     const asked: { site: string; caller: string; today: boolean }[] = [];
-    const shadow = { check: (site: string, caller: { id: string }, _q: unknown, today: boolean) => void asked.push({ site, caller: caller.id, today }), settled: async () => {} };
+    const shadow = { check: (site: string, caller: { id: string }, _q: unknown, today: boolean) => void asked.push({ site, caller: caller.id, today }), decide: async (_s: string, _c: unknown, _q: unknown, today: boolean) => today, settled: async () => {} };
     const app = await db.app({ directory: new MemoryDirectory(), store: db.store, shadow });
     expect((await app.inject({ method: 'GET', url: '/v1/admin/people', headers: admin })).statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/v1/admin/people', headers: editor })).statusCode).toBe(403);

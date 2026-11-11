@@ -5,7 +5,7 @@ import { roleChecks } from './roles.ts';
 /** A shadow that remembers what it was asked to compare. */
 const remembering = () => {
   const compared: { site: string; caller: string; question: ShadowQuestion; today: boolean }[] = [];
-  const shadow: Shadow = { check: (site, caller, question, today) => void compared.push({ site, caller: caller.id, question: question as ShadowQuestion, today }), settled: async () => {} };
+  const shadow: Shadow = { check: (site, caller, question, today) => void compared.push({ site, caller: caller.id, question: question as ShadowQuestion, today }), decide: async (_s: string, _c: unknown, _q: unknown, today: boolean) => today, settled: async () => {} };
   return { compared, shadow };
 };
 
