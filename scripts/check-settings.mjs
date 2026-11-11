@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Holds the deployment's settings to infra/deploy/settings.schema.json, where each is described once
-// (docs/deploy.md, "Settings and secrets"). Fails when:
+// (AUGUR’s docs, Settings and secrets). Fails when:
 //   - a setting doesn't reach a service that reads it in infra/deploy/compose.yml (or the file its
 //     `x-via` names), and the service has no env_file;
 //   - compose.yml makes a setting required (${KEY:?...}) that the schema doesn't, or the other way;
@@ -9,7 +9,7 @@
 //   - a service's code reads a setting the schema doesn't have, or doesn't list that service for;
 //   - a default, in the schema or compose.yml, hard-codes one deployment (an owner, a tailnet host,
 //     an email address) where the setting should be required or worked out;
-//   - the install guide's list of settings to fill in (docs/deploy.md, between the `settings` markers)
+//   - the install guide's list of settings to fill in (docs/src/content/docs/run/install.md, between the `settings` markers)
 //     isn't the one the schema makes.
 //   node scripts/check-settings.mjs            (--write rewrites that list from the schema)
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -107,8 +107,8 @@ export const deploymentLiterals = (value) => {
   return found;
 };
 
-/** The install guide's settings list, made from the schema (docs/deploy.md, First start). */
-export const INSTALL_GUIDE = 'docs/deploy.md';
+/** The install guide's settings list, made from the schema (docs/src/content/docs/run/install.md). */
+export const INSTALL_GUIDE = 'docs/src/content/docs/run/install.md';
 const START = '<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->';
 const END = '<!-- /settings -->';
 

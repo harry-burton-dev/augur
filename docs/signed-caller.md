@@ -44,6 +44,10 @@ app.addHook('onRequest', signedCallers(callerCheckFromEnv('app-expenses')));
 
 An app's own token, with no delegation, is admitted only for an app the registry knows and has on ("Notes isn’t installed here", "Notes is turned off"), and only for the routes its grant covers, its own routes and its own registry entry; the caller the gateway signs then names the app (`app:<id>`, with `app` and `scopes`) and the app's own token goes on with the call, so a service still reads which app is calling the way it did before.
 
+### Acting as an admin persona
+
+While someone acts as an admin persona (ADR 0086, PDR-024 "Act as"), the shell sends `x-augur-persona: <id>` on their calls. On every call the gateway asks the permissions service whether that person has a live session for that persona (`POST /access/v1/persona-session`). If they do, the caller it signs carries the claim `persona` beside the person, whose id stays in `sub`, so both are recorded; `callerFromHeaders` gives it as `caller.persona` (`x-user-persona`). A session that has ended is refused with `persona_ended`, and the call is refused with 503 when the permissions service can't say. Only AUGUR's own frontends (the apps with platform scopes, ADR 0083: Admin and Deployment) carry the persona, and only to AUGUR's services; a call for any other app, or to an app's part, is refused while acting as one. A client can't claim a persona itself: like every caller header, `x-user-persona` and `x-augur-persona` are stripped before forwarding.
+
 ## AUGUR calling your part
 
 AUGUR's own services reach each other inside the deployment, never through the gateway, with one exception: the events service pushes events to each subscribing app's inbound part (`POST /augur/events`, see docs/domain-events.md). That call carries a signed caller like any other, named after the service: `isServiceCaller(caller)` says it is AUGUR, and `serviceOfCaller(caller)` which service (`events`). No person's token is behind it, so `caller.roles` and `caller.departments` are empty; a part that needs a person refuses it.
@@ -63,4 +67,4 @@ The gateway makes a new key each time it starts. A service sees a key id it does
 
 ## From inside a container
 
-A call from the service's own container (`localhost`) is believed as it comes. Only someone who can already run commands there can make one, and it is how a server admin acts when nobody can sign in, as in [deploy.md](deploy.md)'s command for removing an app.
+A call from the service's own container (`localhost`) is believed as it comes. Only someone who can already run commands there can make one, and it is how a server admin acts when nobody can sign in, as in the command for [removing an app](src/content/docs/run/day-to-day.md#remove-an-app-from-the-catalogue).

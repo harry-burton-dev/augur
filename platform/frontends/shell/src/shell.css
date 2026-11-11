@@ -34,6 +34,8 @@ body { background: var(--slate-deep); color: var(--ink); font-family: var(--font
   font-size: var(--type-small);
 }
 .preview-badge a, .previews a { color: inherit; }
+/* "Act as" (PDR-024): at the top, so it is never hidden behind a preview's badge and is always in view while acting. */
+.preview-badge[data-acting] { inset-block-start: var(--space-4); inset-block-end: auto; border-color: var(--needs, var(--warning, var(--hairline))); }
 .previews ul { list-style: none; margin: var(--space-3) 0 var(--space-5); padding: 0; }
 .previews .live { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin: 0 0 var(--space-5); }
 .previews .live label { display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }

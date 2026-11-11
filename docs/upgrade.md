@@ -1,6 +1,6 @@
 # Upgrading AUGUR
 
-Moving a running server from one release to the next. Commands use the `pc` alias from [deploy.md](deploy.md):
+Moving a running server from one release to the next. Commands use the `pc` alias from [Install AUGUR](src/content/docs/run/install.md#1-get-the-release):
 
 ```sh
 alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### OpenFGA moves to 1.19
+
+**From** unreleased
+
+OpenFGA (`openfga`, the store behind the permissions service) moves from 1.11.2 to 1.19.0, which fixes critical flaws in the libraries it was built with. It brings its tables up to date on its first start, as it always has; nothing to do. Going back to an earlier release leaves the newer tables in place, which the deploy test checks.
+
 ### No role needs a one-time code to sign in
 
 **From** augur@0.25.0
@@ -100,7 +106,7 @@ The permissions service now copies floors, positions and who holds them from ide
 
 **From** augur@0.25.0
 
-Nothing to do. Compose makes a new volume, `knowledge-ledger`, where the knowledge graph writes the id of each observation someone forgets. After any restore, from a nightly backup or to a point in time, the knowledge graph's migrate job forgets those again when AUGUR starts, so a restore can't bring back what people asked to forget. The backup container copies the ledger off the server with each night's dump; [Restore a lost server](deploy.md#restore-a-lost-server) has a step that puts it back.
+Nothing to do. Compose makes a new volume, `knowledge-ledger`, where the knowledge graph writes the id of each observation someone forgets. After any restore, from a nightly backup or to a point in time, the knowledge graph's migrate job forgets those again when AUGUR starts, so a restore can't bring back what people asked to forget. The backup container copies the ledger off the server with each night's dump; [Restore a lost server](src/content/docs/run/restore-a-lost-server.md) has a step that puts it back.
 
 ### The permissions service and OpenFGA
 
@@ -211,9 +217,9 @@ The registry installs only releases on the app contract (contract 3, `augur.app-
 **From** augur@0.24.0
 
 - **Their documents, entities and intents are deleted on upgrade.** No app ships with AUGUR any more (ADR 0075): today's apps are being redesigned and will come back from the app feed. This release stops their containers, and the storage job then drops their schemas and logins and empties and deletes their buckets, once on each server (`RETIRED_APPS` in `compose.yml`; `pc logs storage` says what it took). The registry forgets them, and they leave Admin, Apps. The backup the Upgrade Centre takes first is the only copy left: keep it if you may want that data.
-- **Upgrading by hand, take a backup first** (docs/deploy.md, Backups), then upgrade as usual. To keep one app's data instead, add its id to `APP_STORAGE` in `.env` before you upgrade; the storage job then leaves it and says so.
+- **Upgrading by hand, take a backup first** ([Backups](src/content/docs/run/backups.md)), then upgrade as usual. To keep one app's data instead, add its id to `APP_STORAGE` in `.env` before you upgrade; the storage job then leaves it and says so.
 - **If the upgrade goes back**, the earlier release starts the apps again, but empty. Their data comes back only by restoring that backup.
-- **Tidy up when you like:** the `FOLIO_*`, `FOLIO_WORKER_*`, `ATLAS_*`, `AUSPEX_*` and `MANDATE_*` lines and `APP_MEM_LIMIT` in `.env` are no longer read (the preflight lists them), and `maps/` beside your compose file can go. Their Keycloak clients (`app-folio`, `app-auspex`, `app-atlas`, `app-mandate`) stay in the `platform` realm and can no longer be used by anything; delete them in Keycloak's console if you like (`KEYCLOAK_CONSOLE=open`, docs/deploy.md).
+- **Tidy up when you like:** the `FOLIO_*`, `FOLIO_WORKER_*`, `ATLAS_*`, `AUSPEX_*` and `MANDATE_*` lines and `APP_MEM_LIMIT` in `.env` are no longer read (the preflight lists them), and `maps/` beside your compose file can go. Their Keycloak clients (`app-folio`, `app-auspex`, `app-atlas`, `app-mandate`) stay in the `platform` realm and can no longer be used by anything; delete them in Keycloak's console if you like (`KEYCLOAK_CONSOLE=open`, [Limits at the front door](src/content/docs/run/limits.md#limits-at-the-front-door)).
 
 ### An app can't stop AUGUR starting, or its backup check
 
@@ -264,7 +270,7 @@ The registry installs only releases on the app contract (contract 3, `augur.app-
 **From** augur@0.24.0
 
 - **Backups**: dumps and archives in `infra/deploy/backups/` are now readable by root alone, and Status's results move to `infra/deploy/backups/status/`, the only part the gateway sees. Read a dump through the backup container, as the guides now do (`pc run --rm --no-deps -T --entrypoint gunzip backup -c /backups/<file>`).
-- **Off-server copy**: `.env` and `secrets/` now go into it each night, encrypted with `OFFSITE_PASSWORD`. Keep every `OFFSITE_*` setting off the server: they're what a lost server needs ([deploy.md, Restore a lost server](deploy.md#restore-a-lost-server), which replaces the old steps; those copied an empty database over the real copies). The copy also refuses a dump with no AUGUR in it, and a repository another server filled, until `backup.sh --adopt-offsite`.
+- **Off-server copy**: `.env` and `secrets/` now go into it each night, encrypted with `OFFSITE_PASSWORD`. Keep every `OFFSITE_*` setting off the server: they're what a lost server needs ([Restore a lost server](src/content/docs/run/restore-a-lost-server.md), which replaces the old steps; those copied an empty database over the real copies). The copy also refuses a dump with no AUGUR in it, and a repository another server filled, until `backup.sh --adopt-offsite`.
 - **Networks**: telemetry has a network of its own, which apps the runner installs aren't on, and Artifacts' rendition worker reaches only Postgres, Garage and `otel-lgtm`, with read-only files, 2 processors (`FOLIO_WORKER_CPUS`) and an in-memory `/tmp` of 1g (`FOLIO_WORKER_TMP_SIZE`). On a server with fewer than 2 processors, set `FOLIO_WORKER_CPUS=1` before upgrading, or Docker won't start the worker.
 - **The updater** writes `.env` whole, refuses an upgrade with less than 2 GiB free, keeps a note of an upgrade under way (`infra/deploy/.updater-upgrade.json`) so it goes back after a restart partway through, and, with a breaking release between, never goes back by itself once a part has restarted on the new one. It waits up to 5 minutes for each part.
 - After upgrading, check Admin → Status still shows the last backup and the off-server copy. If Status says the copy holds backups this server didn't make, and they are this server's, run `pc exec backup /bin/sh /backup/backup.sh --adopt-offsite` once.
@@ -287,7 +293,7 @@ Identity now deletes a leaver's account once the organisation's leaver retention
 
 **From** augur@0.24.0
 
-Admin → Organisation now also keeps the organisation's logo, a sign-in notice, the languages offered and, for a deployment admin, two steps for everyone and how long leavers and Activity are kept (docs/deploy.md, "Organisation settings"). Nothing to do. If you set `ORG_LOGO_URL`, it still wins; take it out of `.env` to use the logo kept in Admin. Languages chosen in Admin replace `REALM_LANGUAGES`. The sign-in pages pick up the notice, languages and the organisation's name at the next `pc up -d`.
+Admin → Organisation now also keeps the organisation's logo, a sign-in notice, the languages offered and, for a deployment admin, two steps for everyone and how long leavers and Activity are kept ([Organisation settings](src/content/docs/run/settings.md#organisation-settings)). Nothing to do. If you set `ORG_LOGO_URL`, it still wins; take it out of `.env` to use the logo kept in Admin. Languages chosen in Admin replace `REALM_LANGUAGES`. The sign-in pages pick up the notice, languages and the organisation's name at the next `pc up -d`.
 
 ### An app's updates are in the Upgrade Centre only
 
@@ -322,7 +328,7 @@ Once email is set up (`SMTP_*`), Keycloak emails each person when their password
 
 **From** augur@0.23.0
 
-Where email is set up (`SMTP_*`, docs/deploy.md, Email), Admin → People → Add a person now emails an invite by default: a link that lasts 72 hours to confirm their email and choose a password. The one-time password is still there under **How they start**, and is the only choice where email isn't set up. Nothing to do, unless your relay refuses mail from Keycloak: then Admin says the invite couldn't be sent, and Admin → Status, Email says why.
+Where email is set up (`SMTP_*`, [Set up email](src/content/docs/run/email.md)), Admin → People → Add a person now emails an invite by default: a link that lasts 72 hours to confirm their email and choose a password. The one-time password is still there under **How they start**, and is the only choice where email isn't set up. Nothing to do, unless your relay refuses mail from Keycloak: then Admin says the invite couldn't be sent, and Admin → Status, Email says why.
 
 ### Email comes from the organisation's sender
 
@@ -334,7 +340,7 @@ AUGUR's email now comes from the sender set in Admin → Organisation: the organ
 
 **From** augur@0.22.0
 
-Nothing to do unless your organisation's desktops have no GPU, such as virtual desktops. There, set `FOCUS_DEPTH=scrim` in `.env` and `pc up -d web`: dialogs, menus and the palette then dim what's behind them instead of blurring it, which is slow without a GPU. Unset, nothing changes (docs/deploy.md, "Desktops without a GPU").
+Nothing to do unless your organisation's desktops have no GPU, such as virtual desktops. There, set `FOCUS_DEPTH=scrim` in `.env` and `pc up -d web`: dialogs, menus and the palette then dim what's behind them instead of blurring it, which is slow without a GPU. Unset, nothing changes ([Desktops without a GPU](src/content/docs/run/browsers.md#desktops-without-a-gpu)).
 
 ### Activity keeps a year
 
@@ -352,7 +358,7 @@ Activity (Admin's record of who did what) now keeps entries for 365 days. Each n
 
 **From** augur@0.20.0
 
-One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`), and Postgres cancels any one query from a service after a minute (`DATABASE_STATEMENT_TIMEOUT_SECONDS`, 0 for no limit; migrations are never limited). Nothing to do. On a slow server, if `pc logs` shows a working service giving up ("could not be reached", or "canceling statement due to statement timeout"), raise the value in `.env` and run `pc up -d` ([deploy.md](deploy.md#logs-memory-and-health)).
+One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT_SECONDS`), and Postgres cancels any one query from a service after a minute (`DATABASE_STATEMENT_TIMEOUT_SECONDS`, 0 for no limit; migrations are never limited). Nothing to do. On a slow server, if `pc logs` shows a working service giving up ("could not be reached", or "canceling statement due to statement timeout"), raise the value in `.env` and run `pc up -d` ([Limits and health](src/content/docs/run/limits.md#logs-memory-and-health)).
 
 ### Each service signs in as itself
 
@@ -364,7 +370,7 @@ One AUGUR service now waits at most 5 seconds for another (`SERVICE_CALL_TIMEOUT
 
 **From** augur@0.20.0
 
-From this release Postgres archives its changes as it makes them, and the backup container takes a base backup each night beside the dump, so the database can go back to any moment in the last 7 days (ADR 0064; [deploy.md](deploy.md#restore-to-a-point-in-time)). The Upgrade Centre doesn't restart Postgres or the backup container: after upgrading, run `pc up -d postgres backup` once. Postgres restarts with archiving on (a few seconds without the database), then the backup container takes the first base backup and tests a replay. Until then Admin → Status says "Backups need a look" and why. It needs disk for 7 base backups, each about the size of the database, beside the dumps.
+From this release Postgres archives its changes as it makes them, and the backup container takes a base backup each night beside the dump, so the database can go back to any moment in the last 7 days (ADR 0064; [Restore to a point in time](src/content/docs/run/restore-to-a-point-in-time.md)). The Upgrade Centre doesn't restart Postgres or the backup container: after upgrading, run `pc up -d postgres backup` once. Postgres restarts with archiving on (a few seconds without the database), then the backup container takes the first base backup and tests a replay. Until then Admin → Status says "Backups need a look" and why. It needs disk for 7 base backups, each about the size of the database, beside the dumps.
 
 ### SDK 2: the shell stops serving Lit
 
@@ -382,7 +388,7 @@ otel-lgtm, Grafana's OpenTelemetry stack, now runs in every deployment, keeps 72
 
 **From** augur@0.19.0
 
-AUGUR can now send email through the organisation's SMTP relay: password resets and address checks from the sign-in pages. Nothing changes until you add `SMTP_HOST` and `SMTP_FROM` (and `SMTP_USER` and `SMTP_PASSWORD` if the relay wants a sign-in) to `.env` and run `pc up -d`; see [Email](deploy.md#email). `pc logs keycloak-config` then says the relay is set.
+AUGUR can now send email through the organisation's SMTP relay: password resets and address checks from the sign-in pages. Nothing changes until you add `SMTP_HOST` and `SMTP_FROM` (and `SMTP_USER` and `SMTP_PASSWORD` if the relay wants a sign-in) to `.env` and run `pc up -d`; see [Set up email](src/content/docs/run/email.md). `pc logs keycloak-config` then says the relay is set.
 
 ### Organisation settings move to Admin
 
@@ -406,19 +412,19 @@ Going back to a release before this one: Mandate's data stays in the database, a
 
 **From** augur@0.19.0
 
-Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([deploy.md](deploy.md#settings-and-secrets)).
+Some settings the guides told you to put in `.env` never reached the service that reads them: `FEED_SIGNER`, `IMAGE_SIGNER`, `AUGUR_DEV_SIGNER`, `DOMAIN_EVENTS_KEEP_DAYS`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_TRACES_SAMPLER` and `OTEL_TRACES_SAMPLER_ARG`. From this release compose passes them, with `MODEL_TIMEOUT_SECONDS`, `IMAGE_SIGNER_ISSUER` and `CALLER_SIGNING_KEY`. Nothing to do unless one is already in your `.env`: it takes effect at the upgrade, so check it says what you want. Every setting is now described in `infra/deploy/settings.schema.json` ([Settings and secrets](src/content/docs/run/settings.md)).
 
 ### AUGUR's sign-in pages and emails
 
 **From** augur@0.19.0
 
-Keycloak now runs from AUGUR's own image (`ghcr.io/harry-burton-dev/im-platform/keycloak`, tagged and signed like the others) instead of Keycloak's, with the same Keycloak version and AUGUR's sign-in and email theme (ADR 0041). The realm job turns the theme on. Nothing to do: the pages show `ORG_NAME`, as identity does. Optional, in `.env`: `ORG_LOGO_URL` for a logo on the sign-in pages, and `REALM_LANGUAGES` (say `en,de,fr`) to offer more languages than English (docs/deploy.md, "What's in it"). Going back to a release before this one puts Keycloak's own image back: sign-in shows Keycloak's own look again, and Keycloak's log says it can't find the `augur` theme each time a page is shown, which is harmless.
+Keycloak now runs from AUGUR's own image (`ghcr.io/harry-burton-dev/im-platform/keycloak`, tagged and signed like the others) instead of Keycloak's, with the same Keycloak version and AUGUR's sign-in and email theme (ADR 0041). The realm job turns the theme on. Nothing to do: the pages show `ORG_NAME`, as identity does. Optional, in `.env`: `ORG_LOGO_URL` for a logo on the sign-in pages, and `REALM_LANGUAGES` (say `en,de,fr`) to offer more languages than English ([Sign-in pages and emails](src/content/docs/run/whats-running.md#sign-in-pages-and-emails)). Going back to a release before this one puts Keycloak's own image back: sign-in shows Keycloak's own look again, and Keycloak's log says it can't find the `augur` theme each time a page is shown, which is harmless.
 
 ### Log limits, memory limits and healthchecks
 
 **From** augur@0.18.0
 
-Every container's log is now capped at three files of 10 MB, and Keycloak, Artifacts' rendition worker and the observability stack have memory limits (2 GB, 4 GB and 2 GB). Keycloak and Garage have healthchecks, and the containers that need them wait until they're healthy. Nothing to do on most servers: the upgrade recreates each container with its limits. Existing logs bigger than the cap go when the container is recreated. On a server with less than 8 GB of memory, set `KEYCLOAK_MEM_LIMIT` and `FOLIO_WORKER_MEM_LIMIT` lower in `.env` first (docs/deploy.md, "Logs, memory and health").
+Every container's log is now capped at three files of 10 MB, and Keycloak, Artifacts' rendition worker and the observability stack have memory limits (2 GB, 4 GB and 2 GB). Keycloak and Garage have healthchecks, and the containers that need them wait until they're healthy. Nothing to do on most servers: the upgrade recreates each container with its limits. Existing logs bigger than the cap go when the container is recreated. On a server with less than 8 GB of memory, set `KEYCLOAK_MEM_LIMIT` and `FOLIO_WORKER_MEM_LIMIT` lower in `.env` first ([Limits and health](src/content/docs/run/limits.md#logs-memory-and-health)).
 
 ### Keycloak 26.8 and the realm job
 
@@ -460,7 +466,7 @@ Since augur@0.17.0, AUGUR no longer builds Artifacts, Explorer and Data Atlas it
 
 **From** augur@0.18.0
 
-`pnpm seed` (docs/seed.md) fills a deployment with synthetic sample people, floors, documents and entities, and only where `.env` sets `SEED_ALLOWED=true`; nothing changes on a server that doesn't. To use it on a server that already exists, also add its sign-in client, which Keycloak doesn't import into an existing realm: open the Keycloak admin console (`KEYCLOAK_CONSOLE=open`, deploy.md), choose the `platform` realm, **Clients → Import client**, and import the `platform-cli` entry from `infra/deploy/keycloak/platform-realm.json`. Then close the console again.
+`pnpm seed` (docs/seed.md) fills a deployment with synthetic sample people, floors, documents and entities, and only where `.env` sets `SEED_ALLOWED=true`; nothing changes on a server that doesn't. To use it on a server that already exists, also add its sign-in client, which Keycloak doesn't import into an existing realm: open the Keycloak admin console (`KEYCLOAK_CONSOLE=open`, [Limits at the front door](src/content/docs/run/limits.md#limits-at-the-front-door)), choose the `platform` realm, **Clients → Import client**, and import the `platform-cli` entry from `infra/deploy/keycloak/platform-realm.json`. Then close the console again.
 
 ### AUGUR's repository gets a new name
 
@@ -540,7 +546,7 @@ Installing, upgrading or removing an app, and changing how it takes new releases
 
 **From** augur@0.15.0
 
-Identity no longer gets `KEYCLOAK_ADMIN_PASSWORD`. Its own sign-in already holds its rights on every server that has started identity before, so there's nothing to do. Keep the password in `.env`: Keycloak reads it on a new server, and it's the way back in if every deployment admin loses their one-time code. If identity's log ever says its sign-in can't manage the realm, see **Keycloak's admin** in deploy.md.
+Identity no longer gets `KEYCLOAK_ADMIN_PASSWORD`. Its own sign-in already holds its rights on every server that has started identity before, so there's nothing to do. Keep the password in `.env`: Keycloak reads it on a new server, and it's the way back in if every deployment admin loses their one-time code. If identity's log ever says its sign-in can't manage the realm, see [The realm job](src/content/docs/run/settings.md#the-realm-job).
 
 ### The signed feed
 
@@ -741,7 +747,7 @@ Each app's parts are on the app's own network, `app-<id>`, which the app runner 
 
 The server stops building images and pulls the ones CI built and signed for the release instead. Once, before this upgrade:
 
-1. Sign the server in to GitHub's container registry, as in [deploy.md](deploy.md#before-you-start) (a token with only **read:packages**).
+1. Sign the server in to GitHub's container registry, as in [Install AUGUR, Before you start](src/content/docs/run/install.md#before-you-start) (a token with only **read:packages**).
 2. Add `PLATFORM_VERSION=<the release>` to `.env`.
 3. Upgrade with the steps above, `git checkout augur@<version>` rather than `git pull`.
 
@@ -788,7 +794,7 @@ Nothing to do beyond the usual upgrade. The shell, page title and Admin say AUGU
 
 Two optional touches:
 
-- **Sign-in page title**: Keycloak only reads the realm file on first start, so your sign-in page still says "Platform". In the Keycloak console (`PLATFORM_URL/sso/admin`, with `KEYCLOAK_CONSOLE=open` in `.env`; see [deploy.md](deploy.md), Limits at the front door), open the `platform` realm, **Realm settings**, and set **Display name** to `AUGUR`.
+- **Sign-in page title**: Keycloak only reads the realm file on first start, so your sign-in page still says "Platform". In the Keycloak console (`PLATFORM_URL/sso/admin`, with `KEYCLOAK_CONSOLE=open` in `.env`; see [Limits at the front door](src/content/docs/run/limits.md#limits-at-the-front-door)), open the `platform` realm, **Realm settings**, and set **Display name** to `AUGUR`.
 - **Address**: to be at `https://augur.<tailnet>.ts.net`, set `TS_HOSTNAME=augur` and change `PLATFORM_URL` to match in `.env`, then in the Keycloak console update the **shell** client's redirect URIs and web origins to the new address before `pc up -d`. Everyone signs in again.
 
 ## Going back
@@ -800,6 +806,6 @@ Two optional touches:
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:
 
 1. **Code**: the same steps with the version you noted: `git checkout augur@<it>`, set `PLATFORM_VERSION` back, `pc up -d --remove-orphans`. The old images are still on the server, so nothing is downloaded.
-2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading, as in [deploy.md](deploy.md#backups). Anything changed since that backup is lost, so check Admin → Activity first for what that is.
+2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading, as in [Backups](src/content/docs/run/backups.md#restore-the-database-from-a-backup). Anything changed since that backup is lost, so check Admin → Activity first for what that is.
 
 For one app rather than the whole platform, Admin → Apps can give the shell an earlier version of the app instead ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).

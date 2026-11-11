@@ -194,7 +194,7 @@ export const adminRoutes =
 
     /** How long an invite's link works: 72 hours (PER-194 spec). */
     const INVITE_HOURS = 72;
-    const NO_EMAIL = 'Email isn’t set up on this deployment, so an invite can’t be sent. Whoever runs the server adds the SMTP_* settings to .env (docs/deploy.md, Email). Give them a one-time password instead.';
+    const NO_EMAIL = 'Email isn’t set up on this deployment, so an invite can’t be sent. Whoever runs the server adds the SMTP_* settings to .env (AUGUR’s docs, Set up email). Give them a one-time password instead.';
     const InviteResult = Type.Object(
       {
         method: choice(['email', 'temporary-password']),

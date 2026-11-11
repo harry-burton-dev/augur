@@ -1,10 +1,15 @@
 name: Deploy test
 # Does a new AUGUR release install, upgrade and go back? Once per release, with the images the
 # Release workflow just pushed, so nothing is built twice: a fresh server on the new release, then
-# the release before it upgraded to the new one with its data, then back, then a fresh one with the
-# updater, broken on purpose (The deploy test in the AUGUR handbook, 03 Architecture/Engineering).
-# It boots the stack four times in about seven minutes; it never runs on pull requests, to keep CI
-# minutes down. Run it by hand from Actions to try any two releases.
+# the release before it upgraded to the new one with its data, then back; and beside them, on a
+# runner of its own, a fresh one with the updater, broken on purpose, on which an app is installed
+# through the app runner: Starter, the app template, built and signed here as this workflow while
+# the others run, then opened, stopped, seen failing and removed, its sign-in going with it (The
+# deploy test in the AUGUR handbook, 03 Architecture/Engineering). Starter is built from the
+# template's main (the STARTER_REF variable pins another ref) only on a branch the app runner trusts
+# signatures from (main, or release/<unit>-<major>.<minor>); elsewhere the run says it skipped that.
+# It boots the stack four times, in about a quarter of an hour; it never runs on pull requests, to
+# keep CI minutes down. Run it by hand from Actions to try any two releases.
 on:
   workflow_call:
     inputs:
@@ -25,28 +30,14 @@ permissions:
   contents: read
   packages: read
 jobs:
-  deploy-test:
-    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
-    timeout-minutes: 30
-    # To keep its result on the release.
-    permissions:
-      contents: write
-      packages: read
+  # Which release to test, and which to upgrade from: both test jobs need them.
+  releases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      to: ${{ steps.releases.outputs.to }}
+      from: ${{ steps.releases.outputs.from }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      # Two releases' images (the Artifacts worker carries its models) outgrow a hosted runner's
-      # free disk, so drop the toolchains this job never uses first.
-      - name: Make room for two releases' images
-        if: ${{ runner.environment == 'github-hosted' }}
-        run: |
-          df -h / | tail -1
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
-          df -h / | tail -1
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Which releases
         id: releases
         run: |
@@ -72,6 +63,26 @@ jobs:
           TO: ${{ inputs.to }}
           FROM: ${{ inputs.from }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+  deploy-test:
+    needs: releases
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      # Two releases' images (the Artifacts worker carries its models) outgrow a hosted runner's
+      # free disk, so drop the toolchains this job never uses first.
+      - name: Make room for two releases' images
+        if: ${{ runner.environment == 'github-hosted' }}
+        run: |
+          df -h / | tail -1
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          df -h / | tail -1
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       # The release's own deploy files, as a server that checked out its tag has them.
       - name: Check out the release
         run: |
@@ -80,18 +91,18 @@ jobs:
           # The test script and Trivy's exceptions are this workflow's, so an older release is tested the same way.
           git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-browser-check.mjs .trivyignore
         env:
-          TO: ${{ steps.releases.outputs.to }}
+          TO: ${{ needs.releases.outputs.to }}
       - name: A fresh server
         run: infra/deploy-test.sh fresh
         env:
-          LOCAL_TAG: ${{ steps.releases.outputs.to }}
+          LOCAL_TAG: ${{ needs.releases.outputs.to }}
           BROWSER_CHECK_OUT: ${{ runner.temp }}/browser-check
           IMAGES_OUT: ${{ runner.temp }}/images.txt
       - name: Keep the browser check's screenshots
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: browser-check-${{ steps.releases.outputs.to }}
+          name: browser-check-${{ needs.releases.outputs.to }}
           path: ${{ runner.temp }}/browser-check
           retention-days: 14
           if-no-files-found: ignore
@@ -113,31 +124,166 @@ jobs:
         env:
           IMAGES: ${{ runner.temp }}/images.txt
       - name: Upgrade from the release before, then back
-        if: ${{ !cancelled() && steps.releases.outputs.from != '' }}
+        if: ${{ !cancelled() && needs.releases.outputs.from != '' }}
         run: infra/deploy-test.sh upgrade "$FROM"
         env:
-          FROM: ${{ steps.releases.outputs.from }}
-          LOCAL_TAG: ${{ steps.releases.outputs.to }}
+          FROM: ${{ needs.releases.outputs.from }}
+          LOCAL_TAG: ${{ needs.releases.outputs.to }}
+  # Builds Starter while the deploy test's first steps run. Only this job pushes packages and signs.
+  starter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      built: ${{ steps.starter.outcome == 'success' }}
+      signed: ${{ steps.ref.outputs.signed == 'true' }}
+    steps:
+      # Starter, the app template, which never releases itself: its STARTER_REF (main), built, pushed beside this repository's
+      # packages (deploy-test/<id>) and signed by this workflow, with its release file (augur-app release describe,
+      # not published) naming this workflow as its signer. The file isn't signed; its images and bundle are, and
+      # under a called workflow (from Release) augur-app would name the caller, which the signature doesn't.
+      # The refs the app runner takes signatures from: releaseIdentity in the updater's signers.ts
+      # (RELEASE_BRANCHES and HOTFIX_BRANCH), mirrored here.
+      - name: Does the app runner trust a signature made here?
+        id: ref
+        run: |
+          if [[ "$GITHUB_REF" =~ ^refs/heads/(main|preview|production|release/[a-z][a-z0-9-]*-[0-9]+\.[0-9]+)$ ]]; then
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            say="Starter isn't built on $GITHUB_REF, so broken mode skips installing it: the app runner trusts only signatures made on main or a release/<unit>-<major>.<minor> branch."
+            echo "::notice::$say"
+            echo "$say" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Check out Starter
+        if: ${{ steps.ref.outputs.signed == 'true' }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: ${{ vars.STARTER_REPOSITORY || format('{0}/augur-app-template', github.repository_owner) }}
+          ref: ${{ vars.STARTER_REF || 'main' }}
+          path: .starter
+          # The template may be private: APP_RELEASES_TOKEN reads the app repositories (feed.yml).
+          token: ${{ secrets.APP_RELEASES_TOKEN || github.token }}
+          persist-credentials: false
+      - if: ${{ steps.ref.outputs.signed == 'true' }}
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
+        with:
+          package_json_file: .starter/package.json
+      - if: ${{ steps.ref.outputs.signed == 'true' }}
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .starter/.nvmrc
+      - if: ${{ steps.ref.outputs.signed == 'true' }}
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - if: ${{ steps.ref.outputs.signed == 'true' }}
+        uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      - if: ${{ steps.ref.outputs.signed == 'true' }}
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1.2.4
+      - name: Build and sign Starter
+        id: starter
+        if: ${{ steps.ref.outputs.signed == 'true' }}
+        working-directory: .starter
+        run: |
+          # The token secrets can carry a line ending from how they were pasted; pnpm then rejects the header.
+          NODE_AUTH_TOKEN=$(printf %s "$PACKAGES_TOKEN" | tr -d '\r\n')
+          echo "::add-mask::$NODE_AUTH_TOKEN"
+          export NODE_AUTH_TOKEN
+          pnpm install --frozen-lockfile
+          pnpm build && pnpm release-out
+          export IMAGE_REPO="ghcr.io/${GITHUB_REPOSITORY,,}/deploy-test"
+          pnpm exec augur-app bundle beta > "$RUNNER_TEMP/starter-bundle.json"
+          pnpm exec augur-app release describe "$RUNNER_TEMP/starter-bundle.json" |
+            jq --arg repository "$GITHUB_REPOSITORY" --arg workflow .github/workflows/deploy-test.yml \
+              '.signer = {repository: $repository, workflow: $workflow}' > "$RUNNER_TEMP/starter-release.json"
+          jq -c '{id, version, channel, signer, images: [.parts[].containers[].image], frontend: .frontend.artifact}' "$RUNNER_TEMP/starter-release.json"
+        env:
+          PACKAGES_TOKEN: ${{ secrets.PACKAGES_READ_TOKEN || github.token }}
+      - if: ${{ steps.ref.outputs.signed == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: starter-release
+          path: ${{ runner.temp }}/starter-release.json
+          retention-days: 1
+          if-no-files-found: error
+  # Broken on purpose, on a runner of its own, beside the other two boots: it waits only for Starter.
+  broken:
+    needs: [releases, starter]
+    if: ${{ !cancelled() && needs.releases.result == 'success' }}
+    runs-on: ${{ fromJSON(vars.RELEASE_RUNNER || vars.CI_RUNNER || '"ubuntu-latest"') }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # The release's own deploy files, as a server that checked out its tag has them.
+      - name: Check out the release
+        run: |
+          git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
+          git checkout -q "augur@$TO"
+          # The test script and Trivy's exceptions are this workflow's, so an older release is tested the same way.
+          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-browser-check.mjs .trivyignore
+        env:
+          TO: ${{ needs.releases.outputs.to }}
+      - if: ${{ needs.starter.outputs.built == 'true' }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: starter-release
+          path: ${{ runner.temp }}/starter
       # The release's images are pulled already; this adds the updater's. Its watch must see AUGUR
       # broken on purpose (a part stopped) and well again (The deploy test in the AUGUR handbook, 03 Architecture/Engineering, "Broken on purpose").
+      # Then Starter goes in through the app runner and out again, when the starter job built it.
       - name: Broken on purpose, seen by the updater
-        if: ${{ !cancelled() }}
         run: infra/deploy-test.sh broken
         env:
-          LOCAL_TAG: ${{ steps.releases.outputs.to }}
+          LOCAL_TAG: ${{ needs.releases.outputs.to }}
+          # Its own project and port, should a machine run both test jobs at once.
+          PROJECT: augur-deploy-test-broken
+          WEB_PORT: 8089
+          BROWSER_CHECK_OUT: ${{ runner.temp }}/browser-check-broken
+          STARTER_RELEASE: ${{ needs.starter.outputs.built == 'true' && format('{0}/starter/starter-release.json', runner.temp) || '' }}
+          # Why there's none, when there's none: the ref isn't one the runner trusts, or the build failed.
+          STARTER_SIGNED: ${{ needs.starter.outputs.signed }}
+          STARTER_BUILD: ${{ needs.starter.result }}
+          # Starter's images are this repository's packages, which its own token reads while the job runs.
+          STARTER_READ_KEY: ${{ needs.starter.outputs.built == 'true' && secrets.GITHUB_TOKEN || '' }}
+          STARTER_READ_USER: ${{ github.actor }}
+      - name: Keep broken mode's screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-check-${{ needs.releases.outputs.to }}-broken
+          path: ${{ runner.temp }}/browser-check-broken
+          retention-days: 14
+          if-no-files-found: ignore
+  # The result of all of them, on the release.
+  result:
+    needs: [releases, starter, deploy-test, broken]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
       # Pass or fail, on the release, where Promote to stable reads it (docs/release-channels.md), and the
       # feed too: it replaces the pending result the release was made with, and only a pass lets the feed
       # offer a beta. A test that fails before it knows which
       # release it tests still fails the one it was asked for. A run on another branch tests with that
       # branch's script, so it says nothing about the release.
       - name: Keep the result on the release
-        if: ${{ !cancelled() && (steps.releases.outputs.to != '' || inputs.to != '') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
+        if: ${{ (needs.releases.outputs.to != '' || inputs.to != '') && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')) }}
         run: |
           jq -n --arg version "$TO" --arg from "$FROM" --arg run "$GITHUB_RUN_ID" --arg at "$(date -u +%FT%TZ)" --argjson passed "$PASSED" \
             '{schema: "augur.deploy-test/v1", version: $version, from: (if $from == "" then null else $from end), passed: $passed, run: $run, at: $at}' > "$RUNNER_TEMP/deploy-test.json"
           gh release upload "augur@$TO" "$RUNNER_TEMP/deploy-test.json" --clobber
         env:
-          TO: ${{ steps.releases.outputs.to || inputs.to }}
-          FROM: ${{ steps.releases.outputs.from }}
-          PASSED: ${{ job.status == 'success' }}
+          TO: ${{ needs.releases.outputs.to || inputs.to }}
+          FROM: ${{ needs.releases.outputs.from }}
+          # Every job passed. Off a trusted ref the starter job passes having built nothing, and broken mode says so.
+          PASSED: ${{ needs.releases.result == 'success' && needs.deploy-test.result == 'success' && needs.broken.result == 'success' && needs.starter.result == 'success' }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}

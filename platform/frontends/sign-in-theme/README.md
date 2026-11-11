@@ -19,7 +19,7 @@ and shipped as a jar in AUGUR's Keycloak image (`infra/service.Dockerfile`, targ
   logo come from Keycloak's environment (`ORG_NAME`, `ORG_LOGO_URL`, the same settings identity reads),
   until they move to identity's organisation settings (ADR 0042).
 - **Languages:** every word is Keycloak's own message, so each page and email comes in every language
-  Keycloak has. The realm job offers the ones in `REALM_LANGUAGES` (docs/deploy.md).
+  Keycloak has. The realm job offers the ones in `REALM_LANGUAGES` (AUGUR's docs, What runs on a server).
 
 The realm job (`platform/services/identity/src/realm.ts`, `applyLook`) turns the theme on when Keycloak has
 it, and leaves Keycloak's own look on a Keycloak that doesn't (Keycloak's own image).

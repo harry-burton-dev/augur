@@ -9,7 +9,7 @@ export const DEFAULT_STATEMENT_TIMEOUT_MS = 60_000;
 
 /**
  * How long one database statement may run before Postgres cancels it: DATABASE_STATEMENT_TIMEOUT_SECONDS
- * (docs/deploy.md), a minute when unset or empty, and no limit at 0. Migrations lift it for themselves.
+ * (AUGUR’s docs, Limits and health), a minute when unset or empty, and no limit at 0. Migrations lift it for themselves.
  */
 export const statementTimeoutMs = (env: Record<string, string | undefined> = process.env): number => {
   const raw = env.DATABASE_STATEMENT_TIMEOUT_SECONDS?.trim();

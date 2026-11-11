@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { composeServices, deploymentLiterals, envExampleKeys, installList, keysRead, section, settingsProblems, slug, withInstallList } from './check-settings.mjs';
+import { INSTALL_GUIDE, composeServices, deploymentLiterals, envExampleKeys, installList, keysRead, section, settingsProblems, slug, withInstallList } from './check-settings.mjs';
 
 const compose = `
 x-telemetry: &telemetry
@@ -25,11 +25,11 @@ services:
 
 const schema = {
   required: ['POSTGRES_PASSWORD'],
-  patternProperties: { '^[A-Z][A-Z0-9_]*_BUCKET_SECRET$': { 'x-services': ['storage'], 'x-docs': 'docs/deploy.md#first-start' } },
+  patternProperties: { '^[A-Z][A-Z0-9_]*_BUCKET_SECRET$': { 'x-services': ['storage'], 'x-docs': `${INSTALL_GUIDE}#first-start` } },
   properties: {
-    POSTGRES_PASSWORD: { writeOnly: true, 'x-services': ['storage'], 'x-docs': 'docs/deploy.md#first-start' },
+    POSTGRES_PASSWORD: { writeOnly: true, 'x-services': ['storage'], 'x-docs': `${INSTALL_GUIDE}#first-start` },
     RELEASE_FEED_URL: { 'x-services': ['registry'], 'x-docs': 'docs/upgrade.md#the-updates-page' },
-    OTEL_EXPORTER_OTLP_ENDPOINT: { 'x-services': ['registry'], 'x-docs': 'docs/deploy.md#first-start' },
+    OTEL_EXPORTER_OTLP_ENDPOINT: { 'x-services': ['registry'], 'x-docs': `${INSTALL_GUIDE}#first-start` },
     NODE_ENV: { 'x-internal': 'compose', 'x-services': ['registry'] },
     PORT: { 'x-internal': 'compose', 'x-services': ['registry'] },
   },
@@ -38,7 +38,7 @@ const schema = {
 const files = {
   'infra/deploy/compose.yml': compose,
   'infra/deploy/.env.example': 'POSTGRES_PASSWORD=\n# RELEASE_FEED_URL=\n# OTEL_EXPORTER_OTLP_ENDPOINT=\n# NOTES_BUCKET_SECRET=\n',
-  'docs/deploy.md': withInstallList('# Deploy\n\n## First start\n\nSet `POSTGRES_PASSWORD`, and `OTEL_EXPORTER_OTLP_ENDPOINT` for traces.\n\n<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->\n<!-- /settings -->\n\n## Later\n', installList(schema)),
+  [INSTALL_GUIDE]: withInstallList('# Deploy\n\n## First start\n\nSet `POSTGRES_PASSWORD`, and `OTEL_EXPORTER_OTLP_ENDPOINT` for traces.\n\n<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->\n<!-- /settings -->\n\n## Later\n', installList(schema)),
   'docs/upgrade.md': "# Upgrading\n\n### The Updates page\n\n`RELEASE_FEED_URL` points at a mirror's feed.\n",
 };
 
@@ -68,7 +68,7 @@ test('finds a setting the guides name that compose never hands its service', () 
 
 test('takes a service with an env_file as reaching every deployment setting', () => {
   const s = structuredClone(schema);
-  s.properties.APP_SECRETS_KEY = { writeOnly: true, 'x-services': ['storage'], 'x-docs': 'docs/deploy.md#first-start' };
+  s.properties.APP_SECRETS_KEY = { writeOnly: true, 'x-services': ['storage'], 'x-docs': `${INSTALL_GUIDE}#first-start` };
   const problems = check({ schema: s });
   assert.ok(!problems.some((p) => p.includes('storage reads it')));
 });

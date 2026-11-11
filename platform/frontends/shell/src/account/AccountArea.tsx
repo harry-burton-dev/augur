@@ -22,6 +22,7 @@ import {
 } from '@augur/app-kit';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Preferences } from '../host/preferences.js';
+import type { ActingSession, HeldPersona } from '../host/personas.js';
 import { type AccountApi, type AccountSession, type HeldCredential, type Profile, type ProfileChanges, type Security, type SignIn } from './api.js';
 import { currentFormats, writeDate, type Formats } from '../host/formats.js';
 import { whatsNewFor } from './whats-new.js';
@@ -80,6 +81,18 @@ export interface AccountAreaProps {
   version?: string;
   /** How the last of Keycloak's screens went (kc_action_status), to say once. */
   actionStatus?: string | null;
+  /** "Act as" (PDR-024), for someone who holds an admin persona; without one there's nothing to show. */
+  actAs?: ActAsProps;
+}
+
+/** The admin personas a person holds, the session they're acting in, and how to start and stop one. */
+export interface ActAsProps {
+  personas: HeldPersona[];
+  session?: ActingSession;
+  start(persona: string, reason: string, minutes: number): Promise<void>;
+  stop(): Promise<void>;
+  /** Sends them to enter their password again, coming back here: starting a session needs a fresh sign-in. */
+  signInAgain(): void;
 }
 
 /** What identity knows about them, loaded once when the dialog opens and shared by its sections. */
@@ -181,6 +194,7 @@ function partsOf(props: SectionProps): FitPart[] {
         { id: 'two', label: 'Two-step sign-in', content: <TwoStep {...props} /> },
         { id: 'where', label: 'Where you’re signed in', content: <Sessions {...props} /> },
         { id: 'recent', label: 'Recent sign-ins', content: <RecentSignIns {...props} /> },
+        ...(props.actAs?.personas.some((p) => p.actAs) ? [{ id: 'act', label: 'Act as', content: <ActAs {...props.actAs} /> }] : []),
       ];
     case 'notifications':
       return [
@@ -1122,6 +1136,79 @@ function Leave({ api }: SectionProps) {
         <AskTwice size="sm" confirm="Press again to ask to leave" busy={busy} onPress={() => void act(async () => req.set(await api.requestLeave(note.trim() || undefined)))}>
           Ask to leave
         </AskTwice>
+      </Line>
+    </>
+  );
+}
+
+/** How long a session may be, in minutes, up to the persona's longest. */
+const SESSION_MINUTES = [15, 30, 60, 120, 240, 480];
+
+/**
+ * "Act as" (PDR-024): acting as one of their admin personas for a while, for a reason they give, after entering
+ * their password again. While they do, AUGUR's own Admin and Deployment act as it, and every other app waits.
+ */
+function ActAs({ personas, session, start, stop, signInAgain }: ActAsProps) {
+  const admin = personas.filter((p) => p.actAs);
+  const [chosen, setChosen] = useState(admin[0]?.id ?? '');
+  const persona = admin.find((p) => p.id === chosen) ?? admin[0];
+  const longest = persona?.longestMinutes ?? 60;
+  const lengths = SESSION_MINUTES.filter((m) => m <= longest);
+  const [minutes, setMinutes] = useState(Math.min(60, longest));
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ message: string; again?: boolean } | null>(null);
+  const act = async (go: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await go();
+    } catch (err) {
+      setError({ message: (err as Error).message, again: (err as { reason?: string }).reason === 'sign_in_again' });
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (session)
+    return (
+      <>
+        <Note>
+          You’re acting as {session.persona} until {dayAndTime(session.endsAt)}, for: “{session.reason}”. Admin and Deployment act as it; other apps wait until you stop.
+        </Note>
+        <Line detail={error ? <span role="status">{error.message}</span> : undefined}>
+          <Button kind="secondary" size="sm" busy={busy} onPress={() => void act(stop)}>
+            Stop acting as {session.persona}
+          </Button>
+        </Line>
+      </>
+    );
+  if (!persona) return null;
+  const tooShort = reason.trim().length < 3;
+  return (
+    <>
+      <Note>Admin work needs one of your admin personas. You act as it for a while, for a reason that’s recorded, after entering your password again.</Note>
+      {admin.length > 1 ? (
+        <Select label="Persona" options={admin.map((p) => ({ value: p.id, label: p.id }))} value={persona.id} onChange={(v) => setChosen(v)} />
+      ) : (
+        <Line title="Persona" detail={persona.id} />
+      )}
+      <TextField label="Why" hint="Recorded with everything you do as it." required maxLength={300} placeholder="Upgrade to the next release" value={reason} onChange={setReason} />
+      <Select
+        label="For"
+        hint={`At most ${longest} minutes as ${persona.id}.`}
+        options={lengths.map((m) => ({ value: String(m), label: m < 60 ? `${m} minutes` : m === 60 ? '1 hour' : `${m / 60} hours` }))}
+        value={String(Math.min(minutes, longest))}
+        onChange={(v) => setMinutes(Number(v))}
+      />
+      {error?.again ? (
+        <Notice tone="needs" heading="Enter your password again first." action="Sign in again" onAction={signInAgain}>
+          {error.message}
+        </Notice>
+      ) : null}
+      <Line detail={error && !error.again ? <span role="status">{error.message}</span> : undefined}>
+        <Button kind="primary" size="sm" busy={busy} disabled={tooShort} reason="Say why first, in a few words." onPress={() => void act(() => start(persona.id, reason.trim(), Math.min(minutes, longest)))}>
+          Act as {persona.id}
+        </Button>
       </Line>
     </>
   );

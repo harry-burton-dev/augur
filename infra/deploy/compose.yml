@@ -1,5 +1,5 @@
 # The whole platform on one server, reached privately over Tailscale at
-# https://<TS_HOSTNAME>.<your tailnet>.ts.net. See docs/deploy.md.
+# https://<TS_HOSTNAME>.<your tailnet>.ts.net. See AUGUR's docs, Install AUGUR.
 #   cp infra/deploy/.env.example infra/deploy/.env   # then fill it in
 #   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
 # Runs the images CI built for the platform release PLATFORM_VERSION. To build them from this
@@ -66,7 +66,7 @@ x-service: &service
     postgres: { condition: service_healthy }
 
 # A platform service with its own database login waits for the storage job, which makes the login
-# and hands it the service's schema (PLATFORM_DATABASE_LOGINS below; docs/deploy.md).
+# and hands it the service's schema (PLATFORM_DATABASE_LOGINS below; AUGUR's docs, Install AUGUR).
 x-own-login: &own-login
   postgres: { condition: service_healthy }
   storage: { condition: service_completed_successfully }
@@ -74,7 +74,7 @@ x-own-login: &own-login
 services:
   # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate. While
   # infra/deploy/public.sh has it open, Tailscale Funnel serves the same address to the internet too
-  # (tailscale/start.sh; docs/deploy.md, "Open AUGUR to the internet for a while").
+  # (tailscale/start.sh; AUGUR's docs, Open AUGUR to the internet for a while).
   tailscale:
     logging: *logging
     image: tailscale/tailscale:v1.104.4
@@ -105,13 +105,13 @@ services:
     environment:
       # Other sites apps may load from, space separated (also allow each in Admin, Apps).
       APP_ORIGINS: ${APP_ORIGINS:-}
-      # Where the UI kit is loaded from: this server's /kit/ unless set (docs/deploy.md, "The UI kit").
+      # Where the UI kit is loaded from: this server's /kit/ unless set (AUGUR's docs, What browsers load).
       KIT_URL: ${KIT_URL:-/kit/}
-      # The product's name in the browser tab (docs/deploy.md, "First start"); AUGUR unless set.
+      # The product's name in the browser tab (AUGUR's docs, Install AUGUR); AUGUR unless set.
       ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
-      # How focus is drawn: scrim for desktops without a GPU (docs/deploy.md, "Desktops without a GPU"); each app's choice unless set.
+      # How focus is drawn: scrim for desktops without a GPU (AUGUR's docs, What browsers load); each app's choice unless set.
       FOCUS_DEPTH: ${FOCUS_DEPTH:-}
-      # The front door's limits (docs/deploy.md, "Limits at the front door"); the image's defaults when unset.
+      # The front door's limits (AUGUR's docs, Limits and health); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}
       SSO_RATE_PER_SECOND: ${SSO_RATE_PER_SECOND:-10}
@@ -131,8 +131,8 @@ services:
 
   # Postgres 16 with pgvector, for apps' embeddings. The same major version as before, so the data carries over.
   # Archives every change (its WAL) into wal-archive as it goes, so the database can be put back as it was
-  # at any moment since the oldest base backup (ADR 0064; postgres/start.sh; docs/deploy.md, "Restore to a
-  # point in time").
+  # at any moment since the oldest base backup (ADR 0064; postgres/start.sh; AUGUR's docs, Restore to a
+  # point in time).
   postgres:
     logging: *logging
     image: pgvector/pgvector:0.8.7-pg16-bookworm
@@ -161,7 +161,7 @@ services:
   # for the archived WAL to be replayed onto (the newest PITR_KEEP_DAYS kept; ADR 0064), and once a week a
   # test restore of the newest of each into a throwaway database. Once OFFSITE_REPOSITORY is
   # set, each night's dump and apps' files are also copied off the server with restic, encrypted before
-  # they leave, and the weekly restore test restores from that copy (ADR 0060; docs/deploy.md, "Backups").
+  # they leave, and the weekly restore test restores from that copy (ADR 0060; AUGUR's docs, Backups).
   # The same image as postgres: the test restores into a Postgres of its own, which needs pgvector to bring
   # back apps' vector columns. The updater runs the test before every upgrade, so without it upgrades stop.
   backup:
@@ -338,7 +338,7 @@ services:
       SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-permissions=${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
-      # Stricter than AUGUR's floors if you like, never looser (docs/deploy.md, "The realm job").
+      # Stricter than AUGUR's floors if you like, never looser (AUGUR's docs, Settings and secrets, The realm job).
       REALM_PASSWORD_MIN_LENGTH: ${REALM_PASSWORD_MIN_LENGTH:-}
       REALM_PASSWORD_DENYLIST: ${REALM_PASSWORD_DENYLIST:-}
       REALM_SESSION_IDLE_HOURS: ${REALM_SESSION_IDLE_HOURS:-}
@@ -357,7 +357,7 @@ services:
       SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      # The organisation's Entra, to sign in with the organisation's account (docs/deploy.md, Entra). All three or none.
+      # The organisation's Entra, to sign in with the organisation's account (AUGUR's docs, Sign in with Entra). All three or none.
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
@@ -386,6 +386,8 @@ services:
       EVENTS_URL: http://events:8084
       MODELS_URL: http://models:8085
       KNOWLEDGE_URL: http://knowledge:8086
+      # Asked whether someone is acting as an admin persona, when the shell says they are (ADR 0086).
+      PERMISSIONS_URL: http://permissions:8087
       # Tokens name the platform's public address; signing keys are fetched inside the compose network.
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/sso/realms/platform/protocol/openid-connect/certs
@@ -409,7 +411,7 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       # Apps' services run beside AUGUR outside the app runner, name=url: none (ADR 0075).
       APP_UPSTREAMS: ""
-      # The brakes on calls to apps' parts, and how long a delegated caller lasts (docs/deploy.md, Limits at the front door).
+      # The brakes on calls to apps' parts, and how long a delegated caller lasts (AUGUR's docs, Limits and health).
       APP_CONNECT_TIMEOUT_MS: ${APP_CONNECT_TIMEOUT_MS:-}
       APP_RESPONSE_TIMEOUT_MS: ${APP_RESPONSE_TIMEOUT_MS:-}
       APP_CONCURRENT_CALLS: ${APP_CONCURRENT_CALLS:-}
@@ -562,6 +564,8 @@ services:
     environment:
       <<: *env
       PORT: 8085
+      # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
+      PERMISSIONS_URL: http://permissions:8087
       SERVICE_CLIENT_SECRET: "${MODELS_CLIENT_SECRET:-}"
       # Its own login, owning only the models schema.
       DATABASE_URL: postgres://platform_models:${MODELS_DATABASE_PASSWORD:?set MODELS_DATABASE_PASSWORD in .env}@postgres:5432/platform
@@ -587,7 +591,7 @@ services:
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
-    # After a restore, it forgets again what the forget ledger names (docs/deploy.md, "Restore").
+    # After a restore, it forgets again what the forget ledger names (AUGUR's docs, Backups).
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
     depends_on: *own-login
@@ -657,7 +661,7 @@ services:
 
   # The permissions service (ADR 0085): it answers whether a person, through the positions they hold, or an
   # admin persona may do something, from what OpenFGA holds. Only the gateway and AUGUR's own services ask it.
-  # Nothing asks it yet: this release runs it so its store and model are in place.
+  # Services ask it beside their admin checks (shadow mode), and it keeps who is acting as an admin persona.
   permissions:
     logging: *logging
     <<: *service
@@ -672,6 +676,10 @@ services:
       <<: *env
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
+      # Its own login, the one OpenFGA keeps its tables under: persona sessions sit beside them (ADR 0086).
+      DATABASE_URL: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      PERSONA_DEPLOYMENT_ADMIN_MINUTES: ${PERSONA_DEPLOYMENT_ADMIN_MINUTES:-60}
+      PERSONA_ORG_ADMIN_MINUTES: ${PERSONA_ORG_ADMIN_MINUTES:-480}
       OPENFGA_TOKEN: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
       # Its own sign-in, to copy floors, positions and who holds them from identity (ADR 0089), at once
       # when identity announces a change (platform.position.*, .team.*, .person.*) and whole every few minutes.

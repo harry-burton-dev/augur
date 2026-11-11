@@ -4,7 +4,7 @@ import { strayDocs } from './check-docs.mjs';
 
 test('lets through shipped guides and the Markdown that belongs to code', () => {
   const ok = [
-    'docs/deploy.md', 'README.md', 'apps/README.md', 'platform/services/events/CHANGELOG.md', 'AGENTS.md', 'CLAUDE.md',
+    'docs/upgrade.md', 'README.md', 'apps/README.md', 'platform/services/events/CHANGELOG.md', 'AGENTS.md', 'CLAUDE.md',
     'THIRD_PARTY_NOTICES.md', '.changeset/quiet-owls-sing.md', 'platform/packages/mfe-sdk/etc/mfe-sdk.api.md',
     'docs/README.md', 'docs/src/content/docs/run/index.md', 'docs/src/content/docs/build/storage.md',
   ];

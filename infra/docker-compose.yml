@@ -113,6 +113,7 @@ services:
       EVENTS_URL: http://events:8084
       MODELS_URL: http://models:8085
       KNOWLEDGE_URL: http://knowledge:8086
+      PERMISSIONS_URL: http://permissions:8087
       # Tokens are issued for the browser's address; signing keys are fetched over the compose network.
       OIDC_ISSUER: http://localhost:8180/realms/platform
       OIDC_JWKS_URL: http://keycloak:8080/realms/platform/protocol/openid-connect/certs
@@ -179,6 +180,7 @@ services:
       PORT: 8085
       DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-models
+      PERMISSIONS_URL: http://permissions:8087
       MODEL_API_URL: stand-in
       <<: *internal
     depends_on: [postgres]
@@ -209,7 +211,7 @@ services:
   # Permissions (ADR 0085): OpenFGA holds the relationships, in memory here, so they go with the
   # container; the permissions service copies floors and positions in from identity as each changes.
   openfga:
-    image: openfga/openfga:v1.11.2
+    image: openfga/openfga:v1.19.0
     command: ["run"]
     ports: ["127.0.0.1:8088:8080"]
   permissions:
@@ -219,9 +221,10 @@ services:
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
       PERMISSIONS_STORE: augur
+      DATABASE_URL: postgres://platform:platform-local-only@postgres:5432/platform
       SERVICE_CLIENT_SECRET: platform-local-only-permissions
       <<: *internal
-    depends_on: [openfga, identity]
+    depends_on: [postgres, openfga, identity]
 
 volumes:
   pgdata:

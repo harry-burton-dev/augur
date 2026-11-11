@@ -1,7 +1,7 @@
 #!/bin/sh
 # Starts Tailscale for AUGUR: private to your tailnet (serve.json), or open to the internet through
 # Tailscale Funnel (serve-public.json) while public-until, beside this file, holds a time still to come.
-# infra/deploy/public.sh writes it (docs/deploy.md, "Open AUGUR to the internet for a while"). The time
+# infra/deploy/public.sh writes it (AUGUR's docs, Open AUGUR to the internet for a while). The time
 # lives in that file, so it holds over restarts and reboots: once it passes, or the file goes, the
 # container restarts itself private. Either way it's the same address, so sign-in needs no changes.
 until_file=/config/public-until
@@ -49,6 +49,6 @@ wait "$child"
 code=$?
 if [ "$mode" = public ] && [ $(($(date +%s) - started)) -lt 120 ]; then
   until_value >"$failed_file"
-  echo "augur: Tailscale wouldn't start open to the internet (is Funnel allowed for this machine? see docs/deploy.md); starting private"
+  echo "augur: Tailscale wouldn't start open to the internet (is Funnel allowed for this machine? see AUGUR's docs, Open AUGUR to the internet for a while); starting private"
 fi
 exit "$code"
