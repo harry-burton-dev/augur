@@ -42,7 +42,7 @@ kind: Component
 metadata:
   name: augur-admin
   title: "@augur/admin"
-  description: "Admin: people, departments, apps, status and activity. Built as one ES module the shell imports from the registry's entry URL."
+  description: "Admin (at /admin): people, departments, the organisation's settings, apps and activity. A contract 3 app: one ES module the shell runs in a web worker."
   annotations:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/admin/
