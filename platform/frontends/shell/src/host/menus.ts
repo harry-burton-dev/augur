@@ -109,7 +109,7 @@ const pageMeta = (name: string, doc: Pick<Document, 'querySelector'> | undefined
   const value = doc?.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)?.content.trim() ?? '';
   return /^@[A-Z_]+@$/.test(value) ? '' : value;
 };
-const page = () => (typeof document === 'undefined' ? undefined : document);
+const page = (): Pick<Document, 'querySelector'> | undefined => (typeof document === 'undefined' ? undefined : document);
 
 /** The mark on the logo button, as the deployment sets it (ORG_LOGO_URL, the `augur-logo` meta). Empty for the kit's placeholder. */
 export const logoUrl = (doc = page()): string => pageMeta('augur-logo', doc);
