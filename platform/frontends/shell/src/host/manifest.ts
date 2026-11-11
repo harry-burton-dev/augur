@@ -26,6 +26,25 @@ export async function loadManifest(fetchImpl: typeof fetch, url: string, token: 
 }
 
 /**
+ * The topics that say the catalogue may have changed: an app added or given a new version (once its service
+ * registers it), turned off or on, blocked, its floor rule cleared, or removed.
+ */
+export const CATALOGUE_TOPICS = ['added', 'updated', 'turned-off', 'turned-on', 'removed', 'blocked', 'rule-cleared'].map((t) => `platform.app.${t}`);
+
+/**
+ * The catalogue loaded again, keeping each entry that hasn't changed as the one the shell already holds, and
+ * the whole list when nothing changed: an open app stays open, and only what changed is drawn again.
+ */
+export const keepSame = (was: readonly AppManifestEntry[], now: AppManifestEntry[]): AppManifestEntry[] => {
+  const before = new Map(was.map((a) => [a.id, a]));
+  const kept = now.map((a) => {
+    const old = before.get(a.id);
+    return old && JSON.stringify(old) === JSON.stringify(a) ? old : a;
+  });
+  return kept.length === was.length && kept.every((a, i) => a === was[i]) ? (was as AppManifestEntry[]) : kept;
+};
+
+/**
  * Why this shell can't open an app, or undefined when it can. An app names the
  * SDK releases it works with; a shell whose SDK is outside that range would
  * hand it a mount context it doesn't expect, so it refuses instead.

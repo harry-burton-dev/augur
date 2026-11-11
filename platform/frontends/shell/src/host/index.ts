@@ -1,5 +1,5 @@
 export { matchRoute, hrefFor } from './routes.js';
-export { incompatibility, loadManifest, ManifestError } from './manifest.js';
+export { CATALOGUE_TOPICS, incompatibility, keepSame, loadManifest, ManifestError } from './manifest.js';
 export { AppMounter, MountError, type ImportEntry } from './mount.js';
 export { StageMounter, workerCards } from './stage.js';
 export { routeIntent, IntentError, RequestBroker, type OpenRequest } from './intents.js';

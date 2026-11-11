@@ -1,7 +1,7 @@
 import { createEventBus, type AppManifestEntry, type MountContext } from '@augur/mfe-sdk';
 import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it, vi } from 'vitest';
-import { AppMounter, fromServer, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, NotificationActions, routeIntent, toShellNotification } from './index.js';
+import { AppMounter, fromServer, keepSame, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, NotificationActions, routeIntent, toShellNotification } from './index.js';
 
 const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
   id,
@@ -70,6 +70,21 @@ describe('loadManifest', () => {
     await expect(loadManifest(down, '/m', 't')).rejects.toThrow(ManifestError);
     const refused = vi.fn(async () => new Response('', { status: 503 })) as unknown as typeof fetch;
     await expect(loadManifest(refused, '/m', 't')).rejects.toThrow(/503/);
+  });
+
+  it('keeps the entries that didn’t change when it loads again, and the whole list when none did', () => {
+    const [home] = manifest;
+    const was = [home, { ...home, id: 'notes', route: '/notes' }];
+    const same = JSON.parse(JSON.stringify(was)) as AppManifestEntry[];
+    expect(keepSame(was, same)).toBe(was);
+    const added = keepSame(was, [...same, { ...home, id: 'folio', route: '/folio' }]);
+    expect(added).not.toBe(was);
+    expect([added[0], added[1]]).toEqual([was[0], was[1]]);
+    expect(added[0]).toBe(was[0]);
+    const changed = keepSame(was, [same[0], { ...same[1], version: '9.9.9' }]);
+    expect(changed[0]).toBe(was[0]);
+    expect(changed[1]).not.toBe(was[1]);
+    expect(keepSame(was, [same[0]]).map((a) => a.id)).toEqual(['home']);
   });
 });
 

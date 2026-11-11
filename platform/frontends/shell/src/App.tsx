@@ -53,6 +53,8 @@ import {
   SurfaceMounter,
   type HomeState,
   loadManifest,
+  CATALOGUE_TOPICS,
+  keepSame,
   loadPreviews,
   NotificationActions,
   NotificationFeed,
@@ -149,6 +151,8 @@ const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' }
 
 /** How long an app may take to mount before its place says it's opening. */
 const SLOW_APP_MS = 400;
+/** How long the shell waits after an app is added or changed before it asks for the catalogue, so a burst of changes is one ask. */
+const CATALOGUE_SETTLE_MS = 500;
 /** The page's fetch as it is at each call: telemetry patching it reaches every call, without a new function for Host's effects to restart on. */
 const pageFetch: typeof fetch = (...args) => fetch(...args);
 
@@ -174,6 +178,8 @@ export function Host({
   const mounter = useRef<StageMounter | null>(null);
   const bus = useMemo(() => createEventBus(), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
+  /** What the open app was last mounted with, so a catalogue that changed elsewhere doesn't mount it again. */
+  const lastMount = useRef<Record<string, unknown> | null>(null);
   const feed = useRef<NotificationFeed | null>(null);
   const broker = useRef(new RequestBroker());
   /** Where the answering app mounts, inside the request dialog while it's open. */
@@ -428,6 +434,33 @@ export function Host({
     };
   }, [session, manifestUrl, fetchImpl, attempt, floorId]);
 
+  // An app installed, updated, turned off or on, or removed while the person is here: the catalogue again,
+  // quietly. An open app stays open unless its own entry changed. If the ask fails, the list stays as it was
+  // until the next change or the next load: nothing the person can see goes wrong.
+  useEffect(() => {
+    let live = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const reload = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        session
+          .getToken()
+          .then((token) => loadManifest(fetchImpl, manifestUrl, token, floorId))
+          .then((apps) => {
+            if (!live || !apps.length) return;
+            setCatalogue((was) => (was?.floor === floorId ? { floor: floorId, apps: keepSame(was.apps, apps) } : was));
+          })
+          .catch(() => undefined);
+      }, CATALOGUE_SETTLE_MS);
+    };
+    const stops = CATALOGUE_TOPICS.map((topic) => bus.on(topic, reload));
+    return () => {
+      live = false;
+      clearTimeout(timer);
+      stops.forEach((stop) => stop());
+    };
+  }, [bus, session, fetchImpl, manifestUrl, floorId]);
+
   // Which previews this person may try: asked again with the catalogue, since choosing one changes both.
   useEffect(() => {
     let live = true;
@@ -678,6 +711,11 @@ export function Host({
       return;
     }
     const { app, path } = screen;
+    // The catalogue loaded again with this app's entry unchanged, and nothing else moved: it stays as it is.
+    const now = { app, where, floor, home, attempt, contextFor, importEntry };
+    const was = lastMount.current;
+    if (was && !pendingIntent.current && mounter.current.mounted === app && (Object.keys(now) as (keyof typeof now)[]).every((k) => was[k] === now[k])) return;
+    lastMount.current = now;
     const intent = pendingIntent.current;
     pendingIntent.current = undefined;
     const ctx = contextFor(app, path, intent);
