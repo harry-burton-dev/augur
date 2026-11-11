@@ -49,11 +49,13 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin', 'upgrades', 'library']);
   });
 
-  it('offers Admin, with its menu, to admins only', async () => {
+  it('offers Admin, with its places, to admins only', async () => {
     const app = await db.app();
     const forAdmin = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json();
     expect(ids(forAdmin)).toContain('admin');
-    expect(forAdmin.find((a: { id: string }) => a.id === 'admin').menu.map((c: { label: string }) => c.label)).toEqual(['People', 'Departments', 'Settings', 'Apps', 'AUGUR']);
+    const served = forAdmin.find((a: { id: string }) => a.id === 'admin');
+    expect(served.contract).toBe(3);
+    expect(served.contributes.places.map((p: { label: string }) => p.label)).toEqual(['People', 'Departments', 'Organisation', 'Apps', 'Activity']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).not.toContain('admin');
   });
 
