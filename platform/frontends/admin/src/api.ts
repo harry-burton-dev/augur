@@ -189,27 +189,11 @@ export interface FloorRule {
 /** What an admin can set on a floor; `inherit` takes the floor's rule away. */
 export type FloorChoice = FloorRule['state'] | 'inherit';
 
-/** An app's own sign-in, straight after it is issued: the secret is shown this once. */
-export interface IssuedSignIn {
-  clientId: string;
-  secret: string;
-}
-
 /** A site apps may load from besides the platform itself. */
 export interface AllowedOrigin {
   origin: string;
   addedBy: string;
   addedAt: string;
-}
-
-/** One kept version of an app. */
-export interface AppVersion {
-  version: string;
-  entry: AppManifestEntry;
-  registeredBy: string;
-  registeredAt: string;
-  /** The one the shell is given now. */
-  serving: boolean;
 }
 
 /** One part of the platform as the gateway last saw it (see contracts/gateway.openapi.yaml). */
@@ -791,15 +775,6 @@ export class AdminApi {
     if (!org) throw new Error('The org’s floor couldn’t be found.');
     return { id: org.id, name: org.name };
   };
-  appVersions = (id: string) => this.call<AppVersion[]>('GET', `/api/registry/v1/apps/${encodeURIComponent(id)}/versions`);
-  /** Serve one kept version and hold the app there; `null` follows new versions again. */
-  pinApp = (id: string, version: string | null) =>
-    version === null
-      ? this.call<CatalogueApp>('DELETE', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`)
-      : this.call<CatalogueApp>('PUT', `/api/registry/v1/apps/${encodeURIComponent(id)}/pin`, { version });
-
-  /** A new secret for the app's own sign-in; the old one stops working. */
-  issueSignIn = (id: string) => this.call<IssuedSignIn>('POST', `/api/identity/v1/admin/apps/${encodeURIComponent(id)}/credential`);
 
   /** The entries the filters show, as a CSV file (the events service's GET /audit/export; each export is recorded). */
   exportAudit = async (query: Omit<AuditQuery, 'before' | 'limit'>): Promise<{ blob: Blob; filename: string }> => {

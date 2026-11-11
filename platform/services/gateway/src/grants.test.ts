@@ -11,6 +11,9 @@ describe('what an app’s call needs', () => {
     expect(scopeFor('GET', '/api/identity/v1/admin/people?q=a', 'admin', platform)).toBe('people:manage');
     expect(scopeFor('PATCH', '/api/identity/v1/admin/organisation', 'admin', platform)).toBe('org:manage');
     expect(scopeFor('GET', '/api/events/v1/audit', 'admin', platform)).toBe('audit:read');
+    expect(scopeFor('GET', '/api/identity/v1/organisation', 'admin', platform)).toBe('org:manage');
+    expect(scopeFor('GET', '/api/identity/v1/me/workspaces', 'admin', platform)).toBe('apps:manage');
+    expect(scopeFor('GET', '/api/identity/v1/organisation/policy', 'admin', platform)).toBeUndefined();
     expect(scopeFor('PUT', '/api/registry/v1/apps/notes', 'notes', platform)).toBeNull();
     expect(scopeFor('GET', '/api/registry/v1/manifest', 'notes', platform)).toBeUndefined();
   });

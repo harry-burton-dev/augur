@@ -447,6 +447,47 @@ describe('Deployment', () => {
     expect(shell.calls.find((c) => c.method === 'PUT')).toEqual({ method: 'PUT', path: '/api/registry/v1/app-runner/apps/mandate/developers', body: { people: ['p7', 'p8'] } });
   });
 
+  it('holds an app its own service registered at a kept version, follows new ones again, and issues it a new sign-in', async () => {
+    const answer = registry();
+    const kept = (serving: string) =>
+      ['1.1.0', '1.0.0'].map((version) => ({ version, entry: { name: 'Notes', entry: `https://notes.example/${version}/remote.js` }, registeredBy: 'notes', registeredAt: '2026-11-01T00:00:00Z', serving: version === serving }));
+    let serving = '1.1.0';
+    const { shell } = await open((p, init) => {
+      if (p === '/api/registry/v1/apps/notes/versions') return [200, kept(serving)];
+      if (p === '/api/registry/v1/apps/notes/pin' && init?.method === 'PUT') {
+        serving = '1.0.0';
+        return [200, { id: 'notes', pinnedVersion: '1.0.0' }];
+      }
+      if (p === '/api/registry/v1/apps/notes/pin' && init?.method === 'DELETE') {
+        serving = '1.1.0';
+        return [200, { id: 'notes' }];
+      }
+      if (p === '/api/identity/v1/admin/apps/notes/credential') return [200, { clientId: 'app-notes', secret: 's' }];
+      return answer(p, init);
+    }, '/apps/notes');
+    await settle();
+    expect(shell.pane.title).toBe('Notes');
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Follow new versions')).toBeUndefined();
+    handler(find(shell.screen, 'quill-list', (p) => p.label === 'Versions kept'), 'onAction')({ item: '1.0.0', action: 'hold' });
+    await settle();
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'PUT')).toEqual({ method: 'PUT', path: '/api/registry/v1/apps/notes/pin', body: { version: '1.0.0' } });
+    expect(text(find(shell.screen, 'quill-details'))).toContain('1.0.0, held');
+    handler(find(shell.screen, 'quill-button', (p) => p.label === 'Follow new versions'), 'onPress')();
+    await settle();
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'DELETE')?.path).toBe('/api/registry/v1/apps/notes/pin');
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Follow new versions')).toBeUndefined();
+    handler(find(shell.screen, 'quill-button', (p) => p.label === 'Issue a new sign-in'), 'onPress')();
+    expect(shell.moved.at(-1)).toBe('/apps/notes/new-sign-in');
+  });
+
+  it('says so when no app of that name is installed or registered', async () => {
+    const { shell } = await open(registry(), '/apps/nothing');
+    await settle();
+    expect(find(shell.screen, 'quill-state')?.props).toMatchObject({ kind: 'empty' });
+  });
+
   it('allows a site apps may load from on Apps, and removes one after asking', async () => {
     let list = [{ origin: 'https://apps.example.org', addedBy: 'p1', addedAt: '2026-11-01T00:00:00Z' }];
     const answer = registry();

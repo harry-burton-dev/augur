@@ -1,6 +1,6 @@
 import type { AppManifestEntry, MountContext } from '@augur/mfe-sdk';
 import { isRefusal, type Refusal } from './model/roles.js';
-import type { AllowedOrigin, AppInstalls, AppJob, Deliveries, IssuedSignIn, PastedRelease, Principal, DesiredState, DesiredStateInput, Overview, PlatformStatus, PlatformUpdates, ReportingView } from './model/types.js';
+import type { AllowedOrigin, AppInstalls, AppVersion, AppJob, Deliveries, IssuedSignIn, PastedRelease, Principal, DesiredState, DesiredStateInput, Overview, PlatformStatus, PlatformUpdates, ReportingView } from './model/types.js';
 
 /** A call the platform turned down, with the refusal when it explained itself. */
 export class ApiError extends Error {
@@ -79,6 +79,13 @@ export const upgradesApi = (ctx: Pick<MountContext, 'fetch'>) => {
     setDevelopers: (app: string, people: string[]) => call<AppInstalls>('PUT', `/app-runner/apps/${encodeURIComponent(app)}/developers`, { people }),
     /** A new secret for an app's service to sign in with; the old one stops working at once. */
     issueSignIn: (app: string) => call<IssuedSignIn>('POST', `/admin/apps/${encodeURIComponent(app)}/credential`, undefined, '/api/identity/v1'),
+    /** The versions kept of an app its own service registers, and which one the shell is given. */
+    versions: (app: string) => call<AppVersion[]>('GET', `/apps/${encodeURIComponent(app)}/versions`),
+    /** Gives the shell one kept version and holds the app there; null follows new versions again. */
+    pin: (app: string, version: string | null) =>
+      version === null
+        ? call<{ pinnedVersion?: string }>('DELETE', `/apps/${encodeURIComponent(app)}/pin`)
+        : call<{ pinnedVersion?: string }>('PUT', `/apps/${encodeURIComponent(app)}/pin`, { version }),
     /** The sites apps may load from besides AUGUR's own address. */
     origins: () => call<AllowedOrigin[]>('GET', '/origins'),
     allowOrigin: (origin: string) => call<AllowedOrigin>('POST', '/origins', { origin }),

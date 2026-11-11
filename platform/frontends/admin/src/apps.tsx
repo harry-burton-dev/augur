@@ -1,12 +1,9 @@
 import { AskTwice, Button, Details, Dialog, Heading, Rows, Select, Status, Table, TagPicker, TextField, type Detail, type StatusName, type TableColumn, type TableRow } from '@augur/app-kit';
 import { useCallback, useEffect, useState } from 'react';
-import type { AdminApi, AppSettingValue, AppVersion, CatalogueApp, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule, IssuedSignIn } from './api.js';
-import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, inboxWords, kindWords, NEWEST, refusedKindNote, rollbackNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
+import type { AdminApi, AppSettingValue, CatalogueApp, FeaturePreviewMode, FeaturePreviews, FloorChoice, FloorRule } from './api.js';
+import { appEyebrow, appStatus, FLOOR_CHOICES, floorStatus, floorTree, inboxWords, kindWords, refusedKindNote, scopeWords, shipsWithAugur, uploadChoices, type AppFloor } from './apps-model.js';
 import { featureHint, featureModeChoices } from './installs.js';
-import { day, Page, Problem, Secret } from './parts.js';
-import { DEPLOYMENT_ADMIN } from './organisation.js';
-
-const NEEDS_DEPLOYMENT_ADMIN = 'Only a deployment admin can do this. Ask someone who holds the deployment-admin role (Admin, People).';
+import { day, Page, Problem } from './parts.js';
 
 const columns: TableColumn[] = [
   { key: 'name', label: 'App', sortable: true },
@@ -17,16 +14,12 @@ const columns: TableColumn[] = [
   { key: 'source', label: 'From', sortable: true },
 ];
 
-/** Every app in the catalogue with its version, a switch to stop offering one, and its kept versions to go back to. */
-export function Apps({ api, openUpgrades, upgradesName, roles = [] }: { api: AdminApi; openUpgrades: (to?: string) => void; upgradesName: string; roles?: string[] }) {
-  // Choosing a version, issuing a sign-in and choosing where apps load from need deployment-admin (ADR 0084).
-  const deploys = roles.includes(DEPLOYMENT_ADMIN);
+/** Every app in the catalogue with its version and a switch to stop offering one; its versions and server are in Deployment. */
+export function Apps({ api, openUpgrades, upgradesName }: { api: AdminApi; openUpgrades: (to?: string) => void; upgradesName: string }) {
   const [apps, setApps] = useState<CatalogueApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [open, setOpen] = useState<string>();
-  const [issuing, setIssuing] = useState<CatalogueApp>();
-  const [issued, setIssued] = useState<IssuedSignIn & { name: string }>();
 
   const load = useCallback(
     async (showLoading = true) => {
@@ -62,42 +55,13 @@ export function Apps({ api, openUpgrades, upgradesName, roles = [] }: { api: Adm
           {`Install apps in ${upgradesName}`}
         </Button>
       </div>
-      {app ? <AppDetails key={app.id} api={api} app={app} deploys={deploys} openUpgrades={openUpgrades} upgradesName={upgradesName} took={took} onIssue={() => setIssuing(app)} onClose={() => setOpen(undefined)} /> : null}
-      {issuing ? (
-        <Dialog
-          open
-          size="glance"
-          danger
-          eyebrow={issuing.name}
-          heading="Issue a new sign-in?"
-          summary="The app’s service signs in to AUGUR with a secret. A new one stops the old one working straight away, so the service can’t register, notify or write to the log until it’s given the new one."
-          actionLabel="Issue a new sign-in"
-          busyLabel="Issuing…"
-          cancelLabel="Keep the old one"
-          onSubmit={async () => setIssued({ ...(await api.issueSignIn(issuing.id)), name: issuing.name })}
-          onClose={() => setIssuing(undefined)}
-        />
-      ) : null}
-      {issued ? (
-        <Dialog
-          open
-          size="glance"
-          eyebrow="New sign-in"
-          heading={`Give ${issued.name}’s service this secret`}
-          summary={`Set it as SERVICE_CLIENT_SECRET where the service runs, then restart it. It signs in as ${issued.clientId}.`}
-          cancelLabel="Done"
-          onClose={() => setIssued(undefined)}
-        >
-          <Secret value={issued.secret} kind="secret" />
-          <p>It won’t be shown again. If it’s lost, issue a new one.</p>
-        </Dialog>
-      ) : null}
+      {app ? <AppDetails key={app.id} api={api} app={app} openUpgrades={openUpgrades} upgradesName={upgradesName} took={took} onClose={() => setOpen(undefined)} /> : null}
     </Page>
   );
 }
 
-/** One app opened: what it is, whether it's offered, its limits, settings and previews, where it's on, its versions and its runner. */
-function AppDetails({ api, app, deploys, openUpgrades, upgradesName, took, onIssue, onClose }: { api: AdminApi; app: CatalogueApp; deploys: boolean; openUpgrades: (to?: string) => void; upgradesName: string; took: (a: CatalogueApp) => void; onIssue: () => void; onClose: () => void }) {
+/** One app opened: what it is, whether it's offered, its limits, settings and previews, and where it's on. */
+function AppDetails({ api, app, openUpgrades, upgradesName, took, onClose }: { api: AdminApi; app: CatalogueApp; openUpgrades: (to?: string) => void; upgradesName: string; took: (a: CatalogueApp) => void; onClose: () => void }) {
   const [problem, setProblem] = useState('');
   const ships = shipsWithAugur(app);
   const shipped = app.platform || ships;
@@ -180,17 +144,9 @@ function AppDetails({ api, app, deploys, openUpgrades, upgradesName, took, onIss
       {app.platform ? null : <Floors api={api} app={app} />}
       {app.handles?.length ? <p>Answers {app.handles.join(', ')}.</p> : null}
       {ships ? <p data-pillar>It ships with AUGUR and changes version with it. Turn it off here or floor by floor; it can’t be removed, and its sign-in is in the server’s settings.</p> : null}
-      {shipped ? null : <Versions api={api} app={app} deploys={deploys} took={took} />}
-      {shipped ? null : (
-        <div>
-          <Button kind="tertiary" size="sm" disabled={!deploys} reason={NEEDS_DEPLOYMENT_ADMIN} onPress={onIssue}>
-            Issue a new sign-in
-          </Button>
-        </div>
-      )}
       {shipped ? null : (
         <div data-moved className="admin-stack">
-          <p className="admin-flat">Its releases, rolling it back, its internet, settings on the server, developers and removing it are in {upgradesName}.</p>
+          <p className="admin-flat">Its versions, rolling it back, its sign-in, its internet, settings on the server, developers and removing it are in {upgradesName}.</p>
           <div>
             <Button kind="secondary" size="sm" onPress={() => openUpgrades(`/apps/${encodeURIComponent(app.id)}`)}>
               Open it in {upgradesName}
@@ -369,52 +325,4 @@ function Floors({ api, app }: { api: AdminApi; app: CatalogueApp }) {
   );
 }
 
-/** The versions kept for an app, and which one the shell is given. */
-function Versions({ api, app, deploys, took }: { api: AdminApi; app: CatalogueApp; deploys: boolean; took: (a: CatalogueApp) => void }) {
-  const { value: versions, setValue, error } = useLoaded<AppVersion[]>(() => api.appVersions(app.id));
-  const [choice, setChoice] = useState(app.pinnedVersion ?? NEWEST);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState('');
-  if (error) return <Problem>{error}</Problem>;
-  const current = app.pinnedVersion ?? NEWEST;
-  const note = rollbackNote(app, versions?.find((v) => v.version === choice));
-  const use = async () => {
-    setSaving(true);
-    setSaveError('');
-    try {
-      took(await api.pinApp(app.id, choice === NEWEST ? null : choice));
-      setValue(await api.appVersions(app.id));
-    } catch (err) {
-      setSaveError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  };
-  return (
-    <div data-versions className="admin-stack">
-      <Rows
-        loading={!versions}
-        count={2}
-        empty="No versions are kept yet."
-        items={(versions ?? []).map((v) => ({ label: `Version ${v.version}`, value: `${day(v.registeredAt)}${v.serving ? ' · in use' : ''}${v.version === app.pinnedVersion ? ', held' : ''}` }))}
-      />
-      <Select
-        label="Give the shell"
-        hint={app.pinnedVersion ? `Held at ${app.pinnedVersion}: new versions are kept but not used.` : 'Each new version is used as soon as it registers.'}
-        options={[{ value: NEWEST, label: 'The newest, as it registers' }, ...(versions ?? []).map((v) => ({ value: v.version, label: `Version ${v.version}, and hold it` }))]}
-        value={choice}
-        disabled={!versions}
-        reason="Wait for its versions to load."
-        onChange={setChoice}
-      />
-      {note ? <p>{note}</p> : null}
-      <Problem>{saveError}</Problem>
-      <div>
-        <Button kind="secondary" size="sm" disabled={!deploys || choice === current} reason={deploys ? 'That’s what it uses now. Choose another version first.' : NEEDS_DEPLOYMENT_ADMIN} busy={saving} onPress={() => void use()}>
-          {choice === NEWEST ? 'Follow new versions' : `Use version ${choice}`}
-        </Button>
-      </div>
-    </div>
-  );
-}
 

@@ -4,7 +4,7 @@ import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import admin, { screenFor } from './entry.js';
 import { departmentPath, type AppInstalls, type AuditEntry, type CatalogueApp, type Department, type Person } from './api.js';
-import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kindWords, refusedKindNote, rollbackNote, scopeWords, uploadChoices } from './apps-model.js';
+import { appEyebrow, appStatus, floorStatus, floorTree, inboxWords, kindOf, kindWords, refusedKindNote, scopeWords, uploadChoices } from './apps-model.js';
 import { describe as sentence, namesFrom, rangeFor } from './activity.js';
 import { changesFrom, daysCheck, languageLabel, noticeChangesFrom, orgNameCheck, securityChangesFrom, zoneLabel } from './organisation.js';
 
@@ -86,7 +86,6 @@ const press = async (b: Element | null | undefined) => {
 };
 /** A button by its words, anywhere on the page: dialogs draw outside the app. */
 const button = (words: string, inside: ParentNode = document) => [...inside.querySelectorAll('button')].find((b) => b.textContent?.trim().replace(/^Esc/, '') === words);
-const reasonOf = (b: Element | undefined) => document.getElementById(b?.getAttribute('aria-describedby') ?? '')?.textContent ?? '';
 const shut = (b: Element | undefined) => b?.getAttribute('aria-disabled') === 'true' || (b as HTMLButtonElement | undefined)?.disabled === true;
 /** A table's rows, each as its cells' words. */
 const rowsOf = (el: ParentNode) => [...el.querySelectorAll('.quill-table-row')].map((r) => [...r.querySelectorAll('.quill-table-cell')].map((c) => c.textContent?.trim()));
@@ -509,9 +508,6 @@ describe('Apps', () => {
     expect(inboxWords({ scopes: ['inbox:write'], grantedScopes: ['inbox:write'], inbox: kinds })).toBe('Assigned to you, To review');
     expect(inboxWords({ scopes: ['inbox:write'], grantedScopes: [], inbox: kinds })).toMatch(/until it’s allowed to put work in people’s inboxes/);
     expect(inboxWords({ scopes: [] })).toBeUndefined();
-    const kept = (version: string, entry = library.entry) => ({ version, entry: { ...library, version, entry }, registeredBy: 'library', registeredAt: '', serving: false });
-    expect(rollbackNote(library, kept('0.1.0'))).toMatch(/loads from the same address as 0.2.0/);
-    expect(rollbackNote(library, kept('0.1.0', '/apps/library/0.1.0/entry.js'))).toBe('');
   });
 
   it('says what kind of app each is, from the kind in force, and why a claimed kind isn’t used', () => {
@@ -561,34 +557,6 @@ describe('Apps', () => {
     expect(floorStatus(library, tree[0]!, [], names)).toEqual({ on: true, words: 'On' });
   });
 
-  it('issues a new sign-in and shows its secret once', async () => {
-    const { sent } = gateway((_m, url) =>
-      url === '/api/registry/v1/apps'
-        ? Response.json([library])
-        : url.endsWith('/credential')
-          ? Response.json({ app: 'library', clientId: 'app-library', secret: 's3cret-value' }, { status: 201 })
-          : url.endsWith('/versions') || url.endsWith('/floors')
-            ? Response.json([])
-            : undefined,
-    );
-    const el = await open('/apps', ['admin', 'deployment-admin']);
-    await openRow(el, 'Library');
-    expect(document.querySelector('.augur-dialog')!.textContent).toContain('Notify people');
-    await press(button('Issue a new sign-in'));
-    await press(button('Issue a new sign-in', document.querySelectorAll('.augur-dialog')[1] ?? document));
-    expect(sent).toContainEqual({ method: 'POST', url: '/api/identity/v1/admin/apps/library/credential', body: undefined });
-    expect(document.querySelector('[data-secret]')?.textContent).toBe('s3cret-value');
-  });
-
-  it('leaves issuing a sign-in to deployment admins, and says who can (ADR 0084)', async () => {
-    gateway((_m, url) => (url === '/api/registry/v1/apps' ? Response.json([library]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
-    const el = await open('/apps');
-    await openRow(el, 'Library');
-    const issue = button('Issue a new sign-in');
-    expect(shut(issue)).toBe(true);
-    expect(reasonOf(issue)).toContain('Only a deployment admin can do this.');
-  });
-
   describe('installs from releases', () => {
     const installs: AppInstalls = {
       feed: 'on',
@@ -613,11 +581,12 @@ describe('Apps', () => {
       const { sent } = gateway((_method, url) => (url === '/api/registry/v1/apps' ? Response.json([notes]) : url.endsWith('/versions') || url.endsWith('/floors') ? Response.json([]) : undefined));
       const el = await open('/apps');
       await openRow(el, 'Notes');
-      expect(document.querySelector('[data-moved]')?.textContent).toContain('rolling it back, its internet, settings on the server, developers and removing it are in Deployment');
+      expect(document.querySelector('[data-moved]')?.textContent).toContain('Its versions, rolling it back, its sign-in, its internet, settings on the server, developers and removing it are in Deployment');
+      expect(button('Issue a new sign-in')).toBeUndefined();
       await press(button('Open it in Deployment', document.querySelector('[data-moved]')!));
       expect(window.location.pathname).toBe('/upgrades/apps/notes');
-      // Admin no longer reads the app runner, the event deliveries or where apps load from.
-      expect(sent.some((r) => /app-runner|deliveries|origins/.test(r.url))).toBe(false);
+      // Admin no longer reads the app runner, the event deliveries, where apps load from or an app's kept versions.
+      expect(sent.some((r) => /app-runner|deliveries|origins|versions/.test(r.url))).toBe(false);
     });
   });
 });
