@@ -36,7 +36,7 @@ export const settings: Provisioner = {
         continue;
       }
       const value = values[s.id] ?? (s.default === undefined ? undefined : String(s.default));
-      if (value === undefined && s.required) throw new Error(`${manifest.name} needs ${s.label} before it can start. A deployment admin fills it in under Admin → Apps.`);
+      if (value === undefined && s.required) throw new Error(`${manifest.name} needs ${s.label} before it can start. A deployment admin fills it in on its page in Deployment, Apps.`);
       out[s.id] = {
         value: value ?? '',
         ...(s.type === 'secret' ? { secret: true } : {}),

@@ -112,7 +112,7 @@ pc run --rm --no-deps -v platform_garage-meta:/r/meta -v platform_garage-data:/r
 ## 7. Start AUGUR and adopt the copy
 
 Run `pc up -d`, sign in, and check people, apps and a few documents are there. Then tell the backup container
-this server is the deployment the copy belongs to, so it copies there again. Until then Admin → Status says
+this server is the deployment the copy belongs to, so it copies there again. Until then Deployment → Backups says
 the copy holds backups this server didn't make.
 
 ```sh

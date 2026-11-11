@@ -4,12 +4,10 @@ import type { AdminApi, CatalogueApp } from './api.js';
 import { Activity } from './activity.js';
 import { Apps } from './apps.js';
 import { Departments } from './departments.js';
-import { Pipeline } from './line.js';
 import { Organisation } from './organisation.js';
 import { People } from './people.js';
-import { Status } from './status.js';
 
-const screens = ['people', 'departments', 'apps', 'organisation', 'status', 'updates', 'activity'] as const;
+const screens = ['people', 'departments', 'apps', 'organisation', 'activity'] as const;
 export type Screen = (typeof screens)[number];
 
 /** Which screen a path inside Admin opens. Its Orbit lives at "/", so anything else falls back to People. */
@@ -25,8 +23,6 @@ const RAIL: { screen: Screen; label: string; icon: IconName }[] = [
   { screen: 'departments', label: 'Departments', icon: 'department' },
   { screen: 'apps', label: 'Apps', icon: 'apps' },
   { screen: 'organisation', label: 'Organisation', icon: 'org' },
-  { screen: 'status', label: 'Status', icon: 'gauge' },
-  { screen: 'updates', label: 'Dev to production', icon: 'pulse' },
   { screen: 'activity', label: 'Activity', icon: 'clock' },
 ];
 
@@ -43,8 +39,7 @@ const shellTo = (href: string) => {
 };
 
 /**
- * Admin: people, departments, apps, and the platform's status, line and
- * activity, so nobody needs the sign-in service's own console or the command
+ * Admin: people, departments, apps, the organisation and activity, so nobody needs the sign-in service's own console or the command
  * line. Every change goes through the platform's services, which check the
  * caller is an admin and record it in the audit log. Moving between its
  * sections moves the address without the shell mounting it again.
@@ -104,10 +99,6 @@ export function AdminApp({ api, me, roles = [], path: start }: { api: AdminApi; 
           <Apps api={api} openUpgrades={openUpgrades} upgradesName={upgrades?.name ?? 'Deployment'} roles={roles} />
         ) : screen === 'organisation' ? (
           <Organisation api={api} roles={roles} />
-        ) : screen === 'status' ? (
-          <Status api={api} openUpgrades={openUpgrades} />
-        ) : screen === 'updates' ? (
-          <Pipeline api={api} openUpgrades={openUpgrades} />
         ) : (
           <Activity api={api} />
         )}

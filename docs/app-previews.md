@@ -14,7 +14,7 @@ A new push replaces the preview in place, keeping its scratch data. A preview is
 
 ## Trying one (developers)
 
-An admin makes you one of an app's developers in Admin → Apps, on the installed app. Then **Previews** appears in the shell's band: it lists each of your apps with its running previews (the pull request, its title and link, its version and when it ends). **Use it** switches you to that preview; **Back to <version>** switches you back. While you're on one, the shell says so at the bottom of the screen, with the way back.
+An admin makes you one of an app's developers on the app’s page in Deployment → Apps. Then **Previews** appears in the shell's band: it lists each of your apps with its running previews (the pull request, its title and link, its version and when it ends). **Use it** switches you to that preview; **Back to <version>** switches you back. While you're on one, the shell says so at the bottom of the screen, with the way back.
 
 While you've chosen a preview, the shell is given its manifest (so it loads that build's frontend, kept by version), and the gateway sends your calls to the app to the preview's service. The gateway reads where to send them every 30 seconds, so give it a moment after switching. Everyone else, and you on other apps, are unaffected.
 

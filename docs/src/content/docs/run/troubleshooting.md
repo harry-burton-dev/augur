@@ -8,7 +8,7 @@ sidebar:
 ---
 
 Start with `pc ps`, which shows each container and whether it's `healthy`, and `pc logs <service>`, which says
-why one isn't. Admin → Status says the same for each part, when you can sign in.
+why one isn't. Deployment → Health says the same for each part, when you can sign in.
 
 ## The address doesn't resolve
 

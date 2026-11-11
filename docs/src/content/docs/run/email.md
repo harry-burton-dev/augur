@@ -32,7 +32,7 @@ theme and the realm's languages.
 ## Check it works
 
 - Use **Forgot password** on the sign-in page for your own account.
-- **Admin → Status** has an **Email** section: whether email can be sent, the relay and the address mail
+- **Deployment → Health** has an **Email** section: whether email can be sent, the relay and the address mail
   comes from, and when the relay was last checked (at most every 5 minutes). When the relay is set but
   doesn't answer, it says what to check: the sign-in, the host and port, or the security setting. The gateway
   reads the same `SMTP_*` settings for this check and sends nothing.
@@ -42,7 +42,7 @@ theme and the realm's languages.
 Admin → Organisation sets the sender: a name (the organisation's name until changed) and, optionally, an
 address. AUGUR's own email uses them within a minute. Keycloak's emails (password resets, address checks) use
 them from the next run of the realm job: run `pc up -d` after changing them. Without an address, email comes
-from `SMTP_FROM`. If the relay refuses the new address, Admin → Status says so.
+from `SMTP_FROM`. If the relay refuses the new address, Deployment → Health says so.
 
 ## Emails about people's security
 

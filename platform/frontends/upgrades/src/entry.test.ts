@@ -188,6 +188,10 @@ describe('routes', () => {
       { page: 'apps', address: 'https://example.test/r/app-release.json' },
       { page: 'app', app: 'mandate' },
       { page: 'app', app: 'mandate', install: '1.4.1' },
+      { page: 'app', app: 'mandate', ask: { kind: 'roll-back', version: '1.3.0' } },
+      { page: 'app', app: 'mandate', ask: { kind: 'remove' } },
+      { page: 'app', app: 'mandate', ask: { kind: 'internet' } },
+      { page: 'app', app: 'mandate', ask: { kind: 'new-sign-in' } },
       { page: 'health' },
       { page: 'backups' },
       { page: 'channel' },
@@ -293,16 +297,182 @@ describe('Deployment', () => {
     expect(queued.shell.calls.find((c) => c.method === 'DELETE')?.path).toBe('/api/registry/v1/platform/upgrade');
   });
 
-  it('installs an app’s update from its page, and keeps going an app back in Admin for now', async () => {
+  it('installs an app’s update from its page', async () => {
     const { shell } = await open(registry({ change: () => [200, jobs[0]] }), '/apps/mandate');
     expect(shell.pane.title).toBe('Mandate');
-    expect(find(shell.screen, 'quill-list', (p) => p.label === 'Roll back')?.props?.items).toMatchObject([{ actions: [{ disabled: true, reason: 'Rolling an app back is done in Admin, Apps, for now.' }] }]);
     expect(find(shell.screen, 'quill-paged-list', (p) => p.label === 'Install history')?.props?.items).toMatchObject([{ id: 'j1', status: 'done' }]);
     handler(find(shell.screen, 'quill-list', (p) => p.label === 'Available updates'), 'onAction')({ item: '1.4.1', action: 'install' });
     handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({});
     await settle();
     expect(shell.calls.find((c) => c.method === 'POST')).toEqual({ method: 'POST', path: '/api/registry/v1/app-runner/jobs', body: { action: 'install', app: 'mandate', version: '1.4.1' } });
     expect(shell.moved.at(-1)).toBe('/apps/mandate');
+  });
+
+  it('rolls an app back from its page, saying it goes on hold, at a path of its own', async () => {
+    const { shell } = await open(registry({ change: () => [200, jobs[0]] }), '/apps/mandate');
+    const back = find(shell.screen, 'quill-list', (p) => p.label === 'Roll back');
+    expect(back?.props?.items).toMatchObject([{ id: '1.3.0', actions: [{ id: 'roll-back', label: 'Roll back to 1.3.0' }] }]);
+    expect(JSON.stringify(back?.props?.items)).not.toContain('disabled');
+    handler(back, 'onAction')({ item: '1.3.0', action: 'roll-back' });
+    expect(shell.moved).toEqual(['/apps/mandate/roll-back/1.3.0']);
+    const ask = find(shell.screen, 'quill-dialog');
+    expect(ask?.props).toMatchObject({ heading: 'Roll Mandate back to 1.3.0?', actionLabel: 'Roll back' });
+    expect(String(ask?.props?.summary)).toContain('on hold');
+    handler(ask, 'onSubmit')({});
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'POST')).toEqual({ method: 'POST', path: '/api/registry/v1/app-runner/jobs', body: { action: 'install', app: 'mandate', version: '1.3.0' } });
+    expect(shell.moved.at(-1)).toBe('/apps/mandate');
+  });
+
+  it('won’t roll back to a release that isn’t an earlier one, and says why', async () => {
+    const { shell } = await open(registry(), '/apps/mandate/roll-back/0.1.0');
+    expect(find(shell.screen, 'quill-notice', (p) => p.tone === 'refused')?.props?.heading).toBe('Rolling Mandate back to 0.1.0 can’t start now');
+  });
+
+  const serverApp = (): AppInstalls =>
+    installs({
+      dataGraceDays: 30,
+      installed: [
+        {
+          ...installs().installed[0]!,
+          developers: ['p7'],
+          previews: [{ pr: 42, version: '1.5.0-pr.42', title: 'Faster lists', startedAt: '2026-11-09T00:00:00Z', endsAt: '2026-11-12T00:00:00Z' }],
+          internet: { allowed: false, why: ['It reads public holidays'], hosts: ['date.nager.at'] },
+          settings: [
+            { id: 'keep', label: 'Keep deleted things', type: 'number', required: false, min: 1, max: 90, unit: 'days', default: 30, set: false },
+            { id: 'digest', label: 'Daily digest', type: 'boolean', required: false, default: false, set: false },
+            { id: 'key', label: 'API key', type: 'secret', required: true, set: true },
+          ],
+        },
+      ],
+    });
+
+  it('shows what the server runs for an app: its internet, settings, developers and previews, and its sign-in and removal', async () => {
+    const answer = registry({ installs: serverApp() });
+    const { shell } = await open((p, init) => (p.startsWith('/api/identity/v1/directory') ? [200, { people: [{ id: 'p7', name: 'Rae Developer', email: 'rae@example.org' }], teams: [] }] : answer(p, init)), '/apps/mandate');
+    await settle();
+    expect(text(find(shell.screen, 'quill-section', (p) => p.label === 'Internet'))).toContain('date.nager.at');
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Allow the internet')).toBeDefined();
+    expect(find(shell.screen, 'quill-text-field', (p) => p.name === 'setting:keep')?.props).toMatchObject({ label: 'Keep deleted things (days)', value: '' });
+    expect(find(shell.screen, 'quill-select', (p) => p.name === 'setting:digest')?.props).toMatchObject({ value: '' });
+    expect(find(shell.screen, 'quill-text-field', (p) => p.name === 'setting:key')?.props).toMatchObject({ type: 'password', required: false });
+    // The developers are named from the directory, by id.
+    expect(shell.calls.some((c) => c.path === '/api/identity/v1/directory?ids=p7')).toBe(true);
+    expect(find(shell.screen, 'quill-people-picker')?.props?.value).toEqual([{ kind: 'person', id: 'p7', name: 'Rae Developer' }]);
+    expect(text(find(shell.screen, 'quill-list', (p) => p.label === 'Previews running'))).toContain('#42 Faster lists');
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Issue a new sign-in')).toBeDefined();
+    expect(find(shell.screen, 'quill-button', (p) => p.label === 'Remove from the server')?.props?.disabled).toBeUndefined();
+  });
+
+  it('saves a setting inline as soon as it changes, and says why a value isn’t one it takes', async () => {
+    const { shell } = await open(registry({ installs: serverApp(), change: () => [200, serverApp()] }), '/apps/mandate');
+    handler(find(shell.screen, 'quill-text-field', (p) => p.name === 'setting:keep'), 'onCommit')('120');
+    expect(text(find(shell.screen, 'quill-notice', (p) => p.tone === 'refused'))).toContain('from 1 to 90 days');
+    handler(find(shell.screen, 'quill-text-field', (p) => p.name === 'setting:keep'), 'onCommit')('14');
+    handler(find(shell.screen, 'quill-select', (p) => p.name === 'setting:digest'), 'onChange')('true');
+    await settle();
+    expect(shell.calls.filter((c) => c.method === 'PUT')).toEqual([
+      { method: 'PUT', path: '/api/registry/v1/app-runner/apps/mandate/settings/keep', body: { value: 14 } },
+      { method: 'PUT', path: '/api/registry/v1/app-runner/apps/mandate/settings/digest', body: { value: true } },
+    ]);
+  });
+
+  it('asks for the password again when a secret needs it, and comes back to the same page', async () => {
+    const { shell } = await open(registry({ installs: serverApp(), change: () => [403, { error: 'sign_in_again', message: 'Enter your password again.' }] }), '/apps/mandate');
+    handler(find(shell.screen, 'quill-text-field', (p) => p.name === 'setting:key'), 'onCommit')('s3cret');
+    await settle();
+    expect(shell.signedInAgain).toBe(1);
+  });
+
+  it('allows an app the internet, removes it and issues a new sign-in, each from a question of its own', async () => {
+    const answer = registry({ installs: serverApp() });
+    const changes = (p: string, init?: RequestInit): [number, unknown] => {
+      if (init?.method === 'PUT' && p.endsWith('/internet')) return [200, serverApp()];
+      if (init?.method === 'POST' && p.endsWith('/credential')) return [200, { clientId: 'app-mandate', secret: 'new-secret' }];
+      if (init?.method === 'POST') return [200, { ...jobs[0], action: 'remove' }];
+      return answer(p, init);
+    };
+    const { shell, move } = await open(changes, '/apps/mandate');
+    handler(find(shell.screen, 'quill-button', (p) => p.label === 'Allow the internet'), 'onPress')();
+    expect(shell.moved.at(-1)).toBe('/apps/mandate/internet');
+    expect(find(shell.screen, 'quill-dialog')?.props).toMatchObject({ heading: 'Let Mandate reach the internet?', danger: true });
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({});
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'PUT')).toEqual({ method: 'PUT', path: '/api/registry/v1/app-runner/apps/mandate/internet', body: { allowed: true } });
+
+    move('/apps/mandate/new-sign-in');
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({});
+    await settle();
+    expect(find(shell.screen, 'quill-dialog')?.props?.heading).toBe('Give Mandate’s service this secret');
+    expect(find(shell.screen, 'quill-text-field', (p) => p.label === 'Secret')?.props).toMatchObject({ value: 'new-secret', readOnly: true });
+    move('/apps/mandate');
+    move('/apps/mandate/new-sign-in');
+    // Shown once: coming back asks again.
+    expect(find(shell.screen, 'quill-dialog')?.props?.heading).toBe('Issue a new sign-in?');
+
+    move('/apps/mandate/remove');
+    expect(String(find(shell.screen, 'quill-dialog')?.props?.summary)).toContain('for 30 days');
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({});
+    await settle();
+    expect(shell.calls.filter((c) => c.method === 'POST').at(-1)).toEqual({ method: 'POST', path: '/api/registry/v1/app-runner/jobs', body: { action: 'remove', app: 'mandate' } });
+    expect(shell.moved.at(-1)).toBe('/apps');
+  });
+
+  it('keeps a default app from being removed, and a plain admin from changing anything on the server', async () => {
+    const def = serverApp();
+    def.installed[0]!.default = true;
+    const { shell } = await open(registry({ installs: def }), '/apps/mandate/remove');
+    expect(text(find(shell.screen, 'quill-notice', (p) => p.tone === 'refused'))).toContain('DEFAULT_APPS');
+    const plain = await open(registry({ installs: serverApp(), overview: overview({ you: { deploymentAdmin: false } }) }), '/apps/mandate');
+    for (const label of ['Allow the internet', 'Issue a new sign-in', 'Remove from the server']) expect(text(find(plain.shell.screen, 'quill-button', (p) => p.label === label))).toContain('deployment-admin');
+    expect(find(plain.shell.screen, 'quill-people-picker')?.props?.disabled).toBe(true);
+  });
+
+  it('finds people for the developers, and saves who they are', async () => {
+    const answer = registry({ installs: serverApp() });
+    const { shell } = await open((p, init) => {
+      if (p.startsWith('/api/identity/v1/directory?q=')) return [200, { people: [{ id: 'p8', name: 'Lee Builder' }], teams: [] }];
+      if (p.startsWith('/api/identity/v1/directory')) return [200, { people: [{ id: 'p7', name: 'Rae Developer' }], teams: [] }];
+      if (init?.method === 'PUT') return [200, serverApp()];
+      return answer(p, init);
+    }, '/apps/mandate');
+    handler(find(shell.screen, 'quill-people-picker'), 'onQuery')('lee');
+    await settle();
+    expect(find(shell.screen, 'quill-people-picker')?.props?.found).toEqual({ query: 'lee', items: [{ kind: 'person', id: 'p8', name: 'Lee Builder' }] });
+    handler(find(shell.screen, 'quill-people-picker'), 'onChange')([
+      { kind: 'person', id: 'p7', name: 'Rae Developer' },
+      { kind: 'person', id: 'p8', name: 'Lee Builder' },
+    ]);
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'PUT')).toEqual({ method: 'PUT', path: '/api/registry/v1/app-runner/apps/mandate/developers', body: { people: ['p7', 'p8'] } });
+  });
+
+  it('allows a site apps may load from on Apps, and removes one after asking', async () => {
+    let list = [{ origin: 'https://apps.example.org', addedBy: 'p1', addedAt: '2026-11-01T00:00:00Z' }];
+    const answer = registry();
+    const { shell } = await open((p, init) => {
+      if (p.endsWith('/origins') && (init?.method ?? 'GET') === 'GET') return [200, list];
+      if (p.endsWith('/origins')) {
+        const added = { origin: 'https://more.example.org', addedBy: 'p1', addedAt: '2026-11-10T00:00:00Z' };
+        list = [...list, added];
+        return [200, added];
+      }
+      if (init?.method === 'DELETE') return [204, null];
+      return answer(p, init);
+    }, '/apps');
+    await settle();
+    const sites = () => find(shell.screen, 'quill-list', (p) => p.label === 'Where apps load from');
+    expect((sites()?.props?.items as { id: string }[]).map((i) => i.id)).toEqual(['https://apps.example.org']);
+    handler(find(shell.screen, 'quill-text-field', (p) => p.name === 'origin'), 'onCommit')('https://more.example.org');
+    await settle();
+    expect((sites()?.props?.items as { id: string }[]).map((i) => i.id)).toEqual(['https://apps.example.org', 'https://more.example.org']);
+    handler(sites(), 'onAction')({ item: 'https://apps.example.org', action: 'remove' });
+    expect(find(shell.screen, 'quill-dialog')?.props?.heading).toBe('Stop apps loading from https://apps.example.org?');
+    handler(find(shell.screen, 'quill-dialog'), 'onSubmit')({});
+    await settle();
+    expect(shell.calls.find((c) => c.method === 'DELETE')?.path).toBe('/api/registry/v1/origins/https%3A%2F%2Fapps.example.org');
+    expect((sites()?.props?.items as { id: string }[]).map((i) => i.id)).toEqual(['https://more.example.org']);
+    expect(find(shell.screen, 'quill-dialog')).toBeUndefined();
   });
 
   it('marks a failed result reviewed for every admin', async () => {

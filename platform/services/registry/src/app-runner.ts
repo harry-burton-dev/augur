@@ -566,7 +566,7 @@ export const appRunnerRoutes =
         const caller = callerFromHeaders(req.headers);
         if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to try a preview.' });
         const { id } = req.params;
-        if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can try its previews. An admin adds them in Admin → Apps.` });
+        if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can try its previews. A deployment admin adds them on its page in Deployment, Apps.` });
         const { pr } = req.body;
         if (pr !== null && !(await store.runningPreviews()).some((p) => p.app === id && p.pr === pr)) return reply.code(404).send({ error: 'not_found', message: `No preview of pull request ${pr} is running.` });
         await store.choosePreview(caller.id, id, pr);
@@ -607,7 +607,7 @@ export const appRunnerRoutes =
         if (!caller) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to load an app from your machine.' });
         const { id } = req.params;
         if (live.problem) return reply.code(409).send({ error: 'conflict', message: live.problem });
-        if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can load it from their machine. An admin adds them in Admin → Apps.` });
+        if (!(await store.developers(id)).some((d) => d.person === caller.id)) return reply.code(403).send({ error: 'forbidden', message: `Only ${id}’s developers can load it from their machine. A deployment admin adds them on its page in Deployment, Apps.` });
         const { url } = req.body;
         const problem = url === null ? undefined : live.urlProblem(url);
         if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });

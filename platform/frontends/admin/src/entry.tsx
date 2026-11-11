@@ -10,7 +10,7 @@ const roots = new WeakMap<HTMLElement, Root>();
 const STYLE_ID = 'augur-admin-styles';
 
 /**
- * Admin: people, departments, apps, and the platform's status, line and activity. Every read and
+ * Admin: people, departments, apps, the organisation and activity. Every read and
  * change goes to the platform's services through the gateway, with the caller's token.
  */
 export default defineMicroFrontend({

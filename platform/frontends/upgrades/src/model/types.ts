@@ -262,6 +262,56 @@ export interface InstalledApp {
   halted?: Halted;
   job?: AppJob;
   older?: { version: string; channel: Channel }[];
+  /** One of the deployment's default apps (DEFAULT_APPS): what it asks for was agreed by the deployment, and it can't be removed while named. */
+  default?: boolean;
+  /** Who may try its pull requests' previews, by person id. */
+  developers?: string[];
+  previews?: AppPreview[];
+  /** For a version that asks for the internet: what for, from where, and whether a deployment admin allowed it. */
+  internet?: { allowed: boolean; why: string[]; hosts: string[]; allowedBy?: string; allowedAt?: string };
+  /** Its own settings (contract 3), and any a newer version needs first. */
+  settings?: AppSettingView[];
+}
+
+/** A pull request's build of an installed app, running beside it for its developers. */
+export interface AppPreview {
+  pr: number;
+  version: string;
+  title?: string;
+  url?: string;
+  startedAt: string;
+  endsAt: string;
+}
+
+/** One of an installed app's settings, with the admin's value if one was given (never a secret's). */
+export interface AppSettingView extends AppSettingDecl {
+  set: boolean;
+  value?: string | number | boolean;
+  setBy?: string;
+  setAt?: string;
+  /** Asked for only by this newer version, which needs it before it installs. */
+  newIn?: string;
+}
+
+/** A site apps may load from besides AUGUR's own address. */
+export interface AllowedOrigin {
+  origin: string;
+  addedBy: string;
+  addedAt: string;
+}
+
+/** A new sign-in for an app's service, shown once. */
+export interface IssuedSignIn {
+  clientId: string;
+  secret: string;
+}
+
+/** A person, as the directory names them, for the developers picker. */
+export interface Principal {
+  kind: 'person' | 'team';
+  id: string;
+  name: string;
+  detail?: string;
 }
 
 /** What a contract 3 release asks an admin to agree to (spec 9.4). */

@@ -72,13 +72,13 @@ An app whose code lives on another site (its manifest's `entry` is a full addres
 `https://apps.example.org/maps/entry.js`, not a path like `/apps/maps/entry.js`) needs that site allowed in
 two places:
 
-1. In **Admin → Apps → Where apps load from**, add `https://apps.example.org`. Until then the registry refuses
+1. In **Deployment → Apps → Where apps load from**, add `https://apps.example.org`. Until then the registry refuses
    to register the app.
 2. Add it to `APP_ORIGINS` in `.env` (space separated), then run `pc up -d web`, so the browser will run its
    code.
 
 The site must serve the entry with a CORS header such as `Access-Control-Allow-Origin: PLATFORM_URL`. Removing
-a site in Admin stops offering its apps straight away; they show as **Blocked** in Apps until it's allowed
+a site there stops offering its apps straight away; they show as **Blocked** in Apps until it's allowed
 again.
 
 ## Monitoring and sample data

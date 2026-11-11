@@ -468,7 +468,7 @@ describe('the app runner', () => {
     };
     expect(await t.run(install('1.1.0', 'b'))).toBe('failed');
     expect(t.reports.at(-1)?.message).toBe(
-      'Notes 1.1.0: the web part stopped answering after the switch. It didn’t go back by itself: 1.0.0 was installed before the runner kept what it needs to go back. Install 1.0.0 again from Admin → Apps.',
+      'Notes 1.1.0: the web part stopped answering after the switch. It didn’t go back by itself: 1.0.0 was installed before the runner kept what it needs to go back. Install 1.0.0 again from its page in Deployment, Apps.',
     );
   });
 
@@ -760,7 +760,7 @@ describe('the app runner', () => {
     await t.host.writeProject(now, {}, {});
     t.calls.did.length = 0;
     expect(await t.run({ ...install('1.1.0', 'b'), state: 'running' })).toBe('failed');
-    expect(t.reports.at(-1)?.message).toBe('The app runner restarted while watching 1.1.0. 1.1.0 is serving, without the rest of its watch; 1.0.0 keeps running until 12:15 UTC, and Admin → Apps can go back to it.');
+    expect(t.reports.at(-1)?.message).toBe('The app runner restarted while watching 1.1.0. 1.1.0 is serving, without the rest of its watch; 1.0.0 keeps running until 12:15 UTC, and its page in Deployment, Apps can roll back to it.');
     expect(t.calls.did).toEqual([]);
     expect(t.running.has('app-notes-web-green')).toBe(true);
   });

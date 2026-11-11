@@ -164,7 +164,7 @@ exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
 1. From any device on your tailnet, open `PLATFORM_URL` and sign in as `PLATFORM_ADMIN_USER` with
    `PLATFORM_ADMIN_PASSWORD`. Choose your own password. A passkey is on offer in Account → Sign-in and
    security, and Admin → Organisation can ask everyone for a second step.
-2. Open **Admin → Status**. Every part should say it's working. Under **Backups**, the first backup, the first
+2. Open **Deployment → Health**. Every part should say it's working. On **Deployment → Backups**, the first backup, the first
    restore test and the first point-in-time test run when the backup container starts, so give it a few
    minutes; a part that isn't working says why.
 3. In the Tailscale admin console's **Machines**, the machine named after `TS_HOSTNAME` is there. If its key
@@ -187,7 +187,7 @@ exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
    press **Test**. A notice reaches you, and every deployment admin, in AUGUR within a minute.
 3. **[Email](../email/)**, so people can reset a forgotten password.
 4. **The [off-server copy](../backups/#off-server-copy)**, so a lost server doesn't lose its backups. Until
-   then, Admin → Status says backups are kept on this server only.
+   then, Deployment → Backups says backups are kept on this server only.
 5. **Turn on the updater**, if this server should upgrade itself
    ([upgrade guide](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md#the-updater)).
 
@@ -197,7 +197,7 @@ up. Write down where this deployment's bucket is, its Backstage name and its rin
 ## Check it worked
 
 - `pc ps` shows every long-running container `healthy`.
-- Admin → Status says every part is working, and Backups shows a backup and a restore test.
+- Deployment → Health says every part is working, and Deployment → Backups shows a backup and a restore test.
 - The preflight ends `✓ Ready` with nothing under `-` you meant to set up.
 
 If something isn't right, see [If something's wrong](../troubleshooting/).
