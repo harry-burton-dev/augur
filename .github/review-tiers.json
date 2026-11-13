@@ -1,5 +1,5 @@
 {
-  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. harryOk: the High paths that also wait for Harry's ok. deployTest: the paths whose change runs on a server, which get the deploy test before merging. Globs follow node:path matchesGlob. A bot's pull request (Renovate) is checked by CI and the deploy test only.",
+  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. harryOk: the High paths that also wait for Harry's ok. deployTest: the paths whose change runs on a server, which get the deploy test before merging. Globs follow node:path matchesGlob. A bot's pull request (Renovate) has no description to check: it needs only Harry's ok on his paths.",
   "high": [
     "platform/services/updater/**",
     "platform/services/identity/**",
@@ -76,9 +76,14 @@
   "deployTest": [
     "infra/**",
     "release/**",
+    "contracts/**",
     "platform/services/*/src/**",
     "platform/services/*/package.json",
-    "platform/packages/service-kit/src/**",
+    "platform/packages/*/src/**",
+    "platform/packages/*/package.json",
+    "platform/frontends/sign-in-theme/**",
+    "package.json",
+    "pnpm-workspace.yaml",
     "pnpm-lock.yaml"
   ]
 }

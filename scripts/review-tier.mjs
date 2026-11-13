@@ -51,8 +51,9 @@ export const sectionsOf = (body) => {
 };
 
 /** What a pull request of `tier` still lacks, in words; empty when it may merge. */
-export const problems = ({ tier, body, labels = [], lines = 0, harry = false }) => {
+export const problems = ({ tier, body, labels = [], lines = 0, harry = false, bot = false }) => {
   if (tier === 'Low') return [];
+  if (bot) return harry && !labels.includes('harry-ok') ? ["Harry's ok (the harry-ok label, added only after he says ok)"] : [];
   const found = sectionsOf(body);
   const out = [];
   for (const name of SECTIONS) {
@@ -76,7 +77,8 @@ const diffAgainst = (base) => {
   const range = `origin/${base}...HEAD`;
   // Without renames, a file moved out of a High path is listed at both ends.
   const paths = execFileSync('git', ['diff', '--no-renames', '--name-only', range], { encoding: 'utf8' }).split('\n').filter(Boolean);
-  const numstat = execFileSync('git', ['diff', '--no-renames', '--numstat', range], { encoding: 'utf8' });
+  // The line count keeps renames, so a moved file counts only what changed in it.
+  const numstat = execFileSync('git', ['diff', '--numstat', range], { encoding: 'utf8' });
   const lines = numstat.split('\n').filter(Boolean).reduce((sum, row) => {
     const [added, removed] = row.split('\t');
     return sum + (Number(added) || 0) + (Number(removed) || 0);
@@ -103,9 +105,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { tier, because } = tierOf(paths, tiers);
   const labels = JSON.parse(PR_LABELS).map((l) => (typeof l === 'string' ? l : l.name));
   const harry = tier === 'High' && needsHarry(paths, tiers);
-  // A bot's pull request (Renovate's dependency updates) has no description to check: CI and, where it
-  // applies, the deploy test are its gates.
-  const missing = PR_BOT === 'true' ? [] : problems({ tier, body: PR_BODY, labels, lines, harry });
+  // A bot's pull request (Renovate's dependency updates) has no description to check, so only Harry's ok is
+  // asked of it, on his paths; CI and, where it applies, the deploy test are its other gates.
+  const missing = PR_BOT === 'true' ? problems({ tier, labels, harry, bot: true }) : problems({ tier, body: PR_BODY, labels, lines, harry });
   const summary = [
     `### Review tier: ${tier}${harry ? ", waits for Harry's ok" : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
     '',

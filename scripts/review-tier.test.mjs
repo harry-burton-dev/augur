@@ -96,6 +96,17 @@ test('the dev stack and upgrade notes are not High', () => {
   assert.equal(tierOf(['docs/upgrade.md'], tiers).tier, 'Medium');
 });
 
+test("a bot's pull request needs only Harry's ok, on his paths", () => {
+  assert.deepEqual(problems({ tier: 'High', bot: true }), []);
+  assert.match(problems({ tier: 'High', bot: true, harry: true }).join(), /harry-ok/);
+  assert.deepEqual(problems({ tier: 'High', bot: true, harry: true, labels: ['harry-ok'] }), []);
+});
+
+test('a change to a package a service runs gets the deploy test', () => {
+  assert.equal(needsDeployTest(['platform/packages/app-tools/src/manifest.ts'], tiers), true);
+  assert.equal(needsDeployTest(['contracts/registry.yaml'], tiers), true);
+});
+
 test('High over 400 lines needs a reason', () => {
   assert.match(problems({ tier: 'High', body: body(), lines: 975 }).join(), /400/);
   const reasoned = body({ Risk: 'Over 400 lines because the migration and its store move together.' });

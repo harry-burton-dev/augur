@@ -11,11 +11,13 @@ on:
   workflow_call:
 permissions:
   contents: read
-  # To take Harry's ok off when new commits arrive after it.
+  # To take Harry's ok off when new commits change the pull request after it. A repository that calls this
+  # workflow grants the same to its caller job.
   pull-requests: write
+# Not cancelled by a newer run: a push's run must finish taking Harry's ok off, even when an edit follows it.
 concurrency:
   group: review-${{ github.repository }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   tier:
     # The Version packages pull request is the release itself: its contents were each reviewed as they merged.
@@ -37,19 +39,26 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      # Harry's ok is for the commits he was asked about: a push after it takes it off, and he is asked again.
-      - name: New commits take Harry's ok off
+      # Harry's ok is for the change he was asked about. A push that changes the pull request's own diff takes
+      # it off, and he is asked again; bringing the branch up to date with its base (same patch) doesn't.
+      - name: A changed diff takes Harry's ok off
         id: labels
         run: |
           labels=$(jq -c . <<<"$PR_LABELS")
           if [ "$ACTION" = synchronize ] && jq -e 'map(.name) | index("harry-ok")' <<<"$labels" >/dev/null; then
-            gh pr edit "$PR" --remove-label harry-ok
-            labels=$(jq -c 'map(select(.name != "harry-ok"))' <<<"$labels")
-            echo "::warning::New commits after Harry's ok: the harry-ok label is off until he says ok again."
+            patch() { git diff "$(git merge-base "origin/$BASE" "$1")" "$1" | git patch-id --stable | cut -d' ' -f1; }
+            if [ "$(patch "$BEFORE" 2>/dev/null)" != "$(patch "$AFTER")" ]; then
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/harry-ok" >/dev/null
+              labels=$(jq -c 'map(select(.name != "harry-ok"))' <<<"$labels")
+              echo "::warning::The change is different from the one Harry said ok to: the harry-ok label is off until he says ok again."
+            fi
           fi
           echo "labels=$labels" >> "$GITHUB_OUTPUT"
         env:
           ACTION: ${{ github.event.action }}
+          BASE: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
           PR: ${{ github.event.pull_request.number }}
           PR_LABELS: ${{ toJSON(github.event.pull_request.labels) }}
           GH_TOKEN: ${{ github.token }}

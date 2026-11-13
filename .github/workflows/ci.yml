@@ -608,7 +608,8 @@ jobs:
           echo "::warning::No release${line:+ on the ${line%.} line} to upgrade from (none listed, or all halted): only the fresh install is tested."
           echo "No release${line:+ on the ${line%.} line} to upgrade from: only the fresh install was tested." >> "$GITHUB_STEP_SUMMARY"
         env:
-          BASE: ${{ github.base_ref }}
+          # A run by hand on a hotfix branch has no base: the branch itself names the line.
+          BASE: ${{ github.base_ref || github.ref_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
       - name: A fresh server on this pull request's images
