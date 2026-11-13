@@ -43,7 +43,7 @@ Everything after that moment is gone from the live database, though the current 
 
 ```sh
 pc stop                            # everything, Postgres too
-pc run --rm --no-deps -v platform_pgdata:/pgdata --entrypoint /bin/sh backup \
+pc run --rm --no-deps -v "$(pc config --format json | sed -n 's/^ *"name": "\(.*\)",$/\1/p' | head -n 1)_pgdata:/pgdata" --entrypoint /bin/sh backup \
   /backup/restore-to-time.sh "2026-11-05 10:30:00"
 pc up -d postgres
 pc logs -f postgres                # wait for "archive recovery complete"

@@ -4,7 +4,7 @@
 #   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
 # Runs the images CI built for the platform release PLATFORM_VERSION. To build them from this
 # checkout instead, add -f infra/deploy/compose.build.yml (and --build).
-# The project's name comes from COMPOSE_PROJECT_NAME in .env, so several deployments can share a machine.
+# The project's name comes from COMPOSE_PROJECT_NAME in .env, for a deployment set up under another name.
 # It defaults to the old codename: Docker names the data volumes after the project, so renaming an existing
 # server's would start it empty.
 name: ${COMPOSE_PROJECT_NAME:-platform}

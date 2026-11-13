@@ -1058,7 +1058,7 @@
     },
     "COMPOSE_PROJECT_NAME": {
       "type": "string",
-      "description": "Docker Compose's name for this deployment, which its volumes and networks are named after. Leave it unset on a server that has data: it stays platform.",
+      "description": "Docker Compose's name for this deployment, which its volumes and networks are named after. platform unless set. Set it only before a server's first start: on one that has data, changing it starts AUGUR empty.",
       "x-services": [
         "compose"
       ],

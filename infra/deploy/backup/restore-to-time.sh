@@ -1,7 +1,7 @@
 #!/bin/sh
 # Puts the database back as it was at a moment (ADR 0064; AUGUR's docs, Restore to a point in time).
 # Run with Postgres stopped and its data volume mounted at /pgdata, from the backup service:
-#   pc run --rm --no-deps -v platform_pgdata:/pgdata --entrypoint /bin/sh backup \
+#   pc run --rm --no-deps -v <project>_pgdata:/pgdata --entrypoint /bin/sh backup \
 #     /backup/restore-to-time.sh "2026-11-05 10:30:00"
 # The time is UTC. It picks the newest base backup taken before that time, keeps the current data in
 # $BACKUP_DIR/pgdata-before-restore-<now>.tar.gz first, puts the base backup in its place and tells

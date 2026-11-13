@@ -232,7 +232,7 @@ const main = async () => {
 
   if (rest.includes('--bundle')) {
     const bundle = join(feedDir, `augur-${version}-deploy.tar.gz`);
-    execFileSync('git', ['archive', '--format=tar.gz', '-o', bundle, `augur@${version}`, 'infra/deploy', 'docs', 'scripts/preflight.mjs'], { stdio: 'inherit' });
+    execFileSync('git', ['archive', '--format=tar.gz', '-o', bundle, `augur@${version}`, 'infra/deploy', 'docs', 'scripts/preflight.mjs', 'release/augur-release.json'], { stdio: 'inherit' });
     console.log(`Wrote ${bundle}.`);
   }
   console.log(`Mirrored AUGUR ${version}. Servers: PLATFORM_IMAGES=${to} and RELEASE_FEED_URL pointing at releases.json (docs/mirror.md).`);

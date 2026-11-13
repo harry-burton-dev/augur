@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { bundleFiles, bundleName, deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, releaseName, titleOf, versionModule, writeBundle } from './augur-release.mjs';
@@ -76,7 +76,7 @@ test('the deploy bundle holds what a server runs, laid out as a checkout, with s
   const again = writeBundle({ tracked, release: '{"version":"0.26.0"}\n', out: join(dir, 'again.tar.gz') });
   assert.deepEqual(readFileSync(out), readFileSync(again), 'the same files make the same bundle');
   const unpacked = join(dir, 'server');
-  execFileSync('mkdir', [unpacked]);
+  mkdirSync(unpacked);
   execFileSync('tar', ['-xzf', out, '-C', unpacked]);
   execFileSync('sha256sum', ['--quiet', '-c', 'SHA256SUMS'], { cwd: unpacked });
   assert.equal(readFileSync(join(unpacked, 'release/augur-release.json'), 'utf8'), '{"version":"0.26.0"}\n');

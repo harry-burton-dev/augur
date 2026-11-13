@@ -63,8 +63,9 @@ restic restore <augur-files id> --target /restore
 ## 4. Put the settings back
 
 Put back the settings, and the release they name: if its `PLATFORM_VERSION` isn't the release you unpacked
-in step 1, unpack that one's bundle over this folder as in [Install AUGUR, step 1](../install/#1-get-the-release)
-(it leaves `.env`, `secrets/` and `restore/` alone).
+in step 1, unpack that one's bundle over this folder, or its tag's files for a release from before bundles, as in
+[Install AUGUR, step 1](../install/#1-get-the-release) (it leaves `.env`, `secrets/` and `restore/` alone), and delete
+what the preflight lists as left over.
 
 ```sh
 install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env

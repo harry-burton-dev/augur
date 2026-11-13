@@ -26,7 +26,7 @@
 // compares: the name is only shown beside it.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -276,6 +276,7 @@ export const writeBundle = ({ tracked, release, out, from = root }) => {
   // The same files make the same bundle: sorted, owned by root, dated at the epoch, and gzip without a timestamp.
   const tar = execFileSync('tar', ['--sort=name', '--owner=0', '--group=0', '--numeric-owner', '--mtime=@0', '-C', stage, '-cf', '-', 'SHA256SUMS', ...new Set(files.map((p) => p.split('/')[0]))], { maxBuffer: 1 << 28 });
   writeFileSync(out, gzipSync(tar, { level: 9 }));
+  rmSync(stage, { recursive: true, force: true });
   return out;
 };
 

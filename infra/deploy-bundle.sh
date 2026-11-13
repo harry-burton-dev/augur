@@ -13,7 +13,9 @@ name="augur-deploy-$version.tar.gz"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-if ! gh release view "augur@$version" --repo "$repo" --json assets --jq '.assets[].name' | grep -qx "$name"; then
+# A release that can't be read fails here; only one that's there without a bundle exits 3.
+assets=$(gh release view "augur@$version" --repo "$repo" --json assets --jq '.assets[].name')
+if ! grep -qx "$name" <<<"$assets"; then
   echo "augur@$version has no deploy bundle." >&2
   exit 3
 fi

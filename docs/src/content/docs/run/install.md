@@ -71,7 +71,7 @@ base="https://github.com/harry-burton-dev/augur/releases/download/augur%40$versi
 curl -fLO "$base/augur-deploy-$version.tar.gz" -fLO "$base/augur-deploy-$version.tar.gz.sigstore.json"
 # Optional, with cosign installed: the bundle was made by AUGUR's own release workflow.
 cosign verify-blob --bundle "augur-deploy-$version.tar.gz.sigstore.json" \
-  --certificate-identity-regexp '^https://github.com/harry-burton-dev/(augur|im-platform)/\.github/workflows/(release|augur-dev)\.yml@refs/heads/' \
+  --certificate-identity-regexp '^https://github.com/harry-burton-dev/augur/\.github/workflows/(release|augur-dev)\.yml@refs/heads/(main|release/[a-z][a-z0-9-]*-[0-9]+\.[0-9]+)$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com "augur-deploy-$version.tar.gz"
 tar -xzf "augur-deploy-$version.tar.gz" && sha256sum --quiet -c SHA256SUMS
 cp infra/deploy/.env.example infra/deploy/.env && chmod 600 infra/deploy/.env
@@ -80,9 +80,23 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 
 Every command after this runs from that folder and uses `pc`; put the alias in your shell's profile. The
 folder's name doesn't matter. The Compose project, which Docker names the volumes and networks after, is
-called `platform` unless `COMPOSE_PROJECT_NAME` in `.env` names another. Set it only on a new server that
-shares its machine with another deployment, before the first `up`: on a server that has data, changing it
-starts AUGUR empty. A git checkout of the `augur@<version>` tag has the same files and still works.
+called `platform` unless `COMPOSE_PROJECT_NAME` in `.env` names another. Set it, if at all, before the first
+`up`: on a server that has data, changing it starts AUGUR empty. One machine runs one deployment: the app
+runner's project, `augur-apps`, isn't named after the deployment yet.
+
+A git checkout of the `augur@<version>` tag has the same files and still works. A release from before deploy
+bundles (0.26.x and earlier) has none; take its files from the tag's source archive instead:
+
+```sh
+curl -fL "https://github.com/harry-burton-dev/augur/archive/refs/tags/augur%40$version.tar.gz" |
+  tar -xz --strip-components=1 --wildcards '*/infra/deploy' '*/scripts/preflight.mjs' '*/release/augur-release.json'
+```
+
+Unpacking a bundle over a folder that has one already, to move it to another release, overwrites the deploy
+files and keeps `.env`, `secrets/` and `backups/`, which aren't in it. It doesn't delete what the other
+release had and this one hasn't: `sha256sum --quiet -c SHA256SUMS` before unpacking lists any file you
+changed (keep a change in `.env` or a `compose.override.yml` instead), and the preflight lists what's left
+over from another release, to delete.
 
 ## 2. Fill in the settings
 

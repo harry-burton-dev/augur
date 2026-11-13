@@ -37,7 +37,7 @@ RELEASE_FEED_URL=https://mirror.example.org/augur/releases.json
 
 The server pulls from your registry, so sign Docker in to it (`docker login registry.example.org`, read-only). For the [updater](upgrade.md#the-updater), save the same read-only token as `infra/deploy/secrets/image-pull-token` and set `IMAGE_PULL_USER` to its account, as for ghcr.
 
-Each release also carries its own signed deploy bundle, `augur-deploy-<version>.tar.gz` ([Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)): copy it with the release for servers that can reach your mirror but not GitHub. The mirror's own `--bundle` adds the docs too. For servers that can't reach the repository, unpack one of them in place of `git checkout augur@<version>`:
+Each release also carries its own signed deploy bundle, `augur-deploy-<version>.tar.gz` ([Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)): download it and its `.sigstore.json` from the release page and publish them beside your feed, for servers that can reach your mirror but not GitHub. The script doesn't copy them yet; its own `--bundle` is unsigned and adds the docs. For servers that can't reach the repository, unpack one of them in place of `git checkout augur@<version>`:
 
 ```sh
 tar -xzf augur-0.3.0-deploy.tar.gz       # infra/deploy, docs, scripts/preflight.mjs
