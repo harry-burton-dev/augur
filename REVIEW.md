@@ -16,7 +16,7 @@ The paths a pull request changes set its tier (`.github/review-tiers.json`). Its
   - **the deploy test before the merge** where the change runs on a server (`deployTest`): CI's `deploy-test` job;
   - **Harry's ok** on his paths (`harryOk`: the release path, the updater, sign-in, permissions, backups and
     workflows). He answers the three questions below; only then add the `harry-ok` label. Never add it on your own.
-    A push that changes the pull request's own diff takes the label off (bringing it up to date with main
+    The Review check records the change he said ok to; a push that changes it takes the label off (bringing it up to date with main
     doesn't), and he is asked again.
 
 A bot's pull request (Renovate) has no description to check: CI, the deploy test where it applies, and Harry's
