@@ -4,7 +4,7 @@
 # into a folder laid out as a checkout (infra/deploy, scripts/preflight.mjs, release/augur-release.json):
 #   infra/deploy-bundle.sh <version> <folder>
 # Needs gh (signed in, GH_REPO naming the repository) and cosign. Exits 3 when the release has no bundle:
-# releases before bundles came in have only their tag.
+# releases before bundles came in, and tags with no GitHub release, have only their tag.
 set -euo pipefail
 version=${1:?usage: infra/deploy-bundle.sh <version> <folder>}
 into=${2:?usage: infra/deploy-bundle.sh <version> <folder>}
@@ -13,8 +13,14 @@ name="augur-deploy-$version.tar.gz"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# A release that can't be read fails here; only one that's there without a bundle exits 3.
-assets=$(gh release view "augur@$version" --repo "$repo" --json assets --jq '.assets[].name')
+# A release with no bundle, or a tag with no release, exits 3; one that can't be read fails.
+status=0
+assets=$(gh release view "augur@$version" --repo "$repo" --json assets --jq '.assets[].name' 2>"$work/err") || status=$?
+if [ "$status" != 0 ]; then
+  if grep -qi 'release not found' "$work/err"; then echo "augur@$version has no GitHub release, so no deploy bundle." >&2; exit 3; fi
+  cat "$work/err" >&2
+  exit "$status"
+fi
 if ! grep -qx "$name" <<<"$assets"; then
   echo "augur@$version has no deploy bundle." >&2
   exit 3

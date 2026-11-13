@@ -261,23 +261,26 @@ export const bundleFiles = (tracked) =>
 /** Writes the bundle to `out`: `tracked` read from `from`, with `release` (the published release file's text) as its RELEASE_FILE. */
 export const writeBundle = ({ tracked, release, out, from = root }) => {
   const stage = mkdtempSync(join(tmpdir(), 'augur-bundle-'));
-  const files = [...bundleFiles(tracked), RELEASE_FILE].sort();
-  const sums = [];
-  for (const path of files) {
-    const target = join(stage, path);
-    mkdirSync(dirname(target), { recursive: true });
-    const body = path === RELEASE_FILE ? Buffer.from(release) : readFileSync(join(from, path));
-    writeFileSync(target, body);
-    // Scripts keep their execute bit, as a checkout has it.
-    if (path !== RELEASE_FILE) chmodSync(target, statSync(join(from, path)).mode & 0o777);
-    sums.push(`${createHash('sha256').update(body).digest('hex')}  ${path}`);
+  try {
+    const files = [...bundleFiles(tracked), RELEASE_FILE].sort();
+    const sums = [];
+    for (const path of files) {
+      const target = join(stage, path);
+      mkdirSync(dirname(target), { recursive: true });
+      const body = path === RELEASE_FILE ? Buffer.from(release) : readFileSync(join(from, path));
+      writeFileSync(target, body);
+      // Scripts keep their execute bit, as a checkout has it.
+      if (path !== RELEASE_FILE) chmodSync(target, statSync(join(from, path)).mode & 0o777);
+      sums.push(`${createHash('sha256').update(body).digest('hex')}  ${path}`);
+    }
+    writeFileSync(join(stage, 'SHA256SUMS'), `${sums.join('\n')}\n`);
+    // The same files make the same bundle: sorted, owned by root, dated at the epoch, and gzip without a timestamp.
+    const tar = execFileSync('tar', ['--sort=name', '--owner=0', '--group=0', '--numeric-owner', '--mtime=@0', '-C', stage, '-cf', '-', 'SHA256SUMS', ...new Set(files.map((p) => p.split('/')[0]))], { maxBuffer: 1 << 28 });
+    writeFileSync(out, gzipSync(tar, { level: 9 }));
+    return out;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
   }
-  writeFileSync(join(stage, 'SHA256SUMS'), `${sums.join('\n')}\n`);
-  // The same files make the same bundle: sorted, owned by root, dated at the epoch, and gzip without a timestamp.
-  const tar = execFileSync('tar', ['--sort=name', '--owner=0', '--group=0', '--numeric-owner', '--mtime=@0', '-C', stage, '-cf', '-', 'SHA256SUMS', ...new Set(files.map((p) => p.split('/')[0]))], { maxBuffer: 1 << 28 });
-  writeFileSync(out, gzipSync(tar, { level: 9 }));
-  rmSync(stage, { recursive: true, force: true });
-  return out;
 };
 
 /** The registry's copy of the release it ships in: Admin's Updates page compares the feed with it. */

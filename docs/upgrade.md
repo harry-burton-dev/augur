@@ -16,9 +16,8 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
    - a new or renamed setting in `infra/deploy/.env.example`: copy it into your `.env` before starting.
    - "migration" on a service: it changes its database tables when it starts. Within a major version migrations only add (CI holds every change to that), so the release before still runs on them.
-2. **Check the server can take it.** Unpack the release's deploy bundle over the server's folder, as in [Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release) (it leaves `.env`, `secrets/` and `backups/` alone; on a server that runs from a git checkout, `git fetch --tags && git checkout augur@<version>` does the same), and run its preflight, which needs nothing installed but Docker. The first line lists any deploy file you've changed, which unpacking overwrites: keep the change in `.env` or a `compose.override.yml` instead.
+2. **Check the server can take it.** Unpack the release's deploy bundle over the server's folder, as in [Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release) (it leaves `.env`, `secrets/` and `backups/` alone; on a server that runs from a git checkout, `git fetch --tags && git checkout augur@<version>` does the same), and run its preflight, which needs nothing installed but Docker. Unpacking overwrites any deploy file you've changed: keep a change in `.env` or a `compose.override.yml` instead.
    ```sh
-   [ ! -e SHA256SUMS ] || sha256sum --quiet -c SHA256SUMS
    v=<version>; curl -fL "https://github.com/harry-burton-dev/augur/releases/download/augur%40$v/augur-deploy-$v.tar.gz" | tar -xz && sha256sum --quiet -c SHA256SUMS
    docker run --rm -v "$PWD:/augur:ro" -w /augur node:22-alpine node scripts/preflight.mjs
    ```
@@ -824,7 +823,7 @@ Two optional touches:
 
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:
 
-1. **Code**: the same steps with the version you noted: unpack its deploy bundle (or `git checkout augur@<it>`; a release from before bundles is in its tag's source archive, [Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)) and delete what the preflight lists as left over from the newer release, set `PLATFORM_VERSION` back, `pc up -d --remove-orphans`. The old images are still on the server, so nothing is downloaded.
+1. **Code**: the same steps with the version you noted: unpack its deploy bundle (or `git checkout augur@<it>`; a release from before bundles is in its tag's source archive, [Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)) set `PLATFORM_VERSION` back, `pc up -d --remove-orphans`. The old images are still on the server, so nothing is downloaded.
 2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading, as in [Backups](src/content/docs/run/backups.md#restore-the-database-from-a-backup). Anything changed since that backup is lost, so check Admin → Activity first for what that is.
 
 For one app rather than the whole platform, Admin → Apps can give the shell an earlier version of the app instead ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).

@@ -64,8 +64,7 @@ restic restore <augur-files id> --target /restore
 
 Put back the settings, and the release they name: if its `PLATFORM_VERSION` isn't the release you unpacked
 in step 1, unpack that one's bundle over this folder, or its tag's files for a release from before bundles, as in
-[Install AUGUR, step 1](../install/#1-get-the-release) (it leaves `.env`, `secrets/` and `restore/` alone), and delete
-what the preflight lists as left over.
+[Install AUGUR, step 1](../install/#1-get-the-release) (it leaves `.env`, `secrets/` and `restore/` alone).
 
 ```sh
 install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env
@@ -75,7 +74,7 @@ sudo chown -R 1000 infra/deploy/secrets && sudo chmod -R go-rwx infra/deploy/sec
 sed -n 's/^PLATFORM_VERSION=//p' infra/deploy/.env   # the release to run
 alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
 # Docker names the volumes after the Compose project: platform unless .env names another.
-project=$(pc config --format json | sed -n 's/^ *"name": "\(.*\)",$/\1/p' | head -n 1)
+project=$(pc config | sed -n 's/^name: //p'); : "${project:?pc config named no project}"
 ```
 
 - If the server runs the updater and your account isn't user 1000, give user 1000 the deploy folder again, as

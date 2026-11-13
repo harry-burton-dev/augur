@@ -14,7 +14,8 @@ data, and everyone but you, is gone.
 ## Steps
 
 ```sh
-project=$(pc config --format json | sed -n 's/^ *"name": "\(.*\)",$/\1/p' | head -n 1)   # platform unless .env names another
+# Docker names the volumes after the Compose project: platform unless .env names another.
+project=$(pc config | sed -n 's/^name: //p'); : "${project:?pc config named no project}"
 pc down
 for v in pgdata wal-archive garage-meta garage-data otel-lgtm; do docker volume rm "${project}_$v"; done
 sudo rm -rf infra/deploy/backups/*                 # this server's own backups, now of nothing

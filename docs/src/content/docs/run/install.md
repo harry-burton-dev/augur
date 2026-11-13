@@ -93,10 +93,10 @@ curl -fL "https://github.com/harry-burton-dev/augur/archive/refs/tags/augur%40$v
 ```
 
 Unpacking a bundle over a folder that has one already, to move it to another release, overwrites the deploy
-files and keeps `.env`, `secrets/` and `backups/`, which aren't in it. It doesn't delete what the other
-release had and this one hasn't: `sha256sum --quiet -c SHA256SUMS` before unpacking lists any file you
-changed (keep a change in `.env` or a `compose.override.yml` instead), and the preflight lists what's left
-over from another release, to delete.
+files, so keep any change of yours in `.env` or a `compose.override.yml`, as the updater asks too. It keeps
+`.env`, `secrets/` and `backups/`, which aren't in it, and it never deletes: a file the other release had and
+this one hasn't stays. Compose ignores it, and if a later upgrade through the updater takes it for an edit, it
+says which file to delete.
 
 ## 2. Fill in the settings
 

@@ -1,7 +1,7 @@
 // pnpm test:scripts
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { leftOver, compare, fillSecrets, installChecks, preflight, readEnv } from './preflight.mjs';
+import { compare, fillSecrets, installChecks, preflight, readEnv } from './preflight.mjs';
 
 const release = { version: '0.3.0', channel: 'beta', upgradeFrom: '>=0.2.0', breaking: ['@augur/mfe-sdk 1.3.0 → 2.0.0'], settings: { required: ['PLATFORM_VERSION', 'PLATFORM_URL', 'OBJECT_STORE_URL'], removed: ['SERVICE_TOKEN'] } };
 const env = (extra) => ({ PLATFORM_VERSION: '0.2.4', PLATFORM_URL: 'https://augur.example.ts.net', OBJECT_STORE_URL: 'http://minio:9000', ...extra });
@@ -95,10 +95,4 @@ test('filling secrets writes only blank x-generate ones, in place or at the end'
   assert.equal(out, `# Secrets\nPOSTGRES_PASSWORD=${'f'.repeat(64)}\nTS_AUTHKEY=\nGARAGE_RPC_SECRET=${'f'.repeat(64)}\n`);
   assert.deepEqual(fillSecrets(out, schema).filled, [], 'a set value is never changed');
   assert.match(fillSecrets('PLATFORM_URL=x', schema, () => 'e').text, /^PLATFORM_URL=x\nPOSTGRES_PASSWORD=e\nGARAGE_RPC_SECRET=e\n$/);
-});
-
-test('files another release left are listed, but never the server’s own', () => {
-  const listed = ['compose.yml', 'nginx.conf', '.env.example'];
-  const present = ['compose.yml', 'nginx.conf', '.env.example', '.env', 'old-part.conf', 'secrets/github-read-key', 'backups/x.sql.gz', 'apps/compose.yml', 'compose.override.yml', '.updater-upgrade.json', 'tailscale/public-until'];
-  assert.deepEqual(leftOver(listed, present), ['old-part.conf']);
 });

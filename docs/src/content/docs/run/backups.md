@@ -130,7 +130,7 @@ Stop Garage, unpack the archive into its volumes, and make the newest metadata s
 ```sh
 pc stop garage
 # Docker names the volumes after the Compose project: platform unless COMPOSE_PROJECT_NAME in .env names another.
-project=$(pc config --format json | sed -n 's/^ *"name": "\(.*\)",$/\1/p' | head -n 1)
+project=$(pc config | sed -n 's/^name: //p'); : "${project:?pc config named no project}"
 pc run --rm --no-deps -v "${project}_garage-meta:/r/meta" -v "${project}_garage-data:/r/data" -v "$PWD/infra/deploy/backups:/backups:ro" \
   --entrypoint sh backup -c 'cd /r && tar -xzf /backups/objects-2026-10-18.tar.gz && cp "meta/snapshots/$(ls meta/snapshots | sort | tail -n 1)/db.sqlite" meta/db.sqlite && rm -f meta/db.sqlite-wal meta/db.sqlite-shm'
 pc up -d

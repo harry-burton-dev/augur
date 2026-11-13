@@ -15,7 +15,7 @@
 // memory and disk. --fill-secrets first writes a random value into each blank secret the schema marks
 // `x-generate` (mount the checkout read-write for it: drop the `:ro`). It never changes a value that's set.
 import { randomBytes } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, statSync, statfsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -183,29 +183,6 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   return checks;
 };
 
-/**
- * Files in infra/deploy that the deploy bundle unpacked here doesn't list (its SHA256SUMS), and that aren't the
- * server's own: what another release left when this one was unpacked over it. Unpacking never deletes, so a
- * file a newer release added stays after going back, and the updater would later take it for an edit.
- */
-const SERVER_OWN = /^(\.env.*|compose\.override\.ya?ml|compose\.build\.yml|\.updater-upgrade\.json.*|tailscale\/public-until|(backups|secrets|releases|restore|apps)\/.*|.*\.tmp)$/;
-export const leftOver = (listed, present) => {
-  const known = new Set(listed);
-  return present.filter((path) => !known.has(path) && !SERVER_OWN.test(path)).sort();
-};
-const filesUnder = (dir, prefix = '') =>
-  readdirSync(join(dir, prefix), { withFileTypes: true }).flatMap((entry) => {
-    const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (SERVER_OWN.test(`${path}/`) || SERVER_OWN.test(path)) return [];
-    return entry.isDirectory() ? filesUnder(dir, path) : [path];
-  });
-const leftOverHere = () => {
-  const sums = join(root, 'SHA256SUMS');
-  if (!existsSync(sums)) return [];
-  const listed = readFileSync(sums, 'utf8').split('\n').map((line) => line.split('  ')[1]).filter((path) => path?.startsWith('infra/deploy/')).map((path) => path.slice('infra/deploy/'.length));
-  return leftOver(listed, filesUnder(join(root, 'infra/deploy')));
-};
-
 const fileHost = (envFile) => {
   const host = { readKey: existsSync(join(root, 'infra/deploy/secrets/github-read-key')), memoryBytes: totalmem() };
   try {
@@ -248,8 +225,6 @@ const main = () => {
   }
 
   const env = readEnv(readFileSync(envFile, 'utf8'));
-  const stale = leftOverHere();
-  if (stale.length) console.log(`- Left over from another release, not in this one's deploy bundle: ${stale.map((p) => `infra/deploy/${p}`).join(', ')}. Delete them, unless you made them.`);
   if (install) {
     const checks = installChecks({ release, schema, env, host: fileHost(envFile) });
     console.log(`Installing AUGUR ${release.version} (${release.channel}):`);
