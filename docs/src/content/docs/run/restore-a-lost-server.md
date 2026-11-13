@@ -62,15 +62,19 @@ restic restore <augur-files id> --target /restore
 
 ## 4. Put the settings back
 
-Put back the settings, and check out the release they name:
+Put back the settings, and the release they name: if its `PLATFORM_VERSION` isn't the release you unpacked
+in step 1, unpack that one's bundle over this folder as in [Install AUGUR, step 1](../install/#1-get-the-release)
+(it leaves `.env`, `secrets/` and `restore/` alone).
 
 ```sh
 install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env
 cp -R infra/deploy/restore/deploy/secrets infra/deploy/
 # The services that read secrets/ (the registry and the updater) run as user 1000.
 sudo chown -R 1000 infra/deploy/secrets && sudo chmod -R go-rwx infra/deploy/secrets
-git checkout "augur@$(sed -n 's/^PLATFORM_VERSION=//p' infra/deploy/.env)"
+sed -n 's/^PLATFORM_VERSION=//p' infra/deploy/.env   # the release to run
 alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
+# Docker names the volumes after the Compose project: platform unless .env names another.
+project=$(pc config --format json | sed -n 's/^ *"name": "\(.*\)",$/\1/p' | head -n 1)
 ```
 
 - If the server runs the updater and your account isn't user 1000, give user 1000 the deploy folder again, as
@@ -92,7 +96,7 @@ Then put the knowledge graph's forget ledger back, if the copy has one, so what 
 night stays forgotten when AUGUR starts (the knowledge service runs as user 1000):
 
 ```sh
-[ ! -d infra/deploy/restore/knowledge-ledger ] || pc run --rm --no-deps -v platform_knowledge-ledger:/r -v "$PWD/infra/deploy/restore/knowledge-ledger:/from:ro" \
+[ ! -d infra/deploy/restore/knowledge-ledger ] || pc run --rm --no-deps -v "${project}_knowledge-ledger:/r" -v "$PWD/infra/deploy/restore/knowledge-ledger:/from:ro" \
   --entrypoint sh backup -c 'cp -a /from/. /r/ && chown -R 1000:1000 /r'
 ```
 
@@ -105,7 +109,7 @@ here instead.
 Into Garage's volumes, with the newest metadata snapshot as its database:
 
 ```sh
-pc run --rm --no-deps -v platform_garage-meta:/r/meta -v platform_garage-data:/r/data -v "$PWD/infra/deploy/restore/objects:/from:ro" \
+pc run --rm --no-deps -v "${project}_garage-meta:/r/meta" -v "${project}_garage-data:/r/data" -v "$PWD/infra/deploy/restore/objects:/from:ro" \
   --entrypoint sh backup -c 'cp -a /from/meta/. /r/meta/ && cp -a /from/data/. /r/data/ && cp "/r/meta/snapshots/$(ls /r/meta/snapshots | sort | tail -n 1)/db.sqlite" /r/meta/db.sqlite && rm -f /r/meta/db.sqlite-wal /r/meta/db.sqlite-shm'
 ```
 

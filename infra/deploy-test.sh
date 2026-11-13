@@ -17,7 +17,8 @@ export LC_ALL=C
 mode=${1:?usage: infra/deploy-test.sh fresh | upgrade <from-version> | broken}
 from=${2:-}
 here=$(cd "$(dirname "$0")" && pwd)
-deploy="$here/deploy"
+# The deploy files under test: this checkout's, or DEPLOY_DIR, a release's deploy bundle unpacked (infra/deploy-bundle.sh).
+deploy=${DEPLOY_DIR:-$here/deploy}
 dir=$deploy
 project=${PROJECT:-augur-deploy-test}
 local_tag=${LOCAL_TAG:-ci}
@@ -71,13 +72,22 @@ starter_cleanup() {
   if [ -n "$apps_made" ]; then as_root 'rm -rf /d/apps' >/dev/null 2>&1 || true; fi
 }
 # Every secret in .env.example gets a new random value; the rest are what a small server would set.
-# An upgrade starts from the release's own deploy files, as a server that checked out its tag has them.
+# An upgrade starts from the release's own deploy files: its deploy bundle, as a server installed from it has
+# them, where it has one (gh and cosign at hand), else its tag, for releases from before bundles.
 dir=$deploy
 if [ "$mode" = upgrade ] && [ -n "$from" ]; then
   tag="augur@$from"
-  git -C "$here/.." rev-parse -q --verify "refs/tags/$tag" >/dev/null || git -C "$here/.." fetch -q --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
   mkdir -p "$work/from"
-  git -C "$here/.." archive "$tag" infra/deploy | tar -x -C "$work/from"
+  status=3
+  if command -v gh >/dev/null && command -v cosign >/dev/null; then
+    status=0
+    "$here/deploy-bundle.sh" "$from" "$work/from" || status=$?
+    if [ "$status" != 0 ] && [ "$status" != 3 ]; then echo "::error::augur@$from's deploy bundle didn't check out." >&2; exit "$status"; fi
+  fi
+  if [ "$status" = 3 ]; then
+    git -C "$here/.." rev-parse -q --verify "refs/tags/$tag" >/dev/null || git -C "$here/.." fetch -q --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+    git -C "$here/.." archive "$tag" infra/deploy | tar -x -C "$work/from"
+  fi
 fi
 old_deploy="$work/from/infra/deploy"
 
