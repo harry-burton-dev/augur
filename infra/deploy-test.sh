@@ -514,7 +514,8 @@ backup_restores() {
   echo "$1: the backup restored and checked." >&2
 }
 
-if [ "${BUILD:-}" = 1 ]; then
+# BUILT=1 with BUILD=1: the images were built here by an earlier run of this script, so a second mode reuses them.
+if [ "${BUILD:-}" = 1 ] && [ "${BUILT:-}" != 1 ]; then
   pc build $(services | grep -vx -e postgres -e backup -e backup-tools -e garage -e docker-proxy) >&2
   # The build cache isn't needed again, and on a CI runner its space is.
   docker builder prune -af >/dev/null

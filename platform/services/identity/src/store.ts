@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { runMigrations, type Migration } from '@augur/service-kit';
+import { runMigrations, steadyPool, type Migration } from '@augur/service-kit';
 import { organisationIdleMigrations, organisationMigrations, organisationMoreMigrations } from './organisation.ts';
 import { signInMigrations } from './sign-ins.ts';
 import { lifecycleDeletionMigrations, lifecycleLeavingMigrations, lifecycleMigrations } from './lifecycle.ts';
@@ -117,7 +117,7 @@ export class PgPreferenceStore implements PreferenceStore {
   constructor(private readonly pool: pg.Pool) {}
 
   static async connect(connectionString: string) {
-    const store = new PgPreferenceStore(new pg.Pool({ connectionString }));
+    const store = new PgPreferenceStore(steadyPool(new pg.Pool({ connectionString })));
     await store.migrate();
     return store;
   }
