@@ -74,6 +74,63 @@ export const appFailure = (err: Error, appName: string): { status: 502 | 504; me
   return undefined;
 };
 
+/**
+ * The gateway's own budget for AUGUR's services. Every open tab holds the events service's streams, so they get a pool
+ * of their own and can never take the connections the events service's other calls need (design review RES-2). Calls
+ * to a service also have a deadline, kept above each service's own (the model gateway's three minutes, for one), so a
+ * service's own words reach the caller first and the gateway's 504 is only the backstop for one that has stopped.
+ */
+export interface PlatformLimits {
+  /** How long the gateway waits to connect to one of AUGUR's services before answering 502. */
+  connectTimeoutMs: number;
+  /** How long a service may take to start answering, and between one piece of its answer and the next, before the gateway answers 504. Never applies to an open stream. */
+  responseTimeoutMs: number;
+  /** How many connections the gateway keeps to each of AUGUR's services for ordinary calls. */
+  connections: number;
+  /** How many open streams the gateway holds to the events service, apart from its ordinary calls. */
+  streamConnections: number;
+}
+
+export const DEFAULT_PLATFORM_LIMITS: PlatformLimits = { connectTimeoutMs: 5_000, responseTimeoutMs: 200_000, connections: 128, streamConnections: 4_096 };
+
+/** The settings that change the defaults. */
+export const PLATFORM_LIMIT_SETTINGS = {
+  connectTimeoutMs: 'PLATFORM_CONNECT_TIMEOUT_MS',
+  responseTimeoutMs: 'PLATFORM_RESPONSE_TIMEOUT_MS',
+  connections: 'PLATFORM_CONNECTIONS',
+  streamConnections: 'PLATFORM_STREAM_CONNECTIONS',
+} as const;
+
+export const platformLimitsFromEnv = (env = process.env): PlatformLimits => ({
+  connectTimeoutMs: positive(env[PLATFORM_LIMIT_SETTINGS.connectTimeoutMs], DEFAULT_PLATFORM_LIMITS.connectTimeoutMs),
+  responseTimeoutMs: positive(env[PLATFORM_LIMIT_SETTINGS.responseTimeoutMs], DEFAULT_PLATFORM_LIMITS.responseTimeoutMs),
+  connections: positive(env[PLATFORM_LIMIT_SETTINGS.connections], DEFAULT_PLATFORM_LIMITS.connections),
+  streamConnections: positive(env[PLATFORM_LIMIT_SETTINGS.streamConnections], DEFAULT_PLATFORM_LIMITS.streamConnections),
+});
+
+/** The events service's streams: each is its own route at the gateway, with its own pool. */
+export const EVENT_STREAMS = ['/v1/notifications/stream', '/v1/domain-events/stream'];
+
+/** What each of AUGUR's services is called in a refusal. */
+const SERVICE_WORDS: Record<string, string> = {
+  identity: 'AUGUR’s identity service',
+  registry: 'AUGUR’s registry',
+  events: 'AUGUR’s events service',
+  models: 'AUGUR’s model gateway',
+  knowledge: 'AUGUR’s knowledge graph',
+  permissions: 'AUGUR’s permissions service',
+};
+
+/** What an upstream error means at the door of one of AUGUR's services; undefined for anything else. */
+export const platformFailure = (err: Error, service: string) => appFailure(err, SERVICE_WORDS[service] ?? `AUGUR’s ${service} service`);
+
+/** The undici pool options for one of AUGUR's services: ordinary calls, or the events service's open streams. */
+export const platformPoolOptions = (limits: PlatformLimits, kind: 'calls' | 'streams') =>
+  kind === 'streams'
+    ? // A stream waits for its first answer like any call, then stays open for as long as the tab does.
+      { connections: limits.streamConnections, connect: { timeout: limits.connectTimeoutMs }, headersTimeout: limits.responseTimeoutMs, bodyTimeout: 0 }
+    : { connections: limits.connections, connect: { timeout: limits.connectTimeoutMs }, headersTimeout: limits.responseTimeoutMs, bodyTimeout: limits.responseTimeoutMs };
+
 /** The undici pool options that hold a part to its timeouts. */
 export const poolOptions = (limits: AppLimits) => ({
   connect: { timeout: limits.connectTimeoutMs },

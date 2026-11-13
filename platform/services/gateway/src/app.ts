@@ -35,7 +35,7 @@ import {
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig, type Authenticated } from './auth.ts';
 import { AppGrantsUnavailable, holds, notAllowed, registryGrantsFor, scopeFor, type AppGrant, type AppGrants } from './grants.ts';
-import { appFailure, appLimitsFromEnv, InFlight, poolOptions, type AppLimits } from './limits.ts';
+import { appFailure, appLimitsFromEnv, EVENT_STREAMS, InFlight, platformFailure, platformLimitsFromEnv, platformPoolOptions, poolOptions, type AppLimits, type PlatformLimits } from './limits.ts';
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
@@ -117,6 +117,12 @@ const APP_ID = /^[a-z][a-z0-9-]{1,39}$/;
 /** The shape of a floor's id a part may name: the registry is asked about nothing else. */
 const FLOOR_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 /** Every header the gateway itself speaks: a request may bring none of them in. */
+/** Which of AUGUR's services a call under /api/<name> is for; undefined for an app's. */
+const platformServiceOf = (url: string): string | undefined => {
+  const name = /^\/api\/([^/?#]+)/.exec(url)?.[1];
+  return name && PLATFORM_SERVICES.includes(name) ? name : undefined;
+};
+
 const isGatewayHeader = (name: string) => /^x-(augur|user|workspace)-/i.test(name);
 
 declare module 'fastify' {
@@ -171,6 +177,8 @@ export interface GatewayOptions {
   appGrants?: AppGrants;
   /** The brakes on calls to apps' parts (spec 7.5). Defaults to the APP_*_TIMEOUT_MS and APP_CONCURRENT_CALLS settings. */
   limits?: AppLimits;
+  /** The gateway's budget for AUGUR's own services: their connections, the events service's streams, and deadlines. */
+  platformLimits?: PlatformLimits;
   /** How long a delegated caller lasts (spec 8.5). Defaults to APP_DELEGATION_SECONDS, or 300. */
   delegationSeconds?: number;
   /** Whether a person is acting as an admin persona now (ADR 0086). Defaults to asking the permissions upstream. */
@@ -192,7 +200,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), platformLimits = platformLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions }: GatewayOptions = {}) => {
   // Mail comes from the organisation's sender (Admin → Organisation), read from identity as the gateway.
   const sender = upstreams.identity
     ? organisationSender({
@@ -710,6 +718,13 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         reply.request.log.warn({ err: error.message, app: reply.request.appCall }, 'app call failed');
         return void reply.code(failed.status).send({ error: failed.status === 504 ? 'timeout' : 'bad_gateway', message: failed.message });
       }
+      // One of AUGUR's own services that can't be reached or has stopped answering, in words too.
+      const service = reply.request.appCall ? undefined : platformServiceOf(reply.request.url);
+      const down = service ? platformFailure(error, service) : undefined;
+      if (down) {
+        reply.request.log.warn({ err: error.message, service }, 'service call failed');
+        return void reply.code(down.status).send({ error: down.status === 504 ? 'timeout' : 'bad_gateway', message: down.message });
+      }
       // As reply-from answers by default.
       reply.send(error);
     },
@@ -726,14 +741,29 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     },
   };
 
+  // The events service's streams, each with a pool of its own, so open tabs never hold the connections its other calls need.
+  // The routes are more specific than the service's own, so they win.
+  if (upstreams.events) {
+    for (const path of EVENT_STREAMS) {
+      await app.register(proxy, {
+        upstream: upstreams.events,
+        prefix: `/api/events${path}`,
+        rewritePrefix: path,
+        undici: platformPoolOptions(platformLimits, 'streams'),
+        preHandler: (req, reply) => beforeProxy('events', req, reply),
+        replyOptions: replyOptions as never,
+      });
+    }
+  }
+
   // The platform's own services, and apps named in APP_UPSTREAMS: known when the gateway starts.
   for (const [name, upstream] of Object.entries(upstreams)) {
     await app.register(proxy, {
       upstream,
       prefix: `/api/${name}`,
       rewritePrefix: '',
-      // An app's part is held to its timeouts (spec 7.5); AUGUR's own services keep the defaults.
-      ...(PLATFORM_SERVICES.includes(name) ? {} : { undici: poolOptions(limits) }),
+      // An app's part is held to its timeouts (spec 7.5); AUGUR's own services to theirs.
+      undici: PLATFORM_SERVICES.includes(name) ? platformPoolOptions(platformLimits, 'calls') : poolOptions(limits),
       // The signed caller is made before the request goes on, since signing is asynchronous.
       preHandler: (req, reply) => beforeProxy(name, req, reply),
       replyOptions: replyOptions as never,
