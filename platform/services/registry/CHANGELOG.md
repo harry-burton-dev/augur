@@ -1,5 +1,23 @@
 # @augur/registry
 
+## 0.22.0
+
+### Minor Changes
+
+- c22a013: Admin is on the app contract (contract 3) and runs in the shell's worker like Deployment. Its places are People, Departments, Organisation, Apps and Activity. Each person, department, app and Activity entry has a page of its own, and every simple setting is changed where it's shown: a name or email saves as you leave the field, a role or department as you pick it. A change that may ask for your password again (deleting someone, two-step for everyone, how long leavers' and Activity's records are kept) opens a question at a path of its own, so signing in again comes back to it. An app's page in Admin opens the same app's page in Deployment for what the server runs for it.
+- 2c03d1e: Admin has a Roles place: the roles made in AUGUR for the org and each department, each on a page of its own. An admin makes a role, gives it to people (until a day if they like) or to everyone in a department, says what it gives on a department or the org, and takes any of it back with a reason. The permissions service's role answer now says what a role can give on a floor and on the org.
+- 1176abf: What the server runs for an installed app moves from Admin to its page in Deployment: rolling it back (installing an earlier release, which puts it on hold), its internet, its own settings saved as they change, its developers and previews, a new sign-in for its service, and removing it. Where apps load from moves to Deployment's Apps. Deployment may look people up (`people:read`) to name and find developers. Admin's Status and Dev to production pages go: Deployment's Health, Backups and Release channel show the same. Messages that sent people to Admin for these now name Deployment.
+- b7ac676: Shadow mode reaches the registry (ADR 0085): its admin and deployment admin checks (the catalogue, installs and removals, versions, allowed sites, app settings, feature previews, upgrades, the overview and reporting) are also asked of the permissions service, after the registry has answered as it always has, and disagreements are counted and logged (docs/observability.md). The registry's own answer still decides.
+
+### Patch Changes
+
+- Updated dependencies [5243f84]
+- Updated dependencies [e5a1e2b]
+- Updated dependencies [eb53688]
+- Updated dependencies [4442766]
+  - @augur/service-kit@0.20.0
+  - @augur/app-tools@0.6.1
+
 ## 0.21.0
 
 ### Minor Changes

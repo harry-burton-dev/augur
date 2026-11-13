@@ -1,8 +1,8 @@
 {
-  "version": "0.25.0",
-  "name": "Lapwing",
+  "version": "0.26.0",
+  "name": "Merlin",
   "channel": "beta",
-  "released": "2026-11-10",
+  "released": "2026-11-11",
   "upgradeFrom": ">=0.23.1",
   "changed": [
     "@augur/app-kit",
@@ -10,8 +10,6 @@
     "@augur/shell-kit",
     "@augur/kit-bundle",
     "@augur/app-tools",
-    "@augur/clients",
-    "@augur/mfe-sdk",
     "@augur/service-kit",
     "@augur/events",
     "@augur/gateway",
@@ -23,9 +21,7 @@
     "@augur/storage",
     "@augur/updater",
     "@augur/admin",
-    "@augur/home",
     "@augur/shell",
-    "@augur/sign-in-theme",
     "@augur/upgrades"
   ],
   "breaking": [],
@@ -124,6 +120,7 @@
       "APP_ORIGINS",
       "KIT_URL",
       "FOCUS_DEPTH",
+      "DESKTOP_APP",
       "SEED_ALLOWED",
       "GITHUB_READ_USER",
       "RELEASE_FEED_URL",
@@ -164,6 +161,9 @@
       "SERVICE_CALL_TIMEOUT_SECONDS",
       "DATABASE_STATEMENT_TIMEOUT_SECONDS",
       "PERMISSIONS_COPY_SECONDS",
+      "PERSONA_DEPLOYMENT_ADMIN_MINUTES",
+      "PERSONA_ORG_ADMIN_MINUTES",
+      "PERMISSIONS_DECIDES",
       "KNOWLEDGE_PAGE_LIMIT",
       "KNOWLEDGE_SUBGRAPH_DEPTH",
       "KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS",
@@ -207,35 +207,28 @@
       "ALERT_WEBHOOK_TOKEN"
     ],
     "added": [
-      "PERMISSIONS_DATABASE_PASSWORD",
-      "KNOWLEDGE_DATABASE_PASSWORD",
-      "OPENFGA_TOKEN",
-      "KNOWLEDGE_CLIENT_SECRET",
-      "PERMISSIONS_CLIENT_SECRET",
-      "PERMISSIONS_COPY_SECONDS",
-      "KNOWLEDGE_PAGE_LIMIT",
-      "KNOWLEDGE_SUBGRAPH_DEPTH",
-      "KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS",
-      "KNOWLEDGE_REFLECT_DAILY_BUDGET",
-      "KNOWLEDGE_REFLECT_FLOOR_BUDGET"
+      "DESKTOP_APP",
+      "PERSONA_DEPLOYMENT_ADMIN_MINUTES",
+      "PERSONA_ORG_ADMIN_MINUTES",
+      "PERMISSIONS_DECIDES"
     ],
     "removed": []
   },
   "parts": {
     "@augur/app-kit": {
-      "version": "0.20.0"
+      "version": "0.20.1"
     },
     "@augur/kit-common": {
-      "version": "0.16.0"
+      "version": "0.20.0"
     },
     "@augur/shell-kit": {
-      "version": "0.11.0"
+      "version": "0.13.0"
     },
     "@augur/kit-bundle": {
-      "version": "0.5.16"
+      "version": "0.6.1"
     },
     "@augur/app-tools": {
-      "version": "0.6.0"
+      "version": "0.6.1"
     },
     "@augur/clients": {
       "version": "0.2.0"
@@ -247,49 +240,49 @@
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.19.0"
+      "version": "0.20.0"
     },
     "@augur/events": {
-      "version": "0.12.0"
+      "version": "0.12.1"
     },
     "@augur/gateway": {
-      "version": "0.14.0"
+      "version": "0.15.0"
     },
     "@augur/identity": {
-      "version": "1.7.0"
+      "version": "1.7.1"
     },
     "@augur/knowledge": {
-      "version": "0.2.0"
+      "version": "0.2.1"
     },
     "@augur/models": {
-      "version": "0.4.1"
+      "version": "0.5.0"
     },
     "@augur/permissions": {
-      "version": "0.1.0"
+      "version": "0.2.0"
     },
     "@augur/registry": {
-      "version": "0.21.0"
+      "version": "0.22.0"
     },
     "@augur/storage": {
-      "version": "0.6.1"
+      "version": "0.6.2"
     },
     "@augur/updater": {
-      "version": "0.11.0"
+      "version": "0.11.1"
     },
     "@augur/admin": {
-      "version": "0.20.0"
+      "version": "0.21.0"
     },
     "@augur/home": {
       "version": "0.4.3"
     },
     "@augur/shell": {
-      "version": "0.21.0"
+      "version": "0.22.0"
     },
     "@augur/sign-in-theme": {
       "version": "0.2.0"
     },
     "@augur/upgrades": {
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   }
 }

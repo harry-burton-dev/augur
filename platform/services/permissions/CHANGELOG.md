@@ -1,5 +1,29 @@
 # @augur/permissions
 
+## 0.2.0
+
+### Minor Changes
+
+- 2c03d1e: Admin has a Roles place: the roles made in AUGUR for the org and each department, each on a page of its own. An admin makes a role, gives it to people (until a day if they like) or to everyone in a department, says what it gives on a department or the org, and takes any of it back with a reason. The permissions service's role answer now says what a role can give on a floor and on the org.
+- 4f3f46a: The permissions service keeps persona sessions (ADR 0086, 0089). Someone who holds an admin persona can act as it after a sign-in from the last 5 minutes, with a reason, for at most an hour as a deployment admin or a working day as an org admin (`PERSONA_DEPLOYMENT_ADMIN_MINUTES`, `PERSONA_ORG_ADMIN_MINUTES`). Starting and ending a session goes in the audit log. The gateway can ask whether a session is live. Nothing acts as a persona yet: the gateway and the shell's "Act as" come next.
+- 19b29db: Roles made in AUGUR, and the grants that give them (ADR 0085, spec section 5).
+
+  - Whoever manages a floor, or an org admin acting as one, can make a role for it.
+  - They can put people, positions' holders or a floor's members in a role, and a person or a position can be given it until a time.
+  - They can give a role's holders lead, member, settler or raiser on a floor they manage, or publisher or audit reader on the org.
+  - Every grant is kept in a ledger with who gave it, why and until when. Whoever gave it, or anyone who could give it now, can take it back.
+  - When a giver loses the right to give, what they gave is taken back. That is checked after each copy from identity.
+  - Everything is recorded in the audit log.
+  - Admin's screens for this come next.
+
+### Patch Changes
+
+- Updated dependencies [5243f84]
+- Updated dependencies [e5a1e2b]
+- Updated dependencies [eb53688]
+- Updated dependencies [4442766]
+  - @augur/service-kit@0.20.0
+
 ## 0.1.0
 
 ### Minor Changes
