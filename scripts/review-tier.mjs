@@ -16,7 +16,10 @@ import { pathToFileURL } from 'node:url';
 export const MAX_HIGH_LINES = 400;
 export const SECTIONS = ['Testing', 'Not run', 'Risk', 'How to undo', 'Review'];
 
-const any = (path, globs = []) => globs.some((glob) => matchesGlob(path, glob));
+// matchesGlob never lets `*` or `**` match a name that starts with a dot, so `infra/**` would miss
+// `infra/deploy/.env.example`. Matching with each leading dot spelled out, in the path and the glob alike, fixes that.
+const undot = (text) => text.replace(/(^|\/)\./g, '$1_dot_');
+const any = (path, globs = []) => globs.some((glob) => matchesGlob(undot(path), undot(glob)));
 
 /** Low when every path is low and none is high; High when any path is high; otherwise Medium. */
 export const tierOf = (paths, tiers) => {
@@ -71,8 +74,9 @@ export const problems = ({ tier, body, labels = [], lines = 0, harry = false }) 
 /** The paths and changed lines of HEAD against where it left `base`. */
 const diffAgainst = (base) => {
   const range = `origin/${base}...HEAD`;
-  const paths = execFileSync('git', ['diff', '--name-only', range], { encoding: 'utf8' }).split('\n').filter(Boolean);
-  const numstat = execFileSync('git', ['diff', '--numstat', range], { encoding: 'utf8' });
+  // Without renames, a file moved out of a High path is listed at both ends.
+  const paths = execFileSync('git', ['diff', '--no-renames', '--name-only', range], { encoding: 'utf8' }).split('\n').filter(Boolean);
+  const numstat = execFileSync('git', ['diff', '--no-renames', '--numstat', range], { encoding: 'utf8' });
   const lines = numstat.split('\n').filter(Boolean).reduce((sum, row) => {
     const [added, removed] = row.split('\t');
     return sum + (Number(added) || 0) + (Number(removed) || 0);
@@ -81,8 +85,14 @@ const diffAgainst = (base) => {
 };
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const { BASE_REF = 'main', PR_BODY = '', PR_LABELS = '[]', TIERS_FILE = '.github/review-tiers.json', GITHUB_STEP_SUMMARY, GITHUB_OUTPUT } = process.env;
+  const { BASE_REF = 'main', PR_BODY = '', PR_LABELS = '[]', PR_BOT = '', EVENT = 'pull_request', TIERS_FILE = '.github/review-tiers.json', GITHUB_STEP_SUMMARY, GITHUB_OUTPUT } = process.env;
   const tiers = JSON.parse(readFileSync(TIERS_FILE, 'utf8'));
+  if (process.argv.includes('--deploy-test') && EVENT === 'workflow_dispatch') {
+    // A run by hand runs everything.
+    console.log('deploytest: true (run by hand)');
+    if (GITHUB_OUTPUT) appendFileSync(GITHUB_OUTPUT, 'deploytest=true\n');
+    process.exit(0);
+  }
   const { paths, lines } = diffAgainst(BASE_REF);
   if (process.argv.includes('--deploy-test')) {
     const needed = needsDeployTest(paths, tiers);
@@ -93,7 +103,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { tier, because } = tierOf(paths, tiers);
   const labels = JSON.parse(PR_LABELS).map((l) => (typeof l === 'string' ? l : l.name));
   const harry = tier === 'High' && needsHarry(paths, tiers);
-  const missing = problems({ tier, body: PR_BODY, labels, lines, harry });
+  // A bot's pull request (Renovate's dependency updates) has no description to check: CI and, where it
+  // applies, the deploy test are its gates.
+  const missing = PR_BOT === 'true' ? [] : problems({ tier, body: PR_BODY, labels, lines, harry });
   const summary = [
     `### Review tier: ${tier}${harry ? ", waits for Harry's ok" : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
     '',

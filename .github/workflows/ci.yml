@@ -49,17 +49,19 @@ jobs:
           HEAD_REF: ${{ github.head_ref }}
           BEFORE: ${{ github.event.before }}
       # A pull request that changes what runs on a server (deployTest in .github/review-tiers.json, REVIEW.md)
-      # gets the deploy test before it merges. The Version packages pull request doesn't: its release gets
-      # the full deploy test.
+      # gets the deploy test before it merges, and so does a run by hand. The Version packages pull request
+      # doesn't: its release gets the full deploy test. The tiers' file is the one list of these paths, which
+      # the Review workflow reads too.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+        if: (github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')) || github.event_name == 'workflow_dispatch'
         with:
           node-version-file: .nvmrc
       - id: deploytest
-        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
+        if: (github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')) || github.event_name == 'workflow_dispatch'
         run: node scripts/review-tier.mjs --deploy-test
         env:
           BASE_REF: ${{ github.base_ref }}
+          EVENT: ${{ github.event_name }}
 
   build-test:
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
@@ -590,17 +592,23 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # The newest release that isn't a dev build or halted; into a hotfix branch, the newest of that branch's line.
       - name: Which release to upgrade from
         id: from
         run: |
+          line=''
+          case "$BASE" in release/augur-*) line="${BASE#release/augur-}." ;; esac
           list=$(gh release list --limit 100 --json tagName --jq '[.[].tagName | select(startswith("augur@") and (contains("-dev.") | not)) | ltrimstr("augur@")]')
-          for v in $(jq -r '.[]' <<<"$list"); do
+          for v in $(jq -r --arg line "$line" '.[] | select(startswith($line))' <<<"$list"); do
             gh release view "augur@$v" --json assets --jq '.assets[].name' | grep -qx halted.json && continue
             echo "from=$v" >> "$GITHUB_OUTPUT"
             echo "Deploy test of this pull request, upgrading from augur@$v" >> "$GITHUB_STEP_SUMMARY"
-            break
+            exit 0
           done
+          echo "::warning::No release${line:+ on the ${line%.} line} to upgrade from (none listed, or all halted): only the fresh install is tested."
+          echo "No release${line:+ on the ${line%.} line} to upgrade from: only the fresh install was tested." >> "$GITHUB_STEP_SUMMARY"
         env:
+          BASE: ${{ github.base_ref }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
       - name: A fresh server on this pull request's images

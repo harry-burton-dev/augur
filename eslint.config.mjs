@@ -30,7 +30,7 @@ export default tseslint.config(
       'no-restricted-syntax': [
         'error',
         {
-          selector: "NewExpression[callee.property.name='Pool']:not(CallExpression[callee.name='steadyPool'] > NewExpression)",
+          selector: ":matches(NewExpression[callee.property.name='Pool'], NewExpression[callee.name='Pool']):not(CallExpression[callee.name='steadyPool'] > NewExpression)",
           message: 'Wrap a new pg Pool in steadyPool() from @augur/service-kit, so a lost connection is logged instead of ending the process.',
         },
       ],

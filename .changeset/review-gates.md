@@ -1,4 +1,6 @@
 ---
+'@augur/identity': patch
+'@augur/knowledge': patch
 ---
 
-Pull requests get a review tier from the paths they change (REVIEW.md): the Review workflow checks what each tier needs, and CI runs the deploy test before merging one that changes what runs on a server. A new pg Pool must be wrapped in steadyPool (lint), and the knowledge service's and identity's last bare pools now are.
+The knowledge service, its migration job and identity's preference store log a lost database connection instead of ending the process when Postgres restarts. The knowledge service's queries now also have the platform's statement timeout (DATABASE_STATEMENT_TIMEOUT_SECONDS, a minute by default), as every other service's do.

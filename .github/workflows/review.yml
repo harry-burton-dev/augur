@@ -11,6 +11,8 @@ on:
   workflow_call:
 permissions:
   contents: read
+  # To take Harry's ok off when new commits arrive after it.
+  pull-requests: write
 concurrency:
   group: review-${{ github.repository }}-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -35,9 +37,27 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+      # Harry's ok is for the commits he was asked about: a push after it takes it off, and he is asked again.
+      - name: New commits take Harry's ok off
+        id: labels
+        run: |
+          labels=$(jq -c . <<<"$PR_LABELS")
+          if [ "$ACTION" = synchronize ] && jq -e 'map(.name) | index("harry-ok")' <<<"$labels" >/dev/null; then
+            gh pr edit "$PR" --remove-label harry-ok
+            labels=$(jq -c 'map(select(.name != "harry-ok"))' <<<"$labels")
+            echo "::warning::New commits after Harry's ok: the harry-ok label is off until he says ok again."
+          fi
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+        env:
+          ACTION: ${{ github.event.action }}
+          PR: ${{ github.event.pull_request.number }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
       - run: node "${SCRIPT_DIR}/scripts/review-tier.mjs"
         env:
           SCRIPT_DIR: ${{ github.repository == 'harry-burton-dev/augur' && '.' || '.augur-review' }}
           BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+          PR_LABELS: ${{ steps.labels.outputs.labels }}
+          PR_BOT: ${{ github.event.pull_request.user.type == 'Bot' }}

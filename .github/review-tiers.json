@@ -1,5 +1,5 @@
 {
-  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. harryOk: the High paths that also wait for Harry's ok. deployTest: the paths whose change runs on a server, which get the deploy test before merging. Globs follow node:path matchesGlob.",
+  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. harryOk: the High paths that also wait for Harry's ok. deployTest: the paths whose change runs on a server, which get the deploy test before merging. Globs follow node:path matchesGlob. A bot's pull request (Renovate) is checked by CI and the deploy test only.",
   "high": [
     "platform/services/updater/**",
     "platform/services/identity/**",
@@ -27,7 +27,8 @@
     "scripts/check-migrations*",
     "scripts/review-tier*",
     "docs/release-channels.md",
-    "REVIEW.md"
+    "REVIEW.md",
+    "platform/services/storage/**"
   ],
   "notHigh": [
     "**/*.test.ts",
@@ -75,14 +76,9 @@
   "deployTest": [
     "infra/**",
     "release/**",
-    "platform/services/updater/**",
-    "platform/services/identity/**",
-    "platform/services/events/**",
-    "platform/services/*/src/store.ts",
-    "platform/services/*/src/migrat*",
-    "platform/services/*/src/migrations/**",
-    "platform/packages/service-kit/src/jobs*",
-    "platform/packages/service-kit/src/pools*",
-    "platform/packages/service-kit/src/app-database*"
+    "platform/services/*/src/**",
+    "platform/services/*/package.json",
+    "platform/packages/service-kit/src/**",
+    "pnpm-lock.yaml"
   ]
 }

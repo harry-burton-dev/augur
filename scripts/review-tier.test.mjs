@@ -40,6 +40,13 @@ test('any path where the escapes landed makes it High', () => {
   }
 });
 
+test('names that start with a dot match like any other', () => {
+  assert.equal(tierOf(['infra/deploy/.env.example'], tiers).tier, 'High');
+  assert.equal(needsDeployTest(['infra/deploy/.env.example'], tiers), true);
+  assert.equal(tierOf(['.changeset/a.md'], tiers).tier, 'Low');
+  assert.equal(needsHarry(['.github/workflows/ci.yml'], tiers), true);
+});
+
 test('tests of High code alone are Low', () => {
   assert.equal(tierOf(['platform/services/updater/src/upgrade.test.ts'], tiers).tier, 'Low');
 });
@@ -48,6 +55,9 @@ test('the deploy test is needed where a change runs on a server, not for every H
   assert.equal(needsDeployTest(['infra/deploy/compose.yml'], tiers), true);
   assert.equal(needsDeployTest(['platform/packages/service-kit/src/jobs.ts'], tiers), true);
   assert.equal(needsDeployTest(['.github/workflows/ci.yml'], tiers), false);
+  assert.equal(needsDeployTest(['platform/services/storage/src/postgres.ts'], tiers), true);
+  assert.equal(needsDeployTest(['pnpm-lock.yaml'], tiers), true);
+  assert.equal(needsDeployTest(['platform/frontends/shell/src/App.tsx'], tiers), false);
   assert.equal(needsDeployTest(['platform/services/events/src/store.test.ts'], tiers), false);
 });
 
