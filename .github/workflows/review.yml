@@ -1,0 +1,43 @@
+name: Review
+# A pull request's review tier, from the paths it changes (.github/review-tiers.json), and whether its
+# description carries what that tier needs: the sections, the pre-merge /code-review run and, on Harry's
+# paths, his ok as the harry-ok label (REVIEW.md). Its own workflow, like Attribution, so that editing the
+# description or adding the label checks it again without running CI. It installs nothing: seconds.
+# AUGUR's other repositories call this one (workflow_call), each with its own review-tiers.json, so the
+# script lives once, here.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: review-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  tier:
+    # The Version packages pull request is the release itself: its contents were each reviewed as they merged.
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: The tier script, from AUGUR's main
+        if: github.repository != 'harry-burton-dev/augur'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: harry-burton-dev/augur
+          ref: main
+          path: .augur-review
+          sparse-checkout: scripts/review-tier.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - run: node "${SCRIPT_DIR}/scripts/review-tier.mjs"
+        env:
+          SCRIPT_DIR: ${{ github.repository == 'harry-burton-dev/augur' && '.' || '.augur-review' }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels) }}
