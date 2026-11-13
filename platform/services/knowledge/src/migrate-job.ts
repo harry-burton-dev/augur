@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { loadConfigOrExit } from '@augur/service-kit';
+import { loadConfigOrExit, steadyPool } from '@augur/service-kit';
 import { fileLedger, reapplyForgets } from './ledger.ts';
 import { migrate } from './store.ts';
 
@@ -12,7 +12,8 @@ loadConfigOrExit('knowledge-migrate', [
   { name: 'KNOWLEDGE_LEDGER_DIR', about: 'the folder the knowledge service writes each forget to; what it names is forgotten again here after a restore.', required: true },
 ]);
 
-const admin = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+// No statement timeout: a migration may run longer than a request should.
+const admin = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 }), undefined, 0);
 try {
   await migrate(admin, { password: process.env.KNOWLEDGE_DATABASE_PASSWORD ?? '' });
   console.log('The knowledge graph’s schema is up to date.');

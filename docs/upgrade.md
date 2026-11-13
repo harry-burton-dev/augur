@@ -58,19 +58,19 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### Home is the desktop, behind one logo button
 
-**From** unreleased
+**From** augur@0.26.0
 
 The app bar's Home and Apps become one logo button, and the desktop holds Home: Home sits on the background, under a bar that rests at the top or bottom like a taskbar. Nothing to do. The button shows `ORG_LOGO_URL` if you set it (the shell can show it from this site, a `data:` URL or an address in `APP_ORIGINS`), else a placeholder mark. To keep a bare desktop, set `DESKTOP_APP=` (empty) in `.env`, or another app's id to hold that one instead ([Install AUGUR](src/content/docs/run/install.md#2-fill-in-the-settings)).
 
 ### Admin's Status and Dev to production pages moved to Deployment
 
-**From** unreleased
+**From** augur@0.26.0
 
 Admin no longer has **Status** or **Dev to production**: Deployment's **Health**, **Backups** and **Release channel** show the same. What the server runs for an installed app moved from Admin → Apps to the app's page in Deployment → Apps: rolling it back (installing an earlier release, which puts it on hold), its internet, its settings, its developers and previews, a new sign-in for its service and **Remove from the server**. An app its own service registers, rather than the app runner, has a page there too: which kept version the shell is given, holding it there or following new versions, and a new sign-in. **Where apps load from** is on Deployment → Apps too. Turning an app on or off, its floors, feature previews, upload limit and scopes stay in Admin → Apps. Nothing to do on the server.
 
 ### OpenFGA moves to 1.19
 
-**From** unreleased
+**From** augur@0.26.0
 
 OpenFGA (`openfga`, the store behind the permissions service) moves from 1.11.2 to 1.19.0, which fixes critical flaws in the libraries it was built with. It brings its tables up to date on its first start, as it always has; nothing to do. Going back to an earlier release leaves the newer tables in place, which the deploy test checks.
 

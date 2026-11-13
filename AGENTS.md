@@ -102,6 +102,9 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   `pnpm check:reasons`, `pnpm check:catalog` and `pnpm check:settings` (any setting a
   deployment or a service reads: infra/deploy/settings.schema.json) when you touch those areas.
 - Shell or kit changes: run the contract tests in `platform/contract`.
+- Before a pull request: REVIEW.md. Its tier (from the paths it changes) says what it needs before it
+  merges: the description's sections, a `/code-review` run, the deploy test, Harry's ok. The Review
+  workflow checks them.
 - Every PR carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`),
   see docs/versioning.md.
 - When an admin upgrading must act or know something because of your change, add a note at
@@ -113,10 +116,11 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   long-lived branch (ADR 0011, docs/release-channels.md). A hotfix goes into
   its `release/<unit>-<major>.<minor>` branch, and then onto `main` too.
 - Only Harry makes a release stable (Actions → Promote to stable).
-- Harry's standing rule: merge your own PR once CI is green, after merging
-  fresh `origin/main` into it and re-running the checks. Don't ask for review;
-  post one summary per phase, ending with anything Harry must do on his
-  server as a short numbered list.
+- Harry's standing rule: merge your own PR once CI and the Review check are
+  green, after merging fresh `origin/main` into it and re-running the checks.
+  Don't ask for a GitHub review. On Harry's paths (REVIEW.md) ask him the three
+  questions in the thread and wait for his ok; otherwise post one summary per
+  phase, ending with anything Harry must do on his server as a short numbered list.
 - Nothing in the repository names the tool that wrote it: no
   `Co-Authored-By` or session trailers on commits, no assistant attribution in
   pull requests, and no links to private chats or artifacts in files. The

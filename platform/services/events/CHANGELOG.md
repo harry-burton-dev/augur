@@ -1,5 +1,16 @@
 # @augur/events
 
+## 0.12.1
+
+### Patch Changes
+
+- 4442766: The task bar shows an app as soon as it is installed. The registry's app.registered and app.updated now reach everyone as platform.app.added and platform.app.updated, and the shell loads its app list again when any platform.app event arrives, keeping the open app open.
+- Updated dependencies [5243f84]
+- Updated dependencies [e5a1e2b]
+- Updated dependencies [eb53688]
+- Updated dependencies [4442766]
+  - @augur/service-kit@0.20.0
+
 ## 0.12.0
 
 ### Minor Changes
