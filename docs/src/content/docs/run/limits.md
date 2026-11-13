@@ -28,15 +28,15 @@ The front door (`web`) holds every caller to a few limits:
   between one piece of its answer and the next, after which the gateway answers 504 and lets the connection
   go. One app may have `APP_CONCURRENT_CALLS` (64) calls in flight, the next answering 503 until one finishes.
   Each refusal names the app. AUGUR's own routes are never held by an app's limits.
-- **Calls to AUGUR's own services.** The gateway keeps `PLATFORM_CONNECTIONS` (128) connections to each of
-  AUGUR's services for ordinary calls. The events service's open streams (each open tab holds two) have
-  `PLATFORM_STREAM_CONNECTIONS` (4096) of their own, so a full office of open tabs never holds up its other
-  calls. The gateway waits `PLATFORM_CONNECT_TIMEOUT_MS` (5000) to reach a service and answers 502 when it can't;
-  a service gets `PLATFORM_RESPONSE_TIMEOUT_MS` (200000) to start answering, and the same between one piece of
-  its answer and the next, after which the gateway answers 504 naming the service. That deadline is a backstop
-  kept above the services' own limits, such as the model gateway's, so their own words come first. It never
-  cuts an open stream. Past `PLATFORM_STREAM_CONNECTIONS` streams, the next waits for one to close: raise it
-  for more than about 2,000 open tabs at once.
+- **Calls to AUGUR's own services.** The gateway keeps `GATEWAY_SERVICE_CONNECTIONS` (128) connections to each of
+  AUGUR's services for ordinary calls. Their open streams (any `GET /v1/<resource>/stream`; each open tab holds two
+  to the events service) have `GATEWAY_STREAM_CONNECTIONS` (4096) a service of their own, so a full office of open
+  tabs never holds up the other calls. The gateway waits `GATEWAY_SERVICE_CONNECT_TIMEOUT_MS` (5000) to reach a
+  service and answers 502 naming it when it can't; a service gets `GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS` (300000) to
+  start answering, and the same between one piece of its answer and the next, after which the gateway answers 504
+  naming the service. It never cuts an open stream. Keep it above the services' own limits, such as
+  `MODEL_TIMEOUT_SECONDS`, so a service's own words come first. The front door is the first limit on streams:
+  each open stream uses two of its connections, and it holds 1,024 a CPU core, so about 250 tabs a core.
 - **An app's own sign-in** (`POST /api/identity/v1/token`, where a part fetches its token with its client
   secret) is held to the sign-in rate above, not the API's.
 

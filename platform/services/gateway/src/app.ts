@@ -35,7 +35,7 @@ import {
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig, type Authenticated } from './auth.ts';
 import { AppGrantsUnavailable, holds, notAllowed, registryGrantsFor, scopeFor, type AppGrant, type AppGrants } from './grants.ts';
-import { appFailure, appLimitsFromEnv, EVENT_STREAMS, InFlight, platformFailure, platformLimitsFromEnv, platformPoolOptions, poolOptions, type AppLimits, type PlatformLimits } from './limits.ts';
+import { appFailure, appLimitsFromEnv, InFlight, platformFailure, platformLimitsFromEnv, platformPoolOptions, poolOptions, STREAM_ROUTE, type AppLimits, type PlatformLimits } from './limits.ts';
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
@@ -117,12 +117,6 @@ const APP_ID = /^[a-z][a-z0-9-]{1,39}$/;
 /** The shape of a floor's id a part may name: the registry is asked about nothing else. */
 const FLOOR_ID = /^[A-Za-z0-9_.:-]{1,100}$/;
 /** Every header the gateway itself speaks: a request may bring none of them in. */
-/** Which of AUGUR's services a call under /api/<name> is for; undefined for an app's. */
-const platformServiceOf = (url: string): string | undefined => {
-  const name = /^\/api\/([^/?#]+)/.exec(url)?.[1];
-  return name && PLATFORM_SERVICES.includes(name) ? name : undefined;
-};
-
 const isGatewayHeader = (name: string) => /^x-(augur|user|workspace)-/i.test(name);
 
 declare module 'fastify' {
@@ -709,7 +703,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     req.body = req.body.pipe(counted);
   };
 
-  const replyOptions = {
+  // How a call is passed on, and how a failure answers: `service` names which of AUGUR's services the route is for.
+  const replyOptionsFor = (service?: string) => ({
     onError: (reply: FastifyReply, { error }: { error: Error }) => {
       if (reply.request.tooLarge) return void reply.code(413).send({ error: 'too_large', message: reply.request.tooLarge });
       // A part that can't be reached or doesn't answer in time, in words (spec 7.5).
@@ -719,8 +714,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         return void reply.code(failed.status).send({ error: failed.status === 504 ? 'timeout' : 'bad_gateway', message: failed.message });
       }
       // One of AUGUR's own services that can't be reached or has stopped answering, in words too.
-      const service = reply.request.appCall ? undefined : platformServiceOf(reply.request.url);
-      const down = service ? platformFailure(error, service) : undefined;
+      const down = service && !reply.request.appCall ? platformFailure(error, service) : undefined;
       if (down) {
         reply.request.log.warn({ err: error.message, service }, 'service call failed');
         return void reply.code(down.status).send({ error: down.status === 504 ? 'timeout' : 'bad_gateway', message: down.message });
@@ -739,21 +733,23 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       const keepToken = request.identity?.kind === 'app' && authorization ? { authorization } : {};
       return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...callerHeaders(request.caller), ...request.signedCaller } : {}) };
     },
-  };
+  });
 
-  // The events service's streams, each with a pool of its own, so open tabs never hold the connections its other calls need.
-  // The routes are more specific than the service's own, so they win.
-  if (upstreams.events) {
-    for (const path of EVENT_STREAMS) {
-      await app.register(proxy, {
-        upstream: upstreams.events,
-        prefix: `/api/events${path}`,
-        rewritePrefix: path,
-        undici: platformPoolOptions(platformLimits, 'streams'),
-        preHandler: (req, reply) => beforeProxy('events', req, reply),
-        replyOptions: replyOptions as never,
-      });
-    }
+  // AUGUR's services' streams (GET /v1/<resource>/stream), through one pool of their own, so open tabs never hold the
+  // connections the services' other calls need. These routes are more specific than each service's own, so they win.
+  const streaming = Object.keys(upstreams).filter((name) => PLATFORM_SERVICES.includes(name));
+  if (streaming.length) {
+    await app.register(async (sub) => {
+      await sub.register(replyFrom, { undici: platformPoolOptions(platformLimits, 'streams') });
+      for (const name of streaming) {
+        sub.get(`/api/${name}${STREAM_ROUTE}`, async (req: FastifyRequest<{ Params: { resource: string } }>, reply) => {
+          await beforeProxy(name, req, reply);
+          if (reply.sent) return reply;
+          const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+          return reply.from(`${upstreams[name]}${STREAM_ROUTE.replace(':resource', encodeURIComponent(req.params.resource))}${query}`, replyOptionsFor(name) as never);
+        });
+      }
+    });
   }
 
   // The platform's own services, and apps named in APP_UPSTREAMS: known when the gateway starts.
@@ -766,7 +762,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       undici: PLATFORM_SERVICES.includes(name) ? platformPoolOptions(platformLimits, 'calls') : poolOptions(limits),
       // The signed caller is made before the request goes on, since signing is asynchronous.
       preHandler: (req, reply) => beforeProxy(name, req, reply),
-      replyOptions: replyOptions as never,
+      replyOptions: replyOptionsFor(PLATFORM_SERVICES.includes(name) ? name : undefined) as never,
     });
   }
 
@@ -797,7 +793,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         const rest = req.params['*'] ?? '';
         // A developer who chose one of the app's previews is sent to it instead; everyone else to the app.
         const preview = req.caller ? previews?.[req.caller.id] : undefined;
-        return reply.from(`${preview ?? upstream}/${rest}`, replyOptions as never);
+        return reply.from(`${preview ?? upstream}/${rest}`, replyOptionsFor() as never);
       };
       sub.all('/api/:name', handler);
       sub.all('/api/:name/*', handler);
