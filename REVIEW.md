@@ -19,6 +19,9 @@ The paths a pull request changes set its tier (`.github/review-tiers.json`). Its
     The Review check records the change he said ok to; a push that changes it takes the label off (bringing it up to date with main
     doesn't), and he is asked again.
 
+The Review check catches mistakes; it is not a wall against a hostile pull request, whose own workflows run with
+the same token. Harry reading the three answers is the gate; the check makes sure he is asked.
+
 A bot's pull request (Renovate) has no description to check: CI, the deploy test where it applies, and Harry's
 ok on his paths are its gates.
 

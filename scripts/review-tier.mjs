@@ -92,11 +92,10 @@ const diffAgainst = (base) => {
  * request that adds it, are its own used.
  */
 const tiersAt = (base, file) => {
-  try {
-    return { tiers: JSON.parse(execFileSync('git', ['show', `origin/${base}:${file}`], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })), from: base };
-  } catch {
-    return { tiers: JSON.parse(readFileSync(file, 'utf8')), from: 'this pull request (the base has no tiers file yet)' };
-  }
+  // Only a base without the file falls back; a missing base ref or a broken file there fails the check.
+  const there = execFileSync('git', ['ls-tree', '--name-only', `origin/${base}`, '--', file], { encoding: 'utf8' }).trim();
+  if (!there) return { tiers: JSON.parse(readFileSync(file, 'utf8')), from: 'this pull request (the base has no tiers file yet)' };
+  return { tiers: JSON.parse(execFileSync('git', ['show', `origin/${base}:${file}`], { encoding: 'utf8' })), from: base };
 };
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
