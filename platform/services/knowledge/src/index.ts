@@ -33,7 +33,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is not set: the knowledge service keeps the graph in Postgres, as its own login kg_app. Locally, start the dev stack’s (docker compose -f infra/docker-compose.yml up -d postgres).');
 }
 // kg_app owns nothing and writes only through the store's actions: the migration job made the schema.
-const store = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+const store = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 }));
 
 const { IDENTITY_URL = 'http://localhost:8081', EVENTS_URL = 'http://localhost:8084' } = process.env;
 const credentials = platformCredentialsFromEnv('knowledge');

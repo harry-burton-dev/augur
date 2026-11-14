@@ -25,7 +25,7 @@ export const statementTimeoutMs = (env: Record<string, string | undefined> = pro
  * is cancelled and its request fails, rather than holding a connection until the pool runs dry.
  */
 export const steadyPool = <P extends Pool>(pool: P, log: (message: string) => void = (m) => console.error(m), timeoutMs = statementTimeoutMs()): P => {
-  pool.once('error', (err) => log(`A database connection was lost (${err.message}); the next query opens a new one.`));
+  pool.on('error', (err) => log(`A database connection was lost (${err.message}); the next query opens a new one.`));
   // pg runs a client's queries in order, so this comes before whatever the connection was opened for.
   if (timeoutMs > 0) pool.on('connect', (client) => void client.query(`set statement_timeout = ${Math.round(timeoutMs)}`).catch(() => undefined));
   return pool;
