@@ -66,6 +66,25 @@ node <augur>/scripts/augurctl/augurctl.mjs plan staging-1 --dir deployments
 | `pnpm augurctl status [<name>...]` | Every server, or the ones named, one line each: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. It exits 1 when there are no deployment files, or when any server can't be read. |
 | `pnpm augurctl up <name>` | Installs a new server: fetches the release's [deploy bundle](../install/#1-get-the-release) and checks its signature here, sends it to the server and checks its sums there, makes `.env` from the file and its secrets, and starts AUGUR once the preflight passes. If the preflight stops it, fix what it says and run `up` again. It stops if the server has a `.env` already. |
 
+## The fleet's client
+
+A program changes a running server through the fleet's machine client, the Keycloak client `platform-fleet`
+(ADR 0100). Give the server its own secret as `FLEET_CLIENT_SECRET` in `.env`, keep it in the server's
+secrets file, and restart identity's set-up (`pc up -d`) to make the client. With it, a caller may, with nobody
+signed in:
+
+- upgrade AUGUR to the release the Deployment page offers next;
+- set how AUGUR or an app takes new releases (its desired state);
+- install an app release the app feed lists, or remove an app;
+- read the overview, the installed apps and the app runner's jobs, to follow what it asked for.
+
+It may do nothing else. What it installs depends on the server's ring: a dev or preview server takes any release,
+and a production server only one promoted to stable that its publisher hasn't halted. Every change is recorded
+under `platform-fleet` and shows on the Deployment page like anyone's. A leaked secret can change what runs on
+that one server, within its ring: change the secret in `.env` and run `pc up -d` again to stop the old one
+working. Taking `FLEET_CLIENT_SECRET` out of `.env` doesn't delete the client: delete `platform-fleet` in
+Keycloak's admin console too.
+
 To change a running server's release or apps, use its Deployment page for now; `plan` shows when it has
 drifted from its file. Reading the apps a server runs needs read access to its `infra/deploy/apps/` (owned by
 user 1000): `plan` says when it can't, rather than guessing.

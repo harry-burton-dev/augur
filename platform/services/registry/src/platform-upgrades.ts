@@ -13,6 +13,7 @@ import { afterLook, lookDue, MIN_CALLS as AFTER_MIN_CALLS, startAfterWatch } fro
 import { HALTED_PRODUCTION_ONLY, takesHaltedOnRequest } from './ring.ts';
 import type { AppStore, Upgrade, UpgradeOutcome } from './store.ts';
 import { needsDeploymentAdmin, roleChecks, type RoleChecks } from './roles.ts';
+import { actorOf, fleetRingProblem, isFleetCaller, requesterOf } from './fleet.ts';
 
 /** How recently an admin must have entered their password to start an upgrade. */
 export const UPGRADE_SIGN_IN_MS = 10 * 60 * 1000;
@@ -154,7 +155,9 @@ export const platformUpgradeRoutes =
             'never one that says what the server trusts (SERVER_RING and the like: set those in `.env`):',
             "they're kept in memory for the updater until the upgrade ends, never stored, and only",
             'their names are stored and audited. If the registry restarts before the updater takes them,',
-            'the upgrade ends failed and says to ask again. An empty value is left out.',
+            'the upgrade ends failed and says to ask again. An empty value is left out. The fleet\'s client',
+            '(platform-fleet, ADR 0100) may ask with nobody signed in; on a production server only for a stable',
+            'release its publisher hasn\'t halted (409), and it is recorded under its name.',
           ].join(' '),
           body: Type.Object(
             {
@@ -183,15 +186,21 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!roles.deploymentAdmin('registry.upgrades.start', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('upgrade AUGUR'));
-        if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
+        // The fleet's client upgrades with nobody signed in (ADR 0100), held to the server's ring below instead of a step-up.
+        const fleet = isFleetCaller(caller);
+        if (!caller || (!fleet && !roles.deploymentAdmin('registry.upgrades.start', caller, 'can_upgrade'))) return reply.code(403).send(needsDeploymentAdmin('upgrade AUGUR'));
+        if (!fleet && !signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to upgrade. It’s asked for anything this drastic.' });
         }
         const view = updatesView({ checker: updates, apps: await store.records() });
         if (view.next !== req.body.version) {
           return reply.code(409).send({ error: 'conflict', message: view.next ? `Upgrade to ${view.next} next, not ${req.body.version}.` : `There’s no release to upgrade to from ${view.running.version} right now.` });
         }
-        const manifest = updates.result.releases.find((r) => r.version === view.next)?.manifest;
+        const release = updates.result.releases.find((r) => r.version === view.next);
+        // The next release already follows the server's channel; this holds the fleet to its ring even if that changes.
+        const outOfRing = fleet && release ? fleetRingProblem(updates.ring, { what: 'AUGUR', ...release }) : undefined;
+        if (outOfRing) return reply.code(409).send({ error: 'conflict', message: outOfRing });
+        const manifest = release?.manifest;
         const images = manifest?.images ?? {};
         if (!Object.keys(images).length) return reply.code(409).send({ error: 'conflict', message: `AUGUR ${view.next}’s release file names no images, so it can’t be applied.` });
         const settings = Object.fromEntries(Object.entries(req.body.settings ?? {}).filter(([, value]) => value !== ''));
@@ -204,14 +213,14 @@ export const platformUpgradeRoutes =
         const existing = Object.keys(settings).filter((key) => !added.includes(key));
         if (existing.length) return reply.code(400).send({ error: 'bad_request', message: `${existing.join(', ')} isn’t new in AUGUR ${view.next}, so an upgrade doesn’t change it. Change it in .env on the server.` });
         const id = randomUUID();
-        if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: caller.id, requestedByName: caller.name, settingNames: Object.keys(settings) }))) {
+        if (!(await store.requestUpgrade({ id, from: view.running.version, version: view.next, images, requestedBy: requesterOf(caller), requestedByName: caller.name, settingNames: Object.keys(settings) }))) {
           return reply.code(409).send({ error: 'conflict', message: 'An upgrade is already waiting or under way.' });
         }
         // Kept in memory only, for the updater to write to .env: never stored. Only their names are stored and audited.
         upgradeSettings = Object.keys(settings).length ? { id, settings } : undefined;
-        req.log.info({ by: caller.id, from: view.running.version, to: view.next, settings: Object.keys(settings) }, 'upgrade requested');
+        req.log.info({ by: requesterOf(caller), from: view.running.version, to: view.next, settings: Object.keys(settings) }, 'upgrade requested');
         await record(req, {
-          actor: { id: caller.id, kind: 'user' },
+          actor: actorOf(caller),
           app: 'registry',
           action: 'platform.upgrade-requested',
           target: view.next,
