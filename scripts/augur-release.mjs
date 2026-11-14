@@ -62,11 +62,14 @@ const DOCKERFILE = 'infra/service.Dockerfile';
 /** Each store's image, from compose's text and the image build's. */
 export const storesFrom = ({ compose, dockerfile }) => {
   const services = parseYaml(compose)?.services ?? {};
-  const stages = Object.fromEntries([...dockerfile.matchAll(/^FROM\s+(\S+)\s+AS\s+(\S+)\s*$/gim)].map((m) => [m[2], m[1]]));
+  const stages = Object.fromEntries([...dockerfile.matchAll(/^FROM\s+(?:--\S+\s+)*(\S+)\s+AS\s+(\S+)\s*$/gim)].map((m) => [m[2], m[1]]));
   return Object.fromEntries(
     Object.entries(STORES).map(([store, { service, stage }]) => {
       const image = service ? services[service]?.image : stages[stage];
-      if (typeof image !== 'string' || !image) throw new Error(`Can't find ${store}'s image: ${service ? `${COMPOSE_FILE} services.${service}.image` : `${DOCKERFILE} FROM … AS ${stage}`}`);
+      const where = service ? `${COMPOSE_FILE} services.${service}.image` : `${DOCKERFILE} FROM … AS ${stage}`;
+      if (typeof image !== 'string' || !image) throw new Error(`Can't find ${store}'s image: ${where}`);
+      // A variable would hide each move from the release file: name the image as it is.
+      if (image.includes('$')) throw new Error(`${where} is ${image}: name ${store}'s image itself, not through a variable`);
       return [store, image];
     }),
   );
@@ -75,28 +78,45 @@ export const storesFrom = ({ compose, dockerfile }) => {
 /** The stores as this checkout has them. */
 export const readStores = () => storesFrom({ compose: readFileSync(join(root, COMPOSE_FILE), 'utf8'), dockerfile: readFileSync(join(root, DOCKERFILE), 'utf8') });
 
-/** The stores whose image moved since `previous` recorded them: none when it recorded none. */
+/**
+ * The part of a store's image that changes its data: its name, and its version down to the minor (a Keycloak,
+ * OpenFGA or Garage minor can migrate what it keeps); for Postgres, the Postgres major in its tag (pg16), since
+ * pgvector's own version and Debian's don't touch the files. A patch or a new digest doesn't.
+ */
+export const storeLevel = (store, image) => {
+  const [name, tag = ''] = image.split('@')[0].split(/:(?=[^/]*$)/);
+  if (store === 'postgres') return `${name}:${/pg\d+/.exec(tag)?.[0] ?? tag}`;
+  const version = semver.coerce(tag);
+  return `${name}:${version ? `${version.major}.${version.minor}` : tag}`;
+};
+
+/** The stores whose image moved past a patch since `previous` recorded them: none when it recorded none. */
 const storesMoved = (previous, stores) =>
-  previous?.stores && stores ? Object.keys(STORES).filter((s) => previous.stores[s] && stores[s] && previous.stores[s] !== stores[s]) : [];
+  previous?.stores && stores ? Object.keys(STORES).filter((s) => previous.stores[s] && stores[s] && storeLevel(s, previous.stores[s]) !== storeLevel(s, stores[s])) : [];
 const storeBreaking = (previous, stores) =>
   storesMoved(previous, stores).map((s) => `${STORES[s].label} ${previous.stores[s]} → ${stores[s]}: its data can’t go back to the old image`);
+/** The stores a release records: as they are now, or else as the release before had them. */
+const storesKept = (previous, stores) => {
+  const kept = stores ?? previous?.stores;
+  return kept ? { stores: kept } : {};
+};
 
 /**
- * What's missing from docs/upgrade.md for the stores that moved since the last release: each needs a note
- * that isn't released yet (**From** unreleased) and names it, saying what an admin must do and how to go back.
+ * What's missing for the stores whose image moved since the last release. Each needs a note in docs/upgrade.md
+ * that isn't released yet (**From** unreleased), whose heading names it and which says how to go back, and a
+ * changeset with a bump must be waiting, so the move goes out in a release of its own making.
  */
-export const storeNoteProblems = (previous, stores, markdown) => {
+export const storeProblems = (previous, stores, markdown, changesets) => {
   const moved = storesMoved(previous, stores);
   if (!moved.length) return [];
   const lines = markdown.split('\n');
-  const notes = notesOf(markdown) ?? [];
-  const unreleased = notes
-    .map((n, i) => ({ ...n, text: lines.slice(n.line - 1, (notes[i + 1]?.line ?? lines.length + 1) - 1).join('\n') }))
-    .filter((n) => n.from === 'unreleased')
-    .map((n) => n.text);
-  return moved
-    .filter((s) => !unreleased.some((text) => new RegExp(`\\b${STORES[s].label}\\b`, 'i').test(text)))
-    .map((s) => `${STORES[s].label}'s image moved (${previous.stores[s]} → ${stores[s]}), which makes the next release breaking: add a note to ${NOTES_FILE}'s "Release notes that need you", starting **From** unreleased, that names ${STORES[s].label} and says how to go back (restore the backup taken before the upgrade)`);
+  const unreleased = (notesOf(markdown) ?? []).filter((n) => n.from === 'unreleased').map((n) => ({ heading: n.heading, text: lines.slice(n.line - 1, n.end).join('\n') }));
+  const problems = moved
+    .filter((s) => !unreleased.some((n) => new RegExp(`\\b${STORES[s].label}\\b`, 'i').test(n.heading) && /\bback\b/i.test(n.text)))
+    .map((s) => `${STORES[s].label}'s image moved (${previous.stores[s]} → ${stores[s]}), which makes the next release breaking: add a note to ${NOTES_FILE}'s "Release notes that need you", starting **From** unreleased, whose heading names ${STORES[s].label} and which says how to go back (restore the backup taken before the upgrade)`);
+  if (!changesets.some((c) => Object.keys(c.bumps).length))
+    problems.push(`${moved.map((s) => STORES[s].label).join(' and ')} moved, but no changeset waiting bumps a part, so no Version packages PR would release it: add one (pnpm changeset) for the part that runs on it`);
+  return problems;
 };
 
 /** Every part of the platform, by package name, with its version and where it lives. */
@@ -185,7 +205,7 @@ export const nextRelease = (previous, parts, settings, today, names = [], stores
   }
   for (const name of Object.keys(before)) if (!parts[name]) breaking.push(`${name} removed`);
   breaking.push(...storeBreaking(previous, stores));
-  const kept = stores ? { stores } : previous?.stores ? { stores: previous.stores } : {};
+  const kept = storesKept(previous, stores);
 
   const shape = Object.fromEntries(Object.entries(parts).map(([name, { version }]) => [name, { version }]));
   if (!previous) {
@@ -280,7 +300,7 @@ export const devBuild = (previous, parts, settings, changesets, run, today, stor
     breaking,
     settings: { ...settings, added: toAdd(previous, settings), removed: previous.settings.all.filter((k) => !settings.all.includes(k)) },
     parts: Object.fromEntries(Object.entries(parts).map(([name, { version }]) => [name, { version }])),
-    ...(stores ?? previous.stores ? { stores: stores ?? previous.stores } : {}),
+    ...storesKept(previous, stores),
     changelogs,
   };
 };
@@ -447,7 +467,12 @@ const main = () => {
       const shipped = existsSync(join(root, VERSION_FILE)) ? readFileSync(join(root, VERSION_FILE), 'utf8') : '';
       if (shipped !== versionModule(previous)) problems.push(`${VERSION_FILE} doesn't match ${RELEASE_FILE}`);
     }
-    const notesNeeded = previous ? storeNoteProblems(previous, readStores(), readFileSync(join(root, NOTES_FILE), 'utf8')) : [];
+    let notesNeeded = [];
+    try {
+      if (previous) notesNeeded = storeProblems(previous, readStores(), readFileSync(join(root, NOTES_FILE), 'utf8'), pendingChangesets());
+    } catch (err) {
+      notesNeeded = [err.message];
+    }
     if (problems.length || notesNeeded.length) {
       console.error([...problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`), ...notesNeeded.map((p) => `✗ ${p}.`)].join('\n'));
       process.exit(1);

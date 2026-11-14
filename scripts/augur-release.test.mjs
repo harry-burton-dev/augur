@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bundleFiles, bundleName, deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, readStores, releaseName, storeNoteProblems, storesFrom, titleOf, versionModule, writeBundle } from './augur-release.mjs';
+import { bundleFiles, bundleName, deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, readStores, releaseName, storeLevel, storeProblems, storesFrom, titleOf, versionModule, writeBundle } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -194,15 +194,42 @@ test('a dev build that moves a store’s image is breaking too', () => {
   assert.equal(build.upgradeFrom, '>=0.1.0');
 });
 
-test('CI wants an unreleased upgrade note naming each store whose image moved', () => {
+test('only a move past a patch counts: a new name, a minor, or a Postgres major; never a patch or a digest', () => {
+  assert.equal(storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.8.1'), storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.8.2@sha256:ab12'));
+  assert.notEqual(storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.8.1'), storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.9.0'));
+  assert.equal(storeLevel('garage', 'dxflrs/garage:v2.4.1'), 'dxflrs/garage:2.4');
+  assert.equal(storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg16-bookworm'), storeLevel('postgres', 'pgvector/pgvector:0.9.0-pg16-trixie'));
+  assert.notEqual(storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg16-bookworm'), storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg17-bookworm'));
+  assert.notEqual(storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg16-bookworm'), storeLevel('postgres', 'postgres:16'));
+  assert.equal(storeLevel('openfga', 'registry.local:5000/openfga:v1.19.0'), 'registry.local:5000/openfga:1.19');
+  const base = nextRelease(undefined, parts0, settings, '2026-10-23', [], stores);
+  const patched = nextRelease(base, parts0, settings, '2026-10-30', [], { ...stores, garage: 'dxflrs/garage:v2.4.2' });
+  assert.deepEqual(patched.breaking, []);
+});
+
+test('a store’s image named through a variable, or behind a --platform flag, is still read or refused', () => {
+  const compose = 'services:\n  postgres:\n    image: pgvector/pgvector:0.8.7-pg16-bookworm\n  garage:\n    image: dxflrs/garage:v2.4.1\n';
+  const dockerfile = (keycloak) => `FROM ${keycloak} AS keycloak\nFROM openfga/openfga:v1.19.0 AS openfga-upstream\n`;
+  assert.equal(storesFrom({ compose, dockerfile: dockerfile('--platform=$BUILDPLATFORM quay.io/keycloak/keycloak:26.8.1') }).keycloak, 'quay.io/keycloak/keycloak:26.8.1');
+  assert.throws(() => storesFrom({ compose, dockerfile: dockerfile('${KEYCLOAK_IMAGE}') }), /variable/);
+});
+
+test('CI wants an unreleased upgrade note, headed with the store and saying how to go back, and a changeset, for each store that moved', () => {
   const released = { stores };
   const now = { ...stores, postgres: 'pgvector/pgvector:0.8.7-pg17-bookworm' };
-  const notes = (body) => `# Upgrade\n\n## Release notes that need you\n\n${body}\n## Going back\n`;
-  assert.deepEqual(storeNoteProblems(released, stores, notes('')), []);
-  assert.match(storeNoteProblems(released, now, notes(''))[0], /Postgres/);
+  const waiting = [{ bumps: { '@augur/registry': 'patch' } }];
+  const notes = (body) => `# Upgrade\n\n## Release notes that need you\n\n${body}\n## Going back\n\nPostgres: restore it to go back.\n`;
+  const good = '### Postgres moves to 17\n\n**From** unreleased\n\nPostgres rewrites its files. To go back, restore the backup.\n';
+  assert.deepEqual(storeProblems(released, stores, notes(''), []), []);
+  assert.match(storeProblems(released, now, notes(''), waiting)[0], /Postgres/);
   // A released note doesn't count: it was for an earlier move.
-  assert.equal(storeNoteProblems(released, now, notes('### Postgres 17\n\n**From** augur@0.20.0\n\nOld.\n')).length, 1);
-  assert.deepEqual(storeNoteProblems(released, now, notes('### Database engine moves\n\n**From** unreleased\n\nPostgres moves to 17. Take a backup.\n')), []);
+  assert.equal(storeProblems(released, now, notes(good.replace('unreleased', 'augur@0.20.0')), waiting).length, 1);
+  // Nor does one that only mentions it, or one that doesn't say how to go back, or the sections after the notes.
+  assert.equal(storeProblems(released, now, notes('### Apps reach the stores\n\n**From** unreleased\n\nThrough Postgres\u2019s relay. Go back as usual.\n'), waiting).length, 1);
+  assert.equal(storeProblems(released, now, notes('### Postgres moves to 17\n\n**From** unreleased\n\nNothing to do.\n'), waiting).length, 1);
+  assert.deepEqual(storeProblems(released, now, notes(good), waiting), []);
+  // Without a changeset that bumps a part, no release would carry the move.
+  assert.match(storeProblems(released, now, notes(good), [{ bumps: {} }])[0], /changeset/);
   // Before the release file records stores there is nothing to compare.
-  assert.deepEqual(storeNoteProblems({}, now, notes('')), []);
+  assert.deepEqual(storeProblems({}, now, notes(''), []), []);
 });
