@@ -12,7 +12,7 @@ import { declaredSettings, missingMessage, missingRequired } from './settings.ts
 const APP_ID = /^[a-z][a-z0-9-]{1,39}$/;
 
 /** A list of app ids such as DEFAULT_APPS or IN_PAGE_APPS, split by commas or spaces, and what is wrong with it. */
-export const parseDefaultApps = (text: string | undefined, setting = 'DEFAULT_APPS'): { apps: string[]; problems: string[] } => {
+export const parseAppIds = (text: string | undefined, setting: string): { apps: string[]; problems: string[] } => {
   const ids = [...new Set((text ?? '').split(/[\s,]+/).filter(Boolean))];
   const problems = ids.flatMap((id) => {
     if (!APP_ID.test(id)) return [`"${id}" in ${setting} isn’t an app id: lower-case letters, digits and dashes, starting with a letter.`];

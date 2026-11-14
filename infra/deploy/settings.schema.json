@@ -1749,7 +1749,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#release-notes-that-need-you"
+      "x-docs": "docs/upgrade.md#only-augurs-own-apps-load-into-the-shells-page"
     },
     "APP_DATA_GRACE_DAYS": {
       "type": "string",

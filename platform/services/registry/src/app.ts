@@ -358,7 +358,7 @@ export const buildApp = async ({
               const { category: _asked, ...rest } = served;
               const { category } = kindOf(r.entry, feed);
               // Only an app the deployment allows into the shell's page is marked so; the shell opens no other (ADR 0076).
-              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}), ...(inPageApps.includes(r.entry.id) ? { inPage: true } : {}) };
+              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}), ...(inPageApps.includes(r.entry.id) ? { inPage: true as const } : {}) };
             });
           // AUGUR's own apps' feature previews, at the server's default: on for those who turned them on.
           const platform = platformApps
@@ -366,7 +366,7 @@ export const buildApp = async ({
             .map((a) => {
               const on = a.previews?.length ? previewsOnFor(platformRecord(a), optIns, updates.ring, at) : [];
               const m3 = platformManifests3[a.id];
-              return { ...ownServed(a, m3, { maxUpload: a.maxUpload ?? DEFAULT_UPLOAD_MB, previewsOn: on }), ...(m3 ? {} : { inPage: true }) };
+              return { ...ownServed(a, m3, { maxUpload: a.maxUpload ?? DEFAULT_UPLOAD_MB, previewsOn: on }), ...(m3 ? {} : { inPage: true as const }) };
             });
           const apps = [...platform, ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
@@ -909,7 +909,7 @@ export const buildApp = async ({
           const conflict = conflictFor(entry, await store.list());
           if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
           // Only AUGUR's own frontends load into the shell's page, and any app a deployment named as a break-glass.
-          if (!inPageApps.includes(req.params.id)) return reply.code(403).send({ error: 'forbidden', message: inPageProblem(entry.name ?? req.params.id) });
+          if (!inPageApps.includes(req.params.id)) return reply.code(403).send({ error: 'forbidden', message: inPageProblem(entry.name) });
           // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0032).
           const { refused } = kindOf(entry, await feedApps());
           if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');

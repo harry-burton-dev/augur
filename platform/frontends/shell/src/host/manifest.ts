@@ -1,6 +1,6 @@
 import { SDK_VERSION, type AppManifestEntry } from '@augur/mfe-sdk';
 import semver from 'semver';
-import { fromCatalogue3, isCatalogue3 } from './apps3.js';
+import { fromCatalogue3, isCatalogue3, isWorkerApp } from './apps3.js';
 
 export class ManifestError extends Error {}
 
@@ -53,16 +53,19 @@ export type InPageApp = AppManifestEntry & { inPage?: boolean };
  * other app runs in the sandbox on the app contract.
  */
 export const inPageRefusal = (app: InPageApp): string | undefined =>
-  app.inPage === true
+  isWorkerApp(app) || app.inPage === true
     ? undefined
     : `${app.name} loads into AUGUR's own page, which only AUGUR's own apps may. Its team needs to release it on the app contract; until then an admin can allow it on this deployment with IN_PAGE_APPS.`;
 
 /**
- * Why this shell can't open an app, or undefined when it can. An app names the
+ * Why this shell can't open an app, or undefined when it can: one it may not load into its page (inPageRefusal),
+ * or one made for other SDK releases. An app names the
  * SDK releases it works with; a shell whose SDK is outside that range would
  * hand it a mount context it doesn't expect, so it refuses instead.
  */
 export const incompatibility = (app: AppManifestEntry, sdkVersion = SDK_VERSION): string | undefined => {
+  const outside = inPageRefusal(app);
+  if (outside) return outside;
   const range = typeof app.sdk === 'string' ? semver.validRange(app.sdk) : null;
   if (!range) return `${app.name} doesn't say which versions of AUGUR it works with, so it can't be opened. Its team needs to release it again.`;
   if (semver.satisfies(sdkVersion, range, { includePrerelease: true })) return undefined;

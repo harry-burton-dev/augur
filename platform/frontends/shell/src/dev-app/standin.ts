@@ -1,5 +1,6 @@
 import type { AppManifestEntry, InboxCounts, InboxItem, User, Workspace, WorkspaceRef } from '@augur/mfe-sdk';
 import type { Session } from '../host/index.js';
+import { isWorkerApp } from '../host/apps3.js';
 
 /**
  * The person signed in to the stand-in shell `pnpm dev:app` opens. They have
@@ -47,7 +48,7 @@ export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...arg
   const account = devAccount();
   const inbox = devInbox(app);
   // On a developer's own machine their app may load into the page on contract 2, as IN_PAGE_APPS allows on a deployment.
-  const inPage = (a: AppManifestEntry) => ((a as { contract?: unknown }).contract === 3 ? a : { ...a, inPage: true });
+  const inPage = (a: AppManifestEntry) => (isWorkerApp(a) ? a : { ...a, inPage: true });
   const catalogue = [...(app.id === devHome.id ? [app] : [devHome, app]), ...also.filter((a) => a.id !== app.id && a.id !== devHome.id)].map(inPage);
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://stand-in');

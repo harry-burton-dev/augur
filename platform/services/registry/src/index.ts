@@ -1,7 +1,7 @@
 import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { knowledgeOffer } from './knowledge-offer.ts';
-import { parseDefaultApps } from './defaults.ts';
+import { parseAppIds } from './defaults.ts';
 import { appFeed, appFeeds, appFeedUrls, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
@@ -86,9 +86,9 @@ const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 
 // How long a removed app's data is kept, in case it's installed again.
 const dataGraceDays = process.env.APP_DATA_GRACE_DAYS ? Number(process.env.APP_DATA_GRACE_DAYS) : undefined;
 if (dataGraceDays !== undefined && (!Number.isInteger(dataGraceDays) || dataGraceDays < 1 || dataGraceDays > 365)) throw new Error('APP_DATA_GRACE_DAYS is a whole number of days from 1 to 365 (30 when empty).');
-const defaults = parseDefaultApps(process.env.DEFAULT_APPS);
+const defaults = parseAppIds(process.env.DEFAULT_APPS, 'DEFAULT_APPS');
 // A break-glass: apps not made by AUGUR that may still load into the shell's page on contract 2 (ADR 0076).
-const inPage = parseDefaultApps(process.env.IN_PAGE_APPS, 'IN_PAGE_APPS');
+const inPage = parseAppIds(process.env.IN_PAGE_APPS, 'IN_PAGE_APPS');
 if (defaults.problems.length || inPage.problems.length) throw new Error([...defaults.problems, ...inPage.problems].join(' '));
 // The publisher's feed is signed by its Release feed workflow (ADR 0017); FEED_SIGNER names another
 // signer, for a fork. Checked offline when the deployment has Sigstore's trust root (docs/mirror.md).
