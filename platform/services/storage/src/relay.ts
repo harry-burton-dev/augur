@@ -1,8 +1,8 @@
 // The apps' relay (ADR 0076, design review ISO-2): what an app's network has in place of Postgres and the object
-// store. An app that asks for a database reaches Postgres only through it, and only as its own login, never as the
-// platform's superuser or a platform service's; one that asks for a bucket reaches only the object store's S3 API,
-// never its admin API. The runner joins it to an app's network as `postgres` and `garage`, so an app's parts are
-// told the same host names as before.
+// store. An app that asks for a database reaches Postgres only through db-relay, and only as its own login, never as
+// the platform's superuser or a platform service's; one that asks for a bucket reaches only the object store's S3 API,
+// through bucket-relay, never its admin API. The runner joins them to an app's network as `postgres` and `garage`, so
+// an app's parts are told the same host names as before.
 import { connect, createServer, type AddressInfo, type Server, type Socket } from 'node:net';
 
 /** An app's own database login, as the storage container makes it: app_<id>, or a preview's app_<id>_pr<n>. */
@@ -26,26 +26,36 @@ const refusal = (message: string) => {
   return Buffer.concat([head, fields]);
 };
 
-/** The value of `user` in a start message's body (after its length and protocol), or undefined. */
+/**
+ * The value of `user` in a start message's body (after its length and protocol), or undefined when it has none or
+ * more than one: Postgres takes the last, so a second `user` must never slip past a check of the first.
+ */
 const userOf = (body: Buffer) => {
   const pairs = body.toString('utf8').split('\0');
-  for (let i = 0; i + 1 < pairs.length; i += 2) if (pairs[i] === 'user') return pairs[i + 1];
-  return undefined;
+  const users: string[] = [];
+  // The list ends at an empty name.
+  for (let i = 0; i + 1 < pairs.length && pairs[i] !== ''; i += 2) if (pairs[i] === 'user') users.push(pairs[i + 1]!);
+  return users.length === 1 ? users[0] : undefined;
 };
 
-const pipeTo = (client: Socket, to: { host: string; port: number }, first: Buffer) => {
+/** Passes a client on to `to`, `first` being what it already sent; `unreachable` is said to it when `to` doesn't answer. */
+const pipeTo = (client: Socket, to: { host: string; port: number }, first: Buffer, unreachable?: Buffer) => {
   const server = connect(to.port, to.host);
+  let connected = false;
   server.on('connect', () => {
+    connected = true;
     server.write(first);
     client.pipe(server).pipe(client);
     client.resume();
   });
-  const end = () => (client.destroy(), server.destroy());
-  server.on('error', end);
-  client.on('error', end);
+  server.on('error', () => (!connected && unreachable ? client.end(unreachable) : client.destroy(), server.destroy()));
+  client.on('error', () => (client.destroy(), server.destroy()));
   client.on('close', () => server.destroy());
-  server.on('close', () => client.destroy());
+  server.on('close', () => connected && client.destroy());
 };
+
+/** What a client of the database port is told when Postgres doesn't answer the relay. */
+const POSTGRES_DOWN = refusal('The apps’ relay can’t reach Postgres right now. Nothing was changed; try again, or ask an admin to look at the server (pc logs postgres).');
 
 /** Reads a client's start: says no to TLS (the apps' network is Docker's own), then lets only an app's own login on. */
 const databaseClient = (to: { host: string; port: number }) => (client: Socket) => {
@@ -67,49 +77,51 @@ const databaseClient = (to: { host: string; port: number }) => (client: Socket) 
       client.off('data', onData);
       client.pause();
       clearTimeout(timer);
-      if (code === CANCEL_REQUEST) return pipeTo(client, to, held);
+      if (code === CANCEL_REQUEST) return pipeTo(client, to, held, POSTGRES_DOWN);
       if (code !== PROTOCOL_3) return refuse('The apps’ relay to Postgres only takes a Postgres start message.');
       const user = userOf(held.subarray(8, length));
       if (!user || !APP_LOGIN.test(user)) return refuse('Through the apps’ relay, only an app’s own login reaches Postgres, never the platform’s or a service’s.');
-      return pipeTo(client, to, held);
+      return pipeTo(client, to, held, POSTGRES_DOWN);
     }
   };
   client.on('data', onData);
   client.on('error', () => client.destroy());
 };
 
-/** Where the relay listens and what it passes calls on to. */
+/** What one relay reaches: Postgres for apps' own logins, or the object store's S3 API. */
+export type RelayKind = 'database' | 'objects';
+
+/** Where a relay listens and what it passes calls on to. */
 export interface RelayOptions {
+  kind: RelayKind;
   /** The address it listens on; every address unless a test says otherwise. */
   host?: string;
-  database: { listen: number; to: { host: string; port: number } };
-  objects: { listen: number; to: { host: string; port: number } };
+  listen: number;
+  to: { host: string; port: number };
 }
 
 export interface Relay {
-  /** The ports it listens on, by what they reach. */
-  ports: { database: number; objects: number };
+  port: number;
   close(): Promise<void>;
 }
 
-const listen = (server: Server, port: number, host: string) =>
-  new Promise<number>((resolve, reject) => {
-    server.once('error', reject);
-    server.listen(port, host, () => resolve((server.address() as AddressInfo).port));
-  });
-
-export async function startRelay({ host = '0.0.0.0', database, objects }: RelayOptions): Promise<Relay> {
-  const db = createServer({ pauseOnConnect: false }, databaseClient(database.to));
+/**
+ * Starts one relay. Each kind is its own container (db-relay, bucket-relay), so an app that asks only for a bucket
+ * gets no way to Postgres, and one that asks only for a database none to the object store.
+ */
+export async function startRelay({ kind, host = '0.0.0.0', listen, to }: RelayOptions): Promise<Relay> {
   // The object store's S3 API as it is: each key opens only its own bucket. Its admin, RPC and web ports aren't relayed.
-  const s3 = createServer((client) => {
-    client.pause();
-    pipeTo(client, objects.to, Buffer.alloc(0));
+  const server: Server = createServer(
+    kind === 'database'
+      ? databaseClient(to)
+      : (client) => {
+          client.pause();
+          pipeTo(client, to, Buffer.alloc(0));
+        },
+  );
+  const port = await new Promise<number>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(listen, host, () => resolve((server.address() as AddressInfo).port));
   });
-  const ports = { database: await listen(db, database.listen, host), objects: await listen(s3, objects.listen, host) };
-  return {
-    ports,
-    close: async () => {
-      await Promise.all([db, s3].map((s) => new Promise<void>((r) => s.close(() => r()))));
-    },
-  };
+  return { port, close: () => new Promise<void>((r) => server.close(() => r())) };
 }

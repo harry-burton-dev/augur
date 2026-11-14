@@ -157,12 +157,14 @@ case "$*" in
   "network ls --filter label=augur.network=app "*) echo app-old ;;
   *"com.docker.compose.service=app-notes-worker-blue"*) echo worker ;;
   *"com.docker.compose.service=gateway"*) echo gw ;;
-  *"com.docker.compose.service=app-relay"*) echo relay ;;
+  *"com.docker.compose.service=db-relay"*) echo relay ;;
+  *"com.docker.compose.service=bucket-relay"*) ;;
   *"com.docker.compose.service=postgres"*) echo pg ;;
   *"com.docker.compose.service=garage"*) echo store ;;
   *"com.docker.compose.service="*) ;;
   *com.docker.compose.project*) echo platform ;;
-  "network inspect --format {{json .Containers}} app-notes") echo '{"gw":{},"pg":{},"store":{}}' ;;
+  "network connect --alias db-relay --alias postgres app-notes relay") touch ${join(dir, 'joined')} ;;
+  "network inspect --format {{json .Containers}} app-notes") if [ -e ${join(dir, 'joined')} ]; then echo '{"gw":{},"pg":{},"store":{},"relay":{}}'; else echo '{"gw":{},"pg":{},"store":{}}'; fi ;;
   "ps --all --no-trunc --filter network=app-old --format {{.ID}}") echo left ;;
 esac
 `,
@@ -173,10 +175,12 @@ esac
     vi.stubEnv('PATH', `${bin}:${process.env.PATH}`);
     try {
       const host = composeAppHost({ dir, dockerHost: 'tcp://nowhere:2375', dockerConfig: dir, signer: { identity: 'i', issuer: 'x' } });
-      await host.appNetworks([
-        { app: 'notes', name: 'app-notes', join: ['gateway', 'app-relay'] },
-        { app: 'notes', name: 'app-notes_internet', join: [], internet: true, members: ['app-notes-worker-blue'] },
-      ]);
+      await expect(
+        host.appNetworks([
+          { app: 'notes', name: 'app-notes', join: ['gateway', 'db-relay', 'bucket-relay'] },
+          { app: 'notes', name: 'app-notes_internet', join: [], internet: true, members: ['app-notes-worker-blue'] },
+        ]),
+      ).rejects.toThrow(/bucket-relay isn’t running/);
       const said = (await readFile(log, 'utf8')).trim().split('\n');
       expect(said).toContain('network create --internal --label augur.network=app --label augur.app=notes app-notes');
       expect(said).toContain('network connect app-notes self');
@@ -185,10 +189,12 @@ esac
       expect(said).not.toContain('network connect app-notes_internet self');
       expect(said).toContain('network connect app-notes_internet worker');
       // The relay answers to the stores' own names, so parts are told the same hosts as before.
-      expect(said).toContain('network connect --alias app-relay --alias postgres --alias garage app-notes relay');
-      // Postgres and the object store themselves leave an app's network they were joined to before (ISO-2).
+      expect(said).toContain('network connect --alias db-relay --alias postgres app-notes relay');
+      // Postgres leaves an app's network it was joined to before, once its relay is on (ISO-2), and is never joined.
       expect(said).toContain('network disconnect --force app-notes pg');
-      expect(said).toContain('network disconnect --force app-notes store');
+      expect(said.indexOf('network disconnect --force app-notes pg')).toBeGreaterThan(said.indexOf('network connect --alias db-relay --alias postgres app-notes relay'));
+      // The object store's relay isn't running: the object store stays, and the turn says why.
+      expect(said).not.toContain('network disconnect --force app-notes store');
       expect(said.some((l) => l === 'network connect --alias postgres app-notes pg')).toBe(false);
       // Already on it: nothing to do.
       expect(said.some((l) => l.includes('--alias gateway'))).toBe(false);

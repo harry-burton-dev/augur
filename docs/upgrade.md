@@ -56,11 +56,13 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
-### Apps reach the stores only through a relay
+### Apps reach the stores only through relays
 
 **From** unreleased
 
-Nothing to do. A new container, `app-relay`, now stands in for Postgres and the object store on each app's network: it lets only the app's own login on to Postgres, never the platform's superuser or a service's, and passes on only the object store's S3 API, never its admin API. The app runner takes Postgres and Garage themselves off the apps' networks on its next turn, and the apps' parts keep the same addresses (`postgres`, `garage`), so nothing restarts. If `pc ps` shows `app-relay` as unhealthy, apps that keep data can't reach it: `pc logs app-relay` says why. An app installed before contract 3 is still on the platform's network until it's replaced.
+Two new containers, `db-relay` and `bucket-relay`, now stand in for Postgres and the object store on each app's network. `db-relay` lets only the app's own login on to Postgres, never the platform's superuser or a service's; `bucket-relay` passes on only the object store's S3 API, never its admin API. An app gets only the relay for what it asks for. On its first turn after the upgrade the app runner joins each relay to the apps' networks under the store's own name (`postgres`, `garage`), then takes Postgres and Garage themselves off them, so the apps' parts keep the same addresses.
+
+Connections an app's parts already held open to Postgres or the object store end when the store leaves its network. Most clients open new ones, through the relay; if an app that keeps data shows errors after the upgrade, restart it once in Admin → Apps. If `pc ps` shows a relay as unhealthy, `pc logs db-relay` (or `bucket-relay`) says why. An app installed before contract 3 is still on the platform's network until it's replaced.
 
 ### Only AUGUR's own apps load into the shell's page
 
