@@ -1,6 +1,7 @@
 import type { AppManifestEntry, InboxCounts, InboxItem, User, Workspace, WorkspaceRef } from '@augur/mfe-sdk';
 import type { Session } from '../host/index.js';
 import { isWorkerApp } from '../host/apps3.js';
+import type { InPageApp } from '../host/manifest.js';
 
 /**
  * The person signed in to the stand-in shell `pnpm dev:app` opens. They have
@@ -35,7 +36,7 @@ export const devSession = (user: User): Session => ({
 const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 
 /** Home, from its build in `frontends/home/dist`, so an app's glance card can be seen where it goes. */
-export const devHome: AppManifestEntry = { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.0.0', sdk: '^2.0.0 || ^3.0.0', icon: 'home', description: 'What needs you' };
+export const devHome: InPageApp = { id: 'home', name: 'Home', route: '/home', entry: '/apps/home/entry.js', version: '0.0.0', sdk: '^2.0.0 || ^3.0.0', icon: 'home', description: 'What needs you', inPage: true };
 
 /**
  * Answers the platform's own endpoints for the shell, so the real shell runs
