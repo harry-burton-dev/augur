@@ -12,6 +12,7 @@ export const bucket: Provisioner = {
   check: () => [],
   needs: ['storage'],
   outputs: ({ storageId, secrets }) => ({
+    // The object store's S3 API, through the apps' relay, which answers as garage on an app's network; its admin API isn't relayed.
     endpoint: { value: 'http://garage:3900' },
     region: { value: 'garage' },
     bucket: { value: storageId },

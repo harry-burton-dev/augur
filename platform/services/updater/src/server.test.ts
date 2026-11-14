@@ -157,10 +157,12 @@ case "$*" in
   "network ls --filter label=augur.network=app "*) echo app-old ;;
   *"com.docker.compose.service=app-notes-worker-blue"*) echo worker ;;
   *"com.docker.compose.service=gateway"*) echo gw ;;
+  *"com.docker.compose.service=app-relay"*) echo relay ;;
   *"com.docker.compose.service=postgres"*) echo pg ;;
+  *"com.docker.compose.service=garage"*) echo store ;;
   *"com.docker.compose.service="*) ;;
   *com.docker.compose.project*) echo platform ;;
-  "network inspect --format {{json .Containers}} app-notes") echo '{"gw":{}}' ;;
+  "network inspect --format {{json .Containers}} app-notes") echo '{"gw":{},"pg":{},"store":{}}' ;;
   "ps --all --no-trunc --filter network=app-old --format {{.ID}}") echo left ;;
 esac
 `,
@@ -172,7 +174,7 @@ esac
     try {
       const host = composeAppHost({ dir, dockerHost: 'tcp://nowhere:2375', dockerConfig: dir, signer: { identity: 'i', issuer: 'x' } });
       await host.appNetworks([
-        { app: 'notes', name: 'app-notes', join: ['gateway', 'postgres'] },
+        { app: 'notes', name: 'app-notes', join: ['gateway', 'app-relay'] },
         { app: 'notes', name: 'app-notes_internet', join: [], internet: true, members: ['app-notes-worker-blue'] },
       ]);
       const said = (await readFile(log, 'utf8')).trim().split('\n');
@@ -182,7 +184,12 @@ esac
       expect(said).toContain('network create --label augur.network=app --label augur.app=notes app-notes_internet');
       expect(said).not.toContain('network connect app-notes_internet self');
       expect(said).toContain('network connect app-notes_internet worker');
-      expect(said).toContain('network connect --alias postgres app-notes pg');
+      // The relay answers to the stores' own names, so parts are told the same hosts as before.
+      expect(said).toContain('network connect --alias app-relay --alias postgres --alias garage app-notes relay');
+      // Postgres and the object store themselves leave an app's network they were joined to before (ISO-2).
+      expect(said).toContain('network disconnect --force app-notes pg');
+      expect(said).toContain('network disconnect --force app-notes store');
+      expect(said.some((l) => l === 'network connect --alias postgres app-notes pg')).toBe(false);
       // Already on it: nothing to do.
       expect(said.some((l) => l.includes('--alias gateway'))).toBe(false);
       expect(said).toContain('network disconnect --force app-old left');

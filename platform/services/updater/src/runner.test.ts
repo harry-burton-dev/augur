@@ -855,7 +855,8 @@ describe('settings and previews', () => {
     expect(await t.run(install('1.0.0'))).toBe('done');
     expect(t.project()!.networks).toEqual({ 'app-notes': { external: true, name: 'app-notes' } });
     // The example asks for the database, the bucket and telemetry; the network was there before any part ran.
-    expect(t.networks()).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres', 'garage', 'otel-lgtm'] }]);
+    // The stores are reached through the apps' relay, never Postgres or the object store themselves (ISO-2).
+    expect(t.networks()).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'app-relay', 'otel-lgtm'] }]);
     expect(t.missing()).toEqual([]);
 
     // Parts that ask only for the gateway get the gateway and nothing else.
@@ -867,7 +868,7 @@ describe('settings and previews', () => {
   it('leaves the collector off an app’s network when the deployment sends telemetry elsewhere, and says nothing to send to', async () => {
     const t = setup(`${ENV}OTEL_EXPORTER_OTLP_ENDPOINT=https://collector.example:4318\n`);
     expect(await t.run(install('1.0.0'))).toBe('done');
-    expect(t.networks()[0]!.join).toEqual(['gateway', 'postgres', 'garage']);
+    expect(t.networks()[0]!.join).toEqual(['gateway', 'app-relay']);
     expect(t.project()!.services['app-notes-web-blue']!.environment).toMatchObject({ OTEL_EXPORTER_OTLP_ENDPOINT: '' });
   });
 
@@ -878,7 +879,7 @@ describe('settings and previews', () => {
     expect(t.networks()).toEqual([]);
     const r = release('1.1.0-pr.12.1', 'd');
     const previewOnly: RunnerState = { apps: {}, previews: { 'notes-pr12': { app: 'notes', pr: 12, version: r.version, parts: r.parts, manifest: r.manifest } } };
-    expect(appNetworksOf(previewOnly, ENV)).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres', 'garage', 'otel-lgtm'] }]);
+    expect(appNetworksOf(previewOnly, ENV)).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'app-relay', 'otel-lgtm'] }]);
   });
 
   it('keeps the gateway and stores on the apps’ networks every turn, as a platform upgrade gives them new containers', async () => {
@@ -887,7 +888,7 @@ describe('settings and previews', () => {
     const before = t.networkCalls();
     await t.runner.keepNetworks();
     expect(t.networkCalls()).toBe(before + 1);
-    expect(t.networks()).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'postgres', 'garage', 'otel-lgtm'] }]);
+    expect(t.networks()).toEqual([{ app: 'notes', name: 'app-notes', join: ['gateway', 'app-relay', 'otel-lgtm'] }]);
   });
 
   it('gives the internet only to the parts that ask for it, once an admin allows it, and takes it away again (spec 4.6, 10.4)', async () => {

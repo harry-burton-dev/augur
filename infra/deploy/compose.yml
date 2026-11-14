@@ -270,6 +270,27 @@ services:
       postgres: { condition: service_healthy }
       garage: { condition: service_healthy }
 
+  # The apps' relay: what an app's network has in place of Postgres and the object store (design review ISO-2). The
+  # app runner joins it to the network of each app that asks for a database or a bucket, as `postgres` and `garage`.
+  # It lets only an app's own login (app_<id>) on to Postgres, never the platform's superuser or a service's, and
+  # relays only the object store's S3 API, never its admin API. Postgres and Garage themselves join no app's network.
+  app-relay:
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: unless-stopped
+    command: ["node", "dist/relay-run.js"]
+    environment:
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(5432, '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      postgres: { condition: service_healthy }
+      garage: { condition: service_healthy }
+
   # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it. Moving to a
   # new minor migrates Keycloak's database on its first start, which can't be undone: take a backup
   # first (docs/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
@@ -737,7 +758,7 @@ services:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro
     networks: [default, docker, telemetry]
-    depends_on: [docker-proxy, registry]
+    depends_on: [docker-proxy, registry, app-relay]
 
   # The Docker API, for the updater only, without the parts it doesn't need (swarm, secrets, builds, plugins).
   docker-proxy:

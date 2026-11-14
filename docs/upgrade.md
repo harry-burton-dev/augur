@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Apps reach the stores only through a relay
+
+**From** unreleased
+
+Nothing to do. A new container, `app-relay`, now stands in for Postgres and the object store on each app's network: it lets only the app's own login on to Postgres, never the platform's superuser or a service's, and passes on only the object store's S3 API, never its admin API. The app runner takes Postgres and Garage themselves off the apps' networks on its next turn, and the apps' parts keep the same addresses (`postgres`, `garage`), so nothing restarts. If `pc ps` shows `app-relay` as unhealthy, apps that keep data can't reach it: `pc logs app-relay` says why. An app installed before contract 3 is still on the platform's network until it's replaced.
+
 ### Only AUGUR's own apps load into the shell's page
 
 **From** unreleased

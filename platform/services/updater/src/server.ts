@@ -10,7 +10,7 @@ import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { parseRef, pullArtifactLayer, type ArtifactAuth } from './oci.ts';
 import { partsFor } from './parts.ts';
-import type { AppHost, PlatformPart, RunnerState } from './runner.ts';
+import { ALIASES, NEVER_ON_APP_NETWORKS, type AppHost, type PlatformPart, type RunnerState } from './runner.ts';
 
 /** The apps' Compose project, as the runner runs it. */
 const APPS_PROJECT = 'augur-apps';
@@ -482,8 +482,8 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
       // The platform's parts are the containers of the updater's own Compose project, by service.
       const project = wants.length ? (await docker(['container', 'inspect', '--format', '{{index .Config.Labels "com.docker.compose.project"}}', self])).trim() : '';
       if (wants.length && !project) throw new Error('The app runner can’t tell which Compose project AUGUR runs as, so it can’t join the gateway to an app’s network: run the updater with docker compose.');
-      const found = new Map<PlatformPart, string[]>();
-      const containersOf = async (part: PlatformPart) => {
+      const found = new Map<string, string[]>();
+      const containersOf = async (part: PlatformPart | (typeof NEVER_ON_APP_NETWORKS)[number]) => {
         if (!found.has(part))
           found.set(part, lines(await docker(['ps', '--no-trunc', '--filter', `label=com.docker.compose.project=${project}`, '--filter', `label=com.docker.compose.service=${part}`, '--format', '{{.ID}}'])));
         return found.get(part)!;
@@ -506,7 +506,11 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
           const on = new Set(await membersOf(want.name));
           // The runner sees parts' health on the app's own network; its way out is the parts' alone.
           const joins: [string, string[]][] = want.internet ? [] : [[self, []]];
-          for (const part of want.join) for (const id of await containersOf(part)) joins.push([id, ['--alias', part]]);
+          for (const part of want.join) for (const id of await containersOf(part)) joins.push([id, ALIASES[part].flatMap((a) => ['--alias', a])]);
+          // Postgres and the object store themselves were on apps' networks before the relay: they leave (ISO-2).
+          if (!want.internet)
+            for (const part of NEVER_ON_APP_NETWORKS)
+              for (const id of await containersOf(part)) if (on.has(id)) await attempt(`taking ${part} off ${want.name}`, () => docker(['network', 'disconnect', '--force', want.name, id]));
           if (want.internet) {
             // The parts it's for, as they run: joined without a restart, and anything else on it taken off.
             const members = new Set<string>();
