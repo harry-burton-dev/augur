@@ -17,10 +17,11 @@ const FROM = /^\*\*From\*\* (unreleased|augur@(\d+\.\d+\.\d+))(?:\s|$)/;
 export function notesOf(markdown) {
   const lines = markdown.split('\n');
   const notes = [];
-  let fenced = false;
+  let fence; // the open code block's marker, ``` or ~~~
   for (let i = 0; i < lines.length; i++) {
-    if (/^\s*```/.test(lines[i])) fenced = !fenced;
-    if (fenced || !lines[i].startsWith('## ')) continue;
+    const marker = /^\s*(```|~~~)/.exec(lines[i])?.[1];
+    if (marker) fence = fence === undefined ? marker : fence === marker ? undefined : fence;
+    if (fence || !lines[i].startsWith('## ')) continue;
     let j = i + 1;
     while (j < lines.length && lines[j].trim() === '') j++;
     const m = FROM.exec(lines[j] ?? '');

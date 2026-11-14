@@ -8,23 +8,36 @@ sidebar:
 ---
 
 A deployment finds new releases of AUGUR and of apps in a **release feed** that AUGUR's Feed workflow keeps beside
-its images, `ghcr.io/harry-burton-dev/im-platform/feed`. The registry reads it (Deployment, **Check now**) and the
+its images, `ghcr.io/harry-burton-dev/im-platform/feed`. The registry reads it (Deployment, **Check for updates**) and the
 updater pulls what it names. A server that can't reach GitHub reads a mirror in your own registry instead
 ([Mirroring releases](https://github.com/harry-burton-dev/augur/blob/main/docs/mirror.md)).
 
 ## The release feed
 
 - `RELEASE_FEED_URL` points the registry at another feed, such as a mirror's, or `off` to check nothing.
-- Which releases a server is offered (stable, beta or dev) follows its ring, `SERVER_RING`, unless
-  `RELEASE_CHANNEL` says otherwise.
+- Which releases a server is offered follows its ring, `SERVER_RING`: the workbench takes dev builds, a preview
+  server beta releases, and a production server stable ones. `RELEASE_CHANNEL` can choose another, within what
+  the ring allows: a production server only ever follows stable releases, and only the workbench takes dev
+  builds. Deployment says when it ignored `RELEASE_CHANNEL`, and why.
 
 ## The read key
 
 While AUGUR's packages are private, a deployment needs one **read key**: a GitHub token that can read the
 packages and nothing else. With it, the registry checks the feed and the updater pulls images. Give each
 deployment its own key, so you can take one away without touching the others. Keys belong to a GitHub account, so
-use one that can do nothing but read: a separate account for deployments, with two-factor authentication on, and
-**Read** on each of AUGUR's packages.
+use one that can do nothing but read: a separate account for deployments, made with its own email address.
+
+Once, in GitHub:
+
+1. Sign up for the deployments' account and turn on two-factor authentication for it.
+2. As the owner of AUGUR's packages, give that account **Read** on each one: open **Packages** on your profile,
+   then for each package (the feed, each service, the updater and each app) choose **Package settings → Manage
+   access → Invite** and add the account with the **Read** role. A package made later, such as a new app's,
+   needs the same once, after its first release.
+
+   Don't add the account to the repository itself: on a repository owned by a personal account, every
+   collaborator can push. If the repository moves to an organisation, the **Read** role on the repository covers
+   every package that inherits its access.
 
 For each deployment:
 
@@ -40,7 +53,7 @@ For each deployment:
    ```
    and in `.env`, `GITHUB_READ_USER=<the account>`. `docker login` is for pulling by hand (`pc pull`); the
    updater signs itself in with the same key.
-3. Run `pc up -d registry updater`, then **Check now** in Deployment. It lists releases, or says the key was
+3. Run `pc up -d registry updater`, then **Check for updates** in Deployment. It lists releases, or says the key was
    refused and why.
 
 To take a deployment's access away, delete its token in the account's **Settings → Developer settings → Personal

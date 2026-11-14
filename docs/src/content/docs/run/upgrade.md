@@ -9,7 +9,7 @@ sidebar:
 
 Most upgrades start from **Deployment** (`/upgrades`), which shows whether a newer release is out, what changes
 in each part, and a **Needs you first** list: a release you have to go through first, settings to add, breaking
-changes, and apps that won't open on the new SDK. The registry checks once a day; **Check now** checks straight
+changes, and apps that won't open on the new SDK. The registry checks once a day; **Check for updates** checks straight
 away.
 
 **Upgrade to …** on that page asks the deployment's [updater](../updater/) to do the steps below for you: it asks
@@ -110,7 +110,8 @@ By hand, code and data are separate, so going back is two steps, and the second 
 migrated data:
 
 1. **Code**: the same steps with the version you noted. Unpack its deploy bundle (or
-   `git checkout augur@<it>`), set `PLATFORM_VERSION` back, and run `pc up -d --remove-orphans`. The old images
+   `git checkout augur@<it>`; a release from before deploy bundles has its files in its tag's source archive, as
+   in [Install AUGUR, step 1](../install/#1-get-the-release)), set `PLATFORM_VERSION` back, and run `pc up -d --remove-orphans`. The old images
    are still on the server, so nothing is downloaded.
 2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading,
    as in [Backups](../backups/#restore-the-database-from-a-backup). Anything changed since that backup is lost,

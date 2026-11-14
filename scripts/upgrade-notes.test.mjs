@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { notesOf, problems, stamp } from './upgrade-notes.mjs';
 
-const doc = (...notes) => `---\ntitle: Upgrade notes\n---\n\nIntro.\n\n${notes.join('\n\n')}\n\n\`\`\`sh\n## not a note, in a code block\n\`\`\`\n`;
+const doc = (...notes) => `---\ntitle: Upgrade notes\n---\n\nIntro.\n\n${notes.join('\n\n')}\n\n\`\`\`sh\n## not a note, in a code block\n~~~\n## nor this\n\`\`\`\n\n~~~\n## nor this, in a tilde block\n~~~\n`;
 
 test('every note names the release it came in, or unreleased', () => {
   const text = doc('## New\n\n**From** unreleased\n\nDo this.', '## Old\n\n**From** augur@0.15.0 · Check\n\nThat.');

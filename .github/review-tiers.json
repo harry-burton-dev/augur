@@ -53,6 +53,9 @@
     "CLAUDE.md",
     "docs/src/content/docs/release-notes/upgrade-notes.md",
     "docs/src/content/docs/run/upgrade.md",
+    "docs/src/content/docs/run/updater.md",
+    "docs/src/content/docs/run/app-runner.md",
+    "docs/src/content/docs/run/releases.md",
     "docs/release-channels.md",
     "docs/deploy*"
   ],

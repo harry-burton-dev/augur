@@ -15,8 +15,8 @@ then Deployment's Reporting section, under **Worth knowing**, says it isn't set 
 1. Add the deployment to Backstage's `org/deployments.yaml`, if it isn't there, and note its `metadata.name`.
 2. In `.env`, set `DEPLOYMENT_ID` to that name and `PORTAL_URL` to Backstage's address. Then
    `docker compose up -d registry`.
-3. In Deployment's Reporting section, **Copy key**, and paste it into the annotation `augur.dev/report-key` on
-   that entry. Let Backstage read its catalogue again.
+3. In Deployment's Reporting section, select the **Public key** field to copy it, and paste it into the annotation
+   `augur.dev/report-key` on that entry. Let Backstage read its catalogue again.
 
 Backstage refuses a record from a deployment it doesn't list, or one not signed with the key it lists.
 

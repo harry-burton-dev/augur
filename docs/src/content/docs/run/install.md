@@ -207,8 +207,8 @@ exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
 1. **Report to Backstage**
    ([Report to Backstage](../reporting/)):
    set `DEPLOYMENT_ID` to the deployment's name in `org/deployments.yaml` and `PORTAL_URL` to Backstage's
-   address, then `pc up -d registry`. Copy the deployment's key (**Copy key** in Deployment's Reporting
-   section) into the entry's `augur.dev/report-key` annotation. Within 15 minutes Backstage shows the
+   address, then `pc up -d registry`. Copy the deployment's key (the **Public key** field in Deployment's
+   Reporting section) into the entry's `augur.dev/report-key` annotation. Within 15 minutes Backstage shows the
    deployment, and from then it raises the alarm when a report is more than 30 minutes late, so it notices
    when the whole server is down.
 2. **Prove the alert path**

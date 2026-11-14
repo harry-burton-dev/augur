@@ -16,6 +16,7 @@ test('a change to docs, tests and changesets is Low', () => {
 
 test('AGENTS.md and the upgrade notes are never Low', () => {
   assert.equal(tierOf(['AGENTS.md'], tiers).tier, 'Medium');
+  assert.equal(tierOf(['docs/src/content/docs/run/app-runner.md'], tiers).tier, 'Medium');
   assert.equal(tierOf(['docs/src/content/docs/release-notes/upgrade-notes.md'], tiers).tier, 'Medium');
 });
 
