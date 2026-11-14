@@ -52,7 +52,7 @@ Run each from the folder that holds `deployments/`, or pass `--dir <folder>`:
 | --- | --- |
 | `pnpm augurctl check` | Checks every file against the schema and AUGUR's settings. |
 | `pnpm augurctl init <name>` | Makes the secrets file: a random value for each secret AUGUR can make up, encrypted with sops for the keys your `.sops.yaml` names. Add the ones only you know (`TS_AUTHKEY`, `PLATFORM_ADMIN_PASSWORD`) with `sops <file>`. It never replaces a secrets file. |
-| `pnpm augurctl plan <name>` | Lists how the server differs from its file: its settings, its release and ring, its apps, and, for each secret, only whether it matches. It exits 0 when nothing differs and 2 when something does. |
+| `pnpm augurctl plan <name>` | Lists how the server differs from its file: its settings, its release and ring, its apps, and, for each secret, only whether it matches. It reads the server's `.env` over ssh to compare, and keeps it in memory only. It exits 0 when nothing differs and 2 when something does. |
 | `pnpm augurctl status [<name>...]` | One line per server: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. |
 | `pnpm augurctl up <name>` | Installs a new server: fetches the release's [deploy bundle](../install/#1-get-the-release) and checks its signature here, sends it to the server and checks its sums there, makes `.env` from the file and its secrets, and starts AUGUR once the preflight passes. If the preflight stops it, fix what it says and run `up` again. It stops if the server has a `.env` already. |
 
