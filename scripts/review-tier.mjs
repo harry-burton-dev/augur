@@ -86,9 +86,21 @@ const diffAgainst = (base) => {
   return { paths, lines };
 };
 
+/**
+ * The tiers as the base branch has them, so a pull request can't loosen the rules it is checked by (a change
+ * to the tiers file is itself High and waits for Harry). Only where the base has no tiers file yet, the pull
+ * request that adds it, are its own used.
+ */
+const tiersAt = (base, file) => {
+  // Only a base without the file falls back; a missing base ref or a broken file there fails the check.
+  const there = execFileSync('git', ['ls-tree', '--name-only', `origin/${base}`, '--', file], { encoding: 'utf8' }).trim();
+  if (!there) return { tiers: JSON.parse(readFileSync(file, 'utf8')), from: 'this pull request (the base has no tiers file yet)' };
+  return { tiers: JSON.parse(execFileSync('git', ['show', `origin/${base}:${file}`], { encoding: 'utf8' })), from: base };
+};
+
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { BASE_REF = 'main', PR_BODY = '', PR_LABELS = '[]', PR_BOT = '', EVENT = 'pull_request', TIERS_FILE = '.github/review-tiers.json', GITHUB_STEP_SUMMARY, GITHUB_OUTPUT } = process.env;
-  const tiers = JSON.parse(readFileSync(TIERS_FILE, 'utf8'));
+  const { tiers, from } = tiersAt(BASE_REF, TIERS_FILE);
   if (process.argv.includes('--deploy-test') && EVENT === 'workflow_dispatch') {
     // A run by hand runs everything.
     console.log('deploytest: true (run by hand)');
@@ -105,13 +117,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { tier, because } = tierOf(paths, tiers);
   const labels = JSON.parse(PR_LABELS).map((l) => (typeof l === 'string' ? l : l.name));
   const harry = tier === 'High' && needsHarry(paths, tiers);
-  // A bot's pull request (Renovate's dependency updates) has no description to check, so only Harry's ok is
+  // Renovate's pull request (dependency updates) has no description to check, so only Harry's ok is
   // asked of it, on his paths; CI and, where it applies, the deploy test are its other gates.
   const missing = PR_BOT === 'true' ? problems({ tier, labels, harry, bot: true }) : problems({ tier, body: PR_BODY, labels, lines, harry });
   const summary = [
     `### Review tier: ${tier}${harry ? ", waits for Harry's ok" : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
     '',
-    `${paths.length} files, ${lines} changed lines.`,
+    `${paths.length} files, ${lines} changed lines. Tiers from ${from}.`,
     because.length ? `\nBecause of:\n${because.slice(0, 20).map((p) => `- \`${p}\``).join('\n')}${because.length > 20 ? `\n- and ${because.length - 20} more` : ''}` : '',
     missing.length ? `\nStill needs:\n${missing.map((m) => `- ${m}`).join('\n')}` : '\nNothing missing for this tier.',
     '',

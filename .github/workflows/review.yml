@@ -1,23 +1,29 @@
 name: Review
-# A pull request's review tier, from the paths it changes (.github/review-tiers.json), and whether its
-# description carries what that tier needs: the sections, the pre-merge /code-review run and, on Harry's
-# paths, his ok as the harry-ok label (REVIEW.md). Its own workflow, like Attribution, so that editing the
-# description or adding the label checks it again without running CI. It installs nothing: seconds.
+# A pull request's review tier, from the paths it changes (.github/review-tiers.json, as the base branch has
+# it), and whether its description carries what that tier needs: the sections, the pre-merge /code-review run
+# and, on Harry's paths, his ok as the harry-ok label (REVIEW.md). Its own workflow, like Attribution, so that
+# editing the description or adding the label checks it again without running CI. It installs nothing: seconds.
 # AUGUR's other repositories call this one (workflow_call), each with its own review-tiers.json, so the
 # script lives once, here.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize, labeled, unlabeled]
   workflow_call:
+    inputs:
+      script-ref:
+        description: The augur commit to take the tier script from; the same one the caller pins this workflow at.
+        type: string
+        default: main
 permissions:
   contents: read
-  # To take Harry's ok off when new commits change the pull request after it. A repository that calls this
-  # workflow grants the same to its caller job.
+  # To record what Harry said ok to, and take his ok off when the change is no longer that. A repository that
+  # calls this workflow grants the same to its caller job.
   pull-requests: write
-# Not cancelled by a newer run: a push's run must finish taking Harry's ok off, even when an edit follows it.
+# Every run checks the pull request as it is when it runs, whatever ran before it, so a newer run may cancel
+# an older one.
 concurrency:
   group: review-${{ github.repository }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   tier:
     # The Version packages pull request is the release itself: its contents were each reviewed as they merged.
@@ -27,40 +33,61 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - name: The tier script, from AUGUR's main
+      - name: The tier script, from AUGUR
         if: github.repository != 'harry-burton-dev/augur'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: harry-burton-dev/augur
-          ref: main
+          ref: ${{ inputs.script-ref || 'main' }}
           path: .augur-review
           sparse-checkout: scripts/review-tier.mjs
           sparse-checkout-cone-mode: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-      # Harry's ok is for the change he was asked about. A push that changes the pull request's own diff takes
-      # it off, and he is asked again; bringing the branch up to date with its base (same patch) doesn't.
-      - name: A changed diff takes Harry's ok off
+      # Harry's ok is for the change he was asked about. When the label goes on, this records a fingerprint of
+      # the change as it is then, in a comment from github-actions[bot]. Any later run whose change has a
+      # different fingerprint takes the label off, and he is asked again. The fingerprint is the diff against
+      # where the branch left its base, with no context lines and no line numbers, whitespace kept: bringing
+      # the branch up to date with its base leaves it alone, and a change to one character (or a binary) doesn't.
+      # This catches mistakes, not a hostile pull request: a pull request's own workflows run with a token that
+      # can write the same comments (REVIEW.md).
+      - name: Harry's ok covers this change
         id: labels
         run: |
-          labels=$(jq -c . <<<"$PR_LABELS")
-          if [ "$ACTION" = synchronize ] && jq -e 'map(.name) | index("harry-ok")' <<<"$labels" >/dev/null; then
-            patch() { git diff "$(git merge-base "origin/$BASE" "$1")" "$1" | git patch-id --stable | cut -d' ' -f1; }
-            if [ "$(patch "$BEFORE" 2>/dev/null)" != "$(patch "$AFTER")" ]; then
-              gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/harry-ok" >/dev/null
-              labels=$(jq -c 'map(select(.name != "harry-ok"))' <<<"$labels")
+          fingerprint() {
+            git diff -U0 --no-color --binary "$(git merge-base "origin/$BASE" "$1")" "$1" \
+              | { grep -v '^index ' || true; } | sed -E 's/^@@ .*/@@/' | sha256sum | cut -c1-16
+          }
+          now=$(fingerprint "$HEAD")
+          labels=$(gh api "repos/$GH_REPO/issues/$PR/labels" --jq '[.[].name]')
+          if [ "$ACTION" = labeled ] && [ "$LABEL" = harry-ok ]; then
+            if gh api "repos/$GH_REPO/issues/$PR/comments" -f body="<!-- harry-ok: $now -->
+          Harry's ok recorded for this change as it is at ${HEAD:0:7}. A push that changes it takes the harry-ok label off." >/dev/null; then
+              echo "Recorded Harry's ok for $now at $HEAD."
+            else
+              labels=$(jq -c 'map(select(. != "harry-ok"))' <<<"$labels")
+              echo "::warning::Couldn't record Harry's ok (a read-only token?), so it doesn't count yet."
+            fi
+          elif jq -e 'index("harry-ok")' <<<"$labels" >/dev/null; then
+            okd=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
+              --jq '.[] | select(.user.login == "github-actions[bot]") | .body | capture("<!-- harry-ok: (?<fp>[0-9a-f]+) -->").fp' | tail -1)
+            if [ -z "$okd" ]; then
+              labels=$(jq -c 'map(select(. != "harry-ok"))' <<<"$labels")
+              echo "::warning::The harry-ok label has no recorded change behind it (added before the record existed, or its run was cancelled or couldn't write). Take it off and add it again."
+            elif [ "$okd" != "$now" ]; then
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/harry-ok" >/dev/null || echo "::warning::Couldn't take the label off (a read-only token): this check stays red instead."
+              labels=$(jq -c 'map(select(. != "harry-ok"))' <<<"$labels")
               echo "::warning::The change is different from the one Harry said ok to: the harry-ok label is off until he says ok again."
             fi
           fi
           echo "labels=$labels" >> "$GITHUB_OUTPUT"
         env:
           ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
           BASE: ${{ github.base_ref }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.event.after }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
           PR: ${{ github.event.pull_request.number }}
-          PR_LABELS: ${{ toJSON(github.event.pull_request.labels) }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
       - run: node "${SCRIPT_DIR}/scripts/review-tier.mjs"
@@ -69,4 +96,5 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS: ${{ steps.labels.outputs.labels }}
-          PR_BOT: ${{ github.event.pull_request.user.type == 'Bot' }}
+          # Only Renovate's pull requests are taken as a bot's; any other app's are checked like a person's.
+          PR_BOT: ${{ github.event.pull_request.user.login == 'renovate[bot]' }}
