@@ -92,6 +92,15 @@ const grantOf = (r: GrantRow): Grant => ({
 export class PgGrantStore implements GrantStore {
   constructor(private readonly pool: pg.Pool) {}
 
+  /** Resolves once the database answers: the service's readiness check. */
+  async ping() {
+    await this.pool.query('select 1');
+  }
+
+  close() {
+    return this.pool.end();
+  }
+
   static async connect(connectionString: string) {
     const store = new PgGrantStore(steadyPool(new pg.Pool({ connectionString })));
     await runMigrations(store.pool, { schema: 'permissions', migrations });

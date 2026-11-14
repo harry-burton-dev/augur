@@ -1223,6 +1223,21 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },
+    "SHUTDOWN_GRACE_SECONDS": {
+      "type": "string",
+      "description": "How long a stopping service lets its calls in flight finish before it cuts what is still open (at most 23, so it still closes and sends its telemetry within the services' stop_grace_period of 30 seconds).",
+      "default": "20",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
     "DATABASE_STATEMENT_TIMEOUT_SECONDS": {
       "type": "string",
       "description": "How long one database query may run before Postgres cancels it (0 for no limit; migrations are never limited).",

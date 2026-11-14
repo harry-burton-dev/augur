@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, followEvents, loadConfigOrExit, platformCredentialsFromEnv, recordAudit, serviceVerifierFromEnv, startupLog, type NewAuditEntry } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, followEvents, loadConfigOrExit, platformCredentialsFromEnv, recordAudit, serviceVerifierFromEnv, startupLog, type NewAuditEntry, serve } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { cascade, PgGrantStore } from './grants.ts';
 import { loadModel, OpenFga, type CheckKey } from './openfga.ts';
@@ -73,10 +73,12 @@ const copy = keepProjecting(
 );
 
 // Only what happens from now: the copy at start already has everything before it.
+// What runs in the background, to stop before the pools close.
+const background: Array<() => void> = [() => copy.stop()];
 if (credentials) {
   const since = new Date().toISOString();
   let place: string | undefined;
-  followEvents({
+  const following = followEvents({
     eventsUrl: process.env.EVENTS_URL!,
     credentials,
     topics: COPY_TOPICS,
@@ -86,7 +88,9 @@ if (credentials) {
       if (event.at >= since) copy.request();
     },
     onError: (err) => log.warn(`identity’s changes couldn’t be heard, so they wait for the next whole copy: ${(err as Error).message}`),
-  }).start();
+  });
+  following.start();
+  background.push(() => following.stop());
 }
 
 const minutes = (name: string, fallback: number) => Math.max(1, Math.floor(Number(process.env[name]) || fallback));
@@ -110,4 +114,16 @@ const app = await buildApp({
   sessionLimits,
   ...(audit ? { audit } : {}),
 });
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, {
+  port,
+  ready: [
+    { name: 'database', check: () => grants.ping() },
+    {
+      name: 'OpenFGA',
+      check: async () => {
+        if (!(await engine.healthy())) throw new Error('OpenFGA isn’t answering');
+      },
+    },
+  ],
+  close: [...background, () => grants.close(), () => sessions.close()],
+});

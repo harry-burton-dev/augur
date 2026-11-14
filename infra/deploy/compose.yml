@@ -42,10 +42,14 @@ x-telemetry: &telemetry
   SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
   # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
   DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
+  # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
+  SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
 
 x-service: &service
   <<: *hardened
   restart: unless-stopped
+  # Long enough for a stopping service to finish its calls in flight (SHUTDOWN_GRACE_SECONDS) and send its telemetry.
+  stop_grace_period: 30s
   # The compose network, and the telemetry network its traces, metrics and logs go out on (networks, below).
   networks: [default, telemetry]
   environment: &env
@@ -374,8 +378,9 @@ services:
     logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/gateway:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
+    stop_grace_period: 30s
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -437,7 +442,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/identity:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -469,7 +474,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/registry:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -527,7 +532,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/events:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -563,7 +568,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/models:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8085/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8085/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -612,7 +617,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/knowledge:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8086/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8086/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -676,7 +681,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/permissions:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3

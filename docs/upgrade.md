@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Services wait for their database, and stop cleanly
+
+**From** unreleased
+
+Nothing to do unless you changed the services' healthchecks in your own compose override. Each AUGUR service's healthcheck now asks `/readyz`, which answers only while its database answers, so `pc ps` shows a service as `unhealthy` while it can't reach Postgres. A stopping service now finishes its calls in flight, for up to `SHUTDOWN_GRACE_SECONDS` (20, at most 23), and Docker waits up to 30 seconds for it, so `pc down` and an upgrade can take a few seconds longer ([Limits and health](src/content/docs/run/limits.md#logs-memory-and-health)).
+
 ### Home is the desktop, behind one logo button
 
 **From** augur@0.26.0

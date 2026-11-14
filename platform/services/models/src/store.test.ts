@@ -56,6 +56,13 @@ describe.runIf(process.env.DATABASE_URL)('PgModelStore', () => {
     },
   );
 
+  it('answers its readiness check while the database does', async () => {
+    await expect(store.ping()).resolves.toBeUndefined();
+    const gone = await PgModelStore.connect(process.env.DATABASE_URL!);
+    await gone.close();
+    await expect(gone.ping()).rejects.toThrow();
+  });
+
   it('never lets two calls at once take the last one', async () => {
     await admin.query('truncate models.usage');
     const taken = await Promise.all(Array.from({ length: 10 }, () => store.take('library', '2026-10-25', 3)));
