@@ -11,6 +11,7 @@
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev --parallel",
+    "augurctl": "node scripts/augurctl/augurctl.mjs",
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "register-app": "node scripts/register-app.mjs",
     "check:versions": "node scripts/versions.mjs check",
