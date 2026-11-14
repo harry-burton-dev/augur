@@ -38,8 +38,8 @@ shadow week (PER-438):
 
 - **Harry's ok** only on migrations, backups and Postgres, the release path and its workflows, the updater,
   sign-in and permissions, and these rules; and on any workflow or local action that gains privilege (adds
-  `permissions:`, a `write` scope, `secrets`, `id-token` or `pull_request_target`, or takes away a `permissions:`
-  block or a `read` scope) or uses an action no workflow used before.
+  `permissions:`, a `write` scope, `secrets`, `id-token`, a `pull_request_target`, `workflow_run` or
+  `issue_comment` trigger or a `docker://` step, or takes away a `permissions:` block or a `read` scope) or uses an action no workflow used before.
 - **High without his ok** for the rest of today's High paths: the deploy test, the description's sections and
   the `/code-review` run are their gates, and they merge on green.
 - **Not counted:** generated files (`notCount`: the migrations lock, `release/kit.json`, the pnpm lockfile)

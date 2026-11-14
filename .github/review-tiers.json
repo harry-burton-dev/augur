@@ -183,8 +183,8 @@
           ".github/workflows/**",
           ".github/actions/**"
         ],
-        "added": "^\\s*permissions:|: *write\\b|\\bsecrets\\b|id-token|pull_request_target",
-        "why": "gives a workflow more privilege"
+        "added": "^\\s*permissions:|: *write\\b|\\bsecrets\\b|id-token|pull_request_target|workflow_run|issue_comment|uses:\\s*['\"]?docker://",
+        "why": "gives a workflow more privilege or a riskier trigger"
       },
       {
         "paths": [
