@@ -83,18 +83,33 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The release's own deploy files, as a server that checked out its tag has them.
-      - name: Check out the release
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      # The release's own deploy files, as a server installed from its signed deploy bundle has them, with no
+      # checkout of the release. A release from before bundles is tested from its tag's files instead.
+      - name: Get the release's deploy bundle
+        id: bundle
         run: |
-          git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
-          git checkout -q "augur@$TO"
-          # The test script and Trivy's exceptions are this workflow's, so an older release is tested the same way.
-          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-browser-check.mjs .trivyignore
+          status=0
+          infra/deploy-bundle.sh "$TO" "$RUNNER_TEMP/release" || status=$?
+          if [ "$status" = 0 ]; then
+            echo "dir=$RUNNER_TEMP/release/infra/deploy" >> "$GITHUB_OUTPUT"
+          elif [ "$status" = 3 ]; then
+            echo "::notice::augur@$TO has no deploy bundle, so its tag's files are tested."
+            git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
+            git checkout -q "augur@$TO"
+            # The test scripts and Trivy's exceptions are this workflow's, so an older release is tested the same way.
+            git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-bundle.sh infra/deploy-browser-check.mjs .trivyignore
+          else
+            exit "$status"
+          fi
         env:
           TO: ${{ needs.releases.outputs.to }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
       - name: A fresh server
         run: infra/deploy-test.sh fresh
         env:
+          DEPLOY_DIR: ${{ steps.bundle.outputs.dir }}
           LOCAL_TAG: ${{ needs.releases.outputs.to }}
           BROWSER_CHECK_OUT: ${{ runner.temp }}/browser-check
           IMAGES_OUT: ${{ runner.temp }}/images.txt
@@ -128,6 +143,10 @@ jobs:
         run: infra/deploy-test.sh upgrade "$FROM"
         env:
           FROM: ${{ needs.releases.outputs.from }}
+          DEPLOY_DIR: ${{ steps.bundle.outputs.dir }}
+          # The release before is started from its own deploy bundle, where it has one.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           LOCAL_TAG: ${{ needs.releases.outputs.to }}
   # Builds Starter while the deploy test's first steps run. Only this job pushes packages and signs.
   starter:
@@ -229,15 +248,29 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The release's own deploy files, as a server that checked out its tag has them.
-      - name: Check out the release
+      - uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
+      # The release's own deploy files, as a server installed from its signed deploy bundle has them, with no
+      # checkout of the release. A release from before bundles is tested from its tag's files instead.
+      - name: Get the release's deploy bundle
+        id: bundle
         run: |
-          git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
-          git checkout -q "augur@$TO"
-          # The test script and Trivy's exceptions are this workflow's, so an older release is tested the same way.
-          git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-browser-check.mjs .trivyignore
+          status=0
+          infra/deploy-bundle.sh "$TO" "$RUNNER_TEMP/release" || status=$?
+          if [ "$status" = 0 ]; then
+            echo "dir=$RUNNER_TEMP/release/infra/deploy" >> "$GITHUB_OUTPUT"
+          elif [ "$status" = 3 ]; then
+            echo "::notice::augur@$TO has no deploy bundle, so its tag's files are tested."
+            git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
+            git checkout -q "augur@$TO"
+            # The test scripts and Trivy's exceptions are this workflow's, so an older release is tested the same way.
+            git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-bundle.sh infra/deploy-browser-check.mjs .trivyignore
+          else
+            exit "$status"
+          fi
         env:
           TO: ${{ needs.releases.outputs.to }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
       - if: ${{ needs.starter.outputs.built == 'true' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -249,6 +282,7 @@ jobs:
       - name: Broken on purpose, seen by the updater
         run: infra/deploy-test.sh broken
         env:
+          DEPLOY_DIR: ${{ steps.bundle.outputs.dir }}
           LOCAL_TAG: ${{ needs.releases.outputs.to }}
           # Its own project and port, should a machine run both test jobs at once.
           PROJECT: augur-deploy-test-broken

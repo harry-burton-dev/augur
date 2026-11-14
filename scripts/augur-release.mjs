@@ -26,10 +26,11 @@
 // compares: the name is only shown beside it.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import semver from 'semver';
 import { NOTES_FILE, stamp } from './upgrade-notes.mjs';
 
@@ -246,6 +247,42 @@ export const deployFiles = (tracked) =>
       .map((path) => [path.slice(DEPLOY_DIR.length + 1), createHash('sha256').update(readFileSync(join(root, path))).digest('hex')]),
   );
 
+/**
+ * The deploy bundle: what a server installs and upgrades from instead of a git checkout. It holds the
+ * files a server runs as a checkout has them (infra/deploy, the preflight and the release file), so every
+ * command in the docs works the same from either, and a SHA256SUMS of all of them (`sha256sum -c`), whose
+ * infra/deploy lines match the release file's `deploy` map. The build overlay isn't in it: it needs the source.
+ */
+export const bundleName = (version) => `augur-deploy-${version}.tar.gz`;
+const PREFLIGHT = 'scripts/preflight.mjs';
+export const bundleFiles = (tracked) =>
+  tracked.filter((path) => (path.startsWith(`${DEPLOY_DIR}/`) && path !== `${DEPLOY_DIR}/compose.build.yml`) || path === PREFLIGHT).sort();
+
+/** Writes the bundle to `out`: `tracked` read from `from`, with `release` (the published release file's text) as its RELEASE_FILE. */
+export const writeBundle = ({ tracked, release, out, from = root }) => {
+  const stage = mkdtempSync(join(tmpdir(), 'augur-bundle-'));
+  try {
+    const files = [...bundleFiles(tracked), RELEASE_FILE].sort();
+    const sums = [];
+    for (const path of files) {
+      const target = join(stage, path);
+      mkdirSync(dirname(target), { recursive: true });
+      const body = path === RELEASE_FILE ? Buffer.from(release) : readFileSync(join(from, path));
+      writeFileSync(target, body);
+      // Scripts keep their execute bit, as a checkout has it.
+      if (path !== RELEASE_FILE) chmodSync(target, statSync(join(from, path)).mode & 0o777);
+      sums.push(`${createHash('sha256').update(body).digest('hex')}  ${path}`);
+    }
+    writeFileSync(join(stage, 'SHA256SUMS'), `${sums.join('\n')}\n`);
+    // The same files make the same bundle: sorted, owned by root, dated at the epoch, and gzip without a timestamp.
+    const tar = execFileSync('tar', ['--sort=name', '--owner=0', '--group=0', '--numeric-owner', '--mtime=@0', '-C', stage, '-cf', '-', 'SHA256SUMS', ...new Set(files.map((p) => p.split('/')[0]))], { maxBuffer: 1 << 28 });
+    writeFileSync(out, gzipSync(tar, { level: 9 }));
+    return out;
+  } finally {
+    rmSync(stage, { recursive: true, force: true });
+  }
+};
+
 /** The registry's copy of the release it ships in: Admin's Updates page compares the feed with it. */
 export const versionModule = (release) =>
   `// Written by scripts/augur-release.mjs from ${RELEASE_FILE}; don't edit by hand.\n\n` +
@@ -294,7 +331,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, check out \`augur@${release.version}\` for the deploy files, then pull and start: [docs/upgrade.md](../../blob/HEAD/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: unpack \`${bundleName(release.version)}\` from this release over the server's folder, set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, then pull and start: [docs/upgrade.md](../../blob/HEAD/docs/upgrade.md).`);
   return lines.join('\n');
 };
 
@@ -360,6 +397,9 @@ const main = () => {
     // Each changed part's changelog for its new version, which Admin → Upgrade Centre shows (registry's changes.ts).
     const changelogs = previous.channel === 'dev' ? previous.changelogs ?? {} : Object.fromEntries(previous.changed.map((name) => [name, changelogFor(parts[name]?.path ?? '', previous.parts[name].version)]).filter(([, text]) => text));
     writeFileSync(asset, `${JSON.stringify({ ...previous, images, deploy, changelogs }, null, 2)}\n`);
+    // The deploy bundle, signed keyless as this workflow like the images, so a server can check where it came from.
+    const bundle = writeBundle({ tracked: git('ls-files').split('\n'), release: readFileSync(asset, 'utf8'), out: join(dir, bundleName(previous.version)) });
+    execFileSync('cosign', ['sign-blob', '--yes', '--bundle', `${bundle}.sigstore.json`, bundle], { stdio: ['ignore', 'ignore', 'inherit'] });
     const pending = pendingDeployTest({ version: previous.version, channel: previous.channel, run: process.env.GITHUB_RUN_ID, at: new Date().toISOString() });
     const testFile = join(dir, 'deploy-test.json');
     if (pending) writeFileSync(testFile, `${JSON.stringify(pending, null, 2)}\n`);
@@ -369,7 +409,7 @@ const main = () => {
     // (scripts/promote.mjs); only then may it be the latest. A dev build always is one.
     execFileSync(
       'gh',
-      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${titleOf(previous)}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, '--prerelease', asset, ...(pending ? [testFile] : [])],
+      ['release', 'create', tag, '--target', git('rev-parse', 'HEAD'), '--title', `AUGUR ${titleOf(previous)}${previous.channel === 'beta' ? ' (beta)' : previous.channel === 'dev' ? ' (dev build)' : ''}`, '--notes-file', notesFile, '--prerelease', asset, bundle, `${bundle}.sigstore.json`, ...(pending ? [testFile] : [])],
       { cwd: root, stdio: 'inherit' },
     );
     console.log(`Released ${tag}.`);

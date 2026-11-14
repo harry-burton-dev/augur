@@ -42,8 +42,10 @@ Everything after that moment is gone from the live database, though the current 
 `infra/deploy/backups/` first. Times are UTC.
 
 ```sh
+# Docker names the volumes after the Compose project: platform unless .env names another.
+project=$(pc config | sed -n 's/^name: //p'); : "${project:?pc config named no project}"
 pc stop                            # everything, Postgres too
-pc run --rm --no-deps -v platform_pgdata:/pgdata --entrypoint /bin/sh backup \
+pc run --rm --no-deps -v "${project}_pgdata:/pgdata" --entrypoint /bin/sh backup \
   /backup/restore-to-time.sh "2026-11-05 10:30:00"
 pc up -d postgres
 pc logs -f postgres                # wait for "archive recovery complete"
