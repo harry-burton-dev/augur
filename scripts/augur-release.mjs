@@ -92,6 +92,13 @@ export const readSettings = () => {
   return { all, required };
 };
 
+/**
+ * The settings a server must add for this release: new ones, and ones it had as optional that it now needs. A setting
+ * that becomes required is listed with the new ones, so the Updates page and the release notes tell an admin of it.
+ */
+const toAdd = (previous, settings) =>
+  settings.all.filter((k) => !previous.settings.all.includes(k) || (settings.required.includes(k) && !(previous.settings.required ?? []).includes(k)));
+
 /** The release names, in the order they're taken. */
 export const readNames = () => (existsSync(join(root, NAMES_FILE)) ? readJson(NAMES_FILE).names : []);
 
@@ -125,7 +132,7 @@ export const nextRelease = (previous, parts, settings, today, names = []) => {
   if (!previous) {
     return { version: '0.1.0', ...(names[0] ? { name: names[0] } : {}), channel: 'beta', released: today, upgradeFrom: '>=0.1.0', changed: Object.keys(parts), breaking: [], settings: { ...settings, added: [], removed: [] }, parts: shape };
   }
-  const settingsAdded = settings.all.filter((k) => !previous.settings.all.includes(k));
+  const settingsAdded = toAdd(previous, settings);
   const settingsRemoved = previous.settings.all.filter((k) => !settings.all.includes(k));
   if (!changed.length && !breaking.length && !settingsAdded.length && !settingsRemoved.length) return previous;
 
@@ -208,7 +215,7 @@ export const devBuild = (previous, parts, settings, changesets, run, today) => {
     upgradeFrom: breaking.length ? `>=${previous.version}` : previous.upgradeFrom,
     changed,
     breaking,
-    settings: { ...settings, added: settings.all.filter((k) => !previous.settings.all.includes(k)), removed: previous.settings.all.filter((k) => !settings.all.includes(k)) },
+    settings: { ...settings, added: toAdd(previous, settings), removed: previous.settings.all.filter((k) => !settings.all.includes(k)) },
     parts: Object.fromEntries(Object.entries(parts).map(([name, { version }]) => [name, { version }])),
     changelogs,
   };
@@ -324,7 +331,7 @@ export const notes = (release, parts) => {
   const lines = [`AUGUR ${titleOf(release)} (${release.channel}).`, ''];
   if (release.upgradeFrom) lines.push(`Upgrades from AUGUR ${release.upgradeFrom.replace('>=', '')} or later.`, '');
   if (release.breaking.length) lines.push('### Breaking', '', ...release.breaking.map((b) => `- ${b}`), '');
-  if (release.settings.added.length) lines.push('### New settings', '', `Add to your \`.env\` before upgrading (see \`${ENV_EXAMPLE}\`). The updater makes up a required one ending in _SECRET, _PASSWORD or _TOKEN itself:`, '', ...release.settings.added.map((k) => `- \`${k}\`${release.settings.required.includes(k) ? ' (required)' : ''}`), '');
+  if (release.settings.added.length) lines.push('### New settings', '', `Add to your \`.env\` before upgrading (see \`${ENV_EXAMPLE}\`). The updater makes up a required one ending in _SECRET, _PASSWORD or _TOKEN, and CALLER_SIGNING_KEY, itself:`, '', ...release.settings.added.map((k) => `- \`${k}\`${release.settings.required.includes(k) ? ' (required)' : ''}`), '');
   if (release.settings.removed.length) lines.push('### Removed settings', '', ...release.settings.removed.map((k) => `- \`${k}\``), '');
   lines.push('### What changed', '');
   for (const name of release.changed) {

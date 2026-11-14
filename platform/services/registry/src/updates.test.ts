@@ -7,7 +7,7 @@ import { callerHeaders } from '@augur/service-kit';
 import { type AppRecord } from './store.ts';
 import { feedSigner, repoOfFeed, sameRepository } from './feed-trust.ts';
 import { defaultDesiredState } from './desired-state.ts';
-import { automaticDevUpgrade, automaticUpgrade, FeedProblem, follows, goBackTargets, historyEntry, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
+import { automaticDevUpgrade, automaticUpgrade, FeedProblem, follows, goBackTargets, historyEntry, madeUpSetting, releaseFeed, UpdateChecker, updatesView, type FeedRead, type FeedRelease, type ReleaseManifest } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 
 const db = registryDb();
@@ -255,6 +255,13 @@ describe('the release feed', () => {
     const after = await checker.check();
     expect(after.problem).toMatch(/502/);
     expect(after.releases.map((r) => r.version)).toEqual(['0.3.0']);
+  });
+});
+
+describe('settings the updater makes up', () => {
+  it('are long random strings: secrets, passwords, tokens and the caller signing key, never the admin’s password', () => {
+    expect(['SEARCH_CLIENT_SECRET', 'GRAFANA_ADMIN_PASSWORD', 'OPENFGA_TOKEN', 'CALLER_SIGNING_KEY'].every(madeUpSetting)).toBe(true);
+    expect(['PLATFORM_ADMIN_PASSWORD', 'CALLER_SIGNING_KEY_NEXT', 'PLATFORM_URL'].some(madeUpSetting)).toBe(false);
   });
 });
 

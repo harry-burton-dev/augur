@@ -221,6 +221,12 @@ export class BoundedMap<K, V> {
 }
 
 // @public
+export const BREAK_GLASS = "CALLER_BREAK_GLASS";
+
+// @public (undocumented)
+export const breakGlassFromEnv: (env?: NodeJS.ProcessEnv) => boolean;
+
+// @public
 export const bucketKeyIdFor: (secret: string) => string;
 
 // @public
@@ -255,6 +261,9 @@ export const CALLER_HEADERS: {
 
 // @public
 export const CALLER_ISSUER = "augur-gateway";
+
+// @public
+export const CALLER_KEYS_MAX_AGE_MS = 60000;
 
 // @public
 export const CALLER_KEYS_PATH = "/api/gateway/v1/caller-keys";
@@ -312,9 +321,9 @@ export interface CallerSigner {
 }
 
 // @public
-export const callerSigner: (seed?: string) => CallerSigner;
+export const callerSigner: (seed?: string, input?: SignerOptions) => CallerSigner;
 
-// @public (undocumented)
+// @public
 export const callerSignerFromEnv: (env?: NodeJS.ProcessEnv) => CallerSigner;
 
 // @public
@@ -1849,13 +1858,23 @@ export const signedCallerHeaders: (signer: CallerSigner, caller: Caller, audienc
 // Warning: (ae-forgotten-export) The symbol "HookReply" needs to be exported by the entry point index.d.ts
 //
 // @public
-export const signedCallers: (check: CallerCheck | undefined) => (req: HookRequest, reply: HookReply) => Promise<unknown>;
+export const signedCallers: (check: CallerCheck | undefined, input?: SignedCallersOptions) => (req: HookRequest, reply: HookReply) => Promise<unknown>;
+
+// @public (undocumented)
+export interface SignedCallersOptions {
+    breakGlass?: boolean;
+}
 
 // @public
 export const signedInCaller: (manifest: Pick<AppManifest, "name">) => (req: Pick<FastifyRequest, "headers">) => Caller;
 
 // @public
 export const signedInRecently: (caller: Pick<Caller, "signedInAt"> | undefined, withinMs: number, now?: number) => boolean;
+
+// @public (undocumented)
+export interface SignerOptions {
+    next?: string;
+}
 
 // @public (undocumented)
 export interface SignOptions {

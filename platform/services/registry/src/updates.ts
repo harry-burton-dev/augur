@@ -434,16 +434,17 @@ export interface ReleaseSummary {
 
 /**
  * A setting the updater makes up when a release needs it and the server hasn't got it: a long random
- * string, as infra/deploy/.env.example says of any whose name ends so (platform/services/updater).
+ * string, as infra/deploy/.env.example says of any whose name ends so, and the caller signing key, which
+ * is one (platform/services/updater).
  */
-export const madeUpSetting = (key: string) => /_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD';
+export const madeUpSetting = (key: string) => (/_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD') || key === 'CALLER_SIGNING_KEY';
 
 /**
  * Settings that say what this server trusts: what kind of server it is, whose signatures it takes, and where
  * its releases and images come from. They're set in .env on the server, never from the Upgrade Centre, so an
  * admin's session can't change them (ring.ts).
  */
-const TRUST_SETTINGS = new Set(['SERVER_RING', 'RELEASE_CHANNEL', 'ALLOW_PR_PREVIEWS', 'IMAGE_SIGNER', 'IMAGE_SIGNER_ISSUER', 'AUGUR_DEV_SIGNER', 'FEED_SIGNER', 'APP_PUBLISHERS', 'CALLER_SIGNING_KEY', 'RELEASE_FEED_URL', 'APP_FEED_URL', 'PIPELINE_FEED_URL', 'PLATFORM_IMAGES']);
+const TRUST_SETTINGS = new Set(['SERVER_RING', 'RELEASE_CHANNEL', 'ALLOW_PR_PREVIEWS', 'IMAGE_SIGNER', 'IMAGE_SIGNER_ISSUER', 'AUGUR_DEV_SIGNER', 'FEED_SIGNER', 'APP_PUBLISHERS', 'CALLER_SIGNING_KEY', 'CALLER_SIGNING_KEY_NEXT', 'CALLER_BREAK_GLASS', 'RELEASE_FEED_URL', 'APP_FEED_URL', 'PIPELINE_FEED_URL', 'PLATFORM_IMAGES']);
 
 /** Whether `key` is a setting only the server's own .env may change. */
 export const trustSetting = (key: string) => TRUST_SETTINGS.has(key);

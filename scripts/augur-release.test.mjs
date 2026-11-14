@@ -57,6 +57,15 @@ test('new and removed settings are listed, and a settings change alone is a rele
   assert.deepEqual(next.settings.removed, ['APP_ORIGINS']);
 });
 
+test('a setting that becomes required is listed as one to add, as a new one is', () => {
+  const next = after(first, { '@augur/registry': '0.3.0', '@augur/mfe-sdk': '1.1.0' }, { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL', 'APP_ORIGINS'] });
+  assert.equal(next.version, '0.1.1');
+  assert.deepEqual(next.settings.added, ['APP_ORIGINS']);
+  assert.deepEqual(next.settings.removed, []);
+  const build = devBuild(first, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL', 'APP_ORIGINS'] }, [], 4, '2026-10-30');
+  assert.deepEqual(build.settings.added, ['APP_ORIGINS']);
+});
+
 test('the registry is told which release it ships in', () => {
   assert.match(versionModule({ version: '0.4.0', channel: 'stable' }), /export const AUGUR_RELEASE = \{ version: '0\.4\.0', channel: 'stable' \} as const;/);
 });

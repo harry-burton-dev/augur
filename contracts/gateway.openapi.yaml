@@ -307,7 +307,7 @@ paths:
   /caller-keys:
     get:
       summary: The public key signed callers are checked with
-      description: A JSON Web Key Set with the gateway's Ed25519 key. No sign-in is needed. The key is new each time the gateway starts unless CALLER_SIGNING_KEY is set, so fetch it again when a token names a key id you don't have.
+      description: A JSON Web Key Set with the gateway's Ed25519 keys. No sign-in is needed. The first is the key callers are signed with (CALLER_SIGNING_KEY); while the key is being changed, the one that comes next (CALLER_SIGNING_KEY_NEXT) is listed after it. Fetch the set again when a token names a key id you don't have.
       responses:
         "200":
           description: The keys
