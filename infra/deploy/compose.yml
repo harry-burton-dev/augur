@@ -4,8 +4,10 @@
 #   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
 # Runs the images CI built for the platform release PLATFORM_VERSION. To build them from this
 # checkout instead, add -f infra/deploy/compose.build.yml (and --build).
-# Keeps the old codename: Docker names the data volumes after the project, so renaming it would start empty.
-name: platform
+# The project's name comes from COMPOSE_PROJECT_NAME in .env, for a deployment set up under another name.
+# It defaults to the old codename: Docker names the data volumes after the project, so renaming an existing
+# server's would start it empty.
+name: ${COMPOSE_PROJECT_NAME:-platform}
 
 # What every container AUGUR builds runs with: they run as an unprivileged user already, so they need
 # no Linux capabilities and may never gain privileges. init passes Docker's stop signal on, so a stop
@@ -157,7 +159,10 @@ services:
       - ./postgres:/etc/augur:ro
       - wal-archive:/wal-archive
     # And the rendition worker's network, which reaches only Postgres and Garage.
-    networks: [default]
+    # A second name, only on the compose network, for the apps' relays (above) to reach it by.
+    networks:
+      default:
+        aliases: [platform-postgres]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform"]
       interval: 5s
@@ -241,7 +246,10 @@ services:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
-    networks: [default]
+    # A second name, only on the compose network, for the apps' relays (above) to reach it by.
+    networks:
+      default:
+        aliases: [platform-garage]
 
   # Gives each platform service and Keycloak a database login of their own, and each app in
   # APP_STORAGE its own database login and schema, and its own bucket and key, from the secrets
@@ -268,6 +276,37 @@ services:
       APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
     depends_on:
       postgres: { condition: service_healthy }
+      garage: { condition: service_healthy }
+
+  # The apps' relays: what an app's network has in place of Postgres and the object store (design review ISO-2).
+  # The app runner joins db-relay to the network of each app that asks for a database, as `postgres`, and
+  # bucket-relay to each that asks for a bucket, as `garage`. db-relay lets only an app's own login (app_<id>) on
+  # to Postgres, never the platform's superuser or a service's; bucket-relay passes on only the object store's S3
+  # API, never its admin API. Postgres and Garage themselves join no app's network. Each reaches its store by a
+  # name only the compose network has (APP_RELAY_TO), so a relay never reaches itself through an app's alias.
+  db-relay: &relay
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: unless-stopped
+    command: ["node", "dist/relay-run.js", "database"]
+    environment:
+      NODE_ENV: production
+      APP_RELAY_TO: platform-postgres:5432
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(Number(process.env.APP_RELAY_TO.split(':')[1]), '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      postgres: { condition: service_healthy }
+  bucket-relay:
+    <<: *relay
+    command: ["node", "dist/relay-run.js", "objects"]
+    environment:
+      NODE_ENV: production
+      APP_RELAY_TO: platform-garage:3900
+    depends_on:
       garage: { condition: service_healthy }
 
   # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it. Moving to a
@@ -737,7 +776,7 @@ services:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro
     networks: [default, docker, telemetry]
-    depends_on: [docker-proxy, registry]
+    depends_on: [docker-proxy, registry, db-relay, bucket-relay]
 
   # The Docker API, for the updater only, without the parts it doesn't need (swarm, secrets, builds, plugins).
   docker-proxy:

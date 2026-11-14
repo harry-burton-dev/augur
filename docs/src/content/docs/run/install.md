@@ -33,7 +33,7 @@ Have these ready. The preflight (step 3) checks what it can of them before anyth
 
 1. **A server**: Linux, with 4 CPUs, 16 GB of memory and 200 GB of disk for a staging or small production
    server (AUGUR's memory limits are sized for 16 GB). It needs Docker with the Compose plugin
-   (`docker compose version` prints a version) and git, and nothing else: no Node, no Tailscale.
+   (`docker compose version` prints a version), curl and tar, and nothing else: no Node, no Tailscale.
 2. **Your tailnet.** In the [Tailscale admin console](https://login.tailscale.com/admin):
    - **DNS**: turn on MagicDNS and **HTTPS Certificates**. Note your tailnet name, for example
      `tail1234.ts.net`.
@@ -60,15 +60,43 @@ Have these ready. The preflight (step 3) checks what it can of them before anyth
 
 ## 1. Get the release
 
+Each AUGUR release carries its deploy bundle, `augur-deploy-<version>.tar.gz`: the files a server runs
+(`infra/deploy`, the preflight and the release file) and a `SHA256SUMS` of them, signed by the workflow
+that made the release. Download it into an empty folder, check it, and unpack it there:
+
 ```sh
-git clone https://github.com/harry-burton-dev/augur.git augur && cd augur
-git checkout augur@<version>     # the release you'll run: the newest augur@ under Releases
+version=<version>   # the release you'll run: the newest augur@ under Releases
+mkdir augur && cd augur
+base="https://github.com/harry-burton-dev/augur/releases/download/augur%40$version"
+curl -fLO "$base/augur-deploy-$version.tar.gz" -fLO "$base/augur-deploy-$version.tar.gz.sigstore.json"
+# Optional, with cosign installed: the bundle was made by AUGUR's own release workflow.
+cosign verify-blob --bundle "augur-deploy-$version.tar.gz.sigstore.json" \
+  --certificate-identity-regexp '^https://github.com/harry-burton-dev/augur/\.github/workflows/(release|augur-dev)\.yml@refs/heads/(main|release/[a-z][a-z0-9-]*-[0-9]+\.[0-9]+)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com "augur-deploy-$version.tar.gz"
+tar -xzf "augur-deploy-$version.tar.gz" && sha256sum --quiet -c SHA256SUMS
 cp infra/deploy/.env.example infra/deploy/.env && chmod 600 infra/deploy/.env
 alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
 ```
 
-Every command after this runs from the checkout and uses `pc`; put the alias in your shell's profile. The
-folder's name doesn't matter: the Compose project is always called `platform`.
+Every command after this runs from that folder and uses `pc`; put the alias in your shell's profile. The
+folder's name doesn't matter. The Compose project, which Docker names the volumes and networks after, is
+called `platform` unless `COMPOSE_PROJECT_NAME` in `.env` names another. Set it, if at all, before the first
+`up`: on a server that has data, changing it starts AUGUR empty. One machine runs one deployment: the app
+runner's project, `augur-apps`, isn't named after the deployment yet.
+
+A git checkout of the `augur@<version>` tag has the same files and still works. A release from before deploy
+bundles (0.26.x and earlier) has none; take its files from the tag's source archive instead:
+
+```sh
+curl -fL "https://github.com/harry-burton-dev/augur/archive/refs/tags/augur%40$version.tar.gz" |
+  tar -xz --strip-components=1 --wildcards '*/infra/deploy' '*/scripts/preflight.mjs' '*/release/augur-release.json'
+```
+
+Unpacking a bundle over a folder that has one already, to move it to another release, overwrites the deploy
+files, so keep any change of yours in `.env` or a `compose.override.yml`, as the updater asks too. It keeps
+`.env`, `secrets/` and `backups/`, which aren't in it, and it never deletes: a file the other release had and
+this one hasn't stays. Compose ignores it, and if a later upgrade through the updater takes it for an edit, it
+says which file to delete.
 
 ## 2. Fill in the settings
 
@@ -131,7 +159,7 @@ docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur" -w /augur node:22-alpine
 `--fill-secrets` writes a random value into each blank secret in `.env` and never changes one that's set.
 Then it checks, one line each:
 
-- **Release**: the checkout is the release `PLATFORM_VERSION` names.
+- **Release**: the deploy files are the release `PLATFORM_VERSION` names.
 - **Settings**: every required setting is set, and each value fits what it must be: `PLATFORM_URL` an https
   address with no path, `TS_AUTHKEY` a Tailscale key, `PLATFORM_ADMIN_EMAIL` an email address, bucket keys
   64 hex characters, passwords at least 16 characters, `SERVER_RING` one of its three. A name in `.env` that

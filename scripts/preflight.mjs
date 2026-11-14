@@ -116,9 +116,9 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   const lookup = (key) => props[key] ?? patterns.find(([re]) => re.test(key))?.[1];
 
   // The release.
-  if (!env.PLATFORM_VERSION) stop(`PLATFORM_VERSION isn\u2019t set: set it to ${release.version}, the release checked out here.`);
-  else if (env.PLATFORM_VERSION !== release.version) stop(`PLATFORM_VERSION is ${env.PLATFORM_VERSION}, but the checkout is augur@${release.version}: check out augur@${env.PLATFORM_VERSION}, or set PLATFORM_VERSION=${release.version}.`);
-  else pass(`Release: augur@${release.version} (${release.channel}) is checked out, and PLATFORM_VERSION names it.`);
+  if (!env.PLATFORM_VERSION) stop(`PLATFORM_VERSION isn\u2019t set: set it to ${release.version}, the release whose deploy files are here.`);
+  else if (env.PLATFORM_VERSION !== release.version) stop(`PLATFORM_VERSION is ${env.PLATFORM_VERSION}, but the deploy files here are augur@${release.version}’s: unpack augur@${env.PLATFORM_VERSION}’s deploy bundle (or check out its tag), or set PLATFORM_VERSION=${release.version}.`);
+  else pass(`Release: augur@${release.version} (${release.channel}) is the one here, and PLATFORM_VERSION names it.`);
 
   // Every required setting, and every value set, fits the schema.
   const required = [...new Set([...(schema.required ?? []), ...(release.settings?.required ?? [])])];
@@ -206,7 +206,7 @@ const main = () => {
   const install = args.includes('--install');
   const releaseFile = join(root, 'release/augur-release.json');
   if (!existsSync(releaseFile)) {
-    console.error('✗ No release/augur-release.json here: check out an augur@<version> tag first.');
+    console.error('✗ No release/augur-release.json here: unpack an AUGUR release’s deploy bundle (or check out an augur@<version> tag) first.');
     process.exit(1);
   }
   if (!existsSync(envFile)) {

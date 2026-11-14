@@ -18,7 +18,7 @@ or on the internet, without Tailscale, is planned.
 ## Before you start
 
 - A Linux server with **4 CPUs, 16 GB of memory and 200 GB of disk**, with Docker and its Compose plugin
-  (`docker compose version` prints a version) and git. Nothing else: no Node, no Tailscale.
+  (`docker compose version` prints a version), curl and tar. Nothing else: no Node, no Tailscale.
 - A Tailscale tailnet with **MagicDNS** and **HTTPS Certificates** turned on, and an **auth key** from
   Settings → Keys. A reusable, tagged key is easiest.
 - A name for the server on your tailnet, such as `augur-staging`. AUGUR's address will be
@@ -29,13 +29,15 @@ or on the internet, without Tailscale, is planned.
 Pick the newest `augur@<version>` release on GitHub, then on the server:
 
 ```sh
-git clone https://github.com/harry-burton-dev/augur.git augur && cd augur
-git checkout augur@<version>
+version=<version>
+mkdir augur && cd augur
+curl -fL "https://github.com/harry-burton-dev/augur/releases/download/augur%40$version/augur-deploy-$version.tar.gz" | tar -xz
+sha256sum --quiet -c SHA256SUMS
 cp infra/deploy/.env.example infra/deploy/.env && chmod 600 infra/deploy/.env
 alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
 ```
 
-Every command from here runs in the checkout and uses `pc`.
+Every command from here runs in that folder and uses `pc`. [Install AUGUR, step 1](../../run/install/#1-get-the-release) shows how to check the bundle's signature too.
 
 ## 2. Fill in what only you know
 
