@@ -491,6 +491,15 @@
       ],
       "x-docs": "docs/upgrade.md#the-updater"
     },
+    "FLEET_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The fleet's machine client's sign-in (platform-fleet, ADR 0100). With it, augurctl may change what this server runs within its ring, with nobody signed in. Unset, there is no such client.",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/from-files.md#the-fleets-client"
+    },
     "PLATFORM_ADMIN_USER": {
       "type": "string",
       "description": "The first person who can sign in; identity gives them the deployment-admin role when nobody has it.",

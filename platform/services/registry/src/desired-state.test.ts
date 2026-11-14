@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { automaticProblem, defaultDesiredState, desiredStateProblems, firstUpgradeProblem, pinProblem, policySentence, windowAt, type DesiredState } from './desired-state.ts';
+import { automaticProblem, defaultDesiredState, desiredStateProblems, pinProblem, policySentence, windowAt, type DesiredState } from './desired-state.ts';
 
 const state = (more: Partial<DesiredState> = {}): DesiredState => ({ ...defaultDesiredState('augur', 'production'), ...more });
 
@@ -44,12 +44,6 @@ describe('desired state (ADR 0020)', () => {
     expect(automaticProblem(state({ policy: 'ask' }), '0.13.0', '0.13.1')).toBe('Each update waits for an admin.');
     expect(automaticProblem(state({ policy: 'hold' }), '0.13.0', '0.13.1')).toBe('Updates are on hold.');
     expect(pinProblem(state({ pin: '0.13.x' }), '0.13.2-dev.4')).toBeUndefined();
-  });
-
-  it('waits for one upgrade by hand that finished before Automatic starts AUGUR upgrades', () => {
-    expect(firstUpgradeProblem([])).toMatch(/^Automatic starts after an admin has upgraded AUGUR on this server once/);
-    expect(firstUpgradeProblem([{ requestedBy: 'automatic', state: 'done' }, { requestedBy: 'u-1', state: 'rolled-back' }])).toBeDefined();
-    expect(firstUpgradeProblem([{ requestedBy: 'u-1', state: 'done' }])).toBeUndefined();
   });
 
   it('says the record in a sentence', () => {

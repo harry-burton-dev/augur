@@ -160,8 +160,7 @@ const ask = (v: View, rows: UnitRow[]): RemoteNode => {
   const items = needsYou(o, v.data.installs?.installed ?? []);
   const first = items[0];
   if (first) {
-    const action = first.kind === 'first-upgrade' ? 'Review the upgrade' : 'Review';
-    return quill('quill-notice', { tone: 'needs', heading: first.title, action, more: items.length > 1 ? items.length - 1 : undefined, onAction: () => v.on.go(unitPath(first.unit, AUGUR)) }, first.why);
+    return quill('quill-notice', { tone: 'needs', heading: first.title, action: 'Review', more: items.length > 1 ? items.length - 1 : undefined, onAction: () => v.on.go(unitPath(first.unit, AUGUR)) }, first.why);
   }
   const augur = rows.find((r) => r.id === AUGUR);
   if (u.next && augur && augur.state !== 'up-to-date') {
