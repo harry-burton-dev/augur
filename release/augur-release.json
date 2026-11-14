@@ -284,5 +284,11 @@
     "@augur/upgrades": {
       "version": "0.3.0"
     }
+  },
+  "stores": {
+    "postgres": "pgvector/pgvector:0.8.7-pg16-bookworm",
+    "garage": "dxflrs/garage:v2.4.1",
+    "keycloak": "quay.io/keycloak/keycloak:26.8.1",
+    "openfga": "openfga/openfga:v1.19.0"
   }
 }
