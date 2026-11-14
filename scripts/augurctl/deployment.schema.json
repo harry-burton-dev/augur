@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "augur.deployment/v1",
+  "title": "An AUGUR deployment, as a file",
+  "description": "One file per deployment (deployments/<name>.yaml), read by augurctl (scripts/augurctl). It says what the server should run; augurctl plan says how the server differs from it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "name", "ring", "release", "host"],
+  "properties": {
+    "schema": { "const": "augur.deployment/v1" },
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$", "description": "The deployment's name: the file's name, and its Backstage entry." },
+    "ring": { "enum": ["dev", "preview", "production"], "description": "SERVER_RING: which releases the server takes." },
+    "release": {
+      "type": "string",
+      "pattern": "^(follow|[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?)$",
+      "description": "PLATFORM_VERSION, or follow when the server's updater keeps it on its ring's newest release (a dev workbench)."
+    },
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ssh", "dir"],
+      "properties": {
+        "ssh": { "type": "string", "pattern": "^(local|[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+|[A-Za-z0-9_.-]+)$", "description": "Where to reach the server: an ssh destination (user@host), or local for this machine." },
+        "dir": { "type": "string", "pattern": "^/[A-Za-z0-9_./-]+$", "description": "The folder on the server that holds infra/deploy." }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "description": "The .env values that aren't secret, by name (infra/deploy/settings.schema.json). PLATFORM_VERSION and SERVER_RING come from release and ring.",
+      "propertyNames": { "pattern": "^[A-Z][A-Z0-9_]*$" },
+      "additionalProperties": { "type": "string" }
+    },
+    "secrets": { "type": "string", "pattern": "\\.sops\\.env$", "description": "The deployment's secrets, as a sops-encrypted dotenv file, relative to this file." },
+    "apps": {
+      "type": "array",
+      "description": "The apps the server runs, each at a version.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "version"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+          "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(-[0-9A-Za-z.-]+)?$" }
+        }
+      }
+    }
+  }
+}
