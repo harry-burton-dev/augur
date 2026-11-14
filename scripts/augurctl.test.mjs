@@ -29,7 +29,9 @@ test('a deployment file is held to the schema and to AUGUR’s settings', () => 
   assert.match(wrong.join('\n'), /SERVER_RING comes from ring/);
   assert.match(wrong.join('\n'), /folio is listed twice/);
   assert.ok(isSecret('POSTGRES_PASSWORD') && isSecret('NOTES_DATABASE_PASSWORD') && !isSecret('PLATFORM_URL'));
-  assert.ok(isSecret('OLD_CLIENT_SECRET') && isSecret('SOME_API_TOKEN'), 'a key the schema doesn’t know is a secret by its name');
+  assert.ok(isSecret('OLD_CLIENT_SECRET') && isSecret('TS_AUTHKEY'), 'a key the schema doesn’t know is a secret by its name');
+  assert.ok(!isSecret('A_KEY', { properties: { A_KEY: { type: 'string' } } }), 'the schema says, where it knows the key');
+  assert.match(problems({ ...doc, settings: { OLD_CLIENT_SECRET: 'x' } }, 'deployments/preview-1.yaml')[0], /OLD_CLIENT_SECRET is a secret by its name/);
 });
 
 test('the plan lists each difference, never a secret’s value, and nothing when the server matches', () => {

@@ -43,8 +43,9 @@ apps:
 ```
 
 `scripts/augurctl/deployment.schema.json` is the file's schema. A setting must be one AUGUR knows
-([Settings](../settings/)), and a secret goes in the secrets file, never in `settings`. A key whose name ends in
-`_SECRET`, `_PASSWORD`, `_TOKEN`, `_KEY` or `_AUTHKEY` counts as a secret too.
+([Settings](../settings/)), and a secret goes in the secrets file, never in `settings`. A key AUGUR doesn't know,
+such as one left over from an older release, counts as a secret when its name ends in `_SECRET`, `_PASSWORD`,
+`_TOKEN`, `_KEY` or `_AUTHKEY`.
 
 ## Commands
 
@@ -62,7 +63,7 @@ node <augur>/scripts/augurctl/augurctl.mjs plan staging-1 --dir deployments
 | `pnpm augurctl check` | Checks every file against the schema and AUGUR's settings. |
 | `pnpm augurctl init <name>` | Makes the secrets file: a random value for each secret AUGUR can make up, encrypted with sops for the keys your `.sops.yaml` names. Add the ones only you know (`TS_AUTHKEY`, `PLATFORM_ADMIN_PASSWORD`) with `sops <file>`. It never replaces a secrets file. |
 | `pnpm augurctl plan <name>` | Lists how the server differs from its file: its settings, its release and ring, its apps, and, for each secret, only whether it matches. It reads the server's `.env` over ssh to compare, and keeps it in memory only. It exits 0 when nothing differs and 2 when something does. |
-| `pnpm augurctl status [<name>...]` | Every server, or the ones named, one line each: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. With no deployment files it says so and exits 1. |
+| `pnpm augurctl status [<name>...]` | Every server, or the ones named, one line each: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. It exits 1 when there are no deployment files, or when any server can't be read. |
 | `pnpm augurctl up <name>` | Installs a new server: fetches the release's [deploy bundle](../install/#1-get-the-release) and checks its signature here, sends it to the server and checks its sums there, makes `.env` from the file and its secrets, and starts AUGUR once the preflight passes. If the preflight stops it, fix what it says and run `up` again. It stops if the server has a `.env` already. |
 
 To change a running server's release or apps, use its Deployment page for now; `plan` shows when it has
