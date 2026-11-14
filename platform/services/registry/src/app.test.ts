@@ -42,6 +42,25 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(res.statusCode).toBe(200);
   });
 
+  it("refuses a contract 2 app it wasn't told may load into the shell's page, and marks the ones that may", async () => {
+    const app = await db.app({ verifyService, inPageApps: [] });
+    const refused = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    expect(refused.statusCode).toBe(403);
+    expect(refused.json().message).toMatch(/Library loads into AUGUR.s own page.*app contract.*IN_PAGE_APPS/);
+    expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('library');
+
+    const allowed = await db.app({ verifyService, inPageApps: ['library'] });
+    expect((await allowed.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
+    const served = (await allowed.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json() as { id: string; inPage?: boolean; contract?: number }[];
+    expect(served.find((a) => a.id === 'library')?.inPage).toBe(true);
+    expect(served.find((a) => a.id === 'home')?.inPage).toBe(true);
+    expect(served.find((a) => a.id === 'admin')).toMatchObject({ contract: 3 });
+    expect(served.find((a) => a.id === 'admin')?.inPage).toBeUndefined();
+    // One registered before, and no longer allowed: still listed, so the shell can say why it won't open it.
+    const later = await db.app({ verifyService, inPageApps: [] });
+    expect((await later.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json().find((a: { id: string }) => a.id === 'library')?.inPage).toBeUndefined();
+  });
+
   it('hides apps that need a role the caller lacks', async () => {
     const app = await db.app({ verifyService });
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, requiredRole: 'admin' } });
@@ -108,7 +127,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const again = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
     expect([first.statusCode, again.statusCode]).toEqual([201, 200]);
     const manifest = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json();
-    expect(manifest).toContainEqual({ ...library, version: '0.2.0', maxUpload: 10 });
+    expect(manifest).toContainEqual({ ...library, version: '0.2.0', maxUpload: 10, inPage: true });
   });
 
   it('lets an admin register an app, but no one else', async () => {
@@ -155,16 +174,16 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const menu = [{ label: 'Documents', icon: 'folder', items: [{ label: 'Reports', path: '/reports', detail: 'Updated today' }] }];
     const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
     expect((await put({ ...library, ai: false, menu, orbit: false })).statusCode).toBe(201);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu, orbit: false, maxUpload: 10 });
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu, orbit: false, maxUpload: 10, inPage: true });
     expect((await put({ ...library, menu, orbit: 'no' })).statusCode).toBe(400);
     expect((await put({ ...library, sameOnEveryFloor: true })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, sameOnEveryFloor: true, maxUpload: 10 });
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, sameOnEveryFloor: true, maxUpload: 10, inPage: true });
     expect((await put({ ...library, sameOnEveryFloor: 'yes' })).statusCode).toBe(400);
     expect((await put({ ...library, followsAddress: true })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, followsAddress: true, maxUpload: 10 });
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, followsAddress: true, maxUpload: 10, inPage: true });
     expect((await put({ ...library, followsAddress: 'yes' })).statusCode).toBe(400);
     expect((await put({ ...library, focus: true })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, focus: true, maxUpload: 10 });
+    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, focus: true, maxUpload: 10, inPage: true });
     expect((await put({ ...library, focus: 'yes' })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'All', path: '/' }] }] })).statusCode).toBe(400);
     expect((await put({ ...library, menu: [{ label: 'Empty', items: [] }] })).statusCode).toBe(400);

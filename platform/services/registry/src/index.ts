@@ -1,7 +1,7 @@
 import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { knowledgeOffer } from './knowledge-offer.ts';
-import { parseDefaultApps } from './defaults.ts';
+import { parseAppIds } from './defaults.ts';
 import { appFeed, appFeeds, appFeedUrls, AppUpdateChecker } from './app-updates.ts';
 import { AUGUR_RELEASE } from './augur-version.ts';
 import { frontendFilesFromEnv } from './frontends.ts';
@@ -86,8 +86,10 @@ const allowPrPreviews = takesPreview(ring) || process.env.ALLOW_PR_PREVIEWS === 
 // How long a removed app's data is kept, in case it's installed again.
 const dataGraceDays = process.env.APP_DATA_GRACE_DAYS ? Number(process.env.APP_DATA_GRACE_DAYS) : undefined;
 if (dataGraceDays !== undefined && (!Number.isInteger(dataGraceDays) || dataGraceDays < 1 || dataGraceDays > 365)) throw new Error('APP_DATA_GRACE_DAYS is a whole number of days from 1 to 365 (30 when empty).');
-const defaults = parseDefaultApps(process.env.DEFAULT_APPS);
-if (defaults.problems.length) throw new Error(defaults.problems.join(' '));
+const defaults = parseAppIds(process.env.DEFAULT_APPS, 'DEFAULT_APPS');
+// A break-glass: apps not made by AUGUR that may still load into the shell's page on contract 2 (ADR 0076).
+const inPage = parseAppIds(process.env.IN_PAGE_APPS, 'IN_PAGE_APPS');
+if (defaults.problems.length || inPage.problems.length) throw new Error([...defaults.problems, ...inPage.problems].join(' '));
 // The publisher's feed is signed by its Release feed workflow (ADR 0017); FEED_SIGNER names another
 // signer, for a fork. Checked offline when the deployment has Sigstore's trust root (docs/mirror.md).
 const signer = process.env.FEED_SIGNER || feedSigner(repoOfFeed(feedUrl) ?? repoOfFeed(DEFAULT_OCI_FEED_URL)!);
@@ -133,7 +135,7 @@ const frontendFiles = frontendFilesFromEnv();
 if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ frontends are served from where their manifests say, not kept by version.');
 
 // Apps and platform services sign in as themselves (their Keycloak clients).
-const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, shadow: shadowFromEnv(credentials, log), knowledge: knowledgeOffer({ knowledgeUrl: process.env.KNOWLEDGE_URL || 'http://localhost:8086' }), verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, defaultApps: defaults.apps, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
+const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, shadow: shadowFromEnv(credentials, log), knowledge: knowledgeOffer({ knowledgeUrl: process.env.KNOWLEDGE_URL || 'http://localhost:8086' }), verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, defaultApps: defaults.apps, inPageApps: inPage.apps, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
 const serving = await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => updates.stop(), () => appUpdates.stop(), () => database.close()] });
 
 // A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.
