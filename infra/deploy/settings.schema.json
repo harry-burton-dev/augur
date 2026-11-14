@@ -1584,6 +1584,42 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
     },
+    "GATEWAY_SERVICE_CONNECT_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long the gateway waits to connect to one of AUGUR's own services before answering 502, in milliseconds (default 5000).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long one of AUGUR's own services may take to start answering, and between one piece of its answer and the next, before the gateway answers 504, in milliseconds (default 300000). Keep it above the services' own limits, such as MODEL_TIMEOUT_SECONDS, so their own words come first. Open streams are never cut by it.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_SERVICE_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many connections the gateway keeps to each of AUGUR's own services for ordinary calls (default 128).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_STREAM_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many open streams the gateway holds to each of AUGUR's own services, whatever kind they are, apart from its ordinary calls (default 4096). Each open tab holds two to the events service.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
     "FRONTENDS_S3_URL": {
       "type": "string",
       "description": "Where the frontends bucket is.",
