@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { needsDeployTest, needsHarry, problems, sectionsOf, tierOf } from './review-tier.mjs';
+import { autoOkComment, logged, needsDeployTest, needsHarry, problems, sectionsOf, tierOf, verdict } from './review-tier.mjs';
 
 const tiers = JSON.parse(readFileSync(new URL('../.github/review-tiers.json', import.meta.url), 'utf8'));
 
@@ -111,4 +111,106 @@ test('High over 400 lines needs a reason', () => {
   assert.match(problems({ tier: 'High', body: body(), lines: 975 }).join(), /400/);
   const reasoned = body({ Risk: 'Over 400 lines because the migration and its store move together.' });
   assert.deepEqual(problems({ tier: 'High', body: reasoned, lines: 975 }), []);
+});
+
+// The next rules: what takes over after the shadow week (REVIEW.md).
+const changes = (lines = {}, gone = {}) => ({ added: (path) => lines[path] ?? [], removed: (path) => gone[path] ?? [], knownActions: new Set(['actions/checkout', 'pnpm/action-setup']) });
+const nextVerdict = (paths, rules, context) => verdict(paths, rules.next, context);
+
+test('the next rules ask Harry about what is hard to undo, widens access or changes the rules', () => {
+  for (const path of [
+    'platform/services/events/src/migrations/014_floors.sql',
+    'infra/deploy/backup/backup.sh',
+    'scripts/promote.mjs',
+    '.github/workflows/release.yml',
+    '.github/review-tiers.json',
+    'platform/services/identity/src/two-step.ts',
+    'platform/services/updater/src/upgrade.ts',
+  ]) {
+    assert.ok(nextVerdict([path], tiers, changes()).harry.length, path);
+  }
+});
+
+test('the next rules keep busy areas High without asking Harry', () => {
+  for (const path of [
+    'platform/services/registry/src/app-entry.ts',
+    'platform/services/gateway/src/routes.ts',
+    'platform/packages/service-kit/src/jobs.ts',
+    'infra/deploy/compose.yml',
+    'platform/services/events/src/store.ts',
+  ]) {
+    const verdict = nextVerdict([path], tiers, changes());
+    assert.equal(verdict.tier, 'High', path);
+    assert.deepEqual(verdict.harry, [], path);
+  }
+});
+
+test('generated files and the deploy test harness no longer make a change High', () => {
+  assert.equal(nextVerdict(['release/migrations.lock.json', 'docs/seed.md'], tiers, changes()).tier, 'Low');
+  assert.equal(nextVerdict(['infra/deploy-test.sh'], tiers, changes()).tier, 'Medium');
+  assert.equal(nextVerdict(['.github/pull_request_template.md'], tiers, changes()).tier, 'Low');
+  assert.equal(nextVerdict(['docs/release-channels.md'], tiers, changes()).tier, 'Medium');
+});
+
+test('a file only renamed does not count towards the tier', () => {
+  const paths = ['platform/services/registry/src/old.ts', 'platform/services/registry/src/new.ts', 'docs/seed.md'];
+  assert.equal(nextVerdict(paths, tiers, { ...changes(), renamed: paths.slice(0, 2) }).tier, 'Low');
+});
+
+test("a rename still counts for Harry's ok, and a file moved into a workflow is read in full", () => {
+  const moved = ['platform/services/events/src/migrations/014_a.sql', 'platform/services/events/src/migrations/013_a.sql'];
+  assert.ok(nextVerdict(moved, tiers, { ...changes(), renamed: moved }).harry.length);
+  const wf = '.github/workflows/deploy.yml';
+  const verdictOf = nextVerdict(['docs/example.yml', wf], tiers, { ...changes({ [wf]: ['on: pull_request_target'] }), renamed: ['docs/example.yml', wf] });
+  assert.equal(verdictOf.tier, 'High');
+  assert.equal(verdictOf.harry.length, 1);
+});
+
+test('the current rules are unchanged by the next ones', () => {
+  for (const paths of [['.github/workflows/ci.yml'], ['platform/services/registry/src/a.ts'], ['docs/seed.md'], ['infra/deploy/backup/b.sh'], ['platform/frontends/shell/src/app.tsx']]) {
+    const now = verdict(paths, tiers, changes());
+    assert.equal(now.tier, tierOf(paths, tiers).tier, paths[0]);
+    assert.equal(now.harry.length > 0, now.tier === 'High' && needsHarry(paths, tiers), paths[0]);
+  }
+});
+
+test('a workflow asks Harry only when it gains privilege or a new action', () => {
+  const wf = '.github/workflows/ci.yml';
+  assert.deepEqual(nextVerdict([wf], tiers, changes({ [wf]: ['      - uses: actions/checkout@abc123 # v4.5.0'] })).harry, []);
+  assert.equal(nextVerdict([wf], tiers, changes({ [wf]: ['      contents: write'] })).harry.length, 1);
+  assert.equal(nextVerdict([wf], tiers, changes({ [wf]: ['        run: echo ${{ secrets.TOKEN }}'] })).harry.length, 1);
+  assert.equal(nextVerdict([wf], tiers, changes({ [wf]: ['      - uses: someone/new-action@def456'] })).harry.length, 1);
+  assert.deepEqual(nextVerdict([wf], tiers, changes({ [wf]: ['      - uses: ./.github/workflows/review.yml'] })).harry, []);
+  assert.deepEqual(nextVerdict([wf], tiers, changes({ [wf]: ['      # The job needs packages: write to push.'] })).harry, []);
+  assert.equal(nextVerdict([wf], tiers, changes({ [wf]: ['    secrets: inherit'] })).harry.length, 1);
+  assert.equal(nextVerdict([wf], tiers, changes({ [wf]: ["        run: echo '${{ toJSON(secrets) }}'"] })).harry.length, 1);
+  assert.equal(nextVerdict([wf], tiers, changes({}, { [wf]: ['permissions:', '  contents: read'] })).harry.length, 1);
+  assert.equal(nextVerdict(['.github/actions/build/action.yml'], tiers, changes({ '.github/actions/build/action.yml': ['    - uses: someone/else@abc'] })).harry.length, 1);
+});
+
+test('a content rule makes a change High even off the High paths', () => {
+  const local = { next: { ...tiers.next, harryOkWhen: [{ paths: ['manifest.json'], added: '"[a-z-]+:(write|publish)"', why: 'asks for a new permission' }] } };
+  const verdict = nextVerdict(['manifest.json'], local, changes({ 'manifest.json': ['    "inbox:write"'] }));
+  assert.equal(verdict.tier, 'High');
+  assert.match(verdict.harry[0], /new permission/);
+  assert.deepEqual(nextVerdict(['manifest.json'], local, changes({ 'manifest.json': ['  "sdk": "^2.1.0",'] })).harry, []);
+});
+
+test('the auto-ok log takes what waited for Harry and would not have under the next rules', () => {
+  const v = (harry, tier = 'High') => ({ tier, because: [], harry });
+  assert.equal(logged({ now: v(['REVIEW.md']), next: v([]) }), true);
+  assert.equal(logged({ now: v(['REVIEW.md']), next: v(['REVIEW.md']) }), false);
+  assert.equal(logged({ now: v([]), next: v([]) }), false);
+  // After the switch (autoOk): a High change that merged without his ok. A repository without either logs nothing.
+  assert.equal(logged({ now: v([]), autoOk: true }), true);
+  assert.equal(logged({ now: v([], 'Medium'), autoOk: true }), false);
+  assert.equal(logged({ now: v([]) }), false);
+});
+
+test("the auto-ok comment can't be ended early by what a pull request says", () => {
+  const comment = autoOkComment({ phase: 'shadow', tier: 'High', nextTier: 'High', because: ['infra/deploy/compose.yml'], files: 2, lines: 30, deployTest: true, checks: [{ name: 'CI', conclusion: 'success' }], notRun: 'a --> b', howToUndo: 'Revert.', risk: '' });
+  const [, data] = /^<!-- auto-ok: (.*) -->$/m.exec(comment);
+  assert.equal(JSON.parse(data).notRun, 'a --> b');
+  assert.equal(comment.split('\n')[0].match(/-->/g).length, 1);
+  assert.match(comment, /harry-would-not/);
 });

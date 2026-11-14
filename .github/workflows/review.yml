@@ -7,7 +7,7 @@ name: Review
 # script lives once, here.
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled, closed]
   workflow_call:
     inputs:
       script-ref:
@@ -21,14 +21,15 @@ permissions:
   pull-requests: write
 # Every run checks the pull request as it is when it runs, whatever ran before it, so a newer run may cancel
 # an older one. The run that records Harry's ok has a group of its own, so a push or an edit straight after
-# the label goes on can't cancel it before it records.
+# the label goes on can't cancel it before it records; so has the run that writes the auto-ok record on a merge.
 concurrency:
-  group: review-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ (github.event.action == 'labeled' && github.event.label.name == 'harry-ok') && github.run_id || 'check' }}
+  group: review-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ (github.event.action == 'labeled' && github.event.label.name == 'harry-ok') && github.run_id || github.event.action == 'closed' && 'record' || 'check' }}
   cancel-in-progress: true
 jobs:
   tier:
     # The Version packages pull request is the release itself: its contents were each reviewed as they merged.
-    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    # A closed pull request has nothing left to check; the record job below handles a merge.
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') && github.event.action != 'closed' }}
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -125,3 +126,64 @@ jobs:
           PR_LABELS: ${{ steps.labels.outputs.labels }}
           # Only Renovate's pull requests are taken as a bot's; any other app's are checked like a person's.
           PR_BOT: ${{ github.event.pull_request.user.login == 'renovate[bot]' }}
+
+  # The auto-ok log (REVIEW.md): a merged pull request that waited for Harry's ok, but that the next rules
+  # would have merged without him, gets a comment recording what was merged, why and on what checks, and the
+  # auto-ok label. In the shadow week it records what he would have been spared; after it, each High change
+  # that merged without him. The control centre reads the comments and labels.
+  record:
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') && github.event.action == 'closed' && github.event.pull_request.merged }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          # The merge and the commit before it: the change exactly, and the rules it was checked by. A squash
+          # or a merge commit holds the whole pull request; a rebase merge would record only its last commit.
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 2
+      - name: The tier script, from AUGUR
+        if: github.repository != 'harry-burton-dev/augur'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: harry-burton-dev/augur
+          ref: ${{ inputs.script-ref || 'main' }}
+          path: .augur-review
+          sparse-checkout: scripts/review-tier.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      - name: What it merged on
+        id: checks
+        # The checks on the branch's last commit, by name, apart from this workflow's own.
+        run: |
+          checks=$(gh api "repos/$GH_REPO/commits/$HEAD/check-runs" --paginate \
+            --jq '[.check_runs[] | select(.name | test("(^|/ )(tier|record)$") | not) | {name, conclusion}]' | jq -cs 'add // [] | unique_by(.name)')
+          echo "checks=$checks" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+      - id: record
+        run: node "${SCRIPT_DIR}/scripts/review-tier.mjs" --record
+        env:
+          SCRIPT_DIR: ${{ github.repository == 'harry-burton-dev/augur' && '.' || '.augur-review' }}
+          BASE_COMMIT: HEAD^1
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          MERGED_AT: ${{ github.event.pull_request.merged_at }}
+          CHECKS: ${{ steps.checks.outputs.checks }}
+          RECORD_FILE: ${{ runner.temp }}/auto-ok.md
+      - name: Record it on the pull request
+        if: steps.record.outputs.logged == 'true'
+        run: |
+          gh api "repos/$GH_REPO/issues/$PR/comments" -F body=@"$RECORD_FILE" >/dev/null
+          gh api "repos/$GH_REPO/issues/$PR/labels" -f 'labels[]=auto-ok' >/dev/null
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          RECORD_FILE: ${{ runner.temp }}/auto-ok.md
