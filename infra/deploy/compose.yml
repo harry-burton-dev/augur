@@ -313,7 +313,7 @@ services:
 
   # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it. Moving to a
   # new minor migrates Keycloak's database on its first start, which can't be undone: take a backup
-  # first (docs/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
+  # first (docs/src/content/docs/run/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
   keycloak:
     logging: *logging
     # AUGUR's Keycloak: Keycloak with AUGUR's sign-in and email theme (ADR 0041, infra/service.Dockerfile).
@@ -532,7 +532,7 @@ services:
       # Asked at install what the knowledge graph offers apps.
       KNOWLEDGE_URL: http://knowledge:8086
       # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
-      # for new AUGUR and app releases with it, and the updater pulls with it (docs/upgrade.md).
+      # for new AUGUR and app releases with it, and the updater pulls with it (docs/src/content/docs/run/releases.md).
       GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
       # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
       RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
@@ -555,16 +555,16 @@ services:
       # The apps this deployment installs from the feed by default (none when unset).
       DEFAULT_APPS: ${DEFAULT_APPS:-}
       IN_PAGE_APPS: ${IN_PAGE_APPS:-}
-      # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
+      # Admin → Apps: where apps' own releases are listed, for the app runner (docs/src/content/docs/run/app-runner.md).
       APP_FEEDS: ${APP_FEEDS:-}
       APP_FEED_URL: ${APP_FEED_URL:-}
-      # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
+      # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/src/content/docs/run/app-runner.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
-      # Who must sign the release feed, for AUGUR published from a fork (docs/upgrade.md, The signed feed).
+      # Who must sign the release feed, for AUGUR published from a fork (docs/src/content/docs/run/releases.md).
       FEED_SIGNER: ${FEED_SIGNER:-}
     volumes:
-      # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/upgrade.md).
+      # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/src/content/docs/run/releases.md).
       - ./secrets:/run/secrets/augur:ro
       # A mirror's feed kept on this server, for RELEASE_FEED_URL=file:///run/augur/releases/releases.json (docs/mirror.md).
       - ./releases:/run/augur/releases:ro
@@ -747,7 +747,7 @@ services:
       identity: { condition: service_healthy }
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
-  # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with
+  # by itself if one doesn't come up (docs/src/content/docs/run/updater.md). Optional: only with
   # COMPOSE_PROFILES=updater in .env. It drives Docker, which can start anything, so it has the run of
   # the server: only it can reach docker-proxy, on a network of their own.
   updater:

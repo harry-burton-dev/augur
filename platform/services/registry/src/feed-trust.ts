@@ -39,7 +39,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /**
  * The repositories AUGUR is released from: its name now, then the name it had before. Its images and
  * feed stay at ghcr.io/harry-burton-dev/im-platform, where servers pull them, so either name may have
- * signed what is there (docs/upgrade.md).
+ * signed what is there (docs/src/content/docs/run/releases.md#the-signed-feed).
  */
 export const AUGUR_REPOSITORIES = ['harry-burton-dev/augur', 'harry-burton-dev/im-platform'] as const;
 
@@ -121,11 +121,11 @@ export const checkPublisherFeed = async ({
   newest?: string;
 }): Promise<FeedTrust> => {
   if (!check) return { state: 'unchecked', note: 'This registry was started without a way to check the feed’s signature.' };
-  if (!bundle) throw new FeedTrustProblem('The release feed isn’t signed, so nothing new is offered. If it persists, the publisher’s Release feed workflow needs to run again (docs/upgrade.md, The signed feed).');
+  if (!bundle) throw new FeedTrustProblem('The release feed isn’t signed, so nothing new is offered. If it persists, the publisher’s Release feed workflow needs to run again (AUGUR’s docs, Where releases come from).');
   try {
     await check(text, bundle);
   } catch (err) {
-    throw new FeedTrustProblem(`The release feed’s signature didn’t check out, so nothing new is offered: ${(err as Error).message} Everything running carries on (docs/upgrade.md, The signed feed).`);
+    throw new FeedTrustProblem(`The release feed’s signature didn’t check out, so nothing new is offered: ${(err as Error).message} Everything running carries on (AUGUR’s docs, Where releases come from).`);
   }
   let expires: unknown;
   let issued: unknown;
@@ -135,11 +135,11 @@ export const checkPublisherFeed = async ({
     throw new FeedTrustProblem('The release feed isn’t JSON. Check RELEASE_FEED_URL.');
   }
   if (typeof expires !== 'string' || Number.isNaN(Date.parse(expires))) throw new FeedTrustProblem('The release feed doesn’t say when it expires, so it can’t be trusted to be current. Nothing new is offered.');
-  if (Date.parse(expires) <= now.getTime()) throw new FeedTrustProblem(`The release feed expired on ${expires.slice(0, 10)}, so nothing newer than it can be trusted. The publisher issues it weekly; if a newer one doesn’t arrive, check this server can reach the feed (docs/upgrade.md, The signed feed).`);
+  if (Date.parse(expires) <= now.getTime()) throw new FeedTrustProblem(`The release feed expired on ${expires.slice(0, 10)}, so nothing newer than it can be trusted. The publisher issues it weekly; if a newer one doesn’t arrive, check this server can reach the feed (AUGUR’s docs, Where releases come from).`);
   const when = typeof issued === 'string' && !Number.isNaN(Date.parse(issued)) ? issued : undefined;
   if (newest && (!when || Date.parse(when) < Date.parse(newest))) {
     throw new FeedTrustProblem(
-      `The release feed read was issued ${when ? `on ${when.slice(0, 16).replace('T', ' ')}` : 'at an unknown time'}, before the one this server already accepted (${newest.slice(0, 16).replace('T', ' ')}), so it could be hiding a newer release or a halt. Nothing new is offered from it. If it persists, check what sits between this server and the feed (docs/upgrade.md, The signed feed).`,
+      `The release feed read was issued ${when ? `on ${when.slice(0, 16).replace('T', ' ')}` : 'at an unknown time'}, before the one this server already accepted (${newest.slice(0, 16).replace('T', ' ')}), so it could be hiding a newer release or a halt. Nothing new is offered from it. If it persists, check what sits between this server and the feed (AUGUR’s docs, Where releases come from).`,
     );
   }
   return { state: 'verified', expires, ...(when ? { issued: when } : {}), ...(signer ? { signer } : {}) };

@@ -55,7 +55,7 @@ const jobLine = (job: AppJob) => {
 
 /** Why nothing can be installed now, if so: the role, or no app runner. */
 const installWhyNot = (v: View) =>
-  !v.may ? NEEDS_DEPLOYMENT_ADMIN : !v.data.installs?.runnerSeenAt ? 'No app runner has asked for work, so nothing can be installed yet (docs/upgrade.md, The app runner).' : undefined;
+  !v.may ? NEEDS_DEPLOYMENT_ADMIN : !v.data.installs?.runnerSeenAt ? 'No app runner has asked for work, so nothing can be installed yet (AUGUR’s docs, The app runner).' : undefined;
 
 /** Apps' installing parts: what's under way, what the feed offers, installing from an address, and what's waiting or kept. */
 export const installSections = (v: View): RemoteNode => {
@@ -70,7 +70,7 @@ export const installSections = (v: View): RemoteNode => {
       ? quill(
           'quill-notice',
           { tone: 'warning', heading: 'No app runner yet' },
-          'No app runner has asked for work since the registry started, so nothing can be installed or removed. It’s the updater with APP_SECRETS_KEY set: see docs/upgrade.md, The app runner.',
+          'No app runner has asked for work since the registry started, so nothing can be installed or removed. It’s the updater with APP_SECRETS_KEY set: see AUGUR’s docs, The app runner.',
         )
       : null,
     i.problem ? quill('quill-notice', { tone: 'warning' }, `Not every app release could be read. ${i.problem}`) : null,

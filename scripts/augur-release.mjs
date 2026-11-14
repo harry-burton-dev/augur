@@ -338,7 +338,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: unpack \`${bundleName(release.version)}\` from this release over the server's folder, set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, then pull and start: [docs/upgrade.md](../../blob/HEAD/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: unpack \`${bundleName(release.version)}\` from this release over the server's folder, set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, then pull and start: [Upgrade AUGUR](../../blob/HEAD/docs/src/content/docs/run/upgrade.md).`);
   return lines.join('\n');
 };
 
@@ -352,7 +352,7 @@ const main = () => {
     const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10), names);
     if (next === previous) return console.log(`AUGUR stays at ${previous.version}: no part changed.`);
     write(next);
-    // Each upgrade note added since the last release says it came in this one (docs/upgrade.md).
+    // Each upgrade note added since the last release says it came in this one (docs/src/content/docs/release-notes/upgrade-notes.md).
     const notes = join(root, NOTES_FILE);
     writeFileSync(notes, stamp(readFileSync(notes, 'utf8'), next.version));
     console.log(`AUGUR ${previous?.version ?? '(none)'} → ${titleOf(next)}${next.breaking.length ? ' (breaking)' : ''}.`);

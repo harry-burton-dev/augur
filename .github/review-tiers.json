@@ -51,7 +51,8 @@
     "REVIEW.md",
     "AGENTS.md",
     "CLAUDE.md",
-    "docs/upgrade.md",
+    "docs/src/content/docs/release-notes/upgrade-notes.md",
+    "docs/src/content/docs/run/upgrade.md",
     "docs/release-channels.md",
     "docs/deploy*"
   ],

@@ -116,7 +116,7 @@ done > "$deploy/.env"
 if [ -n "${THEN:-}" ]; then echo 'SEED_ALLOWED=true' >> "$deploy/.env"; fi
 
 # Broken mode runs the updater too (its profile), which reads the deploy folder at its path here and
-# signs in with its own secret, as on a server that turned it on (docs/upgrade.md, "The updater").
+# signs in with its own secret, as on a server that turned it on (docs/src/content/docs/run/updater.md).
 # The updater runs Compose on the deploy folder itself, so .env names this test's project, as `-p` does here.
 if [ "$mode" = broken ]; then
   export COMPOSE_PROFILES=updater
@@ -295,7 +295,7 @@ no_restarts() {
 }
 
 # The Keycloak version the deploy files in use run. Moving Keycloak to a new minor migrates its database,
-# which can't be undone, so going back across one is a restore of Keycloak's database (docs/upgrade.md).
+# which can't be undone, so going back across one is a restore of Keycloak's database (docs/src/content/docs/run/upgrade.md).
 # AUGUR's Keycloak image is tagged with AUGUR's version, so the version is Keycloak's own image label,
 # which AUGUR's image keeps; an image without it is told apart by its name.
 keycloak_image() { pc config --format json | jq -r '.services.keycloak.image'; }
@@ -320,7 +320,7 @@ retired_in() (
 )
 
 # The apps this upgrade retires: named in this checkout's RETIRED_APPS and not in the release before's. Their
-# data goes on this upgrade, as docs/upgrade.md says: the storage job drops their schemas (`<app>` and `<app>_jobs`,
+# data goes on this upgrade, as docs/src/content/docs/release-notes/upgrade-notes.md says: the storage job drops their schemas (`<app>` and `<app>_jobs`,
 # dashes as underscores) and the registry forgets them (migration 023). Once a release before also names them,
 # nothing is excused, so an app installed later under one of those ids is guarded like any other.
 retired_by_upgrade() {

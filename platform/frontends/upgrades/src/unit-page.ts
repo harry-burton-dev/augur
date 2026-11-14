@@ -32,7 +32,7 @@ const following = (v: View, up: Upgrade, running: string): RemoteNode => {
       ? quill(
           'quill-notice',
           { tone: u.updaterSeenAt ? 'info' : 'warning' },
-          u.updaterSeenAt ? 'Queued. The updater picks it up within a minute.' : 'No updater has polled for work yet. Cancel this and upgrade by hand (docs/upgrade.md).',
+          u.updaterSeenAt ? 'Queued. The updater picks it up within a minute.' : 'No updater has polled for work yet. Cancel this and upgrade by hand (AUGUR’s docs, Upgrade AUGUR).',
         )
       : null,
     // A failed step shows as where it stopped; the ending below says what happened.
@@ -109,7 +109,7 @@ export const augurPage = (v: View, ask?: Ask): RemoteNode => {
         : g.problem
           ? g.problem
           : g.breakingAfter
-            ? `${g.breakingAfter} is a breaking change in between, so rolling back needs the backup (docs/upgrade.md).`
+            ? `${g.breakingAfter} is a breaking change in between, so rolling back needs the backup (AUGUR’s docs, Upgrade AUGUR).`
             : underWay
               ? 'Wait for the upgrade in progress to finish.'
               : undefined;

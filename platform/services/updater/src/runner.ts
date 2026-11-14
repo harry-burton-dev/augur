@@ -729,7 +729,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     if (refused) throw new StepFailed(refused);
     const r = release as AppRelease;
     const env = await host.readEnv();
-    if (!appSecrets(env, job.app)) throw new StepFailed('APP_SECRETS_KEY is not set in .env, so the runner can’t give the app its secrets (docs/upgrade.md, The app runner).');
+    if (!appSecrets(env, job.app)) throw new StepFailed('APP_SECRETS_KEY is not set in .env, so the runner can’t give the app its secrets (AUGUR’s docs, The app runner).');
 
     await report({ step: 'verify', state: 'running' });
     const publisher = `${r.signer.repository}/${r.signer.workflow}`;

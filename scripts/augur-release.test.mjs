@@ -77,7 +77,7 @@ test('the deploy files are the server’s own, by hash, without .env.example or 
 });
 
 test('the deploy bundle holds what a server runs, laid out as a checkout, with sums matching the release file', () => {
-  const tracked = ['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'scripts/preflight.mjs', 'scripts/seed.mjs', 'docs/upgrade.md'];
+  const tracked = ['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'scripts/preflight.mjs', 'scripts/seed.mjs', 'docs/src/content/docs/release-notes/upgrade-notes.md'];
   assert.deepEqual(bundleFiles(tracked), ['infra/deploy/.env.example', 'infra/deploy/backup/backup.sh', 'infra/deploy/compose.yml', 'scripts/preflight.mjs']);
   assert.equal(bundleName('0.26.0'), 'augur-deploy-0.26.0.tar.gz');
   const dir = mkdtempSync(join(tmpdir(), 'bundle-test-'));

@@ -438,7 +438,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       if (free !== undefined && free < MIN_FREE_BYTES) {
         throw new StepFailed(`The deploy folder’s disk has ${gib(free)} free, and an upgrade needs ${gib(MIN_FREE_BYTES)}: the backup and the new images go there. Make room (old backups, docker image prune), then ask again.`);
       }
-      if (!target.deploy || !target.parts) throw new StepFailed(`AUGUR ${target.version}’s release file couldn’t be read, or names no deploy files, so whether it fits this server isn’t known. Upgrade by hand (docs/upgrade.md).`);
+      if (!target.deploy || !target.parts) throw new StepFailed(`AUGUR ${target.version}’s release file couldn’t be read, or names no deploy files, so whether it fits this server isn’t known. Upgrade by hand (AUGUR’s docs, Upgrade AUGUR).`);
       // A part the server runs that this updater doesn't know would be restarted with the rest but never
       // checked to come back: refused, so nothing is half upgraded. A part new in the release is started once
       // its compose.yml is in place (roll-forward), and the release's own updater knows it from then on.
@@ -446,7 +446,7 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       const unknown = Object.keys(target.images).filter((service) => service !== UPDATER && !parts.roles[service] && running.has(service));
       if (unknown.length) {
         throw new StepFailed(
-          `AUGUR ${target.version} has ${unknown.length > 1 ? 'images' : 'an image'} for ${unknown.join(', ')}, which this server runs, and this updater doesn’t know how to restart ${unknown.length > 1 ? 'them' : 'it'} or tell ${unknown.length > 1 ? 'they' : 'it'} came back. Upgrade by hand (docs/upgrade.md).`,
+          `AUGUR ${target.version} has ${unknown.length > 1 ? 'images' : 'an image'} for ${unknown.join(', ')}, which this server runs, and this updater doesn’t know how to restart ${unknown.length > 1 ? 'them' : 'it'} or tell ${unknown.length > 1 ? 'they' : 'it'} came back. Upgrade by hand (AUGUR’s docs, Upgrade AUGUR).`,
         );
       }
       // The release's deploy files that differ from the server's are written by the updater, as long as
@@ -456,12 +456,12 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       if (changed.length) {
         const own = await server.ownDeployHashes(changed);
         if (!own || !target.images[UPDATER]) {
-          throw new StepFailed(`AUGUR ${target.version} changes the server’s own files (${changed.join(', ')}), and this updater can’t write them, so it’s upgraded by hand: unpack augur@${target.version}’s deploy bundle and follow docs/upgrade.md.`);
+          throw new StepFailed(`AUGUR ${target.version} changes the server’s own files (${changed.join(', ')}), and this updater can’t write them, so it’s upgraded by hand: unpack augur@${target.version}’s deploy bundle and follow AUGUR’s docs, Upgrade AUGUR.`);
         }
         const edited = changed.filter((path) => onDisk[path] !== undefined && onDisk[path] !== own[path]);
         if (edited.length) {
           throw new StepFailed(
-            `${edited.join(', ')} ${edited.length > 1 ? 'have' : 'has'} been changed on the server since AUGUR ${target.from}, and ${target.version} changes ${edited.length > 1 ? 'them' : 'it'} too. Put ${edited.length > 1 ? 'them' : 'it'} back as augur@${target.from} has ${edited.length > 1 ? 'them' : 'it'} (from its deploy bundle, or git checkout), or upgrade by hand (docs/upgrade.md).`,
+            `${edited.join(', ')} ${edited.length > 1 ? 'have' : 'has'} been changed on the server since AUGUR ${target.from}, and ${target.version} changes ${edited.length > 1 ? 'them' : 'it'} too. Put ${edited.length > 1 ? 'them' : 'it'} back as augur@${target.from} has ${edited.length > 1 ? 'them' : 'it'} (from its deploy bundle, or git checkout), or upgrade by hand (AUGUR’s docs, Upgrade AUGUR).`,
           );
         }
         changedFiles = Object.fromEntries(changed.map((path) => [path, undefined]));
@@ -686,7 +686,7 @@ const pullAndCheck = async (server: Server, target: Target, pulled: string[]) =>
   }
 };
 
-/** Puts every part back on the release it was on. The data stays as the new release left it: see docs/upgrade.md, Going back. */
+/** Puts every part back on the release it was on. The data stays as the new release left it: see AUGUR’s docs, Upgrade AUGUR. */
 const rollBack = async (
   target: Target,
   server: Server,

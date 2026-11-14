@@ -91,7 +91,7 @@ const editor = (v: SettingsView, unit: OverviewUnit, ring: Ring, draft: Draft): 
     quill('quill-choice', {
       label: 'Release channel',
       name: 'channel',
-      ...(isAugur ? { hint: 'AUGUR’s release channel is set by RELEASE_CHANNEL in the server’s .env (docs/upgrade.md).' } : {}),
+      ...(isAugur ? { hint: 'AUGUR’s release channel is set by RELEASE_CHANNEL in the server’s .env (AUGUR’s docs, Where releases come from).' } : {}),
       value: draft.channel,
       options: channelsFor(ring).map((c) => {
         const allowed = isAugur ? c.channel === start.channel : c.allowed;
@@ -222,7 +222,7 @@ export const channelSelect = (v: SettingsView, unit: OverviewUnit, ring: Ring, l
     name: `channel-${unit.unit}`,
     value: unit.desired.channel,
     options: channelsFor(ring).map((c) => ({ value: c.channel, label: CHANNEL[c.channel], ...(c.allowed || c.channel === unit.desired.channel ? {} : { disabled: true }) })),
-    ...(isAugur ? { readOnly: true, hint: 'Set by RELEASE_CHANNEL in the server’s .env (docs/upgrade.md).' } : {}),
+    ...(isAugur ? { readOnly: true, hint: 'Set by RELEASE_CHANNEL in the server’s .env (AUGUR’s docs, Where releases come from).' } : {}),
     ...(!v.may ? { disabled: true, reason: NEEDS_DEPLOYMENT_ADMIN } : {}),
     busy,
     onChange: (value: string) => value !== unit.desired.channel && v.act.quick(unit, { channel: value as Channel }),

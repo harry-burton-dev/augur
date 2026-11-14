@@ -247,7 +247,7 @@ export const overviewPage = (v: View): RemoteNode => {
             : { label: 'Release feed', value: `Checked ${when(v, o.checkedAt ?? u.checkedAt)}`, ...(signature(v) ? { note: signature(v) } : {}) },
           u.updaterSeenAt
             ? { label: 'Updater', value: `Last polled ${when(v, u.updaterSeenAt)}` }
-            : { label: 'Updater', value: 'Not set up', note: 'Upgrades started here wait until it is. See docs/upgrade.md.' },
+            : { label: 'Updater', value: 'Not set up', note: 'Upgrades started here wait until it is. See AUGUR’s docs, The updater.' },
         ],
       }),
       u.problem ? quill('quill-notice', { tone: 'warning', heading: 'The release feed has a problem' }, u.problem) : null,
