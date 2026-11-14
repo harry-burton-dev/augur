@@ -6,7 +6,7 @@ import { AppUpdateChecker, type AppFeedRelease } from './app-updates.ts';
 import { UpdateChecker } from './updates.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import { releaseOf } from './release3.testing.ts';
-import { defaultsPlan, NEXT_CHECK, parseDefaultApps } from './defaults.ts';
+import { defaultsPlan, NEXT_CHECK, parseAppIds } from './defaults.ts';
 import type { AppRelease } from './store.ts';
 
 const db = registryDb();
@@ -15,9 +15,9 @@ const feedOf = (...releases: AppRelease[]): AppFeedRelease[] =>
 
 describe('DEFAULT_APPS', () => {
   it('reads ids split by commas or spaces, and refuses one that isn’t an app’s', () => {
-    expect(parseDefaultApps(' notes, maps  board ')).toEqual({ apps: ['notes', 'maps', 'board'], problems: [] });
-    expect(parseDefaultApps(undefined)).toEqual({ apps: [], problems: [] });
-    const bad = parseDefaultApps('Notes registry');
+    expect(parseAppIds(' notes, maps  board ', 'DEFAULT_APPS')).toEqual({ apps: ['notes', 'maps', 'board'], problems: [] });
+    expect(parseAppIds(undefined, 'DEFAULT_APPS')).toEqual({ apps: [], problems: [] });
+    const bad = parseAppIds('Notes registry', 'DEFAULT_APPS');
     expect(bad.apps).toEqual([]);
     expect(bad.problems).toEqual([expect.stringContaining('"Notes" in DEFAULT_APPS isn’t an app id'), expect.stringContaining('DEFAULT_APPS:')]);
   });

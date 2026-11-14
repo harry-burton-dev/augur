@@ -1,15 +1,16 @@
 import { createEventBus, type AppManifestEntry, type MountContext } from '@augur/mfe-sdk';
 import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it, vi } from 'vitest';
-import { AppMounter, fromServer, keepSame, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, NotificationActions, routeIntent, toShellNotification } from './index.js';
+import { AppMounter, fromServer, type InPageApp, keepSame, hrefFor, incompatibility, IntentError, loadManifest, ManifestError, matchRoute, MountError, NotificationActions, routeIntent, toShellNotification } from './index.js';
 
-const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
+const app = (id: string, route: string, extra: Partial<InPageApp> = {}): InPageApp => ({
   id,
   name: id[0].toUpperCase() + id.slice(1),
   route,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
   sdk: CURRENT_SDK,
+  inPage: true,
   ...extra,
 });
 const manifest = [app('home', '/'), app('library', '/library', { handles: ['document.open'] }), app('admin', '/admin')];
@@ -89,6 +90,14 @@ describe('loadManifest', () => {
 });
 
 describe('AppMounter', () => {
+  it("won't load an app into the shell's page unless the registry marks it as one that may, and says why", async () => {
+    const load = vi.fn(async () => ({ default: { mount: vi.fn() } }));
+    const m = new AppMounter(document.createElement('div'), load);
+    const outsider = app('mandate', '/mandate', { inPage: undefined });
+    await expect(m.mount(outsider, ctx())).rejects.toThrow(/Mandate loads into AUGUR.s own page.*app contract.*IN_PAGE_APPS/);
+    expect(load).not.toHaveBeenCalled();
+  });
+
   const mfe = () => ({ mount: vi.fn((el: HTMLElement) => void (el.textContent = 'hi')), unmount: vi.fn() });
 
   it('mounts one app at a time, unmounting the last', async () => {

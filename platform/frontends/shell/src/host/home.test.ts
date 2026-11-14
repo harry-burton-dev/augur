@@ -1,17 +1,19 @@
-import { createEventBus, type AppManifestEntry, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import type { InPageApp } from './manifest.js';
+import { createEventBus, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import { CURRENT_SDK } from '../current-sdk.js';
 import type { ShellNotification } from '@augur/shell-kit';
 import { describe, expect, it, vi } from 'vitest';
 import { cardOf, cardsFor, needsFor, settingsOf, SurfaceMounter } from './home.js';
 import { fromCatalogue3 } from './apps3.js';
 
-const app = (id: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
+const app = (id: string, extra: Partial<InPageApp> = {}): InPageApp => ({
   id,
   name: id[0].toUpperCase() + id.slice(1),
   route: `/${id}`,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
   sdk: CURRENT_SDK,
+  inPage: true,
   ...extra,
 });
 const card = (floor: 'personal' | 'team' | 'org', role?: 'member' | 'lead', module = './Card') => ({ floor, slot: 'card' as const, module, ...(role ? { role } : {}) });
@@ -89,6 +91,9 @@ describe('glance cards', () => {
     expect(claims.unavailable).toBeUndefined();
     expect(old).toMatchObject({ app: 'old', name: 'Old' });
     expect(old.unavailable).toMatch(/made for an older version of AUGUR.*Its team needs to release/);
+    // A card's code runs in the shell's page too: one from an app that may not load there stays, saying why, and never loads.
+    const outsider = app('mandate', { inPage: undefined, surfaces: [card('personal')] });
+    expect(cardsFor([outsider], me, [])[0].unavailable).toMatch(/loads into AUGUR.s own page.*IN_PAGE_APPS/);
   });
 
   it('mounts a card from its app’s entry, once per entry, and puts it away', async () => {

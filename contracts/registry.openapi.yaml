@@ -2254,6 +2254,11 @@ paths:
                               items:
                                 type: string
                               description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)"
+                            inPage:
+                              type: boolean
+                              description: "An app on contract 2 the shell may load into its own page: one of AUGUR's own, or one the deployment names in IN_PAGE_APPS. The shell opens no other contract 2 app (ADR 0076)"
+                              enum:
+                                - true
                     - type: object
                       required:
                         - contract
@@ -4332,7 +4337,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, or a contract 3 manifest of no release the runner was given
+          description: Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest of an app the deployment doesn't allow into the shell's page (IN_PAGE_APPS)
           content:
             application/problem+json:
               schema:

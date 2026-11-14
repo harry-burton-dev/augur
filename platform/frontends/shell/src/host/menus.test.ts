@@ -1,17 +1,18 @@
-import type { AppManifestEntry } from '@augur/mfe-sdk';
+import type { InPageApp } from './manifest.js';
 import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it } from 'vitest';
 import { fromCatalogue3 } from './apps3.js';
 import { areaOf, findPages, groupOf, groupsFor, pageAt, pagesOf, productName, screenFor, titleFor, toShellApp } from './index.js';
 import { desktopApp, desktopAppId, logoUrl } from './menus.js';
 
-const app = (id: string, route: string, extra: Partial<AppManifestEntry> = {}): AppManifestEntry => ({
+const app = (id: string, route: string, extra: Partial<InPageApp> = {}): InPageApp => ({
   id,
   name: id[0].toUpperCase() + id.slice(1),
   route,
   entry: `/apps/${id}/entry.js`,
   version: '0.1.0',
   sdk: CURRENT_SDK,
+  inPage: true,
   ...extra,
 });
 const board = app('board', '/board', {
@@ -112,6 +113,7 @@ describe('the logo and the desktop’s app', () => {
     expect(desktopApp(manifest, '')).toBeUndefined();
     expect(desktopApp(manifest, 'missing')).toBeUndefined();
     expect(desktopApp([app('home', '/home', { sdk: '^0.1.0' })], 'home')).toBeUndefined();
+    expect(desktopApp([app('mandate', '/mandate', { inPage: undefined })], 'mandate')).toBeUndefined();
   });
 });
 
