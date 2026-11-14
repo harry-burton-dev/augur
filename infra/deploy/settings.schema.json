@@ -1231,6 +1231,21 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },
+    "SHUTDOWN_GRACE_SECONDS": {
+      "type": "string",
+      "description": "How long a stopping service lets its calls in flight finish before it cuts what is still open (at most 23, so it still closes and sends its telemetry within the services' stop_grace_period of 30 seconds).",
+      "default": "20",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
     "DATABASE_STATEMENT_TIMEOUT_SECONDS": {
       "type": "string",
       "description": "How long one database query may run before Postgres cancels it (0 for no limit; migrations are never limited).",
@@ -1734,6 +1749,15 @@
         "registry"
       ],
       "x-docs": "docs/upgrade.md#the-app-runner"
+    },
+    "IN_PAGE_APPS": {
+      "type": "string",
+      "pattern": "^[a-z0-9, -]*$",
+      "description": "A break-glass: apps not made by AUGUR that may still load into the shell's own page on contract 2, by id, split by commas or spaces, while they move to the app contract (empty allows none).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/upgrade.md#only-augurs-own-apps-load-into-the-shells-page"
     },
     "APP_DATA_GRACE_DAYS": {
       "type": "string",

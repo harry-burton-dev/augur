@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import { register } from 'node:module';
 import { join } from 'node:path';
+import { FLUSH_TELEMETRY, SERVING, type ShutdownHooks } from './shutdown.js';
 
 /** The settings telemetry reads: process.env, or a test's own. */
 export type TelemetryEnv = Record<string, string | undefined>;
@@ -52,8 +53,8 @@ if (telemetryOn()) {
   ]);
   const sdk = new NodeSDK({
     instrumentations: [
-      // Health checks every 30 seconds would drown everything else.
-      new HttpInstrumentation({ ignoreIncomingRequestHook: (req) => req.url === '/healthz' }),
+      // Health and readiness checks every 30 seconds would drown everything else.
+      new HttpInstrumentation({ ignoreIncomingRequestHook: (req) => req.url === '/healthz' || req.url === '/readyz' }),
       new UndiciInstrumentation(),
       new PgInstrumentation(),
       // Each log line gets the trace it belongs to, and goes to the collector too.
@@ -61,8 +62,12 @@ if (telemetryOn()) {
     ],
   });
   sdk.start();
-  // Sends what's left when Docker stops the service, then stops as Docker asked.
+  const hooks = globalThis as ShutdownHooks;
+  // A service run by serve() asks for this once its calls in flight have finished.
+  hooks[FLUSH_TELEMETRY] = () => sdk.shutdown();
+  // Anything else: sends what's left when Docker stops it, then stops as Docker asked.
   process.once('SIGTERM', () => {
+    if (hooks[SERVING]) return;
     const stop = () => process.kill(process.pid, 'SIGTERM');
     Promise.race([sdk.shutdown(), new Promise((r) => setTimeout(r, FLUSH_MS))]).then(stop, stop);
   });

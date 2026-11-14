@@ -2,7 +2,8 @@
 // the connections the services' other calls need. A service that stops answering is named, in time.
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { serve } from '@augur/service-kit';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app.ts';
 import type { AuthConfig } from './auth.ts';
 import { DEFAULT_APP_LIMITS, DEFAULT_PLATFORM_LIMITS, platformLimitsFromEnv } from './limits.ts';
@@ -133,6 +134,33 @@ describe('services’ streams at the gateway', () => {
       await app.close();
     }
   }, 15_000);
+
+  it('ends the streams it carries as it stops, so stopping never waits on them', async () => {
+    const app = await gateway();
+    const address = await app.listen({ port: 0, host: '127.0.0.1' });
+    const stream = await fetch(`${address}/api/events/v1/notifications/stream?k=s1`, { headers: { authorization: `Bearer ${await sign()}` } });
+    const reader = stream.body!.getReader();
+    await reader.read();
+    const began = performance.now();
+    await app.close();
+    expect(performance.now() - began).toBeLessThan(1_000);
+    let done = false;
+    while (!done) done = (await reader.read()).done;
+    endAll();
+  }, 15_000);
+
+  it('says it is ready to Docker’s healthcheck, which has no sign-in', async () => {
+    const app = await gateway();
+    const serving = await serve(app, { port: 0, host: '127.0.0.1', signals: [], exit: vi.fn() });
+    try {
+      const { port } = app.server.address() as { port: number };
+      const res = await fetch(`http://127.0.0.1:${port}/readyz`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ready: true, checks: {} });
+    } finally {
+      await serving.stop('test over');
+    }
+  });
 
   it('answers 502 naming the service when it can’t be reached', async () => {
     const app = await gateway({}, { events: 'http://127.0.0.1:1' });

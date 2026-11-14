@@ -62,6 +62,18 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Each release now carries `augur-deploy-<version>.tar.gz`, signed like its images: unpack it over the server's folder in place of `git checkout augur@<version>` ([Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)). A git checkout keeps working. Compose's project name now comes from `COMPOSE_PROJECT_NAME` in `.env` and is still `platform` without it. Nothing to do: don't set it on a server that has data, since Docker names the volumes after it.
 
+### Only AUGUR's own apps load into the shell's page
+
+**From** unreleased
+
+If you run an app on contract 2 that AUGUR didn't make (today, Mandate or Explorer), it stops opening after this upgrade: it stays in the app bar and says why. Code loaded into the shell's page runs as the shell, with the person's sign-in, so only AUGUR's own apps load there now; every other app runs in the sandbox on the app contract. The registry also refuses a new contract 2 manifest for any other app. While an app's team moves it to the app contract, you can let it load in the page on this server: name it in `IN_PAGE_APPS` (ids split by commas or spaces) in `.env`, then `pc up -d registry`. Take it out again once the app is released on the app contract.
+
+### Services wait for their database, and stop cleanly
+
+**From** unreleased
+
+Nothing to do unless you changed the services' healthchecks in your own compose override. Each AUGUR service's healthcheck now asks `/readyz`, which answers only while its database answers, so `pc ps` shows a service as `unhealthy` while it can't reach Postgres. A stopping service now finishes its calls in flight, for up to `SHUTDOWN_GRACE_SECONDS` (20, at most 23), and Docker waits up to 30 seconds for it, so `pc down` and an upgrade can take a few seconds longer ([Limits and health](src/content/docs/run/limits.md#logs-memory-and-health)).
+
 ### Home is the desktop, behind one logo button
 
 **From** augur@0.26.0

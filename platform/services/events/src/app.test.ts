@@ -204,6 +204,19 @@ describe.runIf(DATABASE_URL)('events', () => {
     controller.abort();
   });
 
+  it('ends its open streams as it stops, so stopping never waits on them', async () => {
+    const app = await db.app({ verifyService, heartbeatMs: 50 });
+    const url = await app.listen({ port: 0, host: '127.0.0.1' });
+    const res = await fetch(`${url}/v1/notifications/stream`, { headers: sam });
+    const reader = res.body!.pipeThrough(new TextDecoderStream()).getReader();
+    expect((await reader.read()).value).toContain(': connected');
+    const began = performance.now();
+    await app.close();
+    expect(performance.now() - began).toBeLessThan(1_000);
+    let done = false;
+    while (!done) done = (await reader.read()).done;
+  });
+
   it('keeps an audit log that services write and only admins read', async () => {
     const app = await db.app({ verifyService });
     const entry = { actor: { id: 'u-2', kind: 'user' }, app: 'library', action: 'document.published', target: 'doc-7' };

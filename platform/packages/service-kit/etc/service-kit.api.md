@@ -370,6 +370,9 @@ export interface ClientCredentialsOptions {
 }
 
 // @public
+export const CLOSE_BUDGET_MS = 3000;
+
+// @public
 export const commonSettings: {
     database: {
         name: string;
@@ -485,6 +488,9 @@ export const DEFAULT_GATEWAY_URL = "http://gateway:8080";
 
 // @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
+
+// @public
+export const DEFAULT_SHUTDOWN_GRACE_MS = 20000;
 
 // @public
 export const DEFAULT_STATEMENT_TIMEOUT_MS = 60000;
@@ -621,6 +627,9 @@ export interface EmbedTextsOptions {
 }
 
 // @public
+export const endStreamsOnStop: (app: FastifyInstance) => ((res: OpenStream) => void);
+
+// @public
 export const EVENT_CURSOR_TABLE_SQL = "\n  create table if not exists event_followers (\n    follower text primary key,\n    seq text not null\n  );";
 
 // @public
@@ -671,6 +680,9 @@ export interface FloorPlacesOptions {
 // @public
 export class FloorsUnavailable extends Error {
 }
+
+// @public
+export const FLUSH_TELEMETRY: unique symbol;
 
 // @public
 export interface FollowedBinding extends Binding {
@@ -1102,6 +1114,9 @@ export interface MailRelay {
 export const mailRelayFromEnv: (env: Record<string, string | undefined>, warn?: (message: string) => void) => MailRelay | undefined;
 
 // @public
+export const MAX_SHUTDOWN_GRACE_MS: number;
+
+// @public
 export type MemberLookup = (team: string) => Promise<string[]>;
 
 // @public
@@ -1267,6 +1282,14 @@ export type OnFloor = Caller & {
 };
 
 // @public
+export interface OpenStream {
+    // (undocumented)
+    end(): unknown;
+    // (undocumented)
+    on(event: 'close', listener: () => void): unknown;
+}
+
+// @public
 export const OUTBOX_TABLE_SQL = "\n  create table if not exists outbox (\n    id bigint generated always as identity primary key,\n    event_id text not null unique default gen_random_uuid()::text,\n    topic text not null,\n    workspace_id text,\n    payload jsonb not null,\n    created_at timestamptz not null default now(),\n    sent_at timestamptz,\n    refused_at timestamptz,\n    refused_why text\n  );\n  create index if not exists outbox_unsent on outbox (id) where sent_at is null;";
 
 // @public
@@ -1383,6 +1406,11 @@ export const platformCredentialsFromEnv: (service: string, env?: NodeJS.ProcessE
 export type PlatformScope = (typeof PLATFORM_SCOPES)[number];
 
 // @public
+export const poolCheck: (name: string, pool: {
+    query(text: string): Promise<unknown>;
+}) => ReadyCheck;
+
+// @public
 export const previewOf: (env?: Record<string, string | undefined>) => number | undefined;
 
 // @public
@@ -1497,6 +1525,15 @@ export const readPersonDeleted: (event: Pick<DomainEvent, "topic" | "payload">) 
 export const readPersonLeft: (event: Pick<DomainEvent, "topic" | "payload">) => PersonLeft | undefined;
 
 // @public
+export const READY_CHECK_TIMEOUT_MS = 2000;
+
+// @public
+export interface ReadyCheck {
+    check: () => Promise<unknown>;
+    name: string;
+}
+
+// @public
 export function recordAudit(input: EventsOptions & {
     entry: NewAuditEntry;
 }): Promise<void>;
@@ -1589,6 +1626,20 @@ export function sendProblem(reply: FastifyReply, problem: Problem): FastifyReply
 
 // @public (undocumented)
 export function sendProblem(reply: FastifyReply, status: number, reason: string, detail: string, options?: ProblemOptions): FastifyReply;
+
+// @public
+export function serve(app: FastifyInstance, input: ServeOptions): Promise<Serving>;
+
+// @public
+export interface ServeOptions {
+    close?: Array<() => unknown>;
+    exit?: (code: number) => void;
+    graceMs?: number;
+    host?: string;
+    port: number;
+    ready?: ReadyCheck[];
+    signals?: readonly NodeJS.Signals[];
+}
 
 // @public (undocumented)
 export interface ServiceAuthConfig {
@@ -1688,6 +1739,16 @@ export const serviceVerifier: (input: ServiceAuthConfig) => (headers: Record<str
 export const serviceVerifierFromEnv: (env?: NodeJS.ProcessEnv) => (headers: Record<string, string | string[] | undefined>) => Promise<ServiceIdentity | undefined>;
 
 // @public
+export const SERVING: unique symbol;
+
+// @public
+export interface Serving {
+    onStop(stop: () => unknown): void;
+    stop(reason?: string): Promise<void>;
+    readonly stopping: boolean;
+}
+
+// @public
 export interface Setting {
     about: string;
     // (undocumented)
@@ -1776,6 +1837,9 @@ export interface ShadowQuestion {
 }
 
 // @public
+export const shutdownGraceMs: (env?: Record<string, string | undefined>) => number;
+
+// @public
 export const signDelegation: (signer: CallerSigner, caller: Caller, input: DelegationOptions) => Promise<string>;
 
 // @public
@@ -1837,6 +1901,12 @@ export const statementTimeoutMs: (env?: Record<string, string | undefined>) => n
 //
 // @public
 export const steadyPool: <P extends Pool>(pool: P, log?: (message: string) => void, timeoutMs?: number) => P;
+
+// @public
+export const STOP_BUDGET_MS = 30000;
+
+// @public
+export const TELEMETRY_FLUSH_MS = 3000;
 
 // @public
 export type TokenSource = () => Promise<string>;

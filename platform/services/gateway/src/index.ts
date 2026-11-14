@@ -1,4 +1,4 @@
-import { commonSettings, loadConfigOrExit } from '@augur/service-kit';
+import { commonSettings, loadConfigOrExit, serve } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 
 // Every setting the gateway reads, checked before it starts (in production, a missing one stops it).
@@ -27,4 +27,4 @@ loadConfigOrExit('gateway', [
 
 const port = Number(process.env.PORT ?? 8080);
 const app = await buildApp();
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, { port });

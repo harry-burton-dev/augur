@@ -117,6 +117,11 @@ export class PgModelStore implements ModelStore {
     return rows.map((r) => ({ day: r.day, app: r.app, calls: r.calls, inputTokens: Number(r.input_tokens), outputTokens: Number(r.output_tokens) }));
   }
 
+  /** Resolves once the database answers: the service's readiness check. */
+  async ping() {
+    await this.pool.query('select 1');
+  }
+
   async close() {
     await this.pool.end();
   }

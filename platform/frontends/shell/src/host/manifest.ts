@@ -1,6 +1,6 @@
 import { SDK_VERSION, type AppManifestEntry } from '@augur/mfe-sdk';
 import semver from 'semver';
-import { fromCatalogue3, isCatalogue3 } from './apps3.js';
+import { fromCatalogue3, isCatalogue3, isWorkerApp } from './apps3.js';
 
 export class ManifestError extends Error {}
 
@@ -44,12 +44,28 @@ export const keepSame = (was: readonly AppManifestEntry[], now: AppManifestEntry
   return kept.length === was.length && kept.every((a, i) => a === was[i]) ? (was as AppManifestEntry[]) : kept;
 };
 
+/** A catalogue entry the registry allows into the shell's own page: AUGUR's own frontends, and IN_PAGE_APPS. */
+export type InPageApp = AppManifestEntry & { inPage?: boolean };
+
 /**
- * Why this shell can't open an app, or undefined when it can. An app names the
+ * Why the shell won't load an app into its own page, or undefined when it may. Code loaded there runs as the
+ * shell, with the person's sign-in, so only an app the registry marks `inPage` loads there (ADR 0076); any
+ * other app runs in the sandbox on the app contract.
+ */
+export const inPageRefusal = (app: InPageApp): string | undefined =>
+  isWorkerApp(app) || app.inPage === true
+    ? undefined
+    : `${app.name} loads into AUGUR's own page, which only AUGUR's own apps may. Its team needs to release it on the app contract; until then an admin can allow it on this deployment with IN_PAGE_APPS.`;
+
+/**
+ * Why this shell can't open an app, or undefined when it can: one it may not load into its page (inPageRefusal),
+ * or one made for other SDK releases. An app names the
  * SDK releases it works with; a shell whose SDK is outside that range would
  * hand it a mount context it doesn't expect, so it refuses instead.
  */
 export const incompatibility = (app: AppManifestEntry, sdkVersion = SDK_VERSION): string | undefined => {
+  const outside = inPageRefusal(app);
+  if (outside) return outside;
   const range = typeof app.sdk === 'string' ? semver.validRange(app.sdk) : null;
   if (!range) return `${app.name} doesn't say which versions of AUGUR it works with, so it can't be opened. Its team needs to release it again.`;
   if (semver.satisfies(sdkVersion, range, { includePrerelease: true })) return undefined;
