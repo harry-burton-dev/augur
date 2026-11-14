@@ -80,7 +80,7 @@ const databaseClient = (to: { host: string; port: number }) => (client: Socket) 
       if (code === CANCEL_REQUEST) return pipeTo(client, to, held, POSTGRES_DOWN);
       if (code !== PROTOCOL_3) return refuse('The apps’ relay to Postgres only takes a Postgres start message.');
       const user = userOf(held.subarray(8, length));
-      if (!user || !APP_LOGIN.test(user)) return refuse('Through the apps’ relay, only an app’s own login reaches Postgres, never the platform’s or a service’s.');
+      if (!user || !APP_LOGIN.test(user)) return refuse('Through the apps’ relay, only an app’s own login reaches Postgres, never AUGUR’s own logins.');
       return pipeTo(client, to, held, POSTGRES_DOWN);
     }
   };
