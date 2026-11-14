@@ -432,6 +432,56 @@ app_secret() {
     process.stdout.write(secrets.signIn);'
 }
 
+# The parts of AUGUR the app runner joins to an app's network (runner.ts, PlatformPart): everything else of AUGUR's
+# must be out of an app's reach.
+APP_REACHES='gateway db-relay bucket-relay otel-lgtm'
+
+# What app-reach-check.mjs looks at from inside $1 (one of the app's containers), as JSON, from the running
+# deployment: the gateway by the name apps are given; every other running container of AUGUR's, by each of its
+# addresses and each port it exposes or is told to listen on (PORT); and, when db-relay is on one of the app's
+# networks, Postgres through it as each login AUGUR's own parts use (their database URLs and KC_DB_USERNAME).
+app_reach_targets() {
+  local app=$1 config inspected app_networks relay_networks
+  config=$(pc config --format json)
+  inspected=$(pc ps -q | xargs -r docker inspect)
+  app_networks=$(docker inspect "$app" | jq -c '[.[0].NetworkSettings.Networks[].NetworkID]')
+  relay_networks=$(jq -c '[.[] | select(.Config.Labels["com.docker.compose.service"] == "db-relay") | .NetworkSettings.Networks[].NetworkID]' <<<"$inspected")
+  jq -n --argjson config "$config" --argjson inspected "$inspected" --argjson app "$app_networks" --argjson relay "$relay_networks" \
+    --arg allowed "$APP_REACHES" --argjson gateway "$(jq -er '.services.gateway.environment.PORT // "8080" | tonumber' <<<"$config")" '
+    ($allowed | split(" ")) as $allowed
+    | {
+        mustReach: [{ name: "the gateway", host: "gateway", port: $gateway }],
+        mustNotReach: [
+          $inspected[]
+          | .Config.Labels["com.docker.compose.service"] as $s
+          | select($allowed | index($s) | not)
+          | ([(.Config.ExposedPorts // {}) | keys[] | select(endswith("/tcp")) | rtrimstr("/tcp") | tonumber]
+             + [$config.services[$s].environment.PORT // empty | tonumber]) as $ports
+          | .NetworkSettings.Networks[].IPAddress as $ip
+          | select($ip != "")
+          | $ports | unique[]
+          | { name: $s, host: $ip, port: . }
+        ],
+      }
+    + if ($app - ($app - $relay) | length) > 0 then
+        { database: { host: "postgres", port: 5432, logins: (
+            [$config.services[].environment // {} | to_entries[] | .value | tostring | (capture("^(jdbc:)?postgres(ql)?://(?<u>[^:/@]+)(:[^@/]*)?@") // empty).u]
+            + [$config.services[].environment.KC_DB_USERNAME // empty] | unique) } }
+      else {} end'
+}
+
+# What one of the app's containers can reach (infra/app-reach-check.mjs, the targets above), looked at from inside
+# its own network (`--network container:`). It runs in the storage image, which has node, so nothing goes into the
+# app's own container. 0: as it should be; 1: the app reaches what it mustn't (or not the gateway); else: the check
+# itself couldn't run.
+app_reach_check() {
+  local container=$1 image targets
+  image=$(pc config --format json | jq -er '.services.storage.image') || return 3
+  targets=$(app_reach_targets "$container") || return 3
+  docker run --rm --network "container:$container" --entrypoint node -e REACH_TARGETS="$targets" \
+    -v "$here/app-reach-check.mjs:/reach/check.mjs:ro" "$image" /reach/check.mjs >&2
+}
+
 # Broken mode's app (STARTER_RELEASE, above): the browser check installs it as the first admin and asks for its parts
 # to be stopped by writing <id>.stop; they are stopped here, which writes <id>.stopped ("ok", or why not).
 through_the_runner() {
@@ -443,7 +493,13 @@ through_the_runner() {
     notice "The app runner's part of the deploy test was skipped: $starter_skip"
     return 0
   fi
-  local id=$starter_id name secret issuer shots="${BROWSER_CHECK_OUT:-$work/browser-check}" check status=0 containers=()
+  local reach_skip=''
+  # A release from before the apps' relays (db-relay, bucket-relay) joins Postgres and Garage themselves to an app's
+  # network, so what an app can reach is checked only from the release that took them off.
+  if ! pc exec -T updater node -e 'process.exit(require("fs").readFileSync("dist/runner.js", "utf8").includes("db-relay") ? 0 : 3)' >/dev/null 2>&1; then
+    reach_skip="this release's app runner joins the stores themselves to an app's network, from before the relays"
+  fi
+  local id=$starter_id name secret issuer shots="${BROWSER_CHECK_OUT:-$work/browser-check}" check status=0 containers=() reach=
   name=$(jq -r '.manifest.name // .id' "$STARTER_RELEASE")
   secret=$(app_secret "$id")
   issuer=$(pc config --format json | jq -er '.services.updater.environment.OIDC_ISSUER')
@@ -457,18 +513,30 @@ through_the_runner() {
       mapfile -t containers < <(app_containers "$id")
       if [ "${#containers[@]}" = 0 ]; then
         echo "no running container of $id's service or worker parts" > "$shots/$id.stopped"
-      elif docker stop "${containers[@]}" >&2; then
-        echo "Stopped $name's ${#containers[@]} running part(s), as a crash would." >&2
-        echo ok > "$shots/$id.stopped"
       else
-        echo "docker stop failed" > "$shots/$id.stopped"
+        # While it runs, before it's stopped: what the app can reach from its own network.
+        echo "What $name's ${containers[0]} can reach, from its own network:" >&2
+        reach=0
+        if [ -n "$reach_skip" ]; then notice "What $name can reach wasn't checked: $reach_skip."
+        else app_reach_check "${containers[0]}" || reach=$?; fi
+        if docker stop "${containers[@]}" >&2; then
+          echo "Stopped $name's ${#containers[@]} running part(s), as a crash would." >&2
+          echo ok > "$shots/$id.stopped"
+        else
+          echo "docker stop failed" > "$shots/$id.stopped"
+        fi
       fi
     fi
     sleep 2
   done
   wait "$check" || status=$?
   if [ "$status" != 0 ]; then echo "$name through the app runner: the browser check failed." >&2; return 1; fi
-  echo "$name was installed, opened, stopped (its pane said so) and removed through the app runner, and its sign-in went with it." >&2
+  case $reach in
+    0) ;;
+    1) echo "$name's container reached what an app must never reach, or didn't reach the gateway (above)." >&2; return 1 ;;
+    *) echo "What $name's container can reach couldn't be checked (app_reach_check ended $reach, above)." >&2; return 1 ;;
+  esac
+  echo "$name was installed, opened, kept from AUGUR's own services and logins, stopped (its pane said so) and removed through the app runner, and its sign-in went with it." >&2
 }
 
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
