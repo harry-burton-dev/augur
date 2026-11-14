@@ -193,7 +193,7 @@ const load = (dir, name) => {
   try {
     doc = parse(readFileSync(file, 'utf8'));
   } catch (e) {
-    throw new Error(`${file}: isn't YAML: ${e.message.split('\n')[0]}`);
+    throw new Error(`${file}: isn't YAML: ${e.message.split('\n')[0]}`, { cause: e });
   }
   const found = problems(doc, file);
   if (found.length) throw new Error(found.join('\n'));
