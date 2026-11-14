@@ -20,9 +20,10 @@ permissions:
   # calls this workflow grants the same to its caller job.
   pull-requests: write
 # Every run checks the pull request as it is when it runs, whatever ran before it, so a newer run may cancel
-# an older one.
+# an older one. The run that records Harry's ok has a group of its own, so a push or an edit straight after
+# the label goes on can't cancel it before it records.
 concurrency:
-  group: review-${{ github.repository }}-${{ github.event.pull_request.number }}
+  group: review-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ (github.event.action == 'labeled' && github.event.label.name == 'harry-ok') && github.run_id || 'check' }}
   cancel-in-progress: true
 jobs:
   tier:
@@ -70,11 +71,22 @@ jobs:
               echo "::warning::Couldn't record Harry's ok (a read-only token?), so it doesn't count yet."
             fi
           elif jq -e 'index("harry-ok")' <<<"$labels" >/dev/null; then
-            okd=$(gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
-              --jq '.[] | select(.user.login == "github-actions[bot]") | .body | capture("<!-- harry-ok: (?<fp>[0-9a-f]+) -->").fp' | tail -1)
+            recorded() {
+              gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
+                --jq '.[] | select(.user.login == "github-actions[bot]") | .body | capture("<!-- harry-ok: (?<fp>[0-9a-f]+) -->").fp' | tail -1
+            }
+            okd=$(recorded)
+            # The label may have gone on seconds ago, its own run still recording: give that run a minute and a half.
+            on=$(gh api "repos/$GH_REPO/issues/$PR/events" --paginate \
+              --jq '[.[] | select(.event == "labeled" and .label.name == "harry-ok")] | last | .created_at // empty' | tail -1)
+            if [ -z "$okd" ] && [ -n "$on" ] && [ $(( $(date +%s) - $(date -d "$on" +%s) )) -lt 180 ]; then
+              for _ in $(seq 18); do sleep 5; okd=$(recorded); [ -n "$okd" ] && break; done
+            fi
             if [ -z "$okd" ]; then
+              # A label with nothing recorded behind it comes off, so what shows is what counts: no label, no ok.
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/harry-ok" >/dev/null || echo "::warning::Couldn't take the label off (a read-only token)."
               labels=$(jq -c 'map(select(. != "harry-ok"))' <<<"$labels")
-              echo "::warning::The harry-ok label has no recorded change behind it (added before the record existed, or its run was cancelled or couldn't write). Take it off and add it again."
+              echo "::warning::The harry-ok label had no recorded change behind it, so it is off. Add it again if Harry's ok still covers this change."
             elif [ "$okd" != "$now" ]; then
               gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/harry-ok" >/dev/null || echo "::warning::Couldn't take the label off (a read-only token): this check stays red instead."
               labels=$(jq -c 'map(select(. != "harry-ok"))' <<<"$labels")
