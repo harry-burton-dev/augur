@@ -11,6 +11,14 @@ describe('steadyPool', () => {
     expect(said[0]).toContain('administrator command');
   });
 
+  it('keeps logging after the first lost connection, not just once', () => {
+    const said: string[] = [];
+    const pool = steadyPool(new EventEmitter(), (m) => said.push(m));
+    pool.emit('error', new Error('first'));
+    expect(() => pool.emit('error', new Error('second'))).not.toThrow();
+    expect(said).toHaveLength(2);
+  });
+
   it('gives each new connection a statement timeout, unless it is 0', () => {
     const asked: string[] = [];
     const client = { query: async (text: string) => void asked.push(text) };
