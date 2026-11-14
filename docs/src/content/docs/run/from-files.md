@@ -17,6 +17,8 @@ Docker, and never prints a secret.
 - `ssh` to each server, as a user who can run Docker there.
 - [sops](https://getsops.io) and an [age](https://age-encryption.org) key, if the files keep their secrets
   beside them.
+- [cosign](https://docs.sigstore.dev/cosign/system_config/installation/), for `up`: it checks each release's deploy
+  bundle here before sending it to the server.
 - A folder of deployment files, one per server: `deployments/<name>.yaml`. Keep it in a private repository
   of your own, with the secrets files next to it.
 
@@ -52,7 +54,7 @@ Run each from the folder that holds `deployments/`, or pass `--dir <folder>`:
 | `pnpm augurctl init <name>` | Makes the secrets file: a random value for each secret AUGUR can make up, encrypted with sops for the keys your `.sops.yaml` names. Add the ones only you know (`TS_AUTHKEY`, `PLATFORM_ADMIN_PASSWORD`) with `sops <file>`. It never replaces a secrets file. |
 | `pnpm augurctl plan <name>` | Lists how the server differs from its file: its settings, its release and ring, its apps, and, for each secret, only whether it matches. It exits 0 when nothing differs and 2 when something does. |
 | `pnpm augurctl status [<name>...]` | One line per server: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. |
-| `pnpm augurctl up <name>` | Installs a new server: fetches the release's [deploy bundle](../install/#1-get-the-release), checks it (and its signature, if the server has cosign), writes `.env` from the file and its secrets, runs the preflight and starts AUGUR. It stops if the server has a `.env` already. |
+| `pnpm augurctl up <name>` | Installs a new server: fetches the release's [deploy bundle](../install/#1-get-the-release) and checks its signature here, sends it to the server and checks its sums there, makes `.env` from the file and its secrets, and starts AUGUR once the preflight passes. If the preflight stops it, fix what it says and run `up` again. It stops if the server has a `.env` already. |
 
 To change a running server's release or apps, use its Deployment page for now; `plan` shows when it has
 drifted from its file. Reading the apps a server runs needs read access to its `infra/deploy/apps/` (owned by

@@ -10,7 +10,8 @@
 // Changing a running server's release or apps goes through the server's own Deployment page for now.
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import Ajv from 'ajv/dist/2020.js';
@@ -83,12 +84,14 @@ export const factsScript = (dir, plain, hashed) => {
     'set -u',
     `cd ${q(dir)} || { echo "@@error"; echo "No folder ${dir.replace(/[^A-Za-z0-9_./-]/g, '')} on the server."; exit 0; }`,
     'env=infra/deploy/.env',
-    'get() { sed -n "s/^$1=//p" "$env" 2>/dev/null | tail -n 1; }',
+    // As readEnv reads a value: the last line for the key, trimmed, without matching quotes.
+    `get() { sed -n "s/^$1=//p" "$env" 2>/dev/null | tail -n 1 | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"\\(.*\\)"$/\\1/' -e "s/^'\\(.*\\)'$/\\1/"; }`,
     'pc() { docker compose -f infra/deploy/compose.yml --env-file "$env" "$@"; }',
     'echo "@@env"',
     `for k in ${plain.join(' ')}; do grep -q "^$k=" "$env" 2>/dev/null && printf '%s=%s\\n' "$k" "$(get "$k")"; done`,
     `for k in ${hashed.join(' ')}; do grep -q "^$k=" "$env" 2>/dev/null && printf '%s=%s\\n' "$k" "$(get "$k" | tr -d '\\n' | sha256sum | cut -d' ' -f1)"; done`,
-    'echo "@@apps"; { cat infra/deploy/apps/state.json 2>/dev/null || sudo -n cat infra/deploy/apps/state.json 2>/dev/null || true; }; echo',
+    // No apps folder, or none in it yet, is no apps; a folder this user can't read prints nothing.
+    'echo "@@apps"; if [ ! -d infra/deploy/apps ]; then echo \'{"apps":{}}\'; else { cat infra/deploy/apps/state.json 2>/dev/null || sudo -n cat infra/deploy/apps/state.json 2>/dev/null || { [ -r infra/deploy/apps ] && [ -x infra/deploy/apps ] && echo \'{"apps":{}}\'; } || true; }; fi; echo',
     'echo "@@backup"; cat infra/deploy/backups/status/last-backup.json 2>/dev/null; echo',
     'echo "@@ps"; pc ps --all --format json 2>/dev/null || true',
     'echo "@@upgrade"; pc exec -T postgres psql -U platform -d platform -tAc "select row_to_json(u) from (select from_version, version, state, message, finished_at from registry.upgrades order by requested_at desc limit 1) u" 2>/dev/null || true',
@@ -132,44 +135,51 @@ export const statusLine = (doc, f) => {
   return `${doc.name} (${doc.ring}): ${f.env.PLATFORM_VERSION ?? '?'} · ${running.length} running${unwell.length ? `, ${unwell.length} unwell: ${unwell.map((c) => c.Service).join(', ')}` : ''} · ${backup} · ${upgrade} · ${apps}`;
 };
 
+/** The bundle's signers: AUGUR's release and dev build workflows, on a branch releases are made from (the updater's signers.ts). */
+export const bundleIdentity = (repo) =>
+  `^https://github\\.com/${repo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\.github/workflows/(release|augur-dev)\\.yml@refs/heads/(main|preview|production|release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+)$`;
+
 /**
- * Installing a new server from the release's deploy bundle (AUGUR's docs, Install AUGUR), in two steps: fetch
- * and check the bundle, printing its .env.example; then, with the .env made from it, the preflight and the start.
+ * Installing a new server (AUGUR's docs, Install AUGUR): the deploy bundle, checked here with cosign, goes to the
+ * server on stdin; there it's unpacked and its sums checked, and its .env.example printed. Then, with the .env made
+ * from that, the preflight runs on a copy, which becomes .env only once it passes, so a failed install can be run again.
  */
-export const fetchScript = (doc, repo = repoFrom()) => {
-  const v = doc.release;
-  const base = `https://github.com/${repo}/releases/download/augur%40${v}`;
-  return [
+export const unpackScript = (doc) =>
+  [
     'set -eu',
     `mkdir -p ${q(doc.host.dir)} && cd ${q(doc.host.dir)}`,
     `if [ -e infra/deploy/.env ]; then echo "${doc.name} is installed already (infra/deploy/.env is there): use augurctl plan." >&2; exit 3; fi`,
-    `curl -fsSL ${q(`${base}/augur-deploy-${v}.tar.gz`)} -o bundle.tar.gz`,
-    `curl -fsSL ${q(`${base}/augur-deploy-${v}.tar.gz.sigstore.json`)} -o bundle.tar.gz.sigstore.json`,
-    `if command -v cosign >/dev/null; then cosign verify-blob --bundle bundle.tar.gz.sigstore.json --certificate-identity-regexp ${q(`^https://github.com/${repo}/\\.github/workflows/(release|augur-dev)\\.yml@refs/heads/(main|release/[a-z][a-z0-9-]*-[0-9]+\\.[0-9]+)$`)} --certificate-oidc-issuer https://token.actions.githubusercontent.com bundle.tar.gz >&2; else echo "No cosign on the server: the bundle's signature isn't checked, only its sums." >&2; fi`,
-    'tar -xzf bundle.tar.gz && sha256sum --quiet -c SHA256SUMS >&2 && rm -f bundle.tar.gz bundle.tar.gz.sigstore.json',
+    'cat > bundle.tar.gz && tar -xzf bundle.tar.gz && rm -f bundle.tar.gz && sha256sum --quiet -c SHA256SUMS >&2',
     'cat infra/deploy/.env.example',
   ].join('\n');
-};
 export const startScript = (doc, env) =>
   [
     'set -eu',
     `cd ${q(doc.host.dir)}`,
-    `umask 077 && cat > infra/deploy/.env <<'AUGURCTL_ENV'\n${env}AUGURCTL_ENV`,
-    'docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur" -w /augur node:22-alpine node scripts/preflight.mjs --install --fill-secrets >&2',
+    `umask 077 && cat > infra/deploy/.env.augurctl <<'AUGURCTL_ENV'\n${env}AUGURCTL_ENV`,
+    'docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur" -w /augur node:22-alpine node scripts/preflight.mjs --install --fill-secrets --env infra/deploy/.env.augurctl >&2',
+    'mv infra/deploy/.env.augurctl infra/deploy/.env',
     'docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d >&2',
   ].join('\n');
+
+/** One .env line. A value with anything but plain characters is single-quoted, which Compose takes literally (no $ or #). */
+const line$ = (key, value) => {
+  if (/^[A-Za-z0-9_./:@+,=-]*$/.test(value)) return `${key}=${value}`;
+  if (/['\n]/.test(value)) throw new Error(`${key} has a quote or a line break in it, which .env can't hold: change it in the file or the secrets file.`);
+  return `${key}='${value}'`;
+};
 
 /** The .env a new server starts with: .env.example's lines, with the file's values and secrets in place, then any it doesn't list. */
 export const newEnv = (example, values) => {
   const left = { ...values };
-  const lines = example.trimEnd().split('\n').map((line) => {
+  const lines = (example.trimEnd() ? example.trimEnd().split('\n') : []).map((line) => {
     const m = /^#?\s*([A-Z][A-Z0-9_]*)=/.exec(line);
     if (!m || !(m[1] in left)) return line;
     const value = left[m[1]];
     delete left[m[1]];
-    return `${m[1]}=${value}`;
+    return line$(m[1], value);
   });
-  return `${[...lines, ...Object.entries(left).map(([k, v]) => `${k}=${v}`)].join('\n').trimEnd()}\n`;
+  return `${[...lines, ...Object.entries(left).map(([k, v]) => line$(k, v))].join('\n').trimEnd()}\n`;
 };
 
 // ---- What touches the world: files, ssh and sops.
@@ -184,29 +194,51 @@ const load = (dir, name) => {
 };
 const secretsOf = ({ doc, file }) => {
   if (!doc.secrets) return {};
-  return readEnv(execFileSync('sops', ['--decrypt', '--input-type', 'dotenv', '--output-type', 'dotenv', resolve(dirname(file), doc.secrets)], { encoding: 'utf8' }));
+  // sops finds its .sops.yaml from the folder it runs in: the deployment files' own.
+  return readEnv(execFileSync('sops', ['--decrypt', '--input-type', 'dotenv', '--output-type', 'dotenv', resolve(dirname(file), doc.secrets)], { encoding: 'utf8', cwd: dirname(file) }));
 };
-const onHost = (host, script) =>
-  host.ssh === 'local'
-    ? execFileSync('sh', ['-s'], { input: script, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'] })
-    : execFileSync('ssh', ['-o', 'BatchMode=yes', host.ssh, 'sh', '-s'], { input: script, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'] });
+/** Runs `script` on the host. With `input`, the script is sh -c's argument and `input` its stdin. */
+const onHost = (host, script, input) => {
+  const argv = input === undefined ? ['sh', '-s'] : ['sh', '-c', script];
+  const options = { input: input ?? script, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], maxBuffer: 1 << 26 };
+  return host.ssh === 'local' ? execFileSync(argv[0], argv.slice(1), options) : execFileSync('ssh', ['-o', 'BatchMode=yes', host.ssh, ...argv.slice(0, 2), ...(input === undefined ? [] : [q(script)])], options);
+};
+/** The release's deploy bundle, fetched and its signature checked here. */
+const fetchBundle = (version, repo = repoFrom()) => {
+  const work = mkdtempSync(join(tmpdir(), 'augurctl-'));
+  const base = `https://github.com/${repo}/releases/download/augur%40${version}/augur-deploy-${version}.tar.gz`;
+  try {
+    execFileSync('curl', ['-fsSL', '-o', join(work, 'b.tar.gz'), base, '-o', join(work, 'b.sigstore.json'), `${base}.sigstore.json`], { stdio: 'inherit' });
+    execFileSync('cosign', ['verify-blob', '--bundle', join(work, 'b.sigstore.json'), '--certificate-identity-regexp', bundleIdentity(repo), '--certificate-oidc-issuer', 'https://token.actions.githubusercontent.com', join(work, 'b.tar.gz')], { stdio: ['ignore', 'ignore', 'inherit'] });
+    return readFileSync(join(work, 'b.tar.gz'));
+  } finally {
+    rmSync(work, { recursive: true, force: true });
+  }
+};
 const factsOf = (doc, secretKeys = []) =>
   readFacts(onHost(doc.host, factsScript(doc.host.dir, ['PLATFORM_VERSION', ...Object.keys(desiredEnv(doc))], secretKeys)));
 
 const main = () => {
   const args = process.argv.slice(2);
   const at = args.indexOf('--dir');
-  const dir = resolve(at >= 0 ? args.splice(at, 2)[1] : 'deployments');
+  // Where the person ran it: under pnpm the script runs in AUGUR's folder, and INIT_CWD says where they were.
+  const dir = resolve(process.env.INIT_CWD ?? process.cwd(), at >= 0 ? args.splice(at, 2)[1] : 'deployments');
   const [command, ...names] = args;
-  const all = () => (existsSync(dir) ? readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).map((f) => f.replace(/\.ya?ml$/, '')).sort() : []);
+  const all = () => (existsSync(dir) ? [...new Set(readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).map((f) => f.replace(/\.ya?ml$/, '')))].sort() : []);
   if (command === 'check') {
-    const found = all().flatMap((name) => {
-      const file = ['yaml', 'yml'].map((ext) => join(dir, `${name}.${ext}`)).find(existsSync);
-      return problems(parse(readFileSync(file, 'utf8')), file);
+    const names = all();
+    if (!names.length) throw new Error(`No deployment files in ${dir}: run it from the folder that holds deployments/, or pass --dir.`);
+    const found = names.flatMap((name) => {
+      try {
+        load(dir, name);
+        return [];
+      } catch (e) {
+        return e.message.split('\n');
+      }
     });
     for (const p of found) console.error(`✗ ${p}`);
     if (found.length) process.exit(1);
-    return console.log(`✓ ${all().length} deployment file${all().length === 1 ? '' : 's'} in ${dir}, each as AUGUR's schema and settings say.`);
+    return console.log(`✓ ${names.length} deployment file${names.length === 1 ? '' : 's'} in ${dir}, each as AUGUR's schema and settings say.`);
   }
   if (command === 'init') {
     const { doc, file } = load(dir, names[0]);
@@ -215,7 +247,7 @@ const main = () => {
     if (existsSync(target)) throw new Error(`${target} is there already: augurctl never replaces secrets.`);
     const keys = Object.entries(SETTINGS.properties).filter(([, s]) => s['x-generate']).map(([k]) => `${k}=`);
     const { text, filled } = fillSecrets(`${keys.join('\n')}\n`, SETTINGS);
-    writeFileSync(target, execFileSync('sops', ['--encrypt', '--input-type', 'dotenv', '--output-type', 'dotenv', '--filename-override', target, '/dev/stdin'], { input: text, encoding: 'utf8' }), { mode: 0o600 });
+    writeFileSync(target, execFileSync('sops', ['--encrypt', '--input-type', 'dotenv', '--output-type', 'dotenv', '--filename-override', target, '/dev/stdin'], { input: text, encoding: 'utf8', cwd: dirname(file) }), { mode: 0o600 });
     return console.log(`Wrote ${target}: ${filled.length} secrets, encrypted with sops. Add the ones only you know (TS_AUTHKEY, PLATFORM_ADMIN_PASSWORD) with sops ${doc.secrets}.`);
   }
   if (command === 'plan') {
@@ -242,7 +274,7 @@ const main = () => {
     const { doc } = loaded;
     if (doc.release === 'follow') throw new Error(`${doc.name} follows its ring: name the release to install first in release.`);
     const secrets = secretsOf(loaded);
-    const example = onHost(doc.host, fetchScript(doc));
+    const example = onHost(doc.host, unpackScript(doc), fetchBundle(doc.release));
     onHost(doc.host, startScript(doc, newEnv(example, { ...desiredEnv(doc), ...secrets })));
     return console.log(`${doc.name} is installed and starting. Sign in as in AUGUR's docs, Install AUGUR, step 5; then augurctl plan ${doc.name}.`);
   }
