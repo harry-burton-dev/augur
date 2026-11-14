@@ -10,6 +10,7 @@ import type { FastifyRequest } from 'fastify';
 import { JSONWebKeySet } from 'jose';
 import { JWTPayload } from 'jose';
 import { JWTVerifyGetKey } from 'jose';
+import type { ServerResponse } from 'node:http';
 
 // @public
 export function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id'> & {
@@ -370,6 +371,9 @@ export interface ClientCredentialsOptions {
 }
 
 // @public
+export const CLOSE_BUDGET_MS = 3000;
+
+// @public
 export const commonSettings: {
     database: {
         name: string;
@@ -622,6 +626,9 @@ export interface EmbedTextsOptions {
     modelsUrl: string;
     workspace?: string;
 }
+
+// @public
+export const endStreamsOnStop: (app: FastifyInstance) => ((res: ServerResponse) => void);
 
 // @public
 export const EVENT_CURSOR_TABLE_SQL = "\n  create table if not exists event_followers (\n    follower text primary key,\n    seq text not null\n  );";
@@ -1106,6 +1113,9 @@ export interface MailRelay {
 
 // @public
 export const mailRelayFromEnv: (env: Record<string, string | undefined>, warn?: (message: string) => void) => MailRelay | undefined;
+
+// @public
+export const MAX_SHUTDOWN_GRACE_MS: number;
 
 // @public
 export type MemberLookup = (team: string) => Promise<string[]>;
@@ -1726,6 +1736,7 @@ export const SERVING: unique symbol;
 
 // @public
 export interface Serving {
+    onStop(stop: () => unknown): void;
     stop(reason?: string): Promise<void>;
     readonly stopping: boolean;
 }
@@ -1883,6 +1894,12 @@ export const statementTimeoutMs: (env?: Record<string, string | undefined>) => n
 //
 // @public
 export const steadyPool: <P extends Pool>(pool: P, log?: (message: string) => void, timeoutMs?: number) => P;
+
+// @public
+export const STOP_BUDGET_MS = 30000;
+
+// @public
+export const TELEMETRY_FLUSH_MS = 3000;
 
 // @public
 export type TokenSource = () => Promise<string>;

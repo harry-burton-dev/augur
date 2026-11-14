@@ -1,3 +1,4 @@
+import type { ServerResponse } from 'node:http';
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import { sendProblem } from './problems.js';
 import { FLUSH_TELEMETRY, SERVING, type ShutdownHooks } from './shutdown.js';
@@ -5,17 +6,42 @@ import { FLUSH_TELEMETRY, SERVING, type ShutdownHooks } from './shutdown.js';
 export { FLUSH_TELEMETRY, SERVING } from './shutdown.js';
 const hooks = globalThis as ShutdownHooks;
 
+/** How long Docker waits for a service to stop before it kills it: Compose's stop_grace_period for AUGUR's services. */
+export const STOP_BUDGET_MS = 30_000;
+/** How long a stopping service waits for telemetry to send what it holds. */
+export const TELEMETRY_FLUSH_MS = 3_000;
+/** How long a stopping service gives everything it closes (pools, timers) once its calls have finished. */
+export const CLOSE_BUDGET_MS = 3_000;
 /** Twenty seconds: longer than any call a person waits on, well inside Compose's stop_grace_period. */
 export const DEFAULT_SHUTDOWN_GRACE_MS = 20_000;
+/** The longest grace a setting can ask for: what is left of Docker's wait once closing and telemetry have theirs, and a second spare. */
+export const MAX_SHUTDOWN_GRACE_MS = STOP_BUDGET_MS - CLOSE_BUDGET_MS - TELEMETRY_FLUSH_MS - 1_000;
 /** How long one readiness check may take before it counts as not ready. */
 export const READY_CHECK_TIMEOUT_MS = 2_000;
-/** How long a stopping service waits for telemetry to send what it holds. */
-const FLUSH_MS = 3_000;
 
-/** How long a stopping service lets calls in flight finish: SHUTDOWN_GRACE_SECONDS, else 20 seconds. */
+/**
+ * How long a stopping service lets calls in flight finish: SHUTDOWN_GRACE_SECONDS, else 20 seconds, and never so
+ * long that Docker kills it before it has closed its pools and sent its telemetry.
+ */
 export const shutdownGraceMs = (env: Record<string, string | undefined> = process.env): number => {
   const seconds = Number(env.SHUTDOWN_GRACE_SECONDS?.trim());
-  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : DEFAULT_SHUTDOWN_GRACE_MS;
+  return Number.isFinite(seconds) && seconds > 0 ? Math.min(Math.round(seconds * 1000), MAX_SHUTDOWN_GRACE_MS) : DEFAULT_SHUTDOWN_GRACE_MS;
+};
+
+/**
+ * Ends a service's open streams (server-sent events) as it stops, before it waits for its calls in flight:
+ * a stream has no end of its own, and the browser opens it again on a service that is up. Call it once as
+ * the app is built, and pass each stream's response to what it returns.
+ */
+export const endStreamsOnStop = (app: FastifyInstance): ((res: ServerResponse) => void) => {
+  const open = new Set<ServerResponse>();
+  app.addHook('preClose', async () => {
+    for (const res of open) res.end();
+  });
+  return (res) => {
+    open.add(res);
+    res.on('close', () => open.delete(res));
+  };
 };
 
 /** One thing a service needs before it can answer: a database pool, another store. */
@@ -53,6 +79,8 @@ export interface Serving {
   readonly stopping: boolean;
   /** Stops as SIGTERM does. Calling it again returns the same stop. */
   stop(reason?: string): Promise<void>;
+  /** Stops background work started after serve() (a relay, a follower, a timer) before what it uses is closed. */
+  onStop(stop: () => unknown): void;
 }
 
 const within = <T>(work: Promise<T>, ms: number): Promise<T> =>
@@ -72,14 +100,25 @@ const within = <T>(work: Promise<T>, ms: number): Promise<T> =>
  */
 export async function serve(app: FastifyInstance, { port, host = '0.0.0.0', ready = [], close = [], graceMs = shutdownGraceMs(), signals = ['SIGTERM', 'SIGINT'], exit = (code) => process.exit(code) }: ServeOptions): Promise<Serving> {
   let stopped: Promise<void> | undefined;
+  /** Background work's stops, run once the calls in flight have finished and before `close`. */
+  const background: Array<() => unknown> = [];
 
   app.get('/readyz', { schema: { hide: true } as FastifySchema }, async (_req, reply) => {
     if (stopped) return sendProblem(reply, 503, 'unavailable', 'This service is stopping.');
+    // The answer names what isn't answering, never why: the reason (a login, a host name) goes to the log only.
     const checks = Object.fromEntries(
-      await Promise.all(ready.map(async ({ name, check }) => [name, await within(Promise.resolve().then(check), READY_CHECK_TIMEOUT_MS).then(() => 'ok', (err: Error) => err.message || 'not answering')] as const)),
+      await Promise.all(
+        ready.map(async ({ name, check }) => {
+          const result = await within(Promise.resolve().then(check), READY_CHECK_TIMEOUT_MS).then(
+            () => 'ok' as const,
+            (err: Error) => (app.log.warn({ check: name, err: err.message }, 'not ready'), 'not answering' as const),
+          );
+          return [name, result] as const;
+        }),
+      ),
     );
     const down = Object.entries(checks).filter(([, result]) => result !== 'ok');
-    if (down.length) return sendProblem(reply, 503, 'unavailable', `Not ready: ${down.map(([name, why]) => `${name} (${why})`).join(', ')}.`, { extensions: { checks } });
+    if (down.length) return sendProblem(reply, 503, 'unavailable', `Not ready: ${down.map(([name]) => name).join(', ')} not answering.`, { extensions: { checks } });
     return { ready: true, checks };
   });
 
@@ -99,18 +138,25 @@ export async function serve(app: FastifyInstance, { port, host = '0.0.0.0', read
       const cut = setTimeout(() => app.server.closeAllConnections(), graceMs);
       try {
         await app.close();
+      } catch (err) {
+        app.log.warn({ err: String(err) }, 'stopping the server failed; closing the rest anyway');
       } finally {
         clearTimeout(cut);
       }
-      for (const done of close) {
-        try {
-          await done();
-        } catch (err) {
-          app.log.warn({ err: String(err) }, 'closing failed');
+      // What it holds closes in order, all within the close budget, so a pool waiting on a busy client can't
+      // keep it from exiting before Docker's wait is over.
+      const closing = (async () => {
+        for (const done of [...background, ...close]) {
+          try {
+            await done();
+          } catch (err) {
+            app.log.warn({ err: String(err) }, 'closing failed');
+          }
         }
-      }
+      })();
+      await within(closing, CLOSE_BUDGET_MS).catch(() => app.log.warn({ budgetMs: CLOSE_BUDGET_MS }, 'closing took too long; stopping anyway'));
       const flush = hooks[FLUSH_TELEMETRY];
-      if (flush) await within(flush(), FLUSH_MS).catch(() => undefined);
+      if (flush) await within(flush(), TELEMETRY_FLUSH_MS).catch(() => undefined);
       app.log.info('stopped');
       exit(0);
     })());
@@ -121,5 +167,6 @@ export async function serve(app: FastifyInstance, { port, host = '0.0.0.0', read
       return stopped !== undefined;
     },
     stop,
+    onStop: (done) => void background.push(done),
   };
 }

@@ -73,10 +73,12 @@ const copy = keepProjecting(
 );
 
 // Only what happens from now: the copy at start already has everything before it.
+// What runs in the background, to stop before the pools close.
+const background: Array<() => void> = [() => copy.stop()];
 if (credentials) {
   const since = new Date().toISOString();
   let place: string | undefined;
-  followEvents({
+  const following = followEvents({
     eventsUrl: process.env.EVENTS_URL!,
     credentials,
     topics: COPY_TOPICS,
@@ -86,7 +88,9 @@ if (credentials) {
       if (event.at >= since) copy.request();
     },
     onError: (err) => log.warn(`identity’s changes couldn’t be heard, so they wait for the next whole copy: ${(err as Error).message}`),
-  }).start();
+  });
+  following.start();
+  background.push(() => following.stop());
 }
 
 const minutes = (name: string, fallback: number) => Math.max(1, Math.floor(Number(process.env[name]) || fallback));
@@ -114,7 +118,12 @@ await serve(app, {
   port,
   ready: [
     { name: 'database', check: () => grants.ping() },
-    { name: 'OpenFGA', check: async () => void ((await engine.healthy()) || Promise.reject(new Error('not answering'))) },
+    {
+      name: 'OpenFGA',
+      check: async () => {
+        if (!(await engine.healthy())) throw new Error('OpenFGA isn’t answering');
+      },
+    },
   ],
-  close: [() => grants.close(), () => sessions.close()],
+  close: [...background, () => grants.close(), () => sessions.close()],
 });

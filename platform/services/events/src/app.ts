@@ -1,4 +1,3 @@
-import type { ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
@@ -33,6 +32,7 @@ import {
   noShadow,
   type Shadow,
   type ShadowQuestion,
+  endStreamsOnStop,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
 import { deliveryStatus, type PushingState } from './deliver.ts';
@@ -209,15 +209,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', { schema: { hide: true } }, async () => health('events', version, API_VERSION));
-  // Every open stream, so stopping ends them first: a browser opens its stream again, on a service that is up.
-  const streams = new Set<ServerResponse>();
-  const holdOpen = (res: ServerResponse) => {
-    streams.add(res);
-    res.on('close', () => streams.delete(res));
-  };
-  app.addHook('preClose', async () => {
-    for (const res of streams) res.end();
-  });
+  // Stopping ends the open streams first: a browser opens its stream again, on a service that is up.
+  const holdOpen = endStreamsOnStop(app);
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(

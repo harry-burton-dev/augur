@@ -42,7 +42,7 @@ x-telemetry: &telemetry
   SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
   # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
   DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
-  # How long a stopping service lets its calls in flight finish (20 seconds unless set; keep it under stop_grace_period).
+  # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
   SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
 
 x-service: &service

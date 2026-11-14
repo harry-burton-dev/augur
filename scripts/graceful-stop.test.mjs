@@ -8,8 +8,9 @@ import { parse } from 'yaml';
 const root = new URL('..', import.meta.url);
 const read = (path) => readFileSync(new URL(path, root), 'utf8');
 
-/** serve()'s default grace period plus telemetry's flush, in seconds: Docker must wait longer than this. */
-const STOPPING_SECONDS = 20 + 3;
+/** How long serve() plans for Docker to wait (STOP_BUDGET_MS in the service kit), in seconds: its grace, closing and flush fit inside it. */
+const budget = /export const STOP_BUDGET_MS = ([\d_]+);/.exec(read('platform/packages/service-kit/src/serve.ts'));
+const STOP_BUDGET_SECONDS = Number(budget?.[1].replaceAll('_', '')) / 1000;
 
 /** The platform services that listen for calls: each one whose index.ts starts a server. */
 const listening = readdirSync(new URL('platform/services/', root)).filter((name) => {
@@ -32,11 +33,12 @@ test('every platform service that answers calls runs through serve()', () => {
 });
 
 test('compose asks each of them /readyz, and gives it time to stop', () => {
+  assert.ok(STOP_BUDGET_SECONDS > 0, 'the service kit says how long serve() plans for Docker to wait');
   const { services } = parse(read('infra/deploy/compose.yml'), { merge: true });
   for (const name of listening) {
     const service = services[name];
     assert.ok(service, `${name} is in compose`);
     assert.match(JSON.stringify(service.healthcheck?.test ?? []), /127\.0\.0\.1:\d+\/readyz/, `${name}'s healthcheck asks /readyz`);
-    assert.ok(seconds(service.stop_grace_period) > STOPPING_SECONDS, `${name}'s stop_grace_period (${service.stop_grace_period ?? 'Docker’s 10s'}) is longer than ${STOPPING_SECONDS}s`);
+    assert.ok(seconds(service.stop_grace_period) >= STOP_BUDGET_SECONDS, `${name}'s stop_grace_period (${service.stop_grace_period ?? 'Docker’s 10s'}) is at least serve()'s ${STOP_BUDGET_SECONDS}s`);
   }
 });

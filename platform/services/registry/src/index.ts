@@ -134,20 +134,24 @@ if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fronte
 
 // Apps and platform services sign in as themselves (their Keycloak clients).
 const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, shadow: shadowFromEnv(credentials, log), knowledge: knowledgeOffer({ knowledgeUrl: process.env.KNOWLEDGE_URL || 'http://localhost:8086' }), verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, defaultApps: defaults.apps, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
-await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => database.close()] });
+const serving = await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => updates.stop(), () => appUpdates.stop(), () => database.close()] });
 
 // A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.
 if (EVENTS_URL && credentials) {
-  followLeavers({
+  const leavers = followLeavers({
     eventsUrl: EVENTS_URL,
     credentials,
     cursor: { load: () => store.followedTo(), save: (seq) => store.setFollowedTo(seq) },
     deleted: ({ person }) => store.forgetPerson(person),
     onError: (err) => log.error(`A deleted person’s name couldn’t be forgotten yet; the registry tries again (${(err as Error).message}).`),
-  }).start();
+  });
+  leavers.start();
+  serving.onStop(() => leavers.stop());
 } else log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: a deleted person’s name stays on the upgrades they asked for.');
 
 // Deployment admins hear when a release is available and how each update ended, in the shell (ADR 0044).
 if (EVENTS_URL && credentials) {
-  updateNotices({ eventsUrl: EVENTS_URL, credentials, store, updates, appUpdates, timeZone, onError: (err) => log.error(`An update notice wasn’t sent: ${err.message}`) }).start();
+  const notices = updateNotices({ eventsUrl: EVENTS_URL, credentials, store, updates, appUpdates, timeZone, onError: (err) => log.error(`An update notice wasn’t sent: ${err.message}`) });
+  notices.start();
+  serving.onStop(() => notices.stop());
 } else log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: nobody is told about new releases or how updates ended.');
