@@ -32,6 +32,20 @@ export const DEFAULT_GATEWAY_URL = 'http://gateway:8080';
 export const serviceCallerId = (service: string): string => `augur:${service}`;
 /** The caller for one of AUGUR's own services, as the gateway signs it for a part. */
 export const callerOfService = (service: string): Caller => ({ id: serviceCallerId(service), name: service, departments: [], roles: [] });
+/**
+ * The fleet's machine client (ADR 0100): a program that runs deployments from files, signed in as the Keycloak
+ * client `platform-fleet`. Through the gateway it reaches only the registry's routes that read and change what the
+ * server runs. It comes from outside the deployment, so it is not one of AUGUR's own services: its caller id is
+ * `client:platform-fleet`, which isServiceCaller doesn't take, and a service decides what it may do by isFleetCaller.
+ */
+export const FLEET_SERVICE = 'fleet';
+/** The fleet client's Keycloak client: the name its changes are recorded under. */
+export const FLEET_CLIENT_ID = `platform-${FLEET_SERVICE}`;
+/** The caller the gateway signs for the fleet's client. No person's id has a colon (it is their sign-in subject). */
+export const FLEET_CALLER: Caller = { id: `client:${FLEET_CLIENT_ID}`, name: FLEET_CLIENT_ID, departments: [], roles: [] };
+/** Whether a caller is the fleet's client, as the gateway signs it. */
+export const isFleetCaller = (caller?: Pick<Caller, 'id'>): boolean => caller?.id === FLEET_CALLER.id;
+
 /** Whether a caller is one of AUGUR's own services (the gateway included) rather than a person or an app. */
 export const isServiceCaller = (caller?: Pick<Caller, 'id'>): boolean => typeof caller?.id === 'string' && caller.id.startsWith('augur:');
 /** Which of AUGUR's services a service caller is; undefined for anyone else. */
