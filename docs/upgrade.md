@@ -56,6 +56,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### Only AUGUR's own apps load into the shell's page
+
+**From** unreleased
+
+If you run an app on contract 2 that AUGUR didn't make (today, Mandate or Explorer), it stops opening after this upgrade: it stays in the app bar and says why. Code loaded into the shell's page runs as the shell, with the person's sign-in, so only AUGUR's own apps load there now; every other app runs in the sandbox on the app contract. The registry also refuses a new contract 2 manifest for any other app. While an app's team moves it to the app contract, you can let it load in the page on this server: name it in `IN_PAGE_APPS` (ids split by commas or spaces) in `.env`, then `pc up -d registry`. Take it out again once the app is released on the app contract.
+
 ### Services wait for their database, and stop cleanly
 
 **From** unreleased

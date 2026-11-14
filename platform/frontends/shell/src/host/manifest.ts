@@ -44,6 +44,19 @@ export const keepSame = (was: readonly AppManifestEntry[], now: AppManifestEntry
   return kept.length === was.length && kept.every((a, i) => a === was[i]) ? (was as AppManifestEntry[]) : kept;
 };
 
+/** A catalogue entry the registry allows into the shell's own page: AUGUR's own frontends, and IN_PAGE_APPS. */
+export type InPageApp = AppManifestEntry & { inPage?: boolean };
+
+/**
+ * Why the shell won't load an app into its own page, or undefined when it may. Code loaded there runs as the
+ * shell, with the person's sign-in, so only an app the registry marks `inPage` loads there (ADR 0076); any
+ * other app runs in the sandbox on the app contract.
+ */
+export const inPageRefusal = (app: InPageApp): string | undefined =>
+  app.inPage === true
+    ? undefined
+    : `${app.name} loads into AUGUR's own page, which only AUGUR's own apps may. Its team needs to release it on the app contract; until then an admin can allow it on this deployment with IN_PAGE_APPS.`;
+
 /**
  * Why this shell can't open an app, or undefined when it can. An app names the
  * SDK releases it works with; a shell whose SDK is outside that range would

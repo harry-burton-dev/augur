@@ -88,7 +88,7 @@ import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './fro
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
-import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, inPageProblem, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -141,6 +141,11 @@ export interface RegistryOptions {
   dataGraceDays?: number;
   /** The apps this deployment installs by default (DEFAULT_APPS, spec 9.7). */
   defaultApps?: string[];
+  /**
+   * The apps not made by AUGUR that may still load into the shell's own page on contract 2 (IN_PAGE_APPS), a
+   * break-glass while they move to the app contract. Empty by default: only AUGUR's own frontends load there.
+   */
+  inPageApps?: readonly string[];
   /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
   pipeline?: PipelineReader;
   /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to and the deployment reports to. */
@@ -225,6 +230,7 @@ export const buildApp = async ({
   platformUrl,
   dataGraceDays,
   defaultApps,
+  inPageApps = [],
   knowledge,
   allowPrPreviews = true,
   pipeline,
@@ -351,14 +357,16 @@ export const buildApp = async ({
               // Only the kind in force (ADR 0032): a claim the registry doesn't honour never reaches the shell.
               const { category: _asked, ...rest } = served;
               const { category } = kindOf(r.entry, feed);
-              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
+              // Only an app the deployment allows into the shell's page is marked so; the shell opens no other (ADR 0076).
+              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}), ...(inPageApps.includes(r.entry.id) ? { inPage: true } : {}) };
             });
           // AUGUR's own apps' feature previews, at the server's default: on for those who turned them on.
           const platform = platformApps
             .filter((a) => !unbuiltApps.has(a.id))
             .map((a) => {
               const on = a.previews?.length ? previewsOnFor(platformRecord(a), optIns, updates.ring, at) : [];
-              return ownServed(a, platformManifests3[a.id], { maxUpload: a.maxUpload ?? DEFAULT_UPLOAD_MB, previewsOn: on });
+              const m3 = platformManifests3[a.id];
+              return { ...ownServed(a, m3, { maxUpload: a.maxUpload ?? DEFAULT_UPLOAD_MB, previewsOn: on }), ...(m3 ? {} : { inPage: true }) };
             });
           const apps = [...platform, ...registered];
           return apps.filter((a) => !a.requiredRole || roles.includes(a.requiredRole));
@@ -877,7 +885,7 @@ export const buildApp = async ({
               200: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Updated' },
               201: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Registered' },
               400: refused("The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed"),
-              403: refused('Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, or a contract 3 manifest of no release the runner was given'),
+              403: refused("Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest of an app the deployment doesn't allow into the shell's page (IN_PAGE_APPS)"),
               409: refused('The id belongs to a platform app, or the route is taken'),
               503: refused("The sign-in service can't be reached to check the app's token"),
             },
@@ -900,6 +908,8 @@ export const buildApp = async ({
           if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
           const conflict = conflictFor(entry, await store.list());
           if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
+          // Only AUGUR's own frontends load into the shell's page, and any app a deployment named as a break-glass.
+          if (!inPageApps.includes(req.params.id)) return reply.code(403).send({ error: 'forbidden', message: inPageProblem(entry.name ?? req.params.id) });
           // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0032).
           const { refused } = kindOf(entry, await feedApps());
           if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');

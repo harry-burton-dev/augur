@@ -46,7 +46,9 @@ export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...arg
   let preferences: unknown = {};
   const account = devAccount();
   const inbox = devInbox(app);
-  const catalogue = [...(app.id === devHome.id ? [app] : [devHome, app]), ...also.filter((a) => a.id !== app.id && a.id !== devHome.id)];
+  // On a developer's own machine their app may load into the page on contract 2, as IN_PAGE_APPS allows on a deployment.
+  const inPage = (a: AppManifestEntry) => ((a as { contract?: unknown }).contract === 3 ? a : { ...a, inPage: true });
+  const catalogue = [...(app.id === devHome.id ? [app] : [devHome, app]), ...also.filter((a) => a.id !== app.id && a.id !== devHome.id)].map(inPage);
   return async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input), 'http://stand-in');
     const path = url.pathname;

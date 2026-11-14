@@ -1742,6 +1742,15 @@
       ],
       "x-docs": "docs/upgrade.md#the-app-runner"
     },
+    "IN_PAGE_APPS": {
+      "type": "string",
+      "pattern": "^[a-z0-9, -]*$",
+      "description": "A break-glass: apps not made by AUGUR that may still load into the shell's own page on contract 2, by id, split by commas or spaces, while they move to the app contract (empty allows none).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/upgrade.md#release-notes-that-need-you"
+    },
     "APP_DATA_GRACE_DAYS": {
       "type": "string",
       "pattern": "^([1-9][0-9]?|[12][0-9]{2}|3[0-5][0-9]|36[0-5])?$",
