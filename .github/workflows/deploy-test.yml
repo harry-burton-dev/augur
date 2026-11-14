@@ -181,7 +181,9 @@ jobs:
         uses: sigstore/cosign-installer@7e8b541eb2e61bf99390e1afd4be13a184e9ebc5 # v3.10.1
       - if: ${{ steps.ref.outputs.signed == 'true' }}
         uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1.2.4
-      # augur-app bundle pushes Starter's images and bundle to this repository's packages, so it must be signed in.
+      # Signed in to ghcr.io before the build: augur-app bundle pushes Starter's images (docker buildx) and bundle (oras)
+      # under this repository's packages, deploy-test/<id>, and cosign signs them there, all with the docker credential
+      # this login writes. The job's packages: write is what lets the run's token push.
       - if: ${{ steps.ref.outputs.signed == 'true' }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
