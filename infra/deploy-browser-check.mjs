@@ -89,6 +89,8 @@ async function freshTotp(secret) {
 const CALL_MS = 30_000;
 // How long after a sign-in a job is still asked for on it: well inside the registry's 10 minutes.
 const SIGN_IN_FRESH_MS = 3 * 60_000;
+/** How long the gateway remembers where apps' services are (registryUpstreams' ttlMs), mirrored here. */
+const UPSTREAM_REMEMBERED_MS = 30_000;
 
 try {
   // Sign in with the first admin's starting password. Keycloak then asks for whatever the account still
@@ -311,13 +313,27 @@ async function throughTheRunner(r) {
   pass('the first admin signs in from the command line too (device grant)');
 
   await runnerJob(token, { action: 'install', release: r }, 8);
+  // The gateway asks the registry where apps' services are and keeps the answer for a while (registryUpstreams'
+  // ttlMs in platform/services/gateway/src/upstreams.ts, 30 s), so an app opened right after its install can say
+  // "Nothing is served" until that passes. A person would try again; so does this, for a little longer than the
+  // gateway remembers, and says how many tries it took.
+  const openedBy = Date.now() + UPSTREAM_REMEMBERED_MS * 1.5;
   let pane;
+  let tries = 0;
   try {
-    pane = await openApp(id);
-    const text = (await pane.innerText()).trim();
+    let text;
+    let alert;
+    for (;;) {
+      tries += 1;
+      pane = await openApp(id);
+      text = (await pane.innerText()).trim();
+      alert = (await pane.getByRole('alert').count()) ? (await pane.getByRole('alert').first().innerText()).replace(/\s+/g, ' ') : '';
+      if (!alert || Date.now() >= openedBy) break;
+      await sleep(5_000);
+    }
     if (text.length === 0) fail(`${name} opens but shows nothing`);
-    else if (await pane.getByRole('alert').count()) fail(`${name} opens saying something failed: ${(await pane.getByRole('alert').first().innerText()).replace(/\s+/g, ' ')}`);
-    else pass(`${name} opens once installed (${text.split('\n')[0].slice(0, 60)})`);
+    else if (alert) fail(`${name} opens saying something failed, after ${tries} tries: ${alert}`);
+    else pass(`${name} opens once installed${tries > 1 ? ` (on try ${tries})` : ''} (${text.split('\n')[0].slice(0, 60)})`);
     if (!loaded.some((path) => path.startsWith(`/apps/${id}/`))) fail(`${name}'s frontend wasn't loaded from /apps/${id}/`);
   } catch {
     fail(`${name} didn't open at /@me/${id} once installed`);
