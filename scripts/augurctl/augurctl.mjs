@@ -17,7 +17,7 @@ import Ajv from 'ajv/dist/2020.js';
 import { parse } from 'yaml';
 import { fillSecrets, readEnv } from '../preflight.mjs';
 import { AUGUR_REPOSITORIES, releaseIdentity } from '../mirror-release.mjs';
-import { repoFrom } from '../repo.mjs';
+import { AUGUR_HOME } from '../repo.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
@@ -28,7 +28,12 @@ const validate = new Ajv({ allErrors: true, strict: false }).compile(SCHEMA);
 /** The setting's description in the settings schema, by name or pattern. */
 const settingOf = (key, settings = SETTINGS) =>
   settings.properties?.[key] ?? Object.entries(settings.patternProperties ?? {}).find(([p]) => new RegExp(p).test(key))?.[1];
-export const isSecret = (key, settings = SETTINGS) => Boolean(settingOf(key, settings)?.writeOnly);
+/** A secret by the settings schema, or by its name when the schema doesn't know it (a key left over from an older release). */
+const SECRET_NAME = /_(SECRET|PASSWORD|TOKEN|KEY|AUTHKEY)$/;
+export const isSecret = (key, settings = SETTINGS) => {
+  const setting = settingOf(key, settings);
+  return setting ? Boolean(setting.writeOnly) : SECRET_NAME.test(key);
+};
 
 /** What's wrong with one deployment file, as sentences; none when it's fine. */
 export const problems = (doc, file, settings = SETTINGS) => {
@@ -36,8 +41,8 @@ export const problems = (doc, file, settings = SETTINGS) => {
   const out = [];
   if (basename(file).replace(/\.ya?ml$/, '') !== doc.name) out.push(`${file}: its name is ${doc.name}, but the file is named otherwise.`);
   for (const key of Object.keys(doc.settings ?? {})) {
-    if (!settingOf(key, settings)) out.push(`${file}: ${key} isn't a setting AUGUR knows (infra/deploy/settings.schema.json).`);
-    else if (isSecret(key, settings)) out.push(`${file}: ${key} is a secret, so it belongs in the secrets file, not settings.`);
+    if (isSecret(key, settings)) out.push(`${file}: ${key} is a secret${settingOf(key, settings) ? '' : ' by its name'}, so it belongs in the secrets file, not settings.`);
+    else if (!settingOf(key, settings)) out.push(`${file}: ${key} isn't a setting AUGUR knows (infra/deploy/settings.schema.json).`);
     else if (['PLATFORM_VERSION', 'SERVER_RING'].includes(key)) out.push(`${file}: ${key} comes from ${key === 'SERVER_RING' ? 'ring' : 'release'}, not settings.`);
   }
   const ids = (doc.apps ?? []).map((a) => a.id);
@@ -211,7 +216,8 @@ const onHost = (host, script, input) => {
   return host.ssh === 'local' ? execFileSync(argv[0], argv.slice(1), options) : execFileSync('ssh', ['-o', 'BatchMode=yes', host.ssh, ...argv.slice(0, 2), ...(input === undefined ? [] : [q(script)])], options);
 };
 /** The release's deploy bundle, fetched and its signature checked here. */
-const fetchBundle = (version, repo = repoFrom()) => {
+// Releases come from AUGUR's repository: AUGUR_REPO for a fork, never GITHUB_REPOSITORY, which in a fleet's own workflow is the fleet.
+const fetchBundle = (version, repo = process.env.AUGUR_REPO || AUGUR_HOME) => {
   try {
     execFileSync('cosign', ['version'], { stdio: 'ignore' });
   } catch {
@@ -235,10 +241,13 @@ const main = () => {
   // Where the person ran it: under pnpm the script runs in AUGUR's folder, and INIT_CWD says where they were.
   const dir = resolve(process.env.INIT_CWD ?? process.cwd(), at >= 0 ? args.splice(at, 2)[1] : 'deployments');
   const [command, ...names] = args;
-  const all = () => (existsSync(dir) ? [...new Set(readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).map((f) => f.replace(/\.ya?ml$/, '')))].sort() : []);
+  const all = () => {
+    const found = existsSync(dir) ? [...new Set(readdirSync(dir).filter((f) => /\.ya?ml$/.test(f)).map((f) => f.replace(/\.ya?ml$/, '')))].sort() : [];
+    if (!found.length) throw new Error(`No deployment files in ${dir}: run it from the folder that holds deployments/, or pass --dir.`);
+    return found;
+  };
   if (command === 'check') {
     const names = all();
-    if (!names.length) throw new Error(`No deployment files in ${dir}: run it from the folder that holds deployments/, or pass --dir.`);
     const found = names.flatMap((name) => {
       try {
         load(dir, name);
@@ -270,14 +279,18 @@ const main = () => {
     process.exit(2);
   }
   if (command === 'status') {
+    let unread = 0;
     for (const name of names.length ? names : all()) {
       try {
         const { doc } = load(dir, name);
         console.log(statusLine(doc, factsOf(doc)));
       } catch (e) {
+        unread++;
         console.log(`${name}: can't be read: ${e.message.split('\n')[0]}`);
       }
     }
+    // Any server that couldn't be read makes the run fail, so a script checking the exit code notices.
+    if (unread) process.exit(1);
     return;
   }
   if (command === 'up') {
