@@ -28,9 +28,9 @@ concurrency:
 jobs:
   tier:
     # The Version packages pull request is the release itself: its contents were each reviewed as they merged.
-    # A closed pull request has nothing left to check; the record job below handles a merge.
-    # Nor a pull request that is no longer open: a label added after the merge (harry-would-not) changes nothing to check.
-    if: ${{ !startsWith(github.head_ref, 'changeset-release/') && github.event.action != 'closed' && github.event.pull_request.state == 'open' }}
+    # A pull request that is no longer open has nothing left to check, even when a label goes on after the merge
+    # (harry-would-not); the record job below handles a merge.
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') && github.event.pull_request.state == 'open' }}
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -138,13 +138,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # The branch as it merged, and the base just before the merge (BASE_COMMIT below): the diff from where
-          # the branch left that base is the whole pull request, however it merged (squash, merge or rebase),
-          # and the rules and actions are the ones it was checked against.
+          # The branch as it merged, with the history to find the base just before the merge (below). Blobs come
+          # only as the diff needs them.
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          filter: blob:none
+      # The tier script from AUGUR's main, in AUGUR too: one script writes every record, whatever the branch had.
       - name: The tier script, from AUGUR
-        if: github.repository != 'harry-burton-dev/augur'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: harry-burton-dev/augur
@@ -155,6 +155,23 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+      # Where main was just before the merge: the merge commit's first parent for a squash or a merge commit;
+      # for a rebase merge, the commit before the rebased ones (their change is the pull request's own).
+      - name: The base before the merge
+        id: base
+        run: |
+          git fetch --no-tags --filter=blob:none origin "$MERGE_SHA"
+          base="$MERGE_SHA^1"
+          if [ "$(git rev-list --no-walk --count --min-parents=2 "$MERGE_SHA")" = 0 ] && [ "$COMMITS" -gt 1 ] \
+            && git rev-parse -q --verify "$MERGE_SHA~$COMMITS^{commit}" >/dev/null; then
+            before="$MERGE_SHA~$COMMITS"
+            same() { git diff "$1" "$2" | git patch-id --stable | cut -d' ' -f1; }
+            if [ "$(same "$before" "$MERGE_SHA")" = "$(same "$(git merge-base "$before" HEAD)" HEAD)" ]; then base="$before"; fi
+          fi
+          echo "commit=$(git rev-parse "$base")" >> "$GITHUB_OUTPUT"
+        env:
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          COMMITS: ${{ github.event.pull_request.commits }}
       - name: What it merged on
         id: checks
         # The checks on the branch's last commit, by name, apart from this workflow's own. A public repository's
@@ -166,7 +183,7 @@ jobs:
             checks=$(jq -cs 'add // [] | unique_by(.name)' <<<"$runs")
           else
             echo "::warning::Couldn't read the checks this pull request merged on."
-            checks='[{"name":"checks","conclusion":"could not be read"}]'
+            checks=unread
           fi
           echo "checks=$checks" >> "$GITHUB_OUTPUT"
         env:
@@ -176,8 +193,8 @@ jobs:
       - id: record
         run: node "${SCRIPT_DIR}/scripts/review-tier.mjs" --record
         env:
-          SCRIPT_DIR: ${{ github.repository == 'harry-burton-dev/augur' && '.' || '.augur-review' }}
-          BASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}^1
+          SCRIPT_DIR: .augur-review
+          BASE_COMMIT: ${{ steps.base.outputs.commit }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -194,7 +211,6 @@ jobs:
           gh api "repos/$GH_REPO/issues/$PR/comments" -F body=@"$RECORD_FILE" >/dev/null
           gh api "repos/$GH_REPO/issues/$PR/labels" -f 'labels[]=auto-ok' >/dev/null \
             || echo "::warning::The auto-ok record is on the pull request, but the auto-ok label couldn't go on."
-
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
