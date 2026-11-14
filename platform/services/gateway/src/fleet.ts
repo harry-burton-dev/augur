@@ -6,7 +6,6 @@ import { FLEET_SERVICE } from '@augur/service-kit';
 /** The registry's routes, by method, as the registry has them under /api/registry. Reads let the fleet follow what it asked for. */
 const FLEET_CALLS: [string, RegExp][] = [
   ['GET', /^\/v1\/platform\/overview$/],
-  ['GET', /^\/v1\/platform\/updates$/],
   ['GET', /^\/v1\/app-runner\/apps$/],
   ['GET', /^\/v1\/app-runner\/jobs$/],
   ['PUT', /^\/v1\/platform\/upgrade$/],

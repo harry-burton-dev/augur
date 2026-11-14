@@ -38,7 +38,6 @@ describe('the fleet’s client at the gateway (ADR 0100)', () => {
     const app = await gateway();
     for (const [method, path] of [
       ['GET', '/api/registry/v1/platform/overview'],
-      ['GET', '/api/registry/v1/platform/updates'],
       ['GET', '/api/registry/v1/app-runner/apps'],
       ['GET', '/api/registry/v1/app-runner/jobs'],
       ['PUT', '/api/registry/v1/platform/upgrade'],
@@ -62,6 +61,8 @@ describe('the fleet’s client at the gateway (ADR 0100)', () => {
     const app = await gateway();
     for (const [method, path] of [
       ['PUT', '/api/registry/v1/platform/go-back'],
+      // The updates page names the admins who upgraded before: the fleet follows its upgrade on the overview.
+      ['GET', '/api/registry/v1/platform/updates'],
       ['PUT', '/api/registry/v1/platform/upgrade/halted'],
       ['GET', '/api/registry/v1/apps'],
       ['DELETE', '/api/registry/v1/app-runner/jobs/1'],
