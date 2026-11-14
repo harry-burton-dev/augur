@@ -709,6 +709,11 @@ export class PgEventStore implements EventStore {
     return rowCount ?? 0;
   }
 
+  /** Resolves once the database answers: the service's readiness check. */
+  async ping() {
+    await this.pool.query('select 1');
+  }
+
   async close() {
     this.closed = true;
     this.listening?.release();

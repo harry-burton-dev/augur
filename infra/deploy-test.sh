@@ -212,11 +212,11 @@ use() {
 }
 services() { pc config --services | grep -vx tailscale; }
 
-# Each service's /healthz, as the compose network sees it: every service whose healthcheck asks for one in
+# Each service's /healthz, as the compose network sees it: every service whose healthcheck asks for it (or /readyz) in
 # the compose file in use, so a release's own parts, and the apps it ships, are what's probed.
 health_urls() {
   pc config --format json | jq -c '[.services | to_entries[]
-    | (.value.healthcheck.test // [] | tostring | capture("127\\.0\\.0\\.1:(?<port>[0-9]+)/healthz")) as $h
+    | (.value.healthcheck.test // [] | tostring | capture("127\\.0\\.0\\.1:(?<port>[0-9]+)/(healthz|readyz)")) as $h
     | {key, value: "http://\(.key):\($h.port)"}] | from_entries'
 }
 # Asked from a container that has Node.

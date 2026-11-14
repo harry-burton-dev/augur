@@ -30,3 +30,4 @@ export * from './app-service.js';
 export * from './app-database.js';
 export * from './mail-relay.js';
 export * from './personal.js';
+export * from './serve.js';

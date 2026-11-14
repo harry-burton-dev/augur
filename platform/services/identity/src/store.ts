@@ -177,6 +177,11 @@ export class PgPreferenceStore implements PreferenceStore {
     await this.pool.query('delete from identity.leave_requests where person = $1', [person]);
   }
 
+  /** Resolves once the database answers: the service's readiness check. */
+  async ping() {
+    await this.pool.query('select 1');
+  }
+
   close() {
     return this.pool.end();
   }

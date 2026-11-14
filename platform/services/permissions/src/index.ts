@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, followEvents, loadConfigOrExit, platformCredentialsFromEnv, recordAudit, serviceVerifierFromEnv, startupLog, type NewAuditEntry } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, followEvents, loadConfigOrExit, platformCredentialsFromEnv, recordAudit, serviceVerifierFromEnv, startupLog, type NewAuditEntry, serve } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { cascade, PgGrantStore } from './grants.ts';
 import { loadModel, OpenFga, type CheckKey } from './openfga.ts';
@@ -110,4 +110,11 @@ const app = await buildApp({
   sessionLimits,
   ...(audit ? { audit } : {}),
 });
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, {
+  port,
+  ready: [
+    { name: 'database', check: () => grants.ping() },
+    { name: 'OpenFGA', check: async () => void ((await engine.healthy()) || Promise.reject(new Error('not answering'))) },
+  ],
+  close: [() => grants.close(), () => sessions.close()],
+});

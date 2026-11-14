@@ -1418,6 +1418,11 @@ export class PgAppStore implements AppStore {
     return rowCount === 1;
   }
 
+  /** Resolves once the database answers: the service's readiness check. */
+  async ping() {
+    await this.pool.query('select 1');
+  }
+
   close() {
     return this.pool.end();
   }

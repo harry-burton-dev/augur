@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog, steadyPool } from '@augur/service-kit';
+import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog, steadyPool, poolCheck, serve } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { fileLedger } from './ledger.ts';
 import { outboxRelay } from './outbox.ts';
@@ -69,7 +69,7 @@ const roles: RolesLookup = PERMISSIONS_URL && credentials ? permissionsRoles({ p
 if (!PERMISSIONS_URL) log.warn('PERMISSIONS_URL is not set: nobody settles or raises on any floor until it is.');
 const onRolesUnavailable = (err: Error) => app.log.warn({ err: err.message }, 'the permissions service could not say who settles and raises; nobody does on this request');
 const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, ledger, roles, onRolesUnavailable, pageLimit, subgraphDepth });
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, { port, ready: [poolCheck('database', store)], close: [() => store.end()] });
 // Reflect writes each floor's summaries from its own beliefs, through the models service, within its budgets.
 if (MODELS_URL && credentials) {
   const budgets = {

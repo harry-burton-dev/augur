@@ -1,6 +1,6 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import replyFrom from '@fastify/reply-from';
-import type { IncomingHttpHeaders } from 'node:http';
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
 import proxy from '@fastify/http-proxy';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type { Static } from 'typebox';
@@ -108,7 +108,7 @@ const PUBLIC_LOGO_BYTES = 512 * 1024;
  */
 export const TOKEN_PATH = '/api/identity/v1/token';
 
-const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH, TOKEN_PATH]);
+const PUBLIC_ROUTES = new Set(['/healthz', '/readyz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH, TOKEN_PATH]);
 /** The public routes that aren't counted as traffic; a storm at the token route is one the watch should see. */
 const UNCOUNTED_ROUTES = new Set([...PUBLIC_ROUTES].filter((r) => r !== TOKEN_PATH));
 
@@ -738,6 +738,11 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   // AUGUR's services' streams (GET /v1/<resource>/stream), through one pool of their own, so open tabs never hold the
   // connections the services' other calls need. These routes are more specific than each service's own, so they win.
   const streaming = Object.keys(upstreams).filter((name) => PLATFORM_SERVICES.includes(name));
+  // Every stream it carries, so stopping ends them first: the browser opens its stream again, on a gateway that is up.
+  const streams = new Set<ServerResponse>();
+  app.addHook('preClose', async () => {
+    for (const res of streams) res.end();
+  });
   if (streaming.length) {
     await app.register(async (sub) => {
       await sub.register(replyFrom, { undici: platformPoolOptions(platformLimits, 'streams') });
@@ -745,6 +750,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         sub.get(`/api/${name}${STREAM_ROUTE}`, async (req: FastifyRequest<{ Params: { resource: string } }>, reply) => {
           await beforeProxy(name, req, reply);
           if (reply.sent) return reply;
+          streams.add(reply.raw);
+          reply.raw.on('close', () => streams.delete(reply.raw));
           const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
           return reply.from(`${upstreams[name]}${STREAM_ROUTE.replace(':resource', encodeURIComponent(req.params.resource))}${query}`, replyOptionsFor(name) as never);
         });

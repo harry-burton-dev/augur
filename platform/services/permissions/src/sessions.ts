@@ -53,6 +53,15 @@ const fromRow = (r: Row): PersonaSession => ({
 export class PgSessionStore implements SessionStore {
   constructor(private readonly pool: pg.Pool) {}
 
+  /** Resolves once the database answers: the service's readiness check. */
+  async ping() {
+    await this.pool.query('select 1');
+  }
+
+  close() {
+    return this.pool.end();
+  }
+
   static async connect(connectionString: string) {
     const store = new PgSessionStore(steadyPool(new pg.Pool({ connectionString })));
     await runMigrations(store.pool, { schema: 'permissions', migrations });

@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { knowledgeOffer } from './knowledge-offer.ts';
 import { parseDefaultApps } from './defaults.ts';
@@ -56,7 +56,8 @@ const port = Number(process.env.PORT ?? 8082);
 if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is not set: the registry keeps the catalogue in Postgres. Locally, start the dev stack’s (docker compose -f infra/docker-compose.yml up -d postgres).');
 }
-const store: AppStore = await PgAppStore.connect(process.env.DATABASE_URL);
+const database = await PgAppStore.connect(process.env.DATABASE_URL);
+const store: AppStore = database;
 
 // The registry signs in as itself (Keycloak client platform-registry) to write the audit log.
 const { EVENTS_URL } = process.env;
@@ -133,7 +134,7 @@ if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fronte
 
 // Apps and platform services sign in as themselves (their Keycloak clients).
 const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, shadow: shadowFromEnv(credentials, log), knowledge: knowledgeOffer({ knowledgeUrl: process.env.KNOWLEDGE_URL || 'http://localhost:8086' }), verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, defaultApps: defaults.apps, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => database.close()] });
 
 // A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.
 if (EVENTS_URL && credentials) {

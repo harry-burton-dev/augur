@@ -57,6 +57,12 @@ The front door (`web`) holds every caller to a few limits:
   reachable from outside the container. The front door, identity and the realm job wait for Keycloak to be
   healthy, and the storage job for Garage. Keycloak's first start after an upgrade can take a few minutes while
   it migrates its database; Compose waits up to five.
+- **Ready, and stopping cleanly**: each AUGUR service answers `/readyz` only once its database (and, for
+  permissions, OpenFGA) answers, and its healthcheck asks that, so `pc ps` shows `unhealthy` while a service
+  can't reach what it needs. `/healthz` still says what is running. When Docker stops a service, as an upgrade
+  does, it stops taking new calls, ends its open event streams (browsers open them again on their own), and
+  lets the calls already in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20) before it cuts what is left.
+  Docker waits 30 seconds (`stop_grace_period`), so keep the setting under that.
 - **Timeouts between services**: one AUGUR service waits at most 5 seconds for another
   (`SERVICE_CALL_TIMEOUT_SECONDS`) before it answers that the other can't be reached right now, so a hung
   service slows only what needs it. Identity waits up to 15 seconds for Keycloak's admin API, and calls to the

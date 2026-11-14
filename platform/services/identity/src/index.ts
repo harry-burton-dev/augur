@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { auditTo, buildApp } from './app.ts';
-import { callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, notify, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, shadowFromEnv, startupLog, steadyPool } from '@augur/service-kit';
+import { callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, notify, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, shadowFromEnv, startupLog, steadyPool, poolCheck, serve } from '@augur/service-kit';
 import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { KeycloakAccounts, type AccountSource } from './me.ts';
@@ -188,4 +188,4 @@ if (directory) {
 
 // Each admin check is also asked of the permissions service, to compare (shadow mode, ADR 0085).
 const app = await buildApp({ shadow: shadowFromEnv(credentials, log), callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle, redact });
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, { port, ready: [poolCheck('database', pool)], close: [() => pool.end()] });
