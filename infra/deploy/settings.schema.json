@@ -32,7 +32,8 @@
     "PLATFORM_ADMIN_FIRST_NAME",
     "PLATFORM_ADMIN_LAST_NAME",
     "ALERT_WEBHOOK_TOKEN",
-    "GRAFANA_ADMIN_PASSWORD"
+    "GRAFANA_ADMIN_PASSWORD",
+    "CALLER_SIGNING_KEY"
   ],
   "patternProperties": {
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
@@ -1057,6 +1058,14 @@
       ],
       "x-docs": "docs/release-channels.md#server-rings"
     },
+    "COMPOSE_PROJECT_NAME": {
+      "type": "string",
+      "description": "Docker Compose's name for this deployment, which its volumes and networks are named after. platform unless set. Set it only before a server's first start: on one that has data, changing it starts AUGUR empty.",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#1-get-the-release"
+    },
     "COMPOSE_PROFILES": {
       "type": "string",
       "description": "Docker Compose's optional parts to run: updater, observability.",
@@ -1137,11 +1146,40 @@
     "CALLER_SIGNING_KEY": {
       "type": "string",
       "writeOnly": true,
-      "description": "The key the gateway signs callers with (64 hex); without it a new one is made each start.",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
+      "description": "The key the gateway signs callers with (64 hex). The gateway won't start without it, and every gateway of a deployment shares it.",
       "x-services": [
         "gateway"
       ],
       "x-docs": "docs/signed-caller.md#where-the-key-comes-from"
+    },
+    "CALLER_SIGNING_KEY_NEXT": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "The key that comes next while the caller signing key is being changed: published beside CALLER_SIGNING_KEY, never signed with.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/signed-caller.md#changing-the-key"
+    },
+    "CALLER_BREAK_GLASS": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "description": "on lets a server admin act as someone from inside a service's own container, when AUGUR can't sign them in. Off unless set; every call it lets through is logged.",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
+      ],
+      "x-docs": "docs/signed-caller.md#break-glass"
     },
     "OTEL_EXPORTER_OTLP_ENDPOINT": {
       "type": "string",
@@ -1221,6 +1259,21 @@
         "events",
         "models",
         "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "SHUTDOWN_GRACE_SECONDS": {
+      "type": "string",
+      "description": "How long a stopping service lets its calls in flight finish before it cuts what is still open (at most 23, so it still closes and sends its telemetry within the services' stop_grace_period of 30 seconds).",
+      "default": "20",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },
@@ -1577,6 +1630,42 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
     },
+    "GATEWAY_SERVICE_CONNECT_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long the gateway waits to connect to one of AUGUR's own services before answering 502, in milliseconds (default 5000).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long one of AUGUR's own services may take to start answering, and between one piece of its answer and the next, before the gateway answers 504, in milliseconds (default 300000). Keep it above the services' own limits, such as MODEL_TIMEOUT_SECONDS, so their own words come first. Open streams are never cut by it.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_SERVICE_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many connections the gateway keeps to each of AUGUR's own services for ordinary calls (default 128).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_STREAM_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many open streams the gateway holds to each of AUGUR's own services, whatever kind they are, apart from its ordinary calls (default 4096). Each open tab holds two to the events service.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
     "FRONTENDS_S3_URL": {
       "type": "string",
       "description": "Where the frontends bucket is.",
@@ -1643,6 +1732,15 @@
         "updater"
       ]
     },
+    "APP_RELAY_TO": {
+      "type": "string",
+      "description": "What one of the apps' relays passes calls on to, as host:port: Postgres or the object store, by its name on the compose network alone.",
+      "x-internal": "compose",
+      "x-services": [
+        "db-relay",
+        "bucket-relay"
+      ]
+    },
     "GARAGE_ADMIN_URL": {
       "type": "string",
       "description": "Garage's admin API, for the storage job.",
@@ -1691,6 +1789,15 @@
         "registry"
       ],
       "x-docs": "docs/upgrade.md#the-app-runner"
+    },
+    "IN_PAGE_APPS": {
+      "type": "string",
+      "pattern": "^[a-z0-9, -]*$",
+      "description": "A break-glass: apps not made by AUGUR that may still load into the shell's own page on contract 2, by id, split by commas or spaces, while they move to the app contract (empty allows none).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/upgrade.md#only-augurs-own-apps-load-into-the-shells-page"
     },
     "APP_DATA_GRACE_DAYS": {
       "type": "string",

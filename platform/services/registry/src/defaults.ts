@@ -11,13 +11,13 @@ import { declaredSettings, missingMessage, missingRequired } from './settings.ts
 /** An app id as the registry takes one (app-runner-schemas.ts). */
 const APP_ID = /^[a-z][a-z0-9-]{1,39}$/;
 
-/** DEFAULT_APPS as ids, split by commas or spaces, and what is wrong with it. */
-export const parseDefaultApps = (text: string | undefined): { apps: string[]; problems: string[] } => {
+/** A list of app ids such as DEFAULT_APPS or IN_PAGE_APPS, split by commas or spaces, and what is wrong with it. */
+export const parseAppIds = (text: string | undefined, setting: string): { apps: string[]; problems: string[] } => {
   const ids = [...new Set((text ?? '').split(/[\s,]+/).filter(Boolean))];
   const problems = ids.flatMap((id) => {
-    if (!APP_ID.test(id)) return [`"${id}" in DEFAULT_APPS isn’t an app id: lower-case letters, digits and dashes, starting with a letter.`];
+    if (!APP_ID.test(id)) return [`"${id}" in ${setting} isn’t an app id: lower-case letters, digits and dashes, starting with a letter.`];
     const reserved = reservedIdProblem(id);
-    return reserved ? [`DEFAULT_APPS: ${reserved}`] : [];
+    return reserved ? [`${setting}: ${reserved}`] : [];
   });
   return { apps: problems.length ? [] : ids, problems };
 };

@@ -1,0 +1,127 @@
+name: Review
+# A pull request's review tier, from the paths it changes (.github/review-tiers.json, as the base branch has
+# it), and whether its description carries what that tier needs: the sections, the pre-merge /code-review run
+# and, on Harry's paths, his ok as the harry-ok label (REVIEW.md). Its own workflow, like Attribution, so that
+# editing the description or adding the label checks it again without running CI. It installs nothing: seconds.
+# AUGUR's other repositories call this one (workflow_call), each with its own review-tiers.json, so the
+# script lives once, here.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+  workflow_call:
+    inputs:
+      script-ref:
+        description: The augur commit to take the tier script from; the same one the caller pins this workflow at.
+        type: string
+        default: main
+permissions:
+  contents: read
+  # To record what Harry said ok to, and take his ok off when the change is no longer that. A repository that
+  # calls this workflow grants the same to its caller job.
+  pull-requests: write
+# Every run checks the pull request as it is when it runs, whatever ran before it, so a newer run may cancel
+# an older one. The run that records Harry's ok has a group of its own, so a push or an edit straight after
+# the label goes on can't cancel it before it records.
+concurrency:
+  group: review-${{ github.repository }}-${{ github.event.pull_request.number }}-${{ (github.event.action == 'labeled' && github.event.label.name == 'harry-ok') && github.run_id || 'check' }}
+  cancel-in-progress: true
+jobs:
+  tier:
+    # The Version packages pull request is the release itself: its contents were each reviewed as they merged.
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') }}
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: The tier script, from AUGUR
+        if: github.repository != 'harry-burton-dev/augur'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: harry-burton-dev/augur
+          ref: ${{ inputs.script-ref || 'main' }}
+          path: .augur-review
+          sparse-checkout: scripts/review-tier.mjs
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # Harry's ok is for the change he was asked about. When the label goes on, this records a fingerprint of
+      # the change as it is then, in a comment from github-actions[bot]. Any later run whose change has a
+      # different fingerprint takes the label off, and he is asked again. The fingerprint is the diff against
+      # where the branch left its base, with no context lines and no line numbers, whitespace kept: bringing
+      # the branch up to date with its base leaves it alone, and a change to one character (or a binary) doesn't.
+      # This catches mistakes, not a hostile pull request: a pull request's own workflows run with a token that
+      # can write the same comments (REVIEW.md).
+      - name: Harry's ok covers this change
+        id: labels
+        run: |
+          fingerprint() {
+            git diff -U0 --no-color --binary "$(git merge-base "origin/$BASE" "$1")" "$1" \
+              | { grep -v '^index ' || true; } | sed -E 's/^@@ .*/@@/' | sha256sum | cut -c1-16
+          }
+          now=$(fingerprint "$HEAD")
+          labels() { gh api "repos/$GH_REPO/issues/$PR/labels" --jq '[.[].name]'; }
+          drop() { labels=$(jq -c 'map(select(. != "harry-ok"))' <<<"$labels"); }
+          labels=$(labels)
+          if [ "$ACTION" = labeled ] && [ "$LABEL" = harry-ok ]; then
+            if gh api "repos/$GH_REPO/issues/$PR/comments" -f body="<!-- harry-ok: $now -->
+          Harry's ok recorded for this change as it is at ${HEAD:0:7}. A push that changes it takes the harry-ok label off." >/dev/null; then
+              echo "Recorded Harry's ok for $now at $HEAD."
+              # The label may have come off while this run recorded: what counts is what is on now.
+              labels=$(labels)
+            else
+              drop
+              echo "::warning::Couldn't record Harry's ok (a read-only token?), so it doesn't count yet."
+            fi
+          elif jq -e 'index("harry-ok")' <<<"$labels" >/dev/null; then
+            # The newest record ("time fingerprint") and when the label last went on. Both lists are oldest first.
+            recorded() {
+              gh api "repos/$GH_REPO/issues/$PR/comments" --paginate \
+                --jq '.[] | select(.user.login == "github-actions[bot]") | select(.body | test("<!-- harry-ok: [0-9a-f]+ -->")) | "\(.created_at) \(.body | capture("<!-- harry-ok: (?<fp>[0-9a-f]+) -->").fp)"' | tail -1
+            }
+            on=$(gh api "repos/$GH_REPO/issues/$PR/events" --paginate \
+              --jq '[.[] | select(.event == "labeled" and .label.name == "harry-ok")] | last | .created_at // empty' | tail -1)
+            # The label's own run hasn't recorded yet when there's no record made after the label last went on.
+            pending() { rec=$(recorded); [ -n "$on" ] && { [ -z "$rec" ] || [[ "${rec%% *}" < "$on" ]]; }; }
+            age() { echo $(( $(date +%s) - $(date -d "$on" +%s) )); }
+            waited=0
+            while pending && [ "$(age)" -lt "$RECORD_WINDOW" ] && [ "$waited" -lt "$WAIT" ]; do
+              sleep 10; waited=$((waited + 10))
+            done
+            if pending && [ "$(age)" -lt "$RECORD_WINDOW" ]; then
+              # Still being recorded: leave the label on, and this run doesn't count it.
+              drop
+              echo "::warning::Harry's ok is still being recorded by its own run. Re-run this check once the \"Harry's ok recorded\" comment is on the pull request."
+            elif pending || [ -z "$rec" ]; then
+              # A label with nothing recorded behind it comes off, so what shows is what counts: no label, no ok.
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/harry-ok" >/dev/null || echo "::warning::Couldn't take the label off (a read-only token)."
+              drop
+              echo "::warning::The harry-ok label had no recorded change behind it, so it is off. Add it again if Harry's ok still covers this change."
+            elif [ "${rec#* }" != "$now" ]; then
+              gh api -X DELETE "repos/$GH_REPO/issues/$PR/labels/harry-ok" >/dev/null || echo "::warning::Couldn't take the label off (a read-only token): this check stays red instead."
+              drop
+              echo "::warning::The change is different from the one Harry said ok to: the harry-ok label is off until he says ok again."
+            fi
+          fi
+          echo "labels=$labels" >> "$GITHUB_OUTPUT"
+        env:
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          # How long a run waits for the label's own run to record, and how long after the label goes on a
+          # missing record still counts as on its way (a queued run) rather than lost.
+          WAIT: 180
+          RECORD_WINDOW: 900
+      - run: node "${SCRIPT_DIR}/scripts/review-tier.mjs"
+        env:
+          SCRIPT_DIR: ${{ github.repository == 'harry-burton-dev/augur' && '.' || '.augur-review' }}
+          BASE_REF: ${{ github.base_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ steps.labels.outputs.labels }}
+          # Only Renovate's pull requests are taken as a bot's; any other app's are checked like a person's.
+          PR_BOT: ${{ github.event.pull_request.user.login == 'renovate[bot]' }}

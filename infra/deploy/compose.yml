@@ -4,8 +4,10 @@
 #   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
 # Runs the images CI built for the platform release PLATFORM_VERSION. To build them from this
 # checkout instead, add -f infra/deploy/compose.build.yml (and --build).
-# Keeps the old codename: Docker names the data volumes after the project, so renaming it would start empty.
-name: platform
+# The project's name comes from COMPOSE_PROJECT_NAME in .env, for a deployment set up under another name.
+# It defaults to the old codename: Docker names the data volumes after the project, so renaming an existing
+# server's would start it empty.
+name: ${COMPOSE_PROJECT_NAME:-platform}
 
 # What every container AUGUR builds runs with: they run as an unprivileged user already, so they need
 # no Linux capabilities and may never gain privileges. init passes Docker's stop signal on, so a stop
@@ -42,10 +44,14 @@ x-telemetry: &telemetry
   SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
   # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
   DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
+  # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
+  SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
 
 x-service: &service
   <<: *hardened
   restart: unless-stopped
+  # Long enough for a stopping service to finish its calls in flight (SHUTDOWN_GRACE_SECONDS) and send its telemetry.
+  stop_grace_period: 30s
   # The compose network, and the telemetry network its traces, metrics and logs go out on (networks, below).
   networks: [default, telemetry]
   environment: &env
@@ -57,6 +63,8 @@ x-service: &service
     MODELS_URL: http://models:8085
     # Services believe a person is calling only when the gateway signed it; they fetch its key here.
     GATEWAY_URL: http://gateway:8080
+    # on lets a server admin act as someone from inside the service's own container (docs/signed-caller.md, Break-glass).
+    CALLER_BREAK_GLASS: ${CALLER_BREAK_GLASS:-}
     # Every service signs in as itself (its own Keycloak client and SERVICE_CLIENT_SECRET); tokens name the
     # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
@@ -153,7 +161,10 @@ services:
       - ./postgres:/etc/augur:ro
       - wal-archive:/wal-archive
     # And the rendition worker's network, which reaches only Postgres and Garage.
-    networks: [default]
+    # A second name, only on the compose network, for the apps' relays (above) to reach it by.
+    networks:
+      default:
+        aliases: [platform-postgres]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U platform"]
       interval: 5s
@@ -237,7 +248,10 @@ services:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
-    networks: [default]
+    # A second name, only on the compose network, for the apps' relays (above) to reach it by.
+    networks:
+      default:
+        aliases: [platform-garage]
 
   # Gives each platform service and Keycloak a database login of their own, and each app in
   # APP_STORAGE its own database login and schema, and its own bucket and key, from the secrets
@@ -264,6 +278,37 @@ services:
       APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
     depends_on:
       postgres: { condition: service_healthy }
+      garage: { condition: service_healthy }
+
+  # The apps' relays: what an app's network has in place of Postgres and the object store (design review ISO-2).
+  # The app runner joins db-relay to the network of each app that asks for a database, as `postgres`, and
+  # bucket-relay to each that asks for a bucket, as `garage`. db-relay lets only an app's own login (app_<id>) on
+  # to Postgres, never the platform's superuser or a service's; bucket-relay passes on only the object store's S3
+  # API, never its admin API. Postgres and Garage themselves join no app's network. Each reaches its store by a
+  # name only the compose network has (APP_RELAY_TO), so a relay never reaches itself through an app's alias.
+  db-relay: &relay
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    restart: unless-stopped
+    command: ["node", "dist/relay-run.js", "database"]
+    environment:
+      NODE_ENV: production
+      APP_RELAY_TO: platform-postgres:5432
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('net').connect(Number(process.env.APP_RELAY_TO.split(':')[1]), '127.0.0.1').on('connect', () => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      postgres: { condition: service_healthy }
+  bucket-relay:
+    <<: *relay
+    command: ["node", "dist/relay-run.js", "objects"]
+    environment:
+      NODE_ENV: production
+      APP_RELAY_TO: platform-garage:3900
+    depends_on:
       garage: { condition: service_healthy }
 
   # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it. Moving to a
@@ -374,8 +419,9 @@ services:
     logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/gateway:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
+    stop_grace_period: 30s
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -418,9 +464,14 @@ services:
       APP_CONNECT_TIMEOUT_MS: ${APP_CONNECT_TIMEOUT_MS:-}
       APP_RESPONSE_TIMEOUT_MS: ${APP_RESPONSE_TIMEOUT_MS:-}
       APP_CONCURRENT_CALLS: ${APP_CONCURRENT_CALLS:-}
+      GATEWAY_SERVICE_CONNECT_TIMEOUT_MS: ${GATEWAY_SERVICE_CONNECT_TIMEOUT_MS:-}
+      GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS: ${GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS:-}
+      GATEWAY_SERVICE_CONNECTIONS: ${GATEWAY_SERVICE_CONNECTIONS:-}
+      GATEWAY_STREAM_CONNECTIONS: ${GATEWAY_STREAM_CONNECTIONS:-}
       APP_DELEGATION_SECONDS: ${APP_DELEGATION_SECONDS:-}
-      # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
-      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
+      # The key it signs callers with, and the one that comes next while it is being changed (docs/signed-caller.md).
+      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
+      CALLER_SIGNING_KEY_NEXT: ${CALLER_SIGNING_KEY_NEXT:-}
     volumes:
       # Only the results the backup container writes for Status, never the backups themselves.
       - ./backups/status:/backups:ro
@@ -433,7 +484,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/identity:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8081/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -465,7 +516,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/registry:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -505,6 +556,7 @@ services:
       APP_DATA_GRACE_DAYS: ${APP_DATA_GRACE_DAYS:-}
       # The apps this deployment installs from the feed by default (none when unset).
       DEFAULT_APPS: ${DEFAULT_APPS:-}
+      IN_PAGE_APPS: ${IN_PAGE_APPS:-}
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
       APP_FEEDS: ${APP_FEEDS:-}
       APP_FEED_URL: ${APP_FEED_URL:-}
@@ -525,7 +577,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/events:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -561,7 +613,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/models:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8085/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8085/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -610,7 +662,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/knowledge:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8086/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8086/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -674,7 +726,7 @@ services:
     <<: *service
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/permissions:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/healthz"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8087/readyz"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -729,7 +781,7 @@ services:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro
     networks: [default, docker, telemetry]
-    depends_on: [docker-proxy, registry]
+    depends_on: [docker-proxy, registry, db-relay, bucket-relay]
 
   # The Docker API, for the updater only, without the parts it doesn't need (swarm, secrets, builds, plugins).
   docker-proxy:

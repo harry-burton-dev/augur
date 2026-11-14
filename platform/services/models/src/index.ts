@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryRequiredRole, serviceVerifierFromEnv, shadowFromEnv, startupLog } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, loadConfigOrExit, platformCredentialsFromEnv, registryGrants, registryRequiredRole, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
 import { auditTo, buildApp } from './app.ts';
 import { providerFromEnv } from './config.ts';
 import { PgModelStore } from './store.ts';
@@ -43,4 +43,4 @@ const requiredRole = credentials ? registryRequiredRole({ registryUrl: REGISTRY_
 const audit = credentials ? auditTo(EVENTS_URL, credentials) : undefined;
 
 const app = await buildApp({ callers: callerCheckFromEnv('models'), store, provider, verifyService: serviceVerifierFromEnv(), grants, requiredRole, audit, shadow: shadowFromEnv(credentials, log) });
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, { port, ready: [{ name: 'database', check: () => store.ping() }], close: [() => store.close()] });

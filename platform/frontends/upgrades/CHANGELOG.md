@@ -1,5 +1,19 @@
 # @augur/upgrades
 
+## 0.3.0
+
+### Minor Changes
+
+- c22a013: Admin is on the app contract (contract 3) and runs in the shell's worker like Deployment. Its places are People, Departments, Organisation, Apps and Activity. Each person, department, app and Activity entry has a page of its own, and every simple setting is changed where it's shown: a name or email saves as you leave the field, a role or department as you pick it. A change that may ask for your password again (deleting someone, two-step for everyone, how long leavers' and Activity's records are kept) opens a question at a path of its own, so signing in again comes back to it. An app's page in Admin opens the same app's page in Deployment for what the server runs for it.
+- 1176abf: What the server runs for an installed app moves from Admin to its page in Deployment: rolling it back (installing an earlier release, which puts it on hold), its internet, its own settings saved as they change, its developers and previews, a new sign-in for its service, and removing it. Where apps load from moves to Deployment's Apps. Deployment may look people up (`people:read`) to name and find developers. Admin's Status and Dev to production pages go: Deployment's Health, Backups and Release channel show the same. Messages that sent people to Admin for these now name Deployment.
+- 4e68ea8: An app its own service registers gets a page in Deployment, as installed ones have: which kept version the shell is given, holding it there or following new versions, and a new sign-in for its service. Admin's Apps no longer has versions or a new sign-in; it sends you to the app's page in Deployment. The gateway lets AUGUR's own Admin read the organisation's settings and the floors a person is on, so Admin can run on the app contract.
+
+### Patch Changes
+
+- 5243f84: Messages that sent people to the old install guide (docs/deploy.md) now name the page in AUGUR's docs that says what to do, such as "AUGUR's docs, Set up email". The install guide is now the docs site's Run AUGUR section.
+
+  Not breaking: only the wording of `NO_RELAY`, the message shown when no mail relay is set, changed.
+
 ## 0.2.0
 
 ### Minor Changes

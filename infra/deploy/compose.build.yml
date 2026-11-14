@@ -32,6 +32,11 @@ services:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, target: openfga }
   storage:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/storage" } }
+  # The apps' relays run the storage image.
+  db-relay:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/storage" } }
+  bucket-relay:
+    build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], args: { PACKAGE: "@augur/storage" } }
   keycloak:
     build: { context: ../.., dockerfile: infra/service.Dockerfile, secrets: [node_auth_token], target: keycloak }
   updater:

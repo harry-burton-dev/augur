@@ -1,5 +1,15 @@
 # @augur/knowledge
 
+## 0.2.1
+
+### Patch Changes
+
+- Updated dependencies [5243f84]
+- Updated dependencies [e5a1e2b]
+- Updated dependencies [eb53688]
+- Updated dependencies [4442766]
+  - @augur/service-kit@0.20.0
+
 ## 0.2.0
 
 ### Minor Changes

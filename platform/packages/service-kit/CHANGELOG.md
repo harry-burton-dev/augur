@@ -1,5 +1,17 @@
 # @augur/service-kit
 
+## 0.20.0
+
+### Minor Changes
+
+- 5243f84: Messages that sent people to the old install guide (docs/deploy.md) now name the page in AUGUR's docs that says what to do, such as "AUGUR's docs, Set up email". The install guide is now the docs site's Run AUGUR section.
+
+  Not breaking: only the wording of `NO_RELAY`, the message shown when no mail relay is set, changed.
+
+- e5a1e2b: A deployment can let the permissions service decide a check instead of the service's own, site by site, with `PERMISSIONS_DECIDES` (ADR 0085, step 2). The model gateway's admin checks read it first. A site that has moved over is refused with 503 when the permissions service can't answer, never falling back to the old check. Empty, as it is unless set, every check is only compared, as before.
+- eb53688: The gateway reaches the permissions service at `/api/permissions`, and Status checks it. When the shell sends `X-Augur-Persona`, the gateway asks the permissions service whether that admin persona's session is live. Only then does the caller it signs carry `persona` beside the person (service-kit's `Caller.persona`, `x-user-persona`). A session that has ended, a call made for an app, and an unanswered check are each refused, saying why. Services don't act on the persona yet.
+- 4442766: The task bar shows an app as soon as it is installed. The registry's app.registered and app.updated now reach everyone as platform.app.added and platform.app.updated, and the shell loads its app list again when any platform.app event arrives, keeping the open app open.
+
 ## 0.19.0
 
 ### Minor Changes

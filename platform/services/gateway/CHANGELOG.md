@@ -1,5 +1,26 @@
 # @augur/gateway
 
+## 0.15.0
+
+### Minor Changes
+
+- eb53688: The gateway reaches the permissions service at `/api/permissions`, and Status checks it. When the shell sends `X-Augur-Persona`, the gateway asks the permissions service whether that admin persona's session is live. Only then does the caller it signs carry `persona` beside the person (service-kit's `Caller.persona`, `x-user-persona`). A session that has ended, a call made for an app, and an unanswered check are each refused, saying why. Services don't act on the persona yet.
+
+### Patch Changes
+
+- 5243f84: Messages that sent people to the old install guide (docs/deploy.md) now name the page in AUGUR's docs that says what to do, such as "AUGUR's docs, Set up email". The install guide is now the docs site's Run AUGUR section.
+
+  Not breaking: only the wording of `NO_RELAY`, the message shown when no mail relay is set, changed.
+
+- ffdc8ea: Acting as an admin persona now works through AUGUR's own Admin and Deployment, the apps with platform scopes, which is where admin work happens. Every other app, and every app's own part, is still refused while someone acts as one.
+- 4e68ea8: An app its own service registers gets a page in Deployment, as installed ones have: which kept version the shell is given, holding it there or following new versions, and a new sign-in for its service. Admin's Apps no longer has versions or a new sign-in; it sends you to the app's page in Deployment. The gateway lets AUGUR's own Admin read the organisation's settings and the floors a person is on, so Admin can run on the app contract.
+- 96e099b: Admin's calls to the permissions service's roles and grants routes are allowed with `people:manage`, the platform scope it already holds. "Act as" stays the shell's alone: no app reaches the persona routes.
+- Updated dependencies [5243f84]
+- Updated dependencies [e5a1e2b]
+- Updated dependencies [eb53688]
+- Updated dependencies [4442766]
+  - @augur/service-kit@0.20.0
+
 ## 0.14.0
 
 ### Minor Changes

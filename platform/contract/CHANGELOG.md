@@ -1,5 +1,11 @@
 # @augur/contract-tests
 
+## 0.4.1
+
+### Patch Changes
+
+- 0605136: The contract tests check that the shell draws Starter's frame (its tile, its places and its pane) from the app template's manifest alone, before any of its code runs.
+
 ## 0.4.0
 
 ### Minor Changes

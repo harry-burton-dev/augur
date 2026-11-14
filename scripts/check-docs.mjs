@@ -21,7 +21,8 @@ const ALLOWED = [
   /^docs\/src\/content\/docs\/.+\.mdx?$/,
   /(^|\/)README\.md$/,
   /(^|\/)CHANGELOG\.md$/,
-  /^(AGENTS|CLAUDE|THIRD_PARTY_NOTICES)\.md$/,
+  /^(AGENTS|CLAUDE|REVIEW|THIRD_PARTY_NOTICES)\.md$/,
+  /^\.github\/pull_request_template\.md$/,
   /^\.changeset\/[^/]+\.md$/,
   /(^|\/)etc\/[^/]+\.api\.md$/,
 ];

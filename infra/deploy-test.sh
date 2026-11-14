@@ -17,7 +17,8 @@ export LC_ALL=C
 mode=${1:?usage: infra/deploy-test.sh fresh | upgrade <from-version> | broken}
 from=${2:-}
 here=$(cd "$(dirname "$0")" && pwd)
-deploy="$here/deploy"
+# The deploy files under test: this checkout's, or DEPLOY_DIR, a release's deploy bundle unpacked (infra/deploy-bundle.sh).
+deploy=${DEPLOY_DIR:-$here/deploy}
 dir=$deploy
 project=${PROJECT:-augur-deploy-test}
 local_tag=${LOCAL_TAG:-ci}
@@ -39,8 +40,13 @@ cleanup() {
   local status=$?
   if [ "$status" != 0 ]; then
     echo "::group::State when it failed"
-    pc ps -a || true
-    pc logs --no-color --tail 80 || true
+    # pc is defined only once the settings and Starter are prepared; before that nothing of AUGUR runs yet.
+    if declare -F pc >/dev/null; then
+      pc ps -a || true
+      pc logs --no-color --tail 80 || true
+    else
+      echo "No containers yet: the test failed while preparing its settings or Starter, before compose was set up."
+    fi
     if [ -n "${starter_id:-}" ]; then
       for app in $(docker ps -aq --filter "label=augur.app=$starter_id"); do docker logs --tail 40 "$app" 2>&1 | sed "s|^|$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$app") |" || true; done
     fi
@@ -71,13 +77,22 @@ starter_cleanup() {
   if [ -n "$apps_made" ]; then as_root 'rm -rf /d/apps' >/dev/null 2>&1 || true; fi
 }
 # Every secret in .env.example gets a new random value; the rest are what a small server would set.
-# An upgrade starts from the release's own deploy files, as a server that checked out its tag has them.
+# An upgrade starts from the release's own deploy files: its deploy bundle, as a server installed from it has
+# them, where it has one (gh and cosign at hand), else its tag, for releases from before bundles.
 dir=$deploy
 if [ "$mode" = upgrade ] && [ -n "$from" ]; then
   tag="augur@$from"
-  git -C "$here/.." rev-parse -q --verify "refs/tags/$tag" >/dev/null || git -C "$here/.." fetch -q --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
   mkdir -p "$work/from"
-  git -C "$here/.." archive "$tag" infra/deploy | tar -x -C "$work/from"
+  status=3
+  if command -v gh >/dev/null && command -v cosign >/dev/null; then
+    status=0
+    "$here/deploy-bundle.sh" "$from" "$work/from" || status=$?
+    if [ "$status" != 0 ] && [ "$status" != 3 ]; then echo "::error::augur@$from's deploy bundle didn't check out." >&2; exit "$status"; fi
+  fi
+  if [ "$status" = 3 ]; then
+    git -C "$here/.." rev-parse -q --verify "refs/tags/$tag" >/dev/null || git -C "$here/.." fetch -q --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+    git -C "$here/.." archive "$tag" infra/deploy | tar -x -C "$work/from"
+  fi
 fi
 old_deploy="$work/from/infra/deploy"
 
@@ -209,11 +224,11 @@ use() {
 }
 services() { pc config --services | grep -vx tailscale; }
 
-# Each service's /healthz, as the compose network sees it: every service whose healthcheck asks for one in
+# Each service's /healthz, as the compose network sees it: every service whose healthcheck asks for it (or /readyz) in
 # the compose file in use, so a release's own parts, and the apps it ships, are what's probed.
 health_urls() {
   pc config --format json | jq -c '[.services | to_entries[]
-    | (.value.healthcheck.test // [] | tostring | capture("127\\.0\\.0\\.1:(?<port>[0-9]+)/healthz")) as $h
+    | (.value.healthcheck.test // [] | tostring | capture("127\\.0\\.0\\.1:(?<port>[0-9]+)/(healthz|readyz)")) as $h
     | {key, value: "http://\(.key):\($h.port)"}] | from_entries'
 }
 # Asked from a container that has Node.
@@ -514,7 +529,8 @@ backup_restores() {
   echo "$1: the backup restored and checked." >&2
 }
 
-if [ "${BUILD:-}" = 1 ]; then
+# BUILT=1 with BUILD=1: the images were built here by an earlier run of this script, so a second mode reuses them.
+if [ "${BUILD:-}" = 1 ] && [ "${BUILT:-}" != 1 ]; then
   pc build $(services | grep -vx -e postgres -e backup -e backup-tools -e garage -e docker-proxy) >&2
   # The build cache isn't needed again, and on a CI runner its space is.
   docker builder prune -af >/dev/null

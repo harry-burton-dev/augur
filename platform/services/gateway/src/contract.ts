@@ -17,7 +17,7 @@ export const info = {
     'x-augur-caller, a token the gateway signs (EdDSA, one minute) for that',
     "service alone (its `aud` is the service's name), and without the caller's",
     'Authorization header. Services that check callers believe only the signed',
-    'one. Every path but /healthz, /caller-keys and POST /api/identity/v1/token',
+    'one. Every path but /healthz, /readyz, /caller-keys and POST /api/identity/v1/token',
     "(where an app's part gets its own token, contract 3) needs a signed-in caller,",
     "however it is spelt. An app's own token (audience platform-services, client",
     'app-<id>) is admitted for an app the registry knows and has on, held to its',

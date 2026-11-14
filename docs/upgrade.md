@@ -16,9 +16,9 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
    - **major** on a service or contract: a caller has to change. The platform's own frontends move with it, but anything you've built against that API needs checking ([versioning.md](versioning.md)).
    - a new or renamed setting in `infra/deploy/.env.example`: copy it into your `.env` before starting.
    - "migration" on a service: it changes its database tables when it starts. Within a major version migrations only add (CI holds every change to that), so the release before still runs on them.
-2. **Check the server can take it.** Check out the release's deploy files and run its preflight, which needs nothing installed but Docker:
+2. **Check the server can take it.** Unpack the release's deploy bundle over the server's folder, as in [Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release) (it leaves `.env`, `secrets/` and `backups/` alone; on a server that runs from a git checkout, `git fetch --tags && git checkout augur@<version>` does the same), and run its preflight, which needs nothing installed but Docker. Unpacking overwrites any deploy file you've changed: keep a change in `.env` or a `compose.override.yml` instead.
    ```sh
-   git fetch --tags && git checkout augur@<version>
+   v=<version>; curl -fL "https://github.com/harry-burton-dev/augur/releases/download/augur%40$v/augur-deploy-$v.tar.gz" | tar -xz && sha256sum --quiet -c SHA256SUMS
    docker run --rm -v "$PWD:/augur:ro" -w /augur node:22-alpine node scripts/preflight.mjs
    ```
    It reads your `.env`. It stops you if your version can't upgrade straight to this one (and names the release to go through first) or a setting this release needs isn't set, and it lists what the release breaks. Run it again until it says **Ready**.
@@ -34,7 +34,7 @@ alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.en
 ## Upgrade
 
 ```sh
-v=0.1.2                                   # the release you checked out for the preflight
+v=0.1.2                                   # the release you unpacked for the preflight
 sed -i "s/^PLATFORM_VERSION=.*/PLATFORM_VERSION=$v/" infra/deploy/.env
 pc pull && pc up -d --remove-orphans
 ```
@@ -56,21 +56,55 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
-### Home is the desktop, behind one logo button
+### The gateway's caller signing key is required
 
 **From** unreleased
+
+The gateway now won't start without `CALLER_SIGNING_KEY`, the key it signs callers with. If `.env` hasn't got one, add it before you upgrade: `echo "CALLER_SIGNING_KEY=$(openssl rand -hex 32)" >> .env` in the server's folder. The updater that carries this upgrade is the one you run now, which can't make the key up, so Deployment's Updates page asks you to set it and the upgrade waits until you have; from this release on, the updater makes it up when an upgrade needs it. Everyone stays signed in; services fetch the new key the first time they see it. `CALLER_SIGNING_KEY_NEXT` is new and optional, for changing the key without refusing a call ([Signed caller, Changing the key](signed-caller.md#changing-the-key)).
+
+A call from inside a service's own container is no longer believed as it comes. To act as someone from there when nobody can sign in, as the command for removing an app does, turn on break-glass for the time it takes (`CALLER_BREAK_GLASS=on`, [Signed caller, Break-glass](signed-caller.md#break-glass)).
+
+### Deploy bundles, and the Compose project's name from .env
+
+**From** unreleased
+
+Each release now carries `augur-deploy-<version>.tar.gz`, signed like its images: unpack it over the server's folder in place of `git checkout augur@<version>` ([Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)). A git checkout keeps working. Compose's project name now comes from `COMPOSE_PROJECT_NAME` in `.env` and is still `platform` without it. Nothing to do: don't set it on a server that has data, since Docker names the volumes after it.
+
+### Apps reach the stores only through relays
+
+**From** unreleased
+
+Two new containers, `db-relay` and `bucket-relay`, now stand in for Postgres and the object store on each app's network. `db-relay` lets only the app's own login on to Postgres, never the platform's superuser or a service's; `bucket-relay` passes on only the object store's S3 API, never its admin API. An app gets only the relay for what it asks for. On its first turn after the upgrade the app runner joins each relay to the apps' networks under the store's own name (`postgres`, `garage`), then takes Postgres and Garage themselves off them, so the apps' parts keep the same addresses.
+
+Connections an app's parts already held open to Postgres or the object store end when the store leaves its network. Most clients open new ones, through the relay; if an app that keeps data shows errors after the upgrade, restart it once in Admin → Apps. If `pc ps` shows a relay as unhealthy, `pc logs db-relay` (or `bucket-relay`) says why. An app installed before contract 3 is still on the platform's network until it's replaced.
+
+### Only AUGUR's own apps load into the shell's page
+
+**From** unreleased
+
+If you run an app on contract 2 that AUGUR didn't make (today, Mandate or Explorer), it stops opening after this upgrade: it stays in the app bar and says why. Code loaded into the shell's page runs as the shell, with the person's sign-in, so only AUGUR's own apps load there now; every other app runs in the sandbox on the app contract. The registry also refuses a new contract 2 manifest for any other app. While an app's team moves it to the app contract, you can let it load in the page on this server: name it in `IN_PAGE_APPS` (ids split by commas or spaces) in `.env`, then `pc up -d registry`. Take it out again once the app is released on the app contract.
+
+### Services wait for their database, and stop cleanly
+
+**From** unreleased
+
+Nothing to do unless you changed the services' healthchecks in your own compose override. Each AUGUR service's healthcheck now asks `/readyz`, which answers only while its database answers, so `pc ps` shows a service as `unhealthy` while it can't reach Postgres. A stopping service now finishes its calls in flight, for up to `SHUTDOWN_GRACE_SECONDS` (20, at most 23), and Docker waits up to 30 seconds for it, so `pc down` and an upgrade can take a few seconds longer ([Limits and health](src/content/docs/run/limits.md#logs-memory-and-health)).
+
+### Home is the desktop, behind one logo button
+
+**From** augur@0.26.0
 
 The app bar's Home and Apps become one logo button, and the desktop holds Home: Home sits on the background, under a bar that rests at the top or bottom like a taskbar. Nothing to do. The button shows `ORG_LOGO_URL` if you set it (the shell can show it from this site, a `data:` URL or an address in `APP_ORIGINS`), else a placeholder mark. To keep a bare desktop, set `DESKTOP_APP=` (empty) in `.env`, or another app's id to hold that one instead ([Install AUGUR](src/content/docs/run/install.md#2-fill-in-the-settings)).
 
 ### Admin's Status and Dev to production pages moved to Deployment
 
-**From** unreleased
+**From** augur@0.26.0
 
 Admin no longer has **Status** or **Dev to production**: Deployment's **Health**, **Backups** and **Release channel** show the same. What the server runs for an installed app moved from Admin → Apps to the app's page in Deployment → Apps: rolling it back (installing an earlier release, which puts it on hold), its internet, its settings, its developers and previews, a new sign-in for its service and **Remove from the server**. An app its own service registers, rather than the app runner, has a page there too: which kept version the shell is given, holding it there or following new versions, and a new sign-in. **Where apps load from** is on Deployment → Apps too. Turning an app on or off, its floors, feature previews, upload limit and scopes stay in Admin → Apps. Nothing to do on the server.
 
 ### OpenFGA moves to 1.19
 
-**From** unreleased
+**From** augur@0.26.0
 
 OpenFGA (`openfga`, the store behind the permissions service) moves from 1.11.2 to 1.19.0, which fixes critical flaws in the libraries it was built with. It brings its tables up to date on its first start, as it always has; nothing to do. Going back to an earlier release leaves the newer tables in place, which the deploy test checks.
 
@@ -685,10 +719,10 @@ An optional container that runs an upgrade asked for with **Upgrade to …** in 
 **What it holds to.** Before it changes anything it checks there are at least 2 GiB free in `infra/deploy` (the backup and the images land on that disk). Settings entered on the page only add: one that says what the server trusts (`SERVER_RING`, `IMAGE_SIGNER`, `PLATFORM_IMAGES`, `APP_SECRETS_KEY`, any `COMPOSE_*` and the like), one `.env` already has, or one that isn't a plain setting name is refused, even if the registry let it through. `.env` is written whole and renamed into place; where the updater can't keep the file's owner it writes it in place instead, keeping `.env.before-upgrade` beside it until the write checks out (if a message says that file holds the old settings, copy it over `.env` first). While an upgrade runs it keeps a note of it in `infra/deploy/.updater-upgrade.json` (the old `.env` among it, readable by the updater alone): if the updater or the server restarts partway, it goes back using it, with the same breaking-release rule. Don't delete it during an upgrade; it goes when the upgrade ends. Data a new release migrated stays as it is: [Going back](#going-back) says when you'd restore that backup.
 
 **Deploy files and new settings.** Each release's updater image carries that release's deploy files (`infra/deploy`, as `augur@<version>` has them). When the release you upgrade to changes some, the updater takes them from the new release's updater image, checks each against the release file (which the Release workflow signs with the images), writes them into `infra/deploy`, then starts anything they add and makes again anything that mounts a changed file (Keycloak's realm, say). Going back puts the old files back and takes new parts away. Two things stop it, and the page says which:
-- A file the release changes has been **edited on the server** since the release you run. The updater never overwrites your edits: put the file back as `augur@<your version>` has it (`git checkout augur@<version> -- infra/deploy/<file>`), and keep your change in `.env` or a `compose.override.yml` of your own instead.
+- A file the release changes has been **edited on the server** since the release you run. The updater never overwrites your edits: put the file back as `augur@<your version>` has it (from that release's deploy bundle, or `git checkout augur@<version> -- infra/deploy/<file>` in a checkout), and keep your change in `.env` or a `compose.override.yml` of your own instead.
 - A **new required setting that only you can give** (an address, say) that you didn't enter. **Upgrade to …** has a field for each new setting the release adds: what you type there goes to the updater (never stored, and only the setting's name is audited) and into `.env`. Leave one empty when it's already in `.env`. A new required setting whose name ends in `_SECRET`, `_PASSWORD` or `_TOKEN` is a long random string, so it gets no field: the updater makes one up and adds it to `.env` itself, and the page says which it made.
 
-After the updater has written deploy files, the server's `infra/deploy` is ahead of your git checkout's: that's expected. Don't `git checkout` or `git pull` over it; if you want the checkout to match, `git fetch --tags && git checkout augur@<version>` for the version you now run, which is what's on disk.
+After the updater has written deploy files, the server's `infra/deploy` is the new release's, and ahead of the bundle you unpacked or your git checkout: that's expected. Don't unpack an older bundle, `git checkout` or `git pull` over it; to match the rest of the folder, unpack the bundle of the version you now run, which is what's on disk.
 
 It drives Docker, which can start any container, so it has the run of the server. Only it can reach Docker (through `docker-proxy`, on a network of their own), and only an admin who has just entered their password can ask it for anything. Once, after the upgrade that brings it:
 
@@ -817,7 +851,7 @@ Two optional touches:
 
 Code and data are separate, so going back is two steps, and the second is only needed if the new release migrated data:
 
-1. **Code**: the same steps with the version you noted: `git checkout augur@<it>`, set `PLATFORM_VERSION` back, `pc up -d --remove-orphans`. The old images are still on the server, so nothing is downloaded.
+1. **Code**: the same steps with the version you noted: unpack its deploy bundle (or `git checkout augur@<it>`; a release from before bundles is in its tag's source archive, [Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)) set `PLATFORM_VERSION` back, `pc up -d --remove-orphans`. The old images are still on the server, so nothing is downloaded.
 2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading, as in [Backups](src/content/docs/run/backups.md#restore-the-database-from-a-backup). Anything changed since that backup is lost, so check Admin → Activity first for what that is.
 
 For one app rather than the whole platform, Admin → Apps can give the shell an earlier version of the app instead ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).

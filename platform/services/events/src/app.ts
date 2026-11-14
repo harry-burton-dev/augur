@@ -32,6 +32,7 @@ import {
   noShadow,
   type Shadow,
   type ShadowQuestion,
+  endStreamsOnStop,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
 import { deliveryStatus, type PushingState } from './deliver.ts';
@@ -208,6 +209,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
   // Before anything reads the caller: only the gateway's signed word says who is calling.
   app.addHook('onRequest', signedCallers(callers));
   app.get('/healthz', { schema: { hide: true } }, async () => health('events', version, API_VERSION));
+  // Stopping ends the open streams first: a browser opens its stream again, on a service that is up.
+  const holdOpen = endStreamsOnStop(app);
 
   // The HTTP API, under its major version. A breaking change goes under /v2 beside it; /v1 stays until no one calls it.
   await app.register(
@@ -507,6 +510,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         const res = reply.raw;
         res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
         res.write(': connected\n\n');
+        holdOpen(res);
         const unsubscribe = store.subscribe((n) => {
           if (n.recipient === caller.id) res.write(`event: notification\ndata: ${JSON.stringify(forCaller(n))}\n\n`);
         });
@@ -673,6 +677,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           const res = reply.raw;
           res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'x-accel-buffering': 'no' });
           res.write(': connected\n\n');
+          holdOpen(res);
           const stop = store.onEvent((e) => {
             if ((e.workspace?.id === floor || (!e.workspace && isDeploymentWide(e.topic))) && topicMatches(e.topic, topics)) res.write(`event: domain-event\ndata: ${JSON.stringify(forBrowser(e))}\n\n`);
           });

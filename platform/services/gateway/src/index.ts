@@ -1,4 +1,4 @@
-import { commonSettings, loadConfigOrExit } from '@augur/service-kit';
+import { commonSettings, loadConfigOrExit, serve } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 
 // Every setting the gateway reads, checked before it starts (in production, a missing one stops it).
@@ -18,7 +18,8 @@ loadConfigOrExit('gateway', [
   { name: 'APP_CONNECT_TIMEOUT_MS', about: 'how long to wait to connect to an app’s part before answering 502 (default 5000).' },
   { name: 'APP_RESPONSE_TIMEOUT_MS', about: 'how long an app’s part may take to answer before 504 (default 60000).' },
   { name: 'APP_CONCURRENT_CALLS', about: 'how many calls one app may have in flight before the next answers 503 (default 64).' },
-  { name: 'CALLER_SIGNING_KEY', about: 'the key the gateway signs callers with (64 hex); without it a new one is made each start, so only one gateway can run.', secret: true },
+  { name: 'CALLER_SIGNING_KEY', about: 'the key the gateway signs callers with (64 hex); the gateway won’t start without it.', secret: true },
+  { name: 'CALLER_SIGNING_KEY_NEXT', about: 'the key that comes next (64 hex), published beside CALLER_SIGNING_KEY but not signed with, while the key is being changed.', secret: true },
   { name: 'APP_UPSTREAMS', about: 'apps’ services the gateway is started with, name=url, comma separated.' },
   { name: 'BACKUP_DIR', about: 'where the backup container writes its results, for Status.' },
   { name: 'SEED_ALLOWED', about: 'true lets an admin fill this deployment with synthetic sample data (pnpm seed); off unless set.' },
@@ -27,4 +28,4 @@ loadConfigOrExit('gateway', [
 
 const port = Number(process.env.PORT ?? 8080);
 const app = await buildApp();
-await app.listen({ port, host: '0.0.0.0' });
+await serve(app, { port });

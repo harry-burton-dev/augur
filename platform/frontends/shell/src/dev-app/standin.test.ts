@@ -3,6 +3,7 @@ import { CURRENT_SDK } from '../current-sdk.js';
 import { describe, expect, it, vi } from 'vitest';
 import { DEV_EVENT, DEV_INBOX, devHome, devUser, standInFetch } from './standin.js';
 
+const inPage = (a: AppManifestEntry) => ({ ...a, inPage: true });
 const app: AppManifestEntry = { id: 'hello', name: 'Hello', route: '/hello', entry: '/@fs/apps/hello/frontend/src/entry.ts', version: '0.0.0', sdk: CURRENT_SDK, requiredRole: 'editor' };
 
 describe('the stand-in platform', () => {
@@ -13,14 +14,14 @@ describe('the stand-in platform', () => {
 
   it('lists Home and the app being developed', async () => {
     const res = await standInFetch(app)('/api/registry/v1/manifest');
-    expect(await res.json()).toEqual([devHome, app]);
-    expect(await (await standInFetch(devHome)('/api/registry/v1/manifest')).json()).toEqual([devHome]);
+    expect(await res.json()).toEqual([devHome, app].map(inPage));
+    expect(await (await standInFetch(devHome)('/api/registry/v1/manifest')).json()).toEqual([inPage(devHome)]);
   });
 
   it('lists the other apps it was given beside them', async () => {
     const folio: AppManifestEntry = { id: 'folio', name: 'Folio', route: '/folio', entry: '/apps/folio/entry.js', version: '0.1.0', sdk: CURRENT_SDK };
     const res = await standInFetch(app, undefined, [folio, app])('/api/registry/v1/manifest');
-    expect(await res.json()).toEqual([devHome, app, folio]);
+    expect(await res.json()).toEqual([devHome, app, folio].map(inPage));
   });
 
   it('keeps preferences until the page reloads', async () => {

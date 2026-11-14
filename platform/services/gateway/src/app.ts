@@ -32,10 +32,11 @@ import {
   WORKSPACE_HEADERS,
   type Caller,
   type CallerSigner,
+  endStreamsOnStop,
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig, type Authenticated } from './auth.ts';
 import { AppGrantsUnavailable, holds, notAllowed, registryGrantsFor, scopeFor, type AppGrant, type AppGrants } from './grants.ts';
-import { appFailure, appLimitsFromEnv, InFlight, poolOptions, type AppLimits } from './limits.ts';
+import { appFailure, appLimitsFromEnv, InFlight, platformFailure, platformLimitsFromEnv, platformPoolOptions, poolOptions, STREAM_ROUTE, type AppLimits, type PlatformLimits } from './limits.ts';
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
@@ -108,7 +109,7 @@ const PUBLIC_LOGO_BYTES = 512 * 1024;
  */
 export const TOKEN_PATH = '/api/identity/v1/token';
 
-const PUBLIC_ROUTES = new Set(['/healthz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH, TOKEN_PATH]);
+const PUBLIC_ROUTES = new Set(['/healthz', '/readyz', CALLER_KEYS_PATH, TRAFFIC_PATH, PUBLIC_LOGO_PATH, TOKEN_PATH]);
 /** The public routes that aren't counted as traffic; a storm at the token route is one the watch should see. */
 const UNCOUNTED_ROUTES = new Set([...PUBLIC_ROUTES].filter((r) => r !== TOKEN_PATH));
 
@@ -153,7 +154,7 @@ export interface GatewayOptions {
   seedAllowed?: boolean;
   /** Which floors a caller is on. Defaults to asking the identity upstream. */
   floors?: FloorLookup;
-  /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
+  /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY (required in production) and CALLER_SIGNING_KEY_NEXT. */
   signer?: CallerSigner;
   /** Which apps a person may use on a floor, and what each may be sent. Defaults to asking the registry upstream. */
   access?: AppAccess;
@@ -171,6 +172,8 @@ export interface GatewayOptions {
   appGrants?: AppGrants;
   /** The brakes on calls to apps' parts (spec 7.5). Defaults to the APP_*_TIMEOUT_MS and APP_CONCURRENT_CALLS settings. */
   limits?: AppLimits;
+  /** The gateway's budget for AUGUR's own services: their connections, the events service's streams, and deadlines. */
+  platformLimits?: PlatformLimits;
   /** How long a delegated caller lasts (spec 8.5). Defaults to APP_DELEGATION_SECONDS, or 300. */
   delegationSeconds?: number;
   /** Whether a person is acting as an admin persona now (ADR 0086). Defaults to asking the permissions upstream. */
@@ -192,7 +195,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), platformLimits = platformLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions }: GatewayOptions = {}) => {
   // Mail comes from the organisation's sender (Admin → Organisation), read from identity as the gateway.
   const sender = upstreams.identity
     ? organisationSender({
@@ -252,9 +255,10 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       schema: {
         summary: 'The public key signed callers are checked with',
         description: [
-          "A JSON Web Key Set with the gateway's Ed25519 key. No sign-in is needed.",
-          'The key is new each time the gateway starts unless CALLER_SIGNING_KEY is',
-          "set, so fetch it again when a token names a key id you don't have.",
+          "A JSON Web Key Set with the gateway's Ed25519 keys. No sign-in is needed.",
+          'The first is the key callers are signed with (CALLER_SIGNING_KEY); while the key',
+          'is being changed, the one that comes next (CALLER_SIGNING_KEY_NEXT) is listed after it.',
+          "Fetch the set again when a token names a key id you don't have.",
         ].join(' '),
         response: { 200: CallerKeys },
       },
@@ -701,7 +705,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     req.body = req.body.pipe(counted);
   };
 
-  const replyOptions = {
+  // How a call is passed on, and how a failure answers: `service` names which of AUGUR's services the route is for.
+  const replyOptionsFor = (service?: string) => ({
     onError: (reply: FastifyReply, { error }: { error: Error }) => {
       if (reply.request.tooLarge) return void reply.code(413).send({ error: 'too_large', message: reply.request.tooLarge });
       // A part that can't be reached or doesn't answer in time, in words (spec 7.5).
@@ -709,6 +714,12 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       if (failed) {
         reply.request.log.warn({ err: error.message, app: reply.request.appCall }, 'app call failed');
         return void reply.code(failed.status).send({ error: failed.status === 504 ? 'timeout' : 'bad_gateway', message: failed.message });
+      }
+      // One of AUGUR's own services that can't be reached or has stopped answering, in words too.
+      const down = service && !reply.request.appCall ? platformFailure(error, service) : undefined;
+      if (down) {
+        reply.request.log.warn({ err: error.message, service }, 'service call failed');
+        return void reply.code(down.status).send({ error: down.status === 504 ? 'timeout' : 'bad_gateway', message: down.message });
       }
       // As reply-from answers by default.
       reply.send(error);
@@ -724,7 +735,27 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       const keepToken = request.identity?.kind === 'app' && authorization ? { authorization } : {};
       return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...callerHeaders(request.caller), ...request.signedCaller } : {}) };
     },
-  };
+  });
+
+  // AUGUR's services' streams (GET /v1/<resource>/stream), through one pool of their own, so open tabs never hold the
+  // connections the services' other calls need. These routes are more specific than each service's own, so they win.
+  const streaming = Object.keys(upstreams).filter((name) => PLATFORM_SERVICES.includes(name));
+  // Stopping ends the streams it carries first: the browser opens its stream again, on a gateway that is up.
+  const holdOpen = endStreamsOnStop(app);
+  if (streaming.length) {
+    await app.register(async (sub) => {
+      await sub.register(replyFrom, { undici: platformPoolOptions(platformLimits, 'streams') });
+      for (const name of streaming) {
+        sub.get(`/api/${name}${STREAM_ROUTE}`, async (req: FastifyRequest<{ Params: { resource: string } }>, reply) => {
+          await beforeProxy(name, req, reply);
+          if (reply.sent) return reply;
+          holdOpen(reply.raw);
+          const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+          return reply.from(`${upstreams[name]}${STREAM_ROUTE.replace(':resource', encodeURIComponent(req.params.resource))}${query}`, replyOptionsFor(name) as never);
+        });
+      }
+    });
+  }
 
   // The platform's own services, and apps named in APP_UPSTREAMS: known when the gateway starts.
   for (const [name, upstream] of Object.entries(upstreams)) {
@@ -732,11 +763,11 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       upstream,
       prefix: `/api/${name}`,
       rewritePrefix: '',
-      // An app's part is held to its timeouts (spec 7.5); AUGUR's own services keep the defaults.
-      ...(PLATFORM_SERVICES.includes(name) ? {} : { undici: poolOptions(limits) }),
+      // An app's part is held to its timeouts (spec 7.5); AUGUR's own services to theirs.
+      undici: PLATFORM_SERVICES.includes(name) ? platformPoolOptions(platformLimits, 'calls') : poolOptions(limits),
       // The signed caller is made before the request goes on, since signing is asynchronous.
       preHandler: (req, reply) => beforeProxy(name, req, reply),
-      replyOptions: replyOptions as never,
+      replyOptions: replyOptionsFor(PLATFORM_SERVICES.includes(name) ? name : undefined) as never,
     });
   }
 
@@ -767,7 +798,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         const rest = req.params['*'] ?? '';
         // A developer who chose one of the app's previews is sent to it instead; everyone else to the app.
         const preview = req.caller ? previews?.[req.caller.id] : undefined;
-        return reply.from(`${preview ?? upstream}/${rest}`, replyOptions as never);
+        return reply.from(`${preview ?? upstream}/${rest}`, replyOptionsFor() as never);
       };
       sub.all('/api/:name', handler);
       sub.all('/api/:name/*', handler);

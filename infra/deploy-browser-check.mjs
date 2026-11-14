@@ -89,6 +89,10 @@ async function freshTotp(secret) {
 const CALL_MS = 30_000;
 // How long after a sign-in a job is still asked for on it: well inside the registry's 10 minutes.
 const SIGN_IN_FRESH_MS = 3 * 60_000;
+/** How long a just-installed app is given to be served through the gateway, trying again meanwhile. */
+const APP_SERVED_WITHIN_MS = 90_000;
+/** How long an opened app's pane is given to get its service's first answer through the gateway. */
+const APP_ANSWERS_MS = 15_000;
 
 try {
   // Sign in with the first admin's starting password. Keycloak then asks for whatever the account still
@@ -291,13 +295,20 @@ async function appSignIn(id) {
   return { ok: res.status === 200 && Boolean(res.body.access_token), said: `HTTP ${res.status}${res.body.error ? ` ${res.body.error}` : ''}` };
 }
 
-/** Opens the app's pane and gives it time to ask its service: the pane, and what it says. */
+/**
+ * Opens the app's pane and waits for its service's first answer through the gateway (`/api/<id>/…`): the pane, and
+ * that answer's HTTP status, undefined when none came in time. The shell keeps an event stream open, so the page is
+ * never "idle"; the answer is what settles.
+ */
 async function openApp(id) {
+  const answered = page
+    .waitForResponse((r) => new URL(r.url()).pathname.startsWith(`/api/${id}/`), { timeout: APP_ANSWERS_MS })
+    .then((r) => r.status(), () => undefined);
   await page.goto(new URL(`/@me/${id}`, base).href);
   const pane = page.locator(`[data-app="${id}"]`).first();
   await pane.waitFor({ state: 'visible', timeout: 30_000 });
-  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
-  return pane;
+  const status = await answered;
+  return { pane, status };
 }
 
 /**
@@ -311,16 +322,32 @@ async function throughTheRunner(r) {
   pass('the first admin signs in from the command line too (device grant)');
 
   await runnerJob(token, { action: 'install', release: r }, 8);
+  // The gateway keeps the registry's answer about where apps' services are for a while, so an app opened right
+  // after its install can be told "Nothing is served" (the gateway's 404) until the gateway asks again; PER-424 is
+  // for it to learn sooner. A person would try again; so does this, only while the answer is that 404, for at most
+  // APP_SERVED_WITHIN_MS, and says how many tries it took. Any other failure counts the first time.
+  const startedAt = Date.now();
   let pane;
+  let tries = 0;
+  let alert = '';
   try {
-    pane = await openApp(id);
-    const text = (await pane.innerText()).trim();
+    let text = '';
+    let status;
+    for (;;) {
+      tries += 1;
+      ({ pane, status } = await openApp(id));
+      text = (await pane.innerText()).trim();
+      const alerts = pane.getByRole('alert');
+      alert = (await alerts.count()) ? (await alerts.first().innerText()).replace(/\s+/g, ' ') : '';
+      if (!(alert && status === 404) || Date.now() - startedAt >= APP_SERVED_WITHIN_MS) break;
+      await sleep(5_000);
+    }
     if (text.length === 0) fail(`${name} opens but shows nothing`);
-    else if (await pane.getByRole('alert').count()) fail(`${name} opens saying something failed: ${(await pane.getByRole('alert').first().innerText()).replace(/\s+/g, ' ')}`);
-    else pass(`${name} opens once installed (${text.split('\n')[0].slice(0, 60)})`);
+    else if (alert) fail(`${name} opens saying something failed${tries > 1 ? `, still after ${tries} tries over ${Math.round((Date.now() - startedAt) / 1000)} s` : ''} (its service answered ${status ?? 'nothing'}): ${alert}`);
+    else pass(`${name} opens once installed${tries > 1 ? ` (on try ${tries}, ${Math.round((Date.now() - startedAt) / 1000)} s after the install)` : ''} (${text.split('\n')[0].slice(0, 60)})`);
     if (!loaded.some((path) => path.startsWith(`/apps/${id}/`))) fail(`${name}'s frontend wasn't loaded from /apps/${id}/`);
-  } catch {
-    fail(`${name} didn't open at /@me/${id} once installed`);
+  } catch (err) {
+    fail(`${name} didn't open at /@me/${id} once installed (try ${tries}${alert ? `, after it said: ${alert}` : ''}): ${err.message}`);
   }
   await shot(`${id}-installed`);
   const before = await appSignIn(id);
@@ -337,7 +364,7 @@ async function throughTheRunner(r) {
   if (said !== 'ok') fail(`${name}'s parts weren't stopped: infra/deploy-test.sh said ${said}`);
   else {
     try {
-      pane = await openApp(id);
+      ({ pane } = await openApp(id));
       const alert = pane.getByRole('alert').first();
       await alert.waitFor({ state: 'visible', timeout: 30_000 });
       pass(`with its parts stopped, ${name}'s pane says it failed (${(await alert.innerText()).replace(/\s+/g, ' ').slice(0, 80)})`);

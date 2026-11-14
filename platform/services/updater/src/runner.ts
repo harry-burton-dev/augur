@@ -118,8 +118,17 @@ export interface JobRun {
   logs: string;
 }
 
-/** The platform's parts an app's network may be joined by: each under its own name, which is how parts reach it. */
-export type PlatformPart = 'gateway' | 'postgres' | 'garage' | 'otel-lgtm';
+/**
+ * The platform's parts an app's network may be joined by: each under its own name, which is how parts reach it.
+ * The stores are reached through the apps' relays, never Postgres or the object store themselves: db-relay lets
+ * only an app's own login on to Postgres, and bucket-relay only the object store's S3 API through (design review ISO-2).
+ */
+export type PlatformPart = 'gateway' | 'db-relay' | 'bucket-relay' | 'otel-lgtm';
+
+/** The names a platform part answers to on an app's network: each relay answers as the store it stands in for. */
+export const ALIASES: Record<PlatformPart, string[]> = { gateway: ['gateway'], 'db-relay': ['db-relay', 'postgres'], 'bucket-relay': ['bucket-relay', 'garage'], 'otel-lgtm': ['otel-lgtm'] };
+/** The stores that were joined to apps' networks before the relays, each with the relay that stands in for it: they're taken off. */
+export const RELAYED: Record<'postgres' | 'garage', PlatformPart> = { postgres: 'db-relay', garage: 'bucket-relay' };
 
 /** One app's own network (spec 3.1, 4.8): every part of every version of the app is on it, and the platform's parts it names. */
 export interface AppNetwork {
@@ -228,7 +237,7 @@ export const internetNetwork = (app: string) => `app-${app}_internet`;
 const asksInternet = (part: ScorePart) => Object.values(part.resources ?? {}).some((r) => r.type === 'augur-outbound');
 
 /** The platform part a resource type brings onto the app's network (spec 4.6, last column); the gateway is always there. */
-const JOINED_BY: Record<string, PlatformPart> = { 'augur-database': 'postgres', 'augur-bucket': 'garage', 'augur-telemetry': 'otel-lgtm' };
+const JOINED_BY: Record<string, PlatformPart> = { 'augur-database': 'db-relay', 'augur-bucket': 'bucket-relay', 'augur-telemetry': 'otel-lgtm' };
 
 /** One part's Compose service: app-<id>-<part>-<slot>, the slot being blue, green or a preview's pr<n>. */
 export const partService = (app: string, part: string, slot: string) => `app-${app}-${part}-${slot}`;
@@ -493,7 +502,7 @@ export const appNetworksOf = (state: RunnerState, env: string): AppNetwork[] => 
       }
     byApp.set(unit.app, join);
   }
-  const order: PlatformPart[] = ['gateway', 'postgres', 'garage', 'otel-lgtm'];
+  const order: PlatformPart[] = ['gateway', 'db-relay', 'bucket-relay', 'otel-lgtm'];
   const out: AppNetwork[] = [...byApp].map(([app, join]) => ({ app, name: appNetwork(app), join: order.filter((p) => join.has(p)) }));
   for (const app of state.internet ?? []) {
     const members = internetServices(state, app);

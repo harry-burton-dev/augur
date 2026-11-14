@@ -21,7 +21,8 @@ export const database: Provisioner = {
   // The storage container makes the login and schema, and changes nothing when they're there.
   needs: ['storage'],
   outputs: ({ storageId, env, secrets, params }) => ({
-    // Postgres as compose.yml runs it: the platform's one database, where each app has its own login and schema.
+    // The platform's one database, where each app has its own login and schema, through db-relay: on an
+    // app's network it answers as postgres, and lets only the app's own login on (compose.yml).
     host: { value: 'postgres' },
     port: { value: '5432' },
     name: { value: 'platform' },

@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog } from '@augur/service-kit';
+import { askModel, callerCheckFromEnv,commonSettings, floorPlaces, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, startupLog, steadyPool, poolCheck, serve } from '@augur/service-kit';
 import { buildApp } from './app.ts';
 import { fileLedger } from './ledger.ts';
 import { outboxRelay } from './outbox.ts';
@@ -33,7 +33,7 @@ if (!process.env.DATABASE_URL) {
   throw new Error('DATABASE_URL is not set: the knowledge service keeps the graph in Postgres, as its own login kg_app. Locally, start the dev stack’s (docker compose -f infra/docker-compose.yml up -d postgres).');
 }
 // kg_app owns nothing and writes only through the store's actions: the migration job made the schema.
-const store = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 });
+const store = steadyPool(new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 10 }));
 
 const { IDENTITY_URL = 'http://localhost:8081', EVENTS_URL = 'http://localhost:8084' } = process.env;
 const credentials = platformCredentialsFromEnv('knowledge');
@@ -69,7 +69,7 @@ const roles: RolesLookup = PERMISSIONS_URL && credentials ? permissionsRoles({ p
 if (!PERMISSIONS_URL) log.warn('PERMISSIONS_URL is not set: nobody settles or raises on any floor until it is.');
 const onRolesUnavailable = (err: Error) => app.log.warn({ err: err.message }, 'the permissions service could not say who settles and raises; nobody does on this request');
 const app = await buildApp({ store, standing, callers: callerCheckFromEnv('knowledge'), extract, ledger, roles, onRolesUnavailable, pageLimit, subgraphDepth });
-await app.listen({ port, host: '0.0.0.0' });
+const serving = await serve(app, { port, ready: [poolCheck('database', store)], close: [() => store.end()] });
 // Reflect writes each floor's summaries from its own beliefs, through the models service, within its budgets.
 if (MODELS_URL && credentials) {
   const budgets = {
@@ -77,7 +77,7 @@ if (MODELS_URL && credentials) {
     daily: positive('KNOWLEDGE_REFLECT_DAILY_BUDGET', DEFAULT_BUDGETS.daily) ?? DEFAULT_BUDGETS.daily,
     perFloor: positive('KNOWLEDGE_REFLECT_FLOOR_BUDGET', DEFAULT_BUDGETS.perFloor) ?? DEFAULT_BUDGETS.perFloor,
   };
-  reflectScheduler({
+  const reflect = reflectScheduler({
     pool: store,
     budgets,
     ask: async (messages, floor) => {
@@ -85,8 +85,14 @@ if (MODELS_URL && credentials) {
       return { content: answer.message.content, model: answer.model };
     },
     log: (msg, detail) => app.log.info(detail ?? {}, msg),
-  }).start();
+  });
+  reflect.start();
+  serving.onStop(() => reflect.stop());
 } else {
   log.warn('Reflect is off: without MODELS_URL and the service’s sign-in, entities show their beliefs without summaries.');
 }
-if (credentials) outboxRelay({ pool: store, eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err }, 'the outbox could not be sent') }).start();
+if (credentials) {
+  const relay = outboxRelay({ pool: store, eventsUrl: EVENTS_URL, credentials, onError: (err) => app.log.error({ err }, 'the outbox could not be sent') });
+  relay.start();
+  serving.onStop(() => relay.stop());
+}
