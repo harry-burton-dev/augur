@@ -29,7 +29,8 @@ jobs:
   tier:
     # The Version packages pull request is the release itself: its contents were each reviewed as they merged.
     # A closed pull request has nothing left to check; the record job below handles a merge.
-    if: ${{ !startsWith(github.head_ref, 'changeset-release/') && github.event.action != 'closed' }}
+    # Nor a pull request that is no longer open: a label added after the merge (harry-would-not) changes nothing to check.
+    if: ${{ !startsWith(github.head_ref, 'changeset-release/') && github.event.action != 'closed' && github.event.pull_request.state == 'open' }}
     runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -137,10 +138,11 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # The merge and the commit before it: the change exactly, and the rules it was checked by. A squash
-          # or a merge commit holds the whole pull request; a rebase merge would record only its last commit.
-          ref: ${{ github.event.pull_request.merge_commit_sha }}
-          fetch-depth: 2
+          # The branch as it merged, and the base just before the merge (BASE_COMMIT below): the diff from where
+          # the branch left that base is the whole pull request, however it merged (squash, merge or rebase),
+          # and the rules and actions are the ones it was checked against.
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
       - name: The tier script, from AUGUR
         if: github.repository != 'harry-burton-dev/augur'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -155,10 +157,17 @@ jobs:
           node-version: 22
       - name: What it merged on
         id: checks
-        # The checks on the branch's last commit, by name, apart from this workflow's own.
+        # The checks on the branch's last commit, by name, apart from this workflow's own. A public repository's
+        # checks need no extra permission; asking for checks: read here would break every caller that doesn't
+        # grant it. If they can't be read (a private repository), the record says so rather than listing none.
         run: |
-          checks=$(gh api "repos/$GH_REPO/commits/$HEAD/check-runs" --paginate \
-            --jq '[.check_runs[] | select(.name | test("(^|/ )(tier|record)$") | not) | {name, conclusion}]' | jq -cs 'add // [] | unique_by(.name)')
+          if runs=$(gh api "repos/$GH_REPO/commits/$HEAD/check-runs" --paginate \
+              --jq '[.check_runs[] | select(.name | test("(^|/ )(tier|record)$") | not) | {name, conclusion}]'); then
+            checks=$(jq -cs 'add // [] | unique_by(.name)' <<<"$runs")
+          else
+            echo "::warning::Couldn't read the checks this pull request merged on."
+            checks='[{"name":"checks","conclusion":"could not be read"}]'
+          fi
           echo "checks=$checks" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
@@ -168,7 +177,7 @@ jobs:
         run: node "${SCRIPT_DIR}/scripts/review-tier.mjs" --record
         env:
           SCRIPT_DIR: ${{ github.repository == 'harry-burton-dev/augur' && '.' || '.augur-review' }}
-          BASE_COMMIT: HEAD^1
+          BASE_COMMIT: ${{ github.event.pull_request.merge_commit_sha }}^1
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -180,8 +189,12 @@ jobs:
       - name: Record it on the pull request
         if: steps.record.outputs.logged == 'true'
         run: |
+          # The comment is the record; the label is how the control centre finds it, so a label that can't go
+          # on is a warning, not a lost record.
           gh api "repos/$GH_REPO/issues/$PR/comments" -F body=@"$RECORD_FILE" >/dev/null
-          gh api "repos/$GH_REPO/issues/$PR/labels" -f 'labels[]=auto-ok' >/dev/null
+          gh api "repos/$GH_REPO/issues/$PR/labels" -f 'labels[]=auto-ok' >/dev/null \
+            || echo "::warning::The auto-ok record is on the pull request, but the auto-ok label couldn't go on."
+
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

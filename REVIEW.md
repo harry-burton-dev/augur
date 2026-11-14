@@ -50,8 +50,7 @@ Until the switch, the Review check reports what the next rules make of each pull
 current rules decide it. When a pull request merges, the Review workflow's record job writes an **auto-ok
 record** on it (a comment and the `auto-ok` label) if it waited for Harry's ok and the next rules wouldn't have
 asked him: what merged, the paths that set its tier, its checks, and its Not run, How to undo and Risk. That is
-the log of what he would have been spared, and the control centre reads it. The record reads the merge
-against the commit before it, so it needs a squash or a merge commit, not a rebase merge.
+the log of what he would have been spared, and the control centre reads it.
 
 If Harry reads a record and would not have said ok, he adds the `harry-would-not` label. That is a miss: the
 rule that let it through is tightened before the switch, or, after it, by the next pull request to this file.
