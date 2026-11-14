@@ -453,12 +453,12 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
       if (changed.length) {
         const own = await server.ownDeployHashes(changed);
         if (!own || !target.images[UPDATER]) {
-          throw new StepFailed(`AUGUR ${target.version} changes the server’s own files (${changed.join(', ')}), and this updater can’t write them, so it’s upgraded by hand: check out augur@${target.version} and follow docs/upgrade.md.`);
+          throw new StepFailed(`AUGUR ${target.version} changes the server’s own files (${changed.join(', ')}), and this updater can’t write them, so it’s upgraded by hand: unpack augur@${target.version}’s deploy bundle and follow docs/upgrade.md.`);
         }
         const edited = changed.filter((path) => onDisk[path] !== undefined && onDisk[path] !== own[path]);
         if (edited.length) {
           throw new StepFailed(
-            `${edited.join(', ')} ${edited.length > 1 ? 'have' : 'has'} been changed on the server since AUGUR ${target.from}, and ${target.version} changes ${edited.length > 1 ? 'them' : 'it'} too. Put ${edited.length > 1 ? 'them' : 'it'} back as augur@${target.from} has ${edited.length > 1 ? 'them' : 'it'} (git checkout), or upgrade by hand (docs/upgrade.md).`,
+            `${edited.join(', ')} ${edited.length > 1 ? 'have' : 'has'} been changed on the server since AUGUR ${target.from}, and ${target.version} changes ${edited.length > 1 ? 'them' : 'it'} too. Put ${edited.length > 1 ? 'them' : 'it'} back as augur@${target.from} has ${edited.length > 1 ? 'them' : 'it'} (from its deploy bundle, or git checkout), or upgrade by hand (docs/upgrade.md).`,
           );
         }
         changedFiles = Object.fromEntries(changed.map((path) => [path, undefined]));
