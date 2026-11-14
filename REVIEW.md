@@ -21,7 +21,8 @@ The paths a pull request changes set its tier (`.github/review-tiers.json`). Its
     3. Add the `harry-ok` label, and nothing else. Never add it without his ok. The Review check records the
        change he said ok to and turns green.
     4. Merge. If you must push first: merging main again keeps the label; a push that changes the change takes
-       it off, and he is asked again. A label the check couldn't record comes off too; add it again once.
+       it off, and he is asked again. If the check says his ok is still being recorded, re-run it once the
+       "Harry's ok recorded" comment is there. A label that was never recorded comes off; add it again once.
 
 The Review check catches mistakes; it is not a wall against a hostile pull request, whose own workflows run with
 the same token. Harry reading the three answers is the gate; the check makes sure he is asked.
