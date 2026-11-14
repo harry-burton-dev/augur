@@ -1056,6 +1056,14 @@
       ],
       "x-docs": "docs/release-channels.md#server-rings"
     },
+    "COMPOSE_PROJECT_NAME": {
+      "type": "string",
+      "description": "Docker Compose's name for this deployment, which its volumes and networks are named after. platform unless set. Set it only before a server's first start: on one that has data, changing it starts AUGUR empty.",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#1-get-the-release"
+    },
     "COMPOSE_PROFILES": {
       "type": "string",
       "description": "Docker Compose's optional parts to run: updater, observability.",

@@ -14,10 +14,12 @@ data, and everyone but you, is gone.
 ## Steps
 
 ```sh
+# Docker names the volumes after the Compose project: platform unless .env names another.
+project=$(pc config | sed -n 's/^name: //p'); : "${project:?pc config named no project}"
 pc down
-docker volume rm platform_pgdata platform_wal-archive platform_garage-meta platform_garage-data platform_otel-lgtm
+for v in pgdata wal-archive garage-meta garage-data otel-lgtm; do docker volume rm "${project}_$v"; done
 sudo rm -rf infra/deploy/backups/*                 # this server's own backups, now of nothing
-# For a newer release: git fetch --tags && git checkout augur@<version>, and set PLATFORM_VERSION to it.
+# For a newer release: unpack its deploy bundle over this folder (Install AUGUR, step 1), and set PLATFORM_VERSION to it.
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur:ro" -w /augur node:22-alpine node scripts/preflight.mjs --install
 pc up -d
 ```

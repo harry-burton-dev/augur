@@ -1,7 +1,11 @@
 // node --test scripts/*.test.mjs (pnpm test:scripts)
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, releaseName, titleOf, versionModule } from './augur-release.mjs';
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { bundleFiles, bundleName, deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, releaseName, titleOf, versionModule, writeBundle } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -61,6 +65,24 @@ test('the deploy files are the server’s own, by hash, without .env.example or 
   const files = deployFiles(['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'docs/src/content/docs/run/install.md']);
   assert.deepEqual(Object.keys(files), ['backup/backup.sh', 'compose.yml']);
   assert.match(files['compose.yml'], /^[0-9a-f]{64}$/);
+});
+
+test('the deploy bundle holds what a server runs, laid out as a checkout, with sums matching the release file', () => {
+  const tracked = ['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'scripts/preflight.mjs', 'scripts/seed.mjs', 'docs/upgrade.md'];
+  assert.deepEqual(bundleFiles(tracked), ['infra/deploy/.env.example', 'infra/deploy/backup/backup.sh', 'infra/deploy/compose.yml', 'scripts/preflight.mjs']);
+  assert.equal(bundleName('0.26.0'), 'augur-deploy-0.26.0.tar.gz');
+  const dir = mkdtempSync(join(tmpdir(), 'bundle-test-'));
+  const out = writeBundle({ tracked, release: '{"version":"0.26.0"}\n', out: join(dir, bundleName('0.26.0')) });
+  const again = writeBundle({ tracked, release: '{"version":"0.26.0"}\n', out: join(dir, 'again.tar.gz') });
+  assert.deepEqual(readFileSync(out), readFileSync(again), 'the same files make the same bundle');
+  const unpacked = join(dir, 'server');
+  mkdirSync(unpacked);
+  execFileSync('tar', ['-xzf', out, '-C', unpacked]);
+  execFileSync('sha256sum', ['--quiet', '-c', 'SHA256SUMS'], { cwd: unpacked });
+  assert.equal(readFileSync(join(unpacked, 'release/augur-release.json'), 'utf8'), '{"version":"0.26.0"}\n');
+  assert.ok(statSync(join(unpacked, 'infra/deploy/backup/backup.sh')).mode & 0o100, 'scripts stay executable');
+  const sums = Object.fromEntries(readFileSync(join(unpacked, 'SHA256SUMS'), 'utf8').trim().split('\n').map((l) => l.split('  ').reverse()));
+  for (const [path, hash] of Object.entries(deployFiles(tracked))) assert.equal(sums[`infra/deploy/${path}`], hash);
 });
 
 test('a changeset is read for its bumps and what it says', () => {

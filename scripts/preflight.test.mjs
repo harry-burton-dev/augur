@@ -64,7 +64,7 @@ test('an install is ready when every setting is set and fits', () => {
 
 test('an install stops on the wrong release, a blank secret, and settings that don’t fit', () => {
   const found = stops(ready({ PLATFORM_VERSION: '0.18.0', POSTGRES_PASSWORD: '', GARAGE_RPC_SECRET: 'short', PLATFORM_URL: 'https://platform.tail1.ts.net/', SERVER_RING: 'staging', PLATFORM_ADMIN_EMAIL: 'me' }));
-  assert.ok(found.some((t) => /checkout is augur@0\.19\.0/.test(t)));
+  assert.ok(found.some((t) => /deploy files here are augur@0\.19\.0/.test(t)));
   assert.ok(found.some((t) => /POSTGRES_PASSWORD\): run this again with --fill-secrets/.test(t)));
   assert.ok(found.some((t) => /GARAGE_RPC_SECRET doesn’t fit/.test(t)));
   assert.ok(found.some((t) => /no path or trailing slash/.test(t)));
