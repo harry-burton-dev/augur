@@ -1,8 +1,8 @@
 {
-  "version": "0.26.0",
-  "name": "Merlin",
+  "version": "0.27.0",
+  "name": "Nightjar",
   "channel": "beta",
-  "released": "2026-11-11",
+  "released": "2026-11-14",
   "upgradeFrom": ">=0.23.1",
   "changed": [
     "@augur/app-kit",
@@ -20,9 +20,7 @@
     "@augur/registry",
     "@augur/storage",
     "@augur/updater",
-    "@augur/admin",
-    "@augur/shell",
-    "@augur/upgrades"
+    "@augur/shell"
   ],
   "breaking": [],
   "settings": {
@@ -148,6 +146,10 @@
       "APP_CONNECT_TIMEOUT_MS",
       "APP_RESPONSE_TIMEOUT_MS",
       "APP_CONCURRENT_CALLS",
+      "GATEWAY_SERVICE_CONNECT_TIMEOUT_MS",
+      "GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS",
+      "GATEWAY_SERVICE_CONNECTIONS",
+      "GATEWAY_STREAM_CONNECTIONS",
       "COMPOSE_PROFILES",
       "PLATFORM_DIR",
       "UPDATER_CLIENT_SECRET",
@@ -160,6 +162,7 @@
       "OTEL_TRACES_SAMPLER_ARG",
       "SERVICE_CALL_TIMEOUT_SECONDS",
       "DATABASE_STATEMENT_TIMEOUT_SECONDS",
+      "SHUTDOWN_GRACE_SECONDS",
       "PERMISSIONS_COPY_SECONDS",
       "PERSONA_DEPLOYMENT_ADMIN_MINUTES",
       "PERSONA_ORG_ADMIN_MINUTES",
@@ -207,28 +210,29 @@
       "ALERT_WEBHOOK_TOKEN"
     ],
     "added": [
-      "DESKTOP_APP",
-      "PERSONA_DEPLOYMENT_ADMIN_MINUTES",
-      "PERSONA_ORG_ADMIN_MINUTES",
-      "PERMISSIONS_DECIDES"
+      "GATEWAY_SERVICE_CONNECT_TIMEOUT_MS",
+      "GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS",
+      "GATEWAY_SERVICE_CONNECTIONS",
+      "GATEWAY_STREAM_CONNECTIONS",
+      "SHUTDOWN_GRACE_SECONDS"
     ],
     "removed": []
   },
   "parts": {
     "@augur/app-kit": {
-      "version": "0.20.1"
+      "version": "0.22.3"
     },
     "@augur/kit-common": {
-      "version": "0.20.0"
+      "version": "0.21.0"
     },
     "@augur/shell-kit": {
-      "version": "0.13.0"
+      "version": "0.14.1"
     },
     "@augur/kit-bundle": {
-      "version": "0.6.1"
+      "version": "0.6.2"
     },
     "@augur/app-tools": {
-      "version": "0.6.1"
+      "version": "0.6.2"
     },
     "@augur/clients": {
       "version": "0.2.0"
@@ -240,34 +244,34 @@
       "version": "0.1.0"
     },
     "@augur/service-kit": {
-      "version": "0.20.0"
+      "version": "0.21.0"
     },
     "@augur/events": {
-      "version": "0.12.1"
+      "version": "0.13.0"
     },
     "@augur/gateway": {
-      "version": "0.15.0"
+      "version": "0.16.0"
     },
     "@augur/identity": {
-      "version": "1.7.1"
+      "version": "1.8.0"
     },
     "@augur/knowledge": {
-      "version": "0.2.1"
+      "version": "0.3.0"
     },
     "@augur/models": {
-      "version": "0.5.0"
+      "version": "0.6.0"
     },
     "@augur/permissions": {
-      "version": "0.2.0"
+      "version": "0.3.0"
     },
     "@augur/registry": {
-      "version": "0.22.0"
+      "version": "0.23.0"
     },
     "@augur/storage": {
-      "version": "0.6.2"
+      "version": "0.6.3"
     },
     "@augur/updater": {
-      "version": "0.11.1"
+      "version": "0.11.2"
     },
     "@augur/admin": {
       "version": "0.21.0"
@@ -276,7 +280,7 @@
       "version": "0.4.3"
     },
     "@augur/shell": {
-      "version": "0.22.0"
+      "version": "0.23.0"
     },
     "@augur/sign-in-theme": {
       "version": "0.2.0"

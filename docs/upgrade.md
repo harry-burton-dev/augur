@@ -58,7 +58,7 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 ### Services wait for their database, and stop cleanly
 
-**From** unreleased
+**From** augur@0.27.0
 
 Nothing to do unless you changed the services' healthchecks in your own compose override. Each AUGUR service's healthcheck now asks `/readyz`, which answers only while its database answers, so `pc ps` shows a service as `unhealthy` while it can't reach Postgres. A stopping service now finishes its calls in flight, for up to `SHUTDOWN_GRACE_SECONDS` (20, at most 23), and Docker waits up to 30 seconds for it, so `pc down` and an upgrade can take a few seconds longer ([Limits and health](src/content/docs/run/limits.md#logs-memory-and-health)).
 

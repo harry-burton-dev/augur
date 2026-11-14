@@ -28,7 +28,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/techdocs-ref: dir:..
     augur.dev/release-unit: augur
-    augur.dev/version: 0.26.0
+    augur.dev/version: 0.27.0
   links:
     - url: https://drive.google.com/drive/folders/16wXmUMRNP2_vXAlf4kBMF9hCDNUXg7yO
       title: Decision register (AUGUR handbook, 04 Decisions)
@@ -83,7 +83,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/frontends/shell/
     augur.dev/package: "@augur/shell"
-    augur.dev/version: 0.22.0
+    augur.dev/version: 0.23.0
     augur.dev/release-unit: augur
 spec:
   type: website
@@ -137,7 +137,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/app-tools/
     augur.dev/package: "@augur/app-tools"
-    augur.dev/version: 0.6.1
+    augur.dev/version: 0.6.2
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -209,7 +209,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/packages/service-kit/
     augur.dev/package: "@augur/service-kit"
-    augur.dev/version: 0.20.0
+    augur.dev/version: 0.21.0
     augur.dev/release-unit: augur
 spec:
   type: library
@@ -226,7 +226,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/events/
     augur.dev/package: "@augur/events"
-    augur.dev/version: 0.12.1
+    augur.dev/version: 0.13.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -252,7 +252,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/gateway/
     augur.dev/package: "@augur/gateway"
-    augur.dev/version: 0.15.0
+    augur.dev/version: 0.16.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -277,7 +277,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/identity/
     augur.dev/package: "@augur/identity"
-    augur.dev/version: 1.7.1
+    augur.dev/version: 1.8.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -304,7 +304,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/knowledge/
     augur.dev/package: "@augur/knowledge"
-    augur.dev/version: 0.2.1
+    augur.dev/version: 0.3.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -330,7 +330,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/models/
     augur.dev/package: "@augur/models"
-    augur.dev/version: 0.5.0
+    augur.dev/version: 0.6.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -356,7 +356,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/permissions/
     augur.dev/package: "@augur/permissions"
-    augur.dev/version: 0.2.0
+    augur.dev/version: 0.3.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -380,7 +380,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/registry/
     augur.dev/package: "@augur/registry"
-    augur.dev/version: 0.22.0
+    augur.dev/version: 0.23.0
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -406,7 +406,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/storage/
     augur.dev/package: "@augur/storage"
-    augur.dev/version: 0.6.2
+    augur.dev/version: 0.6.3
     augur.dev/release-unit: augur
 spec:
   type: service
@@ -427,7 +427,7 @@ metadata:
     github.com/project-slug: harry-burton-dev/augur
     backstage.io/source-location: url:https://github.com/harry-burton-dev/augur/tree/main/platform/services/updater/
     augur.dev/package: "@augur/updater"
-    augur.dev/version: 0.11.1
+    augur.dev/version: 0.11.2
     augur.dev/release-unit: augur
 spec:
   type: service

@@ -1,5 +1,17 @@
 # @augur/knowledge
 
+## 0.3.0
+
+### Minor Changes
+
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+
+### Patch Changes
+
+- 22ab7d3: The knowledge service, its migration job and identity's preference store log a lost database connection instead of ending the process when Postgres restarts. The knowledge service's queries now also have the platform's statement timeout (DATABASE_STATEMENT_TIMEOUT_SECONDS, a minute by default), as every other service's do.
+- Updated dependencies [3f93b58]
+  - @augur/service-kit@0.21.0
+
 ## 0.2.1
 
 ### Patch Changes
