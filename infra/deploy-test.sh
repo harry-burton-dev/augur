@@ -39,10 +39,12 @@ cleanup() {
   local status=$?
   if [ "$status" != 0 ]; then
     echo "::group::State when it failed"
-    # pc exists only once .env is written; a failure before that has no containers to show.
+    # pc is defined only once the settings and Starter are prepared; before that nothing of AUGUR runs yet.
     if declare -F pc >/dev/null; then
       pc ps -a || true
       pc logs --no-color --tail 80 || true
+    else
+      echo "No containers yet: the test failed while preparing its settings or Starter, before compose was set up."
     fi
     if [ -n "${starter_id:-}" ]; then
       for app in $(docker ps -aq --filter "label=augur.app=$starter_id"); do docker logs --tail 40 "$app" 2>&1 | sed "s|^|$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$app") |" || true; done
