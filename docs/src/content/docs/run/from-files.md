@@ -61,10 +61,11 @@ node <augur>/scripts/augurctl/augurctl.mjs plan staging-1 --dir deployments
 | Command | What it does |
 | --- | --- |
 | `pnpm augurctl check` | Checks every file against the schema and AUGUR's settings. |
-| `pnpm augurctl init <name>` | Makes the secrets file: a random value for each secret AUGUR can make up, encrypted with sops for the keys your `.sops.yaml` names. Add the ones only you know (`TS_AUTHKEY`, `PLATFORM_ADMIN_PASSWORD`) with `sops <file>`. It never replaces a secrets file. |
+| `pnpm augurctl init <name>` | Makes the secrets file: a random value for each secret AUGUR can make up, encrypted with sops for the keys your `.sops.yaml` names. It also makes `FLEET_CLIENT_SECRET`, for [the fleet's client](#the-fleets-client). Add the ones only you know (`TS_AUTHKEY`, `PLATFORM_ADMIN_PASSWORD`) with `sops <file>`. It never replaces a secrets file. |
 | `pnpm augurctl plan <name>` | Lists how the server differs from its file: its settings, its release and ring, its apps, and, for each secret, only whether it matches. It reads the server's `.env` over ssh to compare, and keeps it in memory only. It exits 0 when nothing differs and 2 when something does. |
 | `pnpm augurctl status [<name>...]` | Every server, or the ones named, one line each: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. It exits 1 when there are no deployment files, or when any server can't be read. |
 | `pnpm augurctl up <name>` | Installs a new server: fetches the release's [deploy bundle](../install/#1-get-the-release) and checks its signature here, sends it to the server and checks its sums there, makes `.env` from the file and its secrets, and starts AUGUR once the preflight passes. If the preflight stops it, fix what it says and run `up` again. It stops if the server has a `.env` already. |
+| `pnpm augurctl set <name> [--dry-run] [--remove]` | Moves a running server to its file through the gateway, as [the fleet's client](#the-fleets-client). AUGUR comes first, one release at a time as the server offers them, and set never takes AUGUR back; with `release: follow` it leaves AUGUR to the server. The apps follow once AUGUR runs the file's release: an install for each app whose version differs, and with `--remove` a removal for each app the file doesn't list (without it, it only says so; a default app stays while `DEFAULT_APPS` names it). Run it again after each upgrade: a server two releases behind takes three runs, two for AUGUR and one for its apps. It doesn't change settings: `plan` shows those. `--dry-run` prints what it would ask, apps included. It exits 1 when the server can't be reached or refuses a step, with the reason, and 2 when AUGUR differs from the file and set can't move it there (it says why). Follow the steps with `status`. |
 
 ## The fleet's client
 
@@ -85,6 +86,6 @@ that one server, within its ring: change the secret in `.env` and run `pc up -d`
 working. Taking `FLEET_CLIENT_SECRET` out of `.env` doesn't delete the client: delete `platform-fleet` in
 Keycloak's admin console too.
 
-To change a running server's release or apps, use its Deployment page for now; `plan` shows when it has
-drifted from its file. Reading the apps a server runs needs read access to its `infra/deploy/apps/` (owned by
+`set` changes a running server's release and apps through its gateway; `plan` shows when it has drifted from
+its file. Going back to an older release is still on the server's Deployment page. Reading the apps a server runs needs read access to its `infra/deploy/apps/` (owned by
 user 1000): `plan` says when it can't, rather than guessing.
