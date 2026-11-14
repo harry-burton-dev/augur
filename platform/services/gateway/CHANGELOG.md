@@ -1,5 +1,17 @@
 # @augur/gateway
 
+## 0.16.0
+
+### Minor Changes
+
+- da177c4: AUGUR's services' open streams (any GET /v1/<resource>/stream) get a pool of their own at the gateway, so open tabs never hold up their other calls, and a service that has stopped answering is named in a 504 or 502 (GATEWAY_SERVICE_CONNECT_TIMEOUT_MS, GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS, GATEWAY_SERVICE_CONNECTIONS, GATEWAY_STREAM_CONNECTIONS).
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+
+### Patch Changes
+
+- Updated dependencies [3f93b58]
+  - @augur/service-kit@0.21.0
+
 ## 0.15.0
 
 ### Minor Changes
