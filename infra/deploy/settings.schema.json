@@ -32,7 +32,8 @@
     "PLATFORM_ADMIN_FIRST_NAME",
     "PLATFORM_ADMIN_LAST_NAME",
     "ALERT_WEBHOOK_TOKEN",
-    "GRAFANA_ADMIN_PASSWORD"
+    "GRAFANA_ADMIN_PASSWORD",
+    "CALLER_SIGNING_KEY"
   ],
   "patternProperties": {
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
@@ -1144,11 +1145,40 @@
     "CALLER_SIGNING_KEY": {
       "type": "string",
       "writeOnly": true,
-      "description": "The key the gateway signs callers with (64 hex); without it a new one is made each start.",
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
+      "description": "The key the gateway signs callers with (64 hex). The gateway won't start without it, and every gateway of a deployment shares it.",
       "x-services": [
         "gateway"
       ],
       "x-docs": "docs/signed-caller.md#where-the-key-comes-from"
+    },
+    "CALLER_SIGNING_KEY_NEXT": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "The key that comes next while the caller signing key is being changed: published beside CALLER_SIGNING_KEY, never signed with.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/signed-caller.md#changing-the-key"
+    },
+    "CALLER_BREAK_GLASS": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "description": "on lets a server admin act as someone from inside a service's own container, when AUGUR can't sign them in. Off unless set; every call it lets through is logged.",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
+      ],
+      "x-docs": "docs/signed-caller.md#break-glass"
     },
     "OTEL_EXPORTER_OTLP_ENDPOINT": {
       "type": "string",

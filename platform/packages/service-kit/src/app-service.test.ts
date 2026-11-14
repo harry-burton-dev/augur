@@ -65,6 +65,17 @@ describe('appServer', () => {
     expect(forged.statusCode).toBe(401);
   });
 
+  it('never takes break-glass, even when the app’s own environment turns it on', async () => {
+    process.env.CALLER_BREAK_GLASS = 'on';
+    try {
+      const app = await build(callerCheckFor(callerSigner(), 'app-notes'));
+      const inside = await app.inject({ remoteAddress: '127.0.0.1', method: 'GET', url: '/v1/here', headers: callerHeaders({ ...sam, workspace: { id: 'w1', kind: 'team', role: 'member' } }) });
+      expect(inside.statusCode).toBe(401);
+    } finally {
+      delete process.env.CALLER_BREAK_GLASS;
+    }
+  });
+
   it('expects the gateway to sign for the app’s client on the app contract, and for its id on contract 2', () => {
     expect(callerAudienceOf({ id: 'notes' })).toBe('notes');
     expect(callerAudienceOf({ id: 'notes', contract: 3 })).toBe('app-notes');

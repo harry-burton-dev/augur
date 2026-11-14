@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { partsFor, type Parts } from './parts.ts';
-import { afterRestart, checkOnce, lookAfterWatch, runUpgrade, Withdrawn, type Journal, type Report, type Server, type Target } from './upgrade.ts';
+import { afterRestart, checkOnce, lookAfterWatch, madeUp, runUpgrade, Withdrawn, type Journal, type Report, type Server, type Target } from './upgrade.ts';
 
 /** Parts beyond the platform's own, a service and a worker, as releases before ADR 0075 had for their apps. */
 const parts: Parts = (() => {
@@ -316,6 +316,14 @@ describe('an upgrade', () => {
     expect(reports.find((r) => r.step === 'roll-forward' && r.state === 'done')?.message).toBe(
       'wrote compose.yml, keycloak/realm.json, search.yml; set SEARCH_URL, ORG_NAME as entered; made up SEARCH_CLIENT_SECRET in .env; started search.',
     );
+  });
+
+  it('makes up the gateway’s caller signing key when a release needs it and .env hasn’t got one', async () => {
+    const fake = fakeServer();
+    const { outcome } = await run(target({ required: ['PLATFORM_URL', 'CALLER_SIGNING_KEY'] }), fake.server);
+    expect(outcome).toBe('done');
+    expect(fake.env()).toMatch(/^CALLER_SIGNING_KEY=[0-9a-f]{64}$/m);
+    expect(madeUp('CALLER_SIGNING_KEY_NEXT')).toBe(false);
   });
 
   it('pulls a part moving onto AUGUR’s image once the new compose.yml names it, and puts it back on the old one when it goes back', async () => {
