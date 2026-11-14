@@ -1,4 +1,3 @@
-import type { ServerResponse } from 'node:http';
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import { sendProblem } from './problems.js';
 import { FLUSH_TELEMETRY, SERVING, type ShutdownHooks } from './shutdown.js';
@@ -28,13 +27,19 @@ export const shutdownGraceMs = (env: Record<string, string | undefined> = proces
   return Number.isFinite(seconds) && seconds > 0 ? Math.min(Math.round(seconds * 1000), MAX_SHUTDOWN_GRACE_MS) : DEFAULT_SHUTDOWN_GRACE_MS;
 };
 
+/** An open stream's response, as endStreamsOnStop needs it: a `reply.raw`. */
+export interface OpenStream {
+  end(): unknown;
+  on(event: 'close', listener: () => void): unknown;
+}
+
 /**
  * Ends a service's open streams (server-sent events) as it stops, before it waits for its calls in flight:
  * a stream has no end of its own, and the browser opens it again on a service that is up. Call it once as
  * the app is built, and pass each stream's response to what it returns.
  */
-export const endStreamsOnStop = (app: FastifyInstance): ((res: ServerResponse) => void) => {
-  const open = new Set<ServerResponse>();
+export const endStreamsOnStop = (app: FastifyInstance): ((res: OpenStream) => void) => {
+  const open = new Set<OpenStream>();
   app.addHook('preClose', async () => {
     for (const res of open) res.end();
   });

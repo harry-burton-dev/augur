@@ -10,7 +10,6 @@ import type { FastifyRequest } from 'fastify';
 import { JSONWebKeySet } from 'jose';
 import { JWTPayload } from 'jose';
 import { JWTVerifyGetKey } from 'jose';
-import type { ServerResponse } from 'node:http';
 
 // @public
 export function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id'> & {
@@ -628,7 +627,7 @@ export interface EmbedTextsOptions {
 }
 
 // @public
-export const endStreamsOnStop: (app: FastifyInstance) => ((res: ServerResponse) => void);
+export const endStreamsOnStop: (app: FastifyInstance) => ((res: OpenStream) => void);
 
 // @public
 export const EVENT_CURSOR_TABLE_SQL = "\n  create table if not exists event_followers (\n    follower text primary key,\n    seq text not null\n  );";
@@ -1281,6 +1280,14 @@ export const notifyFor: (app: string, log: (notice: AppNotice) => void, env?: No
 export type OnFloor = Caller & {
     workspace: CallerWorkspace;
 };
+
+// @public
+export interface OpenStream {
+    // (undocumented)
+    end(): unknown;
+    // (undocumented)
+    on(event: 'close', listener: () => void): unknown;
+}
 
 // @public
 export const OUTBOX_TABLE_SQL = "\n  create table if not exists outbox (\n    id bigint generated always as identity primary key,\n    event_id text not null unique default gen_random_uuid()::text,\n    topic text not null,\n    workspace_id text,\n    payload jsonb not null,\n    created_at timestamptz not null default now(),\n    sent_at timestamptz,\n    refused_at timestamptz,\n    refused_why text\n  );\n  create index if not exists outbox_unsent on outbox (id) where sent_at is null;";
