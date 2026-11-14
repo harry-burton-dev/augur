@@ -1701,6 +1701,15 @@
         "updater"
       ]
     },
+    "APP_RELAY_TO": {
+      "type": "string",
+      "description": "What one of the apps' relays passes calls on to, as host:port: Postgres or the object store, by its name on the compose network alone.",
+      "x-internal": "compose",
+      "x-services": [
+        "db-relay",
+        "bucket-relay"
+      ]
+    },
     "GARAGE_ADMIN_URL": {
       "type": "string",
       "description": "Garage's admin API, for the storage job.",

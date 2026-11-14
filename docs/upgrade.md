@@ -62,6 +62,14 @@ Adding a note: put it at the top, with `**From** unreleased` as its first line. 
 
 Each release now carries `augur-deploy-<version>.tar.gz`, signed like its images: unpack it over the server's folder in place of `git checkout augur@<version>` ([Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)). A git checkout keeps working. Compose's project name now comes from `COMPOSE_PROJECT_NAME` in `.env` and is still `platform` without it. Nothing to do: don't set it on a server that has data, since Docker names the volumes after it.
 
+### Apps reach the stores only through relays
+
+**From** unreleased
+
+Two new containers, `db-relay` and `bucket-relay`, now stand in for Postgres and the object store on each app's network. `db-relay` lets only the app's own login on to Postgres, never the platform's superuser or a service's; `bucket-relay` passes on only the object store's S3 API, never its admin API. An app gets only the relay for what it asks for. On its first turn after the upgrade the app runner joins each relay to the apps' networks under the store's own name (`postgres`, `garage`), then takes Postgres and Garage themselves off them, so the apps' parts keep the same addresses.
+
+Connections an app's parts already held open to Postgres or the object store end when the store leaves its network. Most clients open new ones, through the relay; if an app that keeps data shows errors after the upgrade, restart it once in Admin → Apps. If `pc ps` shows a relay as unhealthy, `pc logs db-relay` (or `bucket-relay`) says why. An app installed before contract 3 is still on the platform's network until it's replaced.
+
 ### Only AUGUR's own apps load into the shell's page
 
 **From** unreleased
