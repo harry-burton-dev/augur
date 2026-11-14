@@ -52,6 +52,8 @@ While someone acts as an admin persona (ADR 0086, PDR-024 "Act as"), the shell s
 
 AUGUR's own services reach each other inside the deployment, never through the gateway, with one exception: the events service pushes events to each subscribing app's inbound part (`POST /augur/events`, see docs/domain-events.md). That call carries a signed caller like any other, named after the service: `isServiceCaller(caller)` says it is AUGUR, and `serviceOfCaller(caller)` which service (`events`). No person's token is behind it, so `caller.roles` and `caller.departments` are empty; a part that needs a person refuses it.
 
+One client from outside the deployment also reaches a platform service through the gateway: the fleet's machine client, `platform-fleet` (ADR 0100), which runs deployments from files. It reaches only the registry's routes that read and change what the server runs, and the gateway refuses it everywhere else. Its signed caller is `client:platform-fleet` (named `platform-fleet`), so `isServiceCaller(caller)` is false: it is not AUGUR. A service recognises it with `isFleetCaller(caller)`, and the registry holds it to the server's ring.
+
 ## Where the key comes from
 
 The gateway publishes its public key at `/api/gateway/v1/caller-keys`, with no sign-in needed. `callerCheckFromEnv` fetches it from `CALLER_KEYS_URL` when set (an app hosted outside the compose network sets this to `https://<your platform>/api/gateway/v1/caller-keys`), otherwise from `GATEWAY_URL` plus that path. `GATEWAY_URL` defaults to `http://gateway:8080`.
