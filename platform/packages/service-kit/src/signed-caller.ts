@@ -63,22 +63,39 @@ export interface CallerSigner {
 // An Ed25519 private key is its 32-byte seed behind this fixed PKCS#8 prefix.
 const PKCS8_ED25519 = Buffer.from('302e020100300506032b657004220420', 'hex');
 
-/**
- * Signs with the Ed25519 key made from `seed` (32 bytes, hex). Without one a new
- * key is made each start: services fetch the key again when it changes, so this
- * is enough for one gateway. More than one behind a load balancer must share a seed.
- */
-export const callerSigner = (seed?: string): CallerSigner => {
+/** Where a signing key comes from: 32 bytes, as 64 hex characters (`openssl rand -hex 32`). */
+const keyFrom = (seed: string | undefined, setting: string): KeyObject => {
+  if (seed && !/^[0-9a-fA-F]{64}$/.test(seed)) throw new Error(`${setting} must be 64 hex characters (openssl rand -hex 32).`);
   const bytes = seed ? Buffer.from(seed, 'hex') : randomBytes(32);
-  if (bytes.length !== 32) throw new Error('CALLER_SIGNING_KEY must be 64 hex characters (openssl rand -hex 32).');
-  const privateKey: KeyObject = createPrivateKey({ key: Buffer.concat([PKCS8_ED25519, bytes]), format: 'der', type: 'pkcs8' });
-  const published = (async () => {
-    const jwk = await exportJWK(createPublicKey(privateKey));
-    return { ...jwk, kid: await calculateJwkThumbprint(jwk), alg: 'EdDSA', use: 'sig' };
-  })();
+  if (bytes.length !== 32) throw new Error(`${setting} must be 64 hex characters (openssl rand -hex 32).`);
+  return createPrivateKey({ key: Buffer.concat([PKCS8_ED25519, bytes]), format: 'der', type: 'pkcs8' });
+};
+const publicJwk = async (privateKey: KeyObject) => {
+  const jwk = await exportJWK(createPublicKey(privateKey));
+  return { ...jwk, kid: await calculateJwkThumbprint(jwk), alg: 'EdDSA', use: 'sig' };
+};
+
+export interface SignerOptions {
+  /**
+   * The key that comes next (CALLER_SIGNING_KEY_NEXT), published beside the current one but never signed with, so
+   * every service already knows it when it becomes the current key: docs/signed-caller.md, "Changing the key".
+   */
+  next?: string;
+}
+
+/**
+ * Signs with the Ed25519 key made from `seed` (32 bytes, hex). Without one a new key is made each start, which only
+ * `pnpm dev:app` and tests may do (`callerSignerFromEnv`): a deployment gives every gateway the same CALLER_SIGNING_KEY.
+ */
+export const callerSigner = (seed?: string, { next }: SignerOptions = {}): CallerSigner => {
+  const privateKey = keyFrom(seed, 'CALLER_SIGNING_KEY');
+  const nextKey = next ? keyFrom(next, 'CALLER_SIGNING_KEY_NEXT') : undefined;
+  if (next && seed && next.toLowerCase() === seed.toLowerCase()) throw new Error('CALLER_SIGNING_KEY_NEXT is the same as CALLER_SIGNING_KEY: give it the key that comes next, or leave it empty.');
+  const current = publicJwk(privateKey);
+  const published = (async () => [await current, ...(nextKey ? [await publicJwk(nextKey)] : [])])();
   return {
     async sign(caller, audience, { lifetimeSeconds = LIFETIME_SECONDS } = {}) {
-      const { kid } = await published;
+      const { kid } = await current;
       return new SignJWT({
         name: caller.name,
         ...(caller.email ? { email: caller.email } : {}),
@@ -98,12 +115,23 @@ export const callerSigner = (seed?: string): CallerSigner => {
         .sign(privateKey);
     },
     async keys() {
-      return { keys: [await published] };
+      return { keys: await published };
     },
   };
 };
 
-export const callerSignerFromEnv = (env = process.env): CallerSigner => callerSigner(env.CALLER_SIGNING_KEY || undefined);
+/**
+ * The gateway's signer, from CALLER_SIGNING_KEY and CALLER_SIGNING_KEY_NEXT. In production (NODE_ENV=production, as
+ * every image sets) the key is required: a gateway that made up its own would sign callers no second gateway, and no
+ * restart of this one, could check.
+ */
+export const callerSignerFromEnv = (env = process.env): CallerSigner => {
+  const seed = env.CALLER_SIGNING_KEY || undefined;
+  if (!seed && env.NODE_ENV === 'production') {
+    throw new Error('CALLER_SIGNING_KEY isn’t set, and the gateway needs it to sign callers: put one in .env on the server (openssl rand -hex 32), then start the gateway again (docs/signed-caller.md).');
+  }
+  return callerSigner(seed, { next: env.CALLER_SIGNING_KEY_NEXT || undefined });
+};
 
 /** A signed caller that is missing, forged, expired or for another service. */
 export class CallerTokenError extends Error {}
@@ -161,6 +189,9 @@ export const callerCheckFor = (signer: CallerSigner, audience: string): CallerCh
   return callerCheck({ audience, keys: async (header, token) => (await keys)(header, token) });
 };
 
+/** How long a service keeps the gateway's published keys before fetching them again. */
+export const CALLER_KEYS_MAX_AGE_MS = 60_000;
+
 /** The setting that lets a service believe `x-user-*` headers unchecked: `pnpm dev:app` and local runs only. */
 export const INSECURE_DEV_CALLERS = 'AUGUR_INSECURE_DEV_CALLERS';
 
@@ -177,14 +208,28 @@ export const callerCheckFromEnv = (audience: string, env = process.env): CallerC
   const unchecked = env.NODE_ENV !== 'production' && (env[INSECURE_DEV_CALLERS] === '1' || (env.NODE_ENV === 'test' && Boolean(env.VITEST)));
   if (unchecked && !env.CALLER_KEYS_URL) return undefined;
   const url = env.CALLER_KEYS_URL || `${(env.GATEWAY_URL || DEFAULT_GATEWAY_URL).replace(/\/+$/, '')}${CALLER_KEYS_PATH}`;
-  // A new gateway key is fetched as soon as a token names it, at most every few seconds.
-  return callerCheck({ audience, keys: createRemoteJWKSet(new URL(url), { cooldownDuration: 5_000 }) });
+  // A new gateway key is fetched as soon as a token names it, at most every few seconds, and the whole set at least
+  // every minute: a key the gateway publishes as the next one is known within a minute, and one it drops is forgotten.
+  return callerCheck({ audience, keys: createRemoteJWKSet(new URL(url), { cooldownDuration: 5_000, cacheMaxAge: CALLER_KEYS_MAX_AGE_MS }) });
 };
 
 type HeaderBag = Record<string, string | string[] | undefined>;
 const PERSON_HEADERS: readonly string[] = [...Object.values(CALLER_HEADERS), WORKSPACE_HEADERS.kind, WORKSPACE_HEADERS.role, ...Object.values(DELEGATION_HEADERS)];
 
 const LOOPBACK: readonly string[] = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+
+/**
+ * The setting that lets a server admin act as someone from inside a service's own container, when AUGUR can't sign
+ * them in (docs/signed-caller.md, "Break-glass"). Only `on` turns it on; it is off unless an admin sets it for a
+ * service and restarts it, and every call it lets through is logged.
+ */
+export const BREAK_GLASS = 'CALLER_BREAK_GLASS';
+export const breakGlassFromEnv = (env = process.env): boolean => env[BREAK_GLASS] === 'on';
+
+export interface SignedCallersOptions {
+  /** Believe `x-user-*` headers on a call from inside the container (loopback). CALLER_BREAK_GLASS=on unless said. */
+  breakGlass?: boolean;
+}
 
 interface HookRequest {
   headers: HeaderBag;
@@ -202,15 +247,20 @@ interface HookReply {
  * refused; one without a token is treated as having no caller, which is how a
  * service's own calls arrive. Without a check (AUGUR_INSECURE_DEV_CALLERS=1, tests) it changes nothing.
  *
- * A call from inside the service's own container (loopback) is believed as it
- * comes: only someone who can already run commands there can make one, and it
- * is how a server admin acts as someone when the platform can't sign them in
+ * A call from inside the service's own container (loopback) is checked like any other. Only with break-glass
+ * on (CALLER_BREAK_GLASS=on, set by a server admin for that service) is it believed as it comes, and each one is
+ * logged: it is how an admin acts as someone when AUGUR can't sign them in
  * (`docker compose exec registry node -e "fetch('http://localhost:8082/…')"`).
  *
  *     app.addHook('onRequest', signedCallers(callerCheckFromEnv('identity')));
  */
-export const signedCallers = (check: CallerCheck | undefined) => async (req: HookRequest, reply: HookReply) => {
-  if (!check || LOOPBACK.includes(req.ip)) return;
+export const signedCallers = (check: CallerCheck | undefined, { breakGlass = breakGlassFromEnv() }: SignedCallersOptions = {}) => async (req: HookRequest, reply: HookReply) => {
+  if (!check) return;
+  if (breakGlass && LOOPBACK.includes(req.ip)) {
+    // Only a call that names someone is logged: the container's own health checks name nobody.
+    if (req.headers[CALLER_HEADERS.id] !== undefined) req.log.warn({ caller: req.headers[CALLER_HEADERS.id] }, `believed a caller from inside the container (${BREAK_GLASS}=on, break-glass)`);
+    return;
+  }
   const raw = req.headers[CALLER_TOKEN_HEADER];
   const token = Array.isArray(raw) ? raw[0] : raw;
   for (const name of PERSON_HEADERS) delete req.headers[name];

@@ -63,6 +63,8 @@ x-service: &service
     MODELS_URL: http://models:8085
     # Services believe a person is calling only when the gateway signed it; they fetch its key here.
     GATEWAY_URL: http://gateway:8080
+    # on lets a server admin act as someone from inside the service's own container (docs/signed-caller.md, Break-glass).
+    CALLER_BREAK_GLASS: ${CALLER_BREAK_GLASS:-}
     # Every service signs in as itself (its own Keycloak client and SERVICE_CLIENT_SECRET); tokens name the
     # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
@@ -467,8 +469,9 @@ services:
       GATEWAY_SERVICE_CONNECTIONS: ${GATEWAY_SERVICE_CONNECTIONS:-}
       GATEWAY_STREAM_CONNECTIONS: ${GATEWAY_STREAM_CONNECTIONS:-}
       APP_DELEGATION_SECONDS: ${APP_DELEGATION_SECONDS:-}
-      # The key it signs callers with; a new one each start when unset (docs/signed-caller.md).
-      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
+      # The key it signs callers with, and the one that comes next while it is being changed (docs/signed-caller.md).
+      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
+      CALLER_SIGNING_KEY_NEXT: ${CALLER_SIGNING_KEY_NEXT:-}
     volumes:
       # Only the results the backup container writes for Status, never the backups themselves.
       - ./backups/status:/backups:ro

@@ -88,7 +88,8 @@ export interface AppServerOptions {
 export const callerAudienceOf = (manifest: Pick<AppManifest, 'id' | 'contract'>): string => (manifest.contract !== undefined ? appClientId(manifest.id) : manifest.id);
 
 export const appServer = async (app: FastifyInstance, { manifest, version = manifest.version, api = 'v1', callers = callerCheckFromEnv(callerAudienceOf(manifest)) }: AppServerOptions) => {
-  app.addHook('onRequest', signedCallers(callers));
+  // An app's part never takes break-glass, whatever its environment says: it is for AUGUR's own services.
+  app.addHook('onRequest', signedCallers(callers, { breakGlass: false }));
   await app.register(problemDetails());
   app.get('/healthz', async () => health(manifest.id, version, api));
 };

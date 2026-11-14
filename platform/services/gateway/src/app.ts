@@ -154,7 +154,7 @@ export interface GatewayOptions {
   seedAllowed?: boolean;
   /** Which floors a caller is on. Defaults to asking the identity upstream. */
   floors?: FloorLookup;
-  /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY, or a new key each start. */
+  /** Signs the caller passed on to each service. Defaults to CALLER_SIGNING_KEY (required in production) and CALLER_SIGNING_KEY_NEXT. */
   signer?: CallerSigner;
   /** Which apps a person may use on a floor, and what each may be sent. Defaults to asking the registry upstream. */
   access?: AppAccess;
@@ -255,9 +255,10 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       schema: {
         summary: 'The public key signed callers are checked with',
         description: [
-          "A JSON Web Key Set with the gateway's Ed25519 key. No sign-in is needed.",
-          'The key is new each time the gateway starts unless CALLER_SIGNING_KEY is',
-          "set, so fetch it again when a token names a key id you don't have.",
+          "A JSON Web Key Set with the gateway's Ed25519 keys. No sign-in is needed.",
+          'The first is the key callers are signed with (CALLER_SIGNING_KEY); while the key',
+          'is being changed, the one that comes next (CALLER_SIGNING_KEY_NEXT) is listed after it.',
+          "Fetch the set again when a token names a key id you don't have.",
         ].join(' '),
         response: { 200: CallerKeys },
       },

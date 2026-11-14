@@ -58,13 +58,16 @@ app off without removing it.
 
 ### Remove an app from the catalogue
 
-To remove an app altogether, rather than turning it off:
+To remove an app altogether, rather than turning it off, turn on
+[break-glass](https://github.com/harry-burton-dev/augur/blob/main/docs/signed-caller.md#break-glass) for the registry
+first (`CALLER_BREAK_GLASS=on` in `.env`, then `pc up -d registry`), so it believes a call from inside its own container:
 
 ```sh
 pc exec registry node -e "fetch('http://localhost:8082/v1/apps/' + process.argv[1], { method: 'DELETE', headers: { 'x-user-id': 'server-admin', 'x-user-name': 'Server admin', 'x-user-roles': 'admin' } }).then((r) => console.log(r.status))" <app id>
 ```
 
-`204` means it's gone. Removing it is recorded in the audit log.
+`204` means it's gone. Removing it is recorded in the audit log. Then take `CALLER_BREAK_GLASS` out of `.env` and run
+`pc up -d registry` again.
 
 ### Apps from another site
 

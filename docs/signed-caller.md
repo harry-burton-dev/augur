@@ -63,8 +63,24 @@ It fails closed. A service checks callers unless it is told plainly not to, so a
 
 In production (`NODE_ENV=production`, which every image, every compose service and the app runner set, and `scripts/production-env.test.mjs` holds them to) it always checks, whatever else is set. Never put `AUGUR_INSECURE_DEV_CALLERS` in a deployment's `.env`: it does nothing there, and nothing passes it on.
 
-The gateway makes a new key each time it starts. A service sees a key id it doesn't know and fetches the key again, so nothing needs restarting. More than one gateway behind a load balancer must sign with the same key: give each the same `CALLER_SIGNING_KEY` (`openssl rand -hex 32`, in `.env`), which also keeps the key the same across the gateway's restarts.
+The gateway signs with `CALLER_SIGNING_KEY` (64 hex characters, `openssl rand -hex 32`, in `.env`). A deployment's gateway won't start without it, because a key it made up for itself would change at every restart and no second gateway could share it. The install preflight makes one (`--fill-secrets`), and an upgrade through Deployment makes one when `.env` hasn't got it. Every gateway behind a load balancer is given the same key. Only a gateway run outside production (without `NODE_ENV=production`, as in `pnpm dev:app` and tests) still makes a new key each start when it has none.
 
-## From inside a container
+## Changing the key
 
-A call from the service's own container (`localhost`) is believed as it comes. Only someone who can already run commands there can make one, and it is how a server admin acts when nobody can sign in, as in the command for [removing an app](src/content/docs/run/day-to-day.md#remove-an-app-from-the-catalogue).
+The set at `/api/gateway/v1/caller-keys` can hold two keys: the one the gateway signs with, then the one that comes next. A service fetches the set at least once a minute, and again whenever a token names a key id it doesn't have, so a service believes a token signed with either key of the set within a minute of the gateway publishing it. To change the key without refusing a call:
+
+1. Put the new key in `CALLER_SIGNING_KEY_NEXT` and run `pc up -d gateway`. Callers are still signed with the old key; the new one is only published.
+2. Wait two minutes, so every service has fetched the set with both keys, then swap them: the new key into `CALLER_SIGNING_KEY` and the old one into `CALLER_SIGNING_KEY_NEXT`, then `pc up -d gateway`. Tokens already signed with the old key keep working until they expire.
+3. After `APP_DELEGATION_SECONDS` (five minutes unless set), the longest any signed caller lasts, empty `CALLER_SIGNING_KEY_NEXT` and run `pc up -d gateway` again.
+
+A key you think has leaked is changed the same way, without waiting in step 3: anyone holding the old one can sign callers until it is gone from the set and a minute has passed.
+
+## Break-glass
+
+A call from inside a service's own container (`localhost`) is checked like any other: someone who can run commands there still can't act as a person by sending `x-user-*` headers. When AUGUR can't sign anyone in and an admin must act as someone, as in the command for [removing an app](src/content/docs/run/day-to-day.md#remove-an-app-from-the-catalogue), turn break-glass on for the time it takes:
+
+1. Set `CALLER_BREAK_GLASS=on` in `.env` and run `pc up -d` (or `pc up -d <service>` for the one you need).
+2. Make the call from inside that service's container. Each one it believes is written to the service's log as a warning ("break-glass"), with the id it named.
+3. Remove `CALLER_BREAK_GLASS` from `.env` and run `pc up -d` again.
+
+Break-glass never reaches past the container: a call from the compose network or an app's container is checked whatever it says. Apps' own parts never get it.

@@ -56,6 +56,14 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
+### The gateway's caller signing key is required
+
+**From** unreleased
+
+The gateway now won't start without `CALLER_SIGNING_KEY`, the key it signs callers with. If `.env` hasn't got one, add it before you upgrade: `echo "CALLER_SIGNING_KEY=$(openssl rand -hex 32)" >> .env` in the server's folder. The updater that carries this upgrade is the one you run now, which can't make the key up, so Deployment's Updates page asks you to set it and the upgrade waits until you have; from this release on, the updater makes it up when an upgrade needs it. Everyone stays signed in; services fetch the new key the first time they see it. `CALLER_SIGNING_KEY_NEXT` is new and optional, for changing the key without refusing a call ([Signed caller, Changing the key](signed-caller.md#changing-the-key)).
+
+A call from inside a service's own container is no longer believed as it comes. To act as someone from there when nobody can sign in, as the command for removing an app does, turn on break-glass for the time it takes (`CALLER_BREAK_GLASS=on`, [Signed caller, Break-glass](signed-caller.md#break-glass)).
+
 ### Deploy bundles, and the Compose project's name from .env
 
 **From** unreleased

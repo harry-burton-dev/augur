@@ -155,9 +155,10 @@ const DOCKER_PROXY = 'docker-proxy';
 
 /**
  * A setting the updater makes up itself when a release needs it and the server hasn't got it: a long
- * random string, as infra/deploy/.env.example says of any whose name ends so.
+ * random string, as infra/deploy/.env.example says of any whose name ends so, and the gateway's caller
+ * signing key, whose form (64 hex) is exactly that string.
  */
-export const madeUp = (key: string) => /_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD';
+export const madeUp = (key: string) => (/_(SECRET|PASSWORD|TOKEN)$/.test(key) && key !== 'PLATFORM_ADMIN_PASSWORD') || key === 'CALLER_SIGNING_KEY';
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 /**
  * How long a part has to come back on its new version, and a one-off job to finish. Identity, the
@@ -197,6 +198,8 @@ export const TRUST_SETTINGS = new Set([
   'FEED_SIGNER',
   'APP_PUBLISHERS',
   'CALLER_SIGNING_KEY',
+  'CALLER_SIGNING_KEY_NEXT',
+  'CALLER_BREAK_GLASS',
   'RELEASE_FEED_URL',
   'APP_FEED_URL',
   'PIPELINE_FEED_URL',

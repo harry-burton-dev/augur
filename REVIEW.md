@@ -15,9 +15,14 @@ The paths a pull request changes set its tier (`.github/review-tiers.json`). Its
   `.github/`. Needs what Medium needs, under 400 changed lines (or a reason), and:
   - **the deploy test before the merge** where the change runs on a server (`deployTest`): CI's `deploy-test` job;
   - **Harry's ok** on his paths (`harryOk`: the release path, the updater, sign-in, permissions, backups and
-    workflows). He answers the three questions below; only then add the `harry-ok` label. Never add it on your own.
-    The Review check records the change he said ok to; a push that changes it takes the label off (bringing it up to date with main
-    doesn't), and he is asked again.
+    workflows). In this order:
+    1. Merge fresh `origin/main` and push. Wait for CI to be green, with only the Review check red.
+    2. Ask Harry the three questions below in the thread, and wait for his "ok".
+    3. Add the `harry-ok` label, and nothing else. Never add it without his ok. The Review check records the
+       change he said ok to and turns green.
+    4. Merge. If you must push first: merging main again keeps the label; a push that changes the change takes
+       it off, and he is asked again. If the check says his ok is still being recorded, re-run it once the
+       "Harry's ok recorded" comment is there. A label that was never recorded comes off; add it again once.
 
 The Review check catches mistakes; it is not a wall against a hostile pull request, whose own workflows run with
 the same token. Harry reading the three answers is the gate; the check makes sure he is asked.

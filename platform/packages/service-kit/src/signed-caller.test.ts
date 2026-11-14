@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { callerFromHeaders, callerHeaders, type Caller } from './caller.js';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { CALLER_KEYS_PATH, CALLER_TOKEN_HEADER, callerCheckFor, callerCheckFromEnv, callerSigner, signedCallerHeaders, signedCallers, type CallerCheck } from './signed-caller.js';
+import { BREAK_GLASS, breakGlassFromEnv, CALLER_KEYS_PATH, CALLER_TOKEN_HEADER, callerCheckFor, callerCheckFromEnv, callerSigner, callerSignerFromEnv, signedCallerHeaders, signedCallers, type CallerCheck } from './signed-caller.js';
 
 const sam: Caller = { id: 'u1', name: 'Sam Okafor', email: 'sam@example.org', departments: ['Research'], roles: ['editor'], signedInAt: '2026-10-23T22:00:00.000Z', workspace: { id: 'w1', kind: 'team', role: 'lead' } };
 
@@ -13,9 +13,9 @@ const sam: Caller = { id: 'u1', name: 'Sam Okafor', email: 'sam@example.org', de
 const ON_THE_NETWORK = '172.18.0.9';
 
 // A service that answers with whoever callerFromHeaders reads, and the floor id it was sent.
-const service = async (callers: CallerCheck | undefined) => {
+const service = async (callers: CallerCheck | undefined, options?: Parameters<typeof signedCallers>[1]) => {
   const app = Fastify();
-  app.addHook('onRequest', signedCallers(callers));
+  app.addHook('onRequest', signedCallers(callers, options));
   app.get('/who', async (req) => ({ caller: callerFromHeaders(req.headers) ?? null, floor: req.headers['x-workspace-id'] ?? null }));
   return app;
 };
@@ -87,10 +87,36 @@ describe('signed caller', () => {
     expect(res.statusCode).toBe(503);
   });
 
-  it('believes a call from inside its own container, as a server admin makes one', async () => {
-    const app = await service(callerCheckFor(callerSigner(), 'identity'));
+  it('treats a call from inside its own container like any other, unless break-glass is on', async () => {
+    const app = await service(callerCheckFor(callerSigner(), 'identity'), { breakGlass: false });
     const res = await app.inject({ remoteAddress: '127.0.0.1', url: '/who', headers: callerHeaders(sam) });
-    expect(res.json().caller).toEqual(sam);
+    expect(res.json().caller).toBeNull();
+  });
+
+  it('believes a call from inside its own container only while break-glass is on, and says so in the log', async () => {
+    const warned: string[] = [];
+    const app = Fastify();
+    app.addHook('onRequest', async (req) => {
+      req.log.warn = ((_: object, msg: string) => warned.push(msg)) as typeof req.log.warn;
+    });
+    app.addHook('onRequest', signedCallers(callerCheckFor(callerSigner(), 'identity'), { breakGlass: true }));
+    app.get('/who', async (req) => ({ caller: callerFromHeaders(req.headers) ?? null }));
+    const inside = await app.inject({ remoteAddress: '127.0.0.1', url: '/who', headers: callerHeaders(sam) });
+    expect(inside.json().caller).toEqual(sam);
+    expect(warned.join(' ')).toMatch(/break-glass/);
+    // The container's own health checks name nobody, so they aren't logged.
+    await app.inject({ remoteAddress: '127.0.0.1', url: '/who' });
+    expect(warned).toHaveLength(1);
+    // Break-glass never reaches past the container: a call from the network is still checked.
+    const outside = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: callerHeaders(sam) });
+    expect(outside.json().caller).toBeNull();
+  });
+
+  it('takes break-glass from CALLER_BREAK_GLASS, off unless it says on', () => {
+    expect(breakGlassFromEnv({})).toBe(false);
+    expect(breakGlassFromEnv({ [BREAK_GLASS]: 'true' })).toBe(false);
+    expect(breakGlassFromEnv({ [BREAK_GLASS]: '1' })).toBe(false);
+    expect(breakGlassFromEnv({ CALLER_BREAK_GLASS: 'on' })).toBe(true);
   });
 
   it('changes nothing without a check, as in local dev', async () => {
@@ -99,10 +125,40 @@ describe('signed caller', () => {
     expect(res.json().caller).toEqual(sam);
   });
 
+  it('publishes the next key beside the one it signs with, so services know it before it is used', async () => {
+    const now = 'ab'.repeat(32);
+    const next = 'cd'.repeat(32);
+    const rotating = callerSigner(now, { next });
+    const { keys } = await rotating.keys();
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toEqual((await callerSigner(now).keys()).keys[0]);
+    expect(keys[1]).toEqual((await callerSigner(next).keys()).keys[0]);
+    // It signs with the current key, so a service that knows only that one still believes it...
+    const app = await service(callerCheckFor(callerSigner(now), 'identity'));
+    const res = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: await signedCallerHeaders(rotating, sam, 'identity') });
+    expect(res.json().caller).toEqual(sam);
+    // ...and once the next key becomes the current one, a service that fetched both believes that too.
+    const after = await service(callerCheckFor(rotating, 'identity'));
+    const later = await after.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: await signedCallerHeaders(callerSigner(next), sam, 'identity') });
+    expect(later.json().caller).toEqual(sam);
+    expect(() => callerSigner(now, { next: now })).toThrow(/CALLER_SIGNING_KEY_NEXT/);
+  });
+
+  it('needs CALLER_SIGNING_KEY in production, and takes CALLER_SIGNING_KEY_NEXT beside it', async () => {
+    expect(() => callerSignerFromEnv({ NODE_ENV: 'production' })).toThrow(/CALLER_SIGNING_KEY/);
+    expect(() => callerSignerFromEnv({ NODE_ENV: 'production', CALLER_SIGNING_KEY: '' })).toThrow(/CALLER_SIGNING_KEY/);
+    expect((await callerSignerFromEnv({ NODE_ENV: 'production', CALLER_SIGNING_KEY: 'ab'.repeat(32), CALLER_SIGNING_KEY_NEXT: 'cd'.repeat(32) }).keys()).keys).toHaveLength(2);
+    // Outside production (pnpm dev:app, tests) a new key each start is still fine.
+    expect((await callerSignerFromEnv({}).keys()).keys).toHaveLength(1);
+  });
+
   it('makes the same key from the same seed, so several gateways can share one', async () => {
     const seed = 'ab'.repeat(32);
     expect(await callerSigner(seed).keys()).toEqual(await callerSigner(seed).keys());
     expect(() => callerSigner('abcd')).toThrow(/64 hex/);
+    expect(() => callerSigner('zz'.repeat(32))).toThrow(/64 hex/);
+    // An empty seed is no seed, as an unset setting reads.
+    expect((await callerSigner('').keys()).keys).toHaveLength(1);
   });
 });
 
