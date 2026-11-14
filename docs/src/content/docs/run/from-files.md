@@ -13,7 +13,8 @@ Docker, and never prints a secret.
 
 ## What you need
 
-- A checkout of AUGUR's repository with its packages installed (`pnpm install`), for `pnpm augurctl`.
+- A checkout of AUGUR's repository, with augurctl's own packages installed: `pnpm install --filter .` in it. That
+  needs no package token, unlike a full `pnpm install`.
 - `ssh` to each server, as a user who can run Docker there.
 - [sops](https://getsops.io) and an [age](https://age-encryption.org) key, if the files keep their secrets
   beside them.
@@ -42,18 +43,26 @@ apps:
 ```
 
 `scripts/augurctl/deployment.schema.json` is the file's schema. A setting must be one AUGUR knows
-([Settings](../settings/)), and a secret goes in the secrets file, never in `settings`.
+([Settings](../settings/)), and a secret goes in the secrets file, never in `settings`. A key whose name ends in
+`_SECRET`, `_PASSWORD`, `_TOKEN`, `_KEY` or `_AUTHKEY` counts as a secret too.
 
 ## Commands
 
-Run each from the folder that holds `deployments/`, or pass `--dir <folder>`:
+Run each from the folder that holds `deployments/`, or pass `--dir <folder>`. From inside AUGUR's checkout it is
+`pnpm augurctl <command>`. From anywhere else, such as your fleet's own repository, call it with node, so no
+other pnpm version is picked:
+
+```sh
+node <augur>/scripts/augurctl/augurctl.mjs plan staging-1 --dir deployments
+```
+
 
 | Command | What it does |
 | --- | --- |
 | `pnpm augurctl check` | Checks every file against the schema and AUGUR's settings. |
 | `pnpm augurctl init <name>` | Makes the secrets file: a random value for each secret AUGUR can make up, encrypted with sops for the keys your `.sops.yaml` names. Add the ones only you know (`TS_AUTHKEY`, `PLATFORM_ADMIN_PASSWORD`) with `sops <file>`. It never replaces a secrets file. |
 | `pnpm augurctl plan <name>` | Lists how the server differs from its file: its settings, its release and ring, its apps, and, for each secret, only whether it matches. It reads the server's `.env` over ssh to compare, and keeps it in memory only. It exits 0 when nothing differs and 2 when something does. |
-| `pnpm augurctl status [<name>...]` | One line per server: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. |
+| `pnpm augurctl status [<name>...]` | Every server, or the ones named, one line each: its release, what's running and what's unwell, the last backup, the last upgrade and why it went back if it did, and its apps. With no deployment files it says so and exits 1. |
 | `pnpm augurctl up <name>` | Installs a new server: fetches the release's [deploy bundle](../install/#1-get-the-release) and checks its signature here, sends it to the server and checks its sums there, makes `.env` from the file and its secrets, and starts AUGUR once the preflight passes. If the preflight stops it, fix what it says and run `up` again. It stops if the server has a `.env` already. |
 
 To change a running server's release or apps, use its Deployment page for now; `plan` shows when it has

@@ -28,7 +28,9 @@ const validate = new Ajv({ allErrors: true, strict: false }).compile(SCHEMA);
 /** The setting's description in the settings schema, by name or pattern. */
 const settingOf = (key, settings = SETTINGS) =>
   settings.properties?.[key] ?? Object.entries(settings.patternProperties ?? {}).find(([p]) => new RegExp(p).test(key))?.[1];
-export const isSecret = (key, settings = SETTINGS) => Boolean(settingOf(key, settings)?.writeOnly);
+/** A secret by the settings schema, or by its name when the schema doesn't know it (a key left over from an older release). */
+const SECRET_NAME = /_(SECRET|PASSWORD|TOKEN|KEY|AUTHKEY)$/;
+export const isSecret = (key, settings = SETTINGS) => Boolean(settingOf(key, settings)?.writeOnly) || SECRET_NAME.test(key);
 
 /** What's wrong with one deployment file, as sentences; none when it's fine. */
 export const problems = (doc, file, settings = SETTINGS) => {
@@ -270,7 +272,9 @@ const main = () => {
     process.exit(2);
   }
   if (command === 'status') {
-    for (const name of names.length ? names : all()) {
+    const listed = names.length ? names : all();
+    if (!listed.length) throw new Error(`No deployment files in ${dir}: run it from the folder that holds deployments/, or pass --dir.`);
+    for (const name of listed) {
       try {
         const { doc } = load(dir, name);
         console.log(statusLine(doc, factsOf(doc)));
