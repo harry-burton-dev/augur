@@ -49,8 +49,8 @@ x-telemetry: &telemetry
   SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
   # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
   DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
-  # How long a service waits for a database connection (10 seconds unless set), and how long its migration keeps
-  # trying for a lock (300) or sits idle in its transaction (60) before it gives up. 0 for no limit.
+  # How long a service waits for a database connection (10 seconds unless set), and how long its migration waits for
+  # a lock (60) or sits idle in its transaction (60) before it gives up. 0 for no limit.
   DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
   DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
   DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS:-}

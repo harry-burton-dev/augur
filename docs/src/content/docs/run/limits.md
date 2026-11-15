@@ -98,10 +98,10 @@ shows who holds them.
   for a connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached
   right now, rather than waiting for ever when its pool is used up.
 - **Migrations**: a migration may run as long as it needs, since building an index on a big table can rightly
-  take minutes. It waits for a lock another session holds, such as an app's open transaction on a table it alters, a few
-  seconds at a time, rolling back and trying again so other queries on that table aren't held up, and `pc logs`
-  names who holds it after each try (a session's details only where the service's login may see them). After five
-  minutes (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`, read by AUGUR's own services) it gives up and the service stops. Postgres ends a migration's transaction left idle for a minute (`DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS`),
+  take minutes. It waits at most a minute for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`),
+  such as an app's open transaction on a table it alters, then rolls back and the service stops (AUGUR's own services read the setting; an app's migrations keep the default), and `pc logs`
+  names the migration, the lock and who holds it (a session's details only where the service's login may see
+  them). Postgres ends a migration's transaction left idle for a minute (`DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS`),
   freeing its locks. 0 turns either off.
 - **Pages of the knowledge graph**: a read that lists, such as the entities in sight from a floor, gives at
   most `KNOWLEDGE_PAGE_LIMIT` (100) a page whatever it asks for, and says when it cut a page shorter. Callers

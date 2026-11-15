@@ -9,11 +9,11 @@ describe('runMigrations', () => {
     await expect(runMigrations(pool, { schema: 'a; drop table b', migrations: [] })).rejects.toThrow(/schema name/);
   });
 
-  it('reads its lock and idle limits from the settings, five minutes and a minute when unset or nonsense', () => {
+  it('reads its lock and idle limits from the settings, 60 and 60 seconds when unset or nonsense', () => {
     expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: '5' })).toBe(5_000);
     expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: '0' })).toBe(0);
-    expect(migrationLockTimeoutMs({})).toBe(300_000);
-    expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: 'soon' })).toBe(300_000);
+    expect(migrationLockTimeoutMs({})).toBe(60_000);
+    expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: 'soon' })).toBe(60_000);
     expect(migrationIdleTimeoutMs({ DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: '90' })).toBe(90_000);
     expect(migrationIdleTimeoutMs({ DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: '' })).toBe(60_000);
   });
@@ -140,20 +140,6 @@ describe.runIf(process.env.DATABASE_URL)('runMigrations on Postgres', () => {
     });
     expect(await applied()).toEqual(['001_things']);
     expect(await tables()).toEqual(['migrations', 'things']);
-  });
-
-  it('tries again a few seconds at a time, logging who holds the lock, and goes on once it is free', async () => {
-    const logged: string[] = [];
-    let run: Promise<void> | undefined;
-    await whileHeld('select pg_advisory_xact_lock($1, hashtext($2))', [LOCK_NAMESPACE.migrations, schema], async (holder) => {
-      run = runMigrations(pool, { schema, migrations, lockTimeoutMs: 10_000, lockTryMs: 200, log: (m) => logged.push(m) });
-      await new Promise((resolve) => setTimeout(resolve, 600));
-      expect(logged[0]).toMatch(/is waiting for a lock and rolled back to try again in 1s \(try 1, giving up after 10s\)/);
-      expect(logged[0]).toContain(`pid ${holder}`);
-      // whileHeld lets the lock go when this returns, and the next try takes it.
-    });
-    await run;
-    expect(await applied()).toEqual(['001_things', '002_more', '003_counter']);
   });
 
   it('names only the migration lock’s holder while it waits for that lock, not sessions reading its tables', async () => {

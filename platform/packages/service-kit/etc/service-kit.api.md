@@ -563,7 +563,7 @@ export const DEFAULT_GATEWAY_URL = "http://gateway:8080";
 export const DEFAULT_MIGRATION_IDLE_TIMEOUT_MS = 60000;
 
 // @public
-export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 300000;
+export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 60000;
 
 // @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
@@ -1735,8 +1735,6 @@ export const runMigrations: (pool: Pool_2, input: {
     migrations: readonly Migration[];
     lockTimeoutMs?: number;
     idleTimeoutMs?: number;
-    lockTryMs?: number;
-    log?: (message: string) => void;
 }) => Promise<void>;
 
 // @public (undocumented)
