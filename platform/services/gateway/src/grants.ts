@@ -4,7 +4,8 @@ import { callerHeaders, GATEWAY_CALLER, isPlatformScope, scopeWords, signedCalle
  * What an app may do (contract 3, spec 8.2 and 8.3). The gateway admits an app's own token only for an app the
  * registry knows and has on, and holds each call to the scopes the app is granted on the floor it is for.
  * The registry's answer is kept for 30 seconds, as the services keep theirs, so a change reaches the gateway
- * in that time.
+ * in that time; that an app isn't installed is kept only a couple of seconds, so a just-installed app is reached
+ * at once (PER-424).
  */
 
 /** What the registry says of one app: what it is called, whether it is on where the call is for, and its scopes there. */
@@ -31,6 +32,8 @@ export interface RegistryGrantsOptions {
   /** Signs the gateway itself for the registry, which believes no other caller. */
   signer?: CallerSigner;
   ttlMs?: number;
+  /** How long the registry's "not installed" is kept, so a just-installed app isn't refused for a whole `ttlMs`. */
+  missMs?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
 }
@@ -38,13 +41,14 @@ export interface RegistryGrantsOptions {
 /** Apps and floors to remember at once; past this the oldest is forgotten first. */
 const MAX_REMEMBERED = 5000;
 
-/** Asks the registry what an app is granted where, as the gateway, remembering each answer for `ttlMs`. */
-export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: RegistryGrantsOptions): AppGrants => {
+/**
+ * Asks the registry what an app is granted where, as the gateway, remembering each grant for `ttlMs` and that an app
+ * isn't installed for `missMs`. Calls asking the same at once share one ask.
+ */
+export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, missMs = 2_000, fetchImpl = fetch, now = Date.now }: RegistryGrantsOptions): AppGrants => {
   const cache = new Map<string, { grant: AppGrant | undefined; at: number }>();
-  return async (app, workspace) => {
-    const key = `${app} ${workspace ?? ''}`;
-    const hit = cache.get(key);
-    if (hit && now() - hit.at < ttlMs) return hit.grant;
+  const asking = new Map<string, Promise<AppGrant | undefined>>();
+  const ask = async (app: string, workspace: string | undefined, key: string): Promise<AppGrant | undefined> => {
     const url = new URL(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/grants`);
     if (workspace) url.searchParams.set('workspace', workspace);
     let res: Response;
@@ -74,6 +78,17 @@ export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
     cache.set(key, { grant, at: now() });
     if (cache.size > MAX_REMEMBERED) cache.delete(cache.keys().next().value!);
     return grant;
+  };
+  return async (app, workspace) => {
+    const key = `${app} ${workspace ?? ''}`;
+    const hit = cache.get(key);
+    if (hit && now() - hit.at < (hit.grant ? ttlMs : missMs)) return hit.grant;
+    let pending = asking.get(key);
+    if (!pending) {
+      pending = ask(app, workspace, key).finally(() => asking.delete(key));
+      asking.set(key, pending);
+    }
+    return pending;
   };
 };
 

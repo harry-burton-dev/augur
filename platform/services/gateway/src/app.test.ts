@@ -10,6 +10,7 @@ import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts'
 import { PersonaSessionsUnavailable } from './personas.ts';
 import { AppAccessUnavailable, registryAppAccess } from './uploads.ts';
 import { registryUpstreams, UpstreamsUnavailable } from './upstreams.ts';
+import { registryGrantsFor } from './grants.ts';
 import { Readable } from 'node:stream';
 
 const issuer = 'http://sign-in.test/realms/platform';
@@ -329,7 +330,7 @@ describe('gateway', () => {
     it('passes a call on to an app that is on for the caller on their floor', async () => {
       const res = await call(await gateway(), 'notes', { 'x-workspace-id': 'w-finance' });
       expect(res.statusCode).toBe(200);
-      expect(access).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'u-1', workspace: finance }));
+      expect(access).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'u-1', workspace: finance }), 'notes');
     });
 
     it('refuses a call to an app that is off for the caller on that floor', async () => {
@@ -340,7 +341,7 @@ describe('gateway', () => {
     it('checks a call that names no floor on the organisation’s, without passing that floor on', async () => {
       const app = await gateway();
       expect((await call(app, 'notes')).statusCode).toBe(403);
-      expect(access).toHaveBeenLastCalledWith(expect.objectContaining({ workspace: org }));
+      expect(access).toHaveBeenLastCalledWith(expect.objectContaining({ workspace: org }), 'notes');
       const res = await call(app, 'folio');
       expect(res.statusCode).toBe(200);
       expect(res.json()['x-workspace-id']).toBeUndefined();
@@ -370,6 +371,42 @@ describe('gateway', () => {
       expect(await lookup(alex)).toEqual(new Map([['folio', { name: 'Artifacts', maxUpload: 200 }], ['home', {}]]));
       await lookup(alex);
       expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it('asks again soon for an app the person’s last answer didn’t have, at most once a while (PER-424)', async () => {
+      let now = 0;
+      let list: { id: string }[] = [{ id: 'home' }];
+      const fetchImpl = vi.fn(async () => Response.json(list));
+      const lookup = registryAppAccess({ registryUrl: 'http://registry', ttlMs: 30_000, missMs: 2_000, fetchImpl: fetchImpl as unknown as typeof fetch, now: () => now });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
+      await lookup(alex, 'home');
+      list = [{ id: 'home' }, { id: 'starter' }];
+      now = 1_000;
+      expect((await lookup(alex, 'starter')).has('starter')).toBe(false);
+      now = 2_000;
+      expect((await lookup(alex, 'starter')).has('starter')).toBe(true);
+      now = 3_000;
+      await lookup(alex, 'home');
+      await lookup(alex, 'starter');
+      await lookup(alex, 'nothing');
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps using the person’s catalogue while asking again, and keeps it when the registry can’t answer', async () => {
+      let now = 0;
+      let up = true;
+      const fetchImpl = vi.fn(async () => {
+        if (!up) throw new Error('refused');
+        return Response.json([{ id: 'notes' }]);
+      });
+      const lookup = registryAppAccess({ registryUrl: 'http://registry', fetchImpl: fetchImpl as unknown as typeof fetch, now: () => now });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
+      await lookup(alex, 'notes');
+      up = false;
+      now = 5_000;
+      expect((await lookup(alex, 'starter')).has('notes')).toBe(true);
+      expect((await lookup(alex, 'notes')).has('notes')).toBe(true);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -498,6 +535,69 @@ describe('gateway', () => {
     now = 5000;
     expect(await upstreamsOf()).toEqual({ apps: { notes: 'http://notes:8090#augur:gateway' }, previews: {} });
     await expect(registryUpstreams({ registryUrl: 'http://registry:8082', signer, fetchImpl })()).rejects.toBeInstanceOf(UpstreamsUnavailable);
+  });
+
+  it('asks the registry again soon for an app it was not told of, at most once a while (PER-424)', async () => {
+    let now = 0;
+    let asked = 0;
+    let apps: Record<string, string> = { notes: 'http://notes:8090' };
+    const fetchImpl = (async () => {
+      asked += 1;
+      return new Response(JSON.stringify({ apps }));
+    }) as unknown as typeof fetch;
+    const upstreamsOf = registryUpstreams({ registryUrl: 'http://registry:8082', ttlMs: 30_000, missMs: 2_000, fetchImpl, now: () => now });
+    expect((await upstreamsOf('notes')).apps).toEqual({ notes: 'http://notes:8090' });
+    // Known apps keep the cached answer; a missing one asks again only once a `missMs` has passed since the last ask.
+    now = 1_000;
+    await upstreamsOf('starter');
+    await upstreamsOf('notes');
+    expect(asked).toBe(1);
+    apps = { ...apps, starter: 'http://starter:8090' };
+    now = 2_500;
+    expect((await upstreamsOf('starter')).apps.starter).toBe('http://starter:8090');
+    expect(asked).toBe(2);
+    // Now known, it is served from the answer, and an app that never was asks at most once each `missMs`.
+    now = 3_000;
+    await upstreamsOf('starter');
+    await upstreamsOf('nothing');
+    now = 4_000;
+    await upstreamsOf('nothing');
+    expect(asked).toBe(2);
+    now = 4_600;
+    await upstreamsOf('nothing');
+    expect(asked).toBe(3);
+  });
+
+  it('serves a just-installed app without waiting for the registry answers it keeps', async () => {
+    // The registry as the gateway asks it: where apps are, the person's catalogue, and an app's grants.
+    let installed = false;
+    const registry = Fastify();
+    registry.get('/v1/upstreams', async () => ({ apps: installed ? { starter: url } : {} }));
+    registry.get('/v1/manifest', async () => (installed ? [{ id: 'notes' }, { id: 'starter' }] : [{ id: 'notes' }]));
+    registry.get('/v1/apps/:id/grants', async (req, reply) => (installed || (req.params as { id: string }).id === 'notes' ? { on: true, scopes: [] } : reply.code(404).send()));
+    const registryUrl = await registry.listen({ port: 0, host: '127.0.0.1' });
+    let now = 0;
+    const clock = () => now;
+    const app = await buildApp({
+      upstreams: { registry: registryUrl, notes: url },
+      auth,
+      apps: registryUpstreams({ registryUrl, now: clock }),
+      access: registryAppAccess({ registryUrl, now: clock }),
+      appGrants: registryGrantsFor({ registryUrl, now: clock }),
+      monitor: new HealthMonitor({ probes: [] }),
+    });
+    const open = async (id: string) => (await app.inject({ method: 'GET', url: `/api/${id}/echo`, headers: { authorization: `Bearer ${await sign(ada)}` } })).statusCode;
+    try {
+      // Someone using Notes, then opening Starter before and just after it's installed.
+      expect(await open('notes')).toBe(200);
+      expect(await open('starter')).toBe(404);
+      installed = true;
+      now = 2_000;
+      expect(await open('starter')).toBe(200);
+    } finally {
+      await app.close();
+      await registry.close();
+    }
   });
 
   it('reads app services from a name=url list', () => {
