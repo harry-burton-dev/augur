@@ -547,11 +547,11 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect(grants.json().notificationKinds).toEqual(['comment']);
     });
 
-    it('takes no binding types and lists no entity links, now the binding events are gone (D6)', async () => {
+    it('ignores the binding types an app names and lists no entity links, now the binding events are gone (D6)', async () => {
       const app = await db.app({ verifyService });
       const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, ...extra } });
-      expect((await put({ links: { entities: true }, bindings: ['record'] })).statusCode).toBe(400);
-      expect((await put({ links: { entities: true } })).statusCode).toBe(201);
+      // Accepted for a release, so an app that still sets it registers, but nothing reads it.
+      expect((await put({ links: { entities: true }, bindings: ['record'] })).statusCode).toBe(201);
       expect((await app.inject({ method: 'GET', url: '/v1/entity-links', headers: as('app-atlas') })).statusCode).toBe(404);
     });
 

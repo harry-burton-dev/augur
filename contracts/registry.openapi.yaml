@@ -2010,6 +2010,11 @@ components:
               description: The app links its things to entities in Data Atlas (ADR 0025)
           additionalProperties: false
           description: What the app links its things to elsewhere in AUGUR (SDK 2.1)
+        bindings:
+          type: array
+          items:
+            type: string
+          description: "Retired (D6): the binding events are gone, so this is accepted and ignored. It goes in a later release."
         scopes:
           type: array
           items:

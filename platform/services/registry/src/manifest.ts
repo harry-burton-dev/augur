@@ -15,7 +15,6 @@ export const MAX_SETTINGS = 10;
 /** How many feature previews one app may offer at once. */
 export const MAX_FEATURE_PREVIEWS = 8;
 
-
 /** How many kinds of inbox item one app may declare. */
 export const MAX_INBOX_KINDS = 10;
 
@@ -227,6 +226,7 @@ export const appEntrySchema = Type.Object(
         { additionalProperties: false, description: 'What the app links its things to elsewhere in AUGUR (SDK 2.1)' },
       ),
     ),
+    bindings: Type.Optional(Type.Array(Type.String(), { description: 'Retired (D6): the binding events are gone, so this is accepted and ignored. It goes in a later release.' })),
     scopes: Type.Optional(
       Type.Array(Type.Enum([...SCOPES]), {
         uniqueItems: true,

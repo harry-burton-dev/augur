@@ -5,7 +5,7 @@ import { callerHeaders, frontendDigest, packFrontend, type FloorPlace } from '@a
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { addressProblem } from './upstreams.ts';
-import { frontendHandedOver, manifest3Problems, ownServed } from './apps3.ts';
+import { frontendHandedOver, manifest3Problems, ownServed, served3 } from './apps3.ts';
 import { checkRelease } from './release-check.ts';
 import { platformApps, platformManifests3 } from './manifest.ts';
 import { MemoryFrontendFiles } from './frontends.ts';
@@ -204,11 +204,15 @@ describe.runIf(DATABASE_URL)('fields contract 3 hasn’t frozen, under provision
     expect(manifest3Problems({ ...releaseOf('notes', '1.2.0').manifest, provisional: { requiredRole: '' } }).join(' ')).toMatch(/requiredRole/);
   });
 
-  it('knows no bindings, now the binding events are gone (D6): ignored under provisional, refused at the top', () => {
-    const under = checkRelease(releaseOf('notes', '1.2.0', { provisional: { links: { entities: true }, bindings: ['claim'] } }));
-    expect(under.refusals).toEqual([]);
-    expect(under.warnings).toContain('Notes sets provisional.bindings, which this AUGUR doesn’t know: it installs without it. If it is a misspelling, Notes’s publisher needs to fix it.');
-    expect(manifest3Problems({ ...releaseOf('notes', '1.2.0').manifest, bindings: ['claim'] }).join(' ')).toMatch(/bindings/);
+  it('installs a release that still sets bindings, ignoring it and saying why, now the binding events are gone (D6)', () => {
+    const said = 'Notes sets bindings, which AUGUR no longer reads (D6: the binding events are gone): it installs without it. Notes’s publisher can take it out.';
+    for (const extra of [{ provisional: { links: { entities: true }, bindings: ['claim'] } }, { bindings: ['claim'] }]) {
+      const checked = checkRelease(releaseOf('notes', '1.2.0', extra));
+      expect(checked.refusals).toEqual([]);
+      expect(checked.warnings).toContain(said);
+      expect(checked.warnings.join(' ')).not.toMatch(/doesn’t know|reads it under provisional/);
+      expect(served3(releaseOf('notes', '1.2.0', extra).manifest, { maxUpload: 1 })).not.toHaveProperty('bindings');
+    }
   });
 });
 

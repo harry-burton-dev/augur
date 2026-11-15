@@ -128,8 +128,8 @@ export interface AppManifestEntry {
    * With `links.entities`, the types of thing the app binds, as its topics name them (SDK 2.1):
    * each is published on `<app id>.<type>.entity-bound` and `-unbound`. Lowercase, up to 10, and
    * never `entity` or `role`, which the events' payload uses.
-   * @deprecated The binding events are gone (D6): the registry no longer takes or serves this, so it
-   * is never set. It stays in the type until the next SDK major.
+   * @deprecated The binding events are gone (D6): the registry accepts this but ignores it, and it
+   * means nothing. It stays in the type until the next SDK major.
    */
   bindings?: string[];
   /**

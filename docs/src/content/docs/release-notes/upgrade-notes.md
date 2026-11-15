@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-AUGUR no longer has entity binding events (`<app>.<type>.entity-bound` and `-unbound`): the registry's `GET /v1/entity-links` answers 404, and a manifest's `bindings` is no longer read (a contract 3 manifest that sets it under `provisional` installs with a warning). Nothing in AUGUR or the apps it installs used them. Nothing to do on the server.
+AUGUR no longer has entity binding events (`<app>.<type>.entity-bound` and `-unbound`): the registry's `GET /v1/entity-links` answers 404, and a manifest's `bindings` is accepted but no longer read (a contract 3 release that sets it installs with a warning saying so). Nothing in AUGUR or the apps it installs used them. Nothing to do on the server.
 
 ## An app on contract 3 must declare its domain events
 

@@ -224,6 +224,7 @@
       }
     },
     "links": { "$ref": "#/$defs/links", "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
+    "bindings": { "type": "array", "items": { "type": "string" }, "description": "Retired (D6): the binding events are gone, so this is accepted and ignored, with a warning. It goes in a later release." },
     "provisional": {
       "type": "object",
       "description": "Fields contract 3 hasn't frozen: each may change or go in a minor release. A registry ignores a field here that it doesn't know, so a manifest that sets a newer one still installs on an older AUGUR, without it. Anywhere else an unknown field is refused.",
