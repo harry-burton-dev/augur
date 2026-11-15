@@ -10,8 +10,11 @@ export interface KnownUpstreams {
   previews: Record<string, Record<string, string>>;
 }
 
-/** Where apps' services are, as the registry says. Throws when that can't be found out. */
-export type AppUpstreams = () => Promise<KnownUpstreams>;
+/**
+ * Where apps' services are, as the registry says. Throws when that can't be found out. Given the `app` the caller is
+ * looking for, an answer that doesn't have it is asked again sooner, since that app may have just been installed.
+ */
+export type AppUpstreams = (app?: string) => Promise<KnownUpstreams>;
 
 export class UpstreamsUnavailable extends Error {}
 
@@ -21,17 +24,22 @@ export interface RegistryUpstreamsOptions {
   signer?: CallerSigner;
   /** How long the answer is used before the registry is asked again. */
   ttlMs?: number;
+  /** How soon the registry is asked again for an app its last answer didn't have, at most once in this time. */
+  missMs?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
 }
 
 /**
  * Where each app's service is, as the registry says (set by what runs the app, or an admin), asked
- * again after `ttlMs`. When the registry can't be reached, the last answer is used until it can,
- * so a registry restart doesn't cut people off from apps.
+ * again after `ttlMs`, or after `missMs` for an app the last answer didn't have, so a just-installed
+ * app is served within moments rather than a whole `ttlMs` later (PER-424). When the registry can't
+ * be reached, the last answer is used until it can, so a registry restart doesn't cut people off from apps.
  */
-export const registryUpstreams = ({ registryUrl, signer, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: RegistryUpstreamsOptions): AppUpstreams => {
+export const registryUpstreams = ({ registryUrl, signer, ttlMs = 30_000, missMs = 2_000, fetchImpl = fetch, now = Date.now }: RegistryUpstreamsOptions): AppUpstreams => {
   let last: { upstreams: KnownUpstreams; at: number } | undefined;
+  // When the registry was last asked, answered or not, so a run of misses asks it at most once each `missMs`.
+  let askedAt = -Infinity;
   let asking: Promise<KnownUpstreams> | undefined;
   const ask = async (): Promise<KnownUpstreams> => {
     let res: Response;
@@ -45,8 +53,11 @@ export const registryUpstreams = ({ registryUrl, signer, ttlMs = 30_000, fetchIm
     const { apps, previews } = (await res.json()) as Partial<KnownUpstreams>;
     return { apps: apps ?? {}, previews: previews ?? {} };
   };
-  return async () => {
-    if (last && now() - last.at < ttlMs) return last.upstreams;
+  return async (app) => {
+    const fresh = last && now() - last.at < ttlMs;
+    const missed = app !== undefined && last && !(app in last.upstreams.apps) && now() - askedAt >= missMs;
+    if (last && fresh && !missed) return last.upstreams;
+    if (!asking) askedAt = now();
     asking ??= ask()
       .then((upstreams) => {
         last = { upstreams, at: now() };

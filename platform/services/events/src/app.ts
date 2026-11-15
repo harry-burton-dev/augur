@@ -40,7 +40,7 @@ import { describeApi } from './contract.ts';
 import { payloadChecker, readable } from './event-types.ts';
 import { deliveryStatus, subscribesOn, type PushingState } from './deliver.ts';
 import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
-import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
+import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, SetAsideEvent as SetAsideEventSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { topicMatches, topicsOverlap, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** Filters the audit log and its download share, beyond time and floor. */
@@ -840,6 +840,42 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           if (!admin) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how apps take events.' });
           const now = Date.now();
           return { deliveries: (await store.deliveries.list()).map((d) => ({ ...d, ...deliveryStatus(d, now) })), pushing: pushing() };
+        },
+      );
+
+      app.get(
+        '/deliveries/set-aside',
+        {
+          schema: {
+            summary: 'The events apps’ parts couldn’t take, set aside so the ones behind them could go (admins)',
+            description: [
+              'An event a part answers but can’t take is tried again a few times (DOMAIN_EVENTS_DELIVERY_ATTEMPTS), with the',
+              'later events on its topic waiting behind it; one a part that is down holds for a day is too. Then it is set',
+              'aside: kept here, newest first, with how often it was tried and what the last try said, and recorded in',
+              'Activity as delivery.set-aside. Kept as long as domain events are (DOMAIN_EVENTS_KEEP_DAYS). Since 1.18.',
+            ].join(' '),
+            querystring: Type.Object(
+              {
+                app: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: 'Only this app’s' })),
+                limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
+              },
+              { additionalProperties: false },
+            ),
+            response: {
+              200: Type.Object({ events: Type.Array(ref(SetAsideEventSchema)) }, { description: 'What was set aside, newest first' }),
+              401: refused('No signed-in caller'),
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          const admin = caller.roles.includes('admin');
+          shadow.check('events.deliveries', caller, { action: 'can_manage_apps', resource: { type: 'org', id: THIS_ORG }, as: 'persona' }, admin);
+          if (!admin) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how apps take events.' });
+          const events = await store.deliveries.setAside({ app: req.query.app, limit: req.query.limit ?? 100 });
+          return { events: events.map(({ nextAt: _, setAsideAt, ...e }) => ({ ...e, setAsideAt: setAsideAt! })) };
         },
       );
 
