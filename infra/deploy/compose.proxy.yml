@@ -1,0 +1,15 @@
+# Behind your organisation's own proxy, instead of Tailscale (AUGUR's docs, Install AUGUR, Behind your own proxy).
+# Run beside compose.yml: name both in .env, which the updater follows, and in your pc alias (-f for each):
+#   COMPOSE_FILE=compose.yml:compose.proxy.yml
+# Your proxy or load balancer serves PLATFORM_URL over HTTPS, and passes each request on over plain HTTP to the
+# front door at PROXY_LISTEN, with the caller's address in X-Forwarded-For. TRUSTED_PROXIES says whom to believe
+# about that address: a proxy elsewhere arrives from its own address; one on this machine, through Docker, from
+# the compose network's gateway, inside the default private ranges.
+services:
+  # Tailscale doesn't run: it's started only for a `tailscale` profile, which nothing turns on.
+  tailscale:
+    profiles: [tailscale]
+  web:
+    # Where the front door listens on this server: the host's loopback unless set, for a proxy on the same
+    # machine. A proxy elsewhere needs this server's address on the network it comes in from, such as 10.0.4.20:8080.
+    ports: ["${PROXY_LISTEN:-127.0.0.1:8080}:8080"]

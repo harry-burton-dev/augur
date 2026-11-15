@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## AUGUR can run behind your own proxy instead of Tailscale
+
+**From** unreleased
+
+`compose.proxy.yml` puts AUGUR behind your organisation's own proxy or load balancer: Tailscale doesn't run, and the front door listens at `PROXY_LISTEN` ([Install AUGUR, Behind your own proxy](../../run/install/#behind-your-own-proxy)). Nothing changes for a server on Tailscale, and `TS_AUTHKEY` is now needed only for a machine joining the tailnet. To move a server to its own proxy, first upgrade it to this release, since the updater before it runs `compose.yml` alone. Then stop Tailscale with the alias you have (`pc rm -sf tailscale`), set `COMPOSE_FILE=compose.yml:compose.proxy.yml`, `PROXY_LISTEN`, `TRUSTED_PROXIES` and the new `PLATFORM_URL` in `.env`, add `-f infra/deploy/compose.proxy.yml` to your `pc` alias, and run `pc up -d`. Remove the old machine in the Tailscale admin console. A new `PLATFORM_URL` changes the address people sign in at, so tell them first.
+
 ## Say where the proxy in front is: TRUSTED_PROXIES
 
 **From** unreleased
@@ -504,7 +510,8 @@ Two defaults changed:
 
 From this release a deployment can tell the company's Backstage what it runs. Nothing changes until you set it up; until then the Upgrade Centre's Reporting section, under Worth knowing on its front page, says reporting isn't set up and what to set.
 
-1. Add the deployment to Backstage's `org/deployments.yaml`, if it isn't there, and note its `metadata.name`.
+1. Add the deployment to Backstage's catalog of deployments, if it isn't there, and note its `metadata.name`.
+   The portal's README ("Deployments") says where that file is; the portal's GitHub token must be able to read it.
 2. Set `DEPLOYMENT_ID` in `.env` to that name, with `PORTAL_URL` set to the Backstage address. Then `docker compose up -d registry`.
 3. Copy the deployment's public key, shown by `GET /api/registry/v1/platform/reporting` as an admin (or **Copy key** in the Upgrade Centre's Reporting section), into the annotation `augur.dev/report-key` on that entry, and let Backstage read the catalog again.
 

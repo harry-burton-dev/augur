@@ -12,7 +12,8 @@ then Deployment's Reporting section, under **Worth knowing**, says it isn't set 
 
 ## Set it up
 
-1. Add the deployment to Backstage's `org/deployments.yaml`, if it isn't there, and note its `metadata.name`.
+1. Add the deployment to Backstage's catalog of deployments, if it isn't there, and note its `metadata.name`.
+   The portal's README ("Deployments") says where that file is; the portal's GitHub token must be able to read it.
 2. In `.env`, set `DEPLOYMENT_ID` to that name and `PORTAL_URL` to Backstage's address. Then
    `docker compose up -d registry`.
 3. In Deployment's Reporting section, select the **Public key** field to copy it, and paste it into the annotation
