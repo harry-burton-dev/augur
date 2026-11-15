@@ -216,7 +216,7 @@ EOF
 pc() {
   local files=(-f "$dir/compose.yml")
   # Only a build from this checkout uses the build file: a release under test runs its published
-  # images, as a server does, including the apps that ship with it (ADR 0049).
+  # images, as a server does; no app ships inside a release (ADR 0075).
   if [ "${BUILD:-}" = 1 ] && [ "$dir" = "$deploy" ] && [ -e "$dir/compose.build.yml" ]; then files+=(-f "$dir/compose.build.yml"); fi
   # Behind its own proxy, as .env names it from this checkout on; a release from before compose.proxy.yml (its folder has
   # none) publishes the front door the test's way.

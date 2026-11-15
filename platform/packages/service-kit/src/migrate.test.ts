@@ -176,6 +176,9 @@ describe.runIf(process.env.DATABASE_URL)('runMigrations on Postgres', () => {
     const role = 'service_kit_migrate_login';
     await pool.query(`drop role if exists ${role}`);
     await pool.query(`create role ${role} login password 'migrate-test-only'`);
+    // Storage's tests, on the same server, take CONNECT away from PUBLIC: give it to this login itself.
+    const { rows } = await pool.query<{ db: string }>('select current_database() as db');
+    await pool.query(`grant connect on database ${pg.escapeIdentifier(rows[0].db)} to ${role}`);
     await pool.query(`create schema ${schema} authorization ${role}`);
     const url = new URL(process.env.DATABASE_URL!);
     url.username = role;
@@ -190,6 +193,7 @@ describe.runIf(process.env.DATABASE_URL)('runMigrations on Postgres', () => {
     } finally {
       await own.end();
       await pool.query(`drop schema if exists ${schema} cascade`);
+      await pool.query(`revoke connect on database ${pg.escapeIdentifier(rows[0].db)} from ${role}`);
       await pool.query(`drop role ${role}`);
     }
   });

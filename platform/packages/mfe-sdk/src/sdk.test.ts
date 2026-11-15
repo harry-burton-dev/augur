@@ -343,7 +343,7 @@ describe('refs and markings (SDK 1.10)', () => {
 });
 
 describe('app categories (SDK 1.11)', () => {
-  it('has exactly the two kinds ADR 0032 names, so a change to the contract is seen', () => {
+  it('has exactly the two kinds ADR 0077 names, so a change to the contract is seen', () => {
     expect(APP_CATEGORIES).toEqual(['platform', 'pillar']);
     const kind: AppCategory = 'pillar';
     const entry: AppManifestEntry = { id: 'a', name: 'A', route: '/a', entry: '/a.js', version: '1.0.0', sdk: '^1.11.0', category: kind };

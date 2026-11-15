@@ -65,7 +65,7 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 
 ## Structure (ADR 0002)
 - `platform/` owns the shell, SDK and services. Apps live in their own
-  repositories (ADR 0012). Nothing in `platform/`
+  repositories (ADR 0077). Nothing in `platform/`
   imports an app and apps never import each other: `pnpm check:boundaries`.
 - Apps reach AUGUR only through `@augur/*` packages, the gateway, the
   manifest and domain events.
