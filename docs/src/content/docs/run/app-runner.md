@@ -42,6 +42,11 @@ install apps from, the app template's (or your fork of it) among them. Every par
 bundle, must carry that workflow's signature, and the release must be on app contract 3: an older release is
 listed with why it can't install.
 
+An app's id belongs to the repository whose release first installed under it. A release under that id signed by
+another repository is refused with why, even after the app was removed and its data has gone: a different
+publisher's app needs an id of its own. Renaming the repository counts as another publisher too: there is no way yet
+to move an id to a new repository.
+
 ## Where apps come from
 
 **Deployment → Apps** lists, under **Install from the app feed**, the released apps that aren't installed, each

@@ -3767,7 +3767,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppJob"
         "400":
-          description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, or a bad manifest"
+          description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, one under an id another publisher holds, or a bad manifest"
           content:
             application/problem+json:
               schema:

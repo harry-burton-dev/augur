@@ -15,6 +15,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Grafana now has two routes that don't go through AUGUR: `ALERT_OUTSIDE_URL` gets every alert and its all-clear, and `ALERT_HEARTBEAT_URL` gets a heartbeat every minute, so a service there raises the alarm when the server stops. Both are optional, and alerts still reach deployment admins as notices. On a production server, set both in `.env` and run `pc up -d otel-lgtm registry`: until you do, the registry tells its deployment admins once a week that alerts reach no one outside AUGUR ([Observability, Alerts](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#alerts)).
 
+## An app's id stays with the repository that first installed it
+
+**From** unreleased
+
+The registry now refuses a release under an app's id when another repository signed it, and keeps that rule after the app is removed. Apps already installed are bound to the repository of the release they run now. Nothing to do, unless you meant to swap an app for another publisher's under the same id: that one now needs an id of its own.
+
 ## An event an app's part can't take no longer holds the rest
 
 **From** unreleased
