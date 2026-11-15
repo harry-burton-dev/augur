@@ -100,9 +100,15 @@ test('the dev stack and upgrade notes are not High', () => {
   assert.equal(tierOf(['docs/upgrade.md'], tiers).tier, 'Medium');
 });
 
-test("a bot's pull request merges on CI, and the auto-ok log records it", () => {
+test("a bot's pull request merges on CI, unless it touches what needs a deep review", () => {
   assert.deepEqual(problems({ tier: 'High', bot: true }), []);
-  assert.deepEqual(problems({ tier: 'High', bot: true, harry: true }), []);
+  assert.match(problems({ tier: 'High', bot: true, harry: true }).join(), /takes this bot pull request over/);
+});
+
+test('the deep review can be written the ways REVIEW.md words it', () => {
+  for (const review of ['/code-review high: 2 findings.', '`/code-review` at high effort: none.', '/code-review (xhigh), 3 findings.', '/code-review max']) {
+    assert.deepEqual(problems({ tier: 'High', body: body({ Review: review }), harry: true }), [], review);
+  }
 });
 
 test('a change to a package a service runs gets the deploy test', () => {

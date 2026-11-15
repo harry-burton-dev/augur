@@ -36,7 +36,7 @@ export const tierOf = (paths, tiers) => {
   return { tier: 'Medium', because: paths.filter((p) => !low(p)) };
 };
 
-/** Whether any High path is one that also waits for Harry's ok. */
+/** Whether any High path is one that needs a deep review (the list is still called harryOk). */
 export const needsHarry = (paths, tiers) => paths.some((p) => any(p, tiers.harryOk) && !any(p, tiers.notHigh));
 
 /**
@@ -141,13 +141,14 @@ export const sectionsOf = (body) => {
 };
 
 /** The Review section names a /code-review run at high effort or more. */
-const DEEP_REVIEW = /\/code-review\s+(high|xhigh|max)\b/i;
+const DEEP_REVIEW = /\/code-review`?\s*(?:at\s+|\(\s*)?`?(high|xhigh|max)\b/i;
 
 /** What a pull request of `tier` still lacks, in words; empty when it may merge. */
 export const problems = ({ tier, body, labels = [], lines = 0, harry = false, bot = false }) => {
   if (tier === 'Low') return [];
-  // Renovate's pull requests have no description: CI is their gate, and the auto-ok log records them.
-  if (bot) return [];
+  // Renovate's pull requests have no description: CI is their gate, and the auto-ok log records them. On the
+  // files that need a deep review, an agent takes the pull request over and writes the description first.
+  if (bot) return harry ? ['a description with a /code-review run at high effort or more: an agent takes this bot pull request over first (REVIEW.md)'] : [];
   const found = sectionsOf(body);
   const out = [];
   for (const name of SECTIONS) {
@@ -311,8 +312,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     if (GITHUB_OUTPUT) appendFileSync(GITHUB_OUTPUT, 'logged=true\n');
     process.exit(0);
   }
-  // Renovate's pull request (dependency updates) has no description to check, so CI is its gate; formerly
-  // asked of it, on his paths; CI and, where it applies, the deploy test are its other gates.
+  // Renovate's pull request (dependency updates) has no description to check: CI and, where it applies, the
+  // deploy test are its gates, except on the files that need a deep review (problems()).
   const missing = PR_BOT === 'true' ? problems({ tier, labels, harry, bot: true }) : problems({ tier, body: PR_BODY, labels, lines, harry });
   const summary = [
     `### Review tier: ${tier}${harry ? ', deep review' : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
