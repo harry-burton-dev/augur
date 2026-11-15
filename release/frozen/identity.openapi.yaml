@@ -1,0 +1,4148 @@
+# Generated from platform/services/identity: its routes' TypeBox schemas and src/contract.ts (ADR 0055).
+# Change those, then run pnpm contracts. CI fails when this file is out of step.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
+openapi: 3.1.0
+info:
+  title: Identity
+  version: 1.33.0
+  description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
+components:
+  schemas:
+    Refusal:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
+        - error
+        - message
+      properties:
+        type:
+          type: string
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
+          type: string
+          description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
+    TeamLevels:
+      type: object
+      required:
+        - levels
+        - max
+      properties:
+        levels:
+          type: array
+          items:
+            type: string
+          description: Default ["Department", "Team"]
+        max:
+          type: integer
+          description: How many levels departments can nest
+    WorkspaceRef:
+      type: object
+      required:
+        - id
+        - kind
+        - name
+        - slug
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+            - personal
+            - team
+            - org
+        name:
+          type: string
+          description: '"You" for your own floor'
+        slug:
+          type: string
+          description: The word in links, /@finance/…; your own floor is always "me"
+        level:
+          type: string
+          description: 'Teams only: the name of the level the team sits at, "Department" right below the org and "Team" below that unless an admin renamed them (GET /admin/levels). The kind stays team.'
+    Floor:
+      allOf:
+        - $ref: "#/components/schemas/WorkspaceRef"
+        - type: object
+          required:
+            - path
+            - role
+            - direct
+          properties:
+            path:
+              type: array
+              items:
+                $ref: "#/components/schemas/WorkspaceRef"
+              description: From the org down to this floor, itself included. Your own floor is alone on its path.
+            role:
+              type: string
+              enum:
+                - member
+                - lead
+              description: lead on your own floor and on teams you lead
+            direct:
+              type: boolean
+              description: False when you're on it only through a team below it
+    MapPerson:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+    FloorReason:
+      type: object
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - own
+            - org
+            - member
+            - inside
+            - leads-above
+            - admin
+        role:
+          type: string
+          enum:
+            - member
+            - lead
+        via:
+          $ref: "#/components/schemas/MapPerson"
+        team:
+          $ref: "#/components/schemas/MapPerson"
+      description: "Why the caller can come in: own (their own floor), org (everyone is), member (with role), inside (on a team inside it, `via`), leads-above (leads `team`, which this sits inside), admin."
+    PersonMap:
+      type: object
+      required:
+        - floors
+        - closed
+        - principals
+      properties:
+        floors:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - kind
+              - name
+              - slug
+              - depth
+              - open
+              - why
+              - people
+              - leads
+            properties:
+              id:
+                type: string
+              kind:
+                type: string
+                enum:
+                  - org
+                  - personal
+                  - team
+              name:
+                type: string
+              slug:
+                type: string
+              parentId:
+                type: string
+              depth:
+                type: integer
+                minimum: 0
+                maximum: 5
+              open:
+                type: boolean
+                description: False for a team the caller sees into without standing on it
+              why:
+                $ref: "#/components/schemas/FloorReason"
+              people:
+                type: integer
+                description: Everyone who can stand on it
+              leads:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MapPerson"
+              members:
+                type: array
+                items:
+                  allOf:
+                    - $ref: "#/components/schemas/MapPerson"
+                    - type: object
+                      required:
+                        - role
+                      properties:
+                        role:
+                          type: string
+                          enum:
+                            - member
+                            - lead
+                description: Who is on a team directly, leads first
+        closed:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+              - depth
+              - leads
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              parentId:
+                type: string
+              depth:
+                type: integer
+                minimum: 1
+                maximum: 5
+              leads:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MapPerson"
+        principals:
+          type: array
+          items:
+            type: string
+    Role:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    Person:
+      type: object
+      required:
+        - id
+        - username
+        - firstName
+        - lastName
+        - enabled
+        - invited
+        - roles
+        - departments
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        enabled:
+          type: boolean
+          description: False when their sign-in is turned off
+        invited:
+          type: boolean
+          description: Still has to choose their own password
+        roles:
+          type: array
+          items:
+            type: string
+        departments:
+          type: array
+          items:
+            type: string
+          description: Department ids
+        createdAt:
+          type: string
+          format: date-time
+        state:
+          type: string
+          enum:
+            - invited
+            - active
+            - disabled
+            - left
+          description: "Where their account is in its life (ADR 0040): invited until their first sign-in, then active; disabled while their sign-in is off; left for good"
+        invite:
+          type: object
+          required:
+            - method
+            - expired
+            - count
+          properties:
+            method:
+              type: string
+              enum:
+                - email
+                - temporary-password
+            sentAt:
+              type: string
+              format: date-time
+            expiresAt:
+              type: string
+              format: date-time
+            expired:
+              type: boolean
+              description: Still invited, and the link has run out
+            count:
+              type: integer
+              minimum: 0
+              description: Invite emails sent
+          description: How they were asked to start, when AUGUR made the account
+        lastSignInAt:
+          type: string
+          format: date-time
+          description: Their last sign-in that AUGUR has seen
+        joinedAt:
+          type: string
+          format: date-time
+          description: Their first sign-in that AUGUR has seen
+        disabledCause:
+          type: string
+          enum:
+            - admin
+            - idle
+            - leaver
+            - outside
+          description: Why their sign-in is off, when AUGUR knows
+        left:
+          type: object
+          required:
+            - at
+            - by
+          properties:
+            at:
+              type: string
+              format: date-time
+            by:
+              type: string
+            handOverTo:
+              type: string
+            deleteAfter:
+              type: string
+              format: date-time
+              description: When their account is deleted, once the organisation’s leaver retention has passed (ADR 0072)
+          description: When they left, who ran the leaver flow, and who took on their work
+        deleting:
+          type: string
+          enum:
+            - redacted
+            - tidied
+            - keycloak-deleted
+          description: Deleting their account has started and got this far; it carries on within five minutes (ADR 0072)
+        source:
+          type: string
+          enum:
+            - local
+            - federated
+          description: "How they sign in: a password here, or the organisation’s sign-in (Entra) since their first sign-in through it"
+        locked:
+          type: boolean
+          description: Locked out for now after repeated wrong passwords; an admin can lift it
+        leaving:
+          type: object
+          required:
+            - on
+          properties:
+            on:
+              type: string
+              format: date
+              description: Their last day, in the organisation’s time zone
+            handOverTo:
+              type: string
+          description: A leaver flow set to run once their last day is over
+        idle:
+          anyOf:
+            - type: object
+              required:
+                - warnsAt
+                - turnsOffAt
+                - warned
+              properties:
+                warnsAt:
+                  type: string
+                  format: date-time
+                  description: When they’re emailed that their sign-in will turn off, unless they sign in first
+                turnsOffAt:
+                  type: string
+                  format: date-time
+                  description: When their sign-in turns off, unless they sign in first
+                warned:
+                  type: boolean
+                  description: The warning day has passed
+              additionalProperties: false
+            - type: object
+              required:
+                - exempt
+              properties:
+                exempt:
+                  type: string
+                  enum:
+                    - off
+                    - no-email
+                    - deployment-admin
+                    - not-tracked
+                  description: "Why their sign-in won’t turn off for being idle: idle accounts are off, email isn’t set up so nobody could be warned, they’re a deployment admin, or AUGUR hasn’t seen them sign in yet"
+              additionalProperties: false
+          description: "For an active person: when an idle sign-in turns off, from their last sign-in and the organisation’s days"
+    NewPerson:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+      properties:
+        username:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9._-]{1,59}$
+          description: Defaults to the part of the email before the @
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          pattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
+        roles:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+        departments:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+        start:
+          type: string
+          enum:
+            - email
+            - temporary-password
+          description: "How they start: an invite email with a link to choose a password (the default when email works), or a one-time password an admin gives them"
+      additionalProperties: false
+    PersonChanges:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: \S
+        email:
+          type: string
+          minLength: 3
+          maxLength: 254
+          pattern: ^[^\s@]+@[^\s@]+\.[^\s@]+$
+        enabled:
+          type: boolean
+        roles:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+        departments:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 50
+          uniqueItems: true
+      additionalProperties: false
+      minProperties: 1
+    Department:
+      type: object
+      required:
+        - id
+        - name
+        - members
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        parentId:
+          type: string
+          description: The department it sits inside; absent at the top
+        members:
+          type: array
+          items:
+            type: string
+          description: Ids of its own members
+    Position:
+      type: object
+      required:
+        - id
+        - department
+        - name
+        - role
+      properties:
+        id:
+          type: string
+        department:
+          type: string
+          description: The department it is on
+        name:
+          type: string
+          description: What the job is called, such as Harbour master
+        role:
+          anyOf:
+            - type: string
+              enum:
+                - member
+            - type: string
+              enum:
+                - lead
+          description: Whether whoever holds it leads the department
+        holder:
+          type: string
+          description: Who holds it now; absent while it is vacant
+    Caller:
+      type: object
+      required:
+        - id
+        - name
+        - departments
+        - roles
+      properties:
+        id:
+          type: string
+          description: Stable id from the sign-in provider
+        name:
+          type: string
+        email:
+          type: string
+        departments:
+          type: array
+          items:
+            type: string
+        roles:
+          type: array
+          items:
+            type: string
+        signedInAt:
+          type: string
+          format: date-time
+          description: When they last entered their password, when the gateway said
+        workspace:
+          type: object
+          required:
+            - id
+            - kind
+            - role
+          properties:
+            id:
+              type: string
+            kind:
+              type: string
+              enum:
+                - personal
+                - team
+                - org
+            role:
+              type: string
+              enum:
+                - member
+                - lead
+          description: The floor the request is for, when it named one (x-workspace-id) and the gateway checked the caller is on it
+    Preferences:
+      type: object
+      properties:
+        reduceMotion:
+          type: boolean
+        density:
+          type: string
+          enum:
+            - comfortable
+            - compact
+        areaTitles:
+          type: boolean
+          description: Area title cards on arriving at a floor or opening an app; on unless false
+        toasts:
+          type: boolean
+          description: Each new notification also said once as a toast; off unless true
+        barStop:
+          anyOf:
+            - type: number
+              enum:
+                - 0
+            - type: number
+              enum:
+                - 1
+            - type: number
+              enum:
+                - 2
+            - type: number
+              enum:
+                - 3
+          description: "Where the app bar rests on the desktop: under the band (0), upper (1, the default), lower (2) or at the bottom (3)"
+        away:
+          type: boolean
+        recent:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 12
+          description: App ids, most recent first
+        muted:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 100
+          uniqueItems: true
+          description: App ids whose notifications land in the stream silently and never on Home
+        quietKinds:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}:[a-z][a-z0-9-]{0,39}$
+          maxItems: 200
+          uniqueItems: true
+          description: Kinds of notification, as "<app>:<kind>", that land in the stream silently and never on Home or as a toast
+        pinned:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+          maxItems: 12
+          uniqueItems: true
+          description: App ids they keep first on Home and in the list of apps, in their order
+        startFloor:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: The floor id AUGUR opens on when an address names none; their own floor without it
+        awayMessage:
+          type: string
+          maxLength: 140
+          description: What their away status says
+        awayUntil:
+          type: string
+          format: date-time
+          description: When being away ends by itself
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: IANA, such as Europe/London; without it the organisation's, then the browser's
+        dateFormat:
+          type: string
+          minLength: 2
+          maxLength: 35
+          pattern: ^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$
+          description: The region whose way of writing dates, times and numbers they want, as a language tag such as en-GB; without it their language’s, then the browser’s (since 1.20)
+        clock:
+          type: string
+          enum:
+            - "12"
+            - "24"
+          description: A 12- or 24-hour clock; without it, as their date format writes it (since 1.20)
+        notifications:
+          type: object
+          properties:
+            email:
+              type: boolean
+              description: An email for each thing that needs them; on unless false
+            digest:
+              type: string
+              enum:
+                - off
+                - daily
+                - weekly
+              description: One email gathering the rest; off unless chosen
+            quietHours:
+              type: object
+              required:
+                - from
+                - to
+              properties:
+                from:
+                  type: string
+                  pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+                to:
+                  type: string
+                  pattern: ^([01][0-9]|2[0-3]):[0-5][0-9]$
+              additionalProperties: false
+              description: "HH:MM in their time zone: no toasts and no email between them"
+          additionalProperties: false
+      additionalProperties: false
+      description: Every field is optional; what's missing takes the shell's default.
+    AccountProfile:
+      type: object
+      required:
+        - username
+        - firstName
+        - lastName
+        - emailVerified
+        - managed
+      properties:
+        username:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        jobTitle:
+          type: string
+        phone:
+          type: string
+        pronouns:
+          type: string
+        picture:
+          type: string
+          description: A link to their picture in AUGUR’s storage
+        locale:
+          type: string
+          description: Their language (the user profile’s locale), which sign-in pages use too
+        managed:
+          type: array
+          items:
+            type: string
+            enum:
+              - firstName
+              - lastName
+              - email
+              - jobTitle
+              - phone
+              - pronouns
+              - picture
+              - locale
+          description: Fields their organisation’s sign-in sets at every sign-in, so they can’t be changed here
+        managedBy:
+          type: string
+          description: That sign-in’s name
+        languages:
+          type: array
+          items:
+            type: string
+          description: The languages this deployment offers, the first its default (since 1.20)
+    AccountProfileChanges:
+      type: object
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        lastName:
+          type: string
+          maxLength: 120
+        jobTitle:
+          type: string
+          maxLength: 120
+        phone:
+          type: string
+          maxLength: 40
+          pattern: ^[+0-9 ()-]*$
+        pronouns:
+          type: string
+          maxLength: 40
+        picture:
+          type: string
+          maxLength: 2048
+          description: A link, or empty to take it away
+        locale:
+          type: string
+          maxLength: 35
+          description: One of `languages`, or empty for the deployment’s default (since 1.20)
+      additionalProperties: false
+      minProperties: 1
+      description: Only what changes. An empty string takes a fact away. The email address changes through the email action.
+    AccountSecurity:
+      type: object
+      required:
+        - password
+        - codeApps
+        - passkeys
+        - recoveryCodes
+        - twoStep
+        - linked
+        - canLink
+        - actions
+        - emails
+      properties:
+        password:
+          type: object
+          required:
+            - set
+          properties:
+            set:
+              type: boolean
+            createdAt:
+              type: string
+              format: date-time
+            managedBy:
+              type: string
+              description: The organisation’s sign-in that holds it, when they have no password here
+        codeApps:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - type
+              - removeAction
+              - removable
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                description: otp, webauthn, webauthn-passwordless or recovery-authn-codes
+              label:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+              removeAction:
+                type: string
+                description: "The kc_action that removes it: delete_credential:<id>"
+              removable:
+                type: boolean
+              reason:
+                type: string
+                description: Why it can’t be removed
+        passkeys:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - type
+              - removeAction
+              - removable
+            properties:
+              id:
+                type: string
+              type:
+                type: string
+                description: otp, webauthn, webauthn-passwordless or recovery-authn-codes
+              label:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+              removeAction:
+                type: string
+                description: "The kc_action that removes it: delete_credential:<id>"
+              removable:
+                type: boolean
+              reason:
+                type: string
+                description: Why it can’t be removed
+        recoveryCodes:
+          anyOf:
+            - type: object
+              required:
+                - id
+                - type
+                - removeAction
+                - removable
+              properties:
+                id:
+                  type: string
+                type:
+                  type: string
+                  description: otp, webauthn, webauthn-passwordless or recovery-authn-codes
+                label:
+                  type: string
+                createdAt:
+                  type: string
+                  format: date-time
+                removeAction:
+                  type: string
+                  description: "The kc_action that removes it: delete_credential:<id>"
+                removable:
+                  type: boolean
+                reason:
+                  type: string
+                  description: Why it can’t be removed
+            - type: "null"
+        twoStep:
+          type: object
+          required:
+            - required
+            - set
+          properties:
+            required:
+              type: boolean
+              description: They must sign in with a second step, as the organisation asks everyone for one
+            set:
+              type: boolean
+              description: They have a code app or a passkey
+            reason:
+              type: string
+        linked:
+          type: array
+          items:
+            type: object
+            required:
+              - provider
+              - name
+            properties:
+              provider:
+                type: string
+              name:
+                type: string
+              username:
+                type: string
+        canLink:
+          type: array
+          items:
+            type: object
+            required:
+              - alias
+              - name
+              - action
+            properties:
+              alias:
+                type: string
+              name:
+                type: string
+              action:
+                type: string
+                description: idp_link:<alias>
+        actions:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - action
+              - available
+            properties:
+              id:
+                type: string
+                enum:
+                  - password
+                  - code-app
+                  - passkey
+                  - recovery-codes
+                  - email
+              action:
+                type: string
+                description: The kc_action that opens Keycloak’s screen for it
+              available:
+                type: boolean
+              reason:
+                type: string
+                description: Why not, and who can change it
+        emails:
+          type: object
+          required:
+            - on
+            - verified
+          properties:
+            on:
+              type: boolean
+              description: This deployment emails people when their password, code app or passkeys change
+            address:
+              type: string
+              description: Where those emails go
+            verified:
+              type: boolean
+              description: They have confirmed that address
+          description: Emails about changes to how they sign in
+      description: "How they sign in. Each change is made on Keycloak’s own screen: sign in again with kc_action set to its action, and come back."
+    AccountSession:
+      type: object
+      required:
+        - id
+        - startedAt
+        - lastSeenAt
+        - clients
+      properties:
+        id:
+          type: string
+          description: The sign-in session, as the sid claim in their tokens names it
+        startedAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+        clients:
+          type: array
+          items:
+            type: string
+          description: What it’s signed in to
+        rememberMe:
+          type: boolean
+    AccountSignIn:
+      type: object
+      required:
+        - time
+        - kind
+        - event
+      properties:
+        time:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          enum:
+            - signed-in
+            - failed
+            - changed
+        event:
+          type: string
+          description: Keycloak’s event type
+        ipAddress:
+          type: string
+        client:
+          type: string
+        error:
+          type: string
+    NoticeSettings:
+      type: object
+      required:
+        - person
+        - language
+        - timeZone
+        - emailOn
+        - digest
+        - quietKinds
+        - muted
+      properties:
+        person:
+          type: string
+        email:
+          type: string
+          description: Their confirmed address; absent when they have none or haven’t confirmed it
+        language:
+          type: string
+          description: Their language, else the deployment’s first
+        timeZone:
+          type: string
+          description: Their time zone, else the organisation’s
+        emailOn:
+          type: boolean
+          description: An email for each thing that needs them
+        digest:
+          type: string
+          enum:
+            - off
+            - daily
+            - weekly
+        quietHours:
+          type: object
+          required:
+            - from
+            - to
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+          description: HH:MM in their time zone
+        quietKinds:
+          type: array
+          items:
+            type: string
+          description: Kinds, as <app>:<kind>, set to Quiet
+        muted:
+          type: array
+          items:
+            type: string
+          description: Apps they muted
+      description: How a person wants their notices emailed
+paths:
+  /workspaces/{id}:
+    get:
+      summary: Where a floor sits (platform services only)
+      description: For AUGUR's own services, signed in as themselves, which store only a floor's id. Archived teams are still found, so old records resolve. "org" in place of an id names the organisation's own floor.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The floor's place in the tree
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - kind
+                  - path
+                  - org
+                properties:
+                  id:
+                    type: string
+                  kind:
+                    type: string
+                    enum:
+                      - org
+                      - personal
+                      - team
+                  path:
+                    type: array
+                    items:
+                      type: string
+                    description: Ids from the floor's root down to it; a personal floor is alone on its path
+                  org:
+                    type: string
+                    description: The org's id, which every rule starts from
+                  archivedAt:
+                    type: string
+                    format: date-time
+                description: The floor's place in the tree
+        "403":
+          description: Not a platform service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /workspaces/{id}/people:
+    get:
+      summary: Everyone who can stand on a team (platform services only)
+      description: Its members and those of the teams below it. Events asks this as each team notice is sent.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Person ids, sorted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - workspace
+                  - people
+                properties:
+                  workspace:
+                    type: string
+                  people:
+                    type: array
+                    items:
+                      type: string
+                description: Person ids, sorted
+        "403":
+          description: Not a platform service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such team
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /people/{id}/principals:
+    get:
+      summary: Who a person stands for (platform services, and apps with people:read)
+      description: "The principals an app matches against who may see something: person:<id>; team:<id> for each team they're on; tree:<id> for each of those teams and every team above it (shared with a team and the teams below it); and org, which everyone is in. Archived teams don't count. Apps keep each answer for 30 seconds (identityPrincipals in the service kit)."
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Their principals
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - person
+                  - principals
+                properties:
+                  person:
+                    type: string
+                  principals:
+                    type: array
+                    items:
+                      type: string
+                description: Their principals
+        "400":
+          description: An id longer than 100 characters
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a platform service, nor an app (or an app acting for a person) with people:read
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token or the app's grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /directory:
+    get:
+      summary: Find people and teams (platform services, and apps with people:read)
+      description: "For sharing: people whose name, email or username has `q` in it, and teams whose name does, each sorted by name, first `limit` of each. With `ids` instead, the people and teams with those ids, so an app can name who it has shared with. People whose sign-in is turned off aren't listed. A signed-in person asks the same at /me/directory (1.15)."
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: q
+          required: false
+        - schema:
+            type: string
+            maxLength: 4000
+          in: query
+          name: ids
+          required: false
+          description: Comma-separated person and team ids
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: People and teams
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                  - teams
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        email:
+                          type: string
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - within
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        within:
+                          type: array
+                          items:
+                            type: string
+                          description: Names of the teams it sits in, from the top down
+                        path:
+                          type: array
+                          items:
+                            type: string
+                          description: The ids of those teams, then its own (1.9)
+                description: People and teams
+        "400":
+          description: A query it does not know, or a value out of range
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a platform service, nor an app (or an app acting for a person) with people:read
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token or the app's grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /members:
+    get:
+      summary: Who an audience reaches (platform services, and apps with people:read)
+      description: "The ids of everyone who stands for at least one of the principals (person:, team:, tree: or org), so an app can tell an audience that something was published to it. People whose sign-in is turned off aren't listed. Since 1.9. Platform services may also name role:<realm role>, such as role:deployment-admin (1.14, ADR 0044); an app that does is refused with 403."
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 4000
+          in: query
+          name: principals
+          required: true
+          description: Comma-separated principals
+      responses:
+        "200":
+          description: Person ids, sorted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: string
+                description: Person ids, sorted
+        "400":
+          description: No principals, or a query it does not know
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a platform service, nor an app (or an app acting for a person) with people:read
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token or the app's grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /relationships:
+    get:
+      summary: Floors, positions and who holds them, for the permissions service (platform services only)
+      description: Everything the permissions service copies into OpenFGA, as it is now. It asks for it whole and writes what changed.
+      responses:
+        "200":
+          description: Who and what the permissions service copies from identity
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - org
+                  - teams
+                  - personal
+                  - positions
+                properties:
+                  org:
+                    type: string
+                    description: The organisation floor
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - parent
+                      properties:
+                        id:
+                          type: string
+                        parent:
+                          type: string
+                          description: The team or the org right above it
+                    description: Live teams, parents first
+                  personal:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - owner
+                      properties:
+                        id:
+                          type: string
+                        owner:
+                          type: string
+                    description: Live personal floors
+                  positions:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - team
+                        - role
+                      properties:
+                        id:
+                          type: string
+                        team:
+                          type: string
+                        role:
+                          anyOf:
+                            - type: string
+                              enum:
+                                - member
+                            - type: string
+                              enum:
+                                - lead
+                        holder:
+                          type: string
+                    description: Positions on live teams; a vacant one has no holder
+                  people:
+                    type: array
+                    items:
+                      type: string
+                    description: Everyone whose sign-in is on. Absent where identity has no directory to ask.
+                  roles:
+                    type: object
+                    required:
+                      - admin
+                      - deployment-admin
+                      - publisher
+                    properties:
+                      admin:
+                        type: array
+                        items:
+                          type: string
+                      deployment-admin:
+                        type: array
+                        items:
+                          type: string
+                      publisher:
+                        type: array
+                        items:
+                          type: string
+                    description: Who holds each of the Keycloak roles AUGUR still checks today, among those whose sign-in is on. Copied until each check moves to the permissions service (ADR 0085). Absent with people.
+                description: Who and what the permissions service copies from identity
+        "403":
+          description: Not one of AUGUR’s own services
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Service sign-in can’t be checked now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/apps/{id}/credential:
+    put:
+      summary: Set an app's sign-in to a given secret (the app runner only)
+      description: The app runner (platform-updater) sets the sign-in of an app it installs to the secret it works out from APP_SECRETS_KEY, making the client if it's missing. Audited as app.credential-set, without the secret.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - secret
+              properties:
+                secret:
+                  type: string
+                  pattern: ^[0-9a-f]{64}$
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app's client
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - clientId
+                properties:
+                  clientId:
+                    type: string
+                    examples:
+                      - app-notes
+                description: The app's client
+        "400":
+          description: Not an app id, one AUGUR keeps for itself, or not 64 hex characters
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The sign-in service refused the change
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now, or identity isn't connected to the sign-in service or can't reach it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take away an app's sign-in (the app runner only)
+      description: Deletes the app's Keycloak client (app-<id>), when it removes the app from the server. One already gone changes nothing. Audited as app.credential-removed.
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Gone, or never there
+        "400":
+          description: Not an app id, or one AUGUR keeps for itself
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The sign-in service refused the change
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now, or identity isn't connected to the sign-in service or can't reach it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Issue an app's own sign-in, or replace its secret (deployment admins only)
+      description: "Makes the app's Keycloak client (app-<id>: client credentials only, 5-minute tokens for the audience platform-services), or gives it a new secret, after which the old one stops working. The secret is in this answer only; the app's service is given it as SERVICE_CLIENT_SECRET. Audited as app.credential-issued, without the secret."
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: id
+          required: true
+      responses:
+        "201":
+          description: The app's client and its secret
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - clientId
+                  - secret
+                properties:
+                  clientId:
+                    type: string
+                    examples:
+                      - app-library
+                  secret:
+                    type: string
+                description: The app's client and its secret
+        "400":
+          description: Not an app id, or one AUGUR keeps for itself
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "502":
+          description: The sign-in service refused the change
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service, or can't reach it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /organisation:
+    get:
+      summary: "The organisation's settings: name, time zone, email sender, idle-account days, logo, sign-in notice, languages, security and retention"
+      description: For anyone signed in, and any service signed in as itself, so every part of AUGUR shows the same name and times (ADR 0042).
+      responses:
+        "200":
+          description: The organisation's settings (ADR 0042)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - name
+                  - timeZone
+                  - sender
+                  - idle
+                  - notice
+                  - languages
+                  - defaultLanguage
+                  - security
+                properties:
+                  name:
+                    type: string
+                    description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"
+                  timeZone:
+                    type: string
+                    description: An IANA time zone, e.g. Europe/London. UTC until an admin chooses one
+                  sender:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 100
+                        pattern: ^[^\r\n]*$
+                        description: Who email says it is from, e.g. the organisation's name
+                      address:
+                        type: string
+                        format: email
+                        maxLength: 254
+                        description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
+                    additionalProperties: false
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
+                  logo:
+                    type: object
+                    required:
+                      - url
+                      - sha256
+                      - width
+                      - height
+                    properties:
+                      url:
+                        type: string
+                        description: "Where anyone, signed in or not, fetches it: changes when the logo does"
+                      sha256:
+                        type: string
+                      width:
+                        type: integer
+                      height:
+                        type: integer
+                    additionalProperties: false
+                    description: The organisation’s logo, a PNG
+                  notice:
+                    type: object
+                    required:
+                      - on
+                      - version
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether people read and accept it before they use AUGUR
+                      title:
+                        type: string
+                        maxLength: 80
+                      text:
+                        type: string
+                        maxLength: 5000
+                        description: Plain text; a blank line between paragraphs
+                      version:
+                        type: integer
+                        description: Goes up each time everyone is asked to accept it again
+                      changedAt:
+                        type: string
+                        format: date-time
+                      changedBy:
+                        type: string
+                    additionalProperties: false
+                    description: The sign-in notice, shown as Keycloak’s Terms and Conditions step. Off until an admin turns it on
+                  languages:
+                    type: array
+                    items:
+                      type: string
+                    description: "The languages offered at sign-in and in Account: REALM_LANGUAGES until an admin chooses"
+                  defaultLanguage:
+                    type: string
+                    description: One of `languages`, for anyone who hasn’t chosen
+                  security:
+                    type: object
+                    required:
+                      - twoStepForAll
+                      - leaverRetentionDays
+                      - activityRetentionDays
+                    properties:
+                      twoStepForAll:
+                        type: boolean
+                        description: Everyone, not only the admin roles, signs in with a code app or a passkey
+                      leaverRetentionDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 3650
+                        description: Days a leaver’s account is kept after they leave
+                      activityRetentionDays:
+                        type: integer
+                        minimum: 90
+                        maximum: 3650
+                        description: Days Activity keeps its entries
+                    additionalProperties: false
+                    description: Changed only by a deployment admin who just entered their password. Two steps for admins only, 90 and 365 days, until one changes them
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: When an admin last changed them
+                  updatedBy:
+                    type: string
+                    description: Who last changed them
+                description: The organisation's settings (ADR 0042)
+        "401":
+          description: Not signed in, and not a service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Services' sign-ins can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /organisation/policy:
+    get:
+      summary: How long things are kept, for AUGUR’s own services
+      description: Activity’s retention for the events service, and the leaver and idle-account rules for whatever applies them.
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - activityRetentionDays
+                  - leaverRetentionDays
+                  - idle
+                properties:
+                  activityRetentionDays:
+                    type: integer
+                  leaverRetentionDays:
+                    type: integer
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
+        "403":
+          description: Not one of AUGUR’s own services
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Services' sign-ins can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation/time-zones:
+    get:
+      summary: The time zones an admin can choose (admins only)
+      responses:
+        "200":
+          description: IANA names, UTC first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: IANA names, UTC first
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation/languages:
+    get:
+      summary: The languages an admin can offer (admins only)
+      description: The languages the sign-in service has words in. The realm job leaves out any the running one lacks.
+      responses:
+        "200":
+          description: Language tags, such as en or pt-BR
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: Language tags, such as en or pt-BR
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation:
+    patch:
+      summary: Change the organisation's settings, audited as organisation.changed (admins only; security and retention need a deployment admin)
+      description: Only the fields sent change. The name renames the organisation’s floor, which everyone sees. `security` needs the deployment-admin role and a password entered in the last 10 minutes, or it answers 401 sign_in_again. `notice.askAgain` asks everyone to accept the notice at their next sign-in, audited as organisation.notice-asked. The notice, languages and two steps for everyone reach the sign-in service when AUGUR next starts or upgrades.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  pattern: ^[^\r\n/]*[^\s/][^\r\n/]*$
+                  description: No slash and not only spaces
+                timeZone:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                  description: An IANA time zone; GET /admin/organisation/time-zones lists them
+                sender:
+                  type: object
+                  required:
+                    - name
+                    - address
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                      maxLength: 100
+                      pattern: ^[^\r\n]*\S[^\r\n]*$
+                    address:
+                      anyOf:
+                        - type: string
+                          format: email
+                          maxLength: 254
+                        - type: "null"
+                      description: null takes the address away
+                  additionalProperties: false
+                idle:
+                  type: object
+                  properties:
+                    on:
+                      type: boolean
+                      description: Whether accounts nobody signs in to are warned and then turned off
+                    warningDays:
+                      type: integer
+                      minimum: 7
+                      maximum: 723
+                      description: Days without a sign-in before the warning email
+                    turnOffDays:
+                      type: integer
+                      minimum: 14
+                      maximum: 730
+                      description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                  additionalProperties: false
+                  minProperties: 1
+                  description: Only what changes; the warning stays at least a week before the turn-off
+                notice:
+                  type: object
+                  properties:
+                    on:
+                      type: boolean
+                    title:
+                      type: string
+                      maxLength: 80
+                      pattern: ^[^\r\n]*$
+                    text:
+                      type: string
+                      maxLength: 5000
+                    askAgain:
+                      type: boolean
+                      description: Ask everyone to accept it again at their next sign-in
+                  additionalProperties: false
+                  minProperties: 1
+                languages:
+                  type: array
+                  items:
+                    type: string
+                    maxLength: 35
+                  minItems: 1
+                  maxItems: 40
+                  uniqueItems: true
+                  description: GET /admin/organisation/languages lists the ones there are
+                defaultLanguage:
+                  type: string
+                  maxLength: 35
+                security:
+                  type: object
+                  properties:
+                    twoStepForAll:
+                      type: boolean
+                      description: Everyone, not only the admin roles, signs in with a code app or a passkey
+                    leaverRetentionDays:
+                      type: integer
+                      minimum: 7
+                      maximum: 3650
+                      description: Days a leaver’s account is kept after they leave
+                    activityRetentionDays:
+                      type: integer
+                      minimum: 90
+                      maximum: 3650
+                      description: Days Activity keeps its entries
+                  additionalProperties: false
+                  minProperties: 1
+                  description: Only a deployment admin who just entered their password
+              additionalProperties: false
+              minProperties: 1
+              description: Only what changes
+        description: Only what changes
+      responses:
+        "200":
+          description: The settings now
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - name
+                  - timeZone
+                  - sender
+                  - idle
+                  - notice
+                  - languages
+                  - defaultLanguage
+                  - security
+                properties:
+                  name:
+                    type: string
+                    description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"
+                  timeZone:
+                    type: string
+                    description: An IANA time zone, e.g. Europe/London. UTC until an admin chooses one
+                  sender:
+                    type: object
+                    required:
+                      - name
+                    properties:
+                      name:
+                        type: string
+                        minLength: 1
+                        maxLength: 100
+                        pattern: ^[^\r\n]*$
+                        description: Who email says it is from, e.g. the organisation's name
+                      address:
+                        type: string
+                        format: email
+                        maxLength: 254
+                        description: The address email is sent from. Absent until an admin sets one; mail is not sent from AUGUR without it
+                    additionalProperties: false
+                  idle:
+                    type: object
+                    required:
+                      - on
+                      - warningDays
+                      - turnOffDays
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether accounts nobody signs in to are warned and then turned off
+                      warningDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 723
+                        description: Days without a sign-in before the warning email
+                      turnOffDays:
+                        type: integer
+                        minimum: 14
+                        maximum: 730
+                        description: "Days without a sign-in before their sign-in turns off: at least 7 after the warning"
+                    additionalProperties: false
+                    description: Idle accounts. 60 and 90 days, on, until an admin changes them
+                  logo:
+                    type: object
+                    required:
+                      - url
+                      - sha256
+                      - width
+                      - height
+                    properties:
+                      url:
+                        type: string
+                        description: "Where anyone, signed in or not, fetches it: changes when the logo does"
+                      sha256:
+                        type: string
+                      width:
+                        type: integer
+                      height:
+                        type: integer
+                    additionalProperties: false
+                    description: The organisation’s logo, a PNG
+                  notice:
+                    type: object
+                    required:
+                      - on
+                      - version
+                    properties:
+                      on:
+                        type: boolean
+                        description: Whether people read and accept it before they use AUGUR
+                      title:
+                        type: string
+                        maxLength: 80
+                      text:
+                        type: string
+                        maxLength: 5000
+                        description: Plain text; a blank line between paragraphs
+                      version:
+                        type: integer
+                        description: Goes up each time everyone is asked to accept it again
+                      changedAt:
+                        type: string
+                        format: date-time
+                      changedBy:
+                        type: string
+                    additionalProperties: false
+                    description: The sign-in notice, shown as Keycloak’s Terms and Conditions step. Off until an admin turns it on
+                  languages:
+                    type: array
+                    items:
+                      type: string
+                    description: "The languages offered at sign-in and in Account: REALM_LANGUAGES until an admin chooses"
+                  defaultLanguage:
+                    type: string
+                    description: One of `languages`, for anyone who hasn’t chosen
+                  security:
+                    type: object
+                    required:
+                      - twoStepForAll
+                      - leaverRetentionDays
+                      - activityRetentionDays
+                    properties:
+                      twoStepForAll:
+                        type: boolean
+                        description: Everyone, not only the admin roles, signs in with a code app or a passkey
+                      leaverRetentionDays:
+                        type: integer
+                        minimum: 7
+                        maximum: 3650
+                        description: Days a leaver’s account is kept after they leave
+                      activityRetentionDays:
+                        type: integer
+                        minimum: 90
+                        maximum: 3650
+                        description: Days Activity keeps its entries
+                    additionalProperties: false
+                    description: Changed only by a deployment admin who just entered their password. Two steps for admins only, 90 and 365 days, until one changes them
+                  updatedAt:
+                    type: string
+                    format: date-time
+                    description: When an admin last changed them
+                  updatedBy:
+                    type: string
+                    description: Who last changed them
+                description: The settings now
+        "400":
+          description: A name with a slash or only spaces, an unknown time zone or language, a sender that is not one line or not an email address, idle or retention days out of bounds, or a notice turned on without a title and text
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller, or sign_in_again for security
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or security from someone who isn’t a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Asked everyone again, but the sign-in service can’t be reached
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/organisation/logo:
+    put:
+      summary: Set the organisation's logo, a PNG (admins only), audited as organisation.changed
+      description: A PNG of at most 256 KB and 1024 px on each side, at least 32 px tall. Sent as image/png.
+      responses:
+        "200":
+          description: The organisation’s logo, a PNG
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - url
+                  - sha256
+                  - width
+                  - height
+                properties:
+                  url:
+                    type: string
+                    description: "Where anyone, signed in or not, fetches it: changes when the logo does"
+                  sha256:
+                    type: string
+                  width:
+                    type: integer
+                  height:
+                    type: integer
+                additionalProperties: false
+                description: The organisation’s logo, a PNG
+        "400":
+          description: Not a PNG, or the wrong size
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "413":
+          description: Larger than the limit
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "415":
+          description: Not sent as image/png
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take the organisation's logo away (admins only)
+      responses:
+        "204":
+          description: Default Response
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notice-settings:
+    get:
+      summary: How people want their notices emailed (the events service only)
+      description: "For each person named in ids, or everyone who chose the digest given: their confirmed address, language, time zone (theirs, else the organisation’s) and choices in Account → Notifications. A person without an account is left out."
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: ids
+          required: false
+          description: Comma-separated person ids, at most 200
+        - schema:
+            type: string
+            enum:
+              - daily
+              - weekly
+          in: query
+          name: digest
+          required: false
+      responses:
+        "200":
+          description: Their settings
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                properties:
+                  people:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/NoticeSettings"
+                description: Their settings
+        "400":
+          description: Neither ids nor digest, or too many ids
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the events service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's token can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me:
+    get:
+      summary: The signed-in caller
+      responses:
+        "200":
+          description: Who is calling, with their departments and roles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Caller"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/preferences:
+    get:
+      summary: What the caller has chosen for AUGUR
+      responses:
+        "200":
+          description: Their preferences; empty when they have chosen nothing
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preferences"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    put:
+      summary: Replace the caller's preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Preferences"
+      responses:
+        "200":
+          description: Saved, as sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Preferences"
+        "400":
+          description: A field it doesn't know, or a value out of range
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/profile:
+    get:
+      summary: The caller's profile
+      description: Who they are, from the sign-in service’s user profile (ADR 0039), with the facts their organisation’s sign-in sets marked.
+      responses:
+        "200":
+          description: Their profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountProfile"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    patch:
+      summary: Change the caller's profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountProfileChanges"
+      responses:
+        "200":
+          description: Their profile, changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountProfile"
+        "400":
+          description: A value the user profile refuses
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A fact their organisation’s sign-in sets
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/security:
+    get:
+      summary: How the caller signs in
+      description: Their password, code apps, passkeys and recovery codes, whether they must sign in with a second step, the organisation sign-ins their account is linked to, and the kc_action that changes each.
+      responses:
+        "200":
+          description: How they sign in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSecurity"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/sessions:
+    get:
+      summary: Where the caller is signed in
+      description: Most recently used first. The shell marks its own by the sid claim in its token.
+      responses:
+        "200":
+          description: Their sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sessions
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AccountSession"
+                description: Their sessions
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Sign the caller out everywhere
+      description: Every session, or every one but `keep` (the one they’re using) to sign out everywhere else.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+          in: query
+          name: keep
+          required: false
+          description: A session to leave signed in
+      responses:
+        "200":
+          description: How many sessions ended
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - ended
+                properties:
+                  ended:
+                    type: integer
+                description: How many sessions ended
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/sessions/{id}:
+    delete:
+      summary: Sign the caller out of one session
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Signed out there
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: Not one of their sessions, or it has ended
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/sign-ins:
+    get:
+      summary: The caller's recent sign-ins
+      description: Sign-ins, failed sign-ins and changes to how they sign in, newest first, for as long as the sign-in service keeps them.
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          in: query
+          name: max
+          required: false
+      responses:
+        "200":
+          description: Newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - signIns
+                properties:
+                  signIns:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AccountSignIn"
+                description: Newest first
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service isn’t connected, or can’t be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/leave:
+    get:
+      summary: Whether the caller has asked to leave
+      responses:
+        "200":
+          description: Their open request to leave; empty when they have none
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestedAt:
+                    type: string
+                    format: date-time
+                  note:
+                    type: string
+                description: Their open request to leave; empty when they have none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Ask to leave
+      description: "People don’t delete their own account (ADR 0040): they ask, and an admin’s leaver flow turns the account off, ends their sessions and hands on what they own. Admins are told, and it is recorded in Activity. Asking again keeps the first time and replaces the note."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+                  maxLength: 500
+                  description: Anything the admin should know
+              additionalProperties: false
+      responses:
+        "201":
+          description: Their open request to leave; empty when they have none
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requestedAt:
+                    type: string
+                    format: date-time
+                  note:
+                    type: string
+                description: Their open request to leave; empty when they have none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take back a request to leave
+      responses:
+        "204":
+          description: Taken back, or there was none
+          content:
+            application/json:
+              schema:
+                description: Taken back, or there was none
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/data:
+    get:
+      summary: A copy of everything AUGUR keeps about the caller
+      description: "One JSON document (ADR 0040): who they are, how and where they sign in (never a secret), what they have chosen, whether they asked to leave, and what each other service keeps about them. A part that can’t be read is named in `missing`, with why. Recorded in Activity."
+      responses:
+        "200":
+          description: Their data, as a download
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: {}
+                additionalProperties: true
+                description: Their data, as a download
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/workspaces:
+    get:
+      summary: Every floor the caller can stand on
+      description: Their own floor (made the first time they ask), the org, each team they are on, and every team above those. Being on a team doesn't put you on the teams below it. Ordered own floor, org, then teams in tree order.
+      responses:
+        "200":
+          description: The caller's floors
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - workspaces
+                properties:
+                  workspaces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Floor"
+                description: The caller's floors
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/map:
+    get:
+      summary: The caller's map of the org
+      description: "For Auspex. Every floor the caller can stand on, with who is there and why they can come in; the teams inside ones they lead (and, for admins, every team) to see into without standing on; and every other team as a closed door that names only itself, where it sits and its leads, so the caller knows who can add them. Nothing inside a closed team is said: not its people, how many, or what it uses. Floors are the org, then teams depth first, then the caller's own floor."
+      responses:
+        "200":
+          description: The caller's map
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PersonMap"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/directory:
+    get:
+      summary: Find people and teams to share with
+      description: "What the people picker asks as someone types (searchPrincipals in the SDK, since 1.15): people whose name, email or username has `q` in it, and every team whose name does, each sorted by name, first `limit` of each. With `ids` instead, the people and teams with those ids, to name who something is shared with. Teams the caller isn't on are found too, as on their map: a team names only itself and where it sits. People whose sign-in is turned off aren't listed."
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: q
+          required: false
+        - schema:
+            type: string
+            maxLength: 4000
+          in: query
+          name: ids
+          required: false
+          description: Comma-separated person and team ids
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: People and teams
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - people
+                  - teams
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        email:
+                          type: string
+                  teams:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - within
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        within:
+                          type: array
+                          items:
+                            type: string
+                          description: Names of the teams it sits in, from the top down
+                        path:
+                          type: array
+                          items:
+                            type: string
+                          description: The ids of those teams, then its own (1.9)
+                description: People and teams
+        "400":
+          description: A query it does not know, or a value out of range
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/workspaces/{id}/rollup:
+    get:
+      summary: A floor and every team below it the caller is on
+      description: What an app rolls up when someone asks to include sub-teams. Access flows down only, so a team below appears only if the caller is on it.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The floor first, then the teams below it in tree order
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - workspace
+                  - workspaces
+                properties:
+                  workspace:
+                    type: string
+                  workspaces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Floor"
+                description: The floor first, then the teams below it in tree order
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The caller isn't on that floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/roles:
+    get:
+      summary: The roles an admin can give people
+      responses:
+        "200":
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+                description: Roles
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people:
+    get:
+      summary: Everyone in the directory
+      responses:
+        "200":
+          description: People
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Person"
+                description: People
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: "Add someone: an invite email, or a one-time password they replace at first sign-in"
+      description: "`start` is `email` by default when the sign-in service can send email, else `temporary-password`. An invite emails a link that works for 72 hours to confirm their email and choose a password. If the account is made but the email can’t be sent, the answer is still 201, with `invite.error`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewPerson"
+      responses:
+        "201":
+          description: Added. A one-time password is returned once and kept nowhere it can be read again.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - person
+                  - invite
+                properties:
+                  person:
+                    $ref: "#/components/schemas/Person"
+                  invite:
+                    type: object
+                    required:
+                      - method
+                    properties:
+                      method:
+                        type: string
+                        enum:
+                          - email
+                          - temporary-password
+                      sentTo:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
+                        description: "The account was made but the email couldn’t be sent: resend it, or give a one-time password"
+                    description: How they start
+                  temporaryPassword:
+                    type: string
+                description: Added. A one-time password is returned once and kept nowhere it can be read again.
+        "400":
+          description: A field is missing or wrong, a role or department doesn't exist, or an invite was asked for and email isn't set up
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The username or email is taken
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}:
+    get:
+      summary: One person
+      description: "With `lockout` as the sign-in service has it now: whether wrong passwords have locked them out, and how many in a row."
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The person
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Person"
+                  - type: object
+                    properties:
+                      lockout:
+                        type: object
+                        required:
+                          - locked
+                          - failures
+                        properties:
+                          locked:
+                            type: boolean
+                          failures:
+                            type: integer
+                            minimum: 0
+                          lastFailureAt:
+                            type: string
+                            format: date-time
+                        description: Left out when the sign-in service couldn’t say
+                description: The person
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    patch:
+      summary: Change someone's name, email, roles, departments or sign-in
+      description: Only the fields sent change. roles and departments replace the whole list. An admin can't turn off their own sign-in or remove their own admin role (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PersonChanges"
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The person as they now are
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "400":
+          description: A field is wrong, or a role or department doesn't exist
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The change would lock the caller out, the email is taken, or they have left and the change would turn their sign-in back on
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Delete a leaver’s account now, without waiting for the retention period (deployment admins only)
+      description: "Only for someone who has left, by a deployment admin who entered their password in the last 10 minutes (401 sign_in_again otherwise). Runs the same steps as deletion after retention (ADR 0072): Activity loses their personal values, identity forgets their preferences and teams, Keycloak deletes the account, then `person.deleted` is recorded, which followers hear as `platform.person.deleted`. It can’t be undone."
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Deleted; only their id is kept, in Activity
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deleted
+                properties:
+                  deleted:
+                    type: boolean
+                    enum:
+                      - true
+                description: Deleted; only their id is kept, in Activity
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: They haven’t left
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Activity couldn’t be reached, so the deletion isn’t finished; identity carries it on within five minutes
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/lifecycle:
+    get:
+      summary: What the account lifecycle can do on this deployment
+      description: "For Admin to show what is unavailable and why: `email` is whether the sign-in service can send invites. `today` is the date in the organisation’s time zone, the earliest last day a leaver can have."
+      responses:
+        "200":
+          description: What works
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - email
+                properties:
+                  email:
+                    type: boolean
+                  today:
+                    type: string
+                    format: date
+                  lastDayAhead:
+                    type: integer
+                    description: How many days ahead a last day can be
+                description: What works
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/invite:
+    post:
+      summary: Send someone a new invite email
+      description: A new link that works for 72 hours; the old one stops working. Recorded as `person.invite-resent`.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - invite
+                properties:
+                  invite:
+                    type: object
+                    required:
+                      - method
+                    properties:
+                      method:
+                        type: string
+                        enum:
+                          - email
+                          - temporary-password
+                      sentTo:
+                        type: string
+                      expiresAt:
+                        type: string
+                        format: date-time
+                      error:
+                        type: string
+                        description: "The account was made but the email couldn’t be sent: resend it, or give a one-time password"
+                    description: How they start
+                description: Sent
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: They have already set up, or they have left
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Email isn't set up, or the sign-in service couldn't send it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/leave-requests:
+    get:
+      summary: Everyone who has asked to leave, oldest first
+      description: People ask in their account (POST /me/leave); the leaver flow closes the request.
+      responses:
+        "200":
+          description: Open requests to leave
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - person
+                    - requestedAt
+                  properties:
+                    person:
+                      type: string
+                    requestedAt:
+                      type: string
+                      format: date-time
+                    note:
+                      type: string
+                description: Open requests to leave
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/leave:
+    post:
+      summary: "Someone leaves the organisation: the leaver flow, now or after their last day"
+      description: "Turns off their sign-in, signs them out everywhere (sessions and offline tokens) and records `person.left`, which followers hear as `platform.person.left` so apps hand on or archive what the person owns, to `handOverTo` when it is given. Their teams, roles and data stay as they were until the deployment's retention period ends. Closes their request to leave, if they made one. With `lastDay` (today to 90 days ahead, in the organisation's time zone) nothing happens yet: the flow is set to run once that day is over (`leaving` on the person), recorded as `person.leave-scheduled`, and can be cancelled until then. Sending it again moves the day."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                handOverTo:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                  description: "Who takes on what they own: someone whose sign-in is on"
+                note:
+                  type: string
+                  maxLength: 500
+                  description: Why, or what was agreed, for Activity
+                lastDay:
+                  type: string
+                  format: date
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                  description: Their last day; the flow runs once it is over
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The person, now turned off, or with `leaving` set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "400":
+          description: The person to hand over to is the leaver, is turned off, or isn’t in the directory, or the last day is in the past or too far ahead
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The caller is the leaver, or they have already left
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Activity can’t be reached, so the flow isn’t finished; identity carries it on within five minutes
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Cancel a leaver flow set for after someone’s last day
+      description: Recorded as `person.leave-cancelled`. Nothing had happened to them yet, so nothing is undone.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The person, no longer leaving
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Person"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: No leaver flow was set for them, or it has already run
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/unlock:
+    post:
+      summary: Lift a lockout for wrong passwords
+      description: They can sign in again at once. Recorded as `person.unlocked`.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Unlocked
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the deployment-admin role or a deployment admin’s sign-in is touched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: They aren’t locked out
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/people/{id}/password:
+    post:
+      summary: Give someone a new one-time password
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The new password, returned once
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - temporaryPassword
+                properties:
+                  temporaryPassword:
+                    type: string
+                description: The new password, returned once
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin, or not a deployment admin when the person is one
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/departments:
+    get:
+      summary: Every department, nested ones included
+      responses:
+        "200":
+          description: Departments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Department"
+                description: Departments
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Add a department, at the top or inside another
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 60
+                  pattern: ^[^/]*[^/\s][^/]*$
+                  description: No /
+                parentId:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+              additionalProperties: false
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+        "400":
+          description: The name is empty or has a /, the parent doesn't exist, or it would sit more than 5 deep
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A department beside it already has that name
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/levels:
+    get:
+      summary: What each level of department is called, from the top
+      responses:
+        "200":
+          description: The names, the first for departments right below the org; a level deeper than the names takes the last one
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamLevels"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    put:
+      summary: Rename the levels, audited as levels.renamed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - levels
+              properties:
+                levels:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                  minItems: 1
+                  maxItems: 5
+              additionalProperties: false
+      responses:
+        "200":
+          description: Renamed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamLevels"
+        "400":
+          description: No names, more than 5, an empty or too-long name, or two levels with the same name
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/departments/{id}:
+    patch:
+      summary: Rename a department
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 60
+                  pattern: ^[^/]*[^/\s][^/]*$
+                  description: No /
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Renamed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Department"
+        "400":
+          description: The name is empty or has a /
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such department
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A department beside it already has that name
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/departments/{id}/members/{person}:
+    put:
+      summary: Put someone in a department
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: person
+          required: true
+      responses:
+        "204":
+          description: They're in it
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person or department
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take someone out of a department
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: person
+          required: true
+      responses:
+        "204":
+          description: They're out of it
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such person or department
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/departments/{id}/positions:
+    get:
+      summary: The positions on a department, each with who holds it now
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Positions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Position"
+                description: Positions
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Add a vacant position to a department, audited as position.created
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - role
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  description: What the job is called
+                role:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - member
+                    - type: string
+                      enum:
+                        - lead
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "201":
+          description: Added, vacant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "400":
+          description: The name is empty or too long
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such department
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/positions/{id}:
+    patch:
+      summary: Rename a position, or change whether it leads its department, audited as position.changed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  description: What the job is called
+                role:
+                  anyOf:
+                    - type: string
+                      enum:
+                        - member
+                    - type: string
+                      enum:
+                        - lead
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "400":
+          description: The name is empty or too long
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such position
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take a position away, audited as position.retired; whoever holds it stops
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Taken away
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /admin/positions/{id}/holder:
+    put:
+      summary: Hand a position to someone, or leave it vacant, audited as position.handed-over
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - person
+              properties:
+                person:
+                  anyOf:
+                    - type: string
+                      minLength: 1
+                      maxLength: 100
+                    - type: "null"
+                  description: Who holds it from now; null leaves it vacant
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Handed over
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Position"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such position or person
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Identity isn't connected to the sign-in service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+servers:
+  - url: /v1

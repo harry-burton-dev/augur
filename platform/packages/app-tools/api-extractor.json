@@ -1,0 +1,21 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  // What an app's repository builds against: its public surface, written to etc/ and checked in CI (ADR 0052, scripts/check-api.mjs).
+  "projectFolder": ".",
+  "mainEntryPointFilePath": "<projectFolder>/src/release.d.ts",
+  "compiler": { "overrideTsconfig": { "compilerOptions": { "module": "nodenext", "moduleResolution": "nodenext", "target": "es2022", "skipLibCheck": true, "types": ["node"], "typeRoots": ["../service-kit/node_modules/@types"], "strict": true }, "files": ["src/release.d.ts"] } },
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "app-tools",
+    "reportFolder": "<projectFolder>/etc/",
+    "reportTempFolder": "<projectFolder>/dist/api/"
+  },
+  "docModel": { "enabled": false },
+  "dtsRollup": { "enabled": false },
+  "tsdocMetadata": { "enabled": false },
+  "messages": {
+    "extractorMessageReporting": {
+      "ae-missing-release-tag": { "logLevel": "none" }
+    }
+  }
+}

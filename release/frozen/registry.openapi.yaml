@@ -1,0 +1,5455 @@
+# Generated from platform/services/registry: its routes' TypeBox schemas and src/contract.ts (ADR 0055).
+# Change those, then run pnpm contracts. CI fails when this file is out of step.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
+openapi: 3.1.0
+info:
+  title: Registry
+  version: 1.48.0
+  description: Catalogue of apps and micro frontends; serves the shell manifest.
+components:
+  schemas:
+    Refusal:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
+        - error
+        - message
+      properties:
+        type:
+          type: string
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
+          type: string
+          description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
+    AppInstalls:
+      type: object
+      required:
+        - feed
+        - sdkVersion
+        - installed
+        - available
+      properties:
+        feed:
+          enum:
+            - on
+            - off
+        checkedAt:
+          type: string
+          format: date-time
+        problem:
+          type: string
+          description: Why the app feed couldn't be read last time
+        runnerSeenAt:
+          type: string
+          format: date-time
+          description: When the app runner last asked for work; missing when it hasn't since the registry started
+        sdkVersion:
+          type: string
+        ring:
+          $ref: "#/components/schemas/ServerRing"
+        previewsAllowed:
+          type: boolean
+          description: "Whether pull requests' builds run beside apps for their developers: always on a preview server, with ALLOW_PR_PREVIEWS=on on a production one"
+        channelNote:
+          type: string
+          description: Why apps here follow stable only, on a production server
+        defaultApps:
+          type: array
+          items:
+            type: object
+            required:
+              - app
+              - state
+            properties:
+              app:
+                type: string
+              state:
+                anyOf:
+                  - type: string
+                    enum:
+                      - installed
+                  - type: string
+                    enum:
+                      - asked
+                  - type: string
+                    enum:
+                      - waiting
+                description: installed; asked for once (its job says how that went); or waiting, and why
+              problem:
+                type: string
+                description: Why it isn’t installed yet
+          description: The deployment’s default apps (DEFAULT_APPS, spec 9.7), installed from the feed on their first chance
+        dataGraceDays:
+          type: integer
+          description: How long an app removed from the server keeps its data, in days (APP_DATA_GRACE_DAYS)
+        removed:
+          type: array
+          items:
+            type: object
+            required:
+              - app
+              - name
+              - removedAt
+              - deleteAt
+            properties:
+              app:
+                type: string
+              name:
+                type: string
+              removedAt:
+                type: string
+                format: date-time
+              deleteAt:
+                type: string
+                format: date-time
+                description: When its data goes, unless it is installed again first
+              failures:
+                type: integer
+                description: Tries to delete it that failed in a row; each waits longer, up to a day
+              problem:
+                type: string
+                description: Why the last try failed
+          description: Apps removed from the server whose data is still kept
+        installed:
+          type: array
+          items:
+            type: object
+            required:
+              - app
+              - name
+              - version
+              - installedAt
+              - channel
+              - policy
+            properties:
+              app:
+                type: string
+              name:
+                type: string
+              version:
+                type: string
+              installedAt:
+                type: string
+                format: date-time
+              default:
+                type: boolean
+                description: "One of the deployment’s default apps (DEFAULT_APPS): its asks were agreed by the deployment, and it can’t be removed while named"
+              channel:
+                enum:
+                  - stable
+                  - beta
+                  - dev
+              policy:
+                enum:
+                  - automatic
+                  - ask
+                  - hold
+              update:
+                type: object
+                required:
+                  - version
+                  - channel
+                  - needs
+                properties:
+                  version:
+                    type: string
+                  channel:
+                    enum:
+                      - stable
+                      - beta
+                      - dev
+                  notesUrl:
+                    type: string
+                  needs:
+                    type: array
+                    items:
+                      type: string
+                    description: Why it waits for an admin; empty when it can install by itself
+                  review:
+                    type: object
+                    required:
+                      - kinds
+                      - settings
+                    properties:
+                      kinds:
+                        type: object
+                        description: Each part’s kind (service, worker or job), by part name
+                        additionalProperties:
+                          type: string
+                      settings:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - id
+                            - label
+                            - type
+                            - required
+                          properties:
+                            id:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              description: string, number, boolean, enum or secret
+                            required:
+                              type: boolean
+                            detail:
+                              type: string
+                            unit:
+                              type: string
+                            min:
+                              type: number
+                            max:
+                              type: number
+                            options:
+                              type: array
+                              items:
+                                type: string
+                            default:
+                              anyOf:
+                                - type: string
+                                - type: number
+                                - type: boolean
+                              description: What it is until an admin gives it a value; a secret has none
+                        description: Each setting it offers admins
+                    description: What the review shows beyond the asks (spec 5.6, 9.4)
+                  changes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Change"
+                description: The newest release on its channel, when newer than what runs
+              job:
+                $ref: "#/components/schemas/AppJob"
+              internet:
+                type: object
+                required:
+                  - allowed
+                  - why
+                  - hosts
+                properties:
+                  allowed:
+                    type: boolean
+                  why:
+                    type: array
+                    items:
+                      type: string
+                    description: What each part that asks says it fetches
+                  hosts:
+                    type: array
+                    items:
+                      type: string
+                    description: The hosts its parts name; any host is reachable once allowed
+                  allowedBy:
+                    type: string
+                  allowedAt:
+                    type: string
+                    format: date-time
+                description: "For a version that asks for augur-outbound: whether a deployment admin let it reach the internet (off until one does)"
+              settings:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - id
+                    - label
+                    - type
+                    - required
+                    - set
+                  properties:
+                    id:
+                      type: string
+                    label:
+                      type: string
+                    type:
+                      enum:
+                        - string
+                        - number
+                        - boolean
+                        - enum
+                        - secret
+                    detail:
+                      type: string
+                    unit:
+                      type: string
+                    min:
+                      type: number
+                    max:
+                      type: number
+                    options:
+                      type: array
+                      items:
+                        type: string
+                    default:
+                      anyOf:
+                        - type: string
+                        - type: number
+                        - type: boolean
+                    required:
+                      type: boolean
+                      description: The app doesn’t start until it has a value
+                    set:
+                      type: boolean
+                      description: Whether an admin gave it a value; otherwise its default is in force
+                    value:
+                      anyOf:
+                        - anyOf:
+                            - type: string
+                            - type: number
+                            - type: boolean
+                      description: The admin’s value; never given for a secret
+                    setBy:
+                      type: string
+                    setAt:
+                      type: string
+                      format: date-time
+                    newIn:
+                      type: string
+                      description: Asked for only by this newer version, which needs it before it installs
+                  description: One of the app’s settings, as its form shows it
+                description: Its own settings (contract 3), each with the admin’s value if given; and any a newer version needs first
+              changes:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Change"
+                description: What changed in the version it runs
+              older:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - version
+                    - channel
+                  properties:
+                    version:
+                      type: string
+                    channel:
+                      enum:
+                        - stable
+                        - beta
+                description: Earlier versions in the feed to go back to (install one; the app is then held there)
+              history:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - id
+                    - action
+                    - requestedBy
+                    - requestedAt
+                    - state
+                  properties:
+                    id:
+                      type: string
+                    action:
+                      enum:
+                        - install
+                        - remove
+                        - preview
+                        - preview-remove
+                        - purge
+                    version:
+                      type: string
+                    requestedBy:
+                      type: string
+                      description: A person's id; automatic, for an update or a preview the registry asked for; deployment, for a default app (DEFAULT_APPS); or platform-fleet, for the fleet's client (ADR 0100)
+                    requestedAt:
+                      type: string
+                      format: date-time
+                    state:
+                      enum:
+                        - requested
+                        - running
+                        - done
+                        - failed
+                        - cancelled
+                    message:
+                      type: string
+                    finishedAt:
+                      type: string
+                      format: date-time
+                description: Its jobs, newest first (at most 20)
+              developers:
+                type: array
+                items:
+                  type: string
+                description: Who may try its previews, by person id
+              previews:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Preview"
+        available:
+          type: array
+          items:
+            type: object
+            required:
+              - app
+              - name
+              - version
+              - channel
+            properties:
+              app:
+                type: string
+              name:
+                type: string
+              description:
+                type: string
+              version:
+                type: string
+              channel:
+                enum:
+                  - stable
+                  - beta
+              notesUrl:
+                type: string
+              feed:
+                type: string
+                description: The feed it is listed in, one of APP_FEEDS
+              signer:
+                type: object
+                properties:
+                  repository:
+                    type: string
+                  workflow:
+                    type: string
+              asks:
+                type: object
+                required:
+                  - scopes
+                  - resources
+                  - limits
+                  - floors
+                  - maxUpload
+                  - settings
+                  - canvas
+                properties:
+                  scopes:
+                    type: array
+                    items:
+                      type: string
+                  resources:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - part
+                        - type
+                      properties:
+                        part:
+                          type: string
+                        type:
+                          type: string
+                        params:
+                          type: object
+                    description: Each resource a part asks for, with its params
+                  limits:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        memory:
+                          type: string
+                        cpu:
+                          type: string
+                    description: By part name
+                  floors:
+                    type: array
+                    items:
+                      type: string
+                  maxUpload:
+                    type: integer
+                  settings:
+                    type: array
+                    items:
+                      type: string
+                  canvas:
+                    type: boolean
+                description: The release's asks, as its file carries them (spec 9.4); missing for one that can't install here
+              review:
+                type: object
+                required:
+                  - kinds
+                  - settings
+                properties:
+                  kinds:
+                    type: object
+                    description: Each part’s kind (service, worker or job), by part name
+                    additionalProperties:
+                      type: string
+                  settings:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - label
+                        - type
+                        - required
+                      properties:
+                        id:
+                          type: string
+                        label:
+                          type: string
+                        type:
+                          type: string
+                          description: string, number, boolean, enum or secret
+                        required:
+                          type: boolean
+                        detail:
+                          type: string
+                        unit:
+                          type: string
+                        min:
+                          type: number
+                        max:
+                          type: number
+                        options:
+                          type: array
+                          items:
+                            type: string
+                        default:
+                          anyOf:
+                            - type: string
+                            - type: number
+                            - type: boolean
+                          description: What it is until an admin gives it a value; a secret has none
+                    description: Each setting it offers admins
+                description: What the review shows beyond the asks (spec 5.6, 9.4)
+              problem:
+                type: string
+                description: "Why it can't open in this AUGUR: for one on contract 2, the only thing said of it"
+              job:
+                $ref: "#/components/schemas/AppJob"
+    AppRelease:
+      type: object
+      required:
+        - schema
+      properties:
+        schema:
+          type: string
+          description: augur.app-release/v2
+      description: An app's release file, app-release.json, as @augur/app-tools writes it (urn:augur:app-release:2; docs/ship-an-app.md)
+    Preview:
+      type: object
+      required:
+        - pr
+        - version
+        - startedAt
+        - endsAt
+      properties:
+        pr:
+          type: integer
+        version:
+          type: string
+        title:
+          type: string
+        url:
+          type: string
+          description: The pull request
+        startedAt:
+          type: string
+          format: date-time
+        endsAt:
+          type: string
+          format: date-time
+          description: When it's taken away unless the pull request is built again
+      description: A pull request's build running beside the app
+    AppJob:
+      type: object
+      required:
+        - id
+        - app
+        - action
+        - requestedBy
+        - requestedAt
+        - state
+        - steps
+      properties:
+        id:
+          type: string
+        app:
+          type: string
+        action:
+          enum:
+            - install
+            - remove
+            - preview
+            - preview-remove
+            - purge
+        release:
+          $ref: "#/components/schemas/AppRelease"
+        pr:
+          type: integer
+          description: For a preview's job, its pull request
+        upstream:
+          type: string
+          description: For a preview that started, where it answers
+        requestedBy:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        state:
+          enum:
+            - requested
+            - running
+            - done
+            - failed
+            - cancelled
+        steps:
+          type: array
+          items:
+            type: object
+            required:
+              - step
+              - state
+              - at
+            properties:
+              step:
+                $ref: "#/components/schemas/AppJobStep"
+              state:
+                enum:
+                  - running
+                  - done
+                  - failed
+              at:
+                type: string
+                format: date-time
+              message:
+                type: string
+        message:
+          type: string
+        finishedAt:
+          type: string
+          format: date-time
+        seenBy:
+          type: string
+          description: Who marked it looked at, once it finished
+        seenAt:
+          type: string
+          format: date-time
+    AppJobStep:
+      enum:
+        - verify
+        - storage
+        - sign-in
+        - start
+        - health
+        - switch
+        - watch
+        - retire
+        - remove
+    StoredFrontend:
+      type: object
+      required:
+        - app
+        - version
+        - digest
+        - files
+        - bytes
+        - publishedBy
+        - publishedAt
+      properties:
+        app:
+          type: string
+        version:
+          type: string
+        digest:
+          type: string
+          description: sha256 of the tarball, sha256:<hex>
+        folder:
+          type: string
+          description: The folder its files are in, under /apps/{id}/; absent for ones kept in the version's own
+        files:
+          type: array
+          items:
+            type: string
+        bytes:
+          type: integer
+        publishedBy:
+          type: string
+        publishedAt:
+          type: string
+          format: date-time
+    AppSetting:
+      type: object
+      required:
+        - id
+        - label
+        - type
+        - min
+        - max
+        - default
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z][a-zA-Z0-9]{0,39}$
+          description: "How the app's service names it: \"retentionDays\""
+        label:
+          type: string
+          minLength: 1
+          maxLength: 60
+        detail:
+          type: string
+          maxLength: 200
+          description: A sentence on what it changes
+        type:
+          enum:
+            - integer
+        unit:
+          type: string
+          maxLength: 20
+          description: 'What the number counts, shown after it: "days"'
+        min:
+          type: integer
+        max:
+          type: integer
+        default:
+          type: integer
+          description: Between min and max
+      additionalProperties: false
+    AppSettings:
+      type: object
+      required:
+        - settings
+      properties:
+        settings:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/AppSetting"
+              - type: object
+                required:
+                  - value
+                properties:
+                  value:
+                    type: integer
+                    description: An admin's value, or the default
+                  setBy:
+                    type: string
+                    description: The admin who set it
+                  setAt:
+                    type: string
+                    format: date-time
+    Upgrade:
+      type: object
+      required:
+        - id
+        - from
+        - version
+        - images
+        - requestedBy
+        - requestedAt
+        - state
+        - steps
+      properties:
+        id:
+          type: string
+        from:
+          type: string
+        version:
+          type: string
+        images:
+          type: object
+          additionalProperties:
+            type: string
+        requestedBy:
+          type: string
+        requestedByName:
+          type: string
+          description: Who asked, by name, as they were signed in then
+        requestedAt:
+          type: string
+          format: date-time
+        state:
+          enum:
+            - requested
+            - running
+            - done
+            - rolled-back
+            - failed
+            - cancelled
+        steps:
+          type: array
+          items:
+            type: object
+            required:
+              - step
+              - state
+              - at
+            properties:
+              step:
+                $ref: "#/components/schemas/UpgradeStep"
+              state:
+                enum:
+                  - running
+                  - done
+                  - failed
+              at:
+                type: string
+                format: date-time
+              message:
+                type: string
+        message:
+          type: string
+        finishedAt:
+          type: string
+          format: date-time
+        seenBy:
+          type: string
+          description: Who marked it looked at, once it finished
+        seenAt:
+          type: string
+          format: date-time
+        afterWatch:
+          type: object
+          required:
+            - state
+            - since
+            - until
+            - calls
+            - serverErrors
+            - signInMisses
+          properties:
+            state:
+              enum:
+                - watching
+                - held
+                - failed
+                - quiet
+            since:
+              type: string
+              format: date-time
+            until:
+              type: string
+              format: date-time
+            lastLookAt:
+              type: string
+              format: date-time
+            calls:
+              type: integer
+            serverErrors:
+              type: integer
+            signInMisses:
+              type: integer
+            message:
+              type: string
+              description: How it ended, in a sentence
+            endedAt:
+              type: string
+              format: date-time
+          description: The light watch after a watch too quiet to judge errors by (ADR 0020, amended)
+        settingNames:
+          type: array
+          items:
+            type: string
+          description: The names of the settings entered for it; their values are never stored
+    UpgradeStep:
+      enum:
+        - preflight
+        - backup
+        - pull
+        - roll-forward
+        - verify
+        - watch
+        - roll-back
+      description: "watch: the new release is watched for 10 minutes before the upgrade is done (ADR 0020)"
+    PipelineBranch:
+      enum:
+        - dev
+        - preview
+        - production
+    PipelinePull:
+      type: object
+      required:
+        - number
+        - title
+        - url
+      properties:
+        number:
+          type: integer
+        title:
+          type: string
+        url:
+          type: string
+    PipelineLine:
+      type: object
+      required:
+        - feed
+        - units
+        - steps
+      properties:
+        feed:
+          enum:
+            - on
+            - off
+          description: Off when there's no pipeline feed (a mirror, or PIPELINE_FEED_URL=off)
+        checkedAt:
+          type: string
+          format: date-time
+        problem:
+          type: string
+          description: Why the last read failed; what it read before still shows
+        generatedAt:
+          type: string
+          format: date-time
+        repository:
+          type: string
+        units:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+              - versions
+              - waiting
+              - previews
+            properties:
+              id:
+                type: string
+                description: augur, or an app's id
+              name:
+                type: string
+              versions:
+                type: object
+                required:
+                  - dev
+                  - preview
+                  - production
+                properties:
+                  dev:
+                    type:
+                      - string
+                      - "null"
+                  preview:
+                    type:
+                      - string
+                      - "null"
+                  production:
+                    type:
+                      - string
+                      - "null"
+              devBuild:
+                type: object
+                required:
+                  - version
+                properties:
+                  version:
+                    type: string
+                  released:
+                    type: string
+              waiting:
+                type: array
+                items:
+                  type: string
+                description: The changesets on dev that move it
+              previews:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - pr
+                    - version
+                  properties:
+                    pr:
+                      type: integer
+                    version:
+                      type: string
+              running:
+                type: string
+                description: The version this server runs, when it runs it
+        steps:
+          type: array
+          items:
+            type: object
+            required:
+              - from
+              - to
+              - merged
+              - pulls
+            properties:
+              from:
+                $ref: "#/components/schemas/PipelineBranch"
+              to:
+                $ref: "#/components/schemas/PipelineBranch"
+              merged:
+                type: integer
+                description: How many pull requests are on from that aren't on to yet
+              pulls:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - number
+                    - title
+                  properties:
+                    number:
+                      type: integer
+                    title:
+                      type: string
+                    mergedAt:
+                      type: string
+        pulls:
+          type: object
+          required:
+            - promoteToProduction
+          properties:
+            versionPackages:
+              $ref: "#/components/schemas/PipelinePull"
+            promoteToPreview:
+              $ref: "#/components/schemas/PipelinePull"
+            promoteToProduction:
+              type: array
+              items:
+                allOf:
+                  - $ref: "#/components/schemas/PipelinePull"
+                  - type: object
+                    required:
+                      - unit
+                      - version
+                    properties:
+                      unit:
+                        type: string
+                      version:
+                        type: string
+      description: "The Upgrade Centre's line: each unit between dev, preview and production, from the pipeline feed (docs/release-channels.md, The pipeline feed), with what this server runs of it"
+    PlatformUpdates:
+      type: object
+      required:
+        - running
+        - channel
+        - feed
+        - newer
+        - needsYou
+      properties:
+        running:
+          type: object
+          required:
+            - version
+            - channel
+          properties:
+            version:
+              type: string
+            channel:
+              $ref: "#/components/schemas/ReleaseChannel"
+            build:
+              enum:
+                - source
+              description: "Set when the server was built from a checkout (compose.build.yml): version is then the last release it's based on"
+        channel:
+          $ref: "#/components/schemas/ReleaseChannel"
+        ring:
+          $ref: "#/components/schemas/ServerRing"
+        channelNote:
+          type: string
+          description: Why the channel isn't the one RELEASE_CHANNEL asks for (a production server follows stable only)
+        feed:
+          enum:
+            - on
+            - off
+          description: Off when the deployment set RELEASE_FEED_URL=off
+        feedTrust:
+          $ref: "#/components/schemas/FeedTrust"
+        checkedAt:
+          type: string
+          format: date-time
+        problem:
+          type: string
+          description: Why the last check failed; what it found before still shows
+        available:
+          allOf:
+            - $ref: "#/components/schemas/ReleaseSummary"
+            - type: object
+              required:
+                - parts
+              properties:
+                parts:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - name
+                      - to
+                    properties:
+                      name:
+                        type: string
+                      from:
+                        type: string
+                      to:
+                        type: string
+          description: The newest release on the channel, when newer than the running one
+        newer:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReleaseSummary"
+          description: Every release on the channel newer than the running one, newest first
+        beta:
+          allOf:
+            - $ref: "#/components/schemas/ReleaseSummary"
+          description: "On stable: a beta newer than anything stable"
+        next:
+          type: string
+          description: The release to upgrade to next; one on the way when the newest can't be reached straight
+        upgrade:
+          allOf:
+            - $ref: "#/components/schemas/Upgrade"
+          description: The upgrade asked for, while it's open and for a week after
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpgradeHistoryEntry"
+          description: Every upgrade asked for, newest first (at most 50)
+        goBack:
+          type: array
+          items:
+            type: object
+            required:
+              - version
+              - channel
+            properties:
+              version:
+                type: string
+              channel:
+                $ref: "#/components/schemas/ReleaseChannel"
+              released:
+                type: string
+              problem:
+                type: string
+                description: Why it can't go back straight; absent when it can
+              halted:
+                $ref: "#/components/schemas/Halt"
+              breakingAfter:
+                type: string
+                description: The breaking release between, whose backup going back by hand restores
+          description: Earlier releases on the channel to go back to, newest first (at most 5)
+        updaterSeenAt:
+          type: string
+          format: date-time
+          description: When the updater last asked for work, since the registry started
+        portalUrl:
+          type: string
+          description: The company's Backstage (PORTAL_URL), which the Upgrade Centre links to
+        line:
+          $ref: "#/components/schemas/PipelineLine"
+        needsYou:
+          type: array
+          items:
+            type: object
+            required:
+              - kind
+              - message
+            properties:
+              kind:
+                enum:
+                  - halted
+                  - path
+                  - setting
+                  - breaking
+                  - app
+                  - unknown
+                description: "halted: the running release was halted by its publisher, and is the only need shown"
+              message:
+                type: string
+              version:
+                type: string
+              key:
+                type: string
+                description: The setting, for kind setting
+              required:
+                type: boolean
+              madeUp:
+                type: boolean
+                description: "For kind setting: a secret the updater makes up itself"
+              app:
+                type: string
+                description: The app that won't run on the new SDK, for kind app
+    ReleaseChannel:
+      enum:
+        - stable
+        - beta
+        - dev
+      description: stable is on production, beta on preview, dev a dev build of the dev branch that only the workbench takes (docs/release-channels.md)
+    ServerRing:
+      enum:
+        - dev
+        - preview
+        - production
+      description: "What kind of server this is (SERVER_RING in .env): dev is the workbench, which also runs AUGUR's dev builds; a production one takes only releases promoted to production"
+    ReleaseSummary:
+      type: object
+      required:
+        - version
+        - channel
+        - breaking
+      properties:
+        version:
+          type: string
+        channel:
+          $ref: "#/components/schemas/ReleaseChannel"
+        released:
+          type: string
+        notesUrl:
+          type: string
+          format: uri
+        breaking:
+          type: array
+          items:
+            type: string
+        changes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Change"
+          description: What changed in it, each change once; absent for a release made before changelogs were attached
+        halted:
+          $ref: "#/components/schemas/Halt"
+    Halt:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+        at:
+          type: string
+          format: date-time
+        by:
+          type: string
+          description: Who halted it
+      description: "The publisher halted this release (ADR 0018): it is listed but never offered, installed or chosen as next"
+    UpgradeWindow:
+      type: object
+      required:
+        - day
+        - start
+        - hours
+      properties:
+        day:
+          type: integer
+          minimum: 0
+          maximum: 6
+          description: 0 is Sunday
+        start:
+          type: string
+          pattern: ^([01]\d|2[0-3]):[0-5]\d$
+          description: HH:MM, 24-hour
+        hours:
+          type: number
+          minimum: 1
+          maximum: 24
+      additionalProperties: false
+      description: A weekly slot an automatic upgrade may start in, in the unit's time zone
+    DesiredStateInput:
+      type: object
+      required:
+        - channel
+        - policy
+        - automaticUpTo
+        - windows
+      properties:
+        channel:
+          enum:
+            - stable
+            - beta
+            - dev
+        policy:
+          enum:
+            - automatic
+            - ask
+            - hold
+          description: automatic installs what it reaches by itself; ask waits for an admin; hold offers nothing
+        automaticUpTo:
+          enum:
+            - patch
+            - minor
+          description: How far Automatic goes. A major always waits for an admin.
+        pin:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: A semver range the unit stays within, such as 0.13.x
+        windows:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpgradeWindow"
+          maxItems: 14
+          description: When an automatic upgrade may start; none means at any time
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: An IANA time zone; absent takes the deployment's
+      additionalProperties: false
+    DesiredState:
+      allOf:
+        - $ref: "#/components/schemas/DesiredStateInput"
+        - type: object
+          required:
+            - unit
+            - setBy
+            - setAt
+          properties:
+            unit:
+              type: string
+            setBy:
+              type: string
+              description: Who set it; default for a unit nobody has set
+            setAt:
+              type: string
+              format: date-time
+    Reporting:
+      type: object
+      required:
+        - mode
+        - why
+      properties:
+        mode:
+          enum:
+            - send
+            - file
+            - off
+        why:
+          type: string
+        deployment:
+          type: string
+          description: DEPLOYMENT_ID, the deployment's name in Backstage's catalog of deployments
+        publicKey:
+          type: string
+          description: Base64 SPKI Ed25519 public key
+        last:
+          type: object
+          required:
+            - at
+            - reason
+            - ok
+          properties:
+            at:
+              type: string
+              format: date-time
+            reason:
+              enum:
+                - started
+                - changed
+                - heartbeat
+                - export
+            ok:
+              type: boolean
+            problem:
+              type: string
+    SignedReport:
+      type: object
+      required:
+        - deployment
+        - payload
+        - signature
+      properties:
+        deployment:
+          type: string
+        payload:
+          type: string
+          description: "The record as signed: JSON in the format augur.deployment-report/1, with OpAMP's agentDescription, health and packageStatuses"
+        signature:
+          type: string
+          description: Base64 Ed25519 signature over the payload's UTF-8 bytes
+    Overview:
+      type: object
+      required:
+        - ring
+        - timeZone
+        - feed
+        - units
+        - needsYou
+      properties:
+        reporting:
+          type: object
+          required:
+            - mode
+            - why
+          properties:
+            mode:
+              enum:
+                - send
+                - file
+                - off
+            why:
+              type: string
+          description: Whether Backstage sees what this server runs (ADR 0019)
+        ring:
+          $ref: "#/components/schemas/ServerRing"
+        timeZone:
+          type: string
+          description: The deployment's (DEPLOYMENT_TIME_ZONE)
+        feed:
+          enum:
+            - on
+            - off
+        feedTrust:
+          $ref: "#/components/schemas/FeedTrust"
+        checkedAt:
+          type: string
+          format: date-time
+        units:
+          type: array
+          items:
+            type: object
+            required:
+              - unit
+              - name
+              - running
+              - desired
+              - policy
+              - window
+            properties:
+              unit:
+                type: string
+                description: augur, or an app's id
+              name:
+                type: string
+              running:
+                type: string
+              available:
+                type: string
+                description: The newest release on its channel, when newer
+              next:
+                type: string
+                description: "AUGUR only: the release an upgrade goes to next, which may be older than available"
+              halted:
+                $ref: "#/components/schemas/Halt"
+              desired:
+                allOf:
+                  - $ref: "#/components/schemas/DesiredState"
+                  - type: object
+                    required:
+                      - timeZone
+                      - isDefault
+                    properties:
+                      timeZone:
+                        type: string
+                      isDefault:
+                        type: boolean
+                        description: Nobody has set it; these are the defaults
+              policy:
+                type: string
+                description: The record in a sentence
+              window:
+                type: object
+                required:
+                  - open
+                properties:
+                  open:
+                    type: boolean
+                  nextAt:
+                    type: string
+                    format: date-time
+              automatic:
+                type: object
+                properties:
+                  takes:
+                    type: string
+                  waits:
+                    type: string
+                description: "What Automatic does with the next release: takes it, or why it waits"
+              open:
+                type: object
+                required:
+                  - id
+                  - state
+                properties:
+                  id:
+                    type: string
+                  version:
+                    type: string
+                  state:
+                    enum:
+                      - requested
+                      - running
+              lastResult:
+                $ref: "#/components/schemas/UnitResult"
+        needsYou:
+          type: array
+          items:
+            type: object
+            required:
+              - kind
+              - unit
+              - message
+            properties:
+              kind:
+                enum:
+                  - halted
+                  - failed
+                  - went-back
+                  - after-watch
+              unit:
+                type: string
+              message:
+                type: string
+              result:
+                type: object
+                required:
+                  - kind
+                  - id
+                properties:
+                  kind:
+                    enum:
+                      - upgrade
+                      - app-job
+                  id:
+                    type: string
+                description: The result to mark looked at
+        you:
+          type: object
+          required:
+            - deploymentAdmin
+          properties:
+            deploymentAdmin:
+              type: boolean
+              description: Whether the caller holds deployment-admin, which upgrading, going back and changing settings need (ADR 0022, 0084)
+          description: What the caller may do here, for a frontend that is never told their roles (contract 3). Absent in what Backstage is sent
+    UnitResult:
+      type: object
+      required:
+        - kind
+        - id
+        - state
+        - finishedAt
+      properties:
+        kind:
+          enum:
+            - upgrade
+            - app-job
+        id:
+          type: string
+        from:
+          type: string
+        version:
+          type: string
+        state:
+          enum:
+            - done
+            - rolled-back
+            - failed
+            - cancelled
+        message:
+          type: string
+        finishedAt:
+          type: string
+          format: date-time
+        seenBy:
+          type: string
+        seenAt:
+          type: string
+          format: date-time
+    FeedTrust:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          enum:
+            - verified
+            - mirror
+            - unchecked
+          description: "verified: signed by the publisher and in date; mirror: the organisation's own mirror feed; unchecked: GitHub's releases read directly"
+        expires:
+          type: string
+          format: date-time
+          description: When a verified feed stops being good unless it is issued again
+        issued:
+          type: string
+          format: date-time
+          description: When the publisher issued a verified feed; an older one is refused after it
+        signer:
+          type: string
+          description: The workflow that signed it, as cosign checked it
+        note:
+          type: string
+          description: What to know when it isn't verified
+      description: How far the release feed this server read can be trusted (ADR 0017)
+    Change:
+      type: object
+      required:
+        - kind
+        - text
+        - parts
+      properties:
+        id:
+          type: string
+          description: "Changesets' commit hash: the same change in two parts has the same id"
+        kind:
+          enum:
+            - major
+            - minor
+            - patch
+        text:
+          type: string
+          description: The changeset's words, as Markdown
+        parts:
+          type: array
+          items:
+            type: string
+    UpgradeHistoryEntry:
+      type: object
+      required:
+        - id
+        - from
+        - version
+        - requestedBy
+        - requestedAt
+        - state
+      properties:
+        id:
+          type: string
+        from:
+          type: string
+        version:
+          type: string
+        requestedBy:
+          type: string
+        requestedByName:
+          type: string
+        requestedAt:
+          type: string
+          format: date-time
+        state:
+          enum:
+            - requested
+            - running
+            - done
+            - rolled-back
+            - failed
+            - cancelled
+        message:
+          type: string
+        finishedAt:
+          type: string
+          format: date-time
+        backup:
+          type: string
+          description: The backup the updater took first
+    CatalogueEntry:
+      allOf:
+        - $ref: "#/components/schemas/AppManifestEntry"
+        - type: object
+          required:
+            - platform
+            - enabled
+          properties:
+            platform:
+              type: boolean
+              description: One of AUGUR's own apps, always on
+            contract:
+              type: integer
+              description: The app contract major it is on; missing for one registered on contract 2
+            category:
+              enum:
+                - platform
+                - pillar
+              description: The kind in force (ADR 0032)
+            categoryRefused:
+              type: object
+              required:
+                - asked
+                - why
+              properties:
+                asked:
+                  enum:
+                    - platform
+                    - pillar
+                why:
+                  type: string
+              description: The app's own claim to a kind when it isn't used, and why
+            ships:
+              type: boolean
+              description: "Never set: no app ships with AUGUR (ADR 0075). Kept for /v1 readers."
+              deprecated: true
+            pillar:
+              type: boolean
+              description: "Never set: the old name for `ships`, kept for /v1 readers."
+              deprecated: true
+            enabled:
+              type: boolean
+            registeredBy:
+              type: string
+              description: The service or admin that last registered it
+            registeredAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            pinnedVersion:
+              type: string
+              description: Set when an admin holds the app at this version
+            blocked:
+              type: string
+              description: "Set when the app's entry is on an origin no longer allowed: why it isn't offered"
+            grantedScopes:
+              type: array
+              items:
+                $ref: "#/components/schemas/Scope"
+              description: What it asks for that an admin has granted
+            awaitingScopes:
+              type: array
+              items:
+                $ref: "#/components/schemas/Scope"
+              description: What it asks for that no admin has granted yet
+            uploadLimit:
+              type: integer
+              description: What the gateway lets through to the app's service in one request, in MB
+            uploadLimitLowered:
+              type: boolean
+              description: Set when an admin has lowered it below what the manifest asks
+            upstream:
+              type: string
+              description: Where the gateway reaches the app's service, when set (PUT /apps/{id}/upstream)
+    FloorRule:
+      type: object
+      required:
+        - app
+        - workspace
+        - state
+        - carriesOn
+        - setBy
+        - setAt
+      properties:
+        app:
+          type: string
+        workspace:
+          type: string
+        state:
+          enum:
+            - on
+            - off
+            - blocked
+        carriesOn:
+          type: boolean
+          description: Whether it applies to the teams below too; always true for blocked
+        setBy:
+          type: string
+        setAt:
+          type: string
+          format: date-time
+    AllowedOrigin:
+      type: object
+      required:
+        - origin
+        - addedBy
+        - addedAt
+      properties:
+        origin:
+          type: string
+        addedBy:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+    FeaturePreview:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,39}$
+          description: 'How the app names it: "board-view"'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        detail:
+          type: string
+          maxLength: 200
+          description: A sentence on what it changes, for the person choosing it
+        until:
+          type: string
+          pattern: ^\d{4}-\d{2}-\d{2}$
+          description: Its last day, YYYY-MM-DD; after it, it's off for everyone and Admin says the app should drop it or ship it
+      additionalProperties: false
+    FeaturePreviewMode:
+      enum:
+        - off
+        - opt-in
+        - everyone
+        - floors
+      description: "Who gets a feature preview: nobody, those who turn it on, everyone, or chosen floors and the floors beneath them"
+    FeaturePreviewsAdmin:
+      type: object
+      required:
+        - defaultMode
+        - ring
+        - previews
+      properties:
+        defaultMode:
+          $ref: "#/components/schemas/FeaturePreviewMode"
+        ring:
+          $ref: "#/components/schemas/ServerRing"
+        previews:
+          type: array
+          items:
+            allOf:
+              - $ref: "#/components/schemas/FeaturePreview"
+              - type: object
+                required:
+                  - mode
+                  - ended
+                  - chosen
+                  - optedIn
+                properties:
+                  mode:
+                    $ref: "#/components/schemas/FeaturePreviewMode"
+                  ended:
+                    type: boolean
+                  floors:
+                    type: array
+                    items:
+                      type: string
+                    description: "With mode floors: the floors it is on for"
+                  chosen:
+                    type: boolean
+                    description: An admin chose its mode; false means the server's default
+                  setBy:
+                    type: string
+                  setAt:
+                    type: string
+                    format: date-time
+                  optedIn:
+                    type: integer
+                    description: How many people turned it on
+    AppManifestEntry:
+      type: object
+      required:
+        - id
+        - name
+        - route
+        - entry
+        - version
+        - sdk
+      properties:
+        $schema:
+          type: string
+          maxLength: 500
+          description: "Where editors find this schema, contracts/manifest.schema.json: a path or an address. The registry doesn't use it."
+        id:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{1,39}$
+          description: The app's id, such as "board"; its route, client and storage are named after it
+        name:
+          type: string
+          minLength: 1
+          maxLength: 60
+          description: What people call the app
+        route:
+          type: string
+          pattern: ^/[a-z0-9][a-z0-9/-]*$
+          maxLength: 100
+          description: Route prefix the shell maps to this app
+        entry:
+          type: string
+          minLength: 1
+          maxLength: 500
+          pattern: ^[^\\\u0000-\u001f\u007f]+$
+          description: "URL of the app's ES module entry: a path on AUGUR (/apps/…) or a full https address. No backslashes or control characters."
+        version:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: The app's release, semver
+        sdk:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The @augur/mfe-sdk releases the app works with, a semver range such as ^1.0.0. The shell will not open an app whose range its SDK does not satisfy.
+        description:
+          type: string
+          maxLength: 140
+          description: One line shown under the app name in the shell
+        icon:
+          type: string
+          maxLength: 40
+          description: A UI kit icon name
+        requiredRole:
+          type: string
+          maxLength: 60
+          description: Only people with this role can open it
+        handles:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9.-]*$
+            maxLength: 80
+          maxItems: 50
+          description: Intent types this app handles, such as document.open
+        ai:
+          type: boolean
+          description: The app is an AI; the menus draw it as a bubble
+        search:
+          type: boolean
+          description: The app's service answers GET /v1/search?q=, and the shell's Find asks it
+        storage:
+          type: object
+          properties:
+            database:
+              type: boolean
+            bucket:
+              type: boolean
+          additionalProperties: false
+          description: "The storage the app keeps on AUGUR: its own database schema, its own bucket. See docs/app-storage.md"
+        maxUpload:
+          type: integer
+          minimum: 1
+          maximum: 2048
+          description: The largest request body, in MB, the gateway lets through to the app's service; 10 without it. An admin can lower it.
+        previews:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeaturePreview"
+          maxItems: 8
+          description: "Features the app has ready to try before they're everyone's (SDK 1.7): admins say who gets each, people opt in, and the app asks ctx.previewOn(id)"
+        settings:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppSetting"
+          maxItems: 10
+          description: Settings the app offers admins in Admin, Apps; its service reads them from the registry
+        inbox:
+          type: object
+          required:
+            - kinds
+          properties:
+            kinds:
+              type: array
+              items:
+                type: object
+                required:
+                  - id
+                  - label
+                properties:
+                  id:
+                    type: string
+                    pattern: ^[a-z][a-z0-9-]{0,39}$
+                    description: "How the app's service names it: \"assignment\""
+                  label:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                    description: 'What the Inbox shows for it: "Assigned to you"'
+                  icon:
+                    type: string
+                    maxLength: 40
+                    description: A UI kit icon name
+                additionalProperties: false
+              minItems: 1
+              maxItems: 10
+          additionalProperties: false
+          description: The kinds of work the app puts in people's inboxes, with inbox:write (ADR 0026)
+        notifications:
+          type: object
+          required:
+            - kinds
+          properties:
+            kinds:
+              type: array
+              items:
+                type: object
+                required:
+                  - id
+                  - label
+                properties:
+                  id:
+                    type: string
+                    pattern: ^[a-z][a-z0-9-]{0,39}$
+                    description: "How the app's service names it: \"comment\""
+                  label:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
+                    description: 'What Account shows for it: "Comments on your documents"'
+                  detail:
+                    type: string
+                    maxLength: 120
+                    description: A sentence on when it is sent
+                additionalProperties: false
+              minItems: 1
+              maxItems: 10
+          additionalProperties: false
+          description: The kinds of notification the app sends, with notifications:send, so people can choose each one (ADR 0036)
+        links:
+          type: object
+          properties:
+            entities:
+              type: boolean
+              description: The app binds its things to entities and publishes the binding events (ADR 0066), so the entity catalogue follows them
+          additionalProperties: false
+          description: What the app links its things to elsewhere in AUGUR (SDK 2.1)
+        bindings:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{0,39}$
+            description: 'A type of thing the app binds, as it names it in its topics: "intent"'
+          minItems: 1
+          maxItems: 10
+          uniqueItems: true
+          description: With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound (SDK 2.1)
+        scopes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Scope"
+          uniqueItems: true
+          maxItems: 10
+          description: What the app's service asks to do on AUGUR, such as "notifications:send". An app may always register itself.
+        floors:
+          type: array
+          items:
+            $ref: "#/components/schemas/FloorKind"
+          minItems: 1
+          uniqueItems: true
+          maxItems: 3
+          description: The kinds of floor the app works on; every kind without it
+        surfaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/Surface"
+          maxItems: 30
+          description: What the app shows on each kind of floor, for the shell to place. Each surface's floor must be in floors.
+        orbit:
+          type: boolean
+          description: "false: the app keeps its own menu inside it and the shell never shows its Orbit"
+        sameOnEveryFloor:
+          type: boolean
+          description: "true: the app shows the same on every floor, so the shell's floor gauge rests while it's open and says why (SDK 1.6)"
+        followsAddress:
+          type: boolean
+          description: "true: the app follows the address itself, so the shell keeps it mounted on Back and Forward inside it (SDK 1.11)"
+        focus:
+          type: boolean
+          description: "true: the app can narrow what it shows to a working context, from ctx.focus (SDK 1.10). Reserved: nothing sets one yet (ADR 0029)"
+        category:
+          enum:
+            - platform
+            - pillar
+          description: The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed
+        areas:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppArea"
+          maxItems: 6
+          description: The broad parts of what the app covers, which Title lists under it (SDK 1.5). Menu groups name theirs in area. See Shell principles in the AUGUR handbook, 02 Principles
+        menu:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppMenuCategory"
+          maxItems: 8
+          description: The app's menu, shown by the shell as Orbit at the app's root. A group with one item opens it directly
+      additionalProperties: false
+    FloorKind:
+      enum:
+        - personal
+        - team
+        - org
+      description: team means any team, at any depth
+    Surface:
+      type: object
+      required:
+        - floor
+        - slot
+        - module
+      properties:
+        floor:
+          $ref: "#/components/schemas/FloorKind"
+        slot:
+          enum:
+            - page
+            - card
+            - panel
+            - settings
+            - admin
+        module:
+          type: string
+          pattern: ^[A-Za-z0-9_./-]+$
+          maxLength: 100
+          description: The module the app's entry exposes for it
+        role:
+          enum:
+            - member
+            - lead
+          description: Only for people with this role on the floor
+        rollup:
+          type: boolean
+          description: Shows this floor and the teams below it that the person is on, using AUGUR's roll-up
+      additionalProperties: false
+    Scope:
+      enum:
+        - notifications:send
+        - audit:write
+        - models:use
+        - events:publish
+        - events:subscribe
+        - people:read
+        - inbox:write
+        - knowledge:read
+        - knowledge:act
+        - knowledge:extract
+      description: "notifications:send: notify people (for itself only). audit:write: add entries for itself to the audit log. models:use: call the model gateway (counted against the app's daily limit). events:publish: publish domain events on its own topics (<app id>.*). events:subscribe: read domain events on any topic. people:read: ask identity who a person stands for (their teams) and find people and teams by name, for sharing. inbox:write: put work in people's and teams' inboxes, and change or close the app's own items. knowledge:read: read the knowledge graph as the person the app acts for, on the floors they can see. knowledge:act: take the knowledge graph's actions apps are granted, as that person. knowledge:extract: add what a source says to the knowledge graph (retain)."
+    AppMenuCategory:
+      type: object
+      required:
+        - label
+        - items
+      properties:
+        id:
+          type: string
+          maxLength: 40
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+        icon:
+          type: string
+          maxLength: 40
+          description: A UI kit icon name
+        ai:
+          type: boolean
+        area:
+          type: string
+          maxLength: 40
+          description: The id of the app's area the group belongs to (SDK 1.5)
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppMenuItem"
+          minItems: 1
+          maxItems: 12
+      additionalProperties: false
+    AppArea:
+      type: object
+      required:
+        - id
+        - label
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,39}$
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+        icon:
+          type: string
+          maxLength: 40
+          description: A UI kit icon name, not the app's own
+        detail:
+          type: string
+          maxLength: 60
+          description: One line on what's in it
+      additionalProperties: false
+    AppMenuItem:
+      type: object
+      required:
+        - label
+        - path
+      properties:
+        id:
+          type: string
+          maxLength: 40
+        label:
+          type: string
+          minLength: 1
+          maxLength: 60
+        icon:
+          type: string
+          maxLength: 40
+          description: A UI kit icon name
+        detail:
+          type: string
+          maxLength: 60
+          description: One short fact, never a sentence
+        keywords:
+          type: string
+          maxLength: 140
+          description: Extra words search finds it by
+        ai:
+          type: boolean
+        path:
+          type: string
+          pattern: ^/.+
+          maxLength: 200
+          description: Where in the app it opens, below the app's route
+      additionalProperties: false
+paths:
+  /contract:
+    get:
+      summary: The app contract majors this registry serves
+      description: Any caller. A release on another major is refused, saying which it speaks and which this AUGUR serves (spec 11.5).
+      responses:
+        "200":
+          description: The majors served
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - majors
+                properties:
+                  majors:
+                    type: array
+                    items:
+                      type: integer
+                    description: Contract majors, oldest first
+                description: The majors served
+  /manifest:
+    get:
+      summary: Apps the caller may open
+      description: "With `workspace`, the apps on for that floor: the caller must be on it, so the request also carries it as X-Workspace-Id, which the gateway checks. An app is on a floor when it is turned on, works on that kind of floor (its manifest's `floors`), isn't blocked on the floor or any floor above, and the nearest install from the floor upwards says on (or there is none). A personal floor follows the org."
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: The floor to list apps for
+      responses:
+        "200":
+          description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there. An app on contract 3 is its manifest in force, with `contract`
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  anyOf:
+                    - allOf:
+                        - $ref: "#/components/schemas/AppManifestEntry"
+                        - type: object
+                          properties:
+                            previewsOn:
+                              type: array
+                              items:
+                                type: string
+                              description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)"
+                            inPage:
+                              type: boolean
+                              description: "An app on contract 2 the shell may load into its own page: one of AUGUR's own, or one the deployment names in IN_PAGE_APPS. The shell opens no other contract 2 app (ADR 0076)"
+                              enum:
+                                - true
+                    - type: object
+                      required:
+                        - contract
+                        - id
+                        - name
+                        - version
+                        - maxUpload
+                      properties:
+                        contract:
+                          type: integer
+                          minimum: 3
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        version:
+                          type: string
+                        maxUpload:
+                          type: integer
+                          description: "What the gateway lets through to the app in one request, in MB: what it asks, or less where an admin lowered it"
+                        previewsOn:
+                          type: array
+                          items:
+                            type: string
+                          description: The ids of the app's previews on for the caller
+                      additionalProperties: true
+                      description: "An app on contract 3: its manifest in force, filled in with maxUpload, previewsOn and its contract major"
+                description: Manifest entries filtered by the caller's roles, leaving out apps an admin has turned off, and with a workspace those off there. An app on contract 3 is its manifest in force, with `contract`
+        "403":
+          description: The workspace isn't the floor the gateway checked
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors can't be looked up right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /me/apps:
+    get:
+      summary: Every app, and whether the caller can use it on their floor, and why
+      description: "For Auspex, which never hides an app for being out of reach. Each app says whether it's on for the floor the caller is on and why (platform, approved, set-here, set-above, blocked, not-for-this-kind, turned-off), the floor whose rule decides it (`by`) and who set that rule and when. An app a role keeps from the caller is listed with `requiredRole` and `hasRole: false`. Only the floor the gateway checked can be asked about."
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: true
+      responses:
+        "200":
+          description: The caller's apps on that floor
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - workspace
+                  - apps
+                properties:
+                  workspace:
+                    type: string
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - name
+                        - state
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        icon:
+                          type: string
+                        description:
+                          type: string
+                        floors:
+                          type: array
+                          items:
+                            enum:
+                              - personal
+                              - team
+                              - org
+                        category:
+                          enum:
+                            - platform
+                            - pillar
+                        ships:
+                          type: boolean
+                          description: "Never set: no app ships with AUGUR (ADR 0075). Kept for /v1 readers."
+                          deprecated: true
+                        pillar:
+                          type: boolean
+                          description: "Never set: the old name for `ships`, kept for /v1 readers."
+                          deprecated: true
+                        requiredRole:
+                          type: string
+                        hasRole:
+                          type: boolean
+                        state:
+                          type: object
+                          required:
+                            - on
+                            - why
+                          properties:
+                            on:
+                              type: boolean
+                            why:
+                              enum:
+                                - platform
+                                - approved
+                                - set-here
+                                - set-above
+                                - blocked
+                                - not-for-this-kind
+                                - turned-off
+                            by:
+                              type: string
+                              description: The floor whose rule decides it
+                            setBy:
+                              type: string
+                              description: Who set that rule
+                            setAt:
+                              type: string
+                              format: date-time
+                description: The caller's apps on that floor
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the floor the gateway checked
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors can't be looked up right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps:
+    get:
+      summary: The whole catalogue, for admins
+      description: Every app, AUGUR's own first, whether or not it is turned on.
+      responses:
+        "200":
+          description: Catalogue entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CatalogueEntry"
+                description: Catalogue entries
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/versions:
+    get:
+      summary: An app's kept versions, newest first (admins only)
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Kept versions; `serving` marks the one the shell is given
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - version
+                    - entry
+                    - registeredBy
+                    - registeredAt
+                    - serving
+                  properties:
+                    version:
+                      type: string
+                    entry:
+                      $ref: "#/components/schemas/AppManifestEntry"
+                    registeredBy:
+                      type: string
+                    registeredAt:
+                      type: string
+                      format: date-time
+                    serving:
+                      type: boolean
+                description: Kept versions; `serving` marks the one the shell is given
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/pin:
+    put:
+      summary: Serve one kept version and hold the app there (deployment admins only)
+      description: Rolls an app back, or holds it at its current version. Registrations after this are kept in its history but not served until it is unpinned. When the version's frontend is kept (PUT /apps/{id}/versions/{version}/frontend), its code is held too, since the manifest then points at that version's own copy; otherwise only the manifest changes. Audited as app.pinned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - version
+              properties:
+                version:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueEntry"
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app, or no such version kept
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of AUGUR's own apps, or another app now has that version's route
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Let go of a pin and serve the newest version (deployment admins only)
+      description: Audited as app.unpinned.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueEntry"
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of AUGUR's own apps
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /people/{id}/data:
+    get:
+      summary: What the registry keeps about one person (identity only)
+      description: The upgrades they asked for, with the name kept beside each, newest first. Only identity asks, to build the copy of someone’s data they download from Account.
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Their data here
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - upgrades
+                properties:
+                  upgrades:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - id
+                        - version
+                        - requestedAt
+                      properties:
+                        id:
+                          type: string
+                        version:
+                          type: string
+                        requestedAt:
+                          type: string
+                        requestedByName:
+                          type: string
+                description: Their data here
+        "403":
+          description: Not identity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service that checks the caller's token can't be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/grants:
+    get:
+      summary: What an app may do on a floor (platform services and the gateway)
+      description: AUGUR's services and the gateway check an app's calls against this, and keep each answer for up to 30 seconds. An app is granted the scopes it asks for that an admin has granted, on floors where it is on (see /manifest); nothing where it is off, on a floor that doesn't exist, or anywhere while it is turned off. Without a workspace, on the organisation's floor, as the gateway checks a call that names none (ADR 0007). With them, the inbox and notification kinds its manifest declares, which the events service checks against, and the role its manifest says a person needs, which models checks for an AI app.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: The floor the call is for
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app's grants
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - app
+                  - name
+                  - on
+                  - scopes
+                  - inboxKinds
+                  - notificationKinds
+                  - requiredRole
+                properties:
+                  app:
+                    type: string
+                  name:
+                    type: string
+                    description: What the app is called, for the gateway's refusals
+                  workspace:
+                    type: string
+                  on:
+                    type: boolean
+                    description: "Whether the app is on where the call is for: enabled, for that kind of floor, and not blocked or turned off there (contract 3, spec 8.2)"
+                  floorKind:
+                    type: string
+                    description: The kind of the floor the call is for (personal, team or org), when it exists, so the gateway can name the floor to the service
+                  scopes:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Scope"
+                  platformScopes:
+                    type: array
+                    items:
+                      enum:
+                        - people:manage
+                        - apps:manage
+                        - org:manage
+                        - audit:read
+                        - deployment:upgrade
+                        - deployment:apps
+                        - deployment:health
+                        - deployment:settings
+                    description: AUGUR's own admin scopes (ADR 0083), only ever for one of AUGUR's own frontends, which its release gives them; never for an app from a feed
+                  inboxKinds:
+                    type: array
+                    items:
+                      type: string
+                    description: The ids of the inbox kinds the app's manifest declares
+                  notificationKinds:
+                    type: array
+                    items:
+                      type: string
+                    description: The ids of the notification kinds the app's manifest declares
+                  requiredRole:
+                    anyOf:
+                      - type: string
+                      - type: "null"
+                    description: The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.
+                  contract:
+                    type: integer
+                    description: The app contract the app is on (3), so the gateway signs a plain call to its part for the app's client `app-<id>`, as its part checks; absent for an app on contract 2, whose part checks for its id
+                description: The app's grants
+        "403":
+          description: Not a platform service or the gateway
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, or the sign-in service that checks the caller's token, can't be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /scopes/{scope}/apps:
+    get:
+      summary: The apps granted a scope (platform services)
+      description: Apps whose manifest asks for the scope and that an admin has granted it, each with whether an admin has it on. The events service asks for events:subscribe to know whose parts to push events to, and holds a turned-off app’s events for it. Since 1.39.
+      parameters:
+        - schema:
+            $ref: "#/components/schemas/Scope"
+          in: path
+          name: scope
+          required: true
+      responses:
+        "200":
+          description: The apps granted the scope, by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - app
+                    - name
+                    - enabled
+                  properties:
+                    app:
+                      type: string
+                    name:
+                      type: string
+                      description: What the app is called
+                    enabled:
+                      type: boolean
+                      description: Whether an admin has the app on
+                description: The apps granted the scope, by id
+        "403":
+          description: Not a platform service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service that checks the caller's token can't be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /entity-links:
+    get:
+      summary: The apps that bind their things to entities, and the types they bind (services only)
+      description: "Every registered app whose manifest sets links.entities, with the types of thing it names in bindings, each published on <app>.<type>.entity-bound and <app>.<type>.entity-unbound (ADR 0066). An app that sets links.entities without bindings has no types listed: follow its <app>.* topics and read each event with the service kit's readBinding. For any service, AUGUR's own or an app's."
+      responses:
+        "200":
+          description: The apps that link to entities, by id
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - app
+                    - types
+                  properties:
+                    app:
+                      type: string
+                      description: The app's id
+                    types:
+                      type: array
+                      items:
+                        type: string
+                      description: The types of thing it binds (its manifest's bindings)
+                description: The apps that link to entities, by id
+        "403":
+          description: Not a service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service that checks the caller's token can't be reached right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /feature-previews:
+    get:
+      summary: Apps' feature previews, and whether each is on for the caller (SDK 1.7)
+      description: Every app the caller can open that lists `previews` in its manifest. A preview is on for everyone, for chosen floors and the floors beneath them, for those who turned it on (opt-in), or off; one past its `until` day is ended and off. On a preview server one nobody chose for is opt-in, on a production server off. Floor-targeted ones are on when the caller's floor (X-Workspace-Id, checked by the gateway) is one of them or beneath one.
+      responses:
+        "200":
+          description: The apps with feature previews
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apps
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - app
+                        - name
+                        - previews
+                      properties:
+                        app:
+                          type: string
+                        name:
+                          type: string
+                        previews:
+                          type: array
+                          items:
+                            allOf:
+                              - $ref: "#/components/schemas/FeaturePreview"
+                              - type: object
+                                required:
+                                  - mode
+                                  - on
+                                properties:
+                                  mode:
+                                    $ref: "#/components/schemas/FeaturePreviewMode"
+                                  ended:
+                                    type: boolean
+                                  on:
+                                    type: boolean
+                description: The apps with feature previews
+        "401":
+          description: Not signed in
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /feature-previews/{app}/{preview}:
+    put:
+      summary: Turn one of an app's opt-in feature previews on or off for the caller alone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - on
+              properties:
+                on:
+                  type: boolean
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: app
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: preview
+          required: true
+      responses:
+        "204":
+          description: Chosen
+        "401":
+          description: Not signed in
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app or preview, or the caller can't open the app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: It isn't opt-in (error not_opt_in), or it has ended (ended)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/feature-previews:
+    get:
+      summary: Who gets each of an app's feature previews (admins)
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Its feature previews
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeaturePreviewsAdmin"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/feature-previews/{preview}:
+    put:
+      summary: Set who gets one of an app's feature previews (admins)
+      description: "`null` goes back to the server's default. `floors` turns it on for the floors listed in `floors` and the floors beneath them, and for nobody else. Kept when the app registers new versions. Audited as app.preview-set."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mode
+              properties:
+                mode:
+                  anyOf:
+                    - $ref: "#/components/schemas/FeaturePreviewMode"
+                    - type: "null"
+                floors:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                  minItems: 1
+                  maxItems: 100
+                  uniqueItems: true
+                  description: The floors it is on for, with mode `floors` (and only then)
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: preview
+          required: true
+      responses:
+        "200":
+          description: Its feature previews as they now are
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeaturePreviewsAdmin"
+        "400":
+          description: Mode `floors` without floors, floors with another mode, or a floor that does not exist (error bad_floors)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app, or it offers no such preview
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of AUGUR's own apps, whose previews stay at the server's default (error platform_app)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors can't be looked up right now, so they can't be checked
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/feature-previews/people/{person}:
+    get:
+      summary: Which of an app's feature previews are on for one person (the app's own service, or admins)
+      description: With `workspace`, the floor they stand on, so previews targeted at floors count too; without it those are off.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: The floor they stand on
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: person
+          required: true
+      responses:
+        "200":
+          description: The ids on for them
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - on
+                properties:
+                  on:
+                    type: array
+                    items:
+                      type: string
+                description: The ids on for them
+        "403":
+          description: Neither the app's own service nor an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the caller's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/apps/{id}/developers:
+    put:
+      summary: Set who may try an installed app's pull requests' previews (deployment admins only)
+      description: People's ids, at most 50. Previews run only for apps with developers; one taken off loses their choice of its previews. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Audited as app.developers-set.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - people
+              properties:
+                people:
+                  type: array
+                  items:
+                    type: string
+                    minLength: 1
+                    maxLength: 100
+                  maxItems: 50
+                  uniqueItems: true
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The app runner hasn't installed that app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /previews:
+    get:
+      summary: The previews the caller may try, of the apps they're a developer of
+      description: Each pull request's newest build runs beside the app on the deployment, for a week after its last build or until the pull request closes. `chosen` is the pull request whose preview the caller uses instead of the app, if any.
+      responses:
+        "200":
+          description: The caller's apps and their previews
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apps
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: object
+                      required:
+                        - app
+                        - name
+                        - version
+                        - previews
+                      properties:
+                        app:
+                          type: string
+                        name:
+                          type: string
+                        version:
+                          type: string
+                          description: The installed version
+                        chosen:
+                          type: integer
+                        previews:
+                          type: array
+                          items:
+                            $ref: "#/components/schemas/Preview"
+                        live:
+                          type: string
+                          description: "Live on the workbench: the entry on the caller's own machine the shell loads instead of the app"
+                        liveProblem:
+                          type: string
+                          description: Why the app can't be loaded from the caller's machine here (only the workbench, SERVER_RING=dev, does)
+                description: The caller's apps and their previews
+        "401":
+          description: Not signed in
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /previews/{id}:
+    put:
+      summary: Use one of an app's previews instead of the app, for the caller alone
+      description: The shell is given the preview's manifest, and the gateway sends the caller's calls to the app to the preview, until they choose `null` (back to the app) or the preview goes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pr
+              properties:
+                pr:
+                  type:
+                    - integer
+                    - "null"
+                  minimum: 1
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Chosen
+        "401":
+          description: Not signed in
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not one of the app's developers
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No preview of that pull request is running
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /previews/{id}/live:
+    put:
+      summary: Load an app's frontend from the caller's own machine, for them alone (Live on the workbench)
+      description: Only on the workbench (SERVER_RING=dev), whose front door lets the shell load scripts from *.ts.net. The shell is given `url` as the app's entry for the caller until they send `null` or the registry restarts. The app's service stays the installed one.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type:
+                    - string
+                    - "null"
+                  maxLength: 2048
+                  description: https://<machine>.ts.net/…/entry.ts, as pnpm dev:app <id> --live prints it
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Loading it from there, or stopped
+        "400":
+          description: Not an app entry on a machine on the tailnet
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: Not signed in
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not one of the app's developers
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: This server isn't the workbench
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/apps:
+    get:
+      summary: Installed apps and how each takes updates, and what the app feed offers (admins only)
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/check:
+    post:
+      summary: Check the app feed now, starting any automatic updates it finds (admins only)
+      responses:
+        "200":
+          description: Admin → Apps' installs after the check
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/apps/{id}/follow:
+    put:
+      summary: Set how an installed app takes new releases (deployment admins only)
+      description: "Its channel, and its policy: automatic (a newer release on the channel that asks for nothing new installs by itself), ask (each waits for an admin) or hold (nothing is offered). An app with no choice yet follows stable, automatically. A production server (SERVER_RING=production) follows stable only, and refuses beta or dev with 409. dev (dev builds too) is for a preview server. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Audited as app.updates-set."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - channel
+                - policy
+              properties:
+                channel:
+                  enum:
+                    - stable
+                    - beta
+                    - dev
+                policy:
+                  enum:
+                    - automatic
+                    - ask
+                    - hold
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The app runner hasn't installed that app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: "This is a production server: it follows stable releases only (error production_server)"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/apps/{id}/internet:
+    put:
+      summary: Let an installed app reach the internet, or take that away (deployment admins only)
+      description: "Only its parts that ask for augur-outbound reach it, and any host on it: the hosts they name are what they say they need, not a limit; never a preview. The app runner joins them to it, or takes them off it, within a minute. Removing the app from the server takes it away. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Audited as app.internet-set."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - allowed
+              properties:
+                allowed:
+                  type: boolean
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The app runner hasn't installed that app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The version it runs doesn't ask for the internet
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /runner/internet:
+    get:
+      summary: The apps a deployment admin let reach the internet (the deployment’s app runner only)
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apps
+                properties:
+                  apps:
+                    type: array
+                    items:
+                      type: string
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/apps/{id}/settings/{setting}:
+    put:
+      summary: Set one of an app's own settings, or put it back to its default (deployment admins only)
+      description: "The value is of the setting’s own type: text, a number within its bounds, true or false, or one of its options. A secret’s value is never shown again, only that it was set; giving it needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. The runner hands the value to the parts that read it and starts them again. Audited as app.setting-set (never with a secret’s value)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - value
+              properties:
+                value:
+                  description: Text, a number, true or false, or null for the default
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: setting
+          required: true
+      responses:
+        "200":
+          description: Admin → Apps' installs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppInstalls"
+        "400":
+          description: "Not a value the setting takes: the message names its bounds or options"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: Neither installed nor in the feed, or no version of it has that setting
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A required setting with no default can’t go back to nothing
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /runner/settings:
+    get:
+      summary: The values admins gave apps' settings, secrets included (the deployment's app runner only)
+      responses:
+        "200":
+          description: The values
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apps
+                properties:
+                  apps:
+                    type: object
+                    description: "By app id, then setting id: the value as text"
+                    additionalProperties:
+                      type: object
+                      additionalProperties:
+                        type: string
+                description: The values
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /runner/networks:
+    put:
+      summary: Say the deployment's own networks (the deployment's app runner only)
+      description: CIDRs such as 172.18.0.0/16 or fd00:a::/64, replacing those said before. No app's address may be on one of them.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - networks
+              properties:
+                networks:
+                  type: array
+                  items:
+                    type: string
+                    pattern: ^(?:\d{1,3}(?:\.\d{1,3}){3}/\d{1,2}|[0-9a-fA-F:]+/\d{1,3})$
+                    maxLength: 50
+                  maxItems: 512
+              additionalProperties: false
+      responses:
+        "200":
+          description: As kept
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - networks
+                  - setAt
+                properties:
+                  networks:
+                    type: array
+                    items:
+                      type: string
+                  setAt:
+                    type: string
+                    format: date-time
+                description: As kept
+        "400":
+          description: One isn't a network that parses
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/jobs:
+    get:
+      summary: The app runner's recent jobs, newest first (admins only)
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: app
+          required: false
+          description: Only this app's
+      responses:
+        "200":
+          description: Up to 50 jobs, and when the runner last asked for work (missing when it hasn't since the registry started)
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - jobs
+                properties:
+                  jobs:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AppJob"
+                  runnerSeenAt:
+                    type: string
+                    format: date-time
+                description: Up to 50 jobs, and when the runner last asked for work (missing when it hasn't since the registry started)
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Ask the app runner to install a release or remove an app (deployment admins only)
+      description: "Installing covers a first install, an upgrade and going back to an older version alike; going back to an older version holds an app on Automatic there. A release its publisher halted is refused (ADR 0018), and so is a pull request's build, or on a production server a dev build or any release not promoted to production: the feed says which, or failing that its version. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as app.install-requested or app.uninstall-requested. The fleet's client (platform-fleet, ADR 0100) may ask with nobody signed in, only for a release the app feed lists (by app and version), and is recorded under its name."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required:
+                    - action
+                    - release
+                  properties:
+                    action:
+                      type: string
+                      enum:
+                        - install
+                    release:
+                      $ref: "#/components/schemas/AppRelease"
+                    settings:
+                      type: object
+                      maxProperties: 20
+                      description: "Values for the release’s settings, by id: each of its own type. A required setting with no default needs one here unless an admin already gave it"
+                      additionalProperties:
+                        description: Of the setting’s own type
+                  additionalProperties: false
+                - type: object
+                  required:
+                    - action
+                    - app
+                    - version
+                  properties:
+                    action:
+                      type: string
+                      enum:
+                        - install
+                    app:
+                      type: string
+                      pattern: ^[a-z][a-z0-9-]{1,39}$
+                    version:
+                      type: string
+                      minLength: 1
+                      maxLength: 40
+                    settings:
+                      type: object
+                      maxProperties: 20
+                      description: "Values for the release’s settings, by id: each of its own type. A required setting with no default needs one here unless an admin already gave it"
+                      additionalProperties:
+                        description: Of the setting’s own type
+                  additionalProperties: false
+                  description: A release from the app feed, by version
+                - type: object
+                  required:
+                    - action
+                    - app
+                  properties:
+                    action:
+                      type: string
+                      enum:
+                        - remove
+                    app:
+                      type: string
+                      pattern: ^[a-z][a-z0-9-]{1,39}$
+                  additionalProperties: false
+      responses:
+        "202":
+          description: Waiting for the runner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppJob"
+        "400":
+          description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, or a bad manifest"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The app feed has no release file for that app and version
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Its publisher halted that release, it already has a job waiting or under way, or it is a default app (DEFAULT_APPS), which can’t be removed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/releases/read:
+    post:
+      summary: Read a release file from a pasted address, to review before installing (deployment admins only)
+      description: Fetches an https address (never AUGUR itself, this machine or the deployment’s own networks, by every address its name resolves to), at most 1 MB, in 10 seconds, and checks the file as the feed’s are checked (spec 9.1 to 9.3). The file comes back with its asks and signer for the review, and its refusals and warnings; install it with POST /app-runner/jobs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: The release file’s address
+              additionalProperties: false
+      responses:
+        "200":
+          description: The file, checked
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - release
+                  - refusals
+                  - warnings
+                properties:
+                  release:
+                    type: object
+                    additionalProperties: true
+                    description: The release file as read
+                  refusals:
+                    type: array
+                    items:
+                      type: string
+                    description: Why it can’t install here, in plain words; empty when it can
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: What an admin is told, but doesn’t stop it
+                  asks:
+                    type: object
+                    additionalProperties: true
+                    description: What it asks an admin to agree to (spec 9.4)
+                  signer:
+                    type: object
+                    required:
+                      - repository
+                      - workflow
+                    properties:
+                      repository:
+                        type: string
+                      workflow:
+                        type: string
+                  review:
+                    type: object
+                    required:
+                      - kinds
+                      - settings
+                    properties:
+                      kinds:
+                        type: object
+                        description: Each part’s kind (service, worker or job), by part name
+                        additionalProperties:
+                          type: string
+                      settings:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - id
+                            - label
+                            - type
+                            - required
+                          properties:
+                            id:
+                              type: string
+                            label:
+                              type: string
+                            type:
+                              type: string
+                              description: string, number, boolean, enum or secret
+                            required:
+                              type: boolean
+                            detail:
+                              type: string
+                            unit:
+                              type: string
+                            min:
+                              type: number
+                            max:
+                              type: number
+                            options:
+                              type: array
+                              items:
+                                type: string
+                            default:
+                              anyOf:
+                                - type: string
+                                - type: number
+                                - type: boolean
+                              description: What it is until an admin gives it a value; a secret has none
+                        description: Each setting it offers admins
+                    description: What the review shows beyond the asks (spec 5.6, 9.4)
+                description: The file, checked
+        "400":
+          description: Not an https address it reads from, or nothing there is a release file
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/jobs/{id}:
+    delete:
+      summary: Take back a job the runner hasn't started (admins only)
+      description: Audited as app.job-cancelled.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Cancelled
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such job is waiting
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: It has started, so it finishes by itself; or it deletes a removed app’s data, which only installing the app again stops
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/next:
+    get:
+      summary: The oldest open job (the deployment's app runner only)
+      description: Signed in as the updater client (platform-updater). Each call counts as the runner being seen, and looks for automatic updates whose window has opened, at most once a minute.
+      responses:
+        "200":
+          description: The job
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppJob"
+        "204":
+          description: Nothing to do
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /app-runner/jobs/{id}/progress:
+    post:
+      summary: Report a step of an open job (the deployment's app runner only)
+      description: The first report starts it. With `outcome` it ends, audited as app.installed, app.install-failed, app.uninstalled, app.uninstall-failed, app.preview-started, app.preview-failed, app.preview-removed or app.preview-remove-failed. A preview that started ends with `upstream`, where it answers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - step
+                - state
+              properties:
+                step:
+                  $ref: "#/components/schemas/AppJobStep"
+                state:
+                  enum:
+                    - running
+                    - done
+                    - failed
+                message:
+                  type: string
+                  maxLength: 2000
+                outcome:
+                  enum:
+                    - done
+                    - failed
+                upstream:
+                  type: string
+                  maxLength: 300
+                  description: "With a preview's outcome: where it answers, such as http://app-notes-pr12:8080"
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The job as it stands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppJob"
+        "400":
+          description: "`upstream` isn't an address a preview's service can be at"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the app runner
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The job isn't open
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app runner's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/overview:
+    get:
+      summary: Every unit this server runs, with its desired state, what's next and what needs an admin (admins only)
+      description: "AUGUR first, then each app the app runner installed. Each unit has its desired state (ADR 0020): channel, policy, how far Automatic goes, a semver pin and the weekly windows an automatic upgrade may start in, with whether a window is open now. Needs you lists a halted release being run, and and a failed or went-back result until an admin marks it looked at. The fleet's client (platform-fleet, ADR 0100) reads it too, to follow what it asked for."
+      responses:
+        "200":
+          description: The overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Overview"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/units/{unit}/desired-state:
+    put:
+      summary: Set how a unit takes new releases (deployment admins only)
+      description: "`unit` is augur or an installed app's id. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes, or it answers 401 sign_in_again. AUGUR's channel comes from RELEASE_CHANNEL, so a different one is refused with 409; a production server's apps follow stable only (409 production_server). Without timeZone the record takes the deployment's (DEPLOYMENT_TIME_ZONE). Kept in the unit's history and audited as platform.desired-state-set, with the record before. The fleet's client (platform-fleet, ADR 0100) may set it with nobody signed in, and is recorded under its name."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DesiredStateInput"
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: unit
+          required: true
+      responses:
+        "200":
+          description: The overview, with the new record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Overview"
+        "400":
+          description: A bad pin, time zone or window, with how to write it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: This server runs no such unit
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: AUGUR's channel is set in .env, or a production server's apps follow stable only
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/units/{unit}/desired-state/history:
+    get:
+      summary: The records a unit has had, newest first (admins only, at most 50)
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: unit
+          required: true
+      responses:
+        "200":
+          description: The history
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - unit
+                  - history
+                properties:
+                  unit:
+                    type: string
+                  history:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DesiredState"
+                description: The history
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: This server runs no such unit
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/results/{kind}/{id}/seen:
+    post:
+      summary: Mark a finished upgrade or app install looked at, for every admin (admins only)
+      description: It leaves Needs you. Audited as platform.result-seen.
+      parameters:
+        - schema:
+            enum:
+              - upgrade
+              - app-job
+          in: path
+          name: kind
+          required: true
+        - schema:
+            type: string
+            maxLength: 64
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Overview"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No finished upgrade or job with that id
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/reporting:
+    get:
+      summary: Whether this server reports what it runs to Backstage, its public key and the last send (admins only)
+      description: "ADR 0019. mode is send (DEPLOYMENT_ID and PORTAL_URL set), file (DEPLOYMENT_ID only: export and carry the record) or off (DEPLOYMENT_REPORTING=off, or no DEPLOYMENT_ID), with why in a sentence. publicKey is the deployment's Ed25519 key as base64 SPKI, for the augur.dev/report-key annotation in Backstage."
+      responses:
+        "200":
+          description: How this server reports
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Reporting"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/reporting/export:
+    get:
+      summary: The signed record of what this server runs, as a file to carry to Backstage (admins only)
+      description: "The same body the registry sends Backstage: the record as signed (payload, a JSON string in the format augur.deployment-report/1) and its Ed25519 signature. It holds no personal data."
+      responses:
+        "200":
+          description: The signed record, as an attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignedReport"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Reporting is off, with why (error reporting_off)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/alerts:
+    post:
+      summary: Grafana's alerts, told to deployment admins as notices (ALERT_WEBHOOK_TOKEN only)
+      description: ADR 0059. The deployment's Grafana posts here when one of AUGUR's alert rules starts or stops firing, with ALERT_WEBHOOK_TOKEN as its bearer token. Each alert becomes one notice to deployment admins, keyed by its fingerprint and start, so a repeat tells nobody twice; a resolved alert says it cleared and how long it lasted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - alerts
+              properties:
+                alerts:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - status
+                    properties:
+                      status:
+                        type: string
+                      labels:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      annotations:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      startsAt:
+                        type: string
+                      endsAt:
+                        type: string
+                      fingerprint:
+                        type: string
+                    additionalProperties: true
+                  maxItems: 100
+              additionalProperties: true
+              description: "Grafana's webhook contact point body: the alerts that started or stopped firing"
+        description: "Grafana's webhook contact point body: the alerts that started or stopped firing"
+      responses:
+        "202":
+          description: Taken
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - told
+                properties:
+                  told:
+                    type: integer
+                    description: Notices sent
+                description: Taken
+        "401":
+          description: No ALERT_WEBHOOK_TOKEN, or not this one
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Notices can't be sent right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}:
+    put:
+      summary: Register an app, or update it
+      description: "An app on contract 3 (its manifest carries `contract`) is taken only when it is the manifest of a release an admin had the app runner install, under way or installed before; it is checked against manifest-3.schema.json first. Otherwise, called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. AUGUR's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may. An app an admin removed can't register itself again: only an admin or a platform service (the app runner) can."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              anyOf:
+                - $ref: "#/components/schemas/AppManifestEntry"
+                - type: object
+                  required:
+                    - contract
+                    - id
+                    - name
+                    - version
+                  properties:
+                    contract:
+                      type: integer
+                      minimum: 3
+                      description: The app contract major it is on
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    version:
+                      type: string
+                  additionalProperties: true
+                  description: "An app on contract 3: its manifest (manifest-3.schema.json in @augur/app-tools), registered by the app runner from the release it installed"
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/AppManifestEntry"
+                  - type: object
+                    required:
+                      - contract
+                      - id
+                      - name
+                      - version
+                    properties:
+                      contract:
+                        type: integer
+                        minimum: 3
+                        description: The app contract major it is on
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      version:
+                        type: string
+                    additionalProperties: true
+                    description: "An app on contract 3: its manifest (manifest-3.schema.json in @augur/app-tools), registered by the app runner from the release it installed"
+                description: Updated
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                anyOf:
+                  - $ref: "#/components/schemas/AppManifestEntry"
+                  - type: object
+                    required:
+                      - contract
+                      - id
+                      - name
+                      - version
+                    properties:
+                      contract:
+                        type: integer
+                        minimum: 3
+                        description: The app contract major it is on
+                      id:
+                        type: string
+                      name:
+                        type: string
+                      version:
+                        type: string
+                    additionalProperties: true
+                    description: "An app on contract 3: its manifest (manifest-3.schema.json in @augur/app-tools), registered by the app runner from the release it installed"
+                description: Registered
+        "400":
+          description: The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest of an app the deployment doesn't allow into the shell's page (IN_PAGE_APPS)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The id belongs to a platform app, or the route is taken
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    patch:
+      summary: Turn an app on or off (admins only)
+      description: An app that is off stays registered, keeps its id and route, and stays off when its service registers it again; nobody is offered it in the manifest. Audited as app.enabled or app.disabled.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - enabled
+              properties:
+                enabled:
+                  type: boolean
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueEntry"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A platform app, which is always on
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Remove an app (deployment admins only)
+      description: "Audited as app.removed. Its own service can't register it again afterwards: only an admin or the app runner can."
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Removed
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of the deployment’s default apps (DEFAULT_APPS), which stays while it is named
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/versions/{version}/frontend:
+    put:
+      summary: Keep one version of an app's frontend, served at /apps/{id}/{version}_{digest}/ (a release's bundle at /apps/{id}/{version}/)
+      description: "The app's own service (or a platform service, or an admin) gives the built frontend as one gzipped tarball, before registering that version. From then on the manifest the shell is given points `entry` at that version's own copy whenever the entry is a file under /apps/{id}/ and the tarball holds it. The same tarball again answers 200 and changes nothing. A different one for the same version is a new build of it: it takes the old build's place, in a folder of its own, so no browser goes on running the build it kept. The bundle of a release on the app contract (one the app runner is installing or has installed, or a preview), told by its digest, is kept at /apps/{id}/{version}/ itself, where the shell loads it from. At most 2000 files and 50 MB. Audited as app.frontend-published."
+      requestBody:
+        required: true
+        content:
+          application/gzip:
+            schema:
+              description: The built frontend, one gzipped tarball
+              contentMediaType: application/gzip
+        description: The built frontend, one gzipped tarball
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: version
+          required: true
+          description: The release the frontend belongs to, its manifest's version
+      responses:
+        "200":
+          description: This version already had exactly this frontend
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoredFrontend"
+        "201":
+          description: Kept
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoredFrontend"
+        "400":
+          description: Not a semver version, or not a usable tarball (links, odd paths, too big)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Another app, not an admin, or an app an admin removed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of AUGUR's own apps, or a second bundle for a version already released with another
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "415":
+          description: Not sent as application/gzip
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "501":
+          description: This deployment doesn't keep frontends by version (FRONTENDS_BUCKET_SECRET isn't set)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the app's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /upstreams:
+    get:
+      summary: Where each app's service is, for the gateway (and admins)
+      description: "The upstreams set for apps by what runs them, or by an admin. The gateway asks as itself (its signed caller augur:gateway) and sends /api/{id}/… there for any app not in its APP_UPSTREAMS. `previews` names, for each app, the developers who chose one of its pull requests' previews and where that preview is: the gateway sends their calls there instead."
+      responses:
+        "200":
+          description: Upstreams by app id
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - apps
+                properties:
+                  apps:
+                    type: object
+                    additionalProperties:
+                      type: string
+                  previews:
+                    type: object
+                    description: App id → person id → upstream
+                    additionalProperties:
+                      type: object
+                      additionalProperties:
+                        type: string
+                description: Upstreams by app id
+        "403":
+          description: Neither the gateway nor an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/upstream:
+    put:
+      summary: Say where the gateway reaches an app's service (a platform service or an admin, never the app)
+      description: http or https, a host and port only, never one of AUGUR's own parts. null forgets it. Kept when the app registers new versions. Audited as app.upstream-set or app.upstream-cleared.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type:
+                    - string
+                    - "null"
+                  maxLength: 300
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app as it now is
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueEntry"
+        "400":
+          description: Not an address an app's service can be at
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a platform service or an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: One of AUGUR's own apps
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the caller's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/floors:
+    get:
+      summary: What each floor says about an app (admins)
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app's floor rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FloorRule"
+                description: The app's floor rules
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/floors/{workspace}:
+    put:
+      summary: Set what one floor says about an app (admins)
+      description: "on or off installs the app there or takes it away, carrying on to the teams below unless carriesOn is false or one of them says otherwise. blocked is a guardrail: off there and on every floor below, whatever they say. inherit takes the floor's rule away. Someone's own floor can't be set; it follows the org. Audited as app.enabled, app.disabled, app.blocked or app.inherited, with the floor."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - state
+              properties:
+                state:
+                  enum:
+                    - on
+                    - off
+                    - blocked
+                    - inherit
+                carriesOn:
+                  type: boolean
+                  description: true when left out
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: workspace
+          required: true
+          description: The org or a team
+      responses:
+        "200":
+          description: The app's rules now, and whether it is on for this floor
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - rules
+                  - state
+                properties:
+                  rules:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FloorRule"
+                  state:
+                    type: object
+                    required:
+                      - on
+                      - why
+                    properties:
+                      on:
+                        type: boolean
+                      why:
+                        enum:
+                          - turned-off
+                          - not-for-this-kind
+                          - blocked
+                          - set-here
+                          - set-above
+                          - approved
+                      by:
+                        type: string
+                        description: The floor whose rule decided it
+                description: The app's rules now, and whether it is on for this floor
+        "400":
+          description: Someone's own floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app or floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: A platform app, which is on everywhere
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors can't be looked up right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/scopes:
+    put:
+      summary: Let an app use these scopes (admins)
+      description: An app's first registration is granted what it asks for. A later version that asks for more is served, but gets the extra only once an admin grants it here. Audited as app.scopes-granted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - scopes
+              properties:
+                scopes:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Scope"
+                  uniqueItems: true
+                  maxItems: 10
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app as the catalogue now has it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueEntry"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/upload-limit:
+    put:
+      summary: Lower how much an app may be sent in one request (admins)
+      description: "The gateway holds every request to the app's service to its limit: its manifest's maxUpload (10 MB without one), or the lower number an admin sets here. `null` goes back to what the manifest asks. An admin can only lower it. Kept when the app registers new versions. Audited as app.upload-limit-set."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - mb
+              properties:
+                mb:
+                  anyOf:
+                    - type: integer
+                      minimum: 1
+                      maximum: 2048
+                    - type: "null"
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The app as the catalogue now has it
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogueEntry"
+        "400":
+          description: More than the app's manifest asks for
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/settings:
+    get:
+      summary: The app's own settings and the value of each (admins, and the app's own service)
+      description: "Each setting the app's manifest offers, with the value in force: an admin's, or the setting's default. A value set before the app narrowed a setting's range is used only while it still fits."
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Its settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+        "403":
+          description: Neither an admin nor the app's own service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the caller's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /apps/{id}/settings/{setting}:
+    put:
+      summary: Set one of an app's settings (admins)
+      description: "`null` puts it back to its default. Kept when the app registers new versions. Audited as app.setting-changed."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - value
+              properties:
+                value:
+                  type:
+                    - integer
+                    - "null"
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+        - schema:
+            type: string
+          in: path
+          name: setting
+          required: true
+      responses:
+        "200":
+          description: Its settings as they now are
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppSettings"
+        "400":
+          description: Outside the setting's min and max
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app, or it offers no such setting
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /origins:
+    get:
+      summary: Where apps may load from besides AUGUR itself (admins only)
+      responses:
+        "200":
+          description: Allowed origins
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AllowedOrigin"
+                description: Allowed origins
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Allow apps to load from an origin (deployment admins only)
+      description: HTTPS only, except http://localhost for development. Audited as origin.allowed.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - origin
+              properties:
+                origin:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                  examples:
+                    - https://apps.example.org
+              additionalProperties: false
+      responses:
+        "201":
+          description: Allowed (also when it already was)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AllowedOrigin"
+        "400":
+          description: Not an HTTPS origin, or has a path
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /origins/{origin}:
+    delete:
+      summary: Stop allowing an origin (deployment admins only)
+      description: Apps already registered from it stay in the catalogue, marked blocked, and are left out of the manifest until it is allowed again. Audited as origin.removed.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: origin
+          required: true
+          description: The origin, URL-encoded
+      responses:
+        "204":
+          description: Removed
+        "403":
+          description: Not a deployment admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: Not an allowed origin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/updates:
+    get:
+      summary: Whether a newer AUGUR release is out, and what upgrading to it needs first (admins only)
+      description: "From the registry's last check of the release feed: this repository's GitHub releases (augur@<version>, pre-releases are beta) or RELEASE_FEED_URL, a mirror's list of release files. The registry checks once a day. Read-only: nothing is restarted or changed."
+      responses:
+        "200":
+          description: The running release against the feed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformUpdates"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/updates/check:
+    post:
+      summary: Check the release feed now (admins only)
+      description: A check within 30 seconds of the last good one answers from it. Audited as platform.updates-checked.
+      responses:
+        "200":
+          description: The running release against the feed, as just checked. A feed that can't be read is a `problem`, not an error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformUpdates"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/upgrade:
+    put:
+      summary: Ask the deployment's updater to upgrade AUGUR (deployment admins only)
+      description: "`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again. Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as platform.upgrade-requested. `settings` are new settings for `.env`, each one the upgrade adds, never one that says what the server trusts (SERVER_RING and the like: set those in `.env`): they're kept in memory for the updater until the upgrade ends, never stored, and only their names are stored and audited. If the registry restarts before the updater takes them, the upgrade ends failed and says to ask again. An empty value is left out. The fleet's client (platform-fleet, ADR 0100) may ask with nobody signed in; on a production server only for a stable release its publisher hasn't halted (409), and it is recorded under its name."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - version
+              properties:
+                version:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                settings:
+                  type: object
+                  maxProperties: 50
+                  propertyNames:
+                    pattern: ^[A-Z][A-Z0-9_]{0,63}$
+                  additionalProperties:
+                    type: string
+                    maxLength: 4096
+                    pattern: ^[^\r\n]*$
+                  description: Setting name to value, one line each
+              additionalProperties: false
+      responses:
+        "202":
+          description: Waiting for the updater
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformUpdates"
+        "400":
+          description: A setting the upgrade doesn't add, one that says what the server trusts, or a value over more than one line
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: "sign_in_again: enter the password again first"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Not the next release, its release file names no images, or an upgrade is already waiting or under way
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Take back an upgrade the updater hasn't started (deployment admins only)
+      description: Audited as platform.upgrade-cancelled.
+      responses:
+        "200":
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformUpdates"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No upgrade is waiting
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: It has started; it finishes or rolls back by itself
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/upgrade/halted:
+    put:
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - version
+                - reason
+              properties:
+                version:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                reason:
+                  type: string
+                  minLength: 10
+                  maxLength: 500
+                  pattern: ^[^\r\n]*$
+      responses:
+        "200":
+          description: Default Response
+  /platform/go-back:
+    put:
+      summary: Go back to an earlier AUGUR release (deployment admins who just entered their password)
+      description: "The same steps as an upgrade, a backup first, to one of the releases the Updates page lists under goBack with no problem: no release between is breaking, so the data stays as it is. Audited as platform.go-back-requested, and platform.went-back when it's done."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - version
+              properties:
+                version:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+              additionalProperties: false
+      responses:
+        "202":
+          description: Asked; the Updates page as it now stands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlatformUpdates"
+        "401":
+          description: Enter your password again (error sign_in_again)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a deployment admin (the refusal names the requiredRole)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Not a release it can go back to, with why; or an upgrade is already open
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/upgrade/target:
+    get:
+      summary: The upgrade to run (the deployment's updater only)
+      description: Signed in as the updater client (platform-updater). Each call counts as the updater being seen. On the workbench, and where AUGUR's desired state is Automatic, it first asks for the upgrade Automatic reaches by itself (ADR 0020), audited as platform.upgrade-requested.
+      responses:
+        "200":
+          description: The open upgrade, with each part's image by digest
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - from
+                  - version
+                  - images
+                  - state
+                properties:
+                  id:
+                    type: string
+                  from:
+                    type: string
+                  version:
+                    type: string
+                  images:
+                    type: object
+                    additionalProperties:
+                      type: string
+                  state:
+                    enum:
+                      - requested
+                      - running
+                  parts:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Each part's version in the release, by package name. Missing when the release file can't be read.
+                  required:
+                    type: array
+                    items:
+                      type: string
+                    description: The settings the release won't start without
+                  deploy:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: The release's files in infra/deploy, by path inside it, as sha256
+                  settings:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Settings the admin entered when asking, for the updater to write to .env
+                  watch:
+                    type: object
+                    properties:
+                      breakingSince:
+                        type: string
+                        description: A breaking release between, so a problem is reported for a person rather than gone back from
+                    description: "Present for an upgrade to a newer release: watch it for 10 minutes before it's done, going back by itself if sign-in or the gateway's calls fail (ADR 0020)"
+                description: The open upgrade, with each part's image by digest
+        "204":
+          description: Nothing to do
+        "403":
+          description: Not the updater
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the updater's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/upgrade/progress:
+    post:
+      summary: Report a step of the open upgrade (the deployment's updater only)
+      description: The first report starts it. With `outcome` it ends, audited as platform.upgraded, platform.upgrade-rolled-back or platform.upgrade-failed; platform.went-back when it ends done on an older release than it started from.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - step
+                - state
+              properties:
+                id:
+                  type: string
+                  maxLength: 64
+                step:
+                  $ref: "#/components/schemas/UpgradeStep"
+                state:
+                  enum:
+                    - running
+                    - done
+                    - failed
+                message:
+                  type: string
+                  maxLength: 2000
+                outcome:
+                  enum:
+                    - done
+                    - rolled-back
+                    - failed
+                calls:
+                  type: integer
+                  minimum: 0
+                  description: How many of AUGUR's calls the watch judged by. Fewer than 20 starts the light watch (ADR 0020, amended).
+              additionalProperties: false
+      responses:
+        "200":
+          description: The upgrade as it stands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Upgrade"
+        "403":
+          description: Not the updater
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: Not the open upgrade
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the updater's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /platform/upgrade/after-watch:
+    get:
+      summary: The light watch's next look (the deployment's updater only)
+      description: After a watch too quiet to judge errors by, the updater looks every 5 minutes until AUGUR's services have had 20 calls, for at most a day (ADR 0020, amended). 204 when no look is due.
+      responses:
+        "200":
+          description: The upgrade being watched, and how many minutes of the gateway's counts to read
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                  - version
+                  - minutes
+                properties:
+                  id:
+                    type: string
+                  version:
+                    type: string
+                  minutes:
+                    type: integer
+                    minimum: 1
+                    maximum: 15
+                description: The upgrade being watched, and how many minutes of the gateway's counts to read
+        "204":
+          description: No look is due
+        "403":
+          description: Not the updater
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the updater's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    post:
+      summary: Report one look of the light watch (the deployment's updater only)
+      description: Adds AUGUR's calls since the last look. The watch ends held, failed (more than 5% of 20 calls, or sign-in failing twice in a row; it doesn't go back by itself and shows in Needs you) or quiet after a day, audited as platform.after-watch-failed or platform.after-watch-ended.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - id
+                - calls
+                - serverErrors
+              properties:
+                id:
+                  type: string
+                  maxLength: 64
+                calls:
+                  type: integer
+                  minimum: 0
+                serverErrors:
+                  type: integer
+                  minimum: 0
+                signInProblem:
+                  type: string
+                  maxLength: 500
+              additionalProperties: false
+      responses:
+        "200":
+          description: The light watch as it stands
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - state
+                  - since
+                  - until
+                  - calls
+                  - serverErrors
+                  - signInMisses
+                properties:
+                  state:
+                    enum:
+                      - watching
+                      - held
+                      - failed
+                      - quiet
+                  since:
+                    type: string
+                    format: date-time
+                  until:
+                    type: string
+                    format: date-time
+                  lastLookAt:
+                    type: string
+                    format: date-time
+                  calls:
+                    type: integer
+                  serverErrors:
+                    type: integer
+                  signInMisses:
+                    type: integer
+                  message:
+                    type: string
+                    description: How it ended, in a sentence
+                  endedAt:
+                    type: string
+                    format: date-time
+                description: The light watch as it stands
+        "403":
+          description: Not the updater
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: That upgrade isn't being watched
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The sign-in service can't be reached to check the updater's token
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+servers:
+  - url: /v1

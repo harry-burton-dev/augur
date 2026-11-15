@@ -43,6 +43,7 @@
     "check:api": "node scripts/check-api.mjs",
     "check:breaking": "node scripts/check-breaking.mjs",
     "api:update": "node scripts/check-api.mjs update",
+    "check:frozen": "node scripts/check-frozen.mjs",
     "knip": "knip",
     "coverage:summary": "node scripts/coverage-summary.mjs"
   },

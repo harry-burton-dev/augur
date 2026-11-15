@@ -1,0 +1,2166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://augur.invalid/infra/deploy/settings.schema.json",
+  "title": "AUGUR deployment settings",
+  "$comment": "Every setting a deployment can set in infra/deploy/.env, and every one AUGUR's services read, described once. As a JSON Schema it describes .env as an object of strings: `required`, `default`, and `writeOnly` for a secret. AUGUR's own keywords: `x-services`, the compose services that read it (`compose` for Docker Compose itself); `x-via`, for a service that gets it another way (a compose file of its own such as identity-repair.yml, `.env` when it reads the deployment's .env itself, or `default` when it keeps its own default in a deployment); `x-docs`, the guide section that explains it; `x-internal`, for one compose or the code sets and nobody puts in .env; `x-generate`, for a secret nobody needs to know, which `node scripts/preflight.mjs --install --fill-secrets` makes (64 random hex characters). `pattern`, `minLength`, `enum` and `format` are checked by the install preflight. `pnpm check:settings` (scripts/check-settings.mjs) holds compose.yml, .env.example, the guides and the services' code to it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "PLATFORM_VERSION",
+    "PLATFORM_URL",
+    "POSTGRES_PASSWORD",
+    "KEYCLOAK_ADMIN_PASSWORD",
+    "IDENTITY_DATABASE_PASSWORD",
+    "REGISTRY_DATABASE_PASSWORD",
+    "EVENTS_DATABASE_PASSWORD",
+    "MODELS_DATABASE_PASSWORD",
+    "PERMISSIONS_DATABASE_PASSWORD",
+    "KNOWLEDGE_DATABASE_PASSWORD",
+    "KEYCLOAK_DATABASE_PASSWORD",
+    "GARAGE_RPC_SECRET",
+    "GARAGE_ADMIN_TOKEN",
+    "IDENTITY_CLIENT_SECRET",
+    "REGISTRY_CLIENT_SECRET",
+    "EVENTS_CLIENT_SECRET",
+    "OPENFGA_TOKEN",
+    "KNOWLEDGE_CLIENT_SECRET",
+    "PERMISSIONS_CLIENT_SECRET",
+    "PLATFORM_ADMIN_USER",
+    "PLATFORM_ADMIN_PASSWORD",
+    "PLATFORM_ADMIN_EMAIL",
+    "PLATFORM_ADMIN_FIRST_NAME",
+    "PLATFORM_ADMIN_LAST_NAME",
+    "ALERT_WEBHOOK_TOKEN",
+    "GRAFANA_ADMIN_PASSWORD",
+    "CALLER_SIGNING_KEY"
+  ],
+  "patternProperties": {
+    "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "description": "An app's own database login, for an app named in APP_STORAGE: <ID> is its id in capitals with _ for -.",
+      "x-services": [
+        "storage"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
+    },
+    "^[A-Z][A-Z0-9_]*_BUCKET_SECRET$": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "An app's own bucket key (64 hex), for an app named in APP_STORAGE.",
+      "x-services": [
+        "storage"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
+    }
+  },
+  "properties": {
+    "PLATFORM_VERSION": {
+      "type": "string",
+      "description": "The AUGUR release this server runs, such as 0.1.1.",
+      "x-services": [
+        "compose",
+        "storage"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PLATFORM_IMAGES": {
+      "type": "string",
+      "description": "Where the images come from, for a mirror in your own registry. The default is the publisher's image path, an old id kept on purpose (AGENTS.md, Names).",
+      "default": "ghcr.io/harry-burton-dev/im-platform",
+      "x-services": [
+        "compose"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/mirror.md#point-the-server-at-it"
+    },
+    "PLATFORM_URL": {
+      "type": "string",
+      "pattern": "^https://[^/]+$",
+      "description": "AUGUR's address: https://<TS_HOSTNAME>.<your tailnet>.ts.net.",
+      "x-services": [
+        "web",
+        "keycloak",
+        "registry",
+        "events"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "TS_HOSTNAME": {
+      "type": "string",
+      "description": "The machine's name on the tailnet.",
+      "default": "platform",
+      "x-services": [
+        "compose",
+        "tailscale"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#before-you-start"
+    },
+    "TS_AUTHKEY": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^tskey-",
+      "description": "A Tailscale auth key, for a machine joining the tailnet; not needed behind your own proxy.",
+      "x-services": [
+        "tailscale"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "COMPOSE_FILE": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+\\.ya?ml(:[A-Za-z0-9._-]+\\.ya?ml)*$",
+      "description": "The compose files this deployment runs: compose.yml:compose.proxy.yml puts it behind your own proxy instead of Tailscale.",
+      "default": "compose.yml",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#behind-your-own-proxy",
+      "x-via": {
+        "updater": ".env"
+      }
+    },
+    "PROXY_LISTEN": {
+      "type": "string",
+      "pattern": "^([0-9.]+|\\[[0-9A-Fa-f:]+\\]):[0-9]+$",
+      "description": "Behind your own proxy, where the front door listens on this server: an address and port.",
+      "default": "127.0.0.1:8080",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#behind-your-own-proxy"
+    },
+    "POSTGRES_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Postgres's admin login, used only by the storage job and backups.",
+      "x-services": [
+        "postgres",
+        "backup",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "KEYCLOAK_ADMIN_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Keycloak's own admin's password, read by Keycloak on its first start and by identity's realm job (keycloak-config) on every up.",
+      "x-services": [
+        "keycloak",
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "KEYCLOAK_ADMIN_USER": {
+      "type": "string",
+      "description": "Keycloak's own admin, the way back in if every deployment admin loses their one-time code.",
+      "default": "keycloak-admin",
+      "x-services": [
+        "keycloak",
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/settings.md#the-realm-job"
+    },
+    "IDENTITY_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Identity's own database login.",
+      "x-services": [
+        "identity",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "REGISTRY_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The registry's own database login.",
+      "x-services": [
+        "registry",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "EVENTS_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The events service's own database login.",
+      "x-services": [
+        "events",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "MODELS_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The model gateway's own database login.",
+      "x-services": [
+        "models",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PERMISSIONS_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The permissions service's own database login (platform_permissions), which the storage job makes and OpenFGA keeps its tables under.",
+      "x-services": [
+        "storage",
+        "openfga"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "KNOWLEDGE_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The knowledge graph service's own database login (kg_app), which its migration job makes.",
+      "x-services": [
+        "knowledge",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "KEYCLOAK_DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Keycloak's own database login.",
+      "x-services": [
+        "keycloak",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "GARAGE_RPC_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
+      "description": "Garage's nodes' shared secret.",
+      "x-services": [
+        "garage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "GARAGE_ADMIN_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Garage's admin API token, which the storage job makes buckets with.",
+      "x-services": [
+        "garage",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "FRONTENDS_BUCKET_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
+      "description": "The registry's key to the bucket apps' frontends are kept in by version (64 hex).",
+      "x-services": [
+        "registry",
+        "storage"
+      ],
+      "x-docs": "docs/src/content/docs/run/app-runner.md#turn-it-on"
+    },
+    "APP_SECRETS_KEY": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The key every app's database, bucket and sign-in secrets are worked out from; with the updater, it turns the app runner on.",
+      "x-services": [
+        "storage"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
+    },
+    "APP_PUBLISHERS": {
+      "type": "string",
+      "description": "Who may sign the apps the app runner installs, and nobody else: owner/repo or owner/repo/.github/workflows/<file>, space separated. List each app's repository, the template's among them, before installing it.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/src/content/docs/run/app-runner.md#who-it-trusts"
+    },
+    "APPS_NETWORK": {
+      "type": "string",
+      "description": "The Docker network the app runner puts apps on (default: the updater's own, usually platform_default).",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/src/content/docs/run/app-runner.md#each-apps-network"
+    },
+    "APP_PART_MEMORY_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|K|M|G|T)?)?$",
+      "default": "2Gi",
+      "description": "The most memory one part of an app may ask for (resources.limits.memory in its Score file), such as 2Gi.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_PART_CPU_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?m?)?$",
+      "default": "2",
+      "description": "The most CPU one part of an app may ask for (resources.limits.cpu), such as 2 or 500m.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_MEMORY_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|K|M|G|T)?)?$",
+      "default": "4Gi",
+      "description": "The most memory an app's parts may ask for together.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_CPU_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?m?)?$",
+      "default": "4",
+      "description": "The most CPU an app's parts may ask for together.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_SCRATCH_CEILING": {
+      "type": "string",
+      "pattern": "^([0-9]+(\\.[0-9]+)?(Ki|Mi|Gi|Ti|k|K|M|G|T)?)?$",
+      "default": "1Gi",
+      "description": "The most scratch space (augur-scratch) an app's parts may ask for together.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "APP_READY_SECONDS": {
+      "type": "string",
+      "pattern": "^[0-9]*$",
+      "default": "180",
+      "description": "How long the app runner waits for a part to answer, or a job to finish, when the part doesn't say (augur.dev/ready-seconds); never more than 600.",
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/app-storage.md#limits-and-ceilings"
+    },
+    "IDENTITY_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Identity's own sign-in.",
+      "x-services": [
+        "keycloak",
+        "identity"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "REGISTRY_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The registry's own sign-in.",
+      "x-services": [
+        "keycloak-config",
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "EVENTS_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The events service's own sign-in.",
+      "x-services": [
+        "keycloak-config",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "MODELS_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The model gateway's own sign-in; needed before models can be used.",
+      "x-services": [
+        "keycloak-config",
+        "models"
+      ],
+      "x-docs": "docs/agents.md#setting-up-the-model"
+    },
+    "KNOWLEDGE_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The knowledge graph service's own sign-in, to ask identity where people stand and to send its events.",
+      "x-services": [
+        "keycloak-config",
+        "knowledge"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PERMISSIONS_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The permissions service's own sign-in, to copy floors, positions and who holds them from identity.",
+      "x-services": [
+        "keycloak-config",
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "KNOWLEDGE_PAGE_LIMIT": {
+      "type": "string",
+      "description": "The most one page of a knowledge graph read gives, whatever the caller asks for.",
+      "default": "100",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_SUBGRAPH_DEPTH": {
+      "type": "string",
+      "description": "The most hops a knowledge graph subgraph read goes from its entity, whatever the caller asks for.",
+      "default": "3",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS": {
+      "type": "string",
+      "description": "How long an entity's beliefs must be quiet before the knowledge graph writes its summaries, in seconds.",
+      "default": "600",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_DAILY_BUDGET": {
+      "type": "string",
+      "description": "The most knowledge graph summaries written a day (UTC) for the whole deployment. Keep it under the models service's daily limit, with room for extraction.",
+      "default": "400",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "KNOWLEDGE_REFLECT_FLOOR_BUDGET": {
+      "type": "string",
+      "description": "The most knowledge graph summaries written a day (UTC) on any one floor.",
+      "default": "100",
+      "x-services": [
+        "knowledge"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "UPDATER_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The updater's own sign-in.",
+      "x-services": [
+        "keycloak-config",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
+    },
+    "FLEET_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The fleet's machine client's sign-in (platform-fleet, ADR 0100). With it, augurctl may change what this server runs within its ring, with nobody signed in. Unset, there is no such client.",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/from-files.md#the-fleets-client"
+    },
+    "PLATFORM_ADMIN_USER": {
+      "type": "string",
+      "description": "The first person who can sign in; identity gives them the deployment-admin role when nobody has it.",
+      "x-services": [
+        "keycloak",
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PLATFORM_ADMIN_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "That person's password, for the first sign-in only.",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PLATFORM_ADMIN_EMAIL": {
+      "type": "string",
+      "format": "email",
+      "description": "That person's email address.",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PLATFORM_ADMIN_FIRST_NAME": {
+      "type": "string",
+      "description": "That person's first name.",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PLATFORM_ADMIN_LAST_NAME": {
+      "type": "string",
+      "description": "That person's last name.",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PLATFORM_ADMIN_DEPARTMENT": {
+      "type": "string",
+      "description": "That person's department, made at first start. People see its name in Admin and on floors.",
+      "default": "Administration",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "ORG_NAME": {
+      "type": "string",
+      "description": "What the organisation is called at first start. After that an admin changes it in Admin, Organisation (ADR 0042); the sign-in pages still read it.",
+      "default": "Organisation",
+      "x-services": [
+        "identity",
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "ORG_PRODUCT_NAME": {
+      "type": "string",
+      "description": "What people see the product called: the browser tab, the sign-in pages and emails (the realm's display name).",
+      "default": "AUGUR",
+      "x-services": [
+        "web",
+        "keycloak-config",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "SMTP_HOST": {
+      "type": "string",
+      "description": "The organisation's SMTP relay. Empty: AUGUR sends no email, offers no password reset or address check, and says so.",
+      "default": "",
+      "x-services": [
+        "keycloak-config",
+        "gateway",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/email.md#set-up-the-relay"
+    },
+    "SMTP_PORT": {
+      "type": "string",
+      "description": "The relay's port. Empty: 587, or 465 with SMTP_SECURITY tls.",
+      "default": "",
+      "x-services": [
+        "keycloak-config",
+        "gateway",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/email.md#set-up-the-relay"
+    },
+    "SMTP_SECURITY": {
+      "type": "string",
+      "description": "starttls (the default), tls from the start, or none for a relay on a trusted network.",
+      "default": "",
+      "x-services": [
+        "keycloak-config",
+        "gateway",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/email.md#set-up-the-relay"
+    },
+    "SMTP_FROM": {
+      "type": "string",
+      "description": "The address email comes from, which the relay must accept. The product's name is shown as the sender.",
+      "default": "",
+      "x-services": [
+        "keycloak-config",
+        "gateway",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/email.md#set-up-the-relay"
+    },
+    "SMTP_REPLY_TO": {
+      "type": "string",
+      "description": "Where replies go, if not to SMTP_FROM.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/email.md#set-up-the-relay"
+    },
+    "SMTP_USER": {
+      "type": "string",
+      "description": "The relay's sign-in, if it wants one.",
+      "default": "",
+      "x-services": [
+        "keycloak-config",
+        "gateway",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/email.md#set-up-the-relay"
+    },
+    "SMTP_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "That sign-in's password.",
+      "x-services": [
+        "keycloak-config",
+        "gateway",
+        "events"
+      ],
+      "x-docs": "docs/src/content/docs/run/email.md#set-up-the-relay"
+    },
+    "ENTRA_TENANT_ID": {
+      "type": "string",
+      "description": "The organisation's Entra tenant id (a GUID), to sign in with the organisation's account. Set all three ENTRA_* settings, or none.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/entra.md#register-augur-in-entra"
+    },
+    "ENTRA_CLIENT_ID": {
+      "type": "string",
+      "description": "The AUGUR app registration's client id in that tenant.",
+      "default": "",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/entra.md#register-augur-in-entra"
+    },
+    "ENTRA_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "That app registration's client secret.",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/entra.md#register-augur-in-entra"
+    },
+    "ORG_LOGO_URL": {
+      "type": "string",
+      "description": "A link to a logo for the sign-in pages in place of the one kept in Admin → Organisation, and the mark on the shell's logo button, which goes to the desktop. Empty uses that one on the sign-in pages, or none, and the kit's placeholder mark on the button. The shell can show it only from this site, a data: URL or an address in APP_ORIGINS.",
+      "default": "",
+      "x-services": [
+        "keycloak",
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/whats-running.md#sign-in-pages-and-emails"
+    },
+    "BACKUP_HOUR_UTC": {
+      "type": "string",
+      "description": "The hour (UTC) the nightly backup is taken.",
+      "default": "2",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#nightly-backups"
+    },
+    "BACKUP_KEEP_DAYS": {
+      "type": "string",
+      "description": "How many days of backups are kept.",
+      "default": "14",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#nightly-backups"
+    },
+    "RESTORE_TEST_WEEKDAY": {
+      "type": "string",
+      "description": "The day the weekly restore test runs (0 is Sunday).",
+      "default": "0",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#nightly-backups"
+    },
+    "OFFSITE_REPOSITORY": {
+      "type": "string",
+      "description": "The restic repository in an S3-compatible bucket that backups are copied to, off the server (ADR 0060). Empty, backups stay on the server only.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#off-server-copy"
+    },
+    "OFFSITE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "restic's encryption password for the off-server copy. Keep a copy off the server too.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#off-server-copy"
+    },
+    "OFFSITE_ACCESS_KEY_ID": {
+      "type": "string",
+      "description": "The id of the bucket's key for the off-server copy.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#off-server-copy"
+    },
+    "OFFSITE_SECRET_ACCESS_KEY": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The secret of the bucket's key for the off-server copy.",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#off-server-copy"
+    },
+    "OFFSITE_REGION": {
+      "type": "string",
+      "description": "The bucket's region, if its provider wants one.",
+      "default": "",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#off-server-copy"
+    },
+    "OFFSITE_KEEP_DAILY": {
+      "type": "string",
+      "description": "How many days of copies the off-server bucket keeps.",
+      "default": "30",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/backups.md#off-server-copy"
+    },
+    "PITR_KEEP_DAYS": {
+      "type": "string",
+      "description": "How many days back the database can be restored to a point in time: the nightly base backups kept, here and in the off-server copy (ADR 0064).",
+      "default": "7",
+      "x-services": [
+        "backup"
+      ],
+      "x-docs": "docs/src/content/docs/run/restore-to-a-point-in-time.md#how-it-works"
+    },
+    "PITR_ARCHIVE_SECONDS": {
+      "type": "string",
+      "description": "At most how many seconds of database changes wait before Postgres archives them (ADR 0064).",
+      "default": "900",
+      "x-services": [
+        "postgres"
+      ],
+      "x-docs": "docs/src/content/docs/run/restore-to-a-point-in-time.md#how-it-works"
+    },
+    "MODEL_API_URL": {
+      "type": "string",
+      "description": "An OpenAI-style API for the model behind Agents, or stand-in; without it models stay off.",
+      "x-services": [
+        "models"
+      ],
+      "x-docs": "docs/agents.md#setting-up-the-model"
+    },
+    "MODEL_API_KEY": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The key to MODEL_API_URL.",
+      "x-services": [
+        "models"
+      ],
+      "x-docs": "docs/agents.md#setting-up-the-model"
+    },
+    "MODEL_NAME": {
+      "type": "string",
+      "description": "Which model MODEL_API_URL serves.",
+      "x-services": [
+        "models"
+      ],
+      "x-docs": "docs/agents.md#setting-up-the-model"
+    },
+    "MODEL_EMBEDDING_NAME": {
+      "type": "string",
+      "description": "The model at MODEL_API_URL that turns text into vectors.",
+      "x-services": [
+        "models"
+      ],
+      "x-docs": "docs/agents.md#setting-up-the-model"
+    },
+    "PERMISSIONS_DECIDES": {
+      "type": "string",
+      "description": "The checks the permissions service decides instead of the service's own (ADR 0085), comma-separated by site, such as models.settings.read,models.usage, or all. Move a site only once shadow mode has shown no disagreement there for 7 days. Empty: every check is only compared.",
+      "default": "",
+      "x-services": [
+        "models"
+      ],
+      "x-docs": "docs/observability.md#what-the-alert-rules-read"
+    },
+    "MODEL_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long the model gateway waits for the model to answer, in seconds.",
+      "default": "60",
+      "x-services": [
+        "models"
+      ],
+      "x-docs": "docs/agents.md#setting-up-the-model"
+    },
+    "APP_STORAGE": {
+      "type": "string",
+      "description": "Other apps that keep their own schema and files here, space separated (the apps that ship with AUGUR are made without being named).",
+      "x-services": [
+        "storage"
+      ],
+      "x-docs": "docs/app-storage.md#giving-an-app-its-storage-admins"
+    },
+    "APP_DATABASE_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[0-9]*$",
+      "default": "30",
+      "description": "The most database connections each app's login may hold at once, so one app can't take the ones AUGUR's services need (ADR 0073).",
+      "x-services": [
+        "storage"
+      ],
+      "x-docs": "docs/app-storage.md#what-an-app-gets",
+      "x-via": {
+        "updater": ".env"
+      }
+    },
+    "API_RATE_PER_SECOND": {
+      "type": "string",
+      "description": "API requests a second from one address.",
+      "default": "30",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "API_RATE_BURST": {
+      "type": "string",
+      "description": "API requests let through at once from one address.",
+      "default": "200",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "SSO_RATE_PER_SECOND": {
+      "type": "string",
+      "description": "Sign-in requests a second from one address.",
+      "default": "10",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "SSO_RATE_BURST": {
+      "type": "string",
+      "description": "Sign-in requests let through at once from one address.",
+      "default": "50",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "MAX_UPLOAD_MB": {
+      "type": "string",
+      "description": "The largest upload, in MB.",
+      "default": "2048",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "TRUSTED_PROXIES": {
+      "type": "string",
+      "pattern": "^(none|[ ,]*((((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(/([0-9]|[12][0-9]|3[0-2]))?|[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}(/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))?)([ ,]+|$))*)$",
+      "description": "Where the proxy in front of the front door is: addresses or ranges, separated by spaces or commas, believed about a caller's address; none believes no one.",
+      "default": "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "KEYCLOAK_CONSOLE": {
+      "type": "string",
+      "description": "open serves Keycloak's own admin console at PLATFORM_URL/sso/admin; it's closed otherwise.",
+      "default": "closed",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "APP_ORIGINS": {
+      "type": "string",
+      "description": "Other sites apps may load their code from, space separated.",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/day-to-day.md#apps-from-another-site"
+    },
+    "KIT_URL": {
+      "type": "string",
+      "description": "Where the shell and every app load the UI kit from.",
+      "default": "/kit/",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/browsers.md#the-ui-kit"
+    },
+    "FOCUS_DEPTH": {
+      "type": "string",
+      "enum": [
+        "veil",
+        "lens",
+        "scrim"
+      ],
+      "description": "How the shell and every app draw what's behind something in focus: veil or lens blur it, scrim only dims it, for desktops without a GPU such as virtual desktops. Unset, each app chooses (veil unless it says).",
+      "default": "",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/browsers.md#desktops-without-a-gpu"
+    },
+    "DESKTOP_APP": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]*$",
+      "description": "The app drawn on the desktop, under the bar and over the background, by its id. Empty for a bare desktop.",
+      "default": "home",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "GITHUB_READ_USER": {
+      "type": "string",
+      "description": "The GitHub account the deployment's read key (secrets/github-read-key) belongs to.",
+      "x-services": [
+        "registry",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/releases.md#the-read-key"
+    },
+    "RELEASE_FEED_URL": {
+      "type": "string",
+      "description": "Where new AUGUR releases are listed (a mirror's feed), or off.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/releases.md#the-release-feed"
+    },
+    "APP_FEEDS": {
+      "type": "string",
+      "description": "The feeds apps are installed from, each an https://, oci:// or file:/// address, split by commas or spaces; or off. Default: the feed AUGUR's releases come from, or none when RELEASE_FEED_URL is a mirror.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/app-runner.md#where-apps-come-from"
+    },
+    "APP_FEED_URL": {
+      "type": "string",
+      "description": "The name APP_FEEDS had before contract 3, read only when APP_FEEDS isn't set.",
+      "deprecated": true,
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/app-runner.md#where-apps-come-from"
+    },
+    "FEED_SIGNER": {
+      "type": "string",
+      "description": "Who must sign the release feed, as a regular expression, for AUGUR published from a fork (default: the publisher's Feed workflow, or the one in the repository the feed comes from).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/releases.md#the-signed-feed"
+    },
+    "SERVER_RING": {
+      "type": "string",
+      "enum": [
+        "dev",
+        "preview",
+        "production"
+      ],
+      "description": "dev (the workbench), preview or production: what kind of server this is.",
+      "default": "production",
+      "x-services": [
+        "web",
+        "registry"
+      ],
+      "x-via": {
+        "updater": ".env"
+      },
+      "x-docs": "docs/release-channels.md#server-rings"
+    },
+    "RELEASE_CHANNEL": {
+      "type": "string",
+      "description": "stable, beta or dev (default: by the server's ring).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/release-channels.md#server-rings"
+    },
+    "DEPLOYMENT_TIME_ZONE": {
+      "type": "string",
+      "description": "The time zone upgrade windows are in, such as Europe/London (UTC by default).",
+      "x-services": [
+        "web",
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/upgrade.md#upgrades-that-start-by-themselves"
+    },
+    "PIPELINE_FEED_URL": {
+      "type": "string",
+      "description": "Where the pipeline feed is, or off.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/release-channels.md#the-pipeline-feed"
+    },
+    "PORTAL_URL": {
+      "type": "string",
+      "description": "The company's Backstage, which the Upgrade Centre links to.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/reporting.md#set-it-up"
+    },
+    "DEPLOYMENT_ID": {
+      "type": "string",
+      "description": "This server's name in Backstage's catalog of deployments.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/reporting.md#set-it-up"
+    },
+    "DEPLOYMENT_REPORTING": {
+      "type": "string",
+      "description": "off turns reporting to Backstage off.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/reporting.md#a-server-with-no-way-out"
+    },
+    "ALLOW_PR_PREVIEWS": {
+      "type": "string",
+      "description": "on runs pull requests' builds for apps' developers on a production server too.",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/release-channels.md#server-rings"
+    },
+    "COMPOSE_PROJECT_NAME": {
+      "type": "string",
+      "description": "Docker Compose's name for this deployment, which its volumes and networks are named after. platform unless set. Set it only before a server's first start: on one that has data, changing it starts AUGUR empty.",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#1-get-the-release"
+    },
+    "COMPOSE_PROFILES": {
+      "type": "string",
+      "description": "Docker Compose's optional parts to run: updater, observability.",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
+    },
+    "PLATFORM_DIR": {
+      "type": "string",
+      "description": "The full path of infra/deploy on the server, for the updater.",
+      "x-services": [
+        "compose",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
+    },
+    "IMAGE_PULL_USER": {
+      "type": "string",
+      "description": "Before read keys: the account a read:packages token in secrets/image-pull-token belongs to.",
+      "x-services": [
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
+    },
+    "IMAGE_SIGNER": {
+      "type": "string",
+      "description": "Who must sign AUGUR's images and the apps the runner installs, as a certificate identity pattern, for AUGUR published from a fork (default: the publisher's Release workflow).",
+      "x-services": [
+        "updater"
+      ],
+      "x-docs": "docs/release-channels.md#signatures"
+    },
+    "IMAGE_SIGNER_ISSUER": {
+      "type": "string",
+      "description": "Who issues that identity's certificates (default: GitHub Actions).",
+      "x-services": [
+        "updater"
+      ],
+      "x-docs": "docs/release-channels.md#signatures"
+    },
+    "AUGUR_DEV_SIGNER": {
+      "type": "string",
+      "description": "Who must sign AUGUR's dev builds, which only the workbench runs (default: the dev builds workflow in IMAGE_SIGNER's repository, or the publisher's).",
+      "x-services": [
+        "updater"
+      ],
+      "x-docs": "docs/release-channels.md#signatures"
+    },
+    "DOMAIN_EVENTS_KEEP_DAYS": {
+      "type": "string",
+      "description": "How many days apps' domain events are kept.",
+      "default": "30",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#following"
+    },
+    "INBOX_KEEP_DAYS": {
+      "type": "string",
+      "description": "How many days closed inbox items are kept before they go, with their history (the audit log keeps every step).",
+      "default": "90",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/inbox.md#how-long-items-are-kept"
+    },
+    "INBOX_DONE_DAYS": {
+      "type": "string",
+      "description": "How many days back the Inbox's Done tab looks for closed items. Keep it at most INBOX_KEEP_DAYS, since older items are gone.",
+      "pattern": "^[1-9][0-9]*$",
+      "default": "30",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/inbox.md#how-long-items-are-kept"
+    },
+    "CALLER_SIGNING_KEY": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "x-generate": true,
+      "description": "The key the gateway signs callers with (64 hex). The gateway won't start without it, and every gateway of a deployment shares it.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/signed-caller.md#where-the-key-comes-from"
+    },
+    "CALLER_SIGNING_KEY_NEXT": {
+      "type": "string",
+      "writeOnly": true,
+      "pattern": "^[0-9a-fA-F]{64}$",
+      "description": "The key that comes next while the caller signing key is being changed: published beside CALLER_SIGNING_KEY, never signed with.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/signed-caller.md#changing-the-key"
+    },
+    "CALLER_BREAK_GLASS": {
+      "type": "string",
+      "enum": [
+        "on",
+        "off"
+      ],
+      "description": "on lets a server admin act as someone from inside a service's own container, when AUGUR can't sign them in. Off unless set; every call it lets through is logged.",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
+      ],
+      "x-docs": "docs/signed-caller.md#break-glass"
+    },
+    "OTEL_EXPORTER_OTLP_ENDPOINT": {
+      "type": "string",
+      "description": "The OpenTelemetry collector every service sends to: the deployment's own otel-lgtm unless another is named.",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ],
+      "x-docs": "docs/observability.md#turn-it-on",
+      "default": "http://otel-lgtm:4318"
+    },
+    "OTEL_EXPORTER_OTLP_HEADERS": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "Headers sent to that collector, such as its key: key=value, comma separated.",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ],
+      "x-docs": "docs/observability.md#turn-it-on"
+    },
+    "OTEL_TRACES_SAMPLER": {
+      "type": "string",
+      "description": "Which traces are kept, such as parentbased_traceidratio (default: all).",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ],
+      "x-docs": "docs/observability.md#for-a-service"
+    },
+    "OTEL_SDK_DISABLED": {
+      "type": "string",
+      "description": "true turns OpenTelemetry off in every service and the shell's browser errors, whatever else is set.",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ],
+      "x-docs": "docs/observability.md#turn-it-off"
+    },
+    "OTEL_TRACES_SAMPLER_ARG": {
+      "type": "string",
+      "description": "The sampler's argument, such as 0.1 to keep one trace in ten.",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ],
+      "x-docs": "docs/observability.md#for-a-service"
+    },
+    "SERVICE_CALL_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long one service waits for another before saying it can't be reached (calls to the model gateway and frontend uploads get longer).",
+      "default": "5",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "SHUTDOWN_GRACE_SECONDS": {
+      "type": "string",
+      "description": "How long a stopping service lets its calls in flight finish before it cuts what is still open (at most 23, so it still closes and sends its telemetry within the services' stop_grace_period of 30 seconds).",
+      "default": "20",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_STATEMENT_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long one database query may run before Postgres cancels it (0 for no limit; migrations are never limited).",
+      "default": "60",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "SEED_ALLOWED": {
+      "type": "string",
+      "enum": [
+        "true",
+        "false"
+      ],
+      "description": "true lets a deployment admin fill this deployment with synthetic sample data (pnpm seed). Never where real people work.",
+      "default": "false",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/staging.md#sample-data"
+    },
+    "GRAFANA_ADMIN_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Grafana's admin password (otel-lgtm), at least 16 characters. Required, as Grafana would otherwise take admin/admin. The updater makes it up on upgrade.",
+      "x-services": [
+        "otel-lgtm"
+      ],
+      "x-docs": "docs/observability.md#turn-it-on"
+    },
+    "ALERT_WEBHOOK_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "Grafana's key to tell deployment admins of an alert through the registry. The updater makes it up on upgrade.",
+      "x-services": [
+        "registry",
+        "otel-lgtm"
+      ],
+      "x-docs": "docs/observability.md#alerts"
+    },
+    "NODE_ENV": {
+      "type": "string",
+      "description": "production in every image and compose service.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ]
+    },
+    "PORT": {
+      "type": "string",
+      "description": "The port a service listens on.",
+      "x-internal": "compose",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions"
+      ],
+      "x-via": {
+        "gateway": "default"
+      }
+    },
+    "KNOWLEDGE_LEDGER_DIR": {
+      "type": "string",
+      "description": "Where the knowledge graph writes each forget, on a volume of its own outside Postgres, so a restore forgets it again.",
+      "x-internal": "compose",
+      "x-services": [
+        "knowledge",
+        "knowledge-migrate"
+      ]
+    },
+    "DATABASE_URL": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "A service's Postgres address and login, made from its *_DATABASE_PASSWORD.",
+      "x-internal": "compose",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "storage",
+        "knowledge",
+        "knowledge-migrate",
+        "permissions"
+      ]
+    },
+    "IDENTITY_URL": {
+      "type": "string",
+      "description": "Where the identity service is.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "registry",
+        "events",
+        "knowledge",
+        "permissions"
+      ],
+      "x-via": {
+        "updater": "default"
+      }
+    },
+    "REGISTRY_URL": {
+      "type": "string",
+      "description": "Where the registry is.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "identity",
+        "events",
+        "models",
+        "updater"
+      ]
+    },
+    "EVENTS_URL": {
+      "type": "string",
+      "description": "Where the events service is.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "models",
+        "knowledge",
+        "permissions"
+      ]
+    },
+    "MODELS_URL": {
+      "type": "string",
+      "description": "Where the model gateway is.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "knowledge"
+      ]
+    },
+    "PERMISSIONS_URL": {
+      "type": "string",
+      "description": "Where the permissions service is: for who settles and raises on each floor, asked beside other services' admin and lead checks to compare answers (shadow mode), and asked by the gateway whether someone is acting as an admin persona.",
+      "x-internal": "compose",
+      "x-services": [
+        "events",
+        "gateway",
+        "identity",
+        "knowledge",
+        "models",
+        "registry"
+      ]
+    },
+    "KNOWLEDGE_URL": {
+      "type": "string",
+      "description": "Where the knowledge graph service is.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "registry"
+      ]
+    },
+    "GATEWAY_URL": {
+      "type": "string",
+      "description": "Where the gateway is, for the key it signs callers with.",
+      "x-internal": "compose",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models"
+      ]
+    },
+    "OIDC_ISSUER": {
+      "type": "string",
+      "description": "The sign-in service as tokens name it: PLATFORM_URL/sso/realms/platform.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ]
+    },
+    "OIDC_INTERNAL_URL": {
+      "type": "string",
+      "description": "The sign-in service as services reach it inside Docker.",
+      "x-internal": "compose",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater",
+        "gateway"
+      ]
+    },
+    "OIDC_JWKS_URL": {
+      "type": "string",
+      "description": "Where the sign-in service's signing keys are, as the gateway reaches them.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
+    "OIDC_AUDIENCE": {
+      "type": "string",
+      "description": "The audience people's tokens are issued for.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
+    "OIDC_SERVICE_AUDIENCE": {
+      "type": "string",
+      "description": "The audience apps' and platform services' own tokens are issued for (contract 3).",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
+    "OIDC_TOKEN_URL": {
+      "type": "string",
+      "description": "Where a service fetches its own tokens (default: from OIDC_INTERNAL_URL).",
+      "x-internal": "default",
+      "x-via": {
+        "gateway": "default"
+      }
+    },
+    "APP_MANIFEST": {
+      "type": "string",
+      "description": "An app service's manifest file (default: the manifest.json its build put beside the code).",
+      "x-internal": "default"
+    },
+    "APP_FRONTEND": {
+      "type": "string",
+      "description": "The folder holding an app service's built frontend, which it publishes at start (default: frontend/ beside the code).",
+      "x-internal": "default"
+    },
+    "SERVICE_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "A service's own sign-in secret, from its *_CLIENT_SECRET.",
+      "x-internal": "compose",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater",
+        "permissions"
+      ]
+    },
+    "SERVICE_CLIENT_SECRETS": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "Every AUGUR service's and shipped app's sign-in secret, for identity's realm job (keycloak-config) to make their Keycloak clients.",
+      "x-internal": "compose",
+      "x-services": [
+        "keycloak-config"
+      ]
+    },
+    "KEYCLOAK_URL": {
+      "type": "string",
+      "description": "Keycloak as identity reaches it.",
+      "x-internal": "compose",
+      "x-services": [
+        "identity"
+      ]
+    },
+    "KEYCLOAK_REALM": {
+      "type": "string",
+      "description": "The Keycloak realm people sign in to: platform, an old id kept on purpose.",
+      "x-internal": "default",
+      "x-via": {
+        "identity": "default"
+      }
+    },
+    "BACKUP_DIR": {
+      "type": "string",
+      "description": "Where the backup container writes its results, for Status.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
+    "PUBLIC_ACCESS_FILE": {
+      "type": "string",
+      "description": "What infra/deploy/public.sh writes when AUGUR is open to the internet, for Status.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
+    "APP_UPSTREAMS": {
+      "type": "string",
+      "description": "Apps' services run beside AUGUR outside the app runner, name=url, comma separated. None by default.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway"
+      ]
+    },
+    "APP_DELEGATION_SECONDS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long a delegated caller lasts, in seconds: the signed caller the gateway hands an app's part when it acts for a person (default 300).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/signed-caller.md#acting-for-a-person-the-delegated-caller"
+    },
+    "APP_CONNECT_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long the gateway waits to connect to an app's part before answering 502, in milliseconds (default 5000).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "APP_RESPONSE_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long an app's part may take to start answering, and between one piece of its answer and the next, before the gateway answers 504, in milliseconds (default 60000).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "APP_CONCURRENT_CALLS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many calls one app may have in flight at the gateway before the next answers 503 (default 64).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_SERVICE_CONNECT_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long the gateway waits to connect to one of AUGUR's own services before answering 502, in milliseconds (default 5000).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How long one of AUGUR's own services may take to start answering, and between one piece of its answer and the next, before the gateway answers 504, in milliseconds (default 300000). Keep it above the services' own limits, such as MODEL_TIMEOUT_SECONDS, so their own words come first. Open streams are never cut by it.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_SERVICE_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many connections the gateway keeps to each of AUGUR's own services for ordinary calls (default 128).",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "GATEWAY_STREAM_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$",
+      "description": "How many open streams the gateway holds to each of AUGUR's own services, whatever kind they are, apart from its ordinary calls (default 4096). Each open tab holds two to the events service.",
+      "x-services": [
+        "gateway"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
+    "FRONTENDS_S3_URL": {
+      "type": "string",
+      "description": "Where the frontends bucket is.",
+      "x-internal": "compose",
+      "x-services": [
+        "registry"
+      ]
+    },
+    "FRONTENDS_BUCKET": {
+      "type": "string",
+      "description": "The bucket apps' frontends are kept in (augur-frontends).",
+      "x-internal": "default",
+      "x-via": {
+        "registry": "default"
+      }
+    },
+    "GITHUB_READ_KEY": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The deployment's read key, read from secrets/github-read-key.",
+      "x-internal": "default",
+      "x-via": {
+        "registry": "default"
+      }
+    },
+    "GITHUB_READ_KEY_FILE": {
+      "type": "string",
+      "description": "Where the read key's file is (default /run/secrets/augur/github-read-key).",
+      "x-internal": "default",
+      "x-via": {
+        "registry": "default"
+      }
+    },
+    "RELEASE_FEED_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "Before read keys: a token for GitHub's releases API.",
+      "x-internal": "default",
+      "x-via": {
+        "registry": "default"
+      }
+    },
+    "RELEASE_FEED_TOKEN_FILE": {
+      "type": "string",
+      "description": "Before read keys: where that token's file is (default /run/secrets/augur/release-feed-token).",
+      "x-internal": "default",
+      "x-via": {
+        "registry": "default"
+      }
+    },
+    "AUGUR_BUILD": {
+      "type": "string",
+      "description": "source when the images are built from a checkout, for the Upgrade Centre.",
+      "x-internal": "compose.build.yml",
+      "x-via": {
+        "registry": "infra/deploy/compose.build.yml"
+      }
+    },
+    "DOCKER_HOST": {
+      "type": "string",
+      "description": "The Docker API the updater drives (the docker-proxy).",
+      "x-internal": "compose",
+      "x-services": [
+        "updater"
+      ]
+    },
+    "APP_RELAY_TO": {
+      "type": "string",
+      "description": "What one of the apps' relays passes calls on to, as host:port: Postgres or the object store, by its name on the compose network alone.",
+      "x-internal": "compose",
+      "x-services": [
+        "db-relay",
+        "bucket-relay"
+      ]
+    },
+    "GARAGE_ADMIN_URL": {
+      "type": "string",
+      "description": "Garage's admin API, for the storage job.",
+      "x-internal": "compose",
+      "x-services": [
+        "storage"
+      ]
+    },
+    "GARAGE_S3_URL": {
+      "type": "string",
+      "description": "Garage's S3 API, for the storage job (default http://garage:3900).",
+      "x-internal": "default",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "PLATFORM_DATABASE_LOGINS": {
+      "type": "string",
+      "description": "The AUGUR services that get a database login of their own.",
+      "x-internal": "compose",
+      "x-services": [
+        "storage"
+      ]
+    },
+    "APP_DATABASE_HOST": {
+      "type": "string",
+      "description": "The database host apps are told to use (default: DATABASE_URL's).",
+      "x-internal": "default",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "APP_STORAGE_DROP": {
+      "type": "string",
+      "description": "A pull request preview's scratch storage to take away, set by the app runner for one run of the storage job.",
+      "x-internal": "updater",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "DEFAULT_APPS": {
+      "type": "string",
+      "pattern": "^[a-z0-9, -]*$",
+      "description": "The apps this deployment installs from the app feed by default, by id, split by commas or spaces: their asks are agreed by the deployment, and they can't be removed while named (empty installs none).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/app-runner.md#default-apps"
+    },
+    "IN_PAGE_APPS": {
+      "type": "string",
+      "pattern": "^[a-z0-9, -]*$",
+      "description": "A break-glass: apps not made by AUGUR that may still load into the shell's own page on contract 2, by id, split by commas or spaces, while they move to the app contract (empty allows none).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/src/content/docs/run/app-runner.md#apps-made-before-the-app-contract"
+    },
+    "APP_DATA_GRACE_DAYS": {
+      "type": "string",
+      "pattern": "^([1-9][0-9]?|[12][0-9]{2}|3[0-5][0-9]|36[0-5])?$",
+      "description": "How many days an app removed from the server keeps its data, settings and floors before they are deleted (30 when empty).",
+      "x-services": [
+        "registry"
+      ],
+      "x-docs": "docs/app-storage.md#when-an-app-is-removed"
+    },
+    "APP_STORAGE_RETIRE": {
+      "type": "string",
+      "description": "An app the app runner removed whose time to come back (APP_DATA_GRACE_DAYS) ended: the storage job takes its data away, set by the app runner for one run.",
+      "x-internal": "updater",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "APP_STORAGE_BACKUP": {
+      "type": "string",
+      "description": "The dump the app runner just took before taking a removed app's data away: the storage job drops it only when that backup is the last noted in backups/status and worked, apps' files included (ADR 0103). Set by the app runner beside APP_STORAGE_RETIRE.",
+      "x-internal": "updater",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "RETIRED_APPS": {
+      "type": "string",
+      "description": "Apps AUGUR no longer runs whose data the storage job takes away, once on each server (ADR 0075).",
+      "x-internal": "compose",
+      "x-services": [
+        "storage"
+      ]
+    },
+    "KEYCLOAK_DATABASE": {
+      "type": "string",
+      "description": "Keycloak's own database (keycloak).",
+      "x-internal": "default",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "KEYCLOAK_DATABASE_USER": {
+      "type": "string",
+      "description": "Keycloak's own database login (keycloak).",
+      "x-internal": "default",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "S3_ENDPOINT": {
+      "type": "string",
+      "description": "An app's bucket's S3 address.",
+      "x-internal": "compose"
+    },
+    "S3_BUCKET": {
+      "type": "string",
+      "description": "An app's bucket.",
+      "x-internal": "compose"
+    },
+    "S3_SECRET_ACCESS_KEY": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "An app's bucket secret, from its *_BUCKET_SECRET.",
+      "x-internal": "compose"
+    },
+    "S3_ACCESS_KEY_ID": {
+      "type": "string",
+      "description": "An app's bucket key id (default: worked out from its secret).",
+      "x-internal": "default"
+    },
+    "S3_REGION": {
+      "type": "string",
+      "description": "An app's bucket's region (default garage).",
+      "x-internal": "default"
+    },
+    "CALLER_KEYS_URL": {
+      "type": "string",
+      "description": "Where a service fetches the gateway's caller key, for an app hosted outside the compose network (default: from GATEWAY_URL).",
+      "x-internal": "default",
+      "x-docs": "docs/signed-caller.md#where-the-key-comes-from"
+    },
+    "APP_PREVIEW": {
+      "type": "string",
+      "description": "The pull request an app's service is a preview of, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "APP_REGISTERED_BY": {
+      "type": "string",
+      "description": "runner when the app runner registers an app, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_HOST": {
+      "type": "string",
+      "description": "Where an app part's own database is, from its Score file's augur-database resource, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_PORT": {
+      "type": "string",
+      "description": "The port of an app part's own database (default 5432), set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_NAME": {
+      "type": "string",
+      "description": "The database an app part's schema is in, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_USER": {
+      "type": "string",
+      "description": "An app part's database login, app_<id>, whose search path is the app's schema, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_SCHEMA": {
+      "type": "string",
+      "description": "An app part's own schema, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_CONNECTIONS": {
+      "type": "string",
+      "description": "How many connections an app part's pool may open, from its Score file, set by the app runner.",
+      "x-internal": "updater"
+    },
+    "DATABASE_PASSWORD": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "An app part's database password, given only as a file (DATABASE_PASSWORD_FILE), set by the app runner.",
+      "x-internal": "updater"
+    },
+    "OTEL_RESOURCE_ATTRIBUTES": {
+      "type": "string",
+      "description": "deployment.environment.name, from SERVER_RING.",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "updater"
+      ]
+    },
+    "OTEL_EXPORTER_OTLP_TRACES_ENDPOINT": {
+      "type": "string",
+      "description": "A collector for traces only (default: OTEL_EXPORTER_OTLP_ENDPOINT's).",
+      "x-internal": "default"
+    },
+    "OTEL_SERVICE_NAME": {
+      "type": "string",
+      "description": "A service's name in traces (default: its package's).",
+      "x-internal": "default"
+    },
+    "REALM_PASSWORD_MIN_LENGTH": {
+      "type": "string",
+      "description": "The shortest password Keycloak accepts; at least 15 (a deployment can be stricter, never looser).",
+      "default": "15",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/settings.md#the-realm-job"
+    },
+    "REALM_PASSWORD_DENYLIST": {
+      "type": "string",
+      "description": "The breached-password list, a file in infra/deploy/keycloak/password-blacklists.",
+      "default": "ncsc-top100k.txt",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/settings.md#the-realm-job"
+    },
+    "REALM_SESSION_IDLE_HOURS": {
+      "type": "string",
+      "description": "Hours unused after which a session ends; 8 at most.",
+      "default": "8",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/settings.md#the-realm-job"
+    },
+    "REALM_SESSION_MAX_HOURS": {
+      "type": "string",
+      "description": "Hours after which a session ends whatever; 10 at most.",
+      "default": "10",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/settings.md#the-realm-job"
+    },
+    "REALM_SIGN_IN_EVENT_DAYS": {
+      "type": "string",
+      "description": "Days Keycloak keeps sign-in events.",
+      "default": "90",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/settings.md#the-realm-job"
+    },
+    "REALM_ADMIN_EVENT_DAYS": {
+      "type": "string",
+      "description": "Days Keycloak keeps admins' changes.",
+      "default": "365",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/settings.md#the-realm-job"
+    },
+    "REALM_LANGUAGES": {
+      "type": "string",
+      "description": "The languages offered at sign-in and in Account, comma separated, the first the default (say en,de,fr). Empty offers English only.",
+      "default": "",
+      "x-services": [
+        "keycloak-config",
+        "identity"
+      ],
+      "x-docs": "docs/src/content/docs/run/whats-running.md#sign-in-pages-and-emails"
+    },
+    "LOG_MAX_SIZE": {
+      "type": "string",
+      "description": "The largest each container log file grows before Docker starts a new one.",
+      "default": "10m",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "LOG_MAX_FILES": {
+      "type": "string",
+      "description": "How many log files Docker keeps per container.",
+      "default": "3",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "KEYCLOAK_MEM_LIMIT": {
+      "type": "string",
+      "description": "Keycloak's memory limit; it sizes its Java heap from it.",
+      "default": "2g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "OTEL_LGTM_MEM_LIMIT": {
+      "type": "string",
+      "description": "The memory limit of the observability stack.",
+      "default": "2g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "OTEL_LGTM_REPLICAS": {
+      "type": "string",
+      "enum": [
+        "0",
+        "1"
+      ],
+      "description": "0 stops the deployment's own otel-lgtm, when an organisation's collector takes its place.",
+      "default": "1",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/observability.md#turn-it-off",
+      "x-via": {
+        "updater": ".env"
+      }
+    },
+    "OPENFGA_URL": {
+      "type": "string",
+      "description": "Where the permissions service reaches OpenFGA, which holds the relationships it answers from (ADR 0085).",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
+      }
+    },
+    "OPENFGA_TOKEN": {
+      "type": "string",
+      "writeOnly": true,
+      "minLength": 16,
+      "x-generate": true,
+      "description": "The key the permissions service sends OpenFGA, which OpenFGA needs on every call (ADR 0085).",
+      "x-services": [
+        "openfga",
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "PERMISSIONS_STORE": {
+      "type": "string",
+      "description": "The OpenFGA store this deployment's permissions are kept in.",
+      "default": "augur",
+      "x-internal": "compose",
+      "x-via": {
+        "permissions": "infra/docker-compose.yml"
+      }
+    },
+    "PERMISSIONS_COPY_SECONDS": {
+      "type": "string",
+      "description": "How often the permissions service copies floors, positions and who holds them whole from identity, in seconds, to put right anything an event missed. Each change identity announces is copied as it happens.",
+      "default": "300",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/whats-running.md#permissions"
+    },
+    "PERSONA_DEPLOYMENT_ADMIN_MINUTES": {
+      "type": "string",
+      "description": "The longest someone may act as a deployment admin persona at a time, in minutes. They sign in again and give a reason each time (ADR 0086).",
+      "default": "60",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/whats-running.md#permissions"
+    },
+    "PERSONA_ORG_ADMIN_MINUTES": {
+      "type": "string",
+      "description": "The longest someone may act as an org admin persona at a time, in minutes. They sign in again and give a reason each time (ADR 0086).",
+      "default": "480",
+      "x-services": [
+        "permissions"
+      ],
+      "x-docs": "docs/src/content/docs/run/whats-running.md#permissions"
+    }
+  }
+}

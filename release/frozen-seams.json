@@ -1,0 +1,31 @@
+{
+  "about": "The seams apps depend on, each held against a baseline in release/frozen/ by scripts/check-frozen.mjs. status: frozen (only adds; a narrowing fails CI), fix-first (to be changed before it is frozen; reported, never fails), open (may still change; reported, never fails). Changing a status or moving a baseline is a decision and goes with a record. The statuses here are proposed, from the one-way doors review of 15 November 2026 at d4efc5ac: nothing is accepted until Harry accepts it.",
+  "baselineCommit": "d4efc5ac",
+  "seams": [
+    { "id": "sdk3", "kind": "api-report", "status": "frozen", "path": "platform/packages/mfe-sdk/etc/mfe-sdk-sdk3.api.md", "baseline": "release/frozen/mfe-sdk-sdk3.api.baseline", "why": "What a contract 3 frontend builds against." },
+    { "id": "sdk-build", "kind": "api-report", "status": "frozen", "path": "platform/packages/mfe-sdk/etc/mfe-sdk-build.api.md", "baseline": "release/frozen/mfe-sdk-build.api.baseline", "why": "The build helper an app's bundler imports." },
+    { "id": "sdk-root", "kind": "api-report", "status": "fix-first", "path": "platform/packages/mfe-sdk/etc/mfe-sdk.api.md", "baseline": "release/frozen/mfe-sdk.api.baseline", "why": "Contract 2 and the refs and intent helpers share this entry: move the refs and intents a contract 3 app needs to sdk3, then this entry is AUGUR's own." },
+    { "id": "service-kit", "kind": "api-report", "status": "fix-first", "path": "platform/packages/service-kit/etc/service-kit.api.md", "baseline": "release/frozen/service-kit.api.baseline", "why": "An app's backend imports it, and it exports AUGUR's internals beside what an app needs: split an app entry first." },
+    { "id": "service-kit-mail", "kind": "api-report", "status": "open", "path": "platform/packages/service-kit/etc/service-kit-mail.api.md", "baseline": "release/frozen/service-kit-mail.api.baseline", "why": "AUGUR's own services." },
+    { "id": "service-kit-telemetry", "kind": "api-report", "status": "open", "path": "platform/packages/service-kit/etc/service-kit-telemetry.api.md", "baseline": "release/frozen/service-kit-telemetry.api.baseline", "why": "AUGUR's own services." },
+    { "id": "records", "kind": "api-report", "status": "open", "path": "platform/packages/records/etc/records.api.md", "baseline": "release/frozen/records.api.baseline", "why": "Not in the template; one commit old." },
+    { "id": "app-tools", "kind": "api-report", "status": "open", "path": "platform/packages/app-tools/etc/app-tools.api.md", "baseline": "release/frozen/app-tools.api.baseline", "why": "The release v1 entry, for contract 2." },
+    { "id": "app-tools-release2", "kind": "api-report", "status": "frozen", "path": "platform/packages/app-tools/etc/app-tools-release2.api.md", "baseline": "release/frozen/app-tools-release2.api.baseline", "why": "What an app's release workflow calls." },
+    { "id": "app-tools-validate", "kind": "api-report", "status": "frozen", "path": "platform/packages/app-tools/etc/app-tools-validate.api.md", "baseline": "release/frozen/app-tools-validate.api.baseline", "why": "What an app's CI calls." },
+    { "id": "app-tools-catalog", "kind": "api-report", "status": "open", "path": "platform/packages/app-tools/etc/app-tools-catalog.api.md", "baseline": "release/frozen/app-tools-catalog.api.baseline", "why": "Backstage's catalog entry, not the app contract." },
+    { "id": "manifest-3", "kind": "json-schema", "status": "fix-first", "path": "platform/packages/app-tools/manifest-3.schema.json", "baseline": "release/frozen/manifest-3.schema.json", "why": "Decide `contract` or `majors`, declare events, and settle requiredRole and links before it is frozen." },
+    { "id": "score-part-1", "kind": "json-schema", "status": "frozen", "path": "platform/packages/app-tools/score-part-1.schema.json", "baseline": "release/frozen/score-part-1.schema.json", "why": "How an app asks for its database, bucket, gateway and settings: the seam that lets storage move underneath it." },
+    { "id": "app-release-2", "kind": "json-schema", "status": "frozen", "path": "platform/packages/app-tools/app-release-2.schema.json", "baseline": "release/frozen/app-release-2.schema.json", "why": "Installed releases stay installed: a deployment must read every release it ever took." },
+    { "id": "manifest-2", "kind": "json-schema", "status": "open", "path": "contracts/manifest.schema.json", "baseline": "release/frozen/manifest.schema.json", "why": "Contract 2, for AUGUR's own apps only." },
+    { "id": "settings", "kind": "json-schema", "status": "open", "path": "infra/deploy/settings.schema.json", "baseline": "release/frozen/settings.schema.json", "why": "A deployment's settings, for the people who run one, guarded by upgrade notes. Seventeen keys were removed in the week before the baseline." },
+    { "id": "gateway-api", "kind": "openapi", "status": "frozen", "path": "contracts/gateway.openapi.yaml", "baseline": "release/frozen/gateway.openapi.yaml", "why": "Caller keys: how a part checks who is calling." },
+    { "id": "events-api", "kind": "openapi", "status": "fix-first", "path": "contracts/events.openapi.yaml", "baseline": "release/frozen/events.openapi.yaml", "why": "The envelope carries no payload version and no declared topics yet." },
+    { "id": "identity-api", "kind": "openapi", "status": "frozen", "path": "contracts/identity.openapi.yaml", "baseline": "release/frozen/identity.openapi.yaml", "why": "people:read and the directory." },
+    { "id": "registry-api", "kind": "openapi", "status": "frozen", "path": "contracts/registry.openapi.yaml", "baseline": "release/frozen/registry.openapi.yaml", "why": "An app registers itself and reads its settings and grants." },
+    { "id": "models-api", "kind": "openapi", "status": "frozen", "path": "contracts/models.openapi.yaml", "baseline": "release/frozen/models.openapi.yaml", "why": "models:use." },
+    { "id": "knowledge-api", "kind": "openapi", "status": "open", "path": "contracts/knowledge.openapi.yaml", "baseline": "release/frozen/knowledge.openapi.yaml", "why": "Six days old, eleven commits." }
+  ],
+  "unwatchedLibraries": [
+    { "name": "@augur/clients", "why": "Generated from contracts/*.openapi.yaml, which are seams above; its own hand-written surface is three functions." }
+  ]
+}

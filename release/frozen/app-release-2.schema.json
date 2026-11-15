@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:augur:app-release:2",
+  "title": "AUGUR app release file, v2",
+  "description": "What an app's release carries (augur.app-release/v2): its manifest, its frontend artifact by digest, one Score workload per part with images by digest, who signed it, and what it asks for. The runner installs from this file and nothing else.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "channel",
+    "releasedAt",
+    "manifest",
+    "frontend",
+    "parts",
+    "signer",
+    "asks"
+  ],
+  "properties": {
+    "schema": {
+      "const": "augur.app-release/v2"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,39}$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 40
+    },
+    "channel": {
+      "enum": [
+        "stable",
+        "beta",
+        "dev",
+        "preview"
+      ]
+    },
+    "releasedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "manifest": {
+      "$ref": "urn:augur:app-manifest:3"
+    },
+    "frontend": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "digest",
+        "mediaType"
+      ],
+      "properties": {
+        "artifact": {
+          "type": "string",
+          "pattern": "@sha256:[0-9a-f]{64}$"
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "mediaType": {
+          "const": "application/vnd.augur.frontend.v1.tar+gzip"
+        }
+      },
+      "description": "The frontend bundle, or null for an app with no UI. Required (not null) when the manifest has `frontend`."
+    },
+    "parts": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "One Score workload per part, as score/<part>.score.yaml in the repository, with the image filled in by digest. Empty for a UI-only app.",
+      "items": {
+        "$ref": "urn:augur:score-part:1"
+      }
+    },
+    "signer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "workflow"
+      ],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "pattern": "^[\\w.-]+/[\\w.-]+$"
+        },
+        "workflow": {
+          "type": "string",
+          "pattern": "^\\.github/workflows/[\\w.-]+\\.ya?ml$"
+        }
+      }
+    },
+    "asks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scopes",
+        "resources",
+        "limits",
+        "floors",
+        "maxUpload",
+        "settings",
+        "canvas"
+      ],
+      "description": "What an admin agrees to, written out so a runner can compare one version with the one before without reading the Score files.",
+      "properties": {
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "part",
+              "type"
+            ],
+            "properties": {
+              "part": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              },
+              "params": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "memory",
+              "cpu"
+            ],
+            "properties": {
+              "memory": {
+                "type": "string"
+              },
+              "cpu": {
+                "type": "string"
+              }
+            }
+          },
+          "description": "By part name."
+        },
+        "floors": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "personal",
+              "team",
+              "org"
+            ]
+          }
+        },
+        "maxUpload": {
+          "type": "integer"
+        },
+        "settings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "canvas": {
+          "type": "boolean"
+        }
+      }
+    },
+    "notes": {
+      "type": "string",
+      "maxLength": 20000
+    },
+    "preview": {
+      "type": "object",
+      "properties": {
+        "pr": {
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

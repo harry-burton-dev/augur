@@ -1,0 +1,2011 @@
+# Generated from platform/services/events: its routes' TypeBox schemas and src/contract.ts (ADR 0055).
+# Change those, then run pnpm contracts. CI fails when this file is out of step.
+# Paths below are relative to the server: the major of info.version is the path prefix.
+# A breaking change bumps the major and is served under /v2 beside /v1.
+openapi: 3.1.0
+info:
+  title: Events
+  version: 1.17.0
+  description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
+components:
+  schemas:
+    Refusal:
+      type: object
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - reason
+        - error
+        - message
+      properties:
+        type:
+          type: string
+          description: about:blank unless the problem names its own type
+        title:
+          type: string
+          description: The status's own phrase
+        status:
+          type: integer
+        detail:
+          type: string
+          description: Says why, and what would change it
+        instance:
+          type: string
+        reason:
+          type: string
+          description: A stable code a client can switch on
+          examples:
+            - forbidden
+        whoCanChange:
+          type: string
+          description: Who can fix it, in plain words, when someone can
+        error:
+          type: string
+          description: The same as reason, for SDK 1.x clients
+        message:
+          type: string
+          description: The same as detail, for SDK 1.x clients
+    NewNotification:
+      type: object
+      required:
+        - app
+        - recipients
+        - level
+        - title
+      properties:
+        app:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{1,39}$
+          description: The app it is about; the Shell opens it
+        recipients:
+          type: array
+          items:
+            type: string
+            minLength: 1
+            maxLength: 100
+          maxItems: 500
+          uniqueItems: true
+          description: User ids; empty only with toTeam or audience
+        toTeam:
+          type: boolean
+          description: To everyone on the team the call's floor names, instead of recipients
+        audience:
+          type: array
+          items:
+            type: string
+            pattern: ^(org|(person|team|tree|role):[A-Za-z0-9_.:-]{1,100})$
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          description: Platform services only. Principals such as role:deployment-admin, worked out by identity as it's sent, instead of recipients
+        key:
+          type: string
+          minLength: 1
+          maxLength: 200
+          description: The sender's name for this news; each person is told an app's key once
+        kind:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,39}$
+          description: One of the kinds the app's manifest declares (notifications.kinds), so people can choose how each kind reaches them
+        level:
+          enum:
+            - needs
+            - info
+            - done
+            - failed
+          description: '"needs" when the person has to act'
+        urgent:
+          type: boolean
+          description: "Platform services only (ADR 0044 D3). News that stops work, such as a halted release: the shell may letterbox it"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        detail:
+          type: string
+          maxLength: 2000
+        link:
+          type: string
+          pattern: ^/
+          maxLength: 500
+          description: Path inside the app to open
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationAction"
+          maxItems: 2
+          description: Buttons on it in the Shell; pressing one raises its intent through the shell and marks it read
+      additionalProperties: false
+    NotificationAction:
+      type: object
+      required:
+        - label
+        - intent
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 30
+          description: '"Approve", "Open"'
+        intent:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9.-]*$
+              maxLength: 80
+              description: An intent type some app handles
+            payload:
+              description: The app's own; at most 1024 bytes as JSON
+          additionalProperties: false
+      additionalProperties: false
+    Notification:
+      type: object
+      required:
+        - id
+        - app
+        - level
+        - title
+        - createdAt
+      properties:
+        id:
+          type: string
+        app:
+          type: string
+        level:
+          enum:
+            - needs
+            - info
+            - done
+            - failed
+        title:
+          type: string
+        detail:
+          type: string
+        link:
+          type: string
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationAction"
+        kind:
+          type: string
+          description: One of the app's notifications.kinds
+        urgent:
+          type: boolean
+          description: "News that stops work, from a platform service: the shell may letterbox it"
+        createdAt:
+          type: string
+          format: date-time
+        readAt:
+          type: string
+          format: date-time
+        workspace:
+          $ref: "#/components/schemas/EventFloor"
+    NewAuditEntry:
+      type: object
+      required:
+        - actor
+        - app
+        - action
+      properties:
+        actor:
+          type: object
+          required:
+            - id
+            - kind
+          properties:
+            id:
+              type: string
+              minLength: 1
+              maxLength: 100
+              description: A person's id or a service's name
+            kind:
+              enum:
+                - user
+                - service
+          additionalProperties: false
+        app:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: The app or service it happened in
+        action:
+          type: string
+          pattern: ^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$
+          maxLength: 80
+          description: A dotted verb, e.g. "document.published"
+        target:
+          type: string
+          maxLength: 200
+        detail:
+          type: object
+          maxProperties: 50
+          additionalProperties: {}
+      additionalProperties: false
+    AuditEntry:
+      allOf:
+        - $ref: "#/components/schemas/NewAuditEntry"
+        - type: object
+          required:
+            - id
+            - at
+          properties:
+            id:
+              type: string
+            at:
+              type: string
+              format: date-time
+            workspace:
+              $ref: "#/components/schemas/EventFloor"
+    EventFloor:
+      type: object
+      required:
+        - id
+        - path
+      properties:
+        id:
+          type: string
+        path:
+          type: array
+          items:
+            type: string
+      description: The floor it happened on, and its path from the root as it stood then
+    TeamNotices:
+      type: object
+      required:
+        - workspace
+        - on
+      properties:
+        workspace:
+          type: string
+        on:
+          type: boolean
+    NewDomainEvent:
+      type: object
+      required:
+        - topic
+        - id
+        - payload
+      properties:
+        topic:
+          type: string
+          pattern: ^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)+$
+          maxLength: 120
+          examples:
+            - folio.document.published
+        id:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The publisher's own id for it
+        workspace:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The floor it happened on
+        payload: {}
+      additionalProperties: false
+    DomainEvent:
+      type: object
+      required:
+        - seq
+        - topic
+        - id
+        - publisher
+        - at
+        - payload
+      properties:
+        seq:
+          type: string
+        topic:
+          type: string
+        id:
+          type: string
+        publisher:
+          type: string
+        at:
+          type: string
+          format: date-time
+        workspace:
+          $ref: "#/components/schemas/EventFloor"
+        payload: {}
+    InboxRef:
+      type: object
+      required:
+        - kind
+        - id
+      properties:
+        kind:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: '"ref", or a DocumentRef, EntityRef or UnitRef kind'
+        app:
+          type: string
+          maxLength: 40
+        id:
+          type: string
+          minLength: 1
+          maxLength: 200
+        label:
+          type: string
+          maxLength: 200
+      additionalProperties: true
+      maxProperties: 12
+      description: A reference back to the thing in the app (the SDK's Ref and its kin), carried as found
+    InboxOwner:
+      type: object
+      required:
+        - kind
+        - id
+      properties:
+        kind:
+          enum:
+            - person
+            - team
+        id:
+          type: string
+          minLength: 1
+          maxLength: 100
+        role:
+          enum:
+            - lead
+          description: "For a team item: only the team's leads take it"
+      additionalProperties: false
+      description: Who an item waits on
+    NewInboxItem:
+      type: object
+      required:
+        - kind
+        - owner
+        - title
+        - subject
+      properties:
+        kind:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,39}$
+          description: One of the kinds the app's manifest declares (inbox.kinds)
+        owner:
+          $ref: "#/components/schemas/InboxOwner"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        detail:
+          type: string
+          maxLength: 1000
+        subject:
+          $ref: "#/components/schemas/InboxRef"
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxRef"
+          maxItems: 5
+        open:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9.-]*$
+              maxLength: 80
+              description: An intent type some app handles
+            payload:
+              description: The app's own; at most 1024 bytes as JSON
+          additionalProperties: false
+        path:
+          type: string
+          pattern: ^/
+          maxLength: 500
+          description: Where in the app Open goes when there is no intent
+        due:
+          type: string
+          maxLength: 40
+          pattern: ^\d{4}-\d{2}-\d{2}([T ][0-9:.]+(Z|[+-]\d{2}:?\d{2})?)?$
+          description: An ISO date, or date and time
+        allow:
+          type: object
+          properties:
+            decline:
+              type: boolean
+              default: true
+            handOn:
+              type: boolean
+              default: true
+            selfComplete:
+              type: boolean
+              default: false
+              description: Whether the person may mark it done in the shell
+          additionalProperties: false
+        from:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The person on whose behalf the app made it
+        reopen:
+          type: boolean
+          description: Opens a closed item again
+      additionalProperties: false
+    InboxChange:
+      type: object
+      properties:
+        state:
+          enum:
+            - done
+            - withdrawn
+          description: "Closes it: the work was done, or the app took it back"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        detail:
+          type: string
+          maxLength: 1000
+        due:
+          type: string
+          maxLength: 40
+          pattern: ^\d{4}-\d{2}-\d{2}([T ][0-9:.]+(Z|[+-]\d{2}:?\d{2})?)?$
+          description: An ISO date, or date and time
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxRef"
+          maxItems: 5
+        note:
+          type: string
+          maxLength: 500
+          description: Why, kept in the item's history
+      additionalProperties: false
+    InboxItem:
+      type: object
+      required:
+        - id
+        - app
+        - key
+        - kind
+        - owner
+        - state
+        - allow
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+        app:
+          type: string
+        key:
+          type: string
+        kind:
+          type: string
+        owner:
+          $ref: "#/components/schemas/InboxOwner"
+        takenBy:
+          type: string
+        takenAt:
+          type: string
+          format: date-time
+        state:
+          enum:
+            - open
+            - done
+            - declined
+            - handed-on
+            - withdrawn
+          description: "handed-on is never set: handing on changes the owner and keeps it open"
+        title:
+          type: string
+          description: Left out of a leads-only item shown to a member
+        detail:
+          type: string
+        subject:
+          $ref: "#/components/schemas/InboxRef"
+        refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxRef"
+        open:
+          type: object
+          required:
+            - type
+          properties:
+            type:
+              type: string
+              pattern: ^[a-z][a-z0-9.-]*$
+              maxLength: 80
+              description: An intent type some app handles
+            payload:
+              description: The app's own; at most 1024 bytes as JSON
+          additionalProperties: false
+        path:
+          type: string
+        due:
+          type: string
+          format: date-time
+        overdue:
+          type: boolean
+        allow:
+          type: object
+          required:
+            - decline
+            - handOn
+            - selfComplete
+          properties:
+            decline:
+              type: boolean
+            handOn:
+              type: boolean
+            selfComplete:
+              type: boolean
+        from:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+        closedBy:
+          type: string
+        closeNote:
+          type: string
+        workspace:
+          $ref: "#/components/schemas/EventFloor"
+        redacted:
+          type: boolean
+          description: "A leads-only item shown to a member: that it's there, not what it is"
+    InboxHistory:
+      type: object
+      required:
+        - at
+        - action
+      properties:
+        at:
+          type: string
+          format: date-time
+        by:
+          type: string
+          description: A person's id; none when the app did it
+        action:
+          enum:
+            - created
+            - updated
+            - taken
+            - released
+            - declined
+            - handed-on
+            - done
+            - withdrawn
+            - reopened
+        from:
+          type: string
+          description: person:<id> or team:<id>
+        to:
+          type: string
+        note:
+          type: string
+    InboxCounts:
+      type: object
+      required:
+        - you
+        - teams
+        - overdue
+        - doneDays
+      properties:
+        you:
+          type: integer
+          description: Open items on the person, or taken by them
+        teams:
+          type: integer
+          description: Untaken items of the person's teams they could take
+        overdue:
+          type: integer
+          description: Of `you`, those past due
+        doneDays:
+          type: integer
+          minimum: 1
+          description: How many days back the done tab looks (the deployment's INBOX_DONE_DAYS)
+    Delivery:
+      type: object
+      required:
+        - app
+        - cursor
+        - failures
+        - nextAt
+        - lastError
+        - failingSince
+        - deliveredAt
+        - dropped
+        - droppedAt
+        - state
+        - words
+      properties:
+        app:
+          type: string
+          description: The subscribing app
+        cursor:
+          type: string
+          description: The seq of the last event its part took
+        failures:
+          type: integer
+          description: Failed attempts at the next event in a row
+        nextAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the next attempt is due, after a failure
+        lastError:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: What the last failed attempt said
+        failingSince:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the attempts at the next event began failing
+        deliveredAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the part last took an event
+        dropped:
+          type: integer
+          description: Events passed over after a day of failures, each recorded in Activity as delivery.dropped
+        droppedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When the last was passed over
+        state:
+          enum:
+            - ok
+            - retrying
+            - stalled
+          description: "ok: taking events; retrying: failing for under an hour; stalled: failing for an hour or more"
+        words:
+          type: string
+          description: The state in words, with the reason, as Admin shows it; Admin adds since when from failingSince
+      description: How one app’s part is taking the events pushed to it (contract 3, spec 8.6)
+    Pushing:
+      anyOf:
+        - type: object
+          required:
+            - on
+          properties:
+            on:
+              type: boolean
+              enum:
+                - true
+            problem:
+              type: string
+              description: "What stopped the last pass, when something did: the registry or the database not answering"
+        - type: object
+          required:
+            - on
+            - why
+            - whoCanChange
+          properties:
+            on:
+              type: boolean
+              enum:
+                - false
+            why:
+              type: string
+            whoCanChange:
+              type: string
+      description: Whether events are being pushed to apps’ parts at all, and when not, why and who can change that
+paths:
+  /inbox/items/{app}/{key}:
+    put:
+      summary: Put an item in someone's inbox, or change it (services only, inbox:write)
+      description: "Keyed by the app's own id for the work: putting the same key again changes the one item. The item is on the call's floor (x-workspace-id), where the grant is checked. The owner is a person who can sign in, or a team that is not archived. A closed item is reopened only with reopen. No notification is sent: the Inbox count and Home show it (ADR 0026)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewInboxItem"
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: app
+          required: true
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          in: path
+          name: key
+          required: true
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid item, a kind the manifest does not declare, an unknown owner or floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a signed-in service nor an app acting for a person, not this app's item, no inbox:write on that floor, or a scope the delegation doesn't carry
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: The item is closed; send reopen to open it again
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or people can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    patch:
+      summary: Change an item the app made, or close it as done or withdrawn (services only, inbox:write)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InboxChange"
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: app
+          required: true
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          in: path
+          name: key
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "403":
+          description: Not a signed-in service nor an app acting for a person, not this app's item, no inbox:write on that floor, or a scope the delegation doesn't carry
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or people can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    get:
+      summary: An item the app made, with its history and notes (services only, inbox:write)
+      parameters:
+        - schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{1,39}$
+          in: path
+          name: app
+          required: true
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 200
+          in: path
+          name: key
+          required: true
+      responses:
+        "200":
+          description: The item and every change to it
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/InboxItem"
+                  - type: object
+                    required:
+                      - history
+                    properties:
+                      history:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InboxHistory"
+                description: The item and every change to it
+        "403":
+          description: Not a signed-in service nor an app acting for a person, not this app's item, no inbox:write on that floor, or a scope the delegation doesn't carry
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or people can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox:
+    get:
+      summary: "The caller's inbox: one tab, newest first"
+      description: "you: open items on the caller, or team items they took. teams: untaken items of the teams they're on; a leads-only item is shown whole to a lead standing on that team (x-workspace-id) and redacted to anyone else on it. done: items closed in the last doneDays days (/inbox/counts) that the caller owned or acted on. To page, pass the last id shown as before."
+      parameters:
+        - schema:
+            enum:
+              - you
+              - teams
+              - done
+            default: you
+          in: query
+          name: tab
+          required: false
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: floor
+          required: false
+          description: Only items on this floor
+        - schema:
+            type: string
+            maxLength: 40
+          in: query
+          name: before
+          required: false
+          description: The last item's id already shown
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 100
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: Items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InboxItem"
+                description: Items
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's teams can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/counts:
+    get:
+      summary: How many items wait on the caller and on their teams, for the shell's count
+      responses:
+        "200":
+          description: Counts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxCounts"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: The caller's teams can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}:
+    get:
+      summary: One item the caller can see, with its history
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item and every change to it
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/InboxItem"
+                  - type: object
+                    required:
+                      - history
+                    properties:
+                      history:
+                        type: array
+                        items:
+                          $ref: "#/components/schemas/InboxHistory"
+                description: The item and every change to it
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/take:
+    post:
+      summary: "Take a team item: it becomes the caller’s, shown to the team as taken"
+      description: Publishes platform.inbox.taken with { item, app, key, by } and records inbox.taken in the audit log.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed, or someone took it first (takenBy names who)
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/release:
+    post:
+      summary: Give a taken item back to its team
+      description: Publishes platform.inbox.released with { item, app, key, by } and records inbox.released in the audit log.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/decline:
+    post:
+      summary: Decline an item, saying why
+      description: Publishes platform.inbox.declined with { item, app, key, by } and records inbox.declined in the audit log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - note
+              properties:
+                note:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+                  description: "Why: the app and the sender need to know"
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/hand-on:
+    post:
+      summary: Hand an item on to another person or team
+      description: Publishes platform.inbox.handed-on with { item, app, key, by, to } and records inbox.handed-on in the audit log.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - to
+              properties:
+                to:
+                  type: string
+                  pattern: ^(person|team):[A-Za-z0-9_.:-]{1,100}$
+                  description: person:<id> or team:<id>
+                note:
+                  type: string
+                  maxLength: 500
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: An unknown person or team, or the owner it already has
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /inbox/{id}/done:
+    post:
+      summary: Mark an item done, where the app lets people do that
+      description: Publishes platform.inbox.done with { item, app, key, by } and records inbox.done in the audit log.
+      parameters:
+        - schema:
+            type: string
+            maxLength: 40
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: The item now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxItem"
+        "400":
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not the caller’s to act on, or the app does not allow it
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such item, or not one the caller can see
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "409":
+          description: Already closed
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  takenBy:
+                    type: string
+                additionalProperties: true
+        "503":
+          description: The caller's teams, or who that is, can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notifications:
+    post:
+      summary: Notify people (services only)
+      description: With toTeam and no recipients, to everyone on the team the call's floor names (its members and those of the teams below), asked of identity as it's sent. Only a team that has turned team notices on (403 otherwise). With audience (platform services only, ADR 0044), to everyone the principals reach now, asked of identity, such as role:deployment-admin. With key, nobody who already has a notification from that app with that key is told again, read or not.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewNotification"
+      responses:
+        "202":
+          description: Sent, one notification per recipient
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sent
+                properties:
+                  sent:
+                    type: integer
+                description: Sent, one notification per recipient
+        "400":
+          description: Invalid notification, an unknown floor, or toTeam not on a team
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a signed-in service nor an app acting for a person, not granted this, a scope the delegation doesn’t carry, team notices are off, or urgent or an audience from an app
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors, grants or an audience can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    get:
+      summary: The caller's unread notifications, newest first (up to 50)
+      responses:
+        "200":
+          description: Unread notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Notification"
+                description: Unread notifications
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /team-notices/{workspace}:
+    get:
+      summary: Whether a team has turned team notices on (its leads and admins)
+      description: A lead must be standing on the team (x-workspace-id, checked by the gateway).
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: workspace
+          required: true
+      responses:
+        "200":
+          description: The setting
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamNotices"
+        "403":
+          description: Not a lead standing on that team, nor an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    put:
+      summary: Turn team notices on or off for a team (its leads and admins)
+      description: Audited as team-notices.on or team-notices.off, on that floor.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - on
+              properties:
+                on:
+                  type: boolean
+              additionalProperties: false
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: workspace
+          required: true
+      responses:
+        "200":
+          description: The setting now
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamNotices"
+        "403":
+          description: Not a lead standing on that team, nor an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notifications/{id}:
+    get:
+      summary: One of the caller's notifications, read or not
+      description: "What a notice email links to: the shell opens it as if it were clicked there."
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Default Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Notification"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: The caller has no such notification
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notifications/{id}/read:
+    post:
+      summary: Mark one of the caller's notifications read
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Marked read
+        "404":
+          description: The caller has no such notification
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    delete:
+      summary: Mark it unread again (Undo)
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "204":
+          description: Marked unread
+        "404":
+          description: The caller has no such notification
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /notifications/stream:
+    get:
+      summary: Each new notification for the caller, as server-sent events
+      description: 'Events are named "notification" and carry a Notification as JSON. Events named "inbox" carry { id, change } (added, changed or closed) when an inbox item the caller can see changes: reload the counts, and the list if it is showing. Comment lines are sent as keep-alives. Read with fetch so the sign-in token can be sent; reload the list after reconnecting.'
+      responses:
+        "200":
+          description: An open event stream
+          content:
+            text/event-stream:
+              schema: {}
+  /domain-events:
+    post:
+      summary: Publish domain events (services only)
+      description: "An app publishes on its own topics (\"<app id>.<what happened>\") with the events:publish scope; platform services on \"platform.*\". Every event in one call is on the same publisher's topics. An event whose id the publisher already sent is kept once. Payloads are at most 16 KB: ids and a little context, never content a follower might not be allowed to see. The events service itself publishes platform.person.*, platform.team.* and platform.app.* as identity and the registry record those changes."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - events
+              properties:
+                events:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/NewDomainEvent"
+                  minItems: 1
+                  maxItems: 100
+              additionalProperties: false
+      responses:
+        "202":
+          description: Kept
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - added
+                  - repeated
+                properties:
+                  added:
+                    type: integer
+                  repeated:
+                    type: integer
+                description: Kept
+        "400":
+          description: A topic outside the publisher's, an unknown floor, a floor the app isn't on, or a payload over 16 KB
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a service nor an app acting for a person, not this publisher's topics, no events:publish scope, or a scope the delegation doesn't carry
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors or grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    get:
+      summary: Read domain events in order (services only, events:subscribe)
+      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`, or `next`, which is as far as this read went, past events on other topics: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS); a cursor behind what was pruned answers 410 with how far events were pruned, so the follower rebuilds. An app sees only events on floors where it holds events:subscribe, and the deployment’s own (ADR 0104)."
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 2000
+          in: query
+          name: topics
+          required: true
+          description: Comma separated topics, or families such as folio.*
+        - schema:
+            type: string
+            pattern: ^[0-9]+$
+            maxLength: 19
+          in: query
+          name: after
+          required: false
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: The next events, and the cursor to read on from
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - events
+                  - next
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DomainEvent"
+                  next:
+                    type: string
+                description: The next events, and the cursor to read on from
+        "400":
+          description: A topic that is not a topic, nor a family such as folio.*
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a service nor an app acting for a person, no events:subscribe scope, or a scope the delegation doesn’t carry
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "410":
+          description: "Events after `after` were pruned: the follower has missed some"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                  - message
+                  - after
+                properties:
+                  error:
+                    type: string
+                    enum:
+                      - gone
+                  message:
+                    type: string
+                  after:
+                    type: string
+                    description: "How far events were pruned: rebuild, then read on with this as `after`"
+                description: "Events after `after` were pruned: the follower has missed some"
+        "503":
+          description: Grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /domain-events/stream:
+    get:
+      summary: Domain events on the caller's floor, as server-sent events (people, for the shell)
+      description: 'Each domain event on the topics asked for, published on the floor the caller stands on (x-workspace-id, checked by the gateway), as it is published. Events on another floor never reach it, nor do events on no floor, except platform.app.* ones, which are about the whole deployment. Events are named "domain-event" and carry a DomainEvent as JSON. It is a hint to refresh what is on screen, not a record: there is no catching up, so after a reconnect load fresh. Comment lines are keep-alives. Read with fetch so the sign-in token can be sent.'
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 4000
+          in: query
+          name: topics
+          required: true
+          description: Comma separated topics, or families such as folio.*; at most 100
+      responses:
+        "200":
+          description: An open event stream
+          content:
+            text/event-stream:
+              schema: {}
+        "400":
+          description: A topic that is not a topic, too many topics, or no floor named
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /audit:
+    post:
+      summary: Record an audit entry (services only). Entries are never changed, except to remove a deleted person’s details, and go only after the retention period.
+      description: With an Idempotency-Key header (at most 200 characters), sending the same key again answers the entry the service already recorded under it and records nothing more, so a retry keeps one. A platform entry and the domain event it stands for are kept together, or neither is.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewAuditEntry"
+      responses:
+        "201":
+          description: Recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditEntry"
+        "400":
+          description: Invalid entry, an unknown floor, or a bad Idempotency-Key
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not a signed-in service nor an app acting for a person, not granted this, or a scope the delegation doesn’t carry
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "503":
+          description: Floors or grants can't be checked right now
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+    get:
+      summary: The audit log, newest first (admins; leads for their own floor)
+      description: To page, ask again with `before` set to the id of the oldest entry already shown; a page shorter than `limit` is the last one. With `workspace`, only entries on that floor or a floor below it, as the tree stood when each was written. Admins read the whole log; a lead standing on a floor (x-workspace-id, checked by the gateway) reads that floor's with `workspace` set to it.
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: app
+          required: false
+        - schema:
+            type: string
+          in: query
+          name: actor
+          required: false
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: since
+          required: false
+          description: Only entries at or after this time
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: until
+          required: false
+          description: Only entries before this time
+        - schema:
+            type: string
+            pattern: ^[0-9]+$
+            maxLength: 19
+          in: query
+          name: before
+          required: false
+          description: An entry's id; only entries older than it
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: Only entries on this floor or below it
+        - schema:
+            type: string
+            maxLength: 200
+          in: query
+          name: target
+          required: false
+          description: Only entries about this target
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: person
+          required: false
+          description: Only entries by, about or naming this person (the actor, the target or detail.person)
+        - schema:
+            enum:
+              - change
+              - sign-in
+          in: query
+          name: kind
+          required: false
+          description: Only sign-ins (detail.kind is sign-in), or only every other change
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: Audit entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AuditEntry"
+                description: Audit entries
+        "403":
+          description: Not an admin, nor a lead asking for their own floor
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /deliveries:
+    get:
+      summary: How each subscribing app is taking the events pushed to its part (admins)
+      description: "One row per app the registry says holds events:subscribe: the last event its part took, how many attempts at the next one have failed, what went wrong last, and since when. An app that has taken nothing for an hour is stalled, and Admin → Apps says so with the reason. `pushing` says whether events are being pushed at all, and why not when they aren’t. Since 1.17."
+      responses:
+        "200":
+          description: Each subscribing app’s deliveries, and whether pushing is on
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - deliveries
+                  - pushing
+                properties:
+                  deliveries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Delivery"
+                  pushing:
+                    $ref: "#/components/schemas/Pushing"
+                description: Each subscribing app’s deliveries, and whether pushing is on
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /audit/export:
+    get:
+      summary: Download Activity as CSV or JSON lines (admins)
+      description: "The same filters as the audit log, newest first, at most 366 days at a time: `until` defaults to now and `since` to 366 days before it. CSV columns: at, actor, actorKind, app, action, target, floor, detail (as JSON). The download is itself recorded in Activity, as `audit.exported` with the filters used."
+      parameters:
+        - schema:
+            type: string
+          in: query
+          name: app
+          required: false
+        - schema:
+            type: string
+          in: query
+          name: actor
+          required: false
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: since
+          required: false
+          description: Only entries at or after this time
+        - schema:
+            type: string
+            format: date-time
+          in: query
+          name: until
+          required: false
+          description: Only entries before this time
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: workspace
+          required: false
+          description: Only entries on this floor or below it
+        - schema:
+            type: string
+            maxLength: 200
+          in: query
+          name: target
+          required: false
+          description: Only entries about this target
+        - schema:
+            type: string
+            maxLength: 100
+          in: query
+          name: person
+          required: false
+          description: Only entries by, about or naming this person (the actor, the target or detail.person)
+        - schema:
+            enum:
+              - change
+              - sign-in
+          in: query
+          name: kind
+          required: false
+          description: Only sign-ins (detail.kind is sign-in), or only every other change
+        - schema:
+            enum:
+              - csv
+              - jsonl
+            default: csv
+          in: query
+          name: format
+          required: false
+      responses:
+        "200":
+          description: The file, as `text/csv` or `application/x-ndjson`
+          content:
+            application/json:
+              schema:
+                description: The file, as `text/csv` or `application/x-ndjson`
+        "400":
+          description: The range is longer than the most one download holds, or ends before it starts
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /audit/redact:
+    post:
+      summary: Remove a deleted person's personal values from Activity, and their notifications (identity only)
+      description: In every entry by, about or naming them, each personal value (the keys in service-kit's PERSONAL_DETAIL_KEYS, also inside from/to pairs) becomes "[removed]"; their id stays, now pseudonymous. Their notifications and the notice that they asked to leave are deleted, the notes they left on inbox items are blanked, and the open items that were theirs are withdrawn. Recorded in Activity as `audit.redacted`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - person
+              properties:
+                person:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+              additionalProperties: false
+      responses:
+        "200":
+          description: How many entries were changed and notifications deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - entries
+                  - notifications
+                properties:
+                  entries:
+                    type: integer
+                  notifications:
+                    type: integer
+                description: How many entries were changed and notifications deleted
+        "403":
+          description: Not identity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /people/{id}/data:
+    get:
+      summary: What the events service keeps about one person (identity only)
+      description: "Their notifications, read or not; the inbox items waiting on them and those they finished; and the audit entries naming them as the actor: at most `limit` of each, newest first. Only identity asks, to build the copy of someone's data they download from Account (ADR 0040)."
+      parameters:
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 1000
+          in: query
+          name: limit
+          required: false
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: Their data here
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - notifications
+                  - inbox
+                  - audit
+                properties:
+                  notifications:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Notification"
+                  inbox:
+                    type: array
+                    items: {}
+                    description: InboxItem, as the Inbox gives it to them
+                  audit:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEntry"
+                description: Their data here
+        "403":
+          description: Not identity
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+servers:
+  - url: /v1

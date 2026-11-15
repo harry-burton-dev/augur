@@ -187,6 +187,9 @@ jobs:
         run: pnpm check:breaking
         env:
           BASE_REF: ${{ github.base_ref }}
+      # The seams apps depend on, against the baselines in release/frozen/ (release/frozen-seams.json): a frozen
+      # seam only adds since it was frozen, whatever each pull request along the way was allowed.
+      - run: pnpm check:frozen
       # The kit bundle the shell serves is the one release/kit.json pins, whole, and serves what the SDK says.
       - run: pnpm check:kit
       - run: pnpm check:migrations
