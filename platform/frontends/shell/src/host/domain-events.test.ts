@@ -25,18 +25,19 @@ describe('topicsFor', () => {
 
 describe('DomainEventStream', () => {
   it('follows the floor once and puts each event on the bus by its topic', async () => {
-    const bus = createEventBus();
+    const failed: string[] = [];
+    const bus = createEventBus({ onError: (_err, type) => failed.push(type) });
     const heard: string[] = [];
     bus.on<BrowserDomainEvent>('folio.document.published', (e) => heard.push(`doc ${e.id}`));
     bus.on<BrowserDomainEvent>('platform.team.renamed', (e) => heard.push(`team ${e.id}`));
     bus.on('folio.document.published', () => {
       throw new Error('one handler failing');
     });
-    vi.spyOn(console, 'error').mockImplementation(() => {});
     const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => streamOf([': connected\n\n', sse(event('d1')), sse(event('t1', 'platform.team.renamed')) + sse(event('d2'))], init?.signal)) as unknown as typeof fetch;
     const stream = new DomainEventStream({ getToken: async () => 'tok', floor: 'w-fin', topics: ['folio.*', 'platform.*'], bus, fetchImpl });
     stream.start();
     await vi.waitFor(() => expect(heard).toEqual(['doc d1', 'team t1', 'doc d2']));
+    expect(failed).toEqual(['folio.document.published', 'folio.document.published']);
     stream.stop();
     const [url, init] = vi.mocked(fetchImpl).mock.calls[0];
     expect(url).toBe('/api/events/v1/domain-events/stream?topics=folio.*%2Cplatform.*');
