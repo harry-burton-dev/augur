@@ -35,10 +35,9 @@ export interface Ref {
 }
 
 /**
- * What an app publishes, as `<app>.bound` or `<app>.unbound` through its outbox
- * (SDK 1.10, ADR 0025), when someone links one of its things to an entity or
- * takes the link away. The app keeps its bindings itself; an app that keeps
- * entities follows these events to answer "what points at this entity".
+ * A link from one of an app's things to an entity (SDK 1.10, ADR 0025), as a
+ * frontend passes it around. The app keeps its links itself; AUGUR has no
+ * events for them any more (D6).
  */
 export interface EntityBinding {
   /** The app's own thing. */

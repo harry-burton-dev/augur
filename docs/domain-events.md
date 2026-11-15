@@ -46,16 +46,6 @@ outboxRelay({ pool: db, eventsUrl: EVENTS_URL, credentials: appCredentialsFromEn
 
 Each outbox row has its own event id, so if a send is repeated the events service keeps one. A row the events service refuses for what it is (400 or 413) is set aside: left in the table marked sent, with `refused_at` and `refused_why` so it can be told from one delivered, and reported through `onError`, so pass one. The rows behind it carry on. A refusal can be for the moment, such as an app blocked on a floor for a few minutes: to send such rows again, `update outbox set sent_at = null, refused_at = null, refused_why = null where refused_at is not null`. An outbox made before these columns gets them the first time a row is set aside. Without a database change to go with it, `publishEvents({ eventsUrl, credentials, events })` sends at once.
 
-### Entity bindings
-
-When people link one of an app's things to an entity in Data Atlas, the app keeps the link and publishes it in one shape, so Atlas reads every app's the same way (ADR 0025, ADR 0066):
-
-| Topic | Payload |
-| --- | --- |
-| `<app>.<type>.entity-bound`, `<app>.<type>.entity-unbound` | `{ <type>: id, entity, role?, ...more ids }` |
-
-`mandate.intent.entity-bound { intent, entity, role }` and `folio.record.entity-bound { record, library, level, link, entity, role }` are two. `outboxBinding(client, binding, 'bound' | 'unbound', workspace)` in the service kit writes one to the outbox, and `readBinding(event)` reads any app's back, or answers undefined for an event that isn't one.
-
 ## Following
 
 Add `events:subscribe` to `scopes`. Keep your place (the last `seq` you handled, or `next` from the read, which `followEvents` saves for you so a rare topic doesn't read the same stretch each time) in your own database, and handle each event so that doing it twice does no harm: if your handler throws, the same event comes again on the next poll.

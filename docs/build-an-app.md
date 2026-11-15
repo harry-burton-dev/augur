@@ -268,7 +268,7 @@ The tile is about 320 by 200 pixels and has the app's name and icon above the ca
 - `maxUpload` is the largest request, in MB (1 to 2048), the gateway lets through to your service; 10 without it. Bodies stream through the gateway and are never held there, and one past the limit gets 413 before your service sees it. An admin can lower it in Admin, Apps. The manifest the shell gives your frontend has the limit in force, so check a file against it before sending. SDK 1.4.
 - `inbox` (SDK 1.12) declares the kinds of work your service puts in people's inboxes: `{ "kinds": [{ "id": "assignment", "label": "Assigned to you", "icon": "compass" }] }`, up to 10, each id once. The Inbox shows the label and icon on each item, and an item of a kind you didn't declare is refused. It goes with `inbox:write` ([The Inbox](inbox.md)).
 - `notifications` (SDK 2.0) declares the kinds of notification your service sends: `{ "kinds": [{ "id": "comment", "label": "Comments on your documents", "detail": "When someone comments on one you own" }] }`, up to 10, each id once. Send each notification with its `kind`. Account, Notifications lists them under your app, and each person chooses which kinds reach them out loud and which wait quietly ([Your account](account.md)). A notification of a kind you didn't declare is refused. It goes with `notifications:send`.
-- `links` and `bindings` (SDK 2.1) say your app binds its things to entities: `"links": { "entities": true }, "bindings": ["claim"]`. Each type in `bindings` (lowercase, up to 10, never `entity` or `role`) is published on `<app id>.<type>.entity-bound` and `-unbound` ([Binding your things to entities](#binding-your-things-to-entities) below). The registry lists these apps and types for services at `GET /v1/entity-links`, which the service kit's `registryBindingApps` reads, so the entity catalogue follows exactly your binding topics and shows what uses each entity.
+- `links` (SDK 2.1) says your app links its things to entities: `"links": { "entities": true }` ([Binding your things to entities](#binding-your-things-to-entities) below).
 - `settings` are what admins can change about your app, in Admin, Apps: up to 10, each a whole number with an `id`, a `label`, an optional `detail` and `unit`, and its `min`, `max` and `default`. Your service reads them as itself with `appSettings({ registryUrl, credentials, app })` from the service kit, which gives each id's value: an admin's, or the default. Ask again each time you use one, since an admin can change it at any time; changes are in the activity log. If a newer version narrows a range past an admin's value, the default is used until an admin sets it again.
 
   ```json
@@ -384,19 +384,9 @@ if (passage) {
 
 ### Binding your things to entities
 
-An app that lets people say "this is about HMS X" keeps those links itself, in its own schema, and tells the rest of AUGUR through its outbox, in the same transaction as the link (ADR 0025, ADR 0066, docs/domain-events.md). The topic is `<app>.<type>.entity-bound` when someone links one of your things to an entity and `<app>.<type>.entity-unbound` when they take the link away; the payload is the thing's id under its type, the entity's id, and a role. The service kit writes both:
+An app that lets people say "this is about HMS X" keeps those links itself, in its own schema (ADR 0025), and says so with `"links": { "entities": true }`. In the browser, `EntityBinding` (a `Ref` and an `EntityRef`) is how a frontend passes such a link around. AUGUR has no binding events any more (decision D6): the `<app>.<type>.entity-bound` and `-unbound` topics, the manifest's `bindings`, the registry's `/v1/entity-links` and the service kit's binding helpers are gone.
 
-```ts
-import { bindingTopics, outboxBinding } from '@augur/service-kit';
-
-// inside the transaction that saves the link:
-await outboxBinding(tx, { app: 'expenses', type: 'claim', id: claim.id, entity: ship.id, role: 'about' }, 'bound', floorId);
-// → expenses.claim.entity-bound { claim: 'c-41', entity: 'ent_…', role: 'about' }
-```
-
-Ask for `events:publish`; `bindingTopics('expenses', 'claim')` names the two topics. Send ids only: a thing another app needs more ids to open can carry them in `more` (such as a library and a level), never titles. A follower reads any app's binding events with `readBinding(event)`. In the browser, `EntityBinding` (a `Ref` and an `EntityRef`) is how a frontend passes the same link around.
-
-A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`. An app that keeps entities follows the events to answer "what points at this entity", so binding still works while it is off. Declare `"links": { "entities": true }` and your types in `bindings` (SDK 2.1) so it subscribes to just those topics; a follower asks the registry which apps bind what with the service kit's `registryBindingApps({ registryUrl, credentials })`.
+A `Ref` stands for anything an app keeps when no more specific reference fits (`DocumentRef`, `UnitRef`, `EntityRef`). Check one you're given with `isRef`.
 
 ### Dates and times, the person's way
 
