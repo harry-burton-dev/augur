@@ -74,6 +74,9 @@ tests. Your server can still differ, so check it yourself too.
   `unhealthy` or `starting` is the one to look at in `pc logs`.
 - Open **Deployment → Health**. Every part should be Running, with the new versions in the Version column.
 - Sign in as yourself and as someone without the admin role, and open an app or two.
+- A tab that was open through the upgrade, or through going back, says so in its notifications once it's
+  back in view or its notifications reconnect, with a Reload button. Until someone reloads, that tab still
+  runs the shell it loaded.
 - `pc logs --since 10m gateway identity registry events` shouldn't show errors. Every log line carries a
   `requestId`; the same id is in the `x-request-id` header of the response, so a problem someone reports can be
   found across every service's logs.
