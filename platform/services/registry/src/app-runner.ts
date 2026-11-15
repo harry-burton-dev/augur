@@ -19,6 +19,7 @@ import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
 import { ReviewSchema, reviewOf } from './apps3.ts';
 import { needsDeploymentAdmin, roleChecks, type DeploymentAction, type RoleChecks } from './roles.ts';
+import { actorOf, fleetRingProblem, isFleetCaller, requesterOf } from './fleet.ts';
 import { sameRepository } from './feed-trust.ts';
 import { DEPLOYMENT, defaultRemoveProblem, defaultsPlan } from './defaults.ts';
 import { asText, declaredSettings, KEEP_REMOVED_MS, missingMessage, missingRequired, settingValueProblem, settingsView, SettingValueBody, type DeclaredSetting } from './settings.ts';
@@ -626,7 +627,8 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        if (!admin(req, reply, 'registry.app-runner.apps')) return reply;
+        // The fleet's client reads it too, to follow what it asked for (ADR 0100).
+        if (!isFleetCaller(callerFromHeaders(req.headers)) && !admin(req, reply, 'registry.app-runner.apps')) return reply;
         return appsView();
       },
     );
@@ -908,7 +910,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        if (!admin(req, reply, 'registry.app-runner.jobs')) return reply;
+        if (!isFleetCaller(callerFromHeaders(req.headers)) && !admin(req, reply, 'registry.app-runner.jobs')) return reply;
         return { jobs: await store.appJobs(req.query.app), ...(runnerSeenAt ? { runnerSeenAt } : {}) };
       },
     );
@@ -930,7 +932,8 @@ export const appRunnerRoutes =
             'build or any release not promoted to production: the feed says which, or failing that its',
             'version. Needs a deployment admin who entered their password in the last 10 minutes, or it',
             'answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as',
-            'app.install-requested or app.uninstall-requested.',
+            'app.install-requested or app.uninstall-requested. The fleet\'s client (platform-fleet, ADR 0100) may ask',
+            'with nobody signed in, only for a release the app feed lists (by app and version), and is recorded under its name.',
           ].join(' '),
           body: JobRequest,
           response: {
@@ -944,11 +947,17 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        const caller = deploymentAdmin(req, reply, req.body.action === 'remove' ? 'remove an app from the server' : 'install an app or change its version', 'registry.app-runner.job', req.body.action === 'remove' ? 'can_remove_apps' : 'can_install_apps');
+        // The fleet's client asks with nobody signed in (ADR 0100), for a release the feed lists, held to the server's ring.
+        const asked = callerFromHeaders(req.headers);
+        const fleet = isFleetCaller(asked);
+        const caller = fleet
+          ? asked
+          : deploymentAdmin(req, reply, req.body.action === 'remove' ? 'remove an app from the server' : 'install an app or change its version', 'registry.app-runner.job', req.body.action === 'remove' ? 'can_remove_apps' : 'can_install_apps');
         if (!caller) return reply;
+        if (fleet && 'release' in req.body) return reply.code(400).send({ error: 'bad_request', message: 'The fleet’s client installs only a release the app feed lists: name the app and its version.' });
         // A default app stays while the deployment names it (ADR 0075 "pillar").
         if (req.body.action === 'remove' && defaultApps.includes(req.body.app)) return reply.code(409).send({ error: 'conflict', message: defaultRemoveProblem(req.body.app) });
-        if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
+        if (!fleet && !signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install or remove an app. It’s asked for anything this drastic.' });
         }
         const body = req.body;
@@ -968,6 +977,9 @@ export const appRunnerRoutes =
             releaseProblem(release, await offeredTo(release, knowledge)) ??
             (previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : ringProblem(release, ring, listed));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+          // The fleet's client on a production server: only a release promoted to stable (ADR 0100), as the feed lists it.
+          const outOfRing = fleet ? fleetRingProblem(ring, { what: release.id, version: release.version, channel: listed, halted: updates.result.releases.find((r) => r.app === release!.id && r.version === release!.version)?.halted }) : undefined;
+          if (outOfRing) return reply.code(400).send({ error: 'bad_request', message: outOfRing });
         }
         // Its settings (spec 5.3): each value given must be one its setting takes, and a required one with no default
         // needs a value, given here or by an admin before, or the install is refused now rather than failing on the server.
@@ -984,13 +996,13 @@ export const appRunnerRoutes =
           const missing = missingRequired(declared, (settingId) => settingId in given || kept.some((v) => v.setting === settingId));
           if (missing.length) return reply.code(400).send({ error: 'bad_request', message: missingMessage(release.manifest.name, missing) });
         } else if (Object.keys(given).length) return reply.code(400).send({ error: 'bad_request', message: 'Only an app on contract 3 takes settings with its install.' });
-        const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: caller.id };
+        const job = { id: randomUUID(), app: target, action: body.action, ...(release ? { release } : {}), requestedBy: requesterOf(caller) };
         // The values first, so the runner has them whenever it takes the job; kept even if the job is refused below,
         // as values an admin gave this app.
         if (release && isRelease2(release)) {
           for (const [settingId, value] of Object.entries(given)) {
             const setting = declaredSettings(release.manifest).find((s) => s.id === settingId)!;
-            await store.setSettingValue(target, settingId, asText(value), setting.type === 'secret', caller.id);
+            await store.setSettingValue(target, settingId, asText(value), setting.type === 'secret', requesterOf(caller));
           }
           await store.restoreSettings(target, declaredSettings(release.manifest).map((d) => d.id));
         }
@@ -1000,13 +1012,13 @@ export const appRunnerRoutes =
         if (release && current && semver.lt(release.version, current.version)) {
           const follow = followOf(await store.follows(), target);
           if (follow.policy === 'automatic') {
-            await store.setFollow({ app: target, channel: follow.channel, policy: 'hold', setBy: caller.id });
-            await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'app.updates-set', target, detail: { channel: follow.channel, policy: 'hold', why: `going back to ${release.version}` } });
+            await store.setFollow({ app: target, channel: follow.channel, policy: 'hold', setBy: requesterOf(caller) });
+            await record(req, { actor: actorOf(caller), app: 'registry', action: 'app.updates-set', target, detail: { channel: follow.channel, policy: 'hold', why: `going back to ${release.version}` } });
           }
         }
-        req.log.info({ by: caller.id, app: target, action: body.action }, 'app job requested');
+        req.log.info({ by: requesterOf(caller), app: target, action: body.action }, 'app job requested');
         await record(req, {
-          actor: { id: caller.id, kind: 'user' },
+          actor: actorOf(caller),
           app: 'registry',
           action: release ? 'app.install-requested' : 'app.uninstall-requested',
           target,

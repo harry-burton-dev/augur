@@ -651,6 +651,15 @@ export const eventCursor: (db: Queryable, follower?: string) => {
 export const eventDeliveryKey: (event: Pick<DomainEvent, "seq">) => string;
 
 // @public
+export const FLEET_CALLER: Caller;
+
+// @public
+export const FLEET_CLIENT_ID = "platform-fleet";
+
+// @public
+export const FLEET_SERVICE = "fleet";
+
+// @public
 export const floorCaller: (manifest: Pick<AppManifest, "name">) => (req: Pick<FastifyRequest, "headers">) => OnFloor;
 
 // @public
@@ -974,6 +983,9 @@ export const isAppItself: (caller: Pick<Caller, "id" | "app"> | undefined) => bo
 export const isDelegated: (caller: Pick<Caller, "app"> | undefined) => caller is Caller & {
     app: string;
 };
+
+// @public
+export const isFleetCaller: (caller?: Pick<Caller, "id">) => boolean;
 
 // @public (undocumented)
 export const isGatewayCaller: (caller?: Pick<Caller, "id">) => boolean;

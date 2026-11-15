@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { bundleIdentity, desiredEnv, diff, factsScript, unpackScript, isSecret, newEnv, problems, q, readFacts, statusLine } from './augurctl/augurctl.mjs';
+import { bundleIdentity, desiredEnv, diff, factsScript, unpackScript, isSecret, newEnv, problems, q, readFacts, setSteps, statusLine } from './augurctl/augurctl.mjs';
 
 const doc = {
   schema: 'augur.deployment/v1',
@@ -29,6 +29,9 @@ test('a deployment file is held to the schema and to AUGUR’s settings', () => 
   assert.match(wrong.join('\n'), /SERVER_RING comes from ring/);
   assert.match(wrong.join('\n'), /folio is listed twice/);
   assert.ok(isSecret('POSTGRES_PASSWORD') && isSecret('NOTES_DATABASE_PASSWORD') && !isSecret('PLATFORM_URL'));
+  assert.ok(isSecret('OLD_CLIENT_SECRET') && isSecret('TS_AUTHKEY'), 'a key the schema doesn’t know is a secret by its name');
+  assert.ok(!isSecret('A_KEY', { properties: { A_KEY: { type: 'string' } } }), 'the schema says, where it knows the key');
+  assert.match(problems({ ...doc, settings: { OLD_CLIENT_SECRET: 'x' } }, 'deployments/preview-1.yaml')[0], /OLD_CLIENT_SECRET is a secret by its name/);
 });
 
 test('the plan lists each difference, never a secret’s value, and nothing when the server matches', () => {
@@ -99,4 +102,43 @@ test('a new server’s .env is .env.example with the file’s values in place', 
   assert.ok(augur.test('https://github.com/harry-burton-dev/im-platform/.github/workflows/release.yml@refs/heads/main'), 'releases from before the rename');
   assert.ok(augur.test('https://github.com/harry-burton-dev/augur/.github/workflows/augur-dev.yml@refs/heads/dev'));
   assert.equal(q("it's"), `'it'\\''s'`);
+});
+
+test('set asks for AUGUR’s release first, one at a time, then the apps, and removes an app only when asked', () => {
+  const unit = (id, running, extra = {}) => ({ unit: id, running, ...extra });
+  const says = (overview, options) => setSteps(doc, { units: overview }, options);
+  const install = (app, version) => ({ method: 'POST', path: '/api/registry/v1/app-runner/jobs', body: { action: 'install', app, version } });
+  // AUGUR first, to the release the server offers next; the apps wait for it, and a dry run can show them.
+  const first = says([unit('augur', '0.26.0', { next: '0.27.0' }), unit('folio', '0.8.0')]);
+  assert.deepEqual(first.steps, [{ say: 'upgrade AUGUR 0.26.0 → 0.27.0', method: 'PUT', path: '/api/registry/v1/platform/upgrade', body: { version: '0.27.0' } }]);
+  assert.deepEqual(first.later, [{ say: 'app folio 0.8.0 → 0.9.0', ...install('folio', '0.9.0') }]);
+  assert.deepEqual(first.notes, ["The apps wait for AUGUR's upgrade. Run set again once it's done."]);
+  assert.equal(first.stuck, false);
+  assert.deepEqual(says([unit('augur', '0.26.0', { next: '0.27.0' }), unit('folio', '0.9.0')]).notes, [], 'nothing is said to wait when no app does');
+  const early = says([unit('augur', '0.26.0', { next: '0.27.0' }), unit('folio', '0.9.0'), unit('atlas', '0.5.0')]);
+  assert.deepEqual(early.notes, ["The apps wait for AUGUR's upgrade. Run set again once it's done."], 'no advice about an app while AUGUR moves');
+  assert.equal(says([unit('augur', '0.25.0', { next: '0.26.0' })]).steps[0].say, 'upgrade AUGUR 0.25.0 → 0.26.0 (on the way to 0.27.0)');
+  assert.match(says([unit('augur', '0.25.0', { next: '0.28.0' })]).notes[0], /next release after 0\.25\.0 is 0\.28\.0, and AUGUR upgrades one release at a time/);
+  const back = says([unit('augur', '0.28.0'), unit('folio', '0.8.0')]);
+  assert.match(back.notes[0], /older than the 0\.28\.0 the server runs\. set never takes AUGUR back/);
+  assert.deepEqual([back.stuck, back.later, back.notes[1]], [true, [], "The apps wait until AUGUR runs the file's release."], 'a dry run never promises apps AUGUR won’t reach');
+  assert.match(says([unit('augur', '0.26.0')]).notes[0], /offers no release after 0\.26\.0 yet/);
+  const moving = says([unit('augur', '0.26.0', { open: { state: 'running', version: '0.27.0' } })]);
+  assert.deepEqual(moving.steps, [], 'nothing while AUGUR upgrades');
+  assert.match(moving.notes[0], /apps wait/);
+  // Then each app the file names at another version, or not installed.
+  const apps = says([unit('augur', '0.27.0'), unit('folio', '0.8.0'), unit('atlas', '0.5.0')]);
+  assert.deepEqual(apps.steps, [{ say: 'app folio 0.8.0 → 0.9.0', ...install('folio', '0.9.0') }]);
+  assert.match(apps.notes[0], /atlas 0\.5\.0 is installed but not in the file: set removes an app only with --remove/);
+  assert.deepEqual(says([unit('augur', '0.27.0'), unit('atlas', '0.5.0')], { remove: true }).steps.map((s) => s.say), ['install app folio 0.9.0', 'remove app atlas 0.5.0']);
+  const kept = says([unit('augur', '0.27.0'), unit('folio', '0.9.0'), unit('atlas', '0.5.0')], { remove: true, defaults: ['atlas'] });
+  assert.deepEqual(kept.steps, [], 'a default app is never removed');
+  assert.match(kept.notes[0], /default apps \(DEFAULT_APPS\)/);
+  assert.deepEqual(says([unit('augur', '0.27.0'), unit('folio', '0.8.0', { open: { state: 'requested' } })]).steps, [], 'a job under way is left');
+  assert.deepEqual(says([unit('augur', '0.27.0')], { jobs: [{ app: 'folio', state: 'running' }] }).steps, [], 'so is a first install under way');
+  assert.equal(says([unit('augur', '0.27.0')], { jobs: [{ app: 'folio', state: 'running', pr: 12 }] }).steps.length, 1, 'a preview’s job doesn’t hold up an install');
+  assert.match(says([unit('augur', '0.27.0'), unit('folio', '0.9.0'), unit('atlas', '0.5.0', { open: { state: 'running' } })], { remove: true }).notes[0], /atlas 0\.5\.0 isn't in the file, and a job is running for it already/);
+  assert.deepEqual(says([unit('augur', '0.27.0'), unit('folio', '0.9.0')]), { steps: [], later: [], notes: [], stuck: false });
+  // A server that follows its ring is never told its version.
+  assert.deepEqual(setSteps({ ...doc, release: 'follow' }, { units: [unit('augur', '0.26.0', { next: '0.27.0' }), unit('folio', '0.9.0')] }), { steps: [], later: [], notes: [], stuck: false });
 });
