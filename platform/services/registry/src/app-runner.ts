@@ -14,7 +14,7 @@ import { checkRelease, contractMessage, knowledgeNeeds, type KnowledgeOffer, typ
 import { isRelease2 } from '@augur/app-tools/release2';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
-import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, InternetAllowed, RunningPreview } from './store.ts';
+import type { AppFollow, AppJob, AppJobOutcome, AppPublisher, AppRelease, AppStore, InternetAllowed, RunningPreview } from './store.ts';
 import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
 import { manifest3Of, ReviewSchema, reviewOf } from './apps3.ts';
@@ -106,6 +106,17 @@ export const releaseProblem = (release: unknown, offered?: Offered): string | un
   const { version } = release as AppRelease;
   if (!semver.valid(version)) return `"${version}" is not a version such as 1.2.0.`;
   return undefined;
+};
+
+/**
+ * Why a release can't install under its id: the id is bound to another publisher (D9), the repository whose
+ * release first installed under it. Ids aren't publisher-qualified, so this keeps one from being taken over.
+ */
+export const publisherProblem = (release: AppRelease, publishers: AppPublisher[]): string | undefined => {
+  const bound = publishers.find((p) => p.app === release.id);
+  return bound && !sameRepository(release.signer.repository, bound.repository)
+    ? `${release.id} was first installed from ${bound.repository}, and an app’s id stays with its first publisher. This release is signed by ${release.signer.repository}: its publisher needs to give it an id of its own.`
+    : undefined;
 };
 
 /** Why a pull request's build can't be previewed beside the installed release; undefined when it can. */
@@ -249,13 +260,13 @@ export const appRunnerRoutes =
     };
     /** Where each default app stands, and what to install now (spec 9.7). */
     const defaultsNow = async () => {
-      const [installed, jobs, values] = await Promise.all([store.installedApps(), store.appJobs(), store.settingValues()]);
+      const [installed, jobs, values, publishers] = await Promise.all([store.installedApps(), store.appJobs(), store.settingValues(), store.appPublishers()]);
       return defaultsPlan({
         defaults: defaultApps,
         releases: updates.result.releases,
         installed: installed.map((i) => i.app),
         jobs: jobs.filter((j) => j.pr === undefined).map((j) => ({ ...j, ...(j.release ? { version: j.release.version } : {}) })),
-        problemOf: (release, listed) => releaseProblem(release) ?? ringProblem(release, ring, listed),
+        problemOf: (release, listed) => releaseProblem(release) ?? ringProblem(release, ring, listed) ?? publisherProblem(release, publishers),
         // A value an admin gave counts whether or not a running release declares it: the install keeps it again.
         hasValue: (id, setting) => values.some((v) => v.app === id && v.setting === setting),
         feedUsable: !feedHeld(updates.result, now()),
@@ -324,7 +335,7 @@ export const appRunnerRoutes =
 
     /** Admin → Apps' view of installs: what's installed and how it follows updates, and what the feed offers. */
     const appsView = async () => {
-      const [installed, follows, jobs, running, developers, internet, values, deletions, records] = await Promise.all([
+      const [installed, follows, jobs, running, developers, internet, values, deletions, records, publishers] = await Promise.all([
         store.installedApps(),
         store.follows(),
         store.appJobs(),
@@ -334,8 +345,10 @@ export const appRunnerRoutes =
         store.settingValues(),
         store.dataDeletions(),
         store.records(),
+        store.appPublishers(),
       ]);
       const { checkedAt, problem, releases } = updates.result;
+      const cantInstall = (release: AppRelease) => releaseProblem(release) ?? publisherProblem(release, publishers);
       const installedIds = new Set(installed.map((i) => i.app));
       const latestJob = (id: string) => jobs.find((j) => j.app === id && j.pr === undefined);
       return {
@@ -405,9 +418,9 @@ export const appRunnerRoutes =
             ...(r.notesUrl ? { notesUrl: r.notesUrl } : {}),
             signer: r.release!.signer,
             asks: r.release!.asks,
-            ...(releaseProblem(r.release) ? {} : { review: reviewOf(r.release!) }),
+            ...(cantInstall(r.release!) ? {} : { review: reviewOf(r.release!) }),
             ...(r.feed ? { feed: r.feed } : {}),
-            ...(releaseProblem(r.release) ? { problem: releaseProblem(r.release)! } : {}),
+            ...(cantInstall(r.release!) ? { problem: cantInstall(r.release!)! } : {}),
             ...(latestJob(r.app) ? { job: latestJob(r.app) } : {}),
           }),
       };
@@ -939,7 +952,7 @@ export const appRunnerRoutes =
           body: JobRequest,
           response: {
             202: { ...ref(AppJobSchema), description: 'Waiting for the runner' },
-            400: refused("The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, or a bad manifest"),
+            400: refused("The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, one under an id another publisher holds, or a bad manifest"),
             401: signInAgain,
             403: notDeploymentAdmin,
             404: refused('The app feed has no release file for that app and version'),
@@ -978,6 +991,8 @@ export const appRunnerRoutes =
             releaseProblem(release, await offeredTo(release, knowledge)) ??
             (previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : ringProblem(release, ring, listed));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+          const taken = publisherProblem(release, await store.appPublishers());
+          if (taken) return reply.code(400).send({ error: 'bad_request', message: taken });
           // Its event types may only grow within a version (ADR 0104): checked against the release in force before anything runs.
           if (isRelease2(release)) {
             const was = (await store.records()).find((r) => r.entry.id === release!.id);

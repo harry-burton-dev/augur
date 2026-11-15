@@ -100,6 +100,7 @@ deployment. Either would be the newest copy, and push the real ones out of the d
 | Copy off the server now | `pc exec backup /bin/sh /backup/backup.sh --offsite` |
 | Test a restore from the bucket now | `pc exec backup /bin/sh /backup/backup.sh --restore-test --offsite` |
 | List the copies in the bucket | `pc exec backup /tools/restic snapshots` |
+| Check a night's apps' files come back with the database | `sudo infra/deploy/backup/files-check.sh infra/deploy/backups/platform-<date>.sql.gz infra/deploy/backups/objects-<date>.tar.gz`, on the server itself, not in a container (needs Docker, curl and jq) |
 
 ## Restore the database from a backup
 
@@ -124,6 +125,14 @@ What people forgot in the knowledge graph since then stays forgotten: the graph 
 on a volume of its own (`knowledge-ledger`), outside the database, and forgets those again when `pc up -d`
 starts it. Its log says how many (`pc logs knowledge-migrate`). The same holds after a
 [restore to a point in time](../restore-to-a-point-in-time/).
+
+## Check apps' files come back
+
+The weekly restore test checks the database alone: the backup container can't start Garage. `files-check.sh`
+(above) loads one night's dump and apps' files into a throwaway Postgres and Garage beside it, and fails when a
+frontend the registry has a row for didn't come back. Files without a row are counted, not failed: the
+registry keeps an older build's files when a newer one replaces it, and a removed app's. CI runs it on every
+change to the backup. It doesn't yet check apps' own files against apps' own tables.
 
 ## Restore apps' files
 
