@@ -105,12 +105,17 @@ test('behind your own proxy, an install needs no Tailscale key and PLATFORM_URL 
   const checks = installChecks({ release: fresh, schema, env: proxied(), host: { composeFiles: ['compose.yml', 'compose.proxy.yml'] } });
   assert.ok(checks.some((c) => c.ok && /^Address: https:\/\/augur\.example\.org, served by your proxy in front/.test(c.text)), checks.map((c) => c.text).join('\n'));
   assert.ok(checks.some((c) => c.ok && /PROXY_LISTEN.*127\.0\.0\.1:8080/.test(c.text)));
-  // With Tailscale, the key is still wanted.
-  assert.ok(stops(ready({ TS_AUTHKEY: '' })).some((t) => /Set TS_AUTHKEY/.test(t)));
+  // With Tailscale, the key is still wanted, even where the schema no longer says so.
+  const noKey = { ...schema, required: schema.required.filter((k) => k !== 'TS_AUTHKEY') };
+  assert.ok(installChecks({ release: fresh, schema: noKey, env: ready({ TS_AUTHKEY: '' }) }).some((c) => c.stop && /Set TS_AUTHKEY/.test(c.text)));
+  assert.deepEqual(installChecks({ release: fresh, schema: noKey, env: proxied(), host: { composeFiles: ['compose.yml', 'compose.proxy.yml'] } }).filter((c) => c.stop), []);
+  // Written as Compose would take it too.
+  assert.deepEqual(stops(proxied({ COMPOSE_FILE: './compose.yml:./compose.proxy.yml' }), { composeFiles: ['compose.yml', 'compose.proxy.yml'] }), []);
 });
 
-test('an install stops on a COMPOSE_FILE naming a file that isn’t there', () => {
+test('an install stops on a COMPOSE_FILE naming a file that isn’t there, or one outside infra/deploy', () => {
   assert.ok(stops(proxied({ COMPOSE_FILE: 'compose.yml:compose.proxi.yml' }), { composeFiles: ['compose.yml', 'compose.proxy.yml'] }).some((t) => /compose\.proxi\.yml.*isn’t in infra\/deploy/.test(t)));
+  assert.ok(stops(proxied({ COMPOSE_FILE: 'compose.yml:../compose.proxy.yml' })).some((t) => /name only files in infra\/deploy/.test(t)));
 });
 
 test('an upgrade behind your own proxy doesn’t ask for TS_AUTHKEY', () => {

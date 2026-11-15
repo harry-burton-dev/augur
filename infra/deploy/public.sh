@@ -26,6 +26,9 @@ case "${1:-status}" in
     case "$n" in '' | *[!0-9]*) echo "How long? Give minutes, hours or days, such as 30m, 2h or 1d." >&2; exit 2 ;; esac
     case "$span" in *m) secs=$((n * 60)) ;; *d) secs=$((n * 86400)) ;; *) secs=$((n * 3600)) ;; esac
     if [ "$secs" -le 0 ] || [ "$secs" -gt 86400 ]; then echo "Open it for 24 hours at most; run this again before then to keep it open." >&2; exit 2; fi
+    if grep -Eq '^COMPOSE_FILE=.*compose\.proxy\.yml' "$here/.env" 2>/dev/null; then
+      echo "AUGUR is behind your own proxy (COMPOSE_FILE in .env), so Tailscale Funnel can't open it: open it on your proxy instead." >&2; exit 1
+    fi
     if ! pc ps --status running --services 2>/dev/null | grep -qx tailscale; then
       echo "The tailscale container isn't running. Start AUGUR first (pc up -d)." >&2; exit 1
     fi

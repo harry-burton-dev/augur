@@ -17,7 +17,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -41,16 +41,15 @@ export const readEnv = (text) =>
       .map(([, key, value]) => [key, value.replace(/^(['"])(.*)\1$/, '$2')]),
   );
 
-/** The compose files .env's COMPOSE_FILE names (compose.yml when none), and whether that puts AUGUR behind the organisation's own proxy. */
+/** The compose files .env's COMPOSE_FILE names (compose.yml when none), as the updater reads them, and whether that puts AUGUR behind the organisation's own proxy. */
 const PROXY_FILE = 'compose.proxy.yml';
 export const composeFilesOf = (env) => {
-  const files = (env.COMPOSE_FILE ?? '').split(':').map((f) => f.trim()).filter(Boolean);
+  const files = (env.COMPOSE_FILE ?? '').split(':').map((f) => f.trim()).filter(Boolean).map((f) => (isAbsolute(f) || normalize(f).split('/').includes('..') ? f : normalize(f)));
   return files.length ? files : ['compose.yml'];
 };
-const behindProxy = (env) => composeFilesOf(env).some((f) => f.split('/').pop() === PROXY_FILE);
-/** The settings only Tailscale reads: not wanted behind the organisation's own proxy. */
-const TAILSCALE_ONLY = ['TS_AUTHKEY'];
-const wanted = (env) => (key) => !(behindProxy(env) && TAILSCALE_ONLY.includes(key));
+const behindProxy = (env) => composeFilesOf(env).includes(PROXY_FILE);
+/** Tailscale's key: wanted unless AUGUR is behind the organisation's own proxy, where Tailscale doesn't run. */
+const withTailscaleKey = (env, required) => (behindProxy(env) ? required.filter((key) => key !== 'TS_AUTHKEY') : [...new Set([...required, 'TS_AUTHKEY'])]);
 
 /** What stands between a server with this .env and the release. `errors` stop the upgrade; `notes` are for reading. */
 export const preflight = (release, env) => {
@@ -69,7 +68,8 @@ export const preflight = (release, env) => {
     errors.push(`${release.version} upgrades from ${min} or later, and this server is on ${from}. Upgrade to ${min} first (augur@${min}), then to ${release.version}.`);
   }
 
-  const missing = (release.settings?.required ?? []).filter((key) => key !== 'PLATFORM_VERSION' && !env[key]).filter(wanted(env));
+  // An upgraded server on Tailscale has joined the tailnet, so needs no key: only one behind its own proxy is spared asking.
+  const missing = (release.settings?.required ?? []).filter((key) => key !== 'PLATFORM_VERSION' && !env[key] && !(key === 'TS_AUTHKEY' && behindProxy(env)));
   if (missing.length) errors.push(`Set ${missing.join(', ')} in .env first (see infra/deploy/.env.example).`);
   const stale = (release.settings?.removed ?? []).filter((key) => key in env);
   if (stale.length) notes.push(`${stale.join(', ')} ${stale.length === 1 ? 'is' : 'are'} no longer read; you can remove ${stale.length === 1 ? 'it' : 'them'} from .env.`);
@@ -132,7 +132,7 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   else pass(`Release: augur@${release.version} (${release.channel}) is the one here, and PLATFORM_VERSION names it.`);
 
   // Every required setting, and every value set, fits the schema.
-  const required = [...new Set([...(schema.required ?? []), ...(release.settings?.required ?? [])])].filter(wanted(env));
+  const required = withTailscaleKey(env, [...new Set([...(schema.required ?? []), ...(release.settings?.required ?? [])])]);
   const missing = required.filter((key) => !env[key]);
   const generated = missing.filter((key) => props[key]?.['x-generate']);
   const byHand = missing.filter((key) => !props[key]?.['x-generate']);
@@ -155,8 +155,10 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   if (!shared.length && !misfits.length) pass('Secrets: each is its own, and each fits.');
 
   // The compose files: each one there, as Compose will want them.
-  const absent = host.composeFiles ? composeFilesOf(env).filter((f) => !host.composeFiles.includes(f)) : [];
-  for (const f of absent) stop(`COMPOSE_FILE names ${f}, which isn’t in infra/deploy: compose.yml:${PROXY_FILE} puts AUGUR behind your own proxy (AUGUR’s docs, Install AUGUR).`);
+  for (const f of composeFilesOf(env)) {
+    if (isAbsolute(f) || f.split('/').includes('..')) stop(`COMPOSE_FILE names ${f}: name only files in infra/deploy, which the updater checks and writes, such as compose.yml:${PROXY_FILE}.`);
+    else if (host.composeFiles && !host.composeFiles.includes(f)) stop(`COMPOSE_FILE names ${f}, which isn’t in infra/deploy: compose.yml:${PROXY_FILE} puts AUGUR behind your own proxy (AUGUR’s docs, Install AUGUR).`);
+  }
 
   // The address: behind the organisation's own proxy, whatever it serves; otherwise this machine on the tailnet.
   if (behindProxy(env)) {

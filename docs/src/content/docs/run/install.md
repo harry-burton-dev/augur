@@ -111,10 +111,15 @@ the front door listens at `PROXY_LISTEN`. In `.env`:
 
 ```sh
 COMPOSE_FILE=compose.yml:compose.proxy.yml   # the updater runs these files too
-PROXY_LISTEN=127.0.0.1:8080                  # a proxy on another machine: this server's address it reaches
 PLATFORM_URL=https://augur.example.org       # the address your proxy serves, with no path
-TRUSTED_PROXIES=10.0.4.10                    # your proxy's addresses (Limits and health)
+# A load balancer on another machine (10.0.4.10) reaching this server at 10.0.4.20:
+PROXY_LISTEN=10.0.4.20:8080
+TRUSTED_PROXIES=10.0.4.10
 ```
+
+A proxy on this machine instead leaves `PROXY_LISTEN` at `127.0.0.1:8080` and `TRUSTED_PROXIES` unset: it
+reaches the front door through Docker, which hands the request on from the compose network's gateway, inside
+the private ranges believed by default ([Limits and health](../limits/)).
 
 Leave `TS_AUTHKEY` and `TS_HOSTNAME` out, and use the `pc` alias with `compose.proxy.yml` (step 1). Your proxy
 must:

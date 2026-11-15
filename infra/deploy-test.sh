@@ -218,7 +218,8 @@ pc() {
   # Only a build from this checkout uses the build file: a release under test runs its published
   # images, as a server does, including the apps that ship with it (ADR 0049).
   if [ "${BUILD:-}" = 1 ] && [ "$dir" = "$deploy" ] && [ -e "$dir/compose.build.yml" ]; then files+=(-f "$dir/compose.build.yml"); fi
-  # Behind its own proxy, as .env says; a release from before compose.proxy.yml publishes the front door the test's way.
+  # Behind its own proxy, as .env names it from this checkout on; a release from before compose.proxy.yml (its folder has
+  # none) publishes the front door the test's way.
   if [ -e "$dir/compose.proxy.yml" ]; then files+=(-f "$dir/compose.proxy.yml"); else files+=(-f "$work/compose.test.yml"); fi
   docker compose -p "$project" "${files[@]}" --env-file "$dir/.env" "$@"
 }
@@ -647,7 +648,8 @@ case "$mode" in
     both_ways_in
     # IMAGES_OUT gets every image the release's compose file runs, third-party ones too, for the
     # vulnerability scan (Tailscale among them, though the test never starts it).
-    if [ -n "${IMAGES_OUT:-}" ]; then pc config --images | sort -u > "$IMAGES_OUT"; fi
+    # compose.yml alone, as on Tailscale: behind a proxy (pc here) Tailscale's image isn't run, but servers on Tailscale run it.
+    if [ -n "${IMAGES_OUT:-}" ]; then docker compose -p "$project" -f "$deploy/compose.yml" --env-file "$deploy/.env" config --images | sort -u > "$IMAGES_OUT"; fi
     up
     wait_ready "Fresh install of this checkout"
     no_restarts

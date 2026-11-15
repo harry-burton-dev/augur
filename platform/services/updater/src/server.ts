@@ -124,7 +124,14 @@ export const command = (file: string, args: string[], env: Record<string, string
   });
 
 /** `-f` for each compose file the deployment runs (COMPOSE_FILE in its .env, or compose.yml). */
-const composeArgs = async (dir: string, envFile: string) => composeFiles(dir, await readFile(envFile, 'utf8').catch(() => '')).flatMap((file) => ['-f', file]);
+// No .env yet is compose.yml alone; one that can't be read stops the call, rather than run the wrong files.
+const composeArgs = async (dir: string, envFile: string) => {
+  const text = await readFile(envFile, 'utf8').catch((err: NodeJS.ErrnoException) => {
+    if (err.code === 'ENOENT') return '';
+    throw new CommandFailed(`The updater can't read ${envFile} (${err.code ?? err.message}), so it can't tell which compose files the deployment runs.`);
+  });
+  return composeFiles(dir, text).flatMap((file) => ['-f', file]);
+};
 
 export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = partsFor().health, gatewayUrl = 'http://gateway:8080', signInUrl, signIn }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
   // Only what the CLIs need: a PLATFORM_VERSION here would win over the settings file.
