@@ -172,8 +172,12 @@ export interface AppHost {
   removeVolumes(names: string[]): Promise<void>;
   /** The app's scratch volumes (augur-scratch, labelled with the app), of every version and preview. */
   scratchVolumes(app: string): Promise<string[]>;
-  /** Runs the storage container to take an app's own data away for good: its database login and schemas, its bucket (its keys stay, and open nothing) (APP_STORAGE_RETIRE). */
-  retireStorage(app: string): Promise<void>;
+  /**
+   * Runs the storage container to take an app's own data away for good: its database login and schemas, its bucket (its
+   * keys stay, and open nothing) (APP_STORAGE_RETIRE). It refuses unless `backup`, the dump just taken for it, is the last
+   * the backup container noted and a good one with apps' files in it (APP_STORAGE_BACKUP, ADR 0103).
+   */
+  retireStorage(app: string, backup: string): Promise<void>;
   /**
    * Makes each app's network, internal so nothing on it reaches the internet, and joins to it the runner
    * itself (to see the parts' health) and the platform's parts it names; takes away the app networks not
@@ -1196,7 +1200,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     await report({ step: 'remove', state: 'running' });
     if ((await host.readState()).apps[job.app]) throw new StepFailed(`${job.app} is installed again, so its data stays.`);
     const file = await host.backup();
-    await host.retireStorage(job.app);
+    await host.retireStorage(job.app, file);
     const volumes = await host.scratchVolumes(job.app);
     await host.removeVolumes(volumes);
     await calls.removeCredential(job.app);

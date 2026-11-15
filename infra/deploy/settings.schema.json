@@ -1856,6 +1856,14 @@
         "storage": "default"
       }
     },
+    "APP_STORAGE_BACKUP": {
+      "type": "string",
+      "description": "The dump the app runner just took before taking a removed app's data away: the storage job drops it only when that backup is the last noted in backups/status and worked, apps' files included (ADR 0103). Set by the app runner beside APP_STORAGE_RETIRE.",
+      "x-internal": "updater",
+      "x-via": {
+        "storage": "default"
+      }
+    },
     "RETIRED_APPS": {
       "type": "string",
       "description": "Apps AUGUR no longer runs whose data the storage job takes away, once on each server (ADR 0075).",

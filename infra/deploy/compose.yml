@@ -280,6 +280,9 @@ services:
       PLATFORM_DATABASE_LOGINS: identity registry events models permissions
       # The most connections each app's login may hold at once (30 when empty), so one app can't take AUGUR's (ADR 0073).
       APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
+    volumes:
+      # Only the backup container's results, never the backups: an app's data is dropped only behind a fresh one (ADR 0103).
+      - ./backups/status:/backup-status:ro
     depends_on:
       postgres: { condition: service_healthy }
       garage: { condition: service_healthy }

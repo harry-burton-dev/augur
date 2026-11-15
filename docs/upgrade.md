@@ -54,6 +54,12 @@ Every release has been through the [deploy test](https://drive.google.com/drive/
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+### The backup before an upgrade always copies apps' files
+
+**From** unreleased
+
+The backup the updater takes before an upgrade, or before it takes a removed app's data away, now copies apps' files every time, as `objects-<date>T<time>Z.tar.gz`, where it used to keep the one from earlier that day. So an upgrade takes a little longer and `infra/deploy/backups/` holds one more tarball per upgrade, kept `BACKUP_KEEP_DAYS` days like the rest. A removed app's data is dropped only when that backup worked and holds apps' files (ADR 0103): if it didn't, the app stays under **Removed, data kept** in Admin → Apps with the reason, and is tried again later. Nothing to do.
+
 ### AUGUR can run behind your own proxy instead of Tailscale
 
 **From** unreleased
