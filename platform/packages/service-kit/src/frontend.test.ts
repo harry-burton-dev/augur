@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { frontendDigest, frontendPathProblem, packFrontend, publishFrontend, readFrontend, unpackFrontend } from './frontend.ts';
+import { frontendDigest, frontendPathProblem, FrontendProblem, FRONTEND_TYPES, frontendTypeOf, frontendTypeProblem, packFrontend, publishFrontend, readFrontend, unpackFrontend } from './frontend.ts';
 
 const built = () => {
   const dir = mkdtempSync(join(tmpdir(), 'frontend-'));
@@ -50,6 +51,37 @@ describe('frontend tarballs', () => {
     expect(() => unpackFrontend(gzipSync(Buffer.alloc(1024)))).toThrow(/no files/);
   });
 
+  it('holds only the file types an app frontend needs, each with the type it is served as', () => {
+    expect(frontendTypeOf('entry.js')).toBe('text/javascript; charset=utf-8');
+    expect(frontendTypeOf('assets/chunk.MJS')).toBe('text/javascript; charset=utf-8');
+    expect(frontendTypeOf('style.css')).toBe('text/css; charset=utf-8');
+    expect(frontendTypeOf('fonts/a.woff2')).toBe('font/woff2');
+    expect(frontendTypeOf('entry.js.map')).toBe('application/json');
+    expect(frontendTypeOf('page.html')).toBeUndefined();
+    expect(frontendTypeOf('icon.svg')).toBeUndefined();
+    expect(frontendTypeOf('LICENSE')).toBeUndefined();
+    expect(frontendTypeProblem('entry.js')).toBeUndefined();
+    for (const page of ['index.html', 'a/b.htm', 'x.xhtml', 'icon.svg', 'icon.SVG', 'feed.xml']) {
+      expect(frontendTypeProblem(page)).toMatch(new RegExp(`"${page.replace('.', '\\.')}" is a \\.${page.split('.').pop()!.toLowerCase()} file`));
+    }
+    // It names what may be held, and how to fix it.
+    expect(frontendTypeProblem('icon.svg')).toMatch(/\.js, \.mjs, \.css/);
+    expect(frontendTypeProblem('icon.svg')).toMatch(/Leave it out of the build/);
+    expect(frontendTypeProblem('.well-known/thing')).toMatch(/has no file extension/);
+  });
+
+  it('refuses a page or an SVG when packing and when unpacking, so neither can run as the shell', () => {
+    const script = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(sessionStorage.length)</script></svg>');
+    expect(() => packFrontend([{ path: 'entry.js', data: Buffer.from('') }, { path: 'icon.svg', data: script }])).toThrow(/"icon\.svg" is a \.svg file/);
+    const dir = built();
+    writeFileSync(join(dir, 'index.html'), '<script>alert(1)</script>');
+    expect(() => packFrontend(readFrontend(dir))).toThrow(FrontendProblem);
+    // A tarball packed some other way is refused all the same.
+    const out = join(mkdtempSync(join(tmpdir(), 'tar-')), 'f.tgz');
+    execFileSync('tar', ['czf', out, '-C', dir, '.']);
+    expect(() => unpackFrontend(execFileSync('cat', [out]))).toThrow(/"index\.html" is a \.html file/);
+  });
+
   it('refuses a negative size, which would never get to the end of the tarball', () => {
     const tar = gunzipSync(packFrontend([{ path: 'a.js', data: Buffer.alloc(10) }]));
     // -1000 in octal is -512, one block back: the header is read again and again.
@@ -78,5 +110,27 @@ describe('publishFrontend', () => {
     const base = { registryUrl: 'http://registry:8082', credentials, app: 'expenses', version: '1.2.0', dir: built() };
     expect(await publishFrontend({ ...base, fetchImpl: answer(501) })).toBe(false);
     await expect(publishFrontend({ ...base, fetchImpl: answer(409) })).rejects.toThrow('answered 409: Different files.');
+  });
+});
+
+describe('the front door', () => {
+  it('serves under /apps/ exactly the file types a frontend may hold', () => {
+    const conf = readFileSync(fileURLToPath(new URL('../../../../infra/deploy/nginx.conf', import.meta.url)), 'utf8');
+    const served = /location ~\* \^\/apps\/\(\?!\.\*\\\.\(\?:([^)]+)\)\$\)/.exec(conf)?.[1];
+    expect(served, 'the refusing location in nginx.conf').toBeDefined();
+    const pattern = new RegExp(`^(?:${served})$`, 'i');
+    const refused = ['svg', 'svgz', 'html', 'htm', 'shtml', 'xhtml', 'xht', 'xml', 'xsl', 'mht', 'mhtml', 'txt', 'pdf'];
+    for (const ext of [...refused, ...Object.keys(FRONTEND_TYPES)]) expect(pattern.test(ext), ext).toBe(Object.hasOwn(FRONTEND_TYPES, ext));
+    // nginx takes the first regex location that matches, so the refusal must come before any that serves /apps/.
+    const refusing = conf.indexOf('location ~* ^/apps/(?!');
+    const serving = [...conf.matchAll(/location ~\*? \^\/apps\/(?!\(\?!)/g)].map((m) => m.index);
+    expect(serving.length).toBeGreaterThan(0);
+    for (const at of serving) expect(refusing).toBeLessThan(at);
+    // A ^~ or = location would be chosen without the regex locations being tried at all.
+    expect(conf).not.toMatch(/location (\^~|=) \/apps/);
+  });
+
+  it('keeps the list from being changed at run time', () => {
+    expect(Object.isFrozen(FRONTEND_TYPES)).toBe(true);
   });
 });
