@@ -1,5 +1,5 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { bucketKeyIdFor, type FrontendFile } from '@augur/service-kit';
+import { bucketKeyIdFor, FrontendProblem, frontendTypeOf, frontendTypeProblem, type FrontendFile } from '@augur/service-kit';
 import type { AppEntry } from './manifest.ts';
 import type { StoredFrontend } from './store.ts';
 
@@ -23,36 +23,27 @@ export const folderOf = (frontend: Pick<StoredFrontend, 'version' | 'folder'>) =
 /** The bucket's key prefix and the address the front door serves it at are the same: apps/<app>/<folder>/. */
 export const frontendBase = (app: string, folder: string) => `/apps/${app}/${folder}/`;
 
-const TYPES: Record<string, string> = {
-  js: 'text/javascript; charset=utf-8',
-  mjs: 'text/javascript; charset=utf-8',
-  css: 'text/css; charset=utf-8',
-  json: 'application/json',
-  map: 'application/json',
-  html: 'text/html; charset=utf-8',
-  svg: 'image/svg+xml',
-  png: 'image/png',
-  jpg: 'image/jpeg',
-  jpeg: 'image/jpeg',
-  gif: 'image/gif',
-  webp: 'image/webp',
-  avif: 'image/avif',
-  ico: 'image/x-icon',
-  woff: 'font/woff',
-  woff2: 'font/woff2',
-  ttf: 'font/ttf',
-  txt: 'text/plain; charset=utf-8',
-  wasm: 'application/wasm',
-};
+/**
+ * What a browser is told a file is; modules must say JavaScript or the browser won't run them. Only the file
+ * types a frontend may hold (the service kit's FRONTEND_TYPES): anything else, a page or an SVG above all,
+ * would run as the shell's origin at its /apps/ address, so it has none and is never written.
+ */
+export const contentTypeOf = (path: string) => frontendTypeOf(path);
 
-/** What a browser is told a file is; modules must say JavaScript or the browser won't run them. */
-export const contentTypeOf = (path: string) => TYPES[path.slice(path.lastIndexOf('.') + 1).toLowerCase()] ?? 'application/octet-stream';
+/** Refuses the whole frontend when any file is of a type it may not hold, before any of it is written. */
+const onlyServable = (files: FrontendFile[]) => {
+  for (const f of files) {
+    const problem = frontendTypeProblem(f.path);
+    if (problem) throw new FrontendProblem(problem);
+  }
+};
 
 /** The frontends bucket in Garage, through S3's API, with the registry's own key. */
 export const s3FrontendFiles = ({ endpoint, bucket, accessKeyId, secretAccessKey }: { endpoint: string; bucket: string; accessKeyId: string; secretAccessKey: string }): FrontendFiles => {
   const s3 = new S3Client({ endpoint, region: 'garage', forcePathStyle: true, credentials: { accessKeyId, secretAccessKey } });
   return {
     async put(app, folder, files) {
+      onlyServable(files);
       const base = frontendBase(app, folder).slice(1);
       // A few at a time: a frontend is a handful of files, and Garage is one small node.
       for (let i = 0; i < files.length; i += 8) {
@@ -79,6 +70,7 @@ export const s3FrontendFiles = ({ endpoint, bucket, accessKeyId, secretAccessKey
 export class MemoryFrontendFiles implements FrontendFiles {
   readonly objects = new Map<string, Buffer>();
   async put(app: string, folder: string, files: FrontendFile[]) {
+    onlyServable(files);
     for (const f of files) this.objects.set(`${frontendBase(app, folder).slice(1)}${f.path}`, f.data);
   }
 }

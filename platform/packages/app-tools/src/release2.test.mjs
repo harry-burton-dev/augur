@@ -1,7 +1,7 @@
 // The release file an app on contract 3 attaches, from its checkout and what the build pushed.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -64,4 +64,26 @@ test('augur-app describe with no bundle stands in for the image of a part built 
   assert.equal(image(named, 'web'), `ghcr.io/o/notes/notes@${'sha256:' + '0'.repeat(64)}`);
   // The other parts keep the images their Score files name.
   assert.match(image(named, 'worker'), /^ghcr\.io\/example-org\/augur-notes-worker@sha256:/);
+});
+
+test('augur-app bundle refuses a frontend holding a page or an SVG before it pushes anything', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'app3-repo-'));
+  cpSync(fixture, dir, { recursive: true });
+  // A service to build too: were the frontend checked after it, the error would be docker's push, not this.
+  for (const part of ['frontend', 'service']) {
+    mkdirSync(join(dir, part, 'dist'), { recursive: true });
+    writeFileSync(join(dir, part, 'package.json'), '{}');
+  }
+  writeFileSync(join(dir, 'Dockerfile'), 'FROM scratch\n');
+  writeFileSync(join(dir, 'frontend', 'dist', 'entry.js'), 'export {};');
+  writeFileSync(join(dir, 'frontend', 'dist', 'icon.svg'), '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  const bin = fileURLToPath(new URL('../bin/augur-app.mjs', import.meta.url));
+  const env = { ...process.env, IMAGE_REPO: 'ghcr.io/o/notes', PATH: '/nonexistent' };
+  const run = () => execFileSync(process.execPath, [bin, 'bundle', 'beta'], { cwd: dir, env, encoding: 'utf8', stdio: 'pipe' });
+  assert.throws(run, (err) => {
+    assert.equal(err.status, 1);
+    assert.match(err.stderr, /^frontend\/dist can’t be released: "icon\.svg" is a \.svg file, and a frontend holds only \.js, \.mjs, \.css/);
+    assert.match(err.stderr, /Leave it out of the build/);
+    return true;
+  });
 });

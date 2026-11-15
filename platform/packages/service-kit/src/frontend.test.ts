@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { frontendDigest, frontendPathProblem, packFrontend, publishFrontend, readFrontend, unpackFrontend } from './frontend.ts';
+import { frontendDigest, frontendPathProblem, FrontendProblem, frontendTypeOf, frontendTypeProblem, packFrontend, publishFrontend, readFrontend, unpackFrontend } from './frontend.ts';
 
 const built = () => {
   const dir = mkdtempSync(join(tmpdir(), 'frontend-'));
@@ -48,6 +48,37 @@ describe('frontend tarballs', () => {
     expect(() => unpackFrontend(many, { files: 10, bytes: 20 })).toThrow(/at most/);
     expect(() => unpackFrontend(Buffer.from('not gzip'))).toThrow(/gzipped tarball/);
     expect(() => unpackFrontend(gzipSync(Buffer.alloc(1024)))).toThrow(/no files/);
+  });
+
+  it('holds only the file types an app frontend needs, each with the type it is served as', () => {
+    expect(frontendTypeOf('entry.js')).toBe('text/javascript; charset=utf-8');
+    expect(frontendTypeOf('assets/chunk.MJS')).toBe('text/javascript; charset=utf-8');
+    expect(frontendTypeOf('style.css')).toBe('text/css; charset=utf-8');
+    expect(frontendTypeOf('fonts/a.woff2')).toBe('font/woff2');
+    expect(frontendTypeOf('entry.js.map')).toBe('application/json');
+    expect(frontendTypeOf('page.html')).toBeUndefined();
+    expect(frontendTypeOf('icon.svg')).toBeUndefined();
+    expect(frontendTypeOf('LICENSE')).toBeUndefined();
+    expect(frontendTypeProblem('entry.js')).toBeUndefined();
+    for (const page of ['index.html', 'a/b.htm', 'x.xhtml', 'icon.svg', 'icon.SVG', 'feed.xml']) {
+      expect(frontendTypeProblem(page)).toMatch(new RegExp(`"${page.replace('.', '\\.')}" is a \\.${page.split('.').pop()!.toLowerCase()} file`));
+    }
+    // It names what may be held, and how to fix it.
+    expect(frontendTypeProblem('icon.svg')).toMatch(/\.js, \.mjs, \.css/);
+    expect(frontendTypeProblem('icon.svg')).toMatch(/Leave it out of the build/);
+    expect(frontendTypeProblem('.well-known/thing')).toMatch(/has no file extension/);
+  });
+
+  it('refuses a page or an SVG when packing and when unpacking, so neither can run as the shell', () => {
+    const script = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(sessionStorage.length)</script></svg>');
+    expect(() => packFrontend([{ path: 'entry.js', data: Buffer.from('') }, { path: 'icon.svg', data: script }])).toThrow(/"icon\.svg" is a \.svg file/);
+    const dir = built();
+    writeFileSync(join(dir, 'index.html'), '<script>alert(1)</script>');
+    expect(() => packFrontend(readFrontend(dir))).toThrow(FrontendProblem);
+    // A tarball packed some other way is refused all the same.
+    const out = join(mkdtempSync(join(tmpdir(), 'tar-')), 'f.tgz');
+    execFileSync('tar', ['czf', out, '-C', dir, '.']);
+    expect(() => unpackFrontend(execFileSync('cat', [out]))).toThrow(/"index\.html" is a \.html file/);
   });
 
   it('refuses a negative size, which would never get to the end of the tarball', () => {

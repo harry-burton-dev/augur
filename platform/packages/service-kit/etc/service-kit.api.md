@@ -797,6 +797,9 @@ export const FRONTEND_LIMITS: {
 };
 
 // @public
+export const FRONTEND_TYPES: Readonly<Record<string, string>>;
+
+// @public
 export const frontendDigest: (tarball: Buffer) => string;
 
 // @public
@@ -813,6 +816,12 @@ export const frontendPathProblem: (path: string) => string | undefined;
 // @public (undocumented)
 export class FrontendProblem extends Error {
 }
+
+// @public
+export const frontendTypeOf: (path: string) => string | undefined;
+
+// @public
+export const frontendTypeProblem: (path: string) => string | undefined;
 
 // @public
 export const GATEWAY_CALLER: Caller;

@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Apps' frontends hold no pages or SVGs
+
+**From** unreleased
+
+Under `/apps/` the front door now serves only the file types an app's frontend needs (scripts, styles, JSON, source maps, images other than SVG, fonts, WebAssembly) and answers 404 for anything else, such as an `.html` or `.svg` file, because one opened at its address would run as AUGUR's own page. The registry refuses a frontend bundle that holds one, so an app release with one fails to install; its developer rebuilds it without (`augur-app bundle` now says which file). Every file under `/apps/`, `/assets/` and `/shared/` also carries `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy. No app AUGUR knows of ships such a file. Nothing to do on the server.
+
 ## Postgres keeps connections back for AUGUR
 
 **From** unreleased
