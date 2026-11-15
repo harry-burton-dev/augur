@@ -122,6 +122,8 @@ export interface DomainEvent {
   publisher: string;
   at: string;
   workspace?: EventFloor;
+  /** The version of its type the payload follows, when its publisher declares its types (ADR 0104). */
+  version?: number;
   payload: unknown;
 }
 
@@ -130,6 +132,8 @@ export interface NewDomainEvent {
   id: string;
   payload: unknown;
   floor?: EventFloor;
+  /** The version of its type, checked against what the publisher declares (ADR 0104). */
+  version?: number;
 }
 
 export interface EventsQuery {
@@ -145,6 +149,18 @@ export interface EventsQuery {
 /** Whether a topic is one of those asked for: an exact name, or under a "family.*". */
 export const topicMatches = (topic: string, wanted: string[]) =>
   wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
+
+/** Whether a topic or family asked for shares any topic with those an app reads (exact topics or families). */
+export const topicsOverlap = (asked: string, reads: string[]) =>
+  asked === '*' ||
+  reads.some((read) => {
+    const a = asked.endsWith('.*') ? asked.slice(0, -1) : undefined;
+    const r = read.endsWith('.*') ? read.slice(0, -1) : undefined;
+    if (a && r) return a.startsWith(r) || r.startsWith(a);
+    if (a) return read.startsWith(a);
+    if (r) return asked.startsWith(r);
+    return asked === read;
+  });
 
 /** A leaver's team items still to give back: those of one team, or of every team when `team` is left out. */
 export interface InboxRelease {
@@ -371,6 +387,12 @@ export const migrations: Migration[] = [
         up_to bigint not null
       );`,
   },
+  {
+    id: '017_event_version',
+    sql: `
+      -- The version of its type an event's payload follows, when its publisher declares its types (ADR 0104).
+      alter table events.domain_events add column version integer;`,
+  },
 ];
 
 /** Each new notification, by id. The channels carry ids only: see `refIn`. */
@@ -396,7 +418,7 @@ type NotificationRow = {
   workspace_path: string[] | null;
 };
 
-type DomainEventRow = { seq: string; topic: string; id: string; publisher: string; at: Date; workspace_id: string | null; workspace_path: string[] | null; payload: unknown };
+type DomainEventRow = { seq: string; topic: string; id: string; publisher: string; at: Date; workspace_id: string | null; workspace_path: string[] | null; version: number | null; payload: unknown };
 
 const fromEventRow = (r: DomainEventRow): DomainEvent => ({
   seq: r.seq,
@@ -405,6 +427,7 @@ const fromEventRow = (r: DomainEventRow): DomainEvent => ({
   publisher: r.publisher,
   at: r.at.toISOString(),
   ...floorFrom(r.workspace_id, r.workspace_path),
+  ...(r.version ? { version: r.version } : {}),
   payload: r.payload,
 });
 
@@ -506,7 +529,7 @@ export class PgEventStore implements EventStore {
     const ref = refIn(payload, SEQ);
     if (!ref || !this.emitter.listenerCount('domain-event')) return;
     this.readBack(async () => {
-      const { rows } = await this.pool.query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events where seq = $1', [ref]);
+      const { rows } = await this.pool.query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, version, payload from events.domain_events where seq = $1', [ref]);
       if (rows[0]) this.emitter.emit('domain-event', fromEventRow(rows[0]));
     });
   }
@@ -707,7 +730,7 @@ export class PgEventStore implements EventStore {
     // Seq order is commit order (`insertEvents`), so a seq not visible yet can only ever land above these. Waiting
     // on the transactions still running isn't needed, and would let any login on the database stall every follower.
     const { rows } = await this.pool.query<DomainEventRow>(
-      `select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events
+      `select seq, topic, id, publisher, at, workspace_id, workspace_path, version, payload from events.domain_events
        where seq > $1 and ($5::bigint is null or seq <= $5) and ($6 or topic = any($2::text[]) or topic like any($3::text[]))
        order by seq limit $4`,
       [after ?? '0', exact, families, limit, upTo ?? null, every],

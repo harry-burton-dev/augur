@@ -454,6 +454,48 @@ describe.runIf(DATABASE_URL)('events', () => {
       expect((await read('topics=folio.*', platform)).json().events.map((e: { id: string }) => e.id)).toEqual(['fin', 'legal', 'pay', 'all']);
     });
 
+    it('gives an app that says what it reads only that, refuses what it doesn’t read, and waits out a registry that can’t say (ADR 0104)', async () => {
+      let registryUp = true;
+      const declaredEvents = async (app: string) => {
+        if (!registryUp) throw new GrantsUnavailable('down');
+        return app === 'notes' ? { reads: ['folio.document.published'], publishes: [] } : undefined;
+      };
+      const app = (open = await db.app({ verifyService, grants, floors, declaredEvents }));
+      await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('d1'), { topic: 'folio.document.withdrawn', id: 'w1', payload: {} }] } });
+      const read = (query: string, headers = as('notes')) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers });
+      await expect.poll(async () => (await read('topics=folio.*', platform)).json().events.length).toBe(2);
+      // A family it reads part of gives it that part; AUGUR's own services, and an app that doesn't say, read the lot.
+      expect((await read('topics=folio.*')).json().events.map((e: { id: string }) => e.id)).toEqual(['d1']);
+      expect((await read('topics=folio.*', platform)).json().events.map((e: { id: string }) => e.id)).toEqual(['d1', 'w1']);
+      expect((await read('topics=folio.*', as('folio'))).json().events.map((e: { id: string }) => e.id)).toEqual(['d1', 'w1']);
+      const refused = await read('topics=folio.document.withdrawn');
+      expect([refused.statusCode, refused.json().message]).toEqual([403, expect.stringMatching(/notes doesn’t say in its manifest that it reads folio\.document\.withdrawn\. It reads folio\.document\.published/)]);
+      registryUp = false;
+      expect((await read('topics=folio.*')).statusCode).toBe(503);
+    });
+
+    it('holds an app that declares its event types to them: topic, version and payload (ADR 0104)', async () => {
+      const declaredEvents = async (app: string) =>
+        app === 'folio'
+          ? {
+              publishes: [
+                { topic: 'folio.document.published', version: 1, schema: { type: 'object', required: ['document'], properties: { document: { type: 'string' } } } },
+                { topic: 'folio.document.published', version: 2, schema: { type: 'object', required: ['document', 'by'], properties: { document: { type: 'string' }, by: { type: 'string' } } } },
+              ],
+            }
+          : undefined;
+      const app = (open = await db.app({ verifyService, grants, floors, declaredEvents }));
+      const publish = (events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events } });
+      expect((await publish([{ ...published('d1'), version: 1 }])).statusCode).toBe(202);
+      // Without a version, the newest declared.
+      expect((await publish([{ topic: 'folio.document.published', id: 'd2', payload: { document: 'd2', by: 'u-1' } }])).statusCode).toBe(202);
+      const wrong = await publish([{ topic: 'folio.document.published', id: 'd3', payload: { document: 'd3' } }]);
+      expect([wrong.statusCode, wrong.json().message]).toEqual([400, expect.stringMatching(/Event d3's payload isn't folio\.document\.published version 2: .*by/)]);
+      expect((await publish([{ ...published('d4'), version: 3 }])).json().message).toMatch(/declares folio\.document\.published at version 1, 2, not 3/);
+      expect((await publish([{ topic: 'folio.document.withdrawn', id: 'w1', payload: {} }])).json().message).toMatch(/doesn’t declare folio\.document\.withdrawn/);
+      await expect.poll(async () => (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers: platform })).json().events.map((e: { id: string; version?: number }) => [e.id, e.version])).toEqual([['d1', 1], ['d2', 2]]);
+    });
+
     it('answers 410 to a cursor behind what was pruned, with how far they were pruned, so a follower knows to rebuild (ADR 0104)', async () => {
       const app = (open = await db.app({ verifyService, grants, floors }));
       await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('old1'), published('old2'), published('new')] } });

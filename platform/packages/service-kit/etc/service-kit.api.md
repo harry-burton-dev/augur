@@ -12,7 +12,7 @@ import { JWTPayload } from 'jose';
 import { JWTVerifyGetKey } from 'jose';
 
 // @public
-export function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id'> & {
+export function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id' | 'version'> & {
     id?: string;
 }): Promise<void>;
 
@@ -487,6 +487,27 @@ export type DatabaseRow = Record<string, unknown>;
 export const decidesFrom: (value: string | undefined) => ReadonlySet<string> | "all";
 
 // @public
+export interface DeclaredEvents {
+    // (undocumented)
+    publishes: DeclaredEventType[];
+    // (undocumented)
+    reads?: string[];
+}
+
+// @public
+export type DeclaredEventsLookup = (app: string) => Promise<DeclaredEvents | undefined>;
+
+// @public
+export interface DeclaredEventType {
+    // (undocumented)
+    schema: Record<string, unknown>;
+    // (undocumented)
+    topic: string;
+    // (undocumented)
+    version: number;
+}
+
+// @public
 export const DEFAULT_CACHE_ENTRIES = 5000;
 
 // @public
@@ -603,6 +624,7 @@ export interface DomainEvent {
     seq: string;
     // (undocumented)
     topic: string;
+    version?: number;
     // (undocumented)
     workspace?: {
         id: string;
@@ -1228,6 +1250,7 @@ export interface NewDomainEvent {
     // (undocumented)
     payload: unknown;
     topic: string;
+    version?: number;
     workspace?: string;
 }
 
@@ -1583,6 +1606,9 @@ export interface RegisterOptions {
 
 // @public
 export const registryBindingApps: (input: GrantsOptions) => (() => Promise<BindingApp[]>);
+
+// @public
+export const registryDeclaredEvents: (input: GrantsOptions) => DeclaredEventsLookup;
 
 // @public
 export const registryGrantedApps: (input: GrantsOptions) => GrantedAppsLookup;

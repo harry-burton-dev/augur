@@ -164,6 +164,18 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     expect(audited.at(-1)).toMatchObject({ action: 'delivery.forgotten', target: 'notes', key: expect.stringMatching(/^delivery\.forgotten:notes:/) });
   });
 
+  it('pushes an app that says what it reads only that (ADR 0104)', async () => {
+    const theirs = part();
+    const d = eventDeliverer({ store: db.store, subscribers, grants, send: theirs.send, declaredEvents: async (app) => (app === 'notes' ? { reads: ['folio.document.published'], publishes: [] } : undefined) });
+    await d.tick();
+    await db.store.publish('folio', [
+      { topic: 'folio.document.published', id: 'd1', payload: {} },
+      { topic: 'folio.document.withdrawn', id: 'w1', payload: {} },
+    ]);
+    expect(await d.tick()).toMatchObject({ delivered: 1, skipped: 1 });
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['d1']);
+  });
+
   it('says once when an app missed events that were pruned while it was off, then goes on from what is left', async () => {
     const theirs = part();
     let list = [{ app: 'notes', name: 'Notes', enabled: false }];

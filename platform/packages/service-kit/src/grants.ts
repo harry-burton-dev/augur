@@ -175,3 +175,45 @@ export const registryBindingApps = ({ registryUrl, credentials, ttlMs = 300_000,
     return apps;
   };
 };
+
+/** One type of domain event an app publishes (ADR 0104): its topic, version and the JSON Schema of its payload. */
+export interface DeclaredEventType {
+  topic: string;
+  version: number;
+  schema: Record<string, unknown>;
+}
+
+/** What an app's manifest declares about domain events; `reads` absent when it doesn't say what it reads. */
+export interface DeclaredEvents {
+  reads?: string[];
+  publishes: DeclaredEventType[];
+}
+
+/** The domain events an app declares, or undefined when it declares none (an older app, or one not registered). */
+export type DeclaredEventsLookup = (app: string) => Promise<DeclaredEvents | undefined>;
+
+/**
+ * Asks the registry what an app declares about domain events (`GET /v1/apps/<id>/events`), remembering each
+ * answer for 30 seconds, as long as grants. An app that isn't registered, or a registry too old to say,
+ * declares none. When the registry can't be reached it keeps the last answer, and throws GrantsUnavailable
+ * only when it has none.
+ */
+export const registryDeclaredEvents = ({ registryUrl, credentials, ttlMs = 30_000, fetchImpl = fetch, now = Date.now }: GrantsOptions): DeclaredEventsLookup => {
+  const cache = new BoundedMap<string, { events: DeclaredEvents | undefined; at: number }>();
+  return async (app) => {
+    const hit = cache.get(app);
+    if (hit && now() - hit.at < ttlMs) return hit.events;
+    let events: DeclaredEvents | undefined;
+    try {
+      const res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/events`, { headers: await serviceHeaders(credentials) });
+      if (res.status === 404) events = undefined;
+      else if (res.ok) events = ((await res.json()) as { events?: DeclaredEvents }).events;
+      else throw new Error(`it answered ${res.status}`);
+    } catch (err) {
+      if (hit) return hit.events;
+      throw new GrantsUnavailable(`The registry could not say which events ${app} declares (${(err as Error).message}).`);
+    }
+    cache.set(app, { events, at: now() });
+    return events;
+  };
+};

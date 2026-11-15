@@ -18,6 +18,8 @@ import {
   WORKSPACE_HEADERS,
   type Caller,
   type FloorLookup,
+  type DeclaredEvents,
+  type DeclaredEventsLookup,
   type GrantLookup,
   type MemberLookup,
   type AudienceLookup,
@@ -35,10 +37,11 @@ import {
   endStreamsOnStop,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
+import { payloadChecker } from './event-types.ts';
 import { deliveryStatus, subscribesOn, type PushingState } from './deliver.ts';
 import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
-import { topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
+import { topicMatches, topicsOverlap, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** Filters the audit log and its download share, beyond time and floor. */
 const AUDIT_FILTERS = {
@@ -97,6 +100,8 @@ export interface EventsOptions {
   inboxKinds?: InboxKindLookup;
   /** The notification kinds each app's manifest declares, from the registry; without it kinds aren't checked. */
   notificationKinds?: InboxKindLookup;
+  /** What each app's manifest declares about domain events (ADR 0104); without it an app reads every topic it asks for. */
+  declaredEvents?: DeclaredEventsLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
   /** How long a browser's stream of domain events lasts (STREAM_LIFETIME_MS). */
@@ -202,8 +207,9 @@ const THIS_ORG = 'this';
 /** Reading the whole audit log, as the permissions service is asked it: an org admin's. */
 const READ_AUDIT: ShadowQuestion = { action: 'can_read_audit', resource: { type: 'org', id: THIS_ORG }, as: 'persona' };
 
-export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }), shadow = noShadow }: EventsOptions) => {
+export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, declaredEvents, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }), shadow = noShadow }: EventsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
+  const payloadCheck = payloadChecker();
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
@@ -585,6 +591,25 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         if ((service.kind === 'platform') !== (owner === 'platform')) {
           return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'AUGUR’s own services publish on "platform." topics.' : '"platform." topics belong to AUGUR’s own services.' });
         }
+        // An app that declares the types it publishes is held to them: a declared topic, a declared version, a payload that fits (ADR 0104).
+        const versions = req.body.events.map((e) => e.version);
+        if (service.kind !== 'platform' && declaredEvents) {
+          let declared: DeclaredEvents | undefined;
+          try {
+            declared = await declaredEvents(service.app);
+          } catch (err) {
+            if (!(err instanceof GrantsUnavailable)) throw err;
+            req.log.error({ err: err.message, app: service.app }, 'declared events check failed');
+            return reply.code(503).send({ error: 'unavailable', message: 'What this app publishes can’t be checked right now. Try again in a moment.' });
+          }
+          if (declared) {
+            for (const [i, e] of req.body.events.entries()) {
+              const checked = payloadCheck(service.app, declared, e);
+              if ('problem' in checked) return reply.code(400).send({ error: 'bad_request', message: checked.problem });
+              versions[i] = checked.version;
+            }
+          }
+        }
         const places = new Map<string, EventFloor>();
         for (const id of new Set(req.body.events.flatMap((e) => (e.workspace ? [e.workspace] : [])))) {
           try {
@@ -600,7 +625,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           // so the outbox relay sets that one row aside rather than holding every event behind it.
           if (service.kind !== 'platform' && !(await granted(req, reply, service.app, 'events:publish', id, 400))) return reply;
         }
-        const events: NewDomainEvent[] = req.body.events.map((e) => ({ topic: e.topic, id: e.id, payload: e.payload, floor: e.workspace ? places.get(e.workspace) : undefined }));
+        const events: NewDomainEvent[] = req.body.events.map((e, i) => ({ topic: e.topic, id: e.id, payload: e.payload, floor: e.workspace ? places.get(e.workspace) : undefined, ...(versions[i] ? { version: versions[i] } : {}) }));
         const result = await store.publish(serviceName(service), events);
         req.log.info({ service: serviceName(service), ...result }, 'domain events published');
         return reply.code(202).send(result);
@@ -642,6 +667,20 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           const { topics } = list;
           const caller = await fromService(req, reply, undefined, 'events:subscribe');
           if (!caller) return reply;
+          // An app that says what it reads is given only that (ADR 0104); asking only for what it doesn't read is refused, saying so.
+          let reads: string[] | undefined;
+          if (caller.kind !== 'platform' && declaredEvents) {
+            try {
+              reads = (await declaredEvents(caller.app))?.reads;
+            } catch (err) {
+              if (!(err instanceof GrantsUnavailable)) throw err;
+              req.log.error({ err: err.message, app: caller.app }, 'declared events check failed');
+              return reply.code(503).send({ error: 'unavailable', message: 'What this app reads can’t be checked right now. Try again in a moment.' });
+            }
+            if (reads && !topics.some((t) => topicsOverlap(t, reads!))) {
+              return reply.code(403).send({ error: 'forbidden', message: `${caller.app} doesn’t say in its manifest that it reads ${topics.join(', ')}. It reads ${reads.length ? reads.join(', ') : 'nothing'} (contributes.events.reads).` });
+            }
+          }
           const limit = req.query.limit ?? 100;
           const after = req.query.after ?? '0';
           // Read first: anything committed after this is above it, so nothing is skipped by moving the cursor up to it.
@@ -655,7 +694,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           }
           const next = read.length === limit ? read.at(-1)!.seq : top && BigInt(top) > BigInt(after) ? top : after;
           // An app sees only events on floors where it may subscribe, and the deployment's own; AUGUR's services see all (ADR 0104).
-          const events = caller.kind === 'platform' ? read : await visibleTo(req, caller.app, read);
+          const declaredOnly = reads ? read.filter((e) => topicMatches(e.topic, reads!)) : read;
+          const events = caller.kind === 'platform' ? read : await visibleTo(req, caller.app, declaredOnly);
           if (events === undefined) return reply.code(503).send({ error: 'unavailable', message: 'What this app may do can’t be checked right now. Try again in a moment.' });
           return { events, next };
         },
