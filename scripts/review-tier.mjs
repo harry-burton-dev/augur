@@ -2,7 +2,7 @@
 // A pull request's review tier, from the paths it changes, and whether its description carries what that
 // tier needs (REVIEW.md). Low: nothing beyond green CI. Medium: the description's sections and a pre-merge
 // review. High: those, and on the paths in harryOk (what can't be undone or gives more access) a /code-review
-// at high effort or more. The tiers in `sized` (High, unless the tiers file says otherwise) also need under 400
+// at high effort or more. High, and Medium where the tiers file says `sizeMedium`, also need no more than 400
 // changed lines or a reason; generated files (`notCount`) and the files in `notSized` (tests, fixtures) aren't
 // counted. Harry is not a gate (PER-438): the auto-ok log tells him afterwards.
 // The tiers' paths are in .github/review-tiers.json, so every repository keeps its own; other repositories
@@ -37,16 +37,8 @@ export const tierOf = (paths, tiers) => {
   return { tier: 'Medium', because: paths.filter((p) => !low(p)) };
 };
 
-/**
- * The tiers held to the line limit: the tiers file's `sized`, or High alone where it names none. A name that
- * isn't a tier fails the check, so a misspelling can't switch the limit off.
- */
-export const sizedTiers = (tiers) => {
-  const sized = tiers.sized ?? ['High'];
-  const unknown = Array.isArray(sized) ? sized.filter((name) => !['Low', 'Medium', 'High'].includes(name)) : [sized];
-  if (unknown.length) throw new Error(`"sized" in the tiers file takes a list of Low, Medium and High, not ${JSON.stringify(unknown)}`);
-  return sized;
-};
+/** The tiers held to the line limit: High always, and Medium where the tiers file says `sizeMedium`. */
+export const sizedTiers = (tiers) => (tiers.sizeMedium === true ? ['Medium', 'High'] : ['High']);
 
 /** The rows of `git diff --numstat -z`: each file's changed lines, under the name it has now. */
 export const rowsOf = (numstat) => {
@@ -54,15 +46,21 @@ export const rowsOf = (numstat) => {
   const fields = numstat.split('\0');
   const rows = [];
   for (let i = 0; i < fields.length && fields[i]; i += 1) {
-    const [added, removed, path] = fields[i].split('\t');
+    // Only the first two tabs divide the row: a file's name may hold one.
+    const [, added, removed, path] = /^(-|\d+)\t(-|\d+)\t([\s\S]*)$/.exec(fields[i]) ?? [];
     rows.push({ path: path || fields[(i += 2)], lines: (Number(added) || 0) + (Number(removed) || 0) });
   }
   return rows;
 };
 
-/** The changed lines that count towards the limit: not generated files (`notCount`), nor those in `notSized`. */
+/**
+ * The changed lines that count towards the limit: not generated files (`notCount`), nor those in `notSized`
+ * (tests, fixtures), except on the deep-review paths (`harryOk`), where every line counts whatever its name.
+ */
 export const sizeOf = (rows, tiers) =>
-  rows.filter(({ path }) => !any(path, tiers.notCount) && !any(path, tiers.notSized)).reduce((sum, row) => sum + row.lines, 0);
+  rows
+    .filter(({ path }) => !any(path, tiers.notCount) && (!any(path, tiers.notSized) || any(path, tiers.harryOk)))
+    .reduce((sum, row) => sum + row.lines, 0);
 
 /** Whether any High path is one that needs a deep review (the list is still called harryOk). */
 export const needsHarry = (paths, tiers) => paths.some((p) => any(p, tiers.harryOk) && !any(p, tiers.notHigh));
@@ -276,8 +274,6 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   const change = diffAgainst(base);
   const { paths, lines } = change;
-  const counted = sizeOf(change.rows, tiers);
-  const sized = sizedTiers(tiers);
   if (process.argv.includes('--deploy-test')) {
     const needed = needsDeployTest(paths, tiers);
     console.log(`deploytest: ${needed}`);
@@ -344,11 +340,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   // Renovate's pull request (dependency updates) has no description to check: CI and, where it applies, the
   // deploy test are its gates, except on the files that need a deep review (problems()).
+  const counted = sizeOf(change.rows, tiers);
+  const sized = sizedTiers(tiers);
   const missing = PR_BOT === 'true' ? problems({ tier, harry, bot: true }) : problems({ tier, body: PR_BODY, lines: counted, harry, sized });
   const summary = [
     `### Review tier: ${tier}${harry ? ', deep review' : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
     '',
-    `${paths.length} files, ${lines} changed lines${sized.includes(tier) ? `, ${counted} of them counted towards the limit of ${MAX_LINES}` : ''}. Tiers from ${from}.`,
+    `${paths.length} files, ${lines} changed lines${sized.includes(tier) && PR_BOT !== 'true' ? `, ${counted} of them counted towards the limit of ${MAX_LINES}` : ''}. Tiers from ${from}.`,
     because.length ? `\nBecause of:\n${because.slice(0, 20).map((p) => `- \`${p}\``).join('\n')}${because.length > 20 ? `\n- and ${because.length - 20} more` : ''}` : '',
     harry ? `\nNeeds a deep review (/code-review high, xhigh or max) because of:\n${now.harry.slice(0, 20).map((p) => `- \`${p}\``).join('\n')}${now.harry.length > 20 ? `\n- and ${now.harry.length - 20} more` : ''}` : '',
     next

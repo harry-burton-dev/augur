@@ -1,5 +1,5 @@
 {
-  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. Generated files (notCount) don't count towards the tier, nor (ignoreRenames) do files only renamed. sized: the tiers held to 400 changed lines or a reason (High alone where a tiers file names none); generated files (notCount) and the files in notSized (tests, stories, fixtures) aren't counted. harryOk (named from when these waited for Harry): the paths that need a deep code review (/code-review at high effort or more), kept to what can't be undone or gives more access: migrations, backups and Postgres, Promote to stable and Halt, the updater's trusted signers, and the review check's own script, workflow and tiers. harryOkWhen: rules on what a change adds or takes away, for a new or changed migration (its lock entry) and a workflow that gains privilege, a riskier trigger or a new action. autoOk: each High pull request that merges gets an auto-ok record, which is how Harry hears of it. deployTest: the paths whose change runs on a server, which get the deploy test before merging, apart from notDeployTest (tests). Globs follow node:path matchesGlob. A bot's pull request (Renovate) has no description: on the deep-review paths an agent takes it over first.",
+  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. Generated files (notCount) don't count towards the tier, nor (ignoreRenames) do files only renamed. sizeMedium: Medium is held to 400 changed lines or a reason as High always is; generated files (notCount) and the files in notSized (tests, stories, fixtures) aren't counted, except on the deep-review paths. harryOk (named from when these waited for Harry): the paths that need a deep code review (/code-review at high effort or more), kept to what can't be undone or gives more access: migrations, backups and Postgres, Promote to stable and Halt, the updater's trusted signers, and the review check's own script, workflow and tiers. harryOkWhen: rules on what a change adds or takes away, for a new or changed migration (its lock entry) and a workflow that gains privilege, a riskier trigger or a new action. autoOk: each High pull request that merges gets an auto-ok record, which is how Harry hears of it. deployTest: the paths whose change runs on a server, which get the deploy test before merging, apart from notDeployTest (tests). Globs follow node:path matchesGlob. A bot's pull request (Renovate) has no description: on the deep-review paths an agent takes it over first.",
   "high": [
     "platform/services/updater/**",
     "platform/services/identity/**",
@@ -66,8 +66,8 @@
     "release/kit.json",
     "pnpm-lock.yaml"
   ],
-  "sized": ["Medium", "High"],
-  "notSized": ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs", "**/*.testing.ts", "**/*.spec.ts", "**/*.stories.tsx", "**/fixtures/**"],
+  "sizeMedium": true,
+  "notSized": ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs", "**/*.test.js", "**/*.testing.ts", "**/*.spec.ts", "**/*.stories.tsx", "**/fixtures/**"],
   "ignoreRenames": true,
   "harryOk": [
     "platform/services/*/src/migrat*",

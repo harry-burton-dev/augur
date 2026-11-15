@@ -9,8 +9,8 @@ the parts a machine can (`scripts/review-tier.mjs`).
 The paths a pull request changes set its tier (`.github/review-tiers.json`). Its tier is its highest path.
 
 - **Low**: docs, tests, stories, changesets only. Merges on green CI.
-- **Medium**: everything else. Needs the description's sections, a pre-merge review, and under 400 changed
-  lines (or a reason).
+- **Medium**: everything else. Needs the description's sections, a pre-merge review, and no more than 400
+  changed lines (or a reason).
 - **High**: the updater and anything on the release path, identity, permissions, the gateway, events, the
   registry, service-kit, migrations and stores, the SDK's public contract, app-tools, `infra/`, `release/` and
   `.github/`. Needs what Medium needs, and:
@@ -59,8 +59,9 @@ pull request.
    findings ranked 1 to 6; the rest are optional. Say what you did in the Review section.
 3. At most two review rounds. The second reviews only what changed since the first. If it still finds an
    Important problem, stop and rethink the approach, and say so in the pull request.
-4. One concern per pull request, under 400 changed lines. Tests, stories, fixtures and generated files don't
-   count (`notSized` and `notCount` in the tiers file); the Review check says how many do.
+4. One concern per pull request, no more than 400 changed lines. Tests, stories, fixtures and generated files
+   don't count (`notSized` and `notCount` in the tiers file), except on the deep-review paths; the Review
+   check says how many do.
 5. A change that won't fit goes in as a series, in this order: the contract or schema, the service, the
    frontend, then whatever removes the old path. Open each against `main` once the one before has merged.
    Each leaves `main` working on its own, and says where it sits: "Part of PER-x, 2 of 4".

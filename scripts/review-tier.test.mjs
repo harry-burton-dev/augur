@@ -134,19 +134,21 @@ test('Medium is held to the limit only where the tiers file says so', () => {
   assert.deepEqual(problems({ tier: 'Low', lines: 975, sized }), []);
 });
 
-test("a name in sized that isn't a tier fails the check", () => {
-  assert.throws(() => sizedTiers({ sized: ['medium', 'High'] }), /medium/);
-  assert.throws(() => sizedTiers({ sized: 'High' }), /High/);
-  assert.deepEqual(sizedTiers({ sized: [] }), []);
+test('High is always held to the limit, whatever the tiers file says', () => {
+  for (const file of [{}, { sizeMedium: false }, { sizeMedium: 'true' }, { sized: [] }, tiers]) assert.ok(sizedTiers(file).includes('High'));
+  assert.deepEqual(sizedTiers({ sizeMedium: 'true' }), ['High']);
+  assert.deepEqual(sizedTiers(tiers), ['Medium', 'High']);
 });
 
 test('changed lines are read per file, a renamed file under its new name', () => {
-  const numstat = ['3\t1\tREVIEW.md', '10\t2\t', 'scripts/old.mjs', 'scripts/new.test.mjs', '-\t-\tdocs/logo.png', '7\t0\tscripts/a b.mjs', ''].join('\0');
+  const numstat = ['3\t1\tREVIEW.md', '10\t2\t', 'scripts/old.mjs', 'scripts/new.test.mjs', '-\t-\tdocs/logo.png', '7\t0\tscripts/a b.mjs', '500\t0\t\tlead.ts', '5\t0\tmid\ttab.test.ts', ''].join('\0');
   assert.deepEqual(rowsOf(numstat), [
     { path: 'REVIEW.md', lines: 4 },
     { path: 'scripts/new.test.mjs', lines: 12 },
     { path: 'docs/logo.png', lines: 0 },
     { path: 'scripts/a b.mjs', lines: 7 },
+    { path: '\tlead.ts', lines: 500 },
+    { path: 'mid\ttab.test.ts', lines: 5 },
   ]);
   assert.deepEqual(rowsOf(''), []);
 });
@@ -165,6 +167,12 @@ test("tests, fixtures and generated files don't count towards the limit", () => 
   assert.equal(sizeOf(rows, tiers), 132);
   // A repository whose tiers file names neither list counts every line.
   assert.equal(sizeOf(rows, {}), 13276);
+  // On a deep-review path a name doesn't take a file out of the count.
+  const deep = [
+    { path: 'infra/deploy/backup/fixtures/restore.sh', lines: 900 },
+    { path: 'platform/services/events/src/migrations/002_big.spec.ts', lines: 900 },
+  ];
+  assert.equal(sizeOf(deep, tiers), 1800);
 });
 
 // What asks Harry, what doesn't count, and the auto-ok log (REVIEW.md).
