@@ -1,7 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { retirements } from './retirement.ts';
-import { dropDatabase, jobsSchemaFor, markRetired, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { dropDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
 
 describe('an app’s schema', () => {
   it('is never one named for a part of AUGUR, made or dropped', async () => {
@@ -193,25 +192,6 @@ describe.runIf(process.env.DATABASE_URL)('Keycloak’s database login', () => {
       expect((await inside.query(`select tableowner from pg_tables where tablename = 'realm'`)).rows).toEqual([{ tableowner: role }]);
     } finally {
       await inside.end();
-    }
-  });
-});
-
-describe.runIf(process.env.DATABASE_URL)('a retired app (ADR 0075)', () => {
-  it('is noted once, so its data isn’t taken again when a new app reuses the name', async () => {
-    const admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
-    await admin.connect();
-    const app = `gone-test-${process.pid}`;
-    const noted = async () => new Set((await retirements(admin)).map((r) => r.app));
-    try {
-      expect((await noted()).has(app)).toBe(false);
-      await markRetired(admin, app, 'removed');
-      await markRetired(admin, app, 'kept');
-      expect((await noted()).has(app)).toBe(true);
-      expect((await admin.query('select outcome from public.storage_retired_apps where app = $1', [app])).rows).toEqual([{ outcome: 'removed' }]);
-    } finally {
-      await admin.query('delete from public.storage_retired_apps where app = $1', [app]);
-      await admin.end();
     }
   });
 });

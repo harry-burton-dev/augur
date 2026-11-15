@@ -120,6 +120,17 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
       return true;
     },
 
+    /** Whether there is a bucket called `alias`. */
+    async hasBucket(alias: string): Promise<boolean> {
+      try {
+        await call('GET', `GetBucketInfo?globalAlias=${encodeURIComponent(alias)}`);
+        return true;
+      } catch (err) {
+        if (!(err instanceof GarageError) || err.status !== 404) throw err;
+        return false;
+      }
+    },
+
     /**
      * Gives the bucket called `from` the name `to` instead, and takes every key's access to it away, so nothing that
      * opened it opens it now. True when it was moved, or had been; false when there was no such bucket. A name `to`
@@ -136,12 +147,16 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
       };
       const there = await info(to);
       const bucket = await info(from);
-      if (!bucket) return Boolean(there);
-      if (there && there.id !== bucket.id) throw new GarageError(409, 'BucketAlreadyExists', `${to} is another bucket’s name already, so ${from} can’t be moved there.`);
-      if (!there) await call('POST', 'AddBucketAlias', { bucketId: bucket.id, globalAlias: to });
-      await call('POST', 'RemoveBucketAlias', { bucketId: bucket.id, globalAlias: from });
-      for (const { accessKeyId } of bucket.keys ?? [])
-        await call('POST', 'DenyBucketKey', { bucketId: bucket.id, accessKeyId, permissions: { read: true, write: true, owner: true } });
+      if (!bucket && !there) return false;
+      if (bucket && there && there.id !== bucket.id) throw new GarageError(409, 'BucketAlreadyExists', `${to} is another bucket’s name already, so ${from} can’t be moved there.`);
+      if (bucket) {
+        if (!there) await call('POST', 'AddBucketAlias', { bucketId: bucket.id, globalAlias: to });
+        await call('POST', 'RemoveBucketAlias', { bucketId: bucket.id, globalAlias: from });
+      }
+      // Every time, so a try that stopped after the move still takes the keys off it.
+      const moved = (bucket ?? there)!;
+      for (const { accessKeyId } of moved.keys ?? [])
+        await call('POST', 'DenyBucketKey', { bucketId: moved.id, accessKeyId, permissions: { read: true, write: true, owner: true } });
       return true;
     },
 

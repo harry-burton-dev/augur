@@ -18,7 +18,7 @@ const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; 
     if (path === 'ApplyClusterLayout') return json(200, {});
     if (path.startsWith('GetBucketInfo')) {
       const id = state.buckets[url.searchParams.get('globalAlias')!];
-      return id ? json(200, { id, keys: state.keys.filter((k) => k.name.endsWith(url.searchParams.get('globalAlias')!)).map((k) => ({ accessKeyId: k.id })) }) : json(404, { code: 'NoSuchBucket', message: 'no' });
+      return id ? json(200, { id, keys: state.keys.filter((k) => `b-${k.name.replace(/^app-/, '')}` === id).map((k) => ({ accessKeyId: k.id })) }) : json(404, { code: 'NoSuchBucket', message: 'no' });
     }
     if (path === 'CreateBucket') return json(200, { id: (state.buckets[body.globalAlias] = `b-${body.globalAlias}`) });
     if (path === 'ListKeys') return json(200, state.keys);
@@ -140,9 +140,11 @@ describe('garageAdmin', () => {
     expect(state.buckets).toEqual({ 'retired-notes': 'b-notes' });
     expect(calls).toEqual(['GetBucketInfo?globalAlias=retired-notes', 'GetBucketInfo?globalAlias=notes', 'AddBucketAlias', 'RemoveBucketAlias', 'DenyBucketKey']);
     calls.length = 0;
-    // Done already: the old name is gone and the new one is there.
+    // Done already: the old name is gone and the new one is there; the keys are taken off it again, in case that's where a try stopped.
     expect(await garage.moveBucket('notes', 'retired-notes')).toBe(true);
-    expect(calls).toEqual(['GetBucketInfo?globalAlias=retired-notes', 'GetBucketInfo?globalAlias=notes']);
+    expect(calls).toEqual(['GetBucketInfo?globalAlias=retired-notes', 'GetBucketInfo?globalAlias=notes', 'DenyBucketKey']);
+    expect(await garage.hasBucket('retired-notes')).toBe(true);
+    expect(await garage.hasBucket('notes')).toBe(false);
     // Nothing to move.
     expect(await garage.moveBucket('maps', 'retired-maps')).toBe(false);
   });

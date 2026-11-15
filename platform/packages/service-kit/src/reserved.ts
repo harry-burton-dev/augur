@@ -51,6 +51,8 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   // Settings of the same shape as an app's own in .env (<ID>_BUCKET_SECRET, <ID>_CLIENT_SECRET), which an app with the id would be given.
   frontends: 'the registry’s key to the frontends bucket, FRONTENDS_BUCKET_SECRET',
   entra: 'the organisation’s Entra sign-in, ENTRA_CLIENT_SECRET',
+  // Its jobs schema, retired_jobs, would be where an app with the id "jobs" waits once set aside (ADR 0103).
+  retired: 'apps’ data set aside before it is dropped (retired_<app>)',
 };
 
 /** Beginnings an app's id may not have, and what they're kept for. */

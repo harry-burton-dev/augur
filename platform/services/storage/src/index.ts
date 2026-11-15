@@ -10,8 +10,8 @@ import pg from 'pg';
 import { configFromEnv, envPrefix, FRONTENDS_BUCKET, FRONTENDS_KEY, type StorageConfig } from './config.ts';
 import { BACKUP_STATUS_DIR, backupProblem, readBackupMarker } from './backup-marker.ts';
 import { garageAdmin, GarageError, keyIdFor, keyNameFor } from './garage.ts';
-import { dropDatabase, markRetired, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
-import { dropDue, retiredBucketFor, retirements, setAside, type Buckets } from './retirement.ts';
+import { dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { dropDue, markKept, prepareRetirements, retiredBucketFor, retirements, setAside, type Buckets } from './retirement.ts';
 import { emptyBucket } from './s3.ts';
 
 const log = startupLog('storage');
@@ -48,6 +48,7 @@ const bucketsOf = (options: StorageConfig['garage']): Buckets | undefined => {
   if (!options) return undefined;
   const garage = garageAdmin(options);
   return {
+    has: (app) => garage.hasBucket(app),
     setAside: (app) => garage.moveBucket(app, retiredBucketFor(app)),
     drop: (app) =>
       garage.removeBucket(retiredBucketFor(app), async (bucketId) => {
@@ -79,6 +80,7 @@ if (config.retireNow) {
   const sql = new pg.Client({ connectionString: config.databaseUrl });
   await sql.connect();
   try {
+    await prepareRetirements(sql);
     await setAside({ sql, buckets, app, release: config.release, again: true });
   } catch (err) {
     log.error(`${app}’s data couldn’t be set aside: ${(err as Error).message}`);
@@ -185,16 +187,21 @@ async function ensureKeyOf(garage: ReturnType<typeof garageAdmin>, app: string, 
   const sql = new pg.Client({ connectionString: config.databaseUrl });
   await sql.connect();
   try {
+    await prepareRetirements(sql);
     const done = new Set((await retirements(sql)).map((r) => r.app));
     for (const app of config.retire.filter((a) => !done.has(a))) {
       if (config.apps.some((a) => a.app === app) || config.skipped.some((a) => a.app === app)) {
-        await markRetired(sql, app, 'kept');
+        await markKept(sql, app);
         log.warn(`${app} no longer ships with AUGUR, but APP_STORAGE names it, so its data is kept.`);
         continue;
       }
       try {
-        await setAside({ sql, buckets, app, release: config.release });
-        log.info(`${app} no longer ships with AUGUR: its database login, schemas and bucket are set aside, and go with a later AUGUR release.`);
+        const did = await setAside({ sql, buckets, app, release: config.release });
+        log.info(
+          did === 'set aside'
+            ? `${app} no longer ships with AUGUR: its database login, schemas and bucket are set aside, and go with a later AUGUR release.`
+            : `${app} no longer ships with AUGUR, and had no data here.`,
+        );
       } catch (err) {
         log.error(`${app} no longer ships with AUGUR, but its data couldn’t all be set aside; it’s tried again next time: ${(err as Error).message}`);
       }

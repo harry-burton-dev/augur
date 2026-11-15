@@ -54,28 +54,20 @@ export async function provisionDatabase(sql: Sql, { app, password, connections =
   await sql.query(`alter role ${role} set search_path = ${schema}, public`);
 }
 
-/**
- * Notes that a retired app's data was taken away, or kept, so it isn't done again (the table is retirement.ts's). An
- * app removed from the server (`again`) is noted each time, as one id can be installed and removed more than once.
- */
-export async function markRetired(sql: Sql, app: string, outcome: 'removed' | 'kept', again = false): Promise<void> {
-  await sql.query(
-    `insert into public.storage_retired_apps (app, outcome) values ($1, $2) on conflict (app) do ${again ? 'update set outcome = excluded.outcome, at = now()' : 'nothing'}`,
-    [app, outcome],
-  );
-}
-
 /** Takes an app's (or a preview's) login and schemas away, with everything in them. Nothing happens when there's none. */
 export async function dropDatabase(sql: Sql, app: string): Promise<void> {
   const reserved = reservedIdProblem(app);
   if (reserved) throw new Error(`Nothing was dropped: ${reserved}`);
-  const role = pg.escapeIdentifier(roleFor(app));
-  await sql.query(`drop schema if exists ${pg.escapeIdentifier(schemaFor(app))} cascade`);
-  await sql.query(`drop schema if exists ${pg.escapeIdentifier(jobsSchemaFor(app))} cascade`);
-  const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
+  await dropSchemasAndRole(sql, [schemaFor(app), jobsSchemaFor(app)], roleFor(app));
+}
+
+/** Drops these schemas, with everything in them, and this login with whatever else it owns. Nothing happens for what isn't there. */
+export async function dropSchemasAndRole(sql: Sql, schemas: string[], role: string): Promise<void> {
+  for (const schema of schemas) await sql.query(`drop schema if exists ${pg.escapeIdentifier(schema)} cascade`);
+  const exists = await sql.query('select 1 from pg_roles where rolname = $1', [role]);
   if (!exists.rowCount) return;
-  await sql.query(`drop owned by ${role}`);
-  await sql.query(`drop role ${role}`);
+  await sql.query(`drop owned by ${pg.escapeIdentifier(role)}`);
+  await sql.query(`drop role ${pg.escapeIdentifier(role)}`);
 }
 
 /** A platform service's database login: "identity" → platform_identity. Its schema is named after the service. */

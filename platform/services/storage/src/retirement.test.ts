@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { jobsSchemaFor, roleFor, schemaFor } from './postgres.ts';
-import { dropDue, laterRelease, retiredBucketFor, retiredRoleFor, retiredSchemaFor, setAside, type Buckets } from './retirement.ts';
+import { dropDue, laterRelease, markKept, prepareRetirements, retiredBucketFor, retiredJobsSchemaFor, retiredRoleFor, retiredSchemaFor, retirements, setAside, type Buckets } from './retirement.ts';
 
 describe('laterRelease', () => {
   it('counts only a later AUGUR release, never a beta or dev build of the same one, or a name it can’t read', () => {
@@ -11,19 +11,24 @@ describe('laterRelease', () => {
     expect(laterRelease('0.25.1-beta.2', '0.25.1-beta.1')).toBe(false);
     expect(laterRelease('0.25.0', '0.25.1')).toBe(false);
     expect(laterRelease('latest', '0.25.1')).toBe(false);
-    expect(laterRelease('0.26.0', null)).toBe(false);
+    // Set aside under a build from source: the first release after counts, and the same build doesn't.
+    expect(laterRelease('0.26.0', 'local')).toBe(true);
+    expect(laterRelease('0.26.0', null)).toBe(true);
+    expect(laterRelease('local', 'local')).toBe(false);
   });
 
   it('names what is set aside so no app’s own can be: retired-… is kept from apps’ ids', () => {
     expect(retiredSchemaFor('team-notes')).toBe('retired_team_notes');
+    expect(retiredJobsSchemaFor('team-notes')).toBe('retired_team_notes_jobs');
     expect(retiredRoleFor('team-notes')).toBe('retired_app_team_notes');
     expect(retiredBucketFor('team-notes')).toBe('retired-team-notes');
   });
 });
 
-const fakeBuckets = () => {
+const fakeBuckets = (own = false) => {
   const did: string[] = [];
   const buckets: Buckets = {
+    has: async () => own,
     setAside: async (app) => (did.push(`set aside ${app}`), true),
     drop: async (app) => (did.push(`drop ${app}`), true),
   };
@@ -50,9 +55,10 @@ describe.runIf(process.env.DATABASE_URL)('a retired or removed app’s data (ADR
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
     await admin.connect();
+    await prepareRetirements(admin);
   });
   afterAll(async () => {
-    for (const s of [schemaFor(app), jobsSchemaFor(app), retiredSchemaFor(app), `${retiredSchemaFor(app)}_jobs`]) await admin.query(`drop schema if exists ${s} cascade`);
+    for (const s of [schemaFor(app), jobsSchemaFor(app), retiredSchemaFor(app), retiredJobsSchemaFor(app)]) await admin.query(`drop schema if exists ${s} cascade`);
     for (const r of [roleFor(app), retiredRoleFor(app)]) await admin.query(`drop role if exists ${r}`);
     await admin.query('delete from public.storage_retired_apps where app = $1', [app]).catch(() => {});
     await admin.end();
@@ -65,19 +71,22 @@ describe.runIf(process.env.DATABASE_URL)('a retired or removed app’s data (ADR
     expect(await exists('schema', schemaFor(app))).toBe(false);
     expect(await exists('schema', jobsSchemaFor(app))).toBe(false);
     expect((await admin.query(`select text from ${retiredSchemaFor(app)}.notes`)).rows).toEqual([{ text: 'kept' }]);
-    expect(await exists('schema', `${retiredSchemaFor(app)}_jobs`)).toBe(true);
+    expect(await exists('schema', retiredJobsSchemaFor(app))).toBe(true);
     expect(await exists('role', roleFor(app))).toBe(false);
     expect((await admin.query('select rolcanlogin from pg_roles where rolname = $1', [retiredRoleFor(app)])).rows).toEqual([{ rolcanlogin: false }]);
     expect(did).toEqual([`set aside ${app}`]);
     expect(await row()).toEqual({ outcome: 'renamed', renamed_in: '0.26.0' });
   });
 
-  it('isn’t set aside again while an earlier copy of the same id waits to be dropped', async () => {
+  it('isn’t set aside again while an earlier copy of the same id waits to be dropped, and leaves that copy’s note alone', async () => {
     await make();
-    const { buckets } = fakeBuckets();
-    await expect(setAside({ sql: admin, buckets, app, release: '0.26.0', again: true })).rejects.toThrow(/earlier copy .* waits/);
+    await expect(setAside({ sql: admin, buckets: fakeBuckets().buckets, app, release: '0.26.1', again: true })).rejects.toThrow(/earlier copy .* waits/);
     expect(await exists('schema', schemaFor(app))).toBe(true);
     await admin.query(`drop schema ${schemaFor(app)} cascade; drop schema ${jobsSchemaFor(app)} cascade; drop role ${roleFor(app)}`);
+    await expect(setAside({ sql: admin, buckets: fakeBuckets(true).buckets, app, release: '0.26.1', again: true })).rejects.toThrow(/earlier copy .* waits/);
+    // Nothing new of it: nothing to do, and the waiting copy still goes with the release after its own.
+    expect(await setAside({ sql: admin, buckets: fakeBuckets().buckets, app, release: '0.26.1', again: true })).toBe('nothing there');
+    expect(await row()).toEqual({ outcome: 'renamed', renamed_in: '0.26.0' });
   });
 
   it('stays through the release that set it aside, and without a good backup taken since, saying why', async () => {
@@ -103,9 +112,21 @@ describe.runIf(process.env.DATABASE_URL)('a retired or removed app’s data (ADR
     const { did, buckets } = fakeBuckets();
     await dropDue({ sql: admin, buckets, release: '0.27.0', marker: good('2099-01-01T00:00:00Z'), objects: true, log });
     expect(await exists('schema', retiredSchemaFor(app))).toBe(false);
-    expect(await exists('schema', `${retiredSchemaFor(app)}_jobs`)).toBe(false);
+    expect(await exists('schema', retiredJobsSchemaFor(app))).toBe(false);
     expect(await exists('role', retiredRoleFor(app))).toBe(false);
     expect(did).toEqual([`drop ${app}`]);
     expect((await row()).outcome).toBe('removed');
+  });
+
+  it('notes an app with no data here as gone, and one APP_STORAGE still names as kept, once', async () => {
+    const other = `${app}-x`;
+    try {
+      expect(await setAside({ sql: admin, app: other, release: '0.26.0' })).toBe('nothing there');
+      expect((await retirements(admin, other)).map((r) => [r.outcome, r.renamed_in])).toEqual([['removed', null]]);
+      await markKept(admin, other);
+      expect((await retirements(admin, other)).map((r) => r.outcome)).toEqual(['removed']);
+    } finally {
+      await admin.query('delete from public.storage_retired_apps where app = $1', [other]);
+    }
   });
 });
