@@ -78,10 +78,13 @@ test('Medium needs every section and a named review', () => {
   assert.match(problems({ tier: 'Medium', body: body({ Review: 'Looked fine.' }) })[0], /code-review/);
 });
 
-test("High on Harry's paths needs his ok; other High doesn't", () => {
-  assert.match(problems({ tier: 'High', body: body(), harry: true }).join(), /harry-ok/);
-  assert.deepEqual(problems({ tier: 'High', body: body(), harry: true, labels: ['harry-ok'], lines: 120 }), []);
-  assert.deepEqual(problems({ tier: 'High', body: body(), lines: 120 }), []);
+test("High on Harry's paths needs a deep code review, never his ok; other High needs any /code-review", () => {
+  const medium = body({ Review: '/code-review medium: 2 findings, both fixed.' });
+  assert.match(problems({ tier: 'High', body: medium, harry: true }).join(), /high effort or more/);
+  assert.deepEqual(problems({ tier: 'High', body: body(), harry: true, lines: 120 }), []);
+  assert.deepEqual(problems({ tier: 'High', body: body({ Review: '/code-review max: none found.' }), harry: true }), []);
+  assert.deepEqual(problems({ tier: 'High', body: medium, lines: 120 }), []);
+  assert.doesNotMatch(problems({ tier: 'High', body: '', harry: true }).join(), /harry-ok/);
 });
 
 test("Harry's paths are what can't be undone: migrations, backups, Promote to stable and Halt", () => {
@@ -98,10 +101,15 @@ test('the dev stack and upgrade notes are not High', () => {
   assert.equal(tierOf(['docs/src/content/docs/release-notes/upgrade-notes.md'], tiers).tier, 'Medium');
 });
 
-test("a bot's pull request needs only Harry's ok, on his paths", () => {
+test("a bot's pull request merges on CI, unless it touches what needs a deep review", () => {
   assert.deepEqual(problems({ tier: 'High', bot: true }), []);
-  assert.match(problems({ tier: 'High', bot: true, harry: true }).join(), /harry-ok/);
-  assert.deepEqual(problems({ tier: 'High', bot: true, harry: true, labels: ['harry-ok'] }), []);
+  assert.match(problems({ tier: 'High', bot: true, harry: true }).join(), /takes this bot pull request over/);
+});
+
+test('the deep review can be written the ways REVIEW.md words it', () => {
+  for (const review of ['/code-review high: 2 findings.', '`/code-review` at high effort: none.', '/code-review (xhigh), 3 findings.', '/code-review max']) {
+    assert.deepEqual(problems({ tier: 'High', body: body({ Review: review }), harry: true }), [], review);
+  }
 });
 
 test('a change to a package a service runs gets the deploy test', () => {
@@ -191,13 +199,13 @@ test('a content rule makes a change High even off the High paths', () => {
   assert.deepEqual(verdict(['manifest.json'], local, changes({ 'manifest.json': ['  "sdk": "^2.1.0",'] })).harry, []);
 });
 
-test('the auto-ok log takes each High merge without Harry, and what rules on trial would have spared him', () => {
+test('the auto-ok log takes each High merge, deep-reviewed ones too, and what rules on trial would have spared him', () => {
   const v = (harry, tier = 'High') => ({ tier, because: [], harry });
   // autoOk: a High change that merged without his ok, whether or not rules are on trial.
   assert.equal(logged({ now: v([]), autoOk: true }), true);
   assert.equal(logged({ now: v([]), next: v([]), autoOk: true }), true);
   assert.equal(logged({ now: v([], 'Medium'), autoOk: true }), false);
-  assert.equal(logged({ now: v(['infra/deploy/backup/b.sh']), autoOk: true }), false);
+  assert.equal(logged({ now: v(['infra/deploy/backup/b.sh']), autoOk: true }), true);
   // next: it waited for him, and the rules on trial wouldn't have asked.
   assert.equal(logged({ now: v(['REVIEW.md']), next: v([]) }), true);
   assert.equal(logged({ now: v(['REVIEW.md']), next: v(['REVIEW.md']) }), false);
@@ -244,4 +252,11 @@ test("an auto-ok record whose checks couldn't be read says so", () => {
   const comment = autoOkComment({ phase: 'shadow', tier: 'High', nextTier: 'High', because: [], files: 1, lines: 3, deployTest: false, checks: [], checksRead: false });
   assert.match(comment, /Checks: couldn't be read/);
   assert.equal(JSON.parse(/^<!-- auto-ok: (.*) -->$/m.exec(comment)[1]).checksRead, false);
+});
+
+test('a live auto-ok record names the files that needed a deep review, and the review', () => {
+  const comment = autoOkComment({ phase: 'live', tier: 'High', nextTier: 'High', because: ['infra/deploy/backup/backup.sh'], deep: ['infra/deploy/backup/backup.sh'], review: '/code-review high: 3 findings, all fixed.', files: 1, lines: 12, deployTest: true, checks: [] });
+  assert.match(comment, /without Harry/);
+  assert.match(comment, /Deep review for: `infra\/deploy\/backup\/backup\.sh`/);
+  assert.match(comment, /Review: \/code-review high/);
 });

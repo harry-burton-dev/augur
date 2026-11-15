@@ -14,43 +14,42 @@ The paths a pull request changes set its tier (`.github/review-tiers.json`). Its
   registry, service-kit, migrations and stores, the SDK's public contract, app-tools, `infra/`, `release/` and
   `.github/`. Needs what Medium needs, under 400 changed lines (or a reason), and:
   - **the deploy test before the merge** where the change runs on a server (`deployTest`): CI's `deploy-test` job;
-  - **Harry's ok** only on what can't be undone or gives more access (`harryOk` and `harryOkWhen`): a new or
-    changed migration (its entry in the migrations lock) and the migration runner, backups and Postgres, Promote
-    to stable and Halt, the updater's trusted signers, the Review check's own script, workflow and tiers (so no
-    pull request can switch the check off), and a workflow or local action that gains privilege (adds
+  - **a deep code review** on what can't be undone or gives more access (`harryOk` and `harryOkWhen`, named
+    so from when they waited for Harry): a new or changed migration (its entry in the migrations lock) and the
+    migration runner, backups and Postgres, Promote to stable and Halt, the updater's trusted signers, the Review
+    check's own script, workflow and tiers, and a workflow or local action that gains privilege (adds
     `permissions:`, a `write` scope, `secrets`, `id-token`, a `pull_request_target`, `workflow_run` or
     `issue_comment` trigger, a `container:`, `services:` or `image:`, or a `docker://` step, or takes away a
-    `permissions:` block or a `read` scope) or uses an action no workflow used before. Every other High pull request merges on green and goes in the auto-ok log
-    (below). For his ok, in this order:
-    1. Merge fresh `origin/main` and push. Wait for CI to be green, with only the Review check red.
-    2. Ask Harry the three questions below in the thread, and wait for his "ok".
-    3. Add the `harry-ok` label, and nothing else. Never add it without his ok. The Review check records the
-       change he said ok to and turns green.
-    4. Merge. If you must push first: merging main again keeps the label; a push that changes the change takes
-       it off, and he is asked again. If the check says his ok is still being recorded, re-run it once the
-       "Harry's ok recorded" comment is there. A label that was never recorded comes off; add it again once.
+    `permissions:` block or a `read` scope) or uses an action no workflow used before. The Review section names a
+    `/code-review` run at `high`, `xhigh` or `max` effort, in a fresh context, with every finding ranked 1 to 6
+    fixed or answered. The Review check lists these files under "Needs a deep review".
+
+  Harry is not a gate on any pull request (PER-438, 15 Nov): every High pull request merges on green and goes in
+  the auto-ok log (below), which tells him afterwards. Only he makes a release stable (Actions → Promote to
+  stable); that stays his. The `harry-ok` label is no longer needed anywhere.
 
 The Review check catches mistakes; it is not a wall against a hostile pull request, whose own workflows run with
-the same token. Harry reading the three answers is the gate; the check makes sure he is asked.
+the same token. The code review is the gate; the check makes sure one ran, deep enough for what changed.
 
-A bot's pull request (Renovate) has no description to check: CI, the deploy test where it applies, and Harry's
-ok on his paths are its gates.
+A bot's pull request (Renovate) has no description to check: CI and the deploy test where it applies are its
+gates, and the auto-ok log records it.
 
 ## The auto-ok log
 
-Harry chose (PER-438) to be asked only about what can't be undone or gives more access. Generated files
-(`notCount`: the migrations lock, `release/kit.json`, the pnpm lockfile) don't set the tier, nor do files only
-renamed (`ignoreRenames`), though a rename still counts for his ok.
+Harry chose (PER-438) not to be asked: the code review is the gate, and the log tells him afterwards. Generated
+files (`notCount`: the migrations lock, `release/kit.json`, the pnpm lockfile) don't set the tier, nor do files
+only renamed (`ignoreRenames`), though a rename still counts for the deep review.
 
-When a High pull request merges without his ok, the Review workflow's record job writes an **auto-ok record** on
-it (a comment and the `auto-ok` label): what merged, the paths that set its tier, its checks, and its Not run,
-How to undo and Risk. That is the log he reads instead of being asked, and the control centre reads it too.
+When a High pull request merges, the Review workflow's record job writes an **auto-ok record** on it (a comment
+and the `auto-ok` label): what merged, the paths that set its tier, the files that needed a deep review, its
+checks, and its Not run, How to undo, Risk and Review. That is the log he reads, and the control centre shows it
+("Merged without you").
 
-If Harry reads a record and would not have said ok, he adds the `harry-would-not` label. That is a miss: the
-next pull request to this file or the tiers file tightens the rule that let it through.
+If Harry reads a record and would not have let it through, he adds the `harry-would-not` label. That is a miss:
+the next pull request to this file or the tiers file tightens the rule, or the review, that let it through.
 
 A tiers file may hold `next`, rules to try for a week first: the Review check reports what they make of each
-pull request, and the record job also logs a merge that waited for him but wouldn't have under them.
+pull request.
 
 ## Before you open the pull request
 
@@ -73,7 +72,7 @@ Five sections, each with something in it:
 - `## How to undo`: revert, a setting, a later release; and whether data or a migration makes that harder.
 - `## Review`: the `/code-review` run (effort, how many findings, what was fixed or answered and why).
 
-Harry's three questions for his ok read straight off these: what isn't tested, how to undo it, and which release path.
+The three questions (what isn't tested, how to undo it, which release path) read straight off these, in the auto-ok record.
 
 ## What failure looks like here
 
