@@ -619,7 +619,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       if (toPlatform) {
         // The app must be on for this person here, as for a call to its own routes: blocked or needing a role they lack is not on.
         try {
-          const apps = appAccess ? await appAccess(await checkedOn(req.caller)) : undefined;
+          const apps = appAccess ? await appAccess(await checkedOn(req.caller), id) : undefined;
           if (apps && !apps.has(id)) return refuse(403, 'forbidden', `That app isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.`);
         } catch (err) {
           if (!(err instanceof AppAccessUnavailable) && !(err instanceof FloorLookupError)) throw err;
@@ -689,7 +689,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     }
     let apps: Map<string, AppAllowed> | undefined;
     try {
-      apps = appAccess ? await appAccess(await checkedOn(req.caller)) : undefined;
+      apps = appAccess ? await appAccess(await checkedOn(req.caller), name) : undefined;
     } catch (err) {
       if (!(err instanceof AppAccessUnavailable) && !(err instanceof FloorLookupError)) throw err;
       req.log.error({ err: err.message }, 'app access check failed');
@@ -797,7 +797,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         let upstream: string | undefined;
         let previews: Record<string, string> | undefined;
         try {
-          const known = name in upstreams ? undefined : await appUpstreams();
+          const known = name in upstreams ? undefined : await appUpstreams(name);
           upstream = known?.apps[name];
           previews = known?.previews[name];
         } catch (err) {
