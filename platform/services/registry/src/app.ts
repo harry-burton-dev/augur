@@ -54,7 +54,7 @@ import {
 } from './schemas.ts';
 import { strings } from './update-schemas.ts';
 import { overviewBuilder, overviewRoutes } from './overview.ts';
-import { reportRoutes, ReportSender, type Reporting } from './report.ts';
+import { reportingFrom, reportRoutes, ReportSender, type Reporting } from './report.ts';
 import { alertRoutes, type AlertRouteOptions } from './alerts.ts';
 import { featurePreviewRoutes, platformRecord, previewsOnFor } from './feature-previews.ts';
 import { AppUpdateChecker } from './app-updates.ts';
@@ -235,7 +235,7 @@ export const buildApp = async ({
   allowPrPreviews = true,
   pipeline,
   portalUrl,
-  reporting = { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).' },
+  reporting = reportingFrom({}),
   reportFetch,
   tailnet,
   alerts = {},

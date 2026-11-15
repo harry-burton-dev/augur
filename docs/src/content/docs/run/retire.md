@@ -13,7 +13,8 @@ cost money.
 1. **Tell its people**, and let them take out anything they want to keep.
 2. **Take a last backup off the server**: `pc exec backup /bin/sh /backup/backup.sh --offsite`. Decide how long
    to keep the bucket, and note it.
-3. **Take it out of Backstage**: remove its entry from `org/deployments.yaml`, so Backstage doesn't raise the
+3. **Take it out of Backstage**: remove its entry from
+   Backstage's catalog of deployments (the portal's README, "Deployments", says where that is), so Backstage doesn't raise the
    alarm when its reports stop.
 4. **Stop it and remove its data**: `pc down -v`, then delete the checkout with `infra/deploy/.env`,
    `infra/deploy/secrets/` and `infra/deploy/backups/` (`sudo rm -rf`, since containers own some of it).

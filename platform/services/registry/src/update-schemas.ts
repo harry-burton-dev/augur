@@ -280,7 +280,7 @@ export const Reporting = Type.Object(
   {
     mode: Type.Enum(REPORTING_MODES),
     why: Type.String(),
-    deployment: Type.Optional(Type.String({ description: "DEPLOYMENT_ID, the deployment's name in Backstage's catalog" })),
+    deployment: Type.Optional(Type.String({ description: "DEPLOYMENT_ID, the deployment's name in Backstage's catalog of deployments" })),
     publicKey: Type.Optional(Type.String({ description: 'Base64 SPKI Ed25519 public key' })),
     last: Type.Optional(
       Type.Object({

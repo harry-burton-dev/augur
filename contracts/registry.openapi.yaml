@@ -1339,7 +1339,7 @@ components:
           type: string
         deployment:
           type: string
-          description: DEPLOYMENT_ID, the deployment's name in Backstage's catalog
+          description: DEPLOYMENT_ID, the deployment's name in Backstage's catalog of deployments
         publicKey:
           type: string
           description: Base64 SPKI Ed25519 public key

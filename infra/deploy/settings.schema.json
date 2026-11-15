@@ -1044,7 +1044,7 @@
     },
     "DEPLOYMENT_ID": {
       "type": "string",
-      "description": "This server's name in Backstage's catalog.",
+      "description": "This server's name in Backstage's catalog of deployments.",
       "x-services": [
         "registry"
       ],
