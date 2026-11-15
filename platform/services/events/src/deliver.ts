@@ -232,13 +232,21 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
           serverErrors.delete(app);
           row = { ...row, failures: 0, failingSince: null, lastError: null, nextAt: null };
           report.delivered++;
-        } else if (event && isDown(app, held.seq, sent) && !downForADay(row)) {
-          await partDown(app, row, held.seq, sent.reason, report);
-          return undefined;
-        } else {
-          // Tried as often as allowed, or a day of the part being down: set aside, so the events behind it can go.
+        } else if (event && isDown(app, held.seq, sent)) {
+          if (!downForADay(row)) {
+            await partDown(app, row, held.seq, sent.reason, report);
+            return undefined;
+          }
+          // A day of the part being down: only this event, the one in front, is set aside, and the next gets a day of its own.
           const attempts = held.attempts + 1;
-          const last = !event || attempts >= maxAttempts || downForADay(row);
+          await store.deliveries.retried(app, held.seq, { attempts, lastError: sent.reason, at: new Date(now()), setAside: true });
+          await store.deliveries.newDay(app);
+          row = { ...row, failures: 0, failingSince: null, lastError: null, nextAt: null };
+          await setAside(app, held, attempts, sent.reason, report);
+        } else {
+          // Tried as often as allowed: set aside, so the events behind it can go.
+          const attempts = held.attempts + 1;
+          const last = !event || attempts >= maxAttempts;
           await store.deliveries.retried(app, held.seq, { attempts, lastError: sent.reason, at: new Date(now()), ...(last ? { setAside: true } : { nextAt: new Date(now() + retryBackoffMs(attempts, retryMs)) }) });
           if (!last) {
             failedOnce(report, app);

@@ -90,6 +90,8 @@ export interface DeliveryStore {
   heldFirst(app: string, topic?: string): Promise<HeldEvent[]>;
   /** A held event goes: delivered (the app's part is taking events), or no longer for the app. */
   unhold(app: string, seq: string, delivered: boolean): Promise<void>;
+  /** Clears the part's run of failures, so the next event gets a day of its own after one was set aside. */
+  newDay(app: string): Promise<void>;
   /** A held event failed again at `at`: it waits until `nextAt`, or is set aside. */
   retried(app: string, seq: string, how: { attempts: number; lastError: string; at: Date; nextAt?: Date; setAside?: boolean }): Promise<void>;
   /** What was set aside, newest first; one app's with `app`. */
@@ -309,6 +311,10 @@ export class PgDeliveryStore implements DeliveryStore {
       `update events.deliveries set failures = 0, next_at = null, last_error = null, failing_since = null, delivered_at = now(), updated_at = now() where app = $1`,
       [app],
     );
+  }
+
+  async newDay(app: string) {
+    await this.pool.query('update events.deliveries set failures = 0, next_at = null, last_error = null, failing_since = null, updated_at = now() where app = $1', [app]);
   }
 
   async retried(app: string, seq: string, how: { attempts: number; lastError: string; at: Date; nextAt?: Date; setAside?: boolean }) {

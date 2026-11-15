@@ -259,6 +259,29 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     expect(theirs.got.slice(-3).map((g) => g.event.id).sort()).toEqual(['a1', 'b1', 'c1']);
   });
 
+  it('after a day of its part being down sets aside only the event in front, and the next gets a day of its own (PER-462)', async () => {
+    let clock = Date.parse('2026-03-01T10:00:00Z');
+    const theirs = part();
+    const d = eventDeliverer({ store: db.store, subscribers, grants, send: theirs.send, now: () => clock, attempts: 5, retryMs: 1000 });
+    await d.tick();
+    await db.store.publish('folio', [
+      { topic: 'folio.document.published', id: 'a1', payload: {} },
+      { topic: 'folio.document.withdrawn', id: 'b1', payload: {} },
+    ]);
+    theirs.fail('notes’s part answered 422', (e) => e.id === 'a1' || e.id === 'b1');
+    await d.tick();
+    await db.store.publish('folio', [{ topic: 'folio.document.archived', id: 'e1', payload: {} }]);
+    theirs.down('notes’s part couldn’t be reached: connect ECONNREFUSED');
+    clock += 1000;
+    await d.tick();
+    clock += GIVE_UP_AFTER_MS + 3_600_000;
+    expect(await d.tick()).toMatchObject({ setAside: 1, delivered: 0 });
+    expect((await db.store.deliveries.setAside()).map((h) => h.id)).toEqual(['a1']);
+    // b1 still has tries left and waits; e1 was never passed over; the part's new run of failures starts now.
+    expect((await db.store.deliveries.list())[0]).toMatchObject({ retrying: 1, setAside: 1, failingSince: new Date(clock).toISOString() });
+    expect(theirs.got.map((g) => g.event.id)).not.toContain('e1');
+  });
+
   it('keeps the place of an app turned off, and forgets one whose grant is gone, recording that', async () => {
     const theirs = part();
     let list = [{ app: 'notes', name: 'Notes', enabled: false }];
