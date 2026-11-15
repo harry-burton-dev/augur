@@ -26,7 +26,7 @@ export const kindOf = (app: Pick<CatalogueApp, 'category' | 'platform'>): AppCat
 /** Whether it ships with AUGUR: `ships`, or `pillar` from a registry that doesn't send `ships` yet. */
 export const shipsWithAugur = (app: Pick<CatalogueApp, 'ships' | 'pillar'>) => app.ships ?? app.pillar ?? false;
 
-/** Each kind's name in the Kind column, and the sentence the app's dialog says it in (ADR 0077's words). */
+/** Each kind's name in the Kind column, and the sentence the app's dialog says it in (the two kinds ADR 0077 names). */
 export const KIND_WORDS: Record<AppCategory | 'app', { label: string; fact: string; a: string }> = {
   platform: { label: 'Platform app', fact: 'Platform app: for using and managing AUGUR', a: 'a platform app' },
   pillar: { label: 'Pillar app', fact: 'Pillar app: the foundation of what AUGUR produces', a: 'a pillar app' },
