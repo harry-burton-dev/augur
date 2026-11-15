@@ -1,6 +1,6 @@
 /**
  * The ids an app may not take, because a part of AUGUR already answers to them. An app's id becomes its
- * /api/<id> at the gateway, its /apps/<id>/ at the front door, its Compose service when the app runner
+ * /api/<id> at the gateway, its /apps/<id>/ at the front door, its route /<id> in the shell, its Compose service when the app runner
  * runs it, its database schema and login, and its bucket, so it must not be any of these. The registry
  * refuses a manifest with one, and the storage service makes no schema for one.
  */
@@ -43,6 +43,8 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   shared: 'the shared modules’ path, /shared/',
   assets: 'the shell’s assets, /assets/',
   sandbox: 'the apps’ worker bootstrap, /sandbox/',
+  recover: 'the way back to an earlier release, /recover/',
+  legal: 'AUGUR’s licence and open-source notices, /legal/',
   // Names the deployment itself goes by: its database, sign-in realm and Compose project, and Postgres's own schemas.
   augur: 'AUGUR itself',
   platform: 'AUGUR’s database, sign-in realm and Compose project',
