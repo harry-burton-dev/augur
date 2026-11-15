@@ -28,8 +28,16 @@ Grafana evaluates AUGUR's rules every 30 seconds (`infra/deploy/observability/gr
 - **Server errors:** more than 5% of at least 50 calls in 5 minutes answered with a 5xx, AUGUR's own and apps' counted apart.
 - **Browser errors:** more than 20 errors in people's browsers in 15 minutes.
 - **Backups:** the last backup or restore test can't be relied on, for 10 minutes.
+- **The watchdog:** always firing while the server, Grafana and its metrics are up. It goes only to the heartbeat below, never to a notice.
 
 Each alert, and its all-clear, reaches deployment admins as a notice through the registry (`POST /v1/platform/alerts`, with `ALERT_WEBHOOK_TOKEN`). Grafana sends one notice per incident and repeats a firing one only daily. Email through the deployment's relay joins this once AUGUR has SMTP settings. Grafana sits outside the gateway and the notices, so it still sees them fail; the registry is the one part it needs to tell anyone.
+
+**Outside AUGUR.** A notice needs the registry, the events service and the mail path, so an alert about one of them may reach no one. Two settings in `.env` send alerts off the server without AUGUR, and a production server needs both. Until both are set, the registry tells its deployment admins once a week, and logs it at start.
+
+- `ALERT_OUTSIDE_URL`: every alert, and its all-clear, also goes to this webhook as Grafana's webhook body. Use a chat channel's incoming webhook that takes it, an on-call service, or a relay of your own.
+- `ALERT_HEARTBEAT_URL`: Grafana posts the watchdog here every minute. Point it at a heartbeat (dead-man switch) service, such as a push monitor, set to raise the alarm after about five minutes of silence. When the beats stop, the server, Grafana or the server's way out is down.
+
+An unset route points at the registry's `/v1/platform/alerts/unrouted`, which drops what it gets, so Grafana always has an address. After setting either, run `pc up -d otel-lgtm registry`. To prove them, press **Test** on **Outside AUGUR** and **Heartbeat** under **Alerting → Contact points**: each address gets a test alert.
 
 **Prove it works** once on a new server ([Install AUGUR, step 6](src/content/docs/run/install.md#6-finish-setting-up)): in Grafana, under **Alerting → Contact points**, open **AUGUR notices** and press **Test**. Within a minute every deployment admin has a notice in AUGUR. That proves Grafana reaches the registry with the right token and the registry reaches people. From the command line, this sends the registry the same kind of alert Grafana would and prints `202` when it took it:
 

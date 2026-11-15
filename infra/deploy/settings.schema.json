@@ -1470,6 +1470,28 @@
       ],
       "x-docs": "docs/observability.md#alerts"
     },
+    "ALERT_OUTSIDE_URL": {
+      "type": "string",
+      "format": "uri",
+      "writeOnly": true,
+      "description": "A webhook outside AUGUR that gets every alert and its all-clear too, such as a chat channel's incoming webhook or an on-call service, so an alert about AUGUR itself still reaches someone. Set it on a production server: until it's set, its admins are told weekly.",
+      "x-services": [
+        "otel-lgtm",
+        "registry"
+      ],
+      "x-docs": "docs/observability.md#alerts"
+    },
+    "ALERT_HEARTBEAT_URL": {
+      "type": "string",
+      "format": "uri",
+      "writeOnly": true,
+      "description": "A heartbeat service outside AUGUR that Grafana tells every minute, and that raises the alarm when the beats stop: the dead-man switch for the whole server. Set it on a production server: until it's set, its admins are told weekly.",
+      "x-services": [
+        "otel-lgtm",
+        "registry"
+      ],
+      "x-docs": "docs/observability.md#alerts"
+    },
     "NODE_ENV": {
       "type": "string",
       "description": "production in every image and compose service.",
