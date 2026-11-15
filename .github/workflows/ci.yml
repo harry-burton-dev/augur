@@ -504,13 +504,21 @@ jobs:
           grep -q '"ok":true,"bases":1,"earliest"' /tmp/backups/status/pitr.json && sudo sh -c 'test -s /tmp/backups/base-*/base.tar.gz'
           sudo tar -tzf /tmp/backups/objects-*.tar.gz | tee /tmp/objects.txt
           grep -q '^data/00/block$' /tmp/objects.txt && grep -q '^meta/snapshots/s1$' /tmp/objects.txt && ! grep -q 'db.sqlite' /tmp/objects.txt
-      - name: The updater's backup is a fresh one, and the newest
+      - name: The updater's backup is a fresh one, and the newest, apps' files included
         run: |
-          docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
-            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \
-            "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --now | tee /tmp/now.log
-          grep -E "backup: wrote /backups/platform-[0-9-]+T[0-9]+Z\.sql\.gz" /tmp/now.log
-          test "$(ls /tmp/backups/platform-*.sql.gz | sort | tail -n 1)" = "$(grep -oE '/backups/platform-[^ ]+' /tmp/now.log | sed 's#^#/tmp#')"
+          # Apps' files are taken afresh each time, though today's nightly one has them already (ADR 0103).
+          for run in 1 2; do
+            docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
+              -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro \
+              "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --now | tee /tmp/now.log
+            grep -E "backup: wrote /backups/platform-[0-9-]+T[0-9]+Z\.sql\.gz" /tmp/now.log
+            test "$(ls /tmp/backups/platform-*.sql.gz | sort | tail -n 1)" = "$(grep -oE '/backups/platform-[^ ]+' /tmp/now.log | sed 's#^#/tmp#')"
+            objects=$(grep -oE 'backup: wrote /backups/objects-[0-9-]+T[0-9]+Z\.tar\.gz' /tmp/now.log | sed 's#.*/##')
+            # The storage job reads which files hold apps' files from the note, before it drops anything.
+            grep -q "\"ok\":true,.*\"objects\":\"$objects\"" /tmp/backups/status/last-backup.json
+            sleep 1
+          done
+          test "$(sudo sh -c 'ls /tmp/backups/objects-*T*Z.tar.gz' | wc -l)" = 2
       - name: The weekly restore test restores the newest backup and checks it
         run: |
           docker run --rm -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups \

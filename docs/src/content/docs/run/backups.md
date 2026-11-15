@@ -19,7 +19,9 @@ The `backup` container dumps the whole database every night at 02:00 UTC into `i
 time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `.env`.
 
 Everything lives in that dump: AUGUR's own data, apps' schemas, people's preferences, and Keycloak's users.
-Apps' files go beside it as `objects-YYYY-MM-DD.tar.gz`. The backups hold everyone's data and every login's
+Apps' files go beside it as `objects-YYYY-MM-DD.tar.gz`. The backup the updater takes before an upgrade, and
+before it takes a removed app's data away, is a fresh one of both, named for the minute it was taken: nothing
+is dropped unless that backup worked and holds apps' files (ADR 0103). The backups hold everyone's data and every login's
 password hash, so only root can read them (the commands below read them through a container). What each run
 found goes in `infra/deploy/backups/status/`, readable by anyone, and that folder alone is what the gateway
 sees, for Deployment → Backups.
