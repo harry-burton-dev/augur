@@ -212,10 +212,10 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
   cursor: { load(): Promise<string | undefined>; save(seq: string): Promise<void> };
   handle(event: DomainEvent): Promise<void>;
   /**
-   * Events past its place were pruned (410): rebuild what it keeps from them, then it reads on from `oldest`, the
-   * oldest still kept (ADR 0104). Without it, the follower stops there and each read fails, saying so.
+   * Events past its place were pruned (410): rebuild what it keeps from them, then it reads on after `prunedUpTo`,
+   * how far they were pruned (ADR 0104). Without it, the follower stops there and each read fails, saying so.
    */
-  onGap?: (oldest: string) => Promise<void>;
+  onGap?: (prunedUpTo: string) => Promise<void>;
   batch?: number;
   intervalMs?: number;
   onError?: (err: unknown) => void;
@@ -226,11 +226,11 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
     const after = await cursor.load();
     const query = new URLSearchParams({ topics: topics.join(','), limit: String(batch), ...(after ? { after } : {}) });
     const res = await withDeadline(fetchImpl)(`${eventsUrl.replace(/\/$/, '')}/v1/domain-events?${query}`, { headers: await serviceHeaders(credentials) });
-    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; next?: string; message?: string; oldest?: string };
-    if (res.status === 410 && reply.oldest && /^[0-9]+$/.test(reply.oldest)) {
-      if (!onGap) throw new ServiceCallError(`Following ${topics.join(', ')} missed events up to ${reply.oldest}: ${reply.message ?? 'they were pruned.'} It needs rebuilding (followEvents' onGap) before it can read on.`);
-      await onGap(reply.oldest);
-      await cursor.save((BigInt(reply.oldest) - 1n).toString());
+    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; next?: string; message?: string; after?: string };
+    if (res.status === 410 && reply.after && /^[0-9]+$/.test(reply.after)) {
+      if (!onGap) throw new ServiceCallError(`Following ${topics.join(', ')} missed events up to ${reply.after}: ${reply.message ?? 'they were pruned.'} It needs rebuilding (followEvents' onGap) before it can read on.`);
+      await onGap(reply.after);
+      await cursor.save(reply.after);
       return 0;
     }
     if (!res.ok) throw new ServiceCallError(`Couldn't read events (${topics.join(', ')}): it answered ${res.status}${reply.message ? `: ${reply.message}` : ''}.`);

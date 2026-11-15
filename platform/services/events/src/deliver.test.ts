@@ -179,6 +179,17 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     expect(await d.tick()).toMatchObject({ behind: [] });
   });
 
+  it('says so once even when nothing is left after what was pruned', async () => {
+    let list = [{ app: 'notes', name: 'Notes', enabled: false }];
+    const d = eventDeliverer({ store: db.store, subscribers: async () => list, grants, send: part().send });
+    await d.tick();
+    await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd1', payload: {} }]);
+    await db.store.pruneEvents(0);
+    list = [{ app: 'notes', name: 'Notes', enabled: true }];
+    expect(await d.tick()).toMatchObject({ delivered: 0, behind: ['notes'] });
+    expect(await d.tick()).toMatchObject({ behind: [] });
+  });
+
   it('starts a new subscriber after what was pruned, not behind it', async () => {
     await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd1', payload: {} }]);
     await db.store.pruneEvents(0);

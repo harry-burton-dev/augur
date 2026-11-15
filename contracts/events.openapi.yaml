@@ -1560,7 +1560,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
     get:
       summary: Read domain events in order (services only, events:subscribe)
-      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`, or `next`, which is as far as this read went, past events on other topics: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS); a cursor behind what was pruned answers 410 with the oldest kept, so the follower rebuilds. An app sees only events on floors where it holds events:subscribe, and the deployment’s own (ADR 0104)."
+      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`, or `next`, which is as far as this read went, past events on other topics: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS); a cursor behind what was pruned answers 410 with how far events were pruned, so the follower rebuilds. An app sees only events on floors where it holds events:subscribe, and the deployment’s own (ADR 0104)."
       parameters:
         - schema:
             type: string
@@ -1624,7 +1624,7 @@ paths:
                 required:
                   - error
                   - message
-                  - oldest
+                  - after
                 properties:
                   error:
                     type: string
@@ -1632,9 +1632,9 @@ paths:
                       - gone
                   message:
                     type: string
-                  oldest:
+                  after:
                     type: string
-                    description: "The oldest seq still kept: rebuild, then read on from here"
+                    description: "How far events were pruned: rebuild, then read on with this as `after`"
                 description: "Events after `after` were pruned: the follower has missed some"
         "503":
           description: Grants can't be checked right now

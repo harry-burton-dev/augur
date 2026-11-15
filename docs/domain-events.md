@@ -58,7 +58,7 @@ followEvents({
 }).start();
 ```
 
-Events come in the order they were committed, never with a gap: publishers take turns, so nothing gets a `seq` until the one before it has committed, and a follower can't pass a `seq` that is still to appear. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` in `.env` changes it). A follower that's been off for longer is told, never left to skip them silently: a read whose `after` is behind what was pruned answers **410** with `oldest`, the oldest `seq` still kept (ADR 0104). It must rebuild what it keeps from events (from its owner's API, as at the start), then read on from `oldest`; `followEvents` calls its `onGap(oldest)` to do that, and without one each read fails saying so. A read with no `after` at all starts afresh from the oldest kept.
+Events come in the order they were committed, never with a gap: publishers take turns, so nothing gets a `seq` until the one before it has committed, and a follower can't pass a `seq` that is still to appear. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` in `.env` changes it). A follower that's been off for longer is told, never left to skip them silently: a read whose `after` is behind what was pruned answers **410** with `after`, how far events were pruned (ADR 0104). It must rebuild what it keeps from events (from its owner's API, as at the start), then read on with that `after`; `followEvents` calls its `onGap(after)` to do that, and without one each read fails saying so. A read with no `after` at all starts afresh from the oldest kept.
 
 ### When someone leaves
 

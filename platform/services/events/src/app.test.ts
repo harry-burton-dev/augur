@@ -454,7 +454,7 @@ describe.runIf(DATABASE_URL)('events', () => {
       expect((await read('topics=folio.*', platform)).json().events.map((e: { id: string }) => e.id)).toEqual(['fin', 'legal', 'pay', 'all']);
     });
 
-    it('answers 410 to a cursor behind what was pruned, with the oldest still kept, so a follower knows to rebuild (ADR 0104)', async () => {
+    it('answers 410 to a cursor behind what was pruned, with how far they were pruned, so a follower knows to rebuild (ADR 0104)', async () => {
       const app = (open = await db.app({ verifyService, grants, floors }));
       await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('old1'), published('old2'), published('new')] } });
       const read = (query: string) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers: as('notes') });
@@ -463,7 +463,7 @@ describe.runIf(DATABASE_URL)('events', () => {
       await db.pool.query("update events.domain_events set at = now() - interval '40 days' where id in ('old1', 'old2')");
       expect(await db.store.pruneEvents(30)).toBe(2);
       const gone = await read(`topics=folio.*&after=${old1.seq}`);
-      expect([gone.statusCode, gone.json()]).toMatchObject([410, { error: 'gone', message: expect.stringMatching(/pruned/), oldest: kept.seq }]);
+      expect([gone.statusCode, gone.json()]).toMatchObject([410, { error: 'gone', message: expect.stringMatching(/pruned/), after: old2.seq }]);
       // A follower that had read as far as what was pruned missed nothing, and nor did one starting afresh.
       expect((await read(`topics=folio.*&after=${old2.seq}`)).json().events).toMatchObject([{ id: 'new' }]);
       expect((await read('topics=folio.*')).json().events).toMatchObject([{ id: 'new' }]);

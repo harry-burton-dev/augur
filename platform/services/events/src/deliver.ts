@@ -101,6 +101,9 @@ export type PushingState = { on: true; problem?: string } | { on: false; why: st
 
 const SERVICE_ACTOR = { id: 'events', kind: 'service' as const };
 
+/** Whether an app takes events on a floor (none: the deployment's own): it holds events:subscribe there. Pushed and read alike. */
+export const subscribesOn = async (grants: GrantLookup, app: string, floor: string | undefined): Promise<boolean> => (await grants(app, floor)).includes('events:subscribe');
+
 /** Delivers to every subscribing app that is due; one pass at a time. */
 export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = Date.now, batch = 100, leaseSeconds = LEASE_SECONDS, log }: DelivererOptions) => {
   let running: Promise<DeliveryReport> | undefined;
@@ -121,21 +124,26 @@ export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = 
     if (row.nextAt && new Date(row.nextAt).getTime() > now()) return;
     if (!(await store.deliveries.claim(app, leaseSeconds))) return;
     try {
-      // A place behind what was pruned means events went before this app took them: said once, then it goes on from what is left.
-      const pruned = await store.prunedUpTo();
-      if (pruned !== undefined && BigInt(row.cursor) < BigInt(pruned)) {
-        report.behind.push(app);
-        log?.error({ app, cursor: row.cursor, prunedUpTo: pruned }, 'an app missed events that were pruned before it took them');
-        await audit?.({ actor: SERVICE_ACTOR, app: 'events', action: 'delivery.gap', target: app, detail: { cursor: row.cursor, prunedUpTo: pruned } }, `delivery.gap:${app}:${row.cursor}`);
-      }
       for (;;) {
         const events = await store.readEvents({ topics: ['*'], after: row.cursor, limit: batch });
+        // A place behind what was pruned means events went before this app took them (asked after the read, so a prune
+        // in between can't slip past): it is said once, the place moves up to what is left, and the read starts again.
+        const pruned = await store.prunedUpTo();
+        if (pruned !== undefined && BigInt(row.cursor) < BigInt(pruned)) {
+          report.behind.push(app);
+          log?.error({ app, cursor: row.cursor, prunedUpTo: pruned }, 'an app missed events that were pruned before it took them');
+          await audit?.({ actor: SERVICE_ACTOR, app: 'events', action: 'delivery.gap', target: app, detail: { cursor: row.cursor, prunedUpTo: pruned } }, `delivery.gap:${app}:${row.cursor}`);
+          const moved = await move(app, row, pruned, 'skipped');
+          if (!moved) return;
+          row = moved;
+          continue;
+        }
         if (events.length === 0) return;
         for (const event of events) {
           let wanted = event.publisher !== app;
           if (wanted) {
             try {
-              wanted = (await grants(app, event.workspace?.id)).includes('events:subscribe');
+              wanted = await subscribesOn(grants, app, event.workspace?.id);
             } catch (err) {
               if (!(err instanceof GrantsUnavailable)) throw err;
               log?.warn({ app, err: err.message }, 'could not check where an app subscribes; trying again later');

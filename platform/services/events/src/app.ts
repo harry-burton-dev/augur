@@ -35,7 +35,7 @@ import {
   endStreamsOnStop,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
-import { deliveryStatus, type PushingState } from './deliver.ts';
+import { deliveryStatus, subscribesOn, type PushingState } from './deliver.ts';
 import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
 import { topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
@@ -268,23 +268,18 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
       };
 
       /** The events `app` may see: those on a floor (or none, the deployment's) where it holds events:subscribe. Undefined when grants can't be checked. */
-      const visibleTo = async (app: string, events: DomainEvent[]): Promise<DomainEvent[] | undefined> => {
-        const may = new Map<string, boolean>();
-        const kept: DomainEvent[] = [];
-        for (const event of events) {
-          const floor = event.workspace?.id ?? '';
-          if (!may.has(floor)) {
-            try {
-              if (!grants) throw new GrantsUnavailable('The events service has no registry to check grants with.');
-              may.set(floor, (await grants(app, floor || undefined)).includes('events:subscribe'));
-            } catch (err) {
-              if (!(err instanceof GrantsUnavailable)) throw err;
-              return undefined;
-            }
-          }
-          if (may.get(floor)) kept.push(event);
+      const visibleTo = async (req: FastifyRequest, app: string, events: DomainEvent[]): Promise<DomainEvent[] | undefined> => {
+        const places = [...new Set(events.map((e) => e.workspace?.id ?? ''))];
+        try {
+          if (!grants) throw new GrantsUnavailable('The events service has no registry to check grants with.');
+          const lookup = grants;
+          const may = new Map(await Promise.all(places.map(async (floor) => [floor, await subscribesOn(lookup, app, floor || undefined)] as const)));
+          return events.filter((e) => may.get(e.workspace?.id ?? ''));
+        } catch (err) {
+          if (!(err instanceof GrantsUnavailable)) throw err;
+          req.log.error({ err: err.message, app }, 'grant check failed');
+          return undefined;
         }
-        return kept;
       };
 
       /**
@@ -623,8 +618,8 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
               'in. Keep the last `seq` handled and pass it as `after`, or `next`, which is',
               'as far as this read went, past events on other topics: delivery is at',
               'least once, never with a gap. Events are kept 30 days',
-              '(DOMAIN_EVENTS_KEEP_DAYS); a cursor behind what was pruned answers 410 with the',
-              'oldest kept, so the follower rebuilds. An app sees only events on floors where',
+              '(DOMAIN_EVENTS_KEEP_DAYS); a cursor behind what was pruned answers 410 with how',
+              'far events were pruned, so the follower rebuilds. An app sees only events on floors where',
               'it holds events:subscribe, and the deployment’s own (ADR 0104).',
             ].join(' '),
             querystring: Type.Object({
@@ -636,7 +631,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
               200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor to read on from' }),
               400: refused('A topic that is not a topic, nor a family such as folio.*'),
               403: refused('Not a service nor an app acting for a person, no events:subscribe scope, or a scope the delegation doesn’t carry'),
-              410: Type.Object({ error: Type.Literal('gone'), message: Type.String(), oldest: Type.String({ description: 'The oldest seq still kept: rebuild, then read on from here' }) }, { description: 'Events after `after` were pruned: the follower has missed some' }),
+              410: Type.Object({ error: Type.Literal('gone'), message: Type.String(), after: Type.String({ description: 'How far events were pruned: rebuild, then read on with this as `after`' }) }, { description: 'Events after `after` were pruned: the follower has missed some' }),
               503: refused("Grants can't be checked right now"),
             },
           },
@@ -649,19 +644,18 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           if (!caller) return reply;
           const limit = req.query.limit ?? 100;
           const after = req.query.after ?? '0';
-          // A cursor behind what was pruned has missed events: the follower is told, and rebuilds (ADR 0104).
-          // No cursor at all is a follower starting afresh, from the oldest kept.
-          const pruned = req.query.after === undefined ? undefined : await store.prunedUpTo();
-          if (pruned && BigInt(after) < BigInt(pruned)) {
-            const oldest = (BigInt(pruned) + 1n).toString();
-            return reply.code(410).send({ error: 'gone', message: `Events up to ${pruned} were pruned, so some after ${after} are gone. Rebuild what you keep from events, then read on from ${oldest}.`, oldest });
-          }
           // Read first: anything committed after this is above it, so nothing is skipped by moving the cursor up to it.
           const top = await store.lastSeq();
           const read = await store.readEvents({ topics, after, upTo: top, limit });
+          // A cursor behind what was pruned has missed events: the follower is told, and rebuilds (ADR 0104). Asked after
+          // the read, so a prune landing in between can't slip past. No cursor at all is a follower starting afresh.
+          const pruned = req.query.after === undefined ? undefined : await store.prunedUpTo();
+          if (pruned && BigInt(after) < BigInt(pruned)) {
+            return reply.code(410).send({ error: 'gone', message: `Events up to ${pruned} were pruned, so some after ${after} are gone. Rebuild what you keep from events, then read on with after=${pruned}.`, after: pruned });
+          }
           const next = read.length === limit ? read.at(-1)!.seq : top && BigInt(top) > BigInt(after) ? top : after;
           // An app sees only events on floors where it may subscribe, and the deployment's own; AUGUR's services see all (ADR 0104).
-          const events = caller.kind === 'platform' ? read : await visibleTo(caller.app, read);
+          const events = caller.kind === 'platform' ? read : await visibleTo(req, caller.app, read);
           if (events === undefined) return reply.code(503).send({ error: 'unavailable', message: 'What this app may do can’t be checked right now. Try again in a moment.' });
           return { events, next };
         },
