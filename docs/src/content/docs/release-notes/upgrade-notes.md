@@ -15,6 +15,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Grafana now has two routes that don't go through AUGUR: `ALERT_OUTSIDE_URL` gets every alert and its all-clear, and `ALERT_HEARTBEAT_URL` gets a heartbeat every minute, so a service there raises the alarm when the server stops. Both are optional, and alerts still reach deployment admins as notices. On a production server, set both in `.env` and run `pc up -d otel-lgtm registry`: until you do, the registry tells its deployment admins once a week that alerts reach no one outside AUGUR ([Observability, Alerts](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#alerts)).
 
+## The binding events are gone
+
+**From** unreleased
+
+AUGUR no longer has entity binding events (`<app>.<type>.entity-bound` and `-unbound`): the registry's `GET /v1/entity-links` answers 404, and a manifest's `bindings` is accepted but no longer read (a contract 3 release that sets it installs with a warning saying so). Nothing in AUGUR or the apps it installs used them. Nothing to do on the server.
+
 ## An app on contract 3 must declare its domain events
 
 **From** unreleased
