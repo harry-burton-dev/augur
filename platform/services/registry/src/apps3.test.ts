@@ -5,7 +5,7 @@ import { callerHeaders, frontendDigest, packFrontend, type FloorPlace } from '@a
 import { DATABASE_URL, registryDb } from './db.testing.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { addressProblem } from './upstreams.ts';
-import { frontendHandedOver, manifest3Problems, ownServed } from './apps3.ts';
+import { frontendHandedOver, manifest3Problems, ownServed, served3 } from './apps3.ts';
 import { checkRelease } from './release-check.ts';
 import { platformApps, platformManifests3 } from './manifest.ts';
 import { MemoryFrontendFiles } from './frontends.ts';
@@ -197,15 +197,22 @@ describe.runIf(DATABASE_URL)('fields contract 3 hasn’t frozen, under provision
     expect((await t.catalogue(finance)).find((a) => a.id === 'notes')).toMatchObject({ requiredRole: 'finance' });
   });
 
-  it('refuses one set in both places rather than guess, and holds bindings to links under provisional too', () => {
+  it('refuses one set in both places rather than guess', () => {
     const both = checkRelease(releaseOf('notes', '1.2.0', { requiredRole: 'finance', provisional: { requiredRole: 'admin' } }));
     expect(both.refusals).toEqual(['The manifest sets requiredRole both at its top and under provisional: keep the one under provisional.']);
     expect(both.warnings.join(' ')).not.toMatch(/requiredRole/);
-    // Half moved: bindings at the top, links under provisional, is one rule across both.
-    expect(checkRelease(releaseOf('notes', '1.2.0', { bindings: ['claim'], provisional: { links: { entities: true } } })).refusals).toEqual([]);
     expect(manifest3Problems({ ...releaseOf('notes', '1.2.0').manifest, provisional: { requiredRole: '' } }).join(' ')).toMatch(/requiredRole/);
-    expect(checkRelease(releaseOf('notes', '1.2.0', { provisional: { links: { entities: true }, bindings: ['claim'] } })).refusals).toEqual([]);
-    expect(checkRelease(releaseOf('notes', '1.2.0', { provisional: { bindings: ['claim'] } })).refusals.join(' ')).toMatch(/bindings/);
+  });
+
+  it('installs a release that still sets bindings, ignoring it and saying why, now the binding events are gone (D6)', () => {
+    const said = 'Notes sets bindings, which AUGUR no longer reads (D6: the binding events are gone): it installs without it. Notes’s publisher can take it out.';
+    for (const extra of [{ provisional: { links: { entities: true }, bindings: ['claim'] } }, { bindings: ['claim'] }]) {
+      const checked = checkRelease(releaseOf('notes', '1.2.0', extra));
+      expect(checked.refusals).toEqual([]);
+      expect(checked.warnings).toContain(said);
+      expect(checked.warnings.join(' ')).not.toMatch(/doesn’t know|reads it under provisional/);
+      expect(served3(releaseOf('notes', '1.2.0', extra).manifest, { maxUpload: 1 })).not.toHaveProperty('bindings');
+    }
   });
 });
 
