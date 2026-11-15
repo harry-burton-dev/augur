@@ -797,7 +797,7 @@ services:
       IMAGE_SIGNER_ISSUER: "${IMAGE_SIGNER_ISSUER:-}"
       AUGUR_DEV_SIGNER: "${AUGUR_DEV_SIGNER:-}"
     volumes:
-      - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
+      - ./:/augur-deploy   # Coolify trial only: Coolify refuses a volume target made of a variable
       - ./secrets:/run/secrets/augur:ro
     networks: [default, docker, telemetry]
     depends_on: [docker-proxy, registry, db-relay, bucket-relay]
