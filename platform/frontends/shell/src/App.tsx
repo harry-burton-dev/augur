@@ -178,7 +178,8 @@ export function Host({
   const shellRef = useRef<ShellModel>(shellModel);
   const stageRef = useRef<HTMLDivElement>(null);
   const mounter = useRef<StageMounter | null>(null);
-  const bus = useMemo(() => createEventBus(), []);
+  // A handler that throws is logged with the type it was handling, and the others still run.
+  const bus = useMemo(() => createEventBus({ onError: (err, type) => { console.error(`A handler for ${type} failed`, err); } }), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
   /** What the open app was last mounted with, so a catalogue that changed elsewhere doesn't mount it again. */
   const lastMount = useRef<Record<string, unknown> | null>(null);
