@@ -119,8 +119,15 @@ describe('the front door', () => {
     const served = /location ~\* \^\/apps\/\(\?!\.\*\\\.\(\?:([^)]+)\)\$\)/.exec(conf)?.[1];
     expect(served, 'the refusing location in nginx.conf').toBeDefined();
     const pattern = new RegExp(`^(?:${served})$`, 'i');
-    const known = ['js', 'mjs', 'css', 'json', 'map', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'ico', 'woff', 'woff2', 'ttf', 'otf', 'wasm', 'svg', 'html', 'xhtml', 'xml', 'txt', 'pdf'];
-    for (const ext of new Set([...known, ...Object.keys(FRONTEND_TYPES)])) expect(pattern.test(ext), ext).toBe(Object.hasOwn(FRONTEND_TYPES, ext));
+    const refused = ['svg', 'svgz', 'html', 'htm', 'shtml', 'xhtml', 'xht', 'xml', 'xsl', 'mht', 'mhtml', 'txt', 'pdf'];
+    for (const ext of [...refused, ...Object.keys(FRONTEND_TYPES)]) expect(pattern.test(ext), ext).toBe(Object.hasOwn(FRONTEND_TYPES, ext));
+    // nginx takes the first regex location that matches, so the refusal must come before any that serves /apps/.
+    const refusing = conf.indexOf('location ~* ^/apps/(?!');
+    const serving = [...conf.matchAll(/location ~\*? \^\/apps\/(?!\(\?!)/g)].map((m) => m.index);
+    expect(serving.length).toBeGreaterThan(0);
+    for (const at of serving) expect(refusing).toBeLessThan(at);
+    // A ^~ or = location would be chosen without the regex locations being tried at all.
+    expect(conf).not.toMatch(/location (\^~|=) \/apps/);
   });
 
   it('keeps the list from being changed at run time', () => {
