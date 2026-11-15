@@ -4,7 +4,7 @@ import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import type pg from 'pg';
 import Type, { type Static } from 'typebox';
 import { ulid } from 'ulid';
-import { callerFromHeaders, delegationAllows, health, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
+import { callerFromHeaders, delegationAllows, health, isAppItself, packageVersion, Problem, problemDetails, serviceFastifyOptions, signedCallers, type CallerCheck } from '@augur/service-kit';
 import { actionNamed, CATALOGUE, checkInput, declaration, InvalidInput, type ActionDecl as Declared, type Effects, type RetainInputOf } from './actions.ts';
 import { extractionContext, extractionMessages, ExtractionRefused, newFence, PROMPT_VERSION, toRetain, type Dropped } from './extract.ts';
 import { describeApi } from './contract.ts';
@@ -161,6 +161,13 @@ export const buildApp = async ({ store, standing, callers, extract, ledger, role
   /** The person calling and the floor they ask from: the one named, or the one they stand on. */
   const personOn = (req: FastifyRequest, floor?: string, { orOrg = false, action }: { orOrg?: boolean; action?: Declared } = {}) => {
     const caller = callerFor(req, action);
+    // An app's own token names no person, and a floor is read and changed as one, from where they stand.
+    if (isAppItself(caller)) throw new Problem(403, 'not_allowed', `${caller.app} called the knowledge graph as itself. It can only ${action ? `take ${action.name}` : 'read a floor'} for a person, by sending on the delegation it was given.`);
+    // An app's scopes were granted on the floor the gateway checked, so that is the only floor it may name.
+    if (caller.app && floor !== undefined && floor !== caller.workspace?.id) {
+      if (!caller.workspace) throw new Problem(400, 'floor_required', 'Say which floor you stand on (X-Workspace-Id).');
+      throw new Problem(403, 'not_allowed', `${caller.app} is acting for you on another floor, so it can’t read this one. It can read the floor you opened it on.`);
+    }
     const here = floor ?? caller.workspace?.id;
     if (!here && !orOrg) throw new Problem(400, 'floor_required', 'Say which floor you stand on (X-Workspace-Id).');
     // The gateway checked the floor named in X-Workspace-Id: when it is your own, that's where your own floor is.
