@@ -47,7 +47,7 @@ said() {
 }
 failed() {
   # What the throwaway Garage said, for whoever reads why.
-  docker logs --tail 20 "$run-garage" >&2 2>/dev/null || true
+  docker logs --tail 40 "$run-garage" >&2 2>&1 || true
   said false 0 0 "" 0 "$1"
   exit 1
 }
@@ -70,14 +70,15 @@ q "select 'apps/' || app_id || '/' || coalesce(to_jsonb(a) ->> 'folder', version
 rows=$(grep -c . "$keys" || true)
 
 # Garage's metadata, as Restore a lost server puts it back: the newest snapshot becomes its database. Its
-# blocks aren't unpacked: a server's could be as large as its disk, and only the metadata is read.
+# blocks (data/<two hex digits>/) aren't unpacked: a server's could be as large as its disk, and only the
+# metadata is read. The rest of data/ is, for the marker Garage looks for before it starts.
 docker volume create "$run-meta" >/dev/null
 docker run --rm -v "$objects:/from.tar.gz:ro" -v "$run-meta:/r" --entrypoint sh "$pg_image" -c \
-  'tar -xzf /from.tar.gz -C /r meta && snap=$(ls /r/meta/snapshots 2>/dev/null | sort | tail -n 1) && test -n "$snap" && cp "/r/meta/snapshots/$snap/db.sqlite" /r/meta/db.sqlite' ||
+  'tar -xzf /from.tar.gz -C /r --exclude='\''data/[0-9a-f][0-9a-f]'\'' && snap=$(ls /r/meta/snapshots 2>/dev/null | sort | tail -n 1) && test -n "$snap" && cp "/r/meta/snapshots/$snap/db.sqlite" /r/meta/db.sqlite' ||
   failed "$(basename "$objects") holds no metadata snapshot of Garage's to restore."
 docker run -d --name "$run-garage" --network "$run" -p 127.0.0.1::3903 \
   -e GARAGE_RPC_SECRET="$token" -e GARAGE_ADMIN_TOKEN="$token" \
-  -v "$here/../garage/garage.toml:/etc/garage.toml:ro" -v "$run-meta:/var/lib/garage/meta" --tmpfs /var/lib/garage/data "$garage_image" >/dev/null
+  -v "$here/../garage/garage.toml:/etc/garage.toml:ro" -v "$run-meta:/var/lib/garage" "$garage_image" >/dev/null
 # Its admin port is published to this machine's loopback alone, and only for as long as this runs.
 admin="http://$(docker port "$run-garage" 3903/tcp | head -n 1)"
 api() { curl -fsS -G -H "Authorization: Bearer $token" "$admin/v2/$1" "${@:2}"; }
