@@ -42,12 +42,14 @@ if (config.drop) {
 }
 
 // An app removed from the server whose grace period ended: its data goes, after the runner's backup, and nothing else is done.
-// Only behind that backup (ADR 0103): a good one of the database and apps' files, taken since the runner's job started.
+// Only behind that backup (ADR 0103): the last noted, and a good one of the database and apps' files.
 if (config.retireNow) {
-  const app = config.retireNow;
-  const refused = backupProblem(await readBackupMarker(BACKUP_STATUS_DIR), config.retireAfter!, Boolean(config.garage));
+  const { app, backup } = config.retireNow;
+  const refused = backupProblem(await readBackupMarker(BACKUP_STATUS_DIR), backup, Boolean(config.garage));
   if (refused) {
+    // On stderr as a plain line too: the app runner shows the last of it in Admin, Apps.
     log.error(`${app}’s data stays for now: ${refused}`);
+    process.stderr.write(`${app}’s data stays for now: ${refused}\n`);
     process.exit(1);
   }
   const sql = new pg.Client({ connectionString: config.databaseUrl });

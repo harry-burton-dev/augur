@@ -1856,9 +1856,9 @@
         "storage": "default"
       }
     },
-    "APP_STORAGE_BACKUP_AFTER": {
+    "APP_STORAGE_BACKUP": {
       "type": "string",
-      "description": "When the app runner's job that takes a removed app's data away started (ISO 8601): the storage job drops it only when the last backup is a good one, apps' files included, taken since then (ADR 0103). Set by the app runner beside APP_STORAGE_RETIRE.",
+      "description": "The dump the app runner just took before taking a removed app's data away: the storage job drops it only when that backup is the last noted in backups/status and worked, apps' files included (ADR 0103). Set by the app runner beside APP_STORAGE_RETIRE.",
       "x-internal": "updater",
       "x-via": {
         "storage": "default"
