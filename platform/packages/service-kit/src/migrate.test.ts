@@ -9,13 +9,23 @@ describe('runMigrations', () => {
     await expect(runMigrations(pool, { schema: 'a; drop table b', migrations: [] })).rejects.toThrow(/schema name/);
   });
 
-  it('reads its lock and idle limits from the settings, 60 and 60 seconds when unset or nonsense', () => {
+  it('reads its lock and idle limits from the settings, five minutes and a minute when unset or nonsense', () => {
     expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: '5' })).toBe(5_000);
     expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: '0' })).toBe(0);
-    expect(migrationLockTimeoutMs({})).toBe(60_000);
-    expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: 'soon' })).toBe(60_000);
+    expect(migrationLockTimeoutMs({})).toBe(300_000);
+    expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: 'soon' })).toBe(300_000);
     expect(migrationIdleTimeoutMs({ DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: '90' })).toBe(90_000);
     expect(migrationIdleTimeoutMs({ DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: '' })).toBe(60_000);
+  });
+
+  it('throws away a client whose rollback failed, rather than lending it again', async () => {
+    const released: unknown[] = [];
+    const client = {
+      query: (text: string) => (text === 'begin' || text.startsWith('set ') ? Promise.resolve({ rows: [], rowCount: 0 }) : Promise.reject(new Error(text === 'rollback' ? 'connection gone' : 'terminated'))),
+      release: (err?: Error | boolean) => void released.push(err),
+    };
+    await expect(runMigrations({ connect: () => Promise.resolve(client) }, { schema: 'gone', migrations: [] })).rejects.toThrow('terminated');
+    expect(released).toEqual([true]);
   });
 });
 
@@ -130,6 +140,49 @@ describe.runIf(process.env.DATABASE_URL)('runMigrations on Postgres', () => {
     });
     expect(await applied()).toEqual(['001_things']);
     expect(await tables()).toEqual(['migrations', 'things']);
+  });
+
+  it('tries again a few seconds at a time, logging who holds the lock, and goes on once it is free', async () => {
+    const logged: string[] = [];
+    let run: Promise<void> | undefined;
+    await whileHeld('select pg_advisory_xact_lock($1, hashtext($2))', [LOCK_NAMESPACE.migrations, schema], async (holder) => {
+      run = runMigrations(pool, { schema, migrations, lockTimeoutMs: 10_000, lockTryMs: 200, log: (m) => logged.push(m) });
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      expect(logged[0]).toMatch(/is waiting for a lock and rolled back to try again in 1s \(try 1, giving up after 10s\)/);
+      expect(logged[0]).toContain(`pid ${holder}`);
+      // whileHeld lets the lock go when this returns, and the next try takes it.
+    });
+    await run;
+    expect(await applied()).toEqual(['001_things', '002_more', '003_counter']);
+  });
+
+  it('names only the migration lock’s holder while it waits for that lock, not sessions reading its tables', async () => {
+    await runMigrations(pool, { schema, migrations: migrations.slice(0, 1) });
+    const reader = await pool.connect();
+    try {
+      await reader.query('begin');
+      await reader.query(`lock table ${schema}.things in access share mode`);
+      const { rows } = await reader.query<{ pid: number }>('select pg_backend_pid() as pid');
+      await whileHeld('select pg_advisory_xact_lock($1, hashtext($2))', [LOCK_NAMESPACE.migrations, schema], async (holder) => {
+        const failed = await runMigrations(pool, { schema, migrations, lockTimeoutMs: 300 }).catch((err: unknown) => err);
+        expect((failed as Error).message).toContain(`pid ${holder}`);
+        expect((failed as Error).message).not.toContain(`pid ${rows[0]!.pid}`);
+      });
+    } finally {
+      await reader.query('rollback');
+      reader.release();
+    }
+  });
+
+  it('says it waited on the migrations table, not the migration lock, when that is what was held', async () => {
+    await runMigrations(pool, { schema, migrations: migrations.slice(0, 1) });
+    await whileHeld(`lock table ${schema}.migrations in access exclusive mode`, [], async (holder) => {
+      const failed = await runMigrations(pool, { schema, migrations, lockTimeoutMs: 300 }).catch((err: unknown) => err);
+      expect(failed).toBeInstanceOf(MigrationLockTimeout);
+      expect((failed as MigrationLockTimeout).migration).toBeUndefined();
+      expect((failed as Error).message).toContain(`waited for a lock on ${schema} or its migrations table`);
+      expect((failed as Error).message).toContain(`pid ${holder}`);
+    });
   });
 
   it('says a blocking session’s details are not visible to a login that may not see them', async () => {
