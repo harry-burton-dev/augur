@@ -806,6 +806,23 @@ export const migrations: Migration[] = [
         problem text
       );`,
   },
+  {
+    id: '028_audit_outbox',
+    sql: `
+      -- Audit entries on their way to the events service (ADR 0104): kept here first, so an admin's change is
+      -- audited, and its domain event published, even while the events service is down. auditOutbox sends them.
+      create table registry.audit_outbox (
+        id bigint generated always as identity primary key,
+        key text not null unique,
+        workspace_id text,
+        entry jsonb not null,
+        created_at timestamptz not null default now(),
+        sent_at timestamptz,
+        refused_at timestamptz,
+        refused_why text
+      );
+      create index audit_outbox_unsent on registry.audit_outbox (id) where sent_at is null;`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -850,7 +867,8 @@ const fromAppRow = (r: AppRow): AppRecord => ({
 });
 
 export class PgAppStore implements AppStore {
-  constructor(private readonly pool: pg.Pool) {}
+  /** The registry's database, for what keeps its own rows there (the audit outbox). */
+  constructor(readonly pool: pg.Pool) {}
 
   static async connect(connectionString: string) {
     const store = new PgAppStore(steadyPool(new pg.Pool({ connectionString })));

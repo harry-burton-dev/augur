@@ -34,7 +34,8 @@
     "organisation_003_logo_notice_languages_security": "88eeebf20abb75c5",
     "lifecycle_005_deletion": "6c2ec71d580ce4ba",
     "lifecycle_006_carry_on": "ec8894dd106095e1",
-    "workspaces_004_positions": "1299eb3ff5e1158e"
+    "workspaces_004_positions": "1299eb3ff5e1158e",
+    "audit_outbox_001": "7c3e1b36bb077cf9"
   },
   "@augur/knowledge": {
     "001-store": "0fc93833d19a7f62",
@@ -84,6 +85,7 @@
     "024_runner_networks": "2719e26d22daa5ab",
     "025_app_internet": "97b8f75745392bd7",
     "026_app_setting_values": "cae50d23ea12b791",
-    "027_app_data_deletions": "695124f1b85ca011"
+    "027_app_data_deletions": "695124f1b85ca011",
+    "028_audit_outbox": "1b82478bb103828e"
   }
 }

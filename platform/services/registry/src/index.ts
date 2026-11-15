@@ -1,5 +1,5 @@
-import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
-import { auditTo, buildApp } from './app.ts';
+import { auditOutbox, callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve, type NewAuditEntry } from '@augur/service-kit';
+import { buildApp } from './app.ts';
 import { knowledgeOffer } from './knowledge-offer.ts';
 import { parseAppIds } from './defaults.ts';
 import { appFeed, appFeeds, appFeedUrls, AppUpdateChecker } from './app-updates.ts';
@@ -62,7 +62,10 @@ const store: AppStore = database;
 // The registry signs in as itself (Keycloak client platform-registry) to write the audit log.
 const { EVENTS_URL } = process.env;
 const credentials = platformCredentialsFromEnv('registry');
-const audit = EVENTS_URL && credentials ? auditTo(EVENTS_URL, credentials) : undefined;
+// Each entry is kept in the registry's database first and sent from there, so none is lost while the events service is down.
+const auditing = EVENTS_URL && credentials ? auditOutbox({ pool: database.pool, table: 'registry.audit_outbox', eventsUrl: EVENTS_URL, credentials, onError: (err) => log.warn((err as Error).message) }) : undefined;
+auditing?.start();
+const audit = auditing && ((entry: NewAuditEntry, workspace?: string) => auditing.add(entry, workspace));
 if (!audit) log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: changes to the catalogue are not audited.');
 
 // Where floors sit comes from identity, asked as the registry.
@@ -136,7 +139,7 @@ if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fronte
 
 // Apps and platform services sign in as themselves (their Keycloak clients).
 const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, shadow: shadowFromEnv(credentials, log), knowledge: knowledgeOffer({ knowledgeUrl: process.env.KNOWLEDGE_URL || 'http://localhost:8086' }), verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, defaultApps: defaults.apps, inPageApps: inPage.apps, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
-const serving = await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => updates.stop(), () => appUpdates.stop(), () => database.close()] });
+const serving = await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => auditing?.stop(), () => updates.stop(), () => appUpdates.stop(), () => database.close()] });
 
 // A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.
 if (EVENTS_URL && credentials) {
