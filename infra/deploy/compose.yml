@@ -128,6 +128,8 @@ services:
       SSO_RATE_PER_SECOND: ${SSO_RATE_PER_SECOND:-10}
       SSO_RATE_BURST: ${SSO_RATE_BURST:-50}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+      # Who the front door believes about a caller's address: the proxy in front (AUGUR's docs, Limits and health).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       # Keycloak's own admin console, at PLATFORM_URL/sso/admin: open serves it; it's closed otherwise.
       KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
       # On the workbench (dev) only, the shell may load an app from a developer's machine on the tailnet.
