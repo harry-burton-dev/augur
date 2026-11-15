@@ -1,6 +1,6 @@
 /**
  * The ids an app may not take, because a part of AUGUR already answers to them. An app's id becomes its
- * /api/<id> at the gateway, its /apps/<id>/ at the front door, its Compose service when the app runner
+ * /api/<id> at the gateway, its /apps/<id>/ at the front door, its route /<id> in the shell, its Compose service when the app runner
  * runs it, its database schema and login, and its bucket, so it must not be any of these. The registry
  * refuses a manifest with one, and the storage service makes no schema for one.
  */

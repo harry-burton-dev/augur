@@ -32,8 +32,18 @@ describe('the ids AUGUR keeps', () => {
 
   it('keeps the first part of every path the front door serves itself, since an app is served at /<id>', () => {
     const nginx = readFileSync(new URL('infra/deploy/nginx.conf', repo), 'utf8');
-    // A prefix or exact location (/recover, = /api/identity/v1/token) or a regular expression's (~ ^/sso/(admin…)).
-    const firsts = [...nginx.matchAll(/^\s*location\s+(?:[=~]\*?|\^~)?\s*\^?\/([a-z][a-z0-9-]*)/gm)].map((m) => m[1]);
+    const firsts: string[] = [];
+    const unread: string[] = [];
+    for (const [line, modifier = '', path] of nginx.matchAll(/^\s*location\s+(=|~\*?|\^~)?\s*(\S+)\s*\{/gm)) {
+      if (path === '/' || path.startsWith('@')) continue;
+      // An exact location may end after its first part (= /recover); any other must have a slash after it
+      // (/legal/, ~ ^/sso/(admin…)), or it would also catch every id that begins with it.
+      const first = (modifier.startsWith('~') ? path.replace(/^\^/, '') : path).match(modifier === '=' ? /^\/([^/]+)(?:\/|$)/ : /^\/([^/]+)\//)?.[1];
+      // A first part that isn't a plain name (~ ^/(a|b)/, a capital under ~*) can't be checked here: say so, don't skip it.
+      if (first && /^[a-z0-9-]+$/.test(first)) firsts.push(first);
+      else unread.push(line.trim());
+    }
+    expect(unread).toEqual([]);
     expect(firsts).toContain('api');
     expect([...new Set(firsts)].filter((first) => !Object.hasOwn(RESERVED_APP_IDS, first))).toEqual([]);
   });
