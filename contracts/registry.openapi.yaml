@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.48.0
+  version: 1.49.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -4263,6 +4263,24 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /platform/alerts/unrouted:
+    post:
+      summary: Where Grafana sends a route outside AUGUR that isn’t set, taken and dropped
+      description: ALERT_OUTSIDE_URL or ALERT_HEARTBEAT_URL isn’t set in the deployment’s .env, so compose points Grafana here. Nothing is kept or sent.
+      responses:
+        "202":
+          description: Dropped
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - told
+                properties:
+                  told:
+                    type: integer
+                    description: Always 0, as nothing is told
+                description: Dropped
   /apps/{id}:
     put:
       summary: Register an app, or update it

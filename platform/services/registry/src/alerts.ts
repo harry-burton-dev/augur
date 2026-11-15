@@ -84,6 +84,43 @@ export function noticeOf(alert: GrafanaAlert): NewNotification | undefined {
   };
 }
 
+/** The routes that leave the server without going through AUGUR (contact-points.yaml), by their setting. */
+export const OUTSIDE_ROUTES = {
+  ALERT_OUTSIDE_URL: 'every alert, to a webhook outside AUGUR',
+  ALERT_HEARTBEAT_URL: 'the heartbeat, so a service outside AUGUR can tell when the server stops',
+} as const;
+export type OutsideRoute = keyof typeof OUTSIDE_ROUTES;
+
+const WEEK = 7 * 24 * 60 * 60_000;
+
+/**
+ * What a production server's admins are told while a route outside AUGUR isn't set: without it, an alert
+ * about the registry, the events service or the whole server reaches no one. One notice a week, keyed by the
+ * routes missing, until both are set.
+ */
+export function unroutedNotice(missing: readonly OutsideRoute[], now = Date.now()): NewNotification | undefined {
+  if (!missing.length) return undefined;
+  const what = missing.map((key) => `${key} (${OUTSIDE_ROUTES[key]})`).join(' and ');
+  const them = missing.length > 1 ? ['aren’t', 'they are', 'them'] : ['isn’t', 'it is', 'it'];
+  return {
+    app: ALERTS_APP,
+    recipients: [],
+    audience: WHO,
+    key: `alerts-unrouted:${[...missing].sort().join(',')}:${Math.floor(now / WEEK)}`,
+    level: 'needs',
+    title: 'Alerts reach no one outside AUGUR',
+    detail: `This is a production server, and ${what} ${them[0]} set in its .env. Until ${them[1]}, an alert about the registry, the notices or the whole server can reach no one. A deployment admin with the server sets ${them[2]} (docs/observability.md, Alerts).`.slice(0, 1000),
+    link: '/status',
+  };
+}
+
+/**
+ * The routes outside AUGUR a server is missing, from compose's `${KEY:+set}` (it passes only whether each is
+ * set). Only a production server must have them: elsewhere this is empty.
+ */
+export const unroutedOn = (ring: string, env: Record<string, string | undefined>): OutsideRoute[] =>
+  ring === 'production' ? (Object.keys(OUTSIDE_ROUTES) as OutsideRoute[]).filter((key) => !env[key]) : [];
+
 const sameToken = (given: string, expected: string) => {
   const a = Buffer.from(given);
   const b = Buffer.from(expected);
@@ -140,5 +177,19 @@ export const alertRoutes =
         }
         return reply.code(202).send({ told });
       },
+    );
+    // Where compose points a route outside AUGUR that isn't set (contact-points.yaml), so Grafana always
+    // has an address: it takes the alerts and drops them. unroutedNotice tells a production server's admins.
+    app.post(
+      '/platform/alerts/unrouted',
+      {
+        bodyLimit: 512 * 1024,
+        schema: {
+          summary: 'Where Grafana sends a route outside AUGUR that isn’t set, taken and dropped',
+          description: 'ALERT_OUTSIDE_URL or ALERT_HEARTBEAT_URL isn’t set in the deployment’s .env, so compose points Grafana here. Nothing is kept or sent.',
+          response: { 202: Type.Object({ told: Type.Integer({ description: 'Always 0, as nothing is told' }) }, { description: 'Dropped' }) },
+        },
+      },
+      async (_req, reply) => reply.code(202).send({ told: 0 }),
     );
   };

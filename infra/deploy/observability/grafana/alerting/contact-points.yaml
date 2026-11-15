@@ -1,7 +1,16 @@
 # Where AUGUR's alerts go (ADR 0059): into the registry, which raises a notice for deployment admins and
 # another when the alert clears. Grafana fills $ALERT_WEBHOOK_TOKEN from compose; the registry refuses
 # alerts without it. Alerts reach people by email through those notices, as every notice does once the events service
-# emails them (ADR 0044, 0065), so Grafana keeps no address list or relay settings of its own.
+# emails them (ADR 0044, 0065), so Grafana keeps no email addresses or relay settings of its own.
+#
+# Two more routes leave the server without going through AUGUR, so an alert still reaches someone when the
+# registry, the events service or the mail path is the part that's down:
+# - ALERT_OUTSIDE_URL: every alert, and its all-clear, also goes to a webhook the organisation chooses, in
+#   Grafana's webhook body (an on-call or chat service's Grafana or Alertmanager integration, or a relay).
+# - ALERT_HEARTBEAT_URL: the watchdog rule always fires, and Grafana tells this address about every minute. A
+#   heartbeat service there raises the alarm when the beats stop: the server, Grafana or its network is down.
+# Compose fills both. When one isn't set it points at the registry's /v1/platform/alerts/unrouted, which takes
+# the alerts and drops them, and the registry tells admins of a production server that the route is missing.
 apiVersion: 1
 contactPoints:
   - orgId: 1
@@ -15,8 +24,27 @@ contactPoints:
           httpMethod: POST
           authorization_scheme: Bearer
           authorization_credentials: $ALERT_WEBHOOK_TOKEN
+  - orgId: 1
+    name: Outside AUGUR
+    receivers:
+      - uid: augur-outside
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: $ALERT_OUTSIDE_URL
+          httpMethod: POST
+  - orgId: 1
+    name: Heartbeat
+    receivers:
+      - uid: augur-heartbeat
+        type: webhook
+        disableResolveMessage: true
+        settings:
+          url: $ALERT_HEARTBEAT_URL
+          httpMethod: POST
 
 # One notice per incident: alerts are grouped by rule and part, and a firing one is told again only daily.
+# The watchdog goes only to the heartbeat, about every minute. Every other alert goes outside AUGUR and to the notices.
 policies:
   - orgId: 1
     receiver: AUGUR notices
@@ -24,3 +52,17 @@ policies:
     group_wait: 30s
     group_interval: 5m
     repeat_interval: 24h
+    routes:
+      - receiver: Heartbeat
+        object_matchers: [[watchdog, '=', 'true']]
+        group_by: [alertname]
+        # Grafana repeats only at a flush once repeat_interval has passed, so flushing every 30s
+        # beats every 60 to 90 seconds.
+        group_wait: 0s
+        group_interval: 30s
+        repeat_interval: 1m
+      - receiver: Outside AUGUR
+        object_matchers: [[watchdog, '!=', 'true']]
+        continue: true
+      - receiver: AUGUR notices
+        object_matchers: [[watchdog, '!=', 'true']]
