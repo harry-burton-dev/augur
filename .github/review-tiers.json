@@ -67,7 +67,7 @@
     "pnpm-lock.yaml"
   ],
   "sized": ["Medium", "High"],
-  "notSized": ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs", "**/*.testing.ts", "**/*.stories.tsx", "**/fixtures/**"],
+  "notSized": ["**/*.test.ts", "**/*.test.tsx", "**/*.test.mjs", "**/*.testing.ts", "**/*.spec.ts", "**/*.stories.tsx", "**/fixtures/**"],
   "ignoreRenames": true,
   "harryOk": [
     "platform/services/*/src/migrat*",

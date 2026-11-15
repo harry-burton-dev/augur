@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { autoOkComment, logged, needsDeployTest, needsHarry, problems, sectionsOf, sizeOf, sizedTiers, tierOf, verdict } from './review-tier.mjs';
+import { autoOkComment, logged, needsDeployTest, needsHarry, problems, rowsOf, sectionsOf, sizeOf, sizedTiers, tierOf, verdict } from './review-tier.mjs';
 
 const tiers = JSON.parse(readFileSync(new URL('../.github/review-tiers.json', import.meta.url), 'utf8'));
 
@@ -134,6 +134,23 @@ test('Medium is held to the limit only where the tiers file says so', () => {
   assert.deepEqual(problems({ tier: 'Low', lines: 975, sized }), []);
 });
 
+test("a name in sized that isn't a tier fails the check", () => {
+  assert.throws(() => sizedTiers({ sized: ['medium', 'High'] }), /medium/);
+  assert.throws(() => sizedTiers({ sized: 'High' }), /High/);
+  assert.deepEqual(sizedTiers({ sized: [] }), []);
+});
+
+test('changed lines are read per file, a renamed file under its new name', () => {
+  const numstat = ['3\t1\tREVIEW.md', '10\t2\t', 'scripts/old.mjs', 'scripts/new.test.mjs', '-\t-\tdocs/logo.png', '7\t0\tscripts/a b.mjs', ''].join('\0');
+  assert.deepEqual(rowsOf(numstat), [
+    { path: 'REVIEW.md', lines: 4 },
+    { path: 'scripts/new.test.mjs', lines: 12 },
+    { path: 'docs/logo.png', lines: 0 },
+    { path: 'scripts/a b.mjs', lines: 7 },
+  ]);
+  assert.deepEqual(rowsOf(''), []);
+});
+
 test("tests, fixtures and generated files don't count towards the limit", () => {
   const rows = [
     { path: 'platform/services/registry/src/app.ts', lines: 120 },
@@ -142,11 +159,12 @@ test("tests, fixtures and generated files don't count towards the limit", () => 
     { path: 'platform/packages/app-tools/fixtures/invalid/no-id.json', lines: 40 },
     { path: 'pnpm-lock.yaml', lines: 3000 },
     { path: 'release/migrations.lock.json', lines: 4 },
+    { path: 'platform/contract/tests/inbox.spec.ts', lines: 300 },
     { path: 'REVIEW.md', lines: 12 },
   ];
   assert.equal(sizeOf(rows, tiers), 132);
   // A repository whose tiers file names neither list counts every line.
-  assert.equal(sizeOf(rows, {}), 12976);
+  assert.equal(sizeOf(rows, {}), 13276);
 });
 
 // What asks Harry, what doesn't count, and the auto-ok log (REVIEW.md).

@@ -37,8 +37,28 @@ export const tierOf = (paths, tiers) => {
   return { tier: 'Medium', because: paths.filter((p) => !low(p)) };
 };
 
-/** The tiers held to the line limit: the tiers file's `sized`, or High alone where it names none. */
-export const sizedTiers = (tiers) => tiers.sized ?? ['High'];
+/**
+ * The tiers held to the line limit: the tiers file's `sized`, or High alone where it names none. A name that
+ * isn't a tier fails the check, so a misspelling can't switch the limit off.
+ */
+export const sizedTiers = (tiers) => {
+  const sized = tiers.sized ?? ['High'];
+  const unknown = Array.isArray(sized) ? sized.filter((name) => !['Low', 'Medium', 'High'].includes(name)) : [sized];
+  if (unknown.length) throw new Error(`"sized" in the tiers file takes a list of Low, Medium and High, not ${JSON.stringify(unknown)}`);
+  return sized;
+};
+
+/** The rows of `git diff --numstat -z`: each file's changed lines, under the name it has now. */
+export const rowsOf = (numstat) => {
+  // A renamed file's row ends at the counts, and its old and new names follow as two more fields.
+  const fields = numstat.split('\0');
+  const rows = [];
+  for (let i = 0; i < fields.length && fields[i]; i += 1) {
+    const [added, removed, path] = fields[i].split('\t');
+    rows.push({ path: path || fields[(i += 2)], lines: (Number(added) || 0) + (Number(removed) || 0) });
+  }
+  return rows;
+};
 
 /** The changed lines that count towards the limit: not generated files (`notCount`), nor those in `notSized`. */
 export const sizeOf = (rows, tiers) =>
@@ -152,7 +172,7 @@ export const sectionsOf = (body) => {
 const DEEP_REVIEW = /\/code-review`?\s*(?:at\s+|\(\s*)?`?(high|xhigh|max)\b/i;
 
 /** What a pull request of `tier` still lacks, in words; empty when it may merge. */
-export const problems = ({ tier, body, lines = 0, harry = false, bot = false, sized = ['High'] }) => {
+export const problems = ({ tier, body, lines = 0, harry = false, bot = false, sized = sizedTiers({}) }) => {
   if (tier === 'Low') return [];
   // Renovate's pull requests have no description: CI is their gate, and the auto-ok log records them. On the
   // files that need a deep review, an agent takes the pull request over and writes the description first.
@@ -172,7 +192,7 @@ export const problems = ({ tier, body, lines = 0, harry = false, bot = false, si
   // `lines` is what counts towards the limit (sizeOf), not every line the pull request changes.
   const risk = found.get('risk') ?? '';
   if (sized.includes(tier) && lines > MAX_LINES && !/over \d+ lines because/i.test(risk)) {
-    out.push(`fewer than ${MAX_LINES} changed lines (this has ${lines} that count), a split into a series, or a line in Risk saying "Over ${MAX_LINES} lines because …" with why it can't be split`);
+    out.push(`no more than ${MAX_LINES} changed lines (this has ${lines} that count), a split into a series, or a line in Risk saying "Over ${MAX_LINES} lines because …" with why it can't be split`);
   }
   return out;
 };
@@ -183,14 +203,8 @@ const diffAgainst = (base) => {
   const git = (...args) => execFileSync('git', args, { encoding: 'utf8', maxBuffer: 1e8 });
   // Without renames, a file moved out of a High path is listed at both ends.
   const paths = git('diff', '--no-renames', '--name-only', range).split('\n').filter(Boolean);
-  // The line count keeps renames, so a moved file counts only what changed in it, under the name it has now.
-  // With -z a renamed file's row ends at the counts, and its old and new names follow as two more fields.
-  const fields = git('diff', '--numstat', '-z', range).split('\0');
-  const rows = [];
-  for (let i = 0; i < fields.length && fields[i]; i += 1) {
-    const [added, removed, path] = fields[i].split('\t');
-    rows.push({ path: path || fields[(i += 2)], lines: (Number(added) || 0) + (Number(removed) || 0) });
-  }
+  // The line count keeps renames, so a moved file counts only what changed in it.
+  const rows = rowsOf(git('diff', '--numstat', '-z', range));
   const lines = rows.reduce((sum, row) => sum + row.lines, 0);
   // Asked for only by rules that need them, and each worked out once.
   const once = (make) => {
@@ -263,6 +277,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const change = diffAgainst(base);
   const { paths, lines } = change;
   const counted = sizeOf(change.rows, tiers);
+  const sized = sizedTiers(tiers);
   if (process.argv.includes('--deploy-test')) {
     const needed = needsDeployTest(paths, tiers);
     console.log(`deploytest: ${needed}`);
@@ -329,11 +344,11 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   }
   // Renovate's pull request (dependency updates) has no description to check: CI and, where it applies, the
   // deploy test are its gates, except on the files that need a deep review (problems()).
-  const missing = PR_BOT === 'true' ? problems({ tier, harry, bot: true }) : problems({ tier, body: PR_BODY, lines: counted, harry, sized: sizedTiers(tiers) });
+  const missing = PR_BOT === 'true' ? problems({ tier, harry, bot: true }) : problems({ tier, body: PR_BODY, lines: counted, harry, sized });
   const summary = [
     `### Review tier: ${tier}${harry ? ', deep review' : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
     '',
-    `${paths.length} files, ${lines} changed lines, ${counted} of them counted towards the limit of ${MAX_LINES}. Tiers from ${from}.`,
+    `${paths.length} files, ${lines} changed lines${sized.includes(tier) ? `, ${counted} of them counted towards the limit of ${MAX_LINES}` : ''}. Tiers from ${from}.`,
     because.length ? `\nBecause of:\n${because.slice(0, 20).map((p) => `- \`${p}\``).join('\n')}${because.length > 20 ? `\n- and ${because.length - 20} more` : ''}` : '',
     harry ? `\nNeeds a deep review (/code-review high, xhigh or max) because of:\n${now.harry.slice(0, 20).map((p) => `- \`${p}\``).join('\n')}${now.harry.length > 20 ? `\n- and ${now.harry.length - 20} more` : ''}` : '',
     next
