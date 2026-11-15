@@ -89,6 +89,7 @@ import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { isWorkerApp } from './host/apps3.js';
 import { PaneSlot } from './host/pane-target.js';
+import { buildChange, buildNotice, servedBuild } from './host/build.js';
 import { InboxView } from './inbox/InboxView.js';
 
 /** The apps this shell can open: an intent goes to one of them, and Find asks only them. One it can't open still says why where it is listed. */
@@ -284,6 +285,25 @@ export function Host({
     if (t) setToasts((list) => withToast(list, t));
   }, []);
   const toastDone = useCallback((id: string) => setToasts((list) => list.filter((t) => t.id !== id)), []);
+  /**
+   * An upgrade or a rollback swaps the shell's files under an open tab (host/build.ts). Asked again when the tab
+   * comes back into view and when the notification stream reconnects; said once, as a notification whose button reloads.
+   */
+  const buildNoticeId = useRef<string | undefined>(undefined);
+  const checkBuild = useCallback(async () => {
+    if (buildNoticeId.current) return;
+    const change = buildChange({ version: __SHELL_VERSION__, build: __SHELL_BUILD__ }, await servedBuild(fetchImpl));
+    if (!change || buildNoticeId.current) return;
+    const words = buildNotice(change, productName());
+    const n: ShellNotification = { ...toShellNotification('platform', { title: words.title, body: words.body, needsYou: true }), actions: [{ label: words.action }] };
+    buildNoticeId.current = n.id;
+    tell(n);
+  }, [fetchImpl, tell]);
+  useEffect(() => {
+    const onShow = () => document.visibilityState === 'visible' && void checkBuild();
+    document.addEventListener('visibilitychange', onShow);
+    return () => document.removeEventListener('visibilitychange', onShow);
+  }, [checkBuild]);
   const prefs = useMemo(
     () =>
       new PreferenceSync(preferencesUrl, session.getToken, {
@@ -830,6 +850,7 @@ export function Host({
     const shell = shellRef.current;
     if (!shell) return;
     const known = fromEvents.current;
+    let streamDown = false;
     const f = new NotificationFeed({
       getToken: session.getToken,
       fetchImpl,
@@ -849,7 +870,12 @@ export function Host({
         tell(fromServer(n, quietRef.current));
         if (n.urgent) setUrgent((list) => [...list.filter((x) => x.id !== n.id), n]);
       },
-      onState: (state) => shell.setStream(state),
+      onState: (state) => {
+        shell.setStream(state);
+        // Back after it dropped: services restart in an upgrade, so the shell's own files may have changed too.
+        if (streamDown && !state.loading && !state.error) void checkBuild();
+        streamDown = !!state.error;
+      },
       onInbox: () => {
         refreshInbox();
         setInboxVersion((v) => v + 1);
@@ -858,7 +884,7 @@ export function Host({
     feed.current = f;
     f.start();
     return () => f.stop();
-  }, [session, fetchImpl, eventsUrl, tell, refreshInbox]);
+  }, [session, fetchImpl, eventsUrl, tell, refreshInbox, checkBuild]);
 
   // Hand the Shell its data and listen to what it asks for.
   useEffect(() => {
@@ -937,6 +963,7 @@ export function Host({
     };
     // A button on a notification raises its intent, as the app would itself, and the notification is done with.
     const actOn = (id: string, index: number) => {
+      if (id === buildNoticeId.current) return window.location.reload();
       const intent = actions.current.intentFor(id, index);
       if (!intent) return;
       const server = fromEvents.current.get(id);
