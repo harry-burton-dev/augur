@@ -421,6 +421,8 @@ const renderUnit = (unit: Unit, env: string) => {
       networks: [appNetwork(unit.app), ...(unit.internet && asksInternet(part) ? [internetNetwork(unit.app)] : [])],
       mem_limit: bytesOf(limits.memory),
       cpus: milliCpuOf(limits.cpu)! / 1000,
+      pids_limit: PART_PIDS_LIMIT,
+      oom_score_adj: PART_OOM_SCORE_ADJ,
       // Never privileged, no host folders, no added powers, nothing written but scratch and /tmp (spec 4.13, 10.5).
       read_only: true,
       tmpfs: [TMP],
@@ -439,6 +441,18 @@ const renderUnit = (unit: Unit, env: string) => {
   return { services, volumes, secrets, files, provisioned: p };
 };
 
+/**
+ * The most processes one part may run: far more than any service needs, and a fork bomb stops there instead of
+ * taking the server's process table. With the memory and CPU each part asks for, its whole budget on the server.
+ */
+export const PART_PIDS_LIMIT = 256;
+/**
+ * When the server runs short of memory the kernel ends the process with the highest score first: an app's part goes
+ * before AUGUR's own services (0) and Postgres. Raising a container's score needs no privileges, so it holds under
+ * rootless Docker too.
+ */
+export const PART_OOM_SCORE_ADJ = 500;
+
 /** A container from before contract 3, kept as it ran until it's removed or replaced: its settings file stays beside the project. */
 const legacyContainer = (image: string, service: string, labels: Record<string, string>) => ({
   image,
@@ -447,6 +461,8 @@ const legacyContainer = (image: string, service: string, labels: Record<string, 
   networks: ['platform'],
   cap_drop: ['ALL'],
   security_opt: ['no-new-privileges:true'],
+  pids_limit: PART_PIDS_LIMIT,
+  oom_score_adj: PART_OOM_SCORE_ADJ,
   labels,
 });
 

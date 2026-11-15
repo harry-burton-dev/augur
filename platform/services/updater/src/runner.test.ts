@@ -37,6 +37,9 @@ describe('running Score parts (spec 4, 10)', () => {
         cap_drop: ['ALL'],
         security_opt: ['no-new-privileges:true'],
         networks: ['app-notes'],
+        // A fork bomb stops at its ceiling, and when the server runs short of memory an app's part goes before AUGUR's own.
+        pids_limit: 256,
+        oom_score_adj: 500,
       });
       expect(s).not.toHaveProperty('ports');
       expect(s).not.toHaveProperty('privileged');

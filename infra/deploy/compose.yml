@@ -17,6 +17,10 @@ x-hardened: &hardened
   init: true
   security_opt: [no-new-privileges:true]
   cap_drop: [ALL]
+  # Each one's share of the server (docs: Limits): a leak or a fork bomb in one is restarted on its own instead of
+  # taking memory or the process table from the rest. SERVICE_MEM_LIMIT and SERVICE_PIDS_LIMIT in .env change them.
+  mem_limit: ${SERVICE_MEM_LIMIT:-1g}
+  pids_limit: ${SERVICE_PIDS_LIMIT:-512}
 
 # Every container's log, kept by Docker: at most three files of 10 MB each, so logs can't fill the disk.
 # `pc logs` reads them as before. LOG_MAX_SIZE and LOG_MAX_FILES in .env change the limits.

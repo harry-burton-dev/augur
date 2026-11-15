@@ -2090,6 +2090,24 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },
+    "SERVICE_MEM_LIMIT": {
+      "type": "string",
+      "description": "The memory limit of each container AUGUR builds (its services, the front door, OpenFGA and its jobs).",
+      "default": "1g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "SERVICE_PIDS_LIMIT": {
+      "type": "string",
+      "description": "The most processes each container AUGUR builds may run.",
+      "default": "512",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
     "OTEL_LGTM_REPLICAS": {
       "type": "string",
       "enum": [
