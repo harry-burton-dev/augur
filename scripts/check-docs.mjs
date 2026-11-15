@@ -13,7 +13,7 @@ export const GUIDES = [
   'account', 'agents', 'api-contracts', 'app-previews', 'app-storage', 'build-an-app',
   'catalog', 'domain-events', 'inbox', 'jobs', 'licensing', 'mirror', 'notifications',
   'observability', 'people', 'release-channels', 'seed', 'ship-an-app', 'signed-caller', 'upgrade-went-back',
-  'upgrade', 'versioning',
+  'versioning',
 ].map((name) => `docs/${name}.md`);
 
 /** Markdown that belongs to code, wherever it sits, and the docs site's pages (docs/README.md). */

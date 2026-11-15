@@ -13,7 +13,7 @@ This is for every app: the app runner installs them all, whether the app is in `
 
 ## Once per server (an admin)
 
-1. Set up [the updater](upgrade.md#the-updater) and turn on [the app runner](upgrade.md#the-app-runner) with `APP_SECRETS_KEY` in `.env`.
+1. Set up [the updater](src/content/docs/run/updater.md) and turn on [the app runner](src/content/docs/run/app-runner.md) with `APP_SECRETS_KEY` in `.env`.
 2. In Admin → Apps, **Install** the app from the list of released apps. Each later version installs itself (step 4).
 3. On the installed app, add its developers. Only they can switch to its previews.
 
@@ -51,7 +51,7 @@ Each server reads the app releases every 15 minutes. What happens next is up to 
 - Anything else (a major version, or a version that asks for more) waits under **Needs you**, with the reason, until an admin installs it.
 - **Ask first** makes every version wait, and **Hold** stays where it is.
 
-An install starts the new version beside the old, checks `/healthz`, then switches over. A version that fails its checks is removed, and the old one keeps running. Every step is in Activity ([upgrade.md](upgrade.md#the-app-runner)).
+An install starts the new version beside the old, checks `/healthz`, then switches over. A version that fails its checks is removed, and the old one keeps running. Every step is in Activity ([The app runner](src/content/docs/run/app-runner.md)).
 
 To go back, use **Go back** on the app's page in the Upgrade Centre, or hold the shell at an earlier manifest ([versioning.md](versioning.md#going-back-to-an-earlier-app-version)).
 

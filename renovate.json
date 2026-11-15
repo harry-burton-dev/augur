@@ -80,7 +80,7 @@
       "dependencyDashboardApproval": true
     },
     {
-      "description": "Postgres, pgvector and Keycloak change what's on disk across majors; docs/upgrade.md needs a note first.",
+      "description": "Postgres, pgvector and Keycloak change what's on disk across majors; docs/src/content/docs/release-notes/upgrade-notes.md needs a note first.",
       "matchPackageNames": [
         "postgres",
         "pgvector/pgvector",

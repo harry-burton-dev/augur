@@ -14,7 +14,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 /**
  * The repositories AUGUR is released from: its name now, then the name it had before. A release made
  * before the rename is signed with the old name, and a server may still run it or go back to it. Its
- * images and feed stay at ghcr.io/harry-burton-dev/im-platform, where servers pull them (docs/upgrade.md).
+ * images and feed stay at ghcr.io/harry-burton-dev/im-platform, where servers pull them (docs/src/content/docs/release-notes/upgrade-notes.md).
  */
 export const AUGUR_REPOSITORIES = ['harry-burton-dev/augur', 'harry-burton-dev/im-platform'] as const;
 /** One workflow, or any of several (the same file in each of AUGUR_REPOSITORIES), as the start of a pattern. */

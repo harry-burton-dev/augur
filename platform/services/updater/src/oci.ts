@@ -99,7 +99,7 @@ const tokenFor = async (host: string, challenge: string, auth: ArtifactAuth | un
   if (!res.ok) {
     if (key) throw new ArtifactProblem(`The registry refused the deployment’s read key (${res.status}).`);
     if (auth && !own) throw new ArtifactProblem(`The registry sends sign-ins to ${url.host}, not to itself, so the deployment’s read key wasn’t sent; it refused an anonymous pull (${res.status}).`);
-    throw new ArtifactProblem(`The registry refused an anonymous pull (${res.status}); a private artifact needs the deployment’s read key (docs/upgrade.md).`);
+    throw new ArtifactProblem(`The registry refused an anonymous pull (${res.status}); a private artifact needs the deployment’s read key (AUGUR’s docs, Where releases come from).`);
   }
   const body = await readUpTo(res, MANIFEST_MAX_BYTES, () => new ArtifactProblem('The registry’s sign-in answered with more than a token.'));
   let answer: { token?: string; access_token?: string } = {};
@@ -138,7 +138,7 @@ export const pullArtifactLayer = async ({ ref, mediaType, maxBytes, auth, fetchI
   };
   const manifestRes = await get(`manifests/${digest}`, `${OCI_MANIFEST}, application/vnd.oci.artifact.manifest.v1+json`);
   if (manifestRes.status === 404) throw new ArtifactProblem(`${ref} isn’t in the registry.`);
-  if (manifestRes.status === 401 || manifestRes.status === 403) throw new ArtifactProblem(`The registry refused to give ${ref} (${manifestRes.status}); a private artifact needs the deployment’s read key (docs/upgrade.md).`);
+  if (manifestRes.status === 401 || manifestRes.status === 403) throw new ArtifactProblem(`The registry refused to give ${ref} (${manifestRes.status}); a private artifact needs the deployment’s read key (AUGUR’s docs, Where releases come from).`);
   if (!manifestRes.ok) throw new ArtifactProblem(`The registry answered ${manifestRes.status} for ${ref}.`);
   const manifestBytes = await readUpTo(manifestRes, MANIFEST_MAX_BYTES, () => new ArtifactProblem(`What the registry gave for ${ref} is too big to be a manifest.`));
   if (sha256(manifestBytes) !== digest) throw new ArtifactProblem(`What the registry gave for ${ref} doesn’t match its digest.`);

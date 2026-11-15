@@ -75,7 +75,7 @@ RUN apk add --no-cache openjdk21-jdk maven
 COPY . .
 RUN pnpm --filter @augur/sign-in-theme run jar
 
-# The Keycloak AUGUR runs: a Keycloak upgrade is a change to this line (docs/upgrade.md).
+# The Keycloak AUGUR runs: a Keycloak upgrade is a change to this line, with a note in docs/src/content/docs/release-notes/upgrade-notes.md.
 FROM quay.io/keycloak/keycloak:26.8.1 AS keycloak
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/augur"
 LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
@@ -87,7 +87,7 @@ ENV KC_SPI_EVENTS_LISTENER__EMAIL__EXCLUDE_EVENTS=LOGIN_ERROR
 
 # The OpenFGA AUGUR runs (ADR 0085): OpenFGA's own binary, started so that it brings its tables up to date
 # first, then serves. One part, so it can't serve before its tables are ready. An OpenFGA upgrade is a change
-# to this line (docs/upgrade.md).
+# to this line, with a note in docs/src/content/docs/release-notes/upgrade-notes.md.
 FROM openfga/openfga:v1.19.0 AS openfga-upstream
 FROM alpine:3.22 AS openfga
 LABEL org.opencontainers.image.source="https://github.com/harry-burton-dev/augur"

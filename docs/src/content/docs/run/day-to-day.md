@@ -23,7 +23,7 @@ Every command here runs from the checkout and uses `pc`, the alias from
 
 Deployment (`/upgrades`) upgrades AUGUR for you. By hand, check out the release's `augur@<version>` tag, set
 `PLATFORM_VERSION` to it, then run `pc pull && pc up -d --remove-orphans`. Services migrate their own database
-schemas on start. The [upgrade guide](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md) has
+schemas on start. [Upgrade AUGUR](../upgrade/) has
 the whole procedure.
 
 ## Try a change before it's released
@@ -51,7 +51,7 @@ change is in the audit log. Keycloak's own console is rarely needed, and is clos
 
 No app comes with AUGUR except Home, Admin and Deployment. Each other app installs and updates itself from its
 own releases once the
-[app runner](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md#the-app-runner) is on:
+[app runner](../app-runner/) is on:
 install each from Deployment → Apps once. The whole loop, from a developer's pull request to your server, is in
 [Ship an app](https://github.com/harry-burton-dev/augur/blob/main/docs/ship-an-app.md). Admin → Apps turns an
 app off without removing it.

@@ -14,9 +14,10 @@ test('a change to docs, tests and changesets is Low', () => {
   assert.equal(tierOf(['docs/seed.md', '.changeset/x.md', 'platform/services/models/src/a.test.ts'], tiers).tier, 'Low');
 });
 
-test('AGENTS.md and the upgrade guide are never Low', () => {
+test('AGENTS.md and the upgrade notes are never Low', () => {
   assert.equal(tierOf(['AGENTS.md'], tiers).tier, 'Medium');
-  assert.equal(tierOf(['docs/upgrade.md'], tiers).tier, 'Medium');
+  assert.equal(tierOf(['docs/src/content/docs/run/app-runner.md'], tiers).tier, 'Medium');
+  assert.equal(tierOf(['docs/src/content/docs/release-notes/upgrade-notes.md'], tiers).tier, 'Medium');
 });
 
 test('ordinary product code is Medium', () => {
@@ -97,7 +98,7 @@ test("Harry's paths are what can't be undone: migrations, backups, Promote to st
 
 test('the dev stack and upgrade notes are not High', () => {
   assert.equal(tierOf(['infra/docker-compose.yml'], tiers).tier, 'Medium');
-  assert.equal(tierOf(['docs/upgrade.md'], tiers).tier, 'Medium');
+  assert.equal(tierOf(['docs/src/content/docs/release-notes/upgrade-notes.md'], tiers).tier, 'Medium');
 });
 
 test("a bot's pull request merges on CI, unless it touches what needs a deep review", () => {

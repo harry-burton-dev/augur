@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The notes in docs/upgrade.md's "Release notes that need you" each name the release they came in, so an
+// The upgrade notes (the docs site's Release notes → Upgrade notes page) each name the release they came in, so an
 // admin can tell which apply to their server (the design lab's writing run found 3 of 37 did). A note's
 // first line is `**From** augur@<version>`, or `**From** unreleased` until the Version packages pull
 // request writes its release in (scripts/augur-release.mjs version calls stamp).
@@ -10,26 +10,25 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-export const NOTES_FILE = 'docs/upgrade.md';
-const SECTION = '## Release notes that need you';
+export const NOTES_FILE = 'docs/src/content/docs/release-notes/upgrade-notes.md';
 const FROM = /^\*\*From\*\* (unreleased|augur@(\d+\.\d+\.\d+))(?:\s|$)/;
 
-/** Each note's heading, the line it's on and its last line, and what its From line says (undefined when it has none). */
+/** Each note's heading (each `## ` on the page is one), the line it's on and the line after its last, and what its From line says (undefined when it has none). */
 export function notesOf(markdown) {
   const lines = markdown.split('\n');
-  const start = lines.indexOf(SECTION);
-  if (start < 0) return undefined;
   const notes = [];
-  let i = start + 1;
-  for (; i < lines.length && !lines[i].startsWith('## '); i++) {
-    if (!lines[i].startsWith('### ')) continue;
+  let fence; // the open code block's marker, ``` or ~~~
+  for (let i = 0; i < lines.length; i++) {
+    const marker = /^\s*(```|~~~)/.exec(lines[i])?.[1];
+    if (marker) fence = fence === undefined ? marker : fence === marker ? undefined : fence;
+    if (fence || !lines[i].startsWith('## ')) continue;
     if (notes.length) notes[notes.length - 1].end = i;
     let j = i + 1;
     while (j < lines.length && lines[j].trim() === '') j++;
     const m = FROM.exec(lines[j] ?? '');
-    notes.push({ heading: lines[i].slice(4), line: i + 1, from: m ? m[1] : undefined, version: m?.[2] });
+    notes.push({ heading: lines[i].slice(3), line: i + 1, from: m ? m[1] : undefined, version: m?.[2] });
   }
-  if (notes.length) notes[notes.length - 1].end = i;
+  if (notes.length) notes[notes.length - 1].end = lines.length;
   return notes;
 }
 
@@ -43,7 +42,7 @@ const newer = (a, b) => {
 /** What's wrong with the notes, as sentences; empty when every note names a release no newer than `current`. */
 export function problems(markdown, current) {
   const notes = notesOf(markdown);
-  if (!notes) return [`${NOTES_FILE} has no "${SECTION.slice(3)}" section.`];
+  if (!notes.length) return [`${NOTES_FILE} has no notes: each is a \`## \` heading with a **From** line under it.`];
   return notes.flatMap((n) => {
     if (!n.from) return [`${NOTES_FILE}:${n.line} "${n.heading}" doesn't say which release it came in: its first line should be **From** unreleased (a new note) or **From** augur@<version>.`];
     if (n.version && current && newer(n.version, current)) return [`${NOTES_FILE}:${n.line} "${n.heading}" says it came in augur@${n.version}, after the current release ${current}: a new note says **From** unreleased.`];

@@ -77,7 +77,7 @@ test('the deploy files are the server’s own, by hash, without .env.example or 
 });
 
 test('the deploy bundle holds what a server runs, laid out as a checkout, with sums matching the release file', () => {
-  const tracked = ['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'scripts/preflight.mjs', 'scripts/seed.mjs', 'docs/upgrade.md'];
+  const tracked = ['infra/deploy/compose.yml', 'infra/deploy/.env.example', 'infra/deploy/compose.build.yml', 'infra/deploy/backup/backup.sh', 'scripts/preflight.mjs', 'scripts/seed.mjs', 'docs/src/content/docs/release-notes/upgrade-notes.md'];
   assert.deepEqual(bundleFiles(tracked), ['infra/deploy/.env.example', 'infra/deploy/backup/backup.sh', 'infra/deploy/compose.yml', 'scripts/preflight.mjs']);
   assert.equal(bundleName('0.26.0'), 'augur-deploy-0.26.0.tar.gz');
   const dir = mkdtempSync(join(tmpdir(), 'bundle-test-'));
@@ -218,15 +218,15 @@ test('CI wants an unreleased upgrade note, headed with the store and saying how 
   const released = { stores };
   const now = { ...stores, postgres: 'pgvector/pgvector:0.8.7-pg17-bookworm' };
   const waiting = [{ bumps: { '@augur/registry': 'patch' } }];
-  const notes = (body) => `# Upgrade\n\n## Release notes that need you\n\n${body}\n## Going back\n\nPostgres: restore it to go back.\n`;
-  const good = '### Postgres moves to 17\n\n**From** unreleased\n\nPostgres rewrites its files. To go back, restore the backup.\n';
+  const notes = (body) => `---\ntitle: Upgrade notes\n---\n\n${body}\n## Older note\n\n**From** augur@0.1.0\n\nPostgres: restore it to go back.\n`;
+  const good = '## Postgres moves to 17\n\n**From** unreleased\n\nPostgres rewrites its files. To go back, restore the backup.\n';
   assert.deepEqual(storeProblems(released, stores, notes(''), []), []);
   assert.match(storeProblems(released, now, notes(''), waiting)[0], /Postgres/);
   // A released note doesn't count: it was for an earlier move.
   assert.equal(storeProblems(released, now, notes(good.replace('unreleased', 'augur@0.20.0')), waiting).length, 1);
-  // Nor does one that only mentions it, or one that doesn't say how to go back, or the sections after the notes.
-  assert.equal(storeProblems(released, now, notes('### Apps reach the stores\n\n**From** unreleased\n\nThrough Postgres\u2019s relay. Go back as usual.\n'), waiting).length, 1);
-  assert.equal(storeProblems(released, now, notes('### Postgres moves to 17\n\n**From** unreleased\n\nNothing to do.\n'), waiting).length, 1);
+  // Nor does one that only mentions it, or one that doesn't say how to go back, or an older, released note.
+  assert.equal(storeProblems(released, now, notes('## Apps reach the stores\n\n**From** unreleased\n\nThrough Postgres\u2019s relay. Go back as usual.\n'), waiting).length, 1);
+  assert.equal(storeProblems(released, now, notes('## Postgres moves to 17\n\n**From** unreleased\n\nNothing to do.\n'), waiting).length, 1);
   assert.deepEqual(storeProblems(released, now, notes(good), waiting), []);
   // Without a changeset that bumps a part, no release would carry the move.
   assert.match(storeProblems(released, now, notes(good), [{ bumps: {} }])[0], /changeset/);

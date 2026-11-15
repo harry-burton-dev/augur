@@ -292,7 +292,7 @@ export const deviceSignIn = async ({ issuer, clientId = 'platform-cli', fetchImp
   const start = await fetchImpl(`${base}/auth/device`, form({ client_id: clientId, scope: 'openid' }));
   if (!start.ok) {
     throw new SeedRefused(
-      `The sign-in service won't sign you in from the terminal (${start.status}). Its realm needs the ${clientId} client (docs/upgrade.md, "Sample data, where you allow it").`,
+      `The sign-in service won't sign you in from the terminal (${start.status}). Its realm needs the ${clientId} client (AUGUR’s docs, Upgrade notes, "Sample data, where you allow it").`,
     );
   }
   const code = await start.json();
