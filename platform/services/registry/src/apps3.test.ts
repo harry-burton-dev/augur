@@ -6,6 +6,7 @@ import { DATABASE_URL, registryDb } from './db.testing.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { addressProblem } from './upstreams.ts';
 import { frontendHandedOver, manifest3Problems, ownServed } from './apps3.ts';
+import { checkRelease } from './release-check.ts';
 import { platformApps, platformManifests3 } from './manifest.ts';
 import { MemoryFrontendFiles } from './frontends.ts';
 import { exampleRelease, releaseOf } from './release3.testing.ts';
@@ -164,6 +165,47 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
     const changed = await ask(next({ type: 'object', properties: { note: { type: 'integer' } } }));
     expect([changed.statusCode, changed.json().message]).toEqual([400, expect.stringMatching(/notes\.note\.added version 1 changes note from 1\.2\.0's: .* needs version 2/)]);
     expect((await ask(next({ type: 'object', properties: { note: { type: 'string' }, by: { type: 'string' } } }))).statusCode).toBe(202);
+  });
+});
+
+describe.runIf(DATABASE_URL)('fields contract 3 hasn’t frozen, under provisional', () => {
+  const finance = callerHeaders({ id: 'u-3', name: 'Kim', departments: [], roles: ['finance'] });
+
+  it('installs a manifest with a provisional field this registry doesn’t know, on the rules it has', async () => {
+    const t = await setup();
+    const release = releaseOf('notes', '1.2.0', { provisional: { requiredRole: 'finance', notYetInvented: { any: 'thing' } } });
+    const asked = await t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', release } });
+    expect(asked.statusCode).toBe(202);
+    await t.server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${asked.json().id}/progress`, headers: runner, payload: { step: 'verify', state: 'done' } });
+    expect((await t.register(release.manifest)).statusCode).toBe(201);
+    // The role it knows is held, from under provisional; the field it doesn't is left alone.
+    expect((await t.catalogue()).some((a) => a.id === 'notes')).toBe(false);
+    expect((await t.catalogue(finance)).find((a) => a.id === 'notes')).toMatchObject({ requiredRole: 'finance' });
+    // Ignored, but said, so a misspelt one isn't missed.
+    expect(checkRelease(release).warnings).toContain('Notes sets provisional.notYetInvented, which this AUGUR doesn’t know: it installs without it. If it is a misspelling, Notes’s publisher needs to fix it.');
+    // A newer release may give a known field more than this one knows of.
+    expect(checkRelease(releaseOf('notes', '1.2.0', { provisional: { links: { entities: true, documents: true } } })).refusals).toEqual([]);
+  });
+
+  it('still reads one at the top of the manifest for this release, and says it moves', async () => {
+    const t = await setup();
+    const release = releaseOf('notes', '1.2.0', { requiredRole: 'finance' });
+    expect(checkRelease(release).warnings).toContain('Notes sets requiredRole at the top of its manifest. Contract 3 reads it under provisional, and from the next release only there.');
+    await t.install(release);
+    await t.register(release.manifest);
+    expect((await t.catalogue()).some((a) => a.id === 'notes')).toBe(false);
+    expect((await t.catalogue(finance)).find((a) => a.id === 'notes')).toMatchObject({ requiredRole: 'finance' });
+  });
+
+  it('refuses one set in both places rather than guess, and holds bindings to links under provisional too', () => {
+    const both = checkRelease(releaseOf('notes', '1.2.0', { requiredRole: 'finance', provisional: { requiredRole: 'admin' } }));
+    expect(both.refusals).toEqual(['The manifest sets requiredRole both at its top and under provisional: keep the one under provisional.']);
+    expect(both.warnings.join(' ')).not.toMatch(/requiredRole/);
+    // Half moved: bindings at the top, links under provisional, is one rule across both.
+    expect(checkRelease(releaseOf('notes', '1.2.0', { bindings: ['claim'], provisional: { links: { entities: true } } })).refusals).toEqual([]);
+    expect(manifest3Problems({ ...releaseOf('notes', '1.2.0').manifest, provisional: { requiredRole: '' } }).join(' ')).toMatch(/requiredRole/);
+    expect(checkRelease(releaseOf('notes', '1.2.0', { provisional: { links: { entities: true }, bindings: ['claim'] } })).refusals).toEqual([]);
+    expect(checkRelease(releaseOf('notes', '1.2.0', { provisional: { bindings: ['claim'] } })).refusals.join(' ')).toMatch(/bindings/);
   });
 });
 
