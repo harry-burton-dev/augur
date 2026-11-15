@@ -87,8 +87,9 @@ import { UpdateChecker } from './updates.ts';
 import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
-import { eventsProblem, SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
-import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, declaredEvents, notHandedOver, Served3, served3, staysOn3, inPageProblem, type KeptEntry } from './apps3.ts';
+import { SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
+import { declaredEvents, eventsChangeProblems, eventsProblems } from './event-types.ts';
+import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, inPageProblem, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -670,6 +671,46 @@ export const buildApp = async ({
       );
 
       app.get(
+        '/apps/:id/events',
+        {
+          schema: {
+            summary: 'The domain events an app declares (platform services)',
+            description: [
+              'The topics an app on contract 3 says it reads and each type it publishes, with its version and payload',
+              "schema, from its manifest in force (ADR 0104). The events service holds the app to them. `events` is",
+              'absent when the app declares none; `reads` is absent when it doesn’t say what it reads.',
+            ].join(' '),
+            params: params('id'),
+            response: {
+              200: Type.Object(
+                {
+                  app: Type.String(),
+                  events: Type.Optional(
+                    Type.Object({
+                      reads: Type.Optional(Type.Array(Type.String(), { description: 'Topics, or families such as folio.*' })),
+                      publishes: Type.Array(Type.Object({ topic: Type.String(), version: Type.Integer(), schema: Type.Record(Type.String(), Type.Unknown(), { description: "The payload's JSON Schema" }) })),
+                    }),
+                  ),
+                },
+                { description: 'What the app declares' },
+              ),
+              403: refused('Not a platform service'),
+              404: refused('No such app is registered'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const service = await serviceOf(req, reply);
+          if (service === undefined) return reply;
+          if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services read what an app declares about events.' });
+          const found = (await store.records()).find((r) => r.entry.id === req.params.id);
+          if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
+          const events = declaredEvents(manifest3Of(found.entry));
+          return { app: found.entry.id, ...(events ? { events } : {}) };
+        },
+      );
+
+      app.get(
         '/apps/:id/grants',
         {
           schema: {
@@ -702,18 +743,6 @@ export const buildApp = async ({
                   ),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
                   notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
-                  events: Type.Optional(
-                    Type.Object(
-                      {
-                        reads: Type.Optional(Type.Array(Type.String(), { description: 'The topics, or families such as folio.*, it reads; it is given only those' })),
-                        publishes: Type.Array(
-                          Type.Object({ topic: Type.String(), version: Type.Integer(), schema: Type.Record(Type.String(), Type.Unknown(), { description: "The payload's JSON Schema" }) }),
-                          { description: 'Each type it publishes, which the events service checks each event against' },
-                        ),
-                      },
-                      { description: "The domain events its manifest declares (ADR 0104), which the events service holds it to; absent when it declares none" },
-                    ),
-                  ),
                   requiredRole: Type.Union([Type.String(), Type.Null()], {
                     description: "The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.",
                   }),
@@ -768,7 +797,6 @@ export const buildApp = async ({
             scopes: on ? usableScopes(found) : [],
             inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
-            ...declaredEvents(manifest3Of(found.entry)),
             requiredRole: found.entry.requiredRole ?? null,
             ...(manifest3Of(found.entry) ? { contract: 3 } : {}),
           };
@@ -958,8 +986,9 @@ export const buildApp = async ({
         if (manifest.id !== id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${manifest.id}", not "${id}".` });
         const problems = manifest3Problems(manifest);
         if (problems.length) return reply.code(400).send({ error: 'bad_request', message: `The manifest isn’t one this AUGUR reads: ${problems.join('; ')}.` });
-        const events = eventsProblem(manifest);
-        if (events) return reply.code(400).send({ error: 'bad_request', message: events });
+        const previous = (await store.records()).find((r) => r.entry.id === id);
+        const events = [...eventsProblems(manifest), ...eventsChangeProblems(previous && manifest3Of(previous.entry), manifest)];
+        if (events.length) return reply.code(400).send({ error: 'bad_request', message: events.join(' ') });
         const job = handedOver(await store.installJobs(id), manifest);
         if (!job) {
           req.log.warn({ app: id, version: manifest.version, by: by.id }, 'a contract 3 manifest of no release the runner was given; refused');

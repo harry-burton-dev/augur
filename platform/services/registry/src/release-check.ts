@@ -3,12 +3,12 @@
  * (app-tools' validators, the same ones `augur-app validate` runs), then the rules a schema can't say, each
  * refused with a plain reason, then what it only warns about. The runner checks signatures and ceilings.
  */
-import { Compile } from 'typebox/compile';
 import { contractValidators, partProblems } from '@augur/app-tools/validate';
 import type { AppManifest3, ScorePart } from '@augur/app-tools/validate';
 import { APP_RELEASE_2_SCHEMA, asksOf2, type AppRelease2 } from '@augur/app-tools/release2';
 import { isOfferedScope, reservedIdProblem } from '@augur/service-kit';
 import { platformApps } from './manifest.ts';
+import { eventsProblems } from './event-types.ts';
 
 /** The contract majors this registry serves (spec 11.1, 11.5). Contract 3 has no compatibility path (11.6). */
 export const SERVED_CONTRACTS: readonly number[] = [3];
@@ -129,36 +129,6 @@ export const stable = (v: unknown): string =>
 const repeated = (ids: (string | undefined)[]) => [...new Set(ids.filter((id, i) => id !== undefined && ids.indexOf(id) !== i))] as string[];
 
 /** The rules of 9.2 that a schema can't say. */
-/** The largest payload schema one event type may declare, as JSON. */
-export const MAX_EVENT_SCHEMA_BYTES = 16 * 1024;
-
-/**
- * Why a manifest's events can't be taken (ADR 0104), beyond its schema: reading needs events:subscribe and
- * publishing events:publish; an app publishes only under its own id, each topic and version once, with a payload
- * schema that compiles and isn't over the limit. Undefined when they can.
- */
-export const eventsProblem = (m: AppManifest3): string | undefined => {
-  const events = m.contributes?.events;
-  if (!events) return undefined;
-  const scopes = m.scopes ?? [];
-  if (events.reads?.length && !scopes.includes('events:subscribe')) return `${m.name} says which events it reads, but doesn't ask for events:subscribe.`;
-  if (events.publishes?.length && !scopes.includes('events:publish')) return `${m.name} says which events it publishes, but doesn't ask for events:publish.`;
-  const seen = new Set<string>();
-  for (const type of events.publishes ?? []) {
-    if (!type.topic.startsWith(`${m.id}.`)) return `${m.name} can't publish ${type.topic}: an app publishes only under its own id (${m.id}.…).`;
-    const key = `${type.topic} version ${type.version}`;
-    if (seen.has(key)) return `${m.name} declares ${key} twice.`;
-    seen.add(key);
-    if (JSON.stringify(type.schema).length > MAX_EVENT_SCHEMA_BYTES) return `${m.name}'s schema for ${key} is over ${MAX_EVENT_SCHEMA_BYTES / 1024} KB.`;
-    try {
-      Compile(type.schema);
-    } catch (err) {
-      return `${m.name}'s schema for ${key} can't be read: ${(err as Error).message}.`;
-    }
-  }
-  return undefined;
-};
-
 const ruleRefusals = (release: AppRelease2, offered: Required<Omit<Offered, 'knowledge'>>): string[] => {
   const out: string[] = [];
   const m = release.manifest;
@@ -170,8 +140,7 @@ const ruleRefusals = (release: AppRelease2, offered: Required<Omit<Offered, 'kno
 
   const notOffered = (m.scopes ?? []).filter((s) => !isOfferedScope(s));
   if (notOffered.length) out.push(`${m.name} asks for ${notOffered.join(', ')}, which this AUGUR doesn’t offer.`);
-  const events = eventsProblem(m);
-  if (events) out.push(events);
+  out.push(...eventsProblems(m));
 
   const parts = release.parts;
   for (const name of repeated(parts.map((p) => p.metadata.name))) out.push(`Two parts are named ${name}: each part's name is its own (spec 4.3).`);

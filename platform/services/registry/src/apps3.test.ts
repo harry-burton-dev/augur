@@ -141,20 +141,29 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
     const grants = (await t.server.inject({ method: 'GET', url: '/v1/apps/notes/grants', headers: as('platform-events') })).json();
     expect(grants).toMatchObject({ app: 'notes', name: 'Notes', on: true, scopes: release.manifest.scopes, notificationKinds: ['shared'], inboxKinds: [], contract: 3 });
     expect(grants.events).toBeUndefined();
+    expect((await t.server.inject({ method: 'GET', url: '/v1/apps/notes/events', headers: as('platform-events') })).json()).toEqual({ app: 'notes' });
     const admins = (await t.server.inject({ method: 'GET', url: '/v1/apps', headers: fresh() })).json();
     expect(admins).toContainEqual(expect.objectContaining({ id: 'notes', contract: 3, grantedScopes: release.manifest.scopes }));
   });
 
-  it('carries the events its manifest declares in its grants, for the events service to hold it to (ADR 0104)', async () => {
+  it('tells AUGUR’s services the events its manifest declares, and holds each type to its version (ADR 0104)', async () => {
     const t = await setup();
     const base = releaseOf('notes', '1.2.0');
     const added = { topic: 'notes.note.added', version: 1, description: 'A note was added.', schema: { type: 'object', properties: { note: { type: 'string' } } } };
     const scopes = [...new Set([...base.manifest.scopes!, 'events:subscribe', 'events:publish'])];
     const release = releaseOf('notes', '1.2.0', { scopes, contributes: { ...base.manifest.contributes, events: { reads: ['folio.*'], publishes: [added] } } });
-    await t.install(release);
+    await t.install(release, 'done');
     expect((await t.register(release.manifest)).statusCode).toBe(201);
-    const grants = (await t.server.inject({ method: 'GET', url: '/v1/apps/notes/grants', headers: as('platform-events') })).json();
-    expect(grants.events).toEqual({ reads: ['folio.*'], publishes: [{ topic: 'notes.note.added', version: 1, schema: added.schema }] });
+    const declared = await t.server.inject({ method: 'GET', url: '/v1/apps/notes/events', headers: as('platform-events') });
+    expect(declared.json()).toEqual({ app: 'notes', events: { reads: ['folio.*'], publishes: [{ topic: 'notes.note.added', version: 1, schema: added.schema }] } });
+    // Only AUGUR's own services ask.
+    expect((await t.server.inject({ method: 'GET', url: '/v1/apps/notes/events', headers: as('app-notes') })).statusCode).toBe(403);
+    // A later release may add an optional field to version 1, but not change one: that is version 2.
+    const next = (schema: object) => releaseOf('notes', '1.3.0', { scopes, contributes: { ...base.manifest.contributes, events: { publishes: [{ ...added, schema }] } } });
+    const ask = (release: object) => t.server.inject({ method: 'POST', url: '/v1/app-runner/jobs', headers: fresh(), payload: { action: 'install', release } });
+    const changed = await ask(next({ type: 'object', properties: { note: { type: 'integer' } } }));
+    expect([changed.statusCode, changed.json().message]).toEqual([400, expect.stringMatching(/notes\.note\.added version 1 changes note from 1\.2\.0's: .* needs version 2/)]);
+    expect((await ask(next({ type: 'object', properties: { note: { type: 'string' }, by: { type: 'string' } } }))).statusCode).toBe(202);
   });
 });
 

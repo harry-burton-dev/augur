@@ -17,7 +17,8 @@ import { empty, orNull, ref, refused } from './schemas.ts';
 import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, InternetAllowed, RunningPreview } from './store.ts';
 import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
-import { ReviewSchema, reviewOf } from './apps3.ts';
+import { manifest3Of, ReviewSchema, reviewOf } from './apps3.ts';
+import { eventsChangeProblems } from './event-types.ts';
 import { needsDeploymentAdmin, roleChecks, type DeploymentAction, type RoleChecks } from './roles.ts';
 import { actorOf, fleetRingProblem, isFleetCaller, requesterOf } from './fleet.ts';
 import { sameRepository } from './feed-trust.ts';
@@ -977,6 +978,12 @@ export const appRunnerRoutes =
             releaseProblem(release, await offeredTo(release, knowledge)) ??
             (previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : ringProblem(release, ring, listed));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+          // Its event types may only grow within a version (ADR 0104): checked against the release in force before anything runs.
+          if (isRelease2(release)) {
+            const was = (await store.records()).find((r) => r.entry.id === release!.id);
+            const changed = eventsChangeProblems(was && manifest3Of(was.entry), release.manifest);
+            if (changed.length) return reply.code(400).send({ error: 'bad_request', message: changed.join(' ') });
+          }
           // The fleet's client on a production server: only a release promoted to stable (ADR 0100), as the feed lists it.
           const outOfRing = fleet ? fleetRingProblem(ring, { what: release.id, version: release.version, channel: listed, halted: updates.result.releases.find((r) => r.app === release!.id && r.version === release!.version)?.halted }) : undefined;
           if (outOfRing) return reply.code(400).send({ error: 'bad_request', message: outOfRing });

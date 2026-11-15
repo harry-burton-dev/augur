@@ -22,7 +22,9 @@ On the app contract, the manifest says which events the app reads and each type 
 }
 ```
 
-Reading needs `events:subscribe` and publishing `events:publish`. Each type is under the app's own id, once per version, with its payload's JSON Schema (an object, at most 16 KB). Within a version a type only gains optional fields; anything else is a new version, declared beside the old one. The registry refuses a release that breaks these rules, and AUGUR's services read what an app declares from its grants.
+Reading needs `events:subscribe` and publishing `events:publish`. Each type is under the app's own id, once per version, with its payload's JSON Schema (an object, at most 16 KB). Within a version a type only gains optional fields; anything else is a new version, declared beside the old one, and a release may stop declaring an old version once it no longer publishes it. The registry refuses a release that breaks these rules, before it installs, and AUGUR's services read what an app declares from the registry (`GET /v1/apps/<id>/events`). Leaving out `reads` says nothing about what the app reads; `"reads": []` says it reads nothing.
+
+The registry checks what an app declares from this release on. The events service doesn't hold an app to it yet: that follows in a later release, and its upgrade note will say so.
 
 ## Publishing
 

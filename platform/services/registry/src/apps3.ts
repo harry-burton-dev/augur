@@ -94,18 +94,6 @@ export const entryOf3 = (m: AppManifest3): KeptEntry => {
   };
 };
 
-/** The events a contract 3 app's manifest declares (ADR 0104), as its grants carry them; nothing when it declares none. */
-export const declaredEvents = (m: AppManifest3 | undefined) => {
-  const events = m?.contributes?.events;
-  if (!events) return {};
-  return {
-    events: {
-      ...(events.reads ? { reads: events.reads } : {}),
-      publishes: (events.publishes ?? []).map(({ topic, version, schema }) => ({ topic, version, schema })),
-    },
-  };
-};
-
 /** What the shell is sent for a contract 3 app (spec 9.6): its manifest, with the limit in force, the previews on for the caller and its contract. */
 export const served3 = (m: AppManifest3, filled: { maxUpload: number; previewsOn?: string[] }): AppManifest3 & { maxUpload: number; requiredRole?: string } => {
   const { $schema: _schema, ...manifest } = m as AppManifest3 & { $schema?: string };
