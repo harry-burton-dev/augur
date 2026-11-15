@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ConnectionPool, Queryable } from './domain-events.js';
 import { postAudit, type NewAuditEntry } from './events.js';
+import { LOCK_NAMESPACE } from './locks.js';
 import { ServiceCallError, type ServiceCredentials } from './service.js';
 
 /**
@@ -51,7 +52,7 @@ export interface AuditOutbox {
  * each under the key it was given or one made for it, so a resend after a crash is still one entry in Activity. A sent
  * row is deleted. A row the events service can't take yet stops the round, to go again in `intervalMs`. A row it
  * refuses (`REFUSED`) is set aside, with `refused_at` and `refused_why`, kept 30 days, and goes to `onError`; to send
- * it again, clear `sent_at` and `refused_at`. Only one instance sends at a time (an advisory lock), so order holds
+ * it again, clear `sent_at` and `refused_at`. Only one instance sends at a time (an advisory lock, `LOCK_NAMESPACE.auditOutbox`), so order holds
  * across instances, and no transaction stays open while it sends.
  */
 export const auditOutbox = ({ pool, table, eventsUrl, credentials, fetchImpl, env, batch = 20, intervalMs = 1000, onError = console.error }: {
@@ -73,7 +74,7 @@ export const auditOutbox = ({ pool, table, eventsUrl, credentials, fetchImpl, en
     const client = await pool.connect();
     let locked = false;
     try {
-      const { rows: got } = await client.query('select pg_try_advisory_lock(hashtext($1)) as locked', [table]);
+      const { rows: got } = await client.query('select pg_try_advisory_lock($1, hashtext($2)) as locked', [LOCK_NAMESPACE.auditOutbox, table]);
       locked = got[0]?.locked === true;
       if (!locked) return 0;
       await client.query(`delete from ${table} where refused_at < now() - make_interval(days => $1)`, [REFUSED_KEPT_DAYS]);
@@ -96,7 +97,7 @@ export const auditOutbox = ({ pool, table, eventsUrl, credentials, fetchImpl, en
       }
       return dealt;
     } finally {
-      if (locked) await client.query('select pg_advisory_unlock(hashtext($1))', [table]).catch(() => {});
+      if (locked) await client.query('select pg_advisory_unlock($1, hashtext($2))', [LOCK_NAMESPACE.auditOutbox, table]).catch(() => {});
       client.release();
     }
   };

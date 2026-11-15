@@ -1372,6 +1372,50 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },
+    "DATABASE_CONNECT_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service waits for a database connection, a free one or a new one, before it answers that the database can't be reached right now (0 for no limit).",
+      "default": "10",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service's migration waits for a lock another session holds before it gives up, rolls back and stops the service, saying who holds it (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a migration's transaction may sit idle before Postgres ends it and frees its locks, as when its service hung (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
     "SEED_ALLOWED": {
       "type": "string",
       "enum": [
