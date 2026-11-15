@@ -405,7 +405,7 @@
         "platform",
         "pillar"
       ],
-      "description": "The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed"
+      "description": "The kind of app it says it is (SDK 1.11, ADR 0077). Only honoured for apps that ship with AUGUR or come from its app feed"
     },
     "areas": {
       "type": "array",

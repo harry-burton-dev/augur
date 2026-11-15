@@ -1205,6 +1205,24 @@
       ],
       "x-docs": "docs/domain-events.md#following"
     },
+    "DOMAIN_EVENTS_DELIVERY_ATTEMPTS": {
+      "type": "string",
+      "description": "How many times an event an app's part answers but can't take is tried before it is set aside, so the events behind it go.",
+      "default": "5",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
+    },
+    "DOMAIN_EVENTS_RETRY_SECONDS": {
+      "type": "string",
+      "description": "The wait in seconds before such an event is tried again, doubling each time, up to ten minutes.",
+      "default": "30",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
+    },
     "INBOX_KEEP_DAYS": {
       "type": "string",
       "description": "How many days closed inbox items are kept before they go, with their history (the audit log keeps every step).",
@@ -1369,6 +1387,50 @@
         "events",
         "models",
         "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_CONNECT_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service waits for a database connection, a free one or a new one, before it answers that the database can't be reached right now (0 for no limit).",
+      "default": "10",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service's migration waits for a lock another session holds before it gives up, rolls back and stops the service, saying who holds it (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a migration's transaction may sit idle before Postgres ends it and frees its locks, as when its service hung (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },

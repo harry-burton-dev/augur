@@ -2,7 +2,7 @@ import type { InboxKind } from './inbox.js';
 import type { Focus } from './refs.js';
 
 /**
- * The kinds of app that ship with AUGUR (SDK 1.11, ADR 0032): `platform`, for
+ * The kinds of app that ship with AUGUR (SDK 1.11, ADR 0077): `platform`, for
  * using and managing AUGUR, and `pillar`, the foundation of what AUGUR
  * produces. Every other app is just an app and has no kind. A later kind is
  * added in a minor, so a reader treats a value it doesn't know as no kind.
@@ -132,7 +132,7 @@ export interface AppManifestEntry {
    */
   bindings?: string[];
   /**
-   * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
+   * What kind of app this is (SDK 1.11, ADR 0077): `platform`, for using and
    * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
    * apps that ship with AUGUR or come from its signed app feed can be either;
    * every other app is just an app. The registry gives the shell the kind in
