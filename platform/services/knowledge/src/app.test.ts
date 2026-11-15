@@ -173,6 +173,7 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     expect((await read(ORG, forApp)).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
     // With no floor checked at all, it is asked for one.
     expect((await read(ORG, as('alice', undefined, { app: 'notes', scopes: ['knowledge:read'] }))).json()).toMatchObject({ status: 400, reason: 'floor_required' });
+    expect((await app.inject({ url: '/v1/floors', headers: as('alice', undefined, { app: 'notes', scopes: ['knowledge:read'] }) })).json()).toMatchObject({ status: 400, reason: 'floor_required' });
     // Alice herself still reads each of them.
     expect((await get('alice', `/v1/floors/${ORG}/entities`, 'team-a')).statusCode).toBe(200);
 
@@ -185,6 +186,9 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     expect(kept.json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('as itself') });
     // The ontology is on no floor, so it stays readable with knowledge:read.
     expect((await app.inject({ url: '/v1/ontology', headers: itself(ORG, 'org') })).statusCode).toBe(200);
+    // Nor does anyone else who isn't a person: one of AUGUR's own services, named as the gateway names it.
+    const service = callerHeaders({ id: 'augur:events', name: 'events', departments: [], roles: [], workspace: { id: own.bob, kind: 'personal', role: 'member' } });
+    expect((await app.inject({ url: '/v1/floors', headers: service })).json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('Only a person') });
     expect((await db.admin.query('select 1 from kg.floors where id = $1', [own.bob])).rowCount).toBe(0);
     expect((await get('bob', '/v1/floors', own.bob)).statusCode).toBe(200);
   });

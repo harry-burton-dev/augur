@@ -163,9 +163,12 @@ export const buildApp = async ({ store, standing, callers, extract, ledger, role
     const caller = callerFor(req, action);
     // An app's own token names no person, and a floor is read and changed as one, from where they stand.
     if (isAppItself(caller)) throw new Problem(403, 'not_allowed', `${caller.app} called the knowledge graph as itself. It can only ${action ? `take ${action.name}` : 'read a floor'} for a person, by sending on the delegation it was given.`);
-    // An app's scopes were granted on the floor the gateway checked, so that is the only floor it may name.
+    // Only a person stands on a floor. A person's id is their sign-in subject and has no colon; one of AUGUR's
+    // services (`augur:<name>`) and the fleet's client (`client:<id>`) do, and are nobody here.
+    if (caller.id.includes(':')) throw new Problem(403, 'not_allowed', 'Only a person reads or changes a floor of the knowledge graph.');
+    // An app's scopes were granted on the floor the gateway checked, so it needs one, and that is the only floor it may name.
+    if (caller.app && !caller.workspace) throw new Problem(400, 'floor_required', 'Say which floor you stand on (X-Workspace-Id).');
     if (caller.app && floor !== undefined && floor !== caller.workspace?.id) {
-      if (!caller.workspace) throw new Problem(400, 'floor_required', 'Say which floor you stand on (X-Workspace-Id).');
       throw new Problem(403, 'not_allowed', `${caller.app} is acting for you on another floor, so it can’t read this one. It can read the floor you opened it on.`);
     }
     const here = floor ?? caller.workspace?.id;
