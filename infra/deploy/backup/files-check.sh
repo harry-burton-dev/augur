@@ -35,7 +35,7 @@ cleanup() {
   docker rm -fv "$run-pg" "$run-garage" >/dev/null 2>&1 || true
   docker volume rm "$run-meta" >/dev/null 2>&1 || true
   docker network rm "$run" >/dev/null 2>&1 || true
-  rm -f "$keys"
+  rm -f "$keys" "$keys.err"
 }
 trap cleanup EXIT
 
@@ -45,7 +45,12 @@ said() {
     '{ok: $ok, rows: $rows, missing: $missing, orphans: $orphans} + (if $first == "" then {} else {firstMissing: $first} end) + (if $problem == "" then {} else {problem: $problem} end)'
   [ "$1" = true ]
 }
-failed() { said false 0 0 "" 0 "$1"; exit 1; }
+failed() {
+  # What the throwaway Garage said, for whoever reads why.
+  docker logs --tail 20 "$run-garage" >&2 2>/dev/null || true
+  said false 0 0 "" 0 "$1"
+  exit 1
+}
 
 docker network create "$run" >/dev/null
 
@@ -77,13 +82,14 @@ docker run -d --name "$run-garage" --network "$run" -p 127.0.0.1::3903 \
 admin="http://$(docker port "$run-garage" 3903/tcp | head -n 1)"
 api() { curl -fsS -G -H "Authorization: Bearer $token" "$admin/v2/$1" "${@:2}"; }
 ready=""
-for _ in $(seq 120); do api GetClusterHealth >/dev/null 2>&1 && ready=1 && break; sleep 1; done
+# Healthy, not only answering: until it has read its layout back, it can't read a bucket.
+for _ in $(seq 120); do [ "$(api GetClusterHealth 2>/dev/null | jq -r .status)" = healthy ] && ready=1 && break; sleep 1; done
 [ -n "$ready" ] || failed "The throwaway Garage didn't start on $(basename "$objects")."
 
-bucket=$(api GetBucketInfo --data-urlencode "globalAlias=$FRONTENDS_BUCKET" 2>/dev/null || true)
+bucket=$(api GetBucketInfo --data-urlencode "globalAlias=$FRONTENDS_BUCKET" 2>"$keys.err" || true)
 id=$(jq -r '.id // empty' <<< "${bucket:-null}")
 if [ -z "$id" ]; then
-  [ "$rows" = 0 ] || failed "The frontends bucket ($FRONTENDS_BUCKET) didn't come back, though the registry names $rows files in it."
+  [ "$rows" = 0 ] || failed "The frontends bucket ($FRONTENDS_BUCKET) didn't come back, though the registry names $rows files in it: $(tr -d '"\\' < "$keys.err" | tail -n 1 | cut -c1-200)"
   said true 0 0 "" 0
   exit 0
 fi
