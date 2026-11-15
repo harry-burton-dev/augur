@@ -214,3 +214,9 @@ test("the auto-ok comment can't be ended early by what a pull request says", () 
   assert.equal(comment.split('\n')[0].match(/-->/g).length, 1);
   assert.match(comment, /harry-would-not/);
 });
+
+test("an auto-ok record whose checks couldn't be read says so", () => {
+  const comment = autoOkComment({ phase: 'shadow', tier: 'High', nextTier: 'High', because: [], files: 1, lines: 3, deployTest: false, checks: [], checksRead: false });
+  assert.match(comment, /Checks: couldn't be read/);
+  assert.equal(JSON.parse(/^<!-- auto-ok: (.*) -->$/m.exec(comment)[1]).checksRead, false);
+});
