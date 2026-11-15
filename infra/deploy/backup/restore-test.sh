@@ -81,8 +81,9 @@ q() { psql -h "$scratch" -U postgres -d "$1" -tAc "$2"; }
 
 # The dump drops and recreates each database itself, so it runs to the end
 # (ON_ERROR_STOP would stop it at the first error, even an expected one) and
-# what went wrong is read from the errors afterwards.
-if ! gunzip -c "$file" | psql -h "$scratch" -U postgres -d postgres -q >/dev/null 2>"$scratch/errors"; then
+# what went wrong is read from the errors afterwards. `-f -` makes psql name the dump's line with each
+# error, which says whose it is (whose, not_regranted); read plainly from stdin, it names none.
+if ! gunzip -c "$file" | psql -h "$scratch" -U postgres -d postgres -q -f - >/dev/null 2>"$scratch/errors"; then
   result false "$(basename "$file") could not be read back in."
   exit 1
 fi
