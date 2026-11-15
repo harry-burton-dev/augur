@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { bundleFiles, bundleName, deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, releaseName, titleOf, versionModule, writeBundle } from './augur-release.mjs';
+import { bundleFiles, bundleName, deployFiles, devBuild, nextRelease, oldDevBuilds, parseChangeset, pendingDeployTest, readStores, releaseName, storeLevel, storeProblems, storesFrom, titleOf, versionModule, writeBundle } from './augur-release.mjs';
 
 const settings = { all: ['PLATFORM_URL', 'APP_ORIGINS'], required: ['PLATFORM_URL'] };
 const first = nextRelease(undefined, { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } }, settings, '2026-10-23');
@@ -157,4 +157,79 @@ test('the kit, taken as packages from augur-kit, is a part at the version instal
 test('a new release carries a pending deploy test result, which the deploy test replaces; a dev build has none', () => {
   assert.deepEqual(pendingDeployTest({ version: '0.15.0', channel: 'beta', run: '9', at: '2026-11-06T10:00:00Z' }), { schema: 'augur.deploy-test/v1', version: '0.15.0', from: null, passed: null, run: '9', at: '2026-11-06T10:00:00Z' });
   assert.equal(pendingDeployTest({ version: '0.15.1-dev.4', channel: 'dev', run: '9', at: 't' }), undefined);
+});
+
+const stores = { postgres: 'pgvector/pgvector:0.8.7-pg16-bookworm', garage: 'dxflrs/garage:v2.4.1', keycloak: 'quay.io/keycloak/keycloak:26.8.1', openfga: 'openfga/openfga:v1.19.0' };
+const parts0 = { '@augur/registry': { version: '0.3.0' }, '@augur/mfe-sdk': { version: '1.1.0' } };
+
+test('the stores are read from the deploy files: Postgres and Garage from compose, Keycloak and OpenFGA from the image build', () => {
+  const compose = 'services:\n  postgres:\n    image: pgvector/pgvector:0.8.7-pg16-bookworm\n  backup:\n    image: restic/restic:0.19.1\n  garage:\n    image: dxflrs/garage:v2.4.1\n';
+  const dockerfile = 'FROM node:22-alpine AS deps\nFROM quay.io/keycloak/keycloak:26.8.1 AS keycloak\nFROM openfga/openfga:v1.19.0 AS openfga-upstream\nFROM alpine:3.22 AS openfga\n';
+  assert.deepEqual(storesFrom({ compose, dockerfile }), stores);
+  assert.throws(() => storesFrom({ compose, dockerfile: 'FROM node:22-alpine\n' }), /keycloak/);
+  // This repository's own files have all four.
+  assert.deepEqual(Object.keys(readStores()).sort(), ['garage', 'keycloak', 'openfga', 'postgres']);
+});
+
+test('a release that moves a store’s image is breaking, so a server can’t go back to the old image on data the new one changed', () => {
+  const base = { ...nextRelease(undefined, parts0, settings, '2026-10-23', [], stores) };
+  assert.deepEqual(base.stores, stores);
+  const moved = nextRelease(base, parts0, settings, '2026-10-30', [], { ...stores, keycloak: 'quay.io/keycloak/keycloak:26.9.0' });
+  assert.equal(moved.version, '0.2.0');
+  assert.equal(moved.upgradeFrom, '>=0.1.0');
+  assert.deepEqual(moved.breaking, ['Keycloak quay.io/keycloak/keycloak:26.8.1 → quay.io/keycloak/keycloak:26.9.0: its data can’t go back to the old image']);
+  assert.equal(moved.stores.keycloak, 'quay.io/keycloak/keycloak:26.9.0');
+  // Unmoved stores change nothing, and a release from before stores were recorded only starts recording them.
+  assert.equal(nextRelease(base, parts0, settings, '2026-10-30', [], stores), base);
+  const { stores: _, ...older } = base;
+  const recorded = nextRelease(older, { ...parts0, '@augur/registry': { version: '0.3.1' } }, settings, '2026-10-30', [], stores);
+  assert.deepEqual(recorded.breaking, []);
+  assert.deepEqual(recorded.stores, stores);
+});
+
+test('a dev build that moves a store’s image is breaking too', () => {
+  const base = nextRelease(undefined, parts0, settings, '2026-10-23', [], stores);
+  const build = devBuild(base, parts0, settings, [], 7, '2026-10-30', { ...stores, openfga: 'openfga/openfga:v1.20.0' });
+  assert.deepEqual(build.breaking, ['OpenFGA openfga/openfga:v1.19.0 → openfga/openfga:v1.20.0: its data can’t go back to the old image']);
+  assert.equal(build.upgradeFrom, '>=0.1.0');
+});
+
+test('only a move past a patch counts: a new name, a minor, or a Postgres major; never a patch or a digest', () => {
+  assert.equal(storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.8.1'), storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.8.2@sha256:ab12'));
+  assert.notEqual(storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.8.1'), storeLevel('keycloak', 'quay.io/keycloak/keycloak:26.9.0'));
+  assert.equal(storeLevel('garage', 'dxflrs/garage:v2.4.1'), 'dxflrs/garage:2.4');
+  assert.equal(storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg16-bookworm'), storeLevel('postgres', 'pgvector/pgvector:0.9.0-pg16-trixie'));
+  assert.notEqual(storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg16-bookworm'), storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg17-bookworm'));
+  assert.notEqual(storeLevel('postgres', 'pgvector/pgvector:0.8.7-pg16-bookworm'), storeLevel('postgres', 'postgres:16'));
+  assert.equal(storeLevel('openfga', 'registry.local:5000/openfga:v1.19.0'), 'registry.local:5000/openfga:1.19');
+  const base = nextRelease(undefined, parts0, settings, '2026-10-23', [], stores);
+  const patched = nextRelease(base, parts0, settings, '2026-10-30', [], { ...stores, garage: 'dxflrs/garage:v2.4.2' });
+  assert.deepEqual(patched.breaking, []);
+});
+
+test('a store’s image named through a variable, or behind a --platform flag, is still read or refused', () => {
+  const compose = 'services:\n  postgres:\n    image: pgvector/pgvector:0.8.7-pg16-bookworm\n  garage:\n    image: dxflrs/garage:v2.4.1\n';
+  const dockerfile = (keycloak) => `FROM ${keycloak} AS keycloak\nFROM openfga/openfga:v1.19.0 AS openfga-upstream\n`;
+  assert.equal(storesFrom({ compose, dockerfile: dockerfile('--platform=$BUILDPLATFORM quay.io/keycloak/keycloak:26.8.1') }).keycloak, 'quay.io/keycloak/keycloak:26.8.1');
+  assert.throws(() => storesFrom({ compose, dockerfile: dockerfile('${KEYCLOAK_IMAGE}') }), /variable/);
+});
+
+test('CI wants an unreleased upgrade note, headed with the store and saying how to go back, and a changeset, for each store that moved', () => {
+  const released = { stores };
+  const now = { ...stores, postgres: 'pgvector/pgvector:0.8.7-pg17-bookworm' };
+  const waiting = [{ bumps: { '@augur/registry': 'patch' } }];
+  const notes = (body) => `# Upgrade\n\n## Release notes that need you\n\n${body}\n## Going back\n\nPostgres: restore it to go back.\n`;
+  const good = '### Postgres moves to 17\n\n**From** unreleased\n\nPostgres rewrites its files. To go back, restore the backup.\n';
+  assert.deepEqual(storeProblems(released, stores, notes(''), []), []);
+  assert.match(storeProblems(released, now, notes(''), waiting)[0], /Postgres/);
+  // A released note doesn't count: it was for an earlier move.
+  assert.equal(storeProblems(released, now, notes(good.replace('unreleased', 'augur@0.20.0')), waiting).length, 1);
+  // Nor does one that only mentions it, or one that doesn't say how to go back, or the sections after the notes.
+  assert.equal(storeProblems(released, now, notes('### Apps reach the stores\n\n**From** unreleased\n\nThrough Postgres\u2019s relay. Go back as usual.\n'), waiting).length, 1);
+  assert.equal(storeProblems(released, now, notes('### Postgres moves to 17\n\n**From** unreleased\n\nNothing to do.\n'), waiting).length, 1);
+  assert.deepEqual(storeProblems(released, now, notes(good), waiting), []);
+  // Without a changeset that bumps a part, no release would carry the move.
+  assert.match(storeProblems(released, now, notes(good), [{ bumps: {} }])[0], /changeset/);
+  // Before the release file records stores there is nothing to compare.
+  assert.deepEqual(storeProblems({}, now, notes(''), []), []);
 });
