@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // A pull request's review tier, from the paths it changes, and whether its description carries what that
 // tier needs (REVIEW.md). Low: nothing beyond green CI. Medium: the description's sections and a pre-merge
-// review. High: those, and under 400 changed lines or a reason; on the paths in harryOk, Harry's ok too
-// (the `harry-ok` label).
+// review. High: those, and under 400 changed lines or a reason; on the paths in harryOk (what can't be undone
+// or gives more access) a /code-review at high effort or more. Harry is not a gate (PER-438): the auto-ok log
+// tells him afterwards.
 // The tiers' paths are in .github/review-tiers.json, so every repository keeps its own; other repositories
 // run this script from here through the reusable Review workflow.
 //
@@ -87,7 +88,7 @@ export const verdict = (paths, rules, { renamed = [], ...lines } = {}) => {
  * (`autoOk` in the tiers file): it is High and merged without his ok. Otherwise nothing is logged.
  */
 export const logged = ({ now, next, autoOk = false }) =>
-  (autoOk && now.tier === 'High' && !now.harry.length) || Boolean(next && now.harry.length > 0 && !next.harry.length);
+  (autoOk && now.tier === 'High') || Boolean(next && now.harry.length > 0 && !next.harry.length);
 
 const clip = (text = '', max = 400) => {
   const flat = text.trim().replace(/\s+/g, ' ');
@@ -104,10 +105,12 @@ export const autoOkComment = (record) => {
     `<!-- auto-ok: ${data} -->`,
     shadow
       ? "**Auto-ok (shadow week).** The next review rules would have merged this without Harry's ok. Under the current rules it waited for him."
-      : "**Auto-ok.** This merged without Harry's ok, on its checks.",
+      : "**Auto-ok.** This merged on its checks and its code review, without Harry.",
     '',
     line('Tier', shadow ? `${record.tier} now, ${record.nextTier} under the next rules` : record.tier),
     line('Because of', record.because.slice(0, 8).map((p) => `\`${p}\``).join(', ')),
+    line('Deep review for', (record.deep ?? []).slice(0, 8).map((p) => `\`${p}\``).join(', ')),
+    line('Review', record.review),
     `- ${record.files} files, ${record.lines} changed lines. Deploy test: ${record.deployTest ? 'needed' : 'not needed'}.`,
     line('Checks', record.checksRead === false ? "couldn't be read" : record.checks.map((c) => `${c.name} ${c.conclusion}`).join(', ')),
     line('Not run', record.notRun),
@@ -137,10 +140,14 @@ export const sectionsOf = (body) => {
   return out;
 };
 
+/** The Review section names a /code-review run at high effort or more. */
+const DEEP_REVIEW = /\/code-review\s+(high|xhigh|max)\b/i;
+
 /** What a pull request of `tier` still lacks, in words; empty when it may merge. */
 export const problems = ({ tier, body, labels = [], lines = 0, harry = false, bot = false }) => {
   if (tier === 'Low') return [];
-  if (bot) return harry && !labels.includes('harry-ok') ? ["Harry's ok (the harry-ok label, added only after he says ok)"] : [];
+  // Renovate's pull requests have no description: CI is their gate, and the auto-ok log records them.
+  if (bot) return [];
   const found = sectionsOf(body);
   const out = [];
   for (const name of SECTIONS) {
@@ -150,7 +157,8 @@ export const problems = ({ tier, body, labels = [], lines = 0, harry = false, bo
   const review = found.get('review') ?? '';
   if (review.trim() && !/\/code-review\b/.test(review)) out.push('the Review section naming the /code-review run (effort, findings, what was fixed or answered)');
   if (tier === 'High') {
-    if (harry && !labels.includes('harry-ok')) out.push("Harry's ok (the harry-ok label, added only after he says ok to the three questions)");
+    // Harry is no longer the gate (PER-438, 15 Nov): what used to wait for his ok needs a deeper code review.
+    if (harry && review.trim() && !DEEP_REVIEW.test(review)) out.push('a /code-review run at high effort or more (high, xhigh or max) named in the Review section, for the files listed under "Needs a deep review"');
     const risk = found.get('risk') ?? '';
     if (lines > MAX_HIGH_LINES && !/over \d+ lines because/i.test(risk)) {
       out.push(`fewer than ${MAX_HIGH_LINES} changed lines (this has ${lines}), or a line in Risk saying "Over ${MAX_HIGH_LINES} lines because …"`);
@@ -275,7 +283,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     const found = sectionsOf(PR_BODY);
     const record = {
       v: 1,
-      phase: tiers.autoOk === true && !harry ? 'live' : 'shadow',
+      phase: tiers.autoOk === true ? 'live' : 'shadow',
       repo: GITHUB_REPOSITORY,
       pr: Number(PR_NUMBER) || PR_NUMBER,
       title: PR_TITLE,
@@ -284,6 +292,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       tier,
       harry,
       harryOk: labels.includes('harry-ok'),
+      deep: now.harry.slice(0, 20),
       nextTier: next?.tier ?? tier,
       because: (next?.because ?? because).slice(0, 20),
       files: paths.length,
@@ -295,20 +304,22 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       notRun: clip(found.get('not run')),
       howToUndo: clip(found.get('how to undo')),
       risk: clip(found.get('risk')),
+      review: clip(found.get('review')),
     };
     if (RECORD_FILE) writeFileSync(RECORD_FILE, autoOkComment(record));
     console.log(autoOkComment(record));
     if (GITHUB_OUTPUT) appendFileSync(GITHUB_OUTPUT, 'logged=true\n');
     process.exit(0);
   }
-  // Renovate's pull request (dependency updates) has no description to check, so only Harry's ok is
+  // Renovate's pull request (dependency updates) has no description to check, so CI is its gate; formerly
   // asked of it, on his paths; CI and, where it applies, the deploy test are its other gates.
   const missing = PR_BOT === 'true' ? problems({ tier, labels, harry, bot: true }) : problems({ tier, body: PR_BODY, labels, lines, harry });
   const summary = [
-    `### Review tier: ${tier}${harry ? ", waits for Harry's ok" : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
+    `### Review tier: ${tier}${harry ? ', deep review' : ''}${needsDeployTest(paths, tiers) ? ', deploy test before merge' : ''}`,
     '',
     `${paths.length} files, ${lines} changed lines. Tiers from ${from}.`,
     because.length ? `\nBecause of:\n${because.slice(0, 20).map((p) => `- \`${p}\``).join('\n')}${because.length > 20 ? `\n- and ${because.length - 20} more` : ''}` : '',
+    harry ? `\nNeeds a deep review (/code-review high, xhigh or max) because of:\n${now.harry.slice(0, 20).map((p) => `- \`${p}\``).join('\n')}${now.harry.length > 20 ? `\n- and ${now.harry.length - 20} more` : ''}` : '',
     next
       ? `\nNext rules (shadow week, they don't decide this check yet): ${next.tier}${next.harry.length ? ", waits for Harry's ok" : ''}.${next.harry.length ? `\n${next.harry.slice(0, 10).map((p) => `- \`${p}\``).join('\n')}` : ''}${harry && !next.harry.length ? "\nIt would merge without Harry's ok, and go in the auto-ok log." : ''}`
       : '',
