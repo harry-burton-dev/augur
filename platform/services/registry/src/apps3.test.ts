@@ -140,8 +140,21 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
     await t.register(release.manifest);
     const grants = (await t.server.inject({ method: 'GET', url: '/v1/apps/notes/grants', headers: as('platform-events') })).json();
     expect(grants).toMatchObject({ app: 'notes', name: 'Notes', on: true, scopes: release.manifest.scopes, notificationKinds: ['shared'], inboxKinds: [], contract: 3 });
+    expect(grants.events).toBeUndefined();
     const admins = (await t.server.inject({ method: 'GET', url: '/v1/apps', headers: fresh() })).json();
     expect(admins).toContainEqual(expect.objectContaining({ id: 'notes', contract: 3, grantedScopes: release.manifest.scopes }));
+  });
+
+  it('carries the events its manifest declares in its grants, for the events service to hold it to (ADR 0104)', async () => {
+    const t = await setup();
+    const base = releaseOf('notes', '1.2.0');
+    const added = { topic: 'notes.note.added', version: 1, description: 'A note was added.', schema: { type: 'object', properties: { note: { type: 'string' } } } };
+    const scopes = [...new Set([...base.manifest.scopes!, 'events:subscribe', 'events:publish'])];
+    const release = releaseOf('notes', '1.2.0', { scopes, contributes: { ...base.manifest.contributes, events: { reads: ['folio.*'], publishes: [added] } } });
+    await t.install(release);
+    expect((await t.register(release.manifest)).statusCode).toBe(201);
+    const grants = (await t.server.inject({ method: 'GET', url: '/v1/apps/notes/grants', headers: as('platform-events') })).json();
+    expect(grants.events).toEqual({ reads: ['folio.*'], publishes: [{ topic: 'notes.note.added', version: 1, schema: added.schema }] });
   });
 });
 

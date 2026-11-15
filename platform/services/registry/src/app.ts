@@ -87,8 +87,8 @@ import { UpdateChecker } from './updates.ts';
 import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
-import { SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
-import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, inPageProblem, type KeptEntry } from './apps3.ts';
+import { eventsProblem, SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
+import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, declaredEvents, notHandedOver, Served3, served3, staysOn3, inPageProblem, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -702,6 +702,18 @@ export const buildApp = async ({
                   ),
                   inboxKinds: Type.Array(Type.String(), { description: "The ids of the inbox kinds the app's manifest declares" }),
                   notificationKinds: Type.Array(Type.String(), { description: "The ids of the notification kinds the app's manifest declares" }),
+                  events: Type.Optional(
+                    Type.Object(
+                      {
+                        reads: Type.Optional(Type.Array(Type.String(), { description: 'The topics, or families such as folio.*, it reads; it is given only those' })),
+                        publishes: Type.Array(
+                          Type.Object({ topic: Type.String(), version: Type.Integer(), schema: Type.Record(Type.String(), Type.Unknown(), { description: "The payload's JSON Schema" }) }),
+                          { description: 'Each type it publishes, which the events service checks each event against' },
+                        ),
+                      },
+                      { description: "The domain events its manifest declares (ADR 0104), which the events service holds it to; absent when it declares none" },
+                    ),
+                  ),
                   requiredRole: Type.Union([Type.String(), Type.Null()], {
                     description: "The role the app's manifest says a person needs to use it, or null for anyone the floor lets in. Services a person reaches an app through (such as models, for an AI app) check it as the gateway does.",
                   }),
@@ -756,6 +768,7 @@ export const buildApp = async ({
             scopes: on ? usableScopes(found) : [],
             inboxKinds: (found.entry.inbox?.kinds ?? []).map((k) => k.id),
             notificationKinds: (found.entry.notifications?.kinds ?? []).map((k) => k.id),
+            ...declaredEvents(manifest3Of(found.entry)),
             requiredRole: found.entry.requiredRole ?? null,
             ...(manifest3Of(found.entry) ? { contract: 3 } : {}),
           };
@@ -945,6 +958,8 @@ export const buildApp = async ({
         if (manifest.id !== id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${manifest.id}", not "${id}".` });
         const problems = manifest3Problems(manifest);
         if (problems.length) return reply.code(400).send({ error: 'bad_request', message: `The manifest isn’t one this AUGUR reads: ${problems.join('; ')}.` });
+        const events = eventsProblem(manifest);
+        if (events) return reply.code(400).send({ error: 'bad_request', message: events });
         const job = handedOver(await store.installJobs(id), manifest);
         if (!job) {
           req.log.warn({ app: id, version: manifest.version, by: by.id }, 'a contract 3 manifest of no release the runner was given; refused');

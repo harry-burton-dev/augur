@@ -32,6 +32,17 @@ test('an app chooses its pane layout from the shell\'s named ones, and never a d
   assert.ok(v.manifest(framed({ padding: '24px' })).some((p) => p.includes('/contributes/frame must not have additional properties')));
 });
 
+test('an app declares the events it reads and each type it publishes, with a version and a payload schema (ADR 0104)', () => {
+  const v = contractValidators();
+  const evented = (events) => ({ ...manifest, contributes: { ...manifest.contributes, events } });
+  const added = { topic: 'notes.note.added', version: 1, description: 'A note was added.', schema: { type: 'object', required: ['note'], properties: { note: { type: 'string' } } } };
+  assert.deepEqual(v.manifest(evented({ reads: ['platform.person.deleted', 'folio.*'], publishes: [added] })), []);
+  assert.ok(v.manifest(evented({ reads: ['folio'] })).some((p) => p.includes('/contributes/events/reads/0 must match pattern')));
+  assert.ok(v.manifest(evented({ publishes: [{ topic: 'notes.note.added', schema: {} }] })).some((p) => p.includes('must have required propert')));
+  assert.ok(v.manifest(evented({ publishes: [{ ...added, schema: { type: 'string' } }] })).some((p) => p.includes('/contributes/events/publishes/0/schema/type must be equal to constant')));
+  assert.ok(v.manifest(evented({ publishes: [{ ...added, version: 0 }] })).some((p) => p.includes('/contributes/events/publishes/0/version must be')));
+});
+
 // The first problem each broken file is refused for, as the spec's check printed it (section 18).
 const refusals = {
   'manifest-absolute-entry.json': '/frontend/entry must match pattern',

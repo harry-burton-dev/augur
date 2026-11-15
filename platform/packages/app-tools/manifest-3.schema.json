@@ -170,6 +170,26 @@
           "properties": { "kinds": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/kind" } } },
           "description": "The kinds of work the app puts in people's inboxes (ADR 0026). Needs inbox:write."
         },
+        "events": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reads": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*\\.([a-z][a-z0-9-]*|\\*)$", "maxLength": 120 },
+              "uniqueItems": true,
+              "maxItems": 50,
+              "description": "The topics the app reads, or families such as folio.*; it is given only those (ADR 0104). Needs events:subscribe."
+            },
+            "publishes": {
+              "type": "array",
+              "maxItems": 50,
+              "items": { "$ref": "#/$defs/eventType" },
+              "description": "Each type of event the app publishes, with its version and its payload's JSON Schema, which each event is checked against when it is published (ADR 0104). Needs events:publish."
+            }
+          },
+          "description": "The domain events the app reads and publishes (ADR 0104). Within a version an event type only gains optional fields; anything else is a new version."
+        },
         "search": { "type": "boolean", "description": "The app's inbound part answers GET /v1/search?q= and the shell's Find asks it." },
         "card": { "type": "boolean", "description": "Home draws a card for the app, which the app fills through ctx.frame.card." },
         "canvas": { "type": "boolean", "description": "The app uses the full-canvas sandboxed frame for free drawing (ADR 0076). Shown to the admin before install." },
@@ -220,6 +240,17 @@
   },
   "dependentRequired": { "bindings": ["links"] },
   "$defs": {
+    "eventType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "version", "schema"],
+      "properties": {
+        "topic": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$", "maxLength": 120, "description": "<app id>.<thing>.<what happened>, such as notes.note.added. The registry refuses a topic outside the app's own id." },
+        "version": { "type": "integer", "minimum": 1, "maximum": 999, "description": "The payload's version: within it the type only gains optional fields." },
+        "description": { "type": "string", "maxLength": 300, "description": "What the event says happened." },
+        "schema": { "type": "object", "required": ["type"], "properties": { "type": { "const": "object" } }, "description": "The payload's JSON Schema (2020-12), for an object. The registry refuses one it can't compile, or one over 16 KB." }
+      }
+    },
     "kind": {
       "type": "object",
       "additionalProperties": false,

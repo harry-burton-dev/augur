@@ -2699,6 +2699,35 @@ paths:
                     items:
                       type: string
                     description: The ids of the notification kinds the app's manifest declares
+                  events:
+                    type: object
+                    required:
+                      - publishes
+                    properties:
+                      reads:
+                        type: array
+                        items:
+                          type: string
+                        description: The topics, or families such as folio.*, it reads; it is given only those
+                      publishes:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - topic
+                            - version
+                            - schema
+                          properties:
+                            topic:
+                              type: string
+                            version:
+                              type: integer
+                            schema:
+                              type: object
+                              description: The payload's JSON Schema
+                              additionalProperties: {}
+                        description: Each type it publishes, which the events service checks each event against
+                    description: The domain events its manifest declares (ADR 0104), which the events service holds it to; absent when it declares none
                   requiredRole:
                     anyOf:
                       - type: string

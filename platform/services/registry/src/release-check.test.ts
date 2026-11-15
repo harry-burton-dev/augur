@@ -71,6 +71,23 @@ describe('a contract 3 release at the registry (9.1 to 9.3)', () => {
     expect(contractMessage(2, [3, 4], { name: 'Notes', version: '1.4.0' })).toBe('Notes 1.4.0 speaks contract 2, and this AUGUR serves 3 and 4; the app needs a release on contract 3 or 4.');
   });
 
+  it('takes the events an app declares only when it may read and publish them, under its own id, each type once (ADR 0104)', async () => {
+    const added = { topic: 'notes.note.added', version: 1, schema: { type: 'object', properties: { note: { type: 'string' } } } };
+    const evented = (events: unknown, scopes?: string[]) =>
+      withManifest((m) => {
+        (m.contributes as Record<string, unknown>).events = events;
+        if (scopes) m.scopes = scopes;
+      });
+    const both = (m: string[]) => [...m, 'events:subscribe', 'events:publish'];
+    const scopes = (await exampleRelease()).manifest.scopes.filter((s: string) => !s.startsWith('events:'));
+    expect(await refused(await evented({ reads: ['folio.*'], publishes: [added] }, both(scopes)))).toEqual([]);
+    expect(await refused(await evented({ reads: ['folio.*'] }, scopes))).toEqual([expect.stringMatching(/reads, but doesn't ask for events:subscribe/)]);
+    expect(await refused(await evented({ publishes: [added] }, scopes))).toEqual([expect.stringMatching(/publishes, but doesn't ask for events:publish/)]);
+    expect(await refused(await evented({ publishes: [{ ...added, topic: 'folio.document.published' }] }, both(scopes)))).toEqual([expect.stringMatching(/can't publish folio\.document\.published: an app publishes only under its own id \(notes\./)]);
+    expect(await refused(await evented({ publishes: [added, added] }, both(scopes)))).toEqual([expect.stringMatching(/notes\.note\.added version 1 twice/)]);
+    expect(await refused(await evented({ publishes: [{ ...added, schema: { type: 'object', description: 'x'.repeat(17_000) } }] }, both(scopes)))).toEqual([expect.stringMatching(/over 16 KB/)]);
+  });
+
   it('refuses asks that aren’t what the parts ask for, a secret in the arguments and two parts of one name', async () => {
     const unseen = copy(exampleRelease());
     unseen.parts[0]!.resources!.internet = { type: 'augur-outbound', params: { hosts: ['x.example.org'], why: 'Fetches things' } };

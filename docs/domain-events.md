@@ -8,6 +8,22 @@ A topic is the publisher's id, then what happened, dotted and lowercase: `folio.
 
 An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. An app reads only the events on floors where it holds `events:subscribe`, and those on no floor (the organisation's); AUGUR's own services read every floor's (ADR 0104). Even so, a follower that needs the document asks its owner's API, which checks who may see it.
 
+## Declaring them
+
+On the app contract, the manifest says which events the app reads and each type it publishes (ADR 0104), under `contributes.events`:
+
+```json
+"events": {
+  "reads": ["platform.person.deleted", "folio.*"],
+  "publishes": [
+    { "topic": "notes.note.added", "version": 1, "description": "A note was added.",
+      "schema": { "type": "object", "required": ["note"], "properties": { "note": { "type": "string" } } } }
+  ]
+}
+```
+
+Reading needs `events:subscribe` and publishing `events:publish`. Each type is under the app's own id, once per version, with its payload's JSON Schema (an object, at most 16 KB). Within a version a type only gains optional fields; anything else is a new version, declared beside the old one. The registry refuses a release that breaks these rules, and AUGUR's services read what an app declares from its grants.
+
 ## Publishing
 
 Add `events:publish` to the manifest's `scopes` (an admin allows it in Admin, Apps). When an event goes with a change to your database, write it to your **outbox** in the same transaction, so it's sent if and only if the change commits:
