@@ -385,6 +385,17 @@ up() {
   return 1
 }
 
+# The front door believes X-Forwarded-For from the proxy in front only (TRUSTED_PROXIES, here its default): nginx's
+# config, as the image wrote it at start, says set_real_ip_from for each, and nothing was left out on the way.
+trusts_the_proxy() {
+  local said
+  said=$(pc logs web 2>&1 | grep 'trusted-proxies:' || true)
+  if [ -n "$said" ] || ! pc exec -T web grep -q 'set_real_ip_from 10.0.0.0/8;' /etc/nginx/conf.d/default.conf; then
+    echo "The front door doesn't believe the proxy in front as TRUSTED_PROXIES says (infra/deploy/trusted-proxies.envsh):"$'\n'"${said:-no set_real_ip_from 10.0.0.0/8 in its config}" >&2
+    return 1
+  fi
+}
+
 # The first admin signs in in a real browser, and Home and each app that ships with AUGUR render with
 # the kit from KIT_URL (infra/deploy-browser-check.mjs, in Playwright's own image). BROWSER_CHECK=0 skips it;
 # BROWSER_CHECK_OUT keeps its screenshots.
@@ -613,6 +624,7 @@ case "$mode" in
     up
     wait_ready "Fresh install of this checkout"
     no_restarts
+    trusts_the_proxy
     on_version "$local_tag"
     backup_restores "Fresh install of this checkout"
     browser_check

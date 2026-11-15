@@ -899,6 +899,16 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
     },
+    "TRUSTED_PROXIES": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f:./, ]*$",
+      "description": "Where the proxy in front of the front door is: addresses or ranges, separated by spaces or commas, believed about a caller's address.",
+      "default": "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
     "KEYCLOAK_CONSOLE": {
       "type": "string",
       "description": "open serves Keycloak's own admin console at PLATFORM_URL/sso/admin; it's closed otherwise.",

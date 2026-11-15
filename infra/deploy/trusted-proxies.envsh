@@ -1,0 +1,20 @@
+#!/bin/sh
+# Who the front door believes about a caller's address (AUGUR's docs, Limits and health). The proxy in front,
+# Tailscale's container or the organisation's load balancer, passes on the address it saw in X-Forwarded-For;
+# nginx believes that header only from TRUSTED_PROXIES: addresses or ranges, separated by spaces or commas.
+# Unset, it is the private ranges and loopback. Name only your proxy's addresses where others share them.
+# nginx's entrypoint sources this before it fills in default.conf.template, so ${REAL_IP_FROM} is set here.
+list=$(printf '%s' "${TRUSTED_PROXIES:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1}" | tr ',' ' ')
+REAL_IP_FROM=""
+for proxy in $list; do
+  # An IPv4 or IPv6 address, with or without a prefix length: nothing else reaches nginx's config.
+  if printf '%s' "$proxy" | grep -qE '^(([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?|[0-9A-Fa-f]*:[0-9A-Fa-f:.]*(/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))?)$'; then
+    REAL_IP_FROM="${REAL_IP_FROM}set_real_ip_from ${proxy}; "
+  else
+    echo "trusted-proxies: TRUSTED_PROXIES has ${proxy}, which isn't an address or a range such as 10.0.0.0/8, so it is left out." >&2
+  fi
+done
+if [ -z "$REAL_IP_FROM" ]; then
+  echo "trusted-proxies: TRUSTED_PROXIES names no usable address, so X-Forwarded-For is believed from no one: every caller counts as the proxy's address in the front door's limits." >&2
+fi
+export REAL_IP_FROM
