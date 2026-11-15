@@ -14,7 +14,7 @@ import { checkRelease, contractMessage, knowledgeNeeds, type KnowledgeOffer, typ
 import { isRelease2 } from '@augur/app-tools/release2';
 import { AppInstalls, AppJob as AppJobSchema, AppJobStep, JobRequest, Preview } from './app-runner-schemas.ts';
 import { empty, orNull, ref, refused } from './schemas.ts';
-import type { AppFollow, AppJob, AppJobOutcome, AppRelease, AppStore, InternetAllowed, RunningPreview } from './store.ts';
+import type { AppFollow, AppJob, AppJobOutcome, AppPublisher, AppRelease, AppStore, InternetAllowed, RunningPreview } from './store.ts';
 import { isCidr, releaseAddressProblem, upstreamProblem } from './upstreams.ts';
 import { releaseFileFetch, TooLarge, type ReleaseFetch } from './release-fetch.ts';
 import { manifest3Of, ReviewSchema, reviewOf } from './apps3.ts';
@@ -107,6 +107,15 @@ export const releaseProblem = (release: unknown, offered?: Offered): string | un
   if (!semver.valid(version)) return `"${version}" is not a version such as 1.2.0.`;
   return undefined;
 };
+
+/**
+ * Why a release can't install under its id: the id is bound to another publisher (D9), the repository whose
+ * release first installed under it. Ids aren't publisher-qualified, so this keeps one from being taken over.
+ */
+export const publisherProblem = (release: AppRelease, bound: AppPublisher | undefined): string | undefined =>
+  bound && !sameRepository(release.signer.repository, bound.repository)
+    ? `${release.id} was first installed from ${bound.repository}, and an app’s id stays with its first publisher. This release is signed by ${release.signer.repository}: it needs an id of its own.`
+    : undefined;
 
 /** Why a pull request's build can't be previewed beside the installed release; undefined when it can. */
 export const previewProblem = (preview: AppRelease, installed: AppRelease): string | undefined => {
@@ -266,6 +275,7 @@ export const appRunnerRoutes =
     const installDefaults = async () => {
       if (!defaultApps.length) return;
       for (const { app: id, release } of (await defaultsNow()).install) {
+        if (publisherProblem(release, await store.appPublisher(id))) continue;
         // The values an admin gave it are handed over with it, as with an admin's install.
         await store.restoreSettings(id, declaredSettings(release.manifest).map((d) => d.id));
         if (!(await store.requestAppJob({ id: randomUUID(), app: id, action: 'install', release, requestedBy: DEPLOYMENT }))) continue;
@@ -939,7 +949,7 @@ export const appRunnerRoutes =
           body: JobRequest,
           response: {
             202: { ...ref(AppJobSchema), description: 'Waiting for the runner' },
-            400: refused("The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, or a bad manifest"),
+            400: refused("The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, one under an id another publisher holds, or a bad manifest"),
             401: signInAgain,
             403: notDeploymentAdmin,
             404: refused('The app feed has no release file for that app and version'),
@@ -978,6 +988,8 @@ export const appRunnerRoutes =
             releaseProblem(release, await offeredTo(release, knowledge)) ??
             (previewPr(release.version) !== undefined ? 'That’s a pull request’s build: it runs as a preview beside the app, for its developers.' : ringProblem(release, ring, listed));
           if (problem) return reply.code(400).send({ error: 'bad_request', message: problem });
+          const taken = publisherProblem(release, await store.appPublisher(release.id));
+          if (taken) return reply.code(400).send({ error: 'bad_request', message: taken });
           // Its event types may only grow within a version (ADR 0104): checked against the release in force before anything runs.
           if (isRelease2(release)) {
             const was = (await store.records()).find((r) => r.entry.id === release!.id);
@@ -1232,6 +1244,8 @@ export const appRunnerRoutes =
             detail: { requestedBy: job.requestedBy, ...(job.pr !== undefined ? { pr: job.pr } : {}), ...(job.release ? { version: job.release.version } : {}), ...(message ? { message } : {}) },
           });
         }
+        // Its first install binds the id to the release's publisher, for good (D9).
+        if (outcome === 'done' && job.action === 'install' && job.release) await store.bindPublisher(job.app, job.release.signer.repository);
         // Installed, the values of settings its release no longer declares are kept 30 days from now, in case it comes back (spec 5.5).
         if (outcome === 'done' && job.action === 'install' && job.release && isRelease2(job.release)) {
           await store.keepDeclaredSettings(job.app, declaredSettings(job.release.manifest).map((d) => d.id));

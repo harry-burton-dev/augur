@@ -240,6 +240,13 @@ export interface InternetAllowed {
   allowedAt: string;
 }
 
+/** The publisher an app id is bound to: the repository whose signed release first installed under it (D9). */
+export interface AppPublisher {
+  app: string;
+  repository: string;
+  boundAt: string;
+}
+
 /** An app the runner installed, and the release it's on. */
 export interface InstalledApp {
   app: string;
@@ -403,6 +410,10 @@ export interface AppStore {
   deferDataDeletion(app: string, after: (failures: number) => Date, problem: string): Promise<{ failures: number; dueAt: Date } | undefined>;
   /** Forgets everything the registry kept of an app whose data went: its settings' values, developers, follow, deletion and its catalogue entry with its floors' grants. */
   forgetApp(app: string, by: string): Promise<void>;
+  /** The publisher the app id is bound to; undefined until a release installs under it. Never forgotten, so an id isn't taken over once its app is removed. */
+  appPublisher(app: string): Promise<AppPublisher | undefined>;
+  /** Binds the app id to this repository, unless it is bound already. */
+  bindPublisher(app: string, repository: string): Promise<void>;
   /** Forgets values removed before `before`; how many it forgot. */
   dropRemovedSettings(before: Date): Promise<number>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
@@ -822,6 +833,23 @@ export const migrations: Migration[] = [
         refused_why text
       );
       create index audit_outbox_unsent on registry.audit_outbox (id) where sent_at is null;`,
+  },
+  {
+    id: '029_app_publishers',
+    sql: `
+      -- Each app id's publisher (D9): the repository whose signed release first installed under it. Another
+      -- repository's release under the id is refused, and the row outlives the app's removal (forgetApp keeps it).
+      create table registry.app_publishers (
+        app_id text primary key,
+        repository text not null,
+        bound_at timestamptz not null default now()
+      );
+      -- An app installed before this: bound to the repository of its first install.
+      insert into registry.app_publishers (app_id, repository, bound_at)
+        select distinct on (app_id) app_id, release->'signer'->>'repository', coalesce(finished_at, requested_at)
+        from registry.app_jobs
+        where action = 'install' and state = 'done' and pr is null and release->'signer'->>'repository' is not null
+        order by app_id, finished_at, requested_at;`,
   },
 ];
 
@@ -1413,6 +1441,16 @@ export class PgAppStore implements AppStore {
     });
     // Its catalogue entry goes too, with its versions, frontends and floors' grants, as an admin's removal from the catalogue does.
     await this.remove(app, by);
+  }
+
+  async appPublisher(app: string) {
+    const { rows } = await this.pool.query<{ app_id: string; repository: string; bound_at: Date }>('select * from registry.app_publishers where app_id = $1', [app]);
+    const r = rows[0];
+    return r && { app: r.app_id, repository: r.repository, boundAt: r.bound_at.toISOString() };
+  }
+
+  async bindPublisher(app: string, repository: string) {
+    await this.pool.query('insert into registry.app_publishers (app_id, repository) values ($1, $2) on conflict do nothing', [app, repository]);
   }
 
   async dropRemovedSettings(before: Date) {

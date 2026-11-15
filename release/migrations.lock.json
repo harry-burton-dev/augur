@@ -86,6 +86,7 @@
     "025_app_internet": "97b8f75745392bd7",
     "026_app_setting_values": "cae50d23ea12b791",
     "027_app_data_deletions": "695124f1b85ca011",
-    "028_audit_outbox": "1b82478bb103828e"
+    "028_audit_outbox": "1b82478bb103828e",
+    "029_app_publishers": "13b52683f8c7c005"
   }
 }
