@@ -428,26 +428,31 @@ jobs:
       - name: Apps' files are never a page, and the shell's hashed files carry the same headers
         run: |
           docker run -d --name web-apps --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -p 8085:8080 platform-web
-          for i in $(seq 1 20); do curl -fsI http://localhost:8085/apps/home/entry.js > /tmp/apps-js && break; sleep 1; done
+          trap 'docker rm -f web-apps >/dev/null' EXIT
+          for i in $(seq 1 20); do curl -fsI http://localhost:8085/apps/home/entry.js >/dev/null && break; sleep 1; done
+          curl -fsI http://localhost:8085/apps/home/entry.js >/dev/null || { echo "The front door didn't serve /apps/home/entry.js:"; docker logs web-apps; exit 1; }
           admin=$(jq -r .version platform/frontends/admin/package.json)
           asset=$(docker exec web-apps sh -c 'ls /usr/share/nginx/html/assets | grep "\.js$" | head -n 1')
           shared=$(docker exec web-apps sh -c 'ls /usr/share/nginx/html/shared | grep "\.js$" | head -n 1')
-          policy="content-security-policy-report-only: sandbox; default-src 'none'; frame-ancestors 'none'"
-          has() { grep -qi "$1" "$2" || { echo "$2 lacks: $1"; cat "$2"; exit 1; }; }
+          test -n "$asset" -a -n "$shared" || { echo "No .js file in the image's assets/ ($asset) or shared/ ($shared) to check."; exit 1; }
+          # The policy as not-a-page.conf sends it, report-only or enforcing.
+          policy=$(sed -n 's/^add_header \(Content-Security-Policy[-A-Za-z]*\) "\(.*\)" always;$/\1: \2/p' infra/deploy/not-a-page.conf)
+          test -n "$policy" || { echo "infra/deploy/not-a-page.conf sends no Content-Security-Policy."; exit 1; }
+          has() { grep -qiF -- "$1" "$2" || { echo "$url lacks: $1"; cat "$2"; exit 1; }; }
           for url in "/apps/home/entry.js" "/apps/admin/$admin/sandbox.js" "/assets/$asset" "/shared/$shared"; do
             curl -fsI "http://localhost:8085$url" > /tmp/h
-            has "^x-content-type-options: nosniff" /tmp/h
-            has "^$policy" /tmp/h
-            has "^content-type: application/javascript" /tmp/h
+            has "x-content-type-options: nosniff" /tmp/h
+            has "$policy" /tmp/h
+            grep -qiE "^content-type: (text|application)/javascript" /tmp/h || { echo "$url is not served as JavaScript:"; cat /tmp/h; exit 1; }
           done
-          # A page or an SVG under /apps/ is never served, wherever it would come from; the refusal has the headers too.
-          for url in /apps/home/x.html /apps/home/x.svg "/apps/admin/$admin/x.svg" /apps/library/0.1.0_abc/x.xhtml /apps/home/; do
-            test "$(curl -s -o /tmp/body -D /tmp/h -w '%{http_code}' "http://localhost:8085$url")" = 404
-            has "^content-type: text/plain" /tmp/h
-            has "^x-content-type-options: nosniff" /tmp/h
-            has "^$policy" /tmp/h
+          # A page or an SVG under /apps/ is never served, in any case, wherever it would come from; the refusal has the headers too.
+          for url in /apps/home/x.html /apps/home/x.svg /apps/home/X.SVG "/apps/admin/$admin/x.svg" /apps/library/0.1.0_abc/x.xhtml /apps/home/; do
+            code=$(curl -s -o /dev/null -D /tmp/h -w '%{http_code}' "http://localhost:8085$url")
+            test "$code" = 404 || { echo "$url answered $code, not 404:"; cat /tmp/h; exit 1; }
+            has "content-type: text/plain" /tmp/h
+            has "x-content-type-options: nosniff" /tmp/h
+            has "$policy" /tmp/h
           done
-          docker rm -f web-apps
       - name: The kit is served at /kit/ by default, or from KIT_URL, held to its hashes
         run: |
           v=$(jq -r .version release/kit.json)
