@@ -79,7 +79,7 @@ describe('an app’s id', () => {
   });
 });
 
-describe('categoryOf (ADR 0032)', () => {
+describe('categoryOf (ADR 0077)', () => {
   const nobody = { fromFeed: false };
 
   it('counts the registry’s own apps as platform apps, whatever else is said', () => {

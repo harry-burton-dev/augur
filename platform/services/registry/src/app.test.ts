@@ -652,7 +652,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     });
   });
 
-  describe('kinds of app (ADR 0032)', () => {
+  describe('kinds of app (ADR 0077)', () => {
     const manifestFor = (id: string, name: string, category?: string) => ({ ...library, id, name, route: `/${id}`, entry: `/apps/${id}/entry.js`, handles: [], ...(category ? { category } : {}) });
 
     it('reports the kind in force: its own apps and feed apps’ claims, and no one else’s', async () => {
