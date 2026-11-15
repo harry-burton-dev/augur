@@ -271,12 +271,28 @@ export const Delivery = Type.Object(
     lastError: Type.Union([Type.String(), Type.Null()], { description: 'What the last failed attempt said' }),
     failingSince: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When the attempts at the next event began failing' }),
     deliveredAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When the part last took an event' }),
-    dropped: Type.Integer({ description: 'Events passed over after a day of failures, each recorded in Activity as delivery.dropped' }),
+    dropped: Type.Integer({ description: 'Events passed over after a day of failures, each recorded in Activity as delivery.dropped, before such events were set aside instead (setAside)' }),
     droppedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When the last was passed over' }),
+    retrying: Type.Integer({ description: 'Events its part couldn’t take that are being tried again, and those on their topics waiting behind them. Since 1.18' }),
+    setAside: Type.Integer({ description: 'Events set aside, each recorded in Activity as delivery.set-aside and listed by GET /deliveries/set-aside. Since 1.18' }),
     state: Type.Enum(['ok', 'retrying', 'stalled'], { description: 'ok: taking events; retrying: failing for under an hour; stalled: failing for an hour or more' }),
     words: Type.String({ description: 'The state in words, with the reason, as Admin shows it; Admin adds since when from failingSince' }),
   },
   { $id: 'Delivery', description: 'How one app’s part is taking the events pushed to it (contract 3, spec 8.6)' },
+);
+
+export const SetAsideEvent = Type.Object(
+  {
+    app: Type.String({ description: 'The app whose part couldn’t take it' }),
+    seq: Type.String({ description: 'The event’s place in the order' }),
+    id: Type.String({ description: "The publisher's own id for it" }),
+    topic: Type.String(),
+    attempts: Type.Integer({ description: 'How many times it was tried' }),
+    lastError: Type.Union([Type.String(), Type.Null()], { description: 'What the last try said' }),
+    firstFailedAt: Type.Union([Type.String({ format: 'date-time' }), Type.Null()], { description: 'When it first failed' }),
+    setAsideAt: Type.String({ format: 'date-time' }),
+  },
+  { $id: 'SetAsideEvent', description: 'An event an app’s part couldn’t take, set aside after its tries so the events behind it could go (PER-462)' },
 );
 
 export const Pushing = Type.Union(
@@ -316,4 +332,4 @@ export const refused = (description: string) => ({ description, content: { 'appl
 export const empty = (description: string) => Type.Null({ description });
 
 /** Every named schema, in the order the contract lists them. */
-export const SCHEMAS = [Refusal, NewNotification, NotificationAction, Notification, NewAuditEntry, AuditEntry, EventFloor, TeamNotices, NewDomainEvent, DomainEvent, InboxRef, InboxOwner, NewInboxItem, InboxChange, InboxItem, InboxHistory, InboxCounts, Delivery, Pushing];
+export const SCHEMAS = [Refusal, NewNotification, NotificationAction, Notification, NewAuditEntry, AuditEntry, EventFloor, TeamNotices, NewDomainEvent, DomainEvent, InboxRef, InboxOwner, NewInboxItem, InboxChange, InboxItem, InboxHistory, InboxCounts, Delivery, SetAsideEvent, Pushing];
