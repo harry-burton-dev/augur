@@ -1205,6 +1205,24 @@
       ],
       "x-docs": "docs/domain-events.md#following"
     },
+    "DOMAIN_EVENTS_DELIVERY_ATTEMPTS": {
+      "type": "string",
+      "description": "How many times an event an app's part answers but can't take is tried before it is set aside, so the events behind it go.",
+      "default": "5",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
+    },
+    "DOMAIN_EVENTS_RETRY_SECONDS": {
+      "type": "string",
+      "description": "The wait in seconds before such an event is tried again, doubling each time, up to ten minutes.",
+      "default": "30",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
+    },
     "INBOX_KEEP_DAYS": {
       "type": "string",
       "description": "How many days closed inbox items are kept before they go, with their history (the audit log keeps every step).",

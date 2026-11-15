@@ -607,6 +607,9 @@ services:
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
+      # How often an event an app's part can't take is tried, and the first wait between tries, before it is set aside (5 and 30 when empty; docs/domain-events.md).
+      DOMAIN_EVENTS_DELIVERY_ATTEMPTS: ${DOMAIN_EVENTS_DELIVERY_ATTEMPTS:-}
+      DOMAIN_EVENTS_RETRY_SECONDS: ${DOMAIN_EVENTS_RETRY_SECONDS:-}
       INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
       # How many days back the Inbox's Done tab looks (30 when empty; docs/inbox.md).
       INBOX_DONE_DAYS: ${INBOX_DONE_DAYS:-}

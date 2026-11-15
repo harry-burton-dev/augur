@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## An event an app's part can't take no longer holds the rest
+
+**From** unreleased
+
+When an app's part answers but can't take an event, the events service now tries it up to 5 times over about 7½ minutes (`DOMAIN_EVENTS_DELIVERY_ATTEMPTS`, `DOMAIN_EVENTS_RETRY_SECONDS`) while events on other topics go on, then sets it aside: kept, recorded in Activity as `delivery.set-aside`, and listed for admins by `GET /v1/deliveries/set-aside`. Before, it held every event behind it for a day and was then passed over. A part that is down (no answer, or 502, 503 or 504) still holds everything for up to a day, as before, and the event then is set aside rather than passed over. An app that relied on events arriving strictly in `seq` order across topics now gets them in order within each topic only. Nothing to do on the server; the two settings are optional.
+
 ## Postgres keeps connections back for AUGUR
 
 **From** unreleased
