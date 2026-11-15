@@ -425,6 +425,29 @@ jobs:
           # Anywhere but the workbench, nothing on the tailnet may run in the shell.
           ! grep -i "ts.net" /tmp/headers
           docker rm -f web
+      - name: Apps' files are never a page, and the shell's hashed files carry the same headers
+        run: |
+          docker run -d --name web-apps --add-host gateway:127.0.0.1 --add-host keycloak:127.0.0.1 -p 8085:8080 platform-web
+          for i in $(seq 1 20); do curl -fsI http://localhost:8085/apps/home/entry.js > /tmp/apps-js && break; sleep 1; done
+          admin=$(jq -r .version platform/frontends/admin/package.json)
+          asset=$(docker exec web-apps sh -c 'ls /usr/share/nginx/html/assets | grep "\.js$" | head -n 1')
+          shared=$(docker exec web-apps sh -c 'ls /usr/share/nginx/html/shared | grep "\.js$" | head -n 1')
+          policy="content-security-policy-report-only: sandbox; default-src 'none'; frame-ancestors 'none'"
+          has() { grep -qi "$1" "$2" || { echo "$2 lacks: $1"; cat "$2"; exit 1; }; }
+          for url in "/apps/home/entry.js" "/apps/admin/$admin/sandbox.js" "/assets/$asset" "/shared/$shared"; do
+            curl -fsI "http://localhost:8085$url" > /tmp/h
+            has "^x-content-type-options: nosniff" /tmp/h
+            has "^$policy" /tmp/h
+            has "^content-type: application/javascript" /tmp/h
+          done
+          # A page or an SVG under /apps/ is never served, wherever it would come from; the refusal has the headers too.
+          for url in /apps/home/x.html /apps/home/x.svg "/apps/admin/$admin/x.svg" /apps/library/0.1.0_abc/x.xhtml /apps/home/; do
+            test "$(curl -s -o /tmp/body -D /tmp/h -w '%{http_code}' "http://localhost:8085$url")" = 404
+            has "^content-type: text/plain" /tmp/h
+            has "^x-content-type-options: nosniff" /tmp/h
+            has "^$policy" /tmp/h
+          done
+          docker rm -f web-apps
       - name: The kit is served at /kit/ by default, or from KIT_URL, held to its hashes
         run: |
           v=$(jq -r .version release/kit.json)
