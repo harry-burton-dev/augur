@@ -160,7 +160,9 @@ export const settingsProblems = ({ schema, files, code }) => {
     const internal = Boolean(setting['x-internal']);
     for (const name of setting['x-services'] ?? []) {
       if (name === 'compose') {
-        if (!key.startsWith('COMPOSE_') && !refers(composeText, key)) problems.push(`${key}: compose.yml never uses it, though the schema says Compose reads it.`);
+        // compose.yml, or another compose file in the deploy folder that a deployment runs beside it (compose.proxy.yml).
+        const overlays = Object.entries(files).filter(([path]) => /^infra\/deploy\/compose\.[^/]+\.ya?ml$/.test(path)).map(([, text]) => text);
+        if (!key.startsWith('COMPOSE_') && !refers(composeText, key) && !overlays.some((text) => refers(text, key))) problems.push(`${key}: compose.yml never uses it, though the schema says Compose reads it.`);
         continue;
       }
       const service = services[name];
@@ -251,7 +253,7 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const schema = JSON.parse(read('infra/deploy/settings.schema.json'));
   const files = {};
-  const want = ['infra/deploy/compose.yml', 'infra/deploy/.env.example'];
+  const want = ['infra/deploy/compose.yml', 'infra/deploy/compose.proxy.yml', 'infra/deploy/.env.example'];
   for (const s of [...Object.values(schema.properties), ...Object.values(schema.patternProperties ?? {})]) {
     if (s['x-docs']) want.push(s['x-docs'].split('#')[0]);
     for (const via of Object.values(s['x-via'] ?? {})) if (via !== '.env' && via !== 'default') want.push(via);

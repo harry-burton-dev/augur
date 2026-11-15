@@ -28,6 +28,13 @@ else
   echo "augur: private to the tailnet"
 fi
 
+# A machine new to the tailnet joins with TS_AUTHKEY; one that has joined keeps its state, so needs no key.
+# Behind your own proxy (COMPOSE_FILE=compose.yml:compose.proxy.yml) this container doesn't run at all.
+if [ -z "${TS_AUTHKEY:-}" ] && [ ! -s /var/lib/tailscale/tailscaled.state ]; then
+  echo "augur: TS_AUTHKEY isn't set in .env, so this machine can't join your tailnet. Make an auth key under Settings → Keys in the Tailscale admin console, or put AUGUR behind your own proxy (AUGUR's docs, Install AUGUR)." >&2
+  exit 1
+fi
+
 started=$(date +%s)
 /usr/local/bin/containerboot &
 child=$!

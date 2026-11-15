@@ -148,3 +148,12 @@ test('the install guide’s settings list is made from the schema', () => {
   assert.equal(withInstallList(guide, 'new'), guide.replace('old', 'new'));
   assert.equal(withInstallList('no markers', 'new'), undefined);
 });
+
+test('takes a setting Compose reads in one of the deploy folder’s other compose files, such as compose.proxy.yml', () => {
+  const s = structuredClone(schema);
+  s.properties.PROXY_LISTEN = { 'x-services': ['compose'], 'x-docs': 'docs/upgrade.md#the-updates-page' };
+  const more = { ...files, 'infra/deploy/.env.example': `${files['infra/deploy/.env.example']}# PROXY_LISTEN=\n`, 'docs/upgrade.md': `${files['docs/upgrade.md']}\`PROXY_LISTEN\` too.\n` };
+  assert.ok(check({ schema: s, files: more }).includes('PROXY_LISTEN: compose.yml never uses it, though the schema says Compose reads it.'));
+  const overlay = { ...more, 'infra/deploy/compose.proxy.yml': 'services:\n  web:\n    ports: ["${PROXY_LISTEN:-127.0.0.1:8080}:8080"]\n' };
+  assert.deepEqual(check({ schema: s, files: overlay }), []);
+});

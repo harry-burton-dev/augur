@@ -8,7 +8,6 @@
   "required": [
     "PLATFORM_VERSION",
     "PLATFORM_URL",
-    "TS_AUTHKEY",
     "POSTGRES_PASSWORD",
     "KEYCLOAK_ADMIN_PASSWORD",
     "IDENTITY_DATABASE_PASSWORD",
@@ -116,11 +115,34 @@
       "type": "string",
       "writeOnly": true,
       "pattern": "^tskey-",
-      "description": "A Tailscale auth key.",
+      "description": "A Tailscale auth key, for a machine joining the tailnet; not needed behind your own proxy.",
       "x-services": [
         "tailscale"
       ],
       "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "COMPOSE_FILE": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+\\.ya?ml(:[A-Za-z0-9._-]+\\.ya?ml)*$",
+      "description": "The compose files this deployment runs: compose.yml:compose.proxy.yml puts it behind your own proxy instead of Tailscale.",
+      "default": "compose.yml",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#behind-your-own-proxy",
+      "x-via": {
+        "updater": ".env"
+      }
+    },
+    "PROXY_LISTEN": {
+      "type": "string",
+      "pattern": "^([0-9.]+|\\[[0-9A-Fa-f:]+\\]):[0-9]+$",
+      "description": "Behind your own proxy, where the front door listens on this server: an address and port.",
+      "default": "127.0.0.1:8080",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#behind-your-own-proxy"
     },
     "POSTGRES_PASSWORD": {
       "type": "string",

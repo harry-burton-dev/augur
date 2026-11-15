@@ -101,7 +101,8 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   sed -e '/^#/d' -e '/^$/d' | awk -F= '!seen[$1]++' | while IFS='=' read -r key value; do
   case "$key" in
     PLATFORM_URL) value="http://localhost:$port" ;;
-    TS_AUTHKEY) value=unused ;;
+    # Behind its own proxy (compose.proxy.yml, below) no key is needed; a release from before that wanted one all the same.
+    TS_AUTHKEY) value=$(grep -qs 'TS_AUTHKEY:?' "$deploy/compose.yml" "$old_deploy/compose.yml" && echo unused || true) ;;
     PLATFORM_ADMIN_USER) value=deploy-test-admin ;;
     PLATFORM_ADMIN_EMAIL) value=deploy-test@example.org ;;
     PLATFORM_ADMIN_FIRST_NAME) value=Deploy ;;
@@ -111,6 +112,10 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   esac
   echo "$key=$value"
 done > "$deploy/.env"
+
+# The test reaches AUGUR as an organisation's own proxy would (compose.proxy.yml): Tailscale doesn't run, and
+# the front door listens on localhost:$port. Named in .env, as on a server, so the updater runs the same files.
+if [ -e "$deploy/compose.proxy.yml" ]; then printf 'COMPOSE_FILE=compose.yml:compose.proxy.yml\nPROXY_LISTEN=127.0.0.1:%s\n' "$port" >> "$deploy/.env"; fi
 
 # A command run against a fresh install (the run suite's dry run) seeds it first, so the install allows sample data.
 if [ -n "${THEN:-}" ]; then echo 'SEED_ALLOWED=true' >> "$deploy/.env"; fi
@@ -213,7 +218,10 @@ pc() {
   # Only a build from this checkout uses the build file: a release under test runs its published
   # images, as a server does, including the apps that ship with it (ADR 0049).
   if [ "${BUILD:-}" = 1 ] && [ "$dir" = "$deploy" ] && [ -e "$dir/compose.build.yml" ]; then files+=(-f "$dir/compose.build.yml"); fi
-  docker compose -p "$project" "${files[@]}" -f "$work/compose.test.yml" --env-file "$dir/.env" "$@"
+  # Behind its own proxy, as .env names it from this checkout on; a release from before compose.proxy.yml (its folder has
+  # none) publishes the front door the test's way.
+  if [ -e "$dir/compose.proxy.yml" ]; then files+=(-f "$dir/compose.proxy.yml"); else files+=(-f "$work/compose.test.yml"); fi
+  docker compose -p "$project" "${files[@]}" --env-file "$dir/.env" "$@"
 }
 # Which release's deploy files and images to run: this checkout's, or the one it upgrades from.
 use() {
@@ -396,6 +404,21 @@ trusts_the_proxy() {
   said=$(pc logs web 2>&1 | grep 'trusted-proxies:' || true)
   if [ -n "$said" ] || [ "$got" != "$want" ]; then
     echo "The front door doesn't believe the proxy in front as TRUSTED_PROXIES says (infra/deploy/trusted-proxies.envsh): it believes '$got', not '$want'."$'\n'"$said" >&2
+    return 1
+  fi
+}
+
+# Both ways in, as Compose reads them: with Tailscale (compose.yml alone) the tailscale container runs and needs no
+# key once it has joined; behind your own proxy (compose.proxy.yml) it doesn't run, and the front door is published.
+# The test runs the second; the first only as config, since it can't join a tailnet.
+both_ways_in() {
+  local alone proxied
+  [ -e "$deploy/compose.proxy.yml" ] || return 0
+  alone=$(docker compose -p "$project" -f "$deploy/compose.yml" --env-file "$deploy/.env" config --format json)
+  proxied=$(pc config --format json)
+  if ! jq -e '.services.tailscale and (.services.web.ports // [] | length == 0)' <<<"$alone" >/dev/null ||
+    ! jq -e --arg port "$port" '(.services.tailscale | not) and any(.services.web.ports[]; .published == $port and .host_ip == "127.0.0.1")' <<<"$proxied" >/dev/null; then
+    echo "compose.yml should run Tailscale and publish nothing, and compose.proxy.yml turn Tailscale off and publish the front door at PROXY_LISTEN." >&2
     return 1
   fi
 }
@@ -622,9 +645,11 @@ fi
 case "$mode" in
   fresh)
     use "$local_tag"
+    both_ways_in
     # IMAGES_OUT gets every image the release's compose file runs, third-party ones too, for the
     # vulnerability scan (Tailscale among them, though the test never starts it).
-    if [ -n "${IMAGES_OUT:-}" ]; then pc config --images | sort -u > "$IMAGES_OUT"; fi
+    # compose.yml alone, as on Tailscale: behind a proxy (pc here) Tailscale's image isn't run, but servers on Tailscale run it.
+    if [ -n "${IMAGES_OUT:-}" ]; then docker compose -p "$project" -f "$deploy/compose.yml" --env-file "$deploy/.env" config --images | sort -u > "$IMAGES_OUT"; fi
     up
     wait_ready "Fresh install of this checkout"
     no_restarts

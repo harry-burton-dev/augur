@@ -54,6 +54,12 @@ Every release has been through the [deploy test](https://drive.google.com/drive/
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+### AUGUR can run behind your own proxy instead of Tailscale
+
+**From** unreleased
+
+`compose.proxy.yml` puts AUGUR behind your organisation's own proxy or load balancer: Tailscale doesn't run, and the front door listens at `PROXY_LISTEN` ([Install AUGUR, Behind your own proxy](src/content/docs/run/install.md#behind-your-own-proxy)). Nothing changes for a server on Tailscale, and `TS_AUTHKEY` is now needed only for a machine joining the tailnet. To move a server to its own proxy, first upgrade it to this release, since the updater before it runs `compose.yml` alone. Then stop Tailscale with the alias you have (`pc rm -sf tailscale`), set `COMPOSE_FILE=compose.yml:compose.proxy.yml`, `PROXY_LISTEN`, `TRUSTED_PROXIES` and the new `PLATFORM_URL` in `.env`, add `-f infra/deploy/compose.proxy.yml` to your `pc` alias, and run `pc up -d`. Remove the old machine in the Tailscale admin console. A new `PLATFORM_URL` changes the address people sign in at, so tell them first.
+
 ### Say where the proxy in front is: TRUSTED_PROXIES
 
 **From** unreleased
