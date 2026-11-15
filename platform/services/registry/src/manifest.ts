@@ -267,7 +267,7 @@ export const appEntrySchema = Type.Object(
     ),
     category: Type.Optional(
       Type.Enum([...APP_CATEGORIES], {
-        description: 'The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed',
+        description: 'The kind of app it says it is (SDK 1.11, ADR 0077). Only honoured for apps that ship with AUGUR or come from its app feed',
       }),
     ),
     areas: Type.Optional(
@@ -472,7 +472,7 @@ export interface CategoryInForce {
 }
 
 /**
- * The kind in force for an app (ADR 0032): the registry's own apps are platform apps;
+ * The kind in force for an app (ADR 0077): the registry's own apps are platform apps;
  * an app's own claim counts only when the app runner installed it from the signed app feed. Anything else is just an app, and the claim is
  * reported to admins as refused. A value this registry doesn't know is no kind.
  */

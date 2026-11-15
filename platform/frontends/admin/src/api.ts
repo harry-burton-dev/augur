@@ -127,7 +127,7 @@ export interface CatalogueApp extends AppManifestEntry {
   ships?: boolean;
   /** @deprecated The registry's old name for `ships`, read only from a registry that doesn't send `ships`. */
   pillar?: boolean;
-  /** The kind its manifest claims when the registry doesn't honour it (ADR 0032), and why. `category` is then absent. */
+  /** The kind its manifest claims when the registry doesn't honour it (ADR 0077), and why. `category` is then absent. */
   categoryRefused?: { asked: string; why: string };
   enabled: boolean;
   registeredBy?: string;

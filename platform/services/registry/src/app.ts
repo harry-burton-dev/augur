@@ -189,7 +189,7 @@ const catalogueEntry = (r: AppRecord, allowed: string[], kind: CategoryInForce) 
     // Registered from an origin no longer allowed: kept, but not offered.
     ...(blocked ? { blocked } : {}),
     platform: false,
-    // The kind in force (ADR 0032), and the app's own claim when it isn't used, so Admin can say why.
+    // The kind in force (ADR 0077), and the app's own claim when it isn't used, so Admin can say why.
     ...(kind.category ? { category: kind.category } : {}),
     ...(kind.refused ? { categoryRefused: kind.refused } : {}),
     enabled: r.enabled,
@@ -349,7 +349,7 @@ export const buildApp = async ({
               const served = servedEntry(previews.has(r.entry.id) ? { ...r.entry, version: previews.get(r.entry.id)!.release.version } : r.entry, kept);
               // Live on the workbench: this developer's own machine's frontend, in place of any build.
               const from = live.of(caller?.id, r.entry.id);
-              // Only the kind in force (ADR 0032): a claim the registry doesn't honour never reaches the shell.
+              // Only the kind in force (ADR 0077): a claim the registry doesn't honour never reaches the shell.
               const { category: _asked, ...rest } = served;
               const { category } = kindOf(r.entry, feed);
               // Only an app the deployment allows into the shell's page is marked so; the shell opens no other (ADR 0076).
@@ -945,7 +945,7 @@ export const buildApp = async ({
           if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
           // Only AUGUR's own frontends load into the shell's page, and any app a deployment named as a break-glass.
           if (!inPageApps.includes(req.params.id)) return reply.code(403).send({ error: 'forbidden', message: inPageProblem(entry.name) });
-          // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0032).
+          // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0077).
           const { refused } = kindOf(entry, await feedApps());
           if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');
           // Its sign-in outlives a removal, and a first registration is granted what it asks for: only an admin or the runner brings it back.
