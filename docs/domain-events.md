@@ -8,6 +8,24 @@ A topic is the publisher's id, then what happened, dotted and lowercase: `folio.
 
 An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. An app reads only the events on floors where it holds `events:subscribe`, and those on no floor (the organisation's); AUGUR's own services read every floor's (ADR 0104). Even so, a follower that needs the document asks its owner's API, which checks who may see it.
 
+## Declaring them
+
+On the app contract, the manifest says which events the app reads and each type it publishes (ADR 0104), under `contributes.events`:
+
+```json
+"events": {
+  "reads": ["platform.person.deleted", "folio.*"],
+  "publishes": [
+    { "topic": "notes.note.added", "version": 1, "description": "A note was added.",
+      "schema": { "type": "object", "required": ["note"], "properties": { "note": { "type": "string" } } } }
+  ]
+}
+```
+
+Reading needs `events:subscribe` and publishing `events:publish`. Each type is under the app's own id, once per version, with its payload's JSON Schema (an object, at most 16 KB). Within a version a type only gains optional fields; anything else is a new version, declared beside the old one, and a release may stop declaring an old version once it no longer publishes it. The registry refuses a release that breaks these rules, before it installs, and AUGUR's services read what an app declares from the registry (`GET /v1/apps/<id>/events`). Leaving out `reads` says nothing about what the app reads; `"reads": []` says it reads nothing.
+
+The registry checks what an app declares from this release on. The events service doesn't hold an app to it yet: that follows in a later release, and its upgrade note will say so.
+
 ## Publishing
 
 Add `events:publish` to the manifest's `scopes` (an admin allows it in Admin, Apps). When an event goes with a change to your database, write it to your **outbox** in the same transaction, so it's sent if and only if the change commits:

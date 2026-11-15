@@ -39,9 +39,19 @@ export interface AppManifest3 {
   contributes?: {
     settings?: { id: string; label: string; type: 'string' | 'number' | 'boolean' | 'enum' | 'secret'; [key: string]: unknown }[];
     canvas?: boolean;
+    /** The domain events it reads and publishes (ADR 0104). */
+    events?: { reads?: string[]; publishes?: EventType3[] };
     [key: string]: unknown;
   };
   [key: string]: unknown;
+}
+
+/** One type of event an app publishes: its topic, version and payload schema (ADR 0104). */
+export interface EventType3 {
+  topic: string;
+  version: number;
+  description?: string;
+  schema: Record<string, unknown>;
 }
 
 /** A part's Score workload (score.dev/v1b1), as far as the tools read it. */

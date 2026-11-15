@@ -8,6 +8,7 @@ import type { AppManifest3, ScorePart } from '@augur/app-tools/validate';
 import { APP_RELEASE_2_SCHEMA, asksOf2, type AppRelease2 } from '@augur/app-tools/release2';
 import { isOfferedScope, reservedIdProblem } from '@augur/service-kit';
 import { platformApps } from './manifest.ts';
+import { eventsProblems } from './event-types.ts';
 
 /** The contract majors this registry serves (spec 11.1, 11.5). Contract 3 has no compatibility path (11.6). */
 export const SERVED_CONTRACTS: readonly number[] = [3];
@@ -139,6 +140,7 @@ const ruleRefusals = (release: AppRelease2, offered: Required<Omit<Offered, 'kno
 
   const notOffered = (m.scopes ?? []).filter((s) => !isOfferedScope(s));
   if (notOffered.length) out.push(`${m.name} asks for ${notOffered.join(', ')}, which this AUGUR doesn’t offer.`);
+  out.push(...eventsProblems(m));
 
   const parts = release.parts;
   for (const name of repeated(parts.map((p) => p.metadata.name))) out.push(`Two parts are named ${name}: each part's name is its own (spec 4.3).`);

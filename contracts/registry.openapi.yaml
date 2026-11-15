@@ -2626,6 +2626,68 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /apps/{id}/events:
+    get:
+      summary: The domain events an app declares (platform services)
+      description: The topics an app on contract 3 says it reads and each type it publishes, with its version and payload schema, from its manifest in force (ADR 0104). The events service holds the app to them. `events` is absent when the app declares none; `reads` is absent when it doesn’t say what it reads.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: What the app declares
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - app
+                properties:
+                  app:
+                    type: string
+                  events:
+                    type: object
+                    required:
+                      - publishes
+                    properties:
+                      reads:
+                        type: array
+                        items:
+                          type: string
+                        description: Topics, or families such as folio.*
+                      publishes:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - topic
+                            - version
+                            - schema
+                          properties:
+                            topic:
+                              type: string
+                            version:
+                              type: integer
+                            schema:
+                              type: object
+                              description: The payload's JSON Schema
+                              additionalProperties: {}
+                description: What the app declares
+        "403":
+          description: Not a platform service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /apps/{id}/grants:
     get:
       summary: What an app may do on a floor (platform services and the gateway)
