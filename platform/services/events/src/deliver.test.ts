@@ -2,7 +2,7 @@
 // app that has taken nothing for an hour is shown stalled.
 import { afterEach, describe, expect, it } from 'vitest';
 import { callerHeaders, eventDeliveryKey, IDEMPOTENCY_KEY_HEADER, PART_EVENTS_PATH, type NewAuditEntry, type Scope } from '@augur/service-kit';
-import { backoffMs, deliveryStatus, eventDeliverer, GIVE_UP_AFTER_MS, sendThroughGateway, STALLED_AFTER_MS, type SendEvent } from './deliver.ts';
+import { backoffMs, deliveryStatus, eventDeliverer, GIVE_UP_AFTER_MS, sendThroughGateway, STALLED_AFTER_MS, type SendEvent, type SendResult } from './deliver.ts';
 import { GrantsUnavailable } from '@augur/service-kit';
 import { DATABASE_URL, eventsDb } from './db.testing.ts';
 import type { DomainEvent } from './store.ts';
@@ -14,12 +14,22 @@ const editor = callerHeaders({ id: 'u-2', name: 'Sam', departments: [], roles: [
 /** A part that remembers what it was sent and answers as told. */
 const part = () => {
   const got: { app: string; event: DomainEvent }[] = [];
-  let answer: { ok: true } | { ok: false; reason: string } = { ok: true };
+  let answer: SendResult = { ok: true };
+  /** Which events the answer is for; every one when unset. */
+  let only: ((event: DomainEvent) => boolean) | undefined;
   const send: SendEvent = async (app, event) => {
     got.push({ app, event });
-    return answer;
+    return !only || only(event) ? answer : { ok: true };
   };
-  return { got, send, fail: (reason: string) => (answer = { ok: false, reason }), recover: () => (answer = { ok: true }) };
+  return {
+    got,
+    send,
+    /** The part can't take these events (every one without `which`): it answered, but not 2xx. */
+    fail: (reason: string, which?: (event: DomainEvent) => boolean) => ((answer = { ok: false, reason }), (only = which)),
+    /** The part is down: it couldn't be reached, or said it is unavailable. */
+    down: (reason: string) => ((answer = { ok: false, reason, down: true }), (only = undefined)),
+    recover: () => ((answer = { ok: true }), (only = undefined)),
+  };
 };
 
 let open: Awaited<ReturnType<typeof db.app>> | undefined;
@@ -35,10 +45,11 @@ describe('backoff and status', () => {
 
   it('says in words how an app is taking events', () => {
     const t0 = Date.parse('2026-03-01T10:00:00Z');
-    const row = { app: 'notes', cursor: '4', failures: 0, nextAt: null, lastError: null, failingSince: null, deliveredAt: null, dropped: 0, droppedAt: null };
+    const row = { app: 'notes', cursor: '4', failures: 0, nextAt: null, lastError: null, failingSince: null, deliveredAt: null, dropped: 0, droppedAt: null, retrying: 0, setAside: 0 };
     expect(deliveryStatus(row, t0)).toEqual({ state: 'ok', words: 'Nothing to deliver yet.' });
     expect(deliveryStatus({ ...row, deliveredAt: '2026-03-01T09:59:00.000Z' }, t0).state).toBe('ok');
     expect(deliveryStatus({ ...row, deliveredAt: '2026-03-01T09:59:00.000Z', dropped: 1, droppedAt: '2026-03-01T09:00:00.000Z' }, t0).words).toBe('Taking events. 1 event was passed over after a day of failures.');
+    expect(deliveryStatus({ ...row, deliveredAt: '2026-03-01T09:59:00.000Z', retrying: 1, setAside: 2 }, t0)).toEqual({ state: 'ok', words: 'Taking events. 1 event is being tried again. 2 events were set aside: the part couldn’t take them.' });
     const failing = { ...row, failures: 3, lastError: 'notes’s part answered 500', failingSince: '2026-03-01T09:30:00.000Z' };
     expect(deliveryStatus(failing, t0)).toEqual({ state: 'retrying', words: 'Retrying: notes’s part answered 500.' });
     expect(deliveryStatus(failing, t0 + STALLED_AFTER_MS)).toMatchObject({ state: 'stalled', words: expect.stringMatching(/^Not taking events: /) });
@@ -53,7 +64,7 @@ describe('backoff and status', () => {
     const send = sendThroughGateway({ gatewayUrl: 'http://gateway:8080/', credentials: { name: 'events', getToken: async () => 'tok' }, fetchImpl });
     const event: DomainEvent = { seq: '7', topic: 'folio.document.published', id: 'd1', publisher: 'folio', at: '2026-03-01T10:00:00Z', payload: { document: 'd1' } };
     expect(await send('notes', event)).toEqual({ ok: true });
-    expect(await send('notes', event)).toEqual({ ok: false, reason: 'notes’s part answered 503: Not now' });
+    expect(await send('notes', event)).toEqual({ ok: false, reason: 'notes’s part answered 503: Not now', down: true });
     expect(calls.map((c) => c.url)).toEqual([`http://gateway:8080/api/notes${PART_EVENTS_PATH}`, `http://gateway:8080/api/notes${PART_EVENTS_PATH}`]);
     const headers = calls.map((c) => c.init.headers as Record<string, string>);
     expect(headers[0]!.authorization).toBe('Bearer tok');
@@ -83,25 +94,25 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     await db.store.publish('notes', [{ topic: 'notes.note.made', id: 'n1', payload: {} }]);
     await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd3', payload: { document: 'd3' }, floor: floor('w-finance') }]);
     const report = await d.tick();
-    expect(report).toEqual({ delivered: 2, skipped: 2, failed: [], dropped: 0, behind: [] });
+    expect(report).toEqual({ delivered: 2, skipped: 2, failed: [], setAside: 0, behind: [] });
     expect(theirs.got.map((g) => [g.app, g.event.id])).toEqual([['notes', 'd1'], ['notes', 'd3']]);
     expect(theirs.got[0]!.event).toMatchObject({ topic: 'folio.document.published', publisher: 'folio', payload: { document: 'd1' } });
     // Nothing is sent twice.
-    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], dropped: 0, behind: [] });
+    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], setAside: 0, behind: [] });
     expect(theirs.got).toHaveLength(2);
   });
 
-  it('retries a failing part with backoff, holding the cursor and the order, and goes on once it answers', async () => {
+  it('holds every event for a part that is down, retrying with backoff, and goes on in order once it answers', async () => {
     let clock = Date.parse('2026-03-01T10:00:00Z');
     const now = () => clock;
     const theirs = part();
     const d = deliverer(theirs.send, now);
     await d.tick();
     await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd1', payload: {} }, { topic: 'folio.document.published', id: 'd2', payload: {} }]);
-    theirs.fail('notes’s part answered 500');
+    theirs.down('notes’s part answered 503');
     expect(await d.tick()).toMatchObject({ delivered: 0, failed: ['notes'] });
     const [row] = await db.store.deliveries.list();
-    expect(row).toMatchObject({ app: 'notes', failures: 1, lastError: 'notes’s part answered 500', failingSince: '2026-03-01T10:00:00.000Z', nextAt: '2026-03-01T10:00:01.000Z' });
+    expect(row).toMatchObject({ app: 'notes', failures: 1, lastError: 'notes’s part answered 503', failingSince: '2026-03-01T10:00:00.000Z', nextAt: '2026-03-01T10:00:01.000Z' });
     // Too soon: nothing is tried.
     expect((await d.tick()).failed).toEqual([]);
     expect(theirs.got).toHaveLength(1);
@@ -113,18 +124,18 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     expect(new Set(theirs.got.map((g) => eventDeliveryKey(g.event))).size).toBe(1);
     theirs.recover();
     clock += 2000;
-    expect(await d.tick()).toEqual({ delivered: 2, skipped: 0, failed: [], dropped: 0, behind: [] });
+    expect(await d.tick()).toEqual({ delivered: 2, skipped: 0, failed: [], setAside: 0, behind: [] });
     expect(theirs.got.map((g) => g.event.id)).toEqual(['d1', 'd1', 'd1', 'd2']);
     expect((await db.store.deliveries.list())[0]).toMatchObject({ failures: 0, failingSince: null, lastError: null, nextAt: null });
   });
 
-  it('passes an event over after a day of failing, records that, and shows the app stalled after an hour', async () => {
+  it('sets an event aside after a day of its part being down, records that, and shows the app stalled after an hour', async () => {
     let clock = Date.parse('2026-03-01T10:00:00Z');
     const theirs = part();
     const d = deliverer(theirs.send, () => clock);
     await d.tick();
     await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd1', payload: {} }, { topic: 'folio.document.published', id: 'd2', payload: {} }]);
-    theirs.fail('notes’s part couldn’t be reached: connect ECONNREFUSED');
+    theirs.down('notes’s part couldn’t be reached: connect ECONNREFUSED');
     await d.tick();
     clock += STALLED_AFTER_MS;
     await d.tick();
@@ -137,14 +148,89 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     expect(shown.json().pushing).toEqual({ on: true });
     expect((await app.inject({ method: 'GET', url: '/v1/deliveries', headers: editor })).statusCode).toBe(403);
     clock += GIVE_UP_AFTER_MS;
-    // d1 is given up on and recorded; d2 fails afresh, starting a new run.
-    expect(await d.tick()).toMatchObject({ dropped: 1, failed: ['notes'] });
-    expect(audited).toEqual([expect.objectContaining({ action: 'delivery.dropped', target: 'notes', key: expect.stringMatching(/^delivery\.dropped:notes:\d+$/), detail: expect.objectContaining({ topic: 'folio.document.published' }) })]);
-    expect((await db.store.deliveries.list())[0]).toMatchObject({ failures: 1, dropped: 1, droppedAt: expect.any(String) });
+    // d1 is set aside, kept and recorded; d2 fails afresh, starting a new run.
+    expect(await d.tick()).toMatchObject({ setAside: 1, failed: ['notes'] });
+    expect(audited).toEqual([expect.objectContaining({ action: 'delivery.set-aside', target: 'notes', key: expect.stringMatching(/^delivery\.set-aside:notes:\d+$/), detail: expect.objectContaining({ topic: 'folio.document.published', id: 'd1' }) })]);
+    expect((await db.store.deliveries.list())[0]).toMatchObject({ failures: 1, setAside: 1 });
+    expect((await db.store.deliveries.setAside()).map((h) => [h.id, h.lastError])).toEqual([['d1', 'notes’s part couldn’t be reached: connect ECONNREFUSED']]);
     theirs.recover();
     clock += 1000;
     expect(await d.tick()).toMatchObject({ delivered: 1 });
     expect(theirs.got.at(-1)!.event.id).toBe('d2');
+  });
+
+  it('doesn’t hold events on other topics behind one its part can’t take (PER-462)', async () => {
+    const clock = Date.parse('2026-03-01T10:00:00Z');
+    const theirs = part();
+    const d = deliverer(theirs.send, () => clock);
+    await d.tick();
+    await db.store.publish('folio', [
+      { topic: 'folio.document.published', id: 'a1', payload: {} },
+      { topic: 'folio.document.withdrawn', id: 'b1', payload: {} },
+    ]);
+    theirs.fail('notes’s part answered 500', (e) => e.topic === 'folio.document.published');
+    expect(await d.tick()).toMatchObject({ delivered: 1, failed: ['notes'], setAside: 0 });
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['a1', 'b1']);
+    // The app's own line is healthy: only a1 waits, to be tried again.
+    expect((await db.store.deliveries.list())[0]).toMatchObject({ failures: 0, failingSince: null, retrying: 1, setAside: 0 });
+    await db.store.publish('folio', [{ topic: 'folio.document.withdrawn', id: 'b2', payload: {} }]);
+    expect(await d.tick()).toMatchObject({ delivered: 1 });
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['a1', 'b1', 'b2']);
+  });
+
+  it('tries an event a few times, keeping its topic’s order meanwhile, then sets it aside, lists it, and lets its topic go on (PER-462)', async () => {
+    let clock = Date.parse('2026-03-01T10:00:00Z');
+    const theirs = part();
+    const d = eventDeliverer({ store: db.store, subscribers, grants, send: theirs.send, now: () => clock, attempts: 3, retryMs: 1000, audit: async (e, key) => void audited.push({ ...e, key } as NewAuditEntry) });
+    await d.tick();
+    await db.store.publish('folio', [
+      { topic: 'folio.document.published', id: 'a1', payload: {} },
+      { topic: 'folio.document.published', id: 'a2', payload: {} },
+    ]);
+    theirs.fail('notes’s part answered 422: no such folder', (e) => e.id === 'a1');
+    // a2 waits behind a1 while a1 is being tried again.
+    expect(await d.tick()).toMatchObject({ delivered: 0, failed: ['notes'] });
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['a1']);
+    // Too soon for the second try.
+    expect(await d.tick()).toMatchObject({ delivered: 0, failed: [] });
+    clock += 1000;
+    expect(await d.tick()).toMatchObject({ delivered: 0, failed: ['notes'] });
+    clock += 2000;
+    // The third try is the last: a1 is set aside and a2 goes, in the same pass.
+    expect(await d.tick()).toMatchObject({ delivered: 1, setAside: 1 });
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['a1', 'a1', 'a1', 'a2']);
+    const [kept] = await db.store.deliveries.setAside();
+    expect(kept).toMatchObject({ app: 'notes', id: 'a1', topic: 'folio.document.published', attempts: 3, lastError: 'notes’s part answered 422: no such folder', firstFailedAt: '2026-03-01T10:00:00.000Z', setAsideAt: expect.any(String) });
+    expect(audited.at(-1)).toMatchObject({ action: 'delivery.set-aside', target: 'notes', key: `delivery.set-aside:notes:${kept!.seq}`, detail: expect.objectContaining({ id: 'a1', attempts: 3 }) });
+    // Later events on its topic flow.
+    await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'a3', payload: {} }]);
+    expect(await d.tick()).toMatchObject({ delivered: 1 });
+    expect(theirs.got.at(-1)!.event.id).toBe('a3');
+    // An admin sees what was set aside.
+    const app = (open = await db.app());
+    const listed = await app.inject({ method: 'GET', url: '/v1/deliveries/set-aside?app=notes', headers: admin });
+    expect(listed.statusCode).toBe(200);
+    expect(listed.json().events).toEqual([expect.objectContaining({ app: 'notes', id: 'a1', seq: kept!.seq, attempts: 3, lastError: 'notes’s part answered 422: no such folder' })]);
+    expect((await app.inject({ method: 'GET', url: '/v1/deliveries/set-aside', headers: editor })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'GET', url: '/v1/deliveries', headers: admin })).json().deliveries[0]).toMatchObject({ setAside: 1, retrying: 0 });
+  });
+
+  it('delivers an event that gets through on a later try, then the ones that waited behind it, in order (PER-462)', async () => {
+    let clock = Date.parse('2026-03-01T10:00:00Z');
+    const theirs = part();
+    const d = deliverer(theirs.send, () => clock);
+    await d.tick();
+    await db.store.publish('folio', [
+      { topic: 'folio.document.published', id: 'a1', payload: {} },
+      { topic: 'folio.document.published', id: 'a2', payload: {} },
+    ]);
+    theirs.fail('notes’s part answered 500', (e) => e.id === 'a1');
+    await d.tick();
+    theirs.recover();
+    clock += 60_000;
+    expect(await d.tick()).toMatchObject({ delivered: 2, setAside: 0 });
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['a1', 'a1', 'a2']);
+    expect((await db.store.deliveries.list())[0]).toMatchObject({ retrying: 0, setAside: 0 });
   });
 
   it('keeps the place of an app turned off, and forgets one whose grant is gone, recording that', async () => {
@@ -221,7 +307,7 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
       grants,
       send: theirs.send,
     });
-    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], dropped: 0, behind: [] });
+    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], setAside: 0, behind: [] });
     expect(d.problem).toBe('The registry can’t be asked which apps subscribe (The registry answered 503.).');
     down = false;
     await d.tick();
