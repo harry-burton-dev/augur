@@ -14,11 +14,13 @@ The paths a pull request changes set its tier (`.github/review-tiers.json`). Its
   registry, service-kit, migrations and stores, the SDK's public contract, app-tools, `infra/`, `release/` and
   `.github/`. Needs what Medium needs, under 400 changed lines (or a reason), and:
   - **the deploy test before the merge** where the change runs on a server (`deployTest`): CI's `deploy-test` job;
-  - **Harry's ok** only on what can't be undone or gives more access (`harryOk` and `harryOkWhen`): migrations,
-    backups and Postgres, Promote to stable and Halt, and a workflow or local action that gains privilege (adds
+  - **Harry's ok** only on what can't be undone or gives more access (`harryOk` and `harryOkWhen`): a new or
+    changed migration (its entry in the migrations lock) and the migration runner, backups and Postgres, Promote
+    to stable and Halt, the updater's trusted signers, the Review check's own script, workflow and tiers (so no
+    pull request can switch the check off), and a workflow or local action that gains privilege (adds
     `permissions:`, a `write` scope, `secrets`, `id-token`, a `pull_request_target`, `workflow_run` or
-    `issue_comment` trigger or a `docker://` step, or takes away a `permissions:` block or a `read` scope) or uses
-    an action no workflow used before. Every other High pull request merges on green and goes in the auto-ok log
+    `issue_comment` trigger, a `container:`, `services:` or `image:`, or a `docker://` step, or takes away a
+    `permissions:` block or a `read` scope) or uses an action no workflow used before. Every other High pull request merges on green and goes in the auto-ok log
     (below). For his ok, in this order:
     1. Merge fresh `origin/main` and push. Wait for CI to be green, with only the Review check red.
     2. Ask Harry the three questions below in the thread, and wait for his "ok".
@@ -48,7 +50,7 @@ If Harry reads a record and would not have said ok, he adds the `harry-would-not
 next pull request to this file or the tiers file tightens the rule that let it through.
 
 A tiers file may hold `next`, rules to try for a week first: the Review check reports what they make of each
-pull request, and the record job logs a merge that waited for him but wouldn't have under them.
+pull request, and the record job also logs a merge that waited for him but wouldn't have under them.
 
 ## Before you open the pull request
 
