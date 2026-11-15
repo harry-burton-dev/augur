@@ -297,7 +297,7 @@
         "registry",
         "storage"
       ],
-      "x-docs": "docs/upgrade.md#apps-frontends-by-version"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#turn-it-on"
     },
     "APP_SECRETS_KEY": {
       "type": "string",
@@ -317,7 +317,7 @@
       "x-via": {
         "updater": ".env"
       },
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#who-it-trusts"
     },
     "APPS_NETWORK": {
       "type": "string",
@@ -325,7 +325,7 @@
       "x-via": {
         "updater": ".env"
       },
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#each-apps-network"
     },
     "APP_PART_MEMORY_CEILING": {
       "type": "string",
@@ -512,7 +512,7 @@
         "keycloak-config",
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
     },
     "FLEET_CLIENT_SECRET": {
       "type": "string",
@@ -989,7 +989,7 @@
         "registry",
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-read-key"
+      "x-docs": "docs/src/content/docs/run/releases.md#the-read-key"
     },
     "RELEASE_FEED_URL": {
       "type": "string",
@@ -997,7 +997,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-updates-page"
+      "x-docs": "docs/src/content/docs/run/releases.md#the-release-feed"
     },
     "APP_FEEDS": {
       "type": "string",
@@ -1005,7 +1005,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#where-apps-come-from"
     },
     "APP_FEED_URL": {
       "type": "string",
@@ -1014,7 +1014,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#where-apps-come-from"
     },
     "FEED_SIGNER": {
       "type": "string",
@@ -1022,7 +1022,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-signed-feed"
+      "x-docs": "docs/src/content/docs/run/releases.md#the-signed-feed"
     },
     "SERVER_RING": {
       "type": "string",
@@ -1057,7 +1057,7 @@
         "web",
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#upgrades-follow-each-units-policy-and-window"
+      "x-docs": "docs/src/content/docs/run/upgrade.md#upgrades-that-start-by-themselves"
     },
     "PIPELINE_FEED_URL": {
       "type": "string",
@@ -1073,7 +1073,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#reporting-to-backstage"
+      "x-docs": "docs/src/content/docs/run/reporting.md#set-it-up"
     },
     "DEPLOYMENT_ID": {
       "type": "string",
@@ -1081,7 +1081,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#reporting-to-backstage"
+      "x-docs": "docs/src/content/docs/run/reporting.md#set-it-up"
     },
     "DEPLOYMENT_REPORTING": {
       "type": "string",
@@ -1089,7 +1089,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#reporting-to-backstage"
+      "x-docs": "docs/src/content/docs/run/reporting.md#a-server-with-no-way-out"
     },
     "ALLOW_PR_PREVIEWS": {
       "type": "string",
@@ -1113,7 +1113,7 @@
       "x-services": [
         "compose"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
     },
     "PLATFORM_DIR": {
       "type": "string",
@@ -1122,7 +1122,7 @@
         "compose",
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
     },
     "IMAGE_PULL_USER": {
       "type": "string",
@@ -1130,7 +1130,7 @@
       "x-services": [
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
     },
     "IMAGE_SIGNER": {
       "type": "string",
@@ -1829,7 +1829,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#default-apps"
     },
     "IN_PAGE_APPS": {
       "type": "string",
@@ -1838,7 +1838,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#only-augurs-own-apps-load-into-the-shells-page"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#apps-made-before-the-app-contract"
     },
     "APP_DATA_GRACE_DAYS": {
       "type": "string",

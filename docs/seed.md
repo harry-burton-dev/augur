@@ -9,7 +9,7 @@ Seeding is off unless the deployment allows it:
 - **Your own machine:** the local stack (`infra/docker-compose.yml`) allows it.
 - **A server:** a deployment admin sets `SEED_ALLOWED=true` in `infra/deploy/.env` and runs `pc up -d`. Admin's Status shows whether it is allowed. Never set it where real people work.
 
-On a server that existed before this setting, also add the `platform-cli` sign-in client by hand (docs/upgrade.md, "Sample data, where you allow it").
+On a server that existed before this setting, also add the `platform-cli` sign-in client by hand ([Upgrade notes, Sample data, where you allow it](src/content/docs/release-notes/upgrade-notes.md#sample-data-where-you-allow-it)).
 
 ## Signing in
 

@@ -47,7 +47,7 @@ const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
  * The stores: the images that keep AUGUR's data, and change it when they move (a Postgres major rewrites
  * its files, Keycloak and OpenFGA migrate their tables as they start, Garage its metadata). An old image
  * can't be started again on what a newer one changed, so a release that moves one is breaking: the
- * updater then won't go back to the release before by itself, and docs/upgrade.md says what to do.
+ * updater then won't go back to the release before by itself, and docs/src/content/docs/release-notes/upgrade-notes.md says what to do.
  * Postgres and Garage run as compose has them; Keycloak and OpenFGA are built on theirs (service.Dockerfile).
  */
 const STORES = {
@@ -102,7 +102,8 @@ const storesKept = (previous, stores) => {
 };
 
 /**
- * What's missing for the stores whose image moved since the last release. Each needs a note in docs/upgrade.md
+ * What's missing for the stores whose image moved since the last release. Each needs a note in
+ * docs/src/content/docs/release-notes/upgrade-notes.md
  * that isn't released yet (**From** unreleased), whose heading names it and which says how to go back, and a
  * changeset with a bump must be waiting, so the move goes out in a release of its own making.
  */
@@ -113,7 +114,7 @@ export const storeProblems = (previous, stores, markdown, changesets) => {
   const unreleased = (notesOf(markdown) ?? []).filter((n) => n.from === 'unreleased').map((n) => ({ heading: n.heading, text: lines.slice(n.line - 1, n.end).join('\n') }));
   const problems = moved
     .filter((s) => !unreleased.some((n) => new RegExp(`\\b${STORES[s].label}\\b`, 'i').test(n.heading) && /\bback\b/i.test(n.text)))
-    .map((s) => `${STORES[s].label}'s image moved (${previous.stores[s]} → ${stores[s]}), which makes the next release breaking: add a note to ${NOTES_FILE}'s "Release notes that need you", starting **From** unreleased, whose heading names ${STORES[s].label} and which says how to go back (restore the backup taken before the upgrade)`);
+    .map((s) => `${STORES[s].label}'s image moved (${previous.stores[s]} → ${stores[s]}), which makes the next release breaking: add a note to ${NOTES_FILE}, starting **From** unreleased, whose heading names ${STORES[s].label} and which says how to go back (restore the backup taken before the upgrade)`);
   if (!changesets.some((c) => Object.keys(c.bumps).length))
     problems.push(`${moved.map((s) => STORES[s].label).join(' and ')} moved, but no changeset waiting bumps a part, so no Version packages PR would release it: add one (pnpm changeset) for the part that runs on it`);
   return problems;
@@ -422,7 +423,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: unpack \`${bundleName(release.version)}\` from this release over the server's folder, set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, then pull and start: [docs/upgrade.md](../../blob/HEAD/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: unpack \`${bundleName(release.version)}\` from this release over the server's folder, set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, then pull and start: [Upgrade AUGUR](../../blob/HEAD/docs/src/content/docs/run/upgrade.md).`);
   return lines.join('\n');
 };
 
@@ -436,7 +437,7 @@ const main = () => {
     const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10), names, readStores());
     if (next === previous) return console.log(`AUGUR stays at ${previous.version}: no part changed.`);
     write(next);
-    // Each upgrade note added since the last release says it came in this one (docs/upgrade.md).
+    // Each upgrade note added since the last release says it came in this one (docs/src/content/docs/release-notes/upgrade-notes.md).
     const notes = join(root, NOTES_FILE);
     writeFileSync(notes, stamp(readFileSync(notes, 'utf8'), next.version));
     console.log(`AUGUR ${previous?.version ?? '(none)'} → ${titleOf(next)}${next.breaking.length ? ' (breaking)' : ''}.`);

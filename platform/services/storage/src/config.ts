@@ -47,7 +47,7 @@ export interface StorageConfig {
   };
   /**
    * The secret of the registry's key to the bucket of apps' frontends (FRONTENDS_BUCKET_SECRET),
-   * 64 hex characters. Without it apps' frontends aren't kept by version (docs/upgrade.md).
+   * 64 hex characters. Without it apps' frontends aren't kept by version (docs/src/content/docs/run/app-runner.md).
    */
   frontendsSecret?: string;
   /**

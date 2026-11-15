@@ -39,7 +39,7 @@ pc exec registry node -e "fetch('http://localhost:8082/v1/platform/alerts', { me
 
 To change a threshold, edit your copy of `rules.yaml` and run `pc restart otel-lgtm`. An upgrade replaces the file, so note what you changed.
 
-**When the whole server is down,** nothing on it can say so. The registry sends its signed report to Backstage every 15 minutes (docs/upgrade.md, Reporting to Backstage), and Backstage raises the alarm when one is more than 30 minutes late.
+**When the whole server is down,** nothing on it can say so. The registry sends its signed report to Backstage every 15 minutes ([Report to Backstage](src/content/docs/run/reporting.md)), and Backstage raises the alarm when one is more than 30 minutes late.
 
 ## What you see
 

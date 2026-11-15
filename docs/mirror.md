@@ -1,6 +1,6 @@
 # Mirroring AUGUR releases
 
-For a server that can't reach GitHub: copy each release into your organisation's own image registry, and keep a feed of releases where the server can read it. the Upgrade Centre, the updater and the steps in [upgrade.md](upgrade.md) then work as usual, from your mirror.
+For a server that can't reach GitHub: copy each release into your organisation's own image registry, and keep a feed of releases where the server can read it. the Upgrade Centre, the updater and the steps in [Upgrade AUGUR](src/content/docs/run/upgrade.md) then work as usual, from your mirror.
 
 A mirror holds:
 
@@ -35,7 +35,7 @@ RELEASE_FEED_URL=https://mirror.example.org/augur/releases.json
 
 `RELEASE_FEED_URL` is wherever you publish `releases.json`: any web server the registry can reach, without a sign-in. If there's none, keep the feed on the server instead, in `infra/deploy/releases/` (copy `releases.json` there each time), and set `RELEASE_FEED_URL=file:///run/augur/releases/releases.json`.
 
-The server pulls from your registry, so sign Docker in to it (`docker login registry.example.org`, read-only). For the [updater](upgrade.md#the-updater), save the same read-only token as `infra/deploy/secrets/image-pull-token` and set `IMAGE_PULL_USER` to its account, as for ghcr.
+The server pulls from your registry, so sign Docker in to it (`docker login registry.example.org`, read-only). For the [updater](src/content/docs/run/updater.md), save the same read-only token as `infra/deploy/secrets/image-pull-token` and set `IMAGE_PULL_USER` to its account, as for ghcr.
 
 Each release also carries its own signed deploy bundle, `augur-deploy-<version>.tar.gz` ([Install AUGUR, step 1](src/content/docs/run/install.md#1-get-the-release)): download it and its `.sigstore.json` from the release page and publish them beside your feed, for servers that can reach your mirror but not GitHub. The script doesn't copy them yet. For servers that can't reach the repository, unpack one in place of `git checkout augur@<version>`, or the script's own `--bundle`, which adds the docs but is unsigned and has no `SHA256SUMS`:
 
@@ -60,7 +60,7 @@ When the publisher halts a release ([release-channels.md](release-channels.md#ha
 
 ## Mirror apps
 
-Apps the [app runner](upgrade.md#the-app-runner) installs have releases of their own (`app/<id>@<version>`). Mirror them the same way, into the same feed folder:
+Apps the [app runner](src/content/docs/run/app-runner.md) installs have releases of their own (`app/<id>@<version>`). Mirror them the same way, into the same feed folder:
 
 ```sh
 node scripts/mirror-release.mjs apps --to registry.example.org/augur --feed ./augur-mirror
@@ -79,4 +79,4 @@ APP_FEEDS=file:///run/augur/releases/apps.json
 
 Without `APP_FEEDS` (or `APP_FEED_URL`, its name before), a server whose `RELEASE_FEED_URL` is a mirror reads no app releases at all. Previews of pull requests aren't mirrored: they're for servers that can reach GitHub ([app-previews.md](app-previews.md)).
 
-Default apps (`DEFAULT_APPS`, [upgrade.md](upgrade.md#the-app-runner)) come from the feed too, so mirror each one's stable releases before naming it: until the mirror's `apps.json` has a stable release of it, Deployment → Apps says it's waiting for one.
+Default apps (`DEFAULT_APPS`, [The app runner](src/content/docs/run/app-runner.md)) come from the feed too, so mirror each one's stable releases before naming it: until the mirror's `apps.json` has a stable release of it, Deployment → Apps says it's waiting for one.

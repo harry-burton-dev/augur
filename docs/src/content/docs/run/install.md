@@ -52,7 +52,7 @@ Have these ready. The preflight (step 3) checks what it can of them before anyth
 4. **A read key**, only if AUGUR's packages aren't public to you: one GitHub token with only
    **read:packages**. After step 1, save it as `infra/deploy/secrets/github-read-key` (owned by user 1000),
    set `GITHUB_READ_USER` in `.env`, and sign Docker in with it once (`docker login ghcr.io`). The
-   [upgrade guide](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md#the-read-key) has the
+   [read key](../releases/#the-read-key) section has the
    steps. A server that can't reach GitHub runs releases from your own registry instead
    ([Mirroring releases](https://github.com/harry-burton-dev/augur/blob/main/docs/mirror.md)).
 5. **For later, but before anyone real works on it**: the organisation's [email relay](../email/) and a
@@ -241,10 +241,10 @@ exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
 ## 6. Finish setting up
 
 1. **Report to Backstage**
-   ([upgrade guide](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md#reporting-to-backstage)):
+   ([Report to Backstage](../reporting/)):
    set `DEPLOYMENT_ID` to its name in Backstage's catalog of deployments and `PORTAL_URL` to Backstage's
-   address, then `pc up -d registry`. Copy the deployment's key (**Copy key** in Deployment's Reporting
-   section) into the entry's `augur.dev/report-key` annotation. Within 15 minutes Backstage shows the
+   address, then `pc up -d registry`. Copy the deployment's key (the **Public key** field in Deployment's
+   Reporting section) into the entry's `augur.dev/report-key` annotation. Within 15 minutes Backstage shows the
    deployment, and from then it raises the alarm when a report is more than 30 minutes late, so it notices
    when the whole server is down.
 2. **Prove the alert path**
@@ -256,7 +256,7 @@ exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
 4. **The [off-server copy](../backups/#off-server-copy)**, so a lost server doesn't lose its backups. Until
    then, Deployment → Backups says backups are kept on this server only.
 5. **Turn on the updater**, if this server should upgrade itself
-   ([upgrade guide](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md#the-updater)).
+   ([The updater](../updater/#turn-it-on)).
 
 Run the preflight once more (without `--fill-secrets`): what's left under `-` is what you chose not to set
 up. Write down where this deployment's bucket is, its Backstage name and its ring with its other records.

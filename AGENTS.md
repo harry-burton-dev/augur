@@ -61,7 +61,7 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   `ghcr.io/harry-burton-dev/im-platform` (it stayed when the repository was
   renamed to `augur`). The updater and registry also still trust releases
   signed under the old repository name. Don't rename them without an
-  upgrade note in docs/upgrade.md.
+  upgrade note in docs/src/content/docs/release-notes/upgrade-notes.md.
 
 ## Structure (ADR 0002)
 - `platform/` owns the shell, SDK and services. Apps live in their own
@@ -108,8 +108,8 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - Every PR carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`),
   see docs/versioning.md.
 - When an admin upgrading must act or know something because of your change, add a note at
-  the top of "Release notes that need you" in docs/upgrade.md, starting `**From** unreleased`
-  (`pnpm check:upgrade-notes`); the Version packages PR writes its release in.
+  the top of docs/src/content/docs/release-notes/upgrade-notes.md: a `## ` heading with a line starting `**From** unreleased`
+  under it (`pnpm check:upgrade-notes`); the Version packages PR writes its release in.
 
 ## Pull requests and releases
 - Open pull requests against `main`, the only
@@ -136,5 +136,5 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   only how Harry reaches his own workbench, so never design around it. Agents
   can't see Harry's servers: never assume a step there worked; ask, or give a
   command whose output he can paste.
-- Upgrades go through Deployment (`/upgrades`); docs/upgrade.md has the
+- Upgrades go through Deployment (`/upgrades`); docs/src/content/docs/run/upgrade.md has the
   manual path.

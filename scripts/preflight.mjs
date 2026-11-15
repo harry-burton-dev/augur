@@ -59,11 +59,11 @@ export const preflight = (release, env) => {
   const min = release.upgradeFrom?.replace(/^>=\s*/, '');
 
   if (!from || !isVersion(from)) {
-    notes.push(from ? `PLATFORM_VERSION is "${from}", not a release, so the upgrade path isn't checked.` : "PLATFORM_VERSION isn't set yet: this server built its own images before. See \"Images from releases\" in docs/upgrade.md.");
+    notes.push(from ? `PLATFORM_VERSION is "${from}", not a release, so the upgrade path isn't checked.` : "PLATFORM_VERSION isn't set yet: this server built its own images before. See \"Images from releases\" in AUGUR’s docs, Upgrade notes.");
   } else if (compare(from, release.version) === 0) {
     notes.push(`Already on ${release.version}.`);
   } else if (compare(from, release.version) > 0) {
-    notes.push(`${release.version} is older than ${from}: this is going back. Follow "Going back" in docs/upgrade.md.`);
+    notes.push(`${release.version} is older than ${from}: this is going back. Follow "Going back" in AUGUR’s docs, Upgrade AUGUR.`);
   } else if (min && compare(from, min) < 0) {
     errors.push(`${release.version} upgrades from ${min} or later, and this server is on ${from}. Upgrade to ${min} first (augur@${min}), then to ${release.version}.`);
   }
@@ -179,10 +179,10 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   if (env.SEED_ALLOWED === 'true') note(`SEED_ALLOWED=true: sample data can be added here. Only where nobody real works${ring === 'production' ? ', and this is a production server' : ''}.`);
 
   // The read key: both halves or neither.
-  if (env.GITHUB_READ_USER && !host.readKey) stop('GITHUB_READ_USER is set, but infra/deploy/secrets/github-read-key isn\u2019t there (docs/upgrade.md, The read key).');
+  if (env.GITHUB_READ_USER && !host.readKey) stop('GITHUB_READ_USER is set, but infra/deploy/secrets/github-read-key isn\u2019t there (AUGUR’s docs, Where releases come from).');
   else if (!env.GITHUB_READ_USER && host.readKey) stop('infra/deploy/secrets/github-read-key is there, but GITHUB_READ_USER isn\u2019t set: set it to the account the key belongs to.');
   else if (env.GITHUB_READ_USER) pass(`Read key: ${env.GITHUB_READ_USER}'s, in infra/deploy/secrets/github-read-key.`);
-  else note('No read key (GITHUB_READ_USER): fine while the release\u2019s packages are public; the Upgrade Centre can\u2019t see private ones without it (docs/upgrade.md, The read key).');
+  else note('No read key (GITHUB_READ_USER): fine while the release\u2019s packages are public; the Upgrade Centre can\u2019t see private ones without it (AUGUR’s docs, Where releases come from).');
 
   // Later, but worth knowing now.
   if (!env.DEPLOYMENT_ID) note(`Not reporting to Backstage yet (DEPLOYMENT_ID${env.PORTAL_URL ? '' : ', PORTAL_URL'}): set it up after the first start (AUGUR’s docs, Install AUGUR, step 6).`);

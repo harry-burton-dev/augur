@@ -78,7 +78,7 @@ project=$(pc config | sed -n 's/^name: //p'); : "${project:?pc config named no p
 ```
 
 - If the server runs the updater and your account isn't user 1000, give user 1000 the deploy folder again, as
-  when it was set up ([upgrade guide, The updater](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md#the-updater), step 2).
+  when it was set up ([The updater](../updater/#turn-it-on), step 2).
 - In the Tailscale admin console, remove the lost server's machine, so the new one can take its name.
 - If `TS_AUTHKEY` was a one-off key or has expired, put a new one in `.env`.
 

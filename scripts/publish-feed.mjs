@@ -1,6 +1,6 @@
 // The release feed deployments read with their read key: AUGUR's releases and apps' releases as one file,
 // pushed to GitHub's container registry beside the images, as ghcr.io/<repo>/feed:latest. A deployment
-// can then check for releases with the same read:packages token it pulls images with (docs/upgrade.md,
+// can then check for releases with the same read:packages token it pulls images with (docs/src/content/docs/run/releases.md,
 // "The read key"), where reading GitHub's releases themselves would need a second token.
 //   node scripts/publish-feed.mjs [--out <file>] [--sign] [--push]
 //     --out   where to write the feed (default: feed.json)

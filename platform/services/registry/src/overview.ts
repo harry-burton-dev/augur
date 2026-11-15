@@ -315,7 +315,7 @@ export const overviewRoutes =
         if (!(await knownUnit(unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${unit}.` });
         const body = req.body;
         if (unit === AUGUR_UNIT && body.channel !== updates.channel) {
-          return reply.code(409).send({ error: 'conflict', message: `AUGUR follows ${updates.channel} releases, set by RELEASE_CHANNEL in .env (docs/upgrade.md). Change it there.` });
+          return reply.code(409).send({ error: 'conflict', message: `AUGUR follows ${updates.channel} releases, set by RELEASE_CHANNEL in .env (AUGUR’s docs, Where releases come from). Change it there.` });
         }
         if (unit !== AUGUR_UNIT && body.channel !== 'stable' && !takesPreview(ring)) return reply.code(409).send({ error: 'production_server', message: PRODUCTION_ONLY });
         const problems = desiredStateProblems({ ...body, timeZone: body.timeZone ?? timeZone });

@@ -77,7 +77,7 @@ cosign verify-attestation --type spdxjson --certificate-identity-regexp '^https:
 
 Dev builds are signed by `augur-dev.yml` (AUGUR) or `app-dev.yml` (apps) on `main`, which the updater takes only for a dev build, and only on the workbench ([AUGUR dev builds](#augur-dev-builds)). `dev` stays on that list until `main` replaces it.
 
-For AUGUR published from a fork, three settings in `.env` say whose signatures the updater takes instead, as certificate identity patterns: `IMAGE_SIGNER` for its images and the apps it installs (such as `^https://github\.com/acme/augur/\.github/workflows/release\.yml@refs/heads/main$`), `IMAGE_SIGNER_ISSUER` for who issues the certificates (GitHub Actions unless set), and `AUGUR_DEV_SIGNER` for its dev builds, which otherwise follows the repository `IMAGE_SIGNER` names. Leave all three unset to take the publisher's. The registry's `FEED_SIGNER` does the same for the release feed ([upgrade.md](upgrade.md#the-signed-feed)).
+For AUGUR published from a fork, three settings in `.env` say whose signatures the updater takes instead, as certificate identity patterns: `IMAGE_SIGNER` for its images and the apps it installs (such as `^https://github\.com/acme/augur/\.github/workflows/release\.yml@refs/heads/main$`), `IMAGE_SIGNER_ISSUER` for who issues the certificates (GitHub Actions unless set), and `AUGUR_DEV_SIGNER` for its dev builds, which otherwise follows the repository `IMAGE_SIGNER` names. Leave all three unset to take the publisher's. The registry's `FEED_SIGNER` does the same for the release feed ([Where releases come from](src/content/docs/run/releases.md#the-signed-feed)).
 
 ## Server rings
 
@@ -100,7 +100,7 @@ The same history covers apps: each install, update and removal, by whom or by it
 
 ## Going back
 
-**Upgrade Centre → Go back** lists the five releases before yours on your channel. **Go back** runs the same steps as an upgrade, a backup first, then every part on the older release; parts the older release doesn't have are stopped. It's offered straight away only while no release between is breaking: within that, migrations only add, so the older release works on the tables the newer one left, and the data stays as it is. Across a breaking release, the list says which one and why, and going back is by hand, restoring the backup taken before upgrading to it ([upgrade.md](upgrade.md#going-back)). History records each going back, and Activity has `platform.go-back-requested` and `platform.went-back`.
+**Upgrade Centre → Go back** lists the five releases before yours on your channel. **Go back** runs the same steps as an upgrade, a backup first, then every part on the older release; parts the older release doesn't have are stopped. It's offered straight away only while no release between is breaking: within that, migrations only add, so the older release works on the tables the newer one left, and the data stays as it is. Across a breaking release, the list says which one and why, and going back is by hand, restoring the backup taken before upgrading to it ([Upgrade AUGUR, Going back](src/content/docs/run/upgrade.md#going-back)). History records each going back, and Activity has `platform.go-back-requested` and `platform.went-back`.
 
 For an app, **Go back** on its page in the Upgrade Centre installs one of its three versions before (blue/green, as any install) and sets it to **Hold**, so Automatic doesn't take it straight up again.
 

@@ -92,7 +92,7 @@ describe.runIf(DATABASE_URL)('the Upgrade Centre overview (ADR 0020)', () => {
     // A deployment admin whose password is older than the step-up window enters it again first (ADR 0022).
     const stale = callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], signedInAt: new Date(Date.now() - 60 * 60_000).toISOString() });
     expect((await set(record, stale)).json()).toMatchObject({ error: 'sign_in_again' });
-    expect((await set({ ...record, channel: 'beta' })).json().message).toBe('AUGUR follows stable releases, set by RELEASE_CHANNEL in .env (docs/upgrade.md). Change it there.');
+    expect((await set({ ...record, channel: 'beta' })).json().message).toBe('AUGUR follows stable releases, set by RELEASE_CHANNEL in .env (AUGUR’s docs, Where releases come from). Change it there.');
     expect((await set({ ...record, pin: 'latest' })).json().message).toBe('“latest” isn’t a version range. Use one such as 0.13.x or ^1.2.0.');
     expect((await app.inject({ method: 'PUT', url: '/v1/platform/units/nothing/desired-state', headers: deployer, payload: record })).statusCode).toBe(404);
 

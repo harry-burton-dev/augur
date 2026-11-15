@@ -143,13 +143,13 @@ export const feedReader =
       throw new FeedProblem(`The release feed at ${new URL(target).host} can’t be reached. Check the server can reach it, or point RELEASE_FEED_URL at a mirror.`);
     }
     if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
-      throw new FeedProblem('GitHub’s limit on checks without a token was reached. It resets within the hour; a read-only token raises it (docs/upgrade.md).');
+      throw new FeedProblem('GitHub’s limit on checks without a token was reached. It resets within the hour; a read-only token raises it (AUGUR’s docs, Where releases come from).');
     }
     if (res.status === 401 || res.status === 403 || res.status === 404) {
       throw new FeedProblem(
         token
           ? `The release feed refused the registry’s token (${res.status}). Check it can still read the repository’s releases.`
-          : `The release feed refused the registry (${res.status}). A private repository needs a read-only token: see docs/upgrade.md.`,
+          : `The release feed refused the registry (${res.status}). A private repository needs a read-only token: see AUGUR’s docs, Where releases come from.`,
       );
     }
     if (!res.ok) throw new FeedProblem(`The release feed answered ${res.status}. Try again later.`);
@@ -190,7 +190,7 @@ export const feedSource =
     }
     const body = await feedReader({ token, key, fetchImpl })(target, accept);
     if (!target.startsWith('file:') && new URL(target).host === 'api.github.com') {
-      return { body, trust: { state: 'unchecked', note: 'This server reads GitHub’s releases directly, which aren’t signed. Give it a read key to read the signed feed instead (docs/upgrade.md, The read key).' } };
+      return { body, trust: { state: 'unchecked', note: 'This server reads GitHub’s releases directly, which aren’t signed. Give it a read key to read the signed feed instead (AUGUR’s docs, Where releases come from).' } };
     }
     return { body, trust: { state: 'mirror', note: 'A mirror’s own feed: the organisation that runs the mirror vouches for the list, and the updater still checks every image’s signature.' } };
   };
@@ -226,8 +226,8 @@ const ociFiles = async (target: string, key: ReadKey | undefined, fetchImpl: typ
   const refused = (status: number) =>
     new FeedProblem(
       key
-        ? `The release feed refused this deployment’s read key (${status}). Check the token in secrets/github-read-key can still read the repository’s packages, and that GITHUB_READ_USER is its account (docs/upgrade.md).`
-        : `The release feed refused the registry (${status}). A private repository needs a read key: see docs/upgrade.md.`,
+        ? `The release feed refused this deployment’s read key (${status}). Check the token in secrets/github-read-key can still read the repository’s packages, and that GITHUB_READ_USER is its account (AUGUR’s docs, Where releases come from).`
+        : `The release feed refused the registry (${status}). A private repository needs a read key: see AUGUR’s docs, Where releases come from.`,
     );
   const tokenRes = await call(
     `https://${host}/token?service=${encodeURIComponent(host)}&scope=${encodeURIComponent(`repository:${repository}:pull`)}`,
@@ -529,7 +529,7 @@ export const goBackTargets = (checker: UpdateChecker): GoBackTarget[] => {
     const between = releases.filter((b) => semver.gt(b.version, r.version) && semver.lte(b.version, running.version));
     const breaking = between.filter((b) => b.manifest?.breaking.length).sort((a, b) => semver.compare(a.version, b.version))[0];
     if (breaking) {
-      return { ...base, breakingAfter: breaking.version, problem: `AUGUR ${breaking.version} is breaking (${breaking.manifest!.breaking[0]}), so ${r.version} may not work on the tables it left. Go back by hand and restore the backup taken before upgrading to ${breaking.version} (docs/upgrade.md, Going back).` };
+      return { ...base, breakingAfter: breaking.version, problem: `AUGUR ${breaking.version} is breaking (${breaking.manifest!.breaking[0]}), so ${r.version} may not work on the tables it left. Go back by hand and restore the backup taken before upgrading to ${breaking.version} (AUGUR’s docs, Upgrade AUGUR).` };
     }
     const unknown = between.find((b) => !b.manifest);
     if (unknown) return { ...base, problem: `AUGUR ${unknown.version}’s release file couldn’t be read, so whether going back past it is safe isn’t known.` };
@@ -599,7 +599,7 @@ export const updatesView = ({ checker, apps }: { checker: UpdateChecker; apps: A
   const haltNeed = (to?: string): NeedsYou[] => {
     if (!runningHalt) return [];
     const back = goBackTargets(checker).find((t) => !t.problem)?.version;
-    const where = to ? `Upgrade to ${to}.` : back ? `Go back to ${back}, or wait for a fixed release.` : 'Wait for a fixed release, or go back by hand (docs/upgrade.md, Going back).';
+    const where = to ? `Upgrade to ${to}.` : back ? `Go back to ${back}, or wait for a fixed release.` : 'Wait for a fixed release, or go back by hand (AUGUR’s docs, Upgrade AUGUR).';
     return [{ kind: 'halted', version: running.version, message: `AUGUR ${running.version}, which this server runs, was halted by its publisher: ${sentence(runningHalt.reason)} ${where}` }];
   };
   if (!newer.length) return { ...base, newer: listed.map(summary), ...(beta ? { beta } : {}), needsYou: haltNeed() };
