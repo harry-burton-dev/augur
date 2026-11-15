@@ -51,12 +51,14 @@ The front door (`web`) holds every caller to a few limits:
 - **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its
   Java heap from it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g), so a runaway container is
   restarted on its own instead of pushing AUGUR out. Every other container AUGUR builds (its services, the front
-  door, OpenFGA and its jobs) has 1g (`SERVICE_MEM_LIMIT`) and may run at most 512 processes
-  (`SERVICE_PIDS_LIMIT`). `pc ps` shows a container restarting. Raise the limit and run `pc up -d` if it keeps
-  happening; a server with 16 GB fits the defaults with room to spare.
-- **Apps' parts** have the memory and CPU each asks for in its manifest, at most 256 processes, and are
-  the first the kernel stops when the server runs out of memory (`oom_score_adj` 500), before AUGUR's own
-  services and Postgres.
+  door, OpenFGA and its jobs) has 1g (`SERVICE_MEM_LIMIT`), the updater 2g (`UPDATER_MEM_LIMIT`), and each may
+  run at most 512 processes (`SERVICE_PIDS_LIMIT`). `pc ps` shows a service restarting, or a job (the storage
+  job, the realm job, the knowledge migration) exited with 137 and what waits on it not started. Raise the limit
+  and run `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
+- **Apps' parts** have the memory and CPU each asks for in its manifest, at most 256 processes, and are the first
+  the kernel stops when the server runs out of memory (`oom_score_adj` 500), before AUGUR's own services and
+  Postgres. A part gets these when it's next started: an app's install, update or settings change. A container
+  from before the app contract runs as it was, without them, until it's replaced.
 - **Telemetry** goes over a network of its own: AUGUR's services send to `otel-lgtm` on it, and apps the runner
   installs aren't on it, so they can't reach `otel-lgtm` at all. Loki, Tempo and Prometheus answer only inside
   that container, to Grafana, so nothing on the networks can read what the services logged.

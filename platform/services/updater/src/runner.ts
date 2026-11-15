@@ -461,8 +461,6 @@ const legacyContainer = (image: string, service: string, labels: Record<string, 
   networks: ['platform'],
   cap_drop: ['ALL'],
   security_opt: ['no-new-privileges:true'],
-  pids_limit: PART_PIDS_LIMIT,
-  oom_score_adj: PART_OOM_SCORE_ADJ,
   labels,
 });
 

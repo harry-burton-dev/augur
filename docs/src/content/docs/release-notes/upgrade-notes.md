@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-Every container AUGUR builds (its services, the front door, OpenFGA and its jobs) now has a memory limit of 1g and may run at most 512 processes, and each app's part at most 256 processes, going first when the server runs out of memory. Nothing to do on most servers. If `pc ps` shows one of AUGUR's services restarting after the upgrade, set `SERVICE_MEM_LIMIT` higher in `.env` (2g, say) and run `pc up -d`; `docker stats --no-stream` shows what each uses now.
+Every container AUGUR builds (its services, the front door, OpenFGA and its jobs) now has a memory limit of 1g (the updater 2g) and may run at most 512 processes. Each app's part runs with at most 256 processes and goes first when the server runs out of memory, from its next install, update or settings change. Nothing to do on most servers. If `pc ps` shows one of AUGUR's services restarting after the upgrade, or a job exited with 137, set `SERVICE_MEM_LIMIT` (or `UPDATER_MEM_LIMIT`) higher in `.env` and run `pc up -d`; `docker stats --no-stream` shows what each uses now.
 
 ## An app that declares its domain events is held to them
 

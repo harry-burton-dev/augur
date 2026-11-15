@@ -119,6 +119,7 @@
       "OTEL_LGTM_MEM_LIMIT",
       "SERVICE_MEM_LIMIT",
       "SERVICE_PIDS_LIMIT",
+      "UPDATER_MEM_LIMIT",
       "APP_ORIGINS",
       "KIT_URL",
       "FOCUS_DEPTH",

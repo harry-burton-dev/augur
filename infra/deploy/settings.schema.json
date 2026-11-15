@@ -2092,8 +2092,19 @@
     },
     "SERVICE_MEM_LIMIT": {
       "type": "string",
-      "description": "The memory limit of each container AUGUR builds (its services, the front door, OpenFGA and its jobs).",
+      "description": "The memory limit of each container AUGUR builds (its services, the front door, OpenFGA and its jobs), the updater apart.",
       "default": "1g",
+      "pattern": "^[0-9]+[bkmg]?$",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "UPDATER_MEM_LIMIT": {
+      "type": "string",
+      "description": "The updater's memory limit: more than the other services', since it pulls, checks and unpacks releases.",
+      "default": "2g",
+      "pattern": "^[0-9]+[bkmg]?$",
       "x-services": [
         "compose"
       ],
@@ -2103,6 +2114,7 @@
       "type": "string",
       "description": "The most processes each container AUGUR builds may run.",
       "default": "512",
+      "pattern": "^[0-9]+$",
       "x-services": [
         "compose"
       ],

@@ -766,6 +766,8 @@ services:
     logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/updater:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
+    # More than the others: it pulls, checks and unpacks releases, and dying half way through a switch leaves it to redo.
+    mem_limit: ${UPDATER_MEM_LIMIT:-2g}
     profiles: [updater]
     restart: unless-stopped
     environment:
