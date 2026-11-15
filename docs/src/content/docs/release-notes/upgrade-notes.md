@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Some secrets reach their services as files, which needs Docker Compose 2.24
+
+**From** unreleased
+
+The gateway's `CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registry, events, the knowledge graph and permissions, `ALERT_WEBHOOK_TOKEN` and `OPENFGA_TOKEN` now reach the services that read them as files under `/run/secrets/`, not in their environment, so `docker inspect` no longer shows them. They stay in `.env` as before: nothing in `.env` changes. Compose's `secrets:` with `environment:` needs Docker Compose 2.24 or newer, so before you upgrade, run `docker compose version` on the server. On an older one, `pc up` stops on the `secrets:` section of `compose.yml`: update the Docker Compose plugin first ([Install AUGUR](../../run/install/#before-you-start)).
+
 ## An event an app's part can't take no longer holds the rest
 
 **From** unreleased
