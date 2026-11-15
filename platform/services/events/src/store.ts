@@ -152,7 +152,6 @@ export const topicMatches = (topic: string, wanted: string[]) =>
 
 /** Whether a topic or family asked for shares any topic with those an app reads (exact topics or families). */
 export const topicsOverlap = (asked: string, reads: string[]) =>
-  asked === '*' ||
   reads.some((read) => {
     const a = asked.endsWith('.*') ? asked.slice(0, -1) : undefined;
     const r = read.endsWith('.*') ? read.slice(0, -1) : undefined;

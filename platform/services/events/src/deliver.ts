@@ -9,6 +9,7 @@
  */
 import { eventDeliveryKey, GrantsUnavailable, IDEMPOTENCY_KEY_HEADER, PART_EVENTS_PATH, serviceHeaders, withDeadline, type DeclaredEventsLookup, type GrantedApp, type GrantLookup, type NewAuditEntry, type ServiceCredentials } from '@augur/service-kit';
 import { topicMatches, type DomainEvent, type EventStore } from './store.ts';
+import { readable } from './event-types.ts';
 import type { Delivery, Outcome } from './deliveries.ts';
 
 /** How long a part may fail before the event it can't take is passed over (spec 8.6: a day). */
@@ -145,7 +146,7 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
           let wanted = event.publisher !== app;
           if (wanted) {
             try {
-              const reads = declaredEvents && (await declaredEvents(app))?.reads;
+              const reads = declaredEvents && readable((await declaredEvents(app))?.reads);
               wanted = (!reads || topicMatches(event.topic, reads)) && (await subscribesOn(grants, app, event.workspace?.id));
             } catch (err) {
               if (!(err instanceof GrantsUnavailable)) throw err;

@@ -15,7 +15,7 @@ export interface NewDomainEvent {
   payload: unknown;
   /** The floor it happened on, if any. */
   workspace?: string;
-  /** The version of its type the payload follows, of those the manifest declares; the newest without it (ADR 0104). */
+  /** The version of its type the payload follows, of those the manifest declares; without it, the newest its payload fits (ADR 0104). */
   version?: number;
 }
 
@@ -82,7 +82,7 @@ export const OUTBOX_TABLE_SQL = `
 
 /**
  * Adds an event to the outbox. Call it inside the transaction that makes the change. It goes at the newest
- * version of its type the app declares (ADR 0104); to send an older one, publish it directly.
+ * version of its type the app declares that its payload fits (ADR 0104); to pin a version, publish it directly.
  */
 export async function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id' | 'version'> & { id?: string }): Promise<void> {
   await db.query(

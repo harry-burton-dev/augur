@@ -470,6 +470,8 @@ describe.runIf(DATABASE_URL)('events', () => {
       expect((await read('topics=folio.*', as('folio'))).json().events.map((e: { id: string }) => e.id)).toEqual(['d1', 'w1']);
       const refused = await read('topics=folio.document.withdrawn');
       expect([refused.statusCode, refused.json().message]).toEqual([403, expect.stringMatching(/notes doesn’t say in its manifest that it reads folio\.document\.withdrawn\. It reads folio\.document\.published/)]);
+      // AUGUR's own topics are readable by any follower, declared or not.
+      expect((await read('topics=platform.*')).statusCode).toBe(200);
       registryUp = false;
       expect((await read('topics=folio.*')).statusCode).toBe(503);
     });
@@ -487,13 +489,16 @@ describe.runIf(DATABASE_URL)('events', () => {
       const app = (open = await db.app({ verifyService, grants, floors, declaredEvents }));
       const publish = (events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events } });
       expect((await publish([{ ...published('d1'), version: 1 }])).statusCode).toBe(202);
-      // Without a version, the newest declared.
+      // Without a version, the newest declared its payload fits (an outbox row queued before an upgrade still goes)...
       expect((await publish([{ topic: 'folio.document.published', id: 'd2', payload: { document: 'd2', by: 'u-1' } }])).statusCode).toBe(202);
-      const wrong = await publish([{ topic: 'folio.document.published', id: 'd3', payload: { document: 'd3' } }]);
-      expect([wrong.statusCode, wrong.json().message]).toEqual([400, expect.stringMatching(/Event d3's payload isn't folio\.document\.published version 2: .*by/)]);
+      expect((await publish([{ topic: 'folio.document.published', id: 'd5', payload: { document: 'd5' } }])).statusCode).toBe(202);
+      // ...and one it fits none of is refused against the newest.
+      const wrong = await publish([{ topic: 'folio.document.published', id: 'd3', payload: { by: 'u-1' } }]);
+      expect([wrong.statusCode, wrong.json().message]).toEqual([400, expect.stringMatching(/Event d3's payload isn't folio\.document\.published version 2: .*document/)]);
+      expect((await publish([{ topic: 'folio.document.published', id: 'd6', version: 2, payload: { document: 'd6' } }])).json().message).toMatch(/version 2: .*by/);
       expect((await publish([{ ...published('d4'), version: 3 }])).json().message).toMatch(/declares folio\.document\.published at version 1, 2, not 3/);
       expect((await publish([{ topic: 'folio.document.withdrawn', id: 'w1', payload: {} }])).json().message).toMatch(/doesn’t declare folio\.document\.withdrawn/);
-      await expect.poll(async () => (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers: platform })).json().events.map((e: { id: string; version?: number }) => [e.id, e.version])).toEqual([['d1', 1], ['d2', 2]]);
+      await expect.poll(async () => (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers: platform })).json().events.map((e: { id: string; version?: number }) => [e.id, e.version])).toEqual([['d1', 1], ['d2', 2], ['d5', 1]]);
     });
 
     it('answers 410 to a cursor behind what was pruned, with how far they were pruned, so a follower knows to rebuild (ADR 0104)', async () => {

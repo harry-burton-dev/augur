@@ -37,7 +37,7 @@ import {
   endStreamsOnStop,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
-import { payloadChecker } from './event-types.ts';
+import { payloadChecker, readable } from './event-types.ts';
 import { deliveryStatus, subscribesOn, type PushingState } from './deliver.ts';
 import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
@@ -192,7 +192,7 @@ const topicList = (raw: string): { topics: string[] } | { bad: string } => {
 /** Events on no floor that still reach every browser: an app added, changed or turned off for the whole deployment. Ids only. */
 const isDeploymentWide = (topic: string) => topic.startsWith('platform.app.');
 
-const forBrowser = ({ seq, topic, id, publisher, at, workspace, payload }: DomainEvent) => ({ seq, topic, id, publisher, at, ...(workspace ? { workspace } : {}), payload });
+const forBrowser = ({ seq, topic, id, publisher, at, workspace, version, payload }: DomainEvent) => ({ seq, topic, id, publisher, at, ...(workspace ? { workspace } : {}), ...(version ? { version } : {}), payload });
 
 /** What the Shell receives: a person never sees whom else a notification went to. */
 const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
@@ -271,6 +271,19 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           return undefined;
         }
         return (await granted(req, reply, service.app, scope, workspaceOf(req))) ? service : undefined;
+      };
+
+      /** What an app declares about events, undefined for nothing; null when it can't be asked, the 503 sent. */
+      const declaredOf = async (req: FastifyRequest, reply: FastifyReply, app: string, what: 'reads' | 'publishes'): Promise<DeclaredEvents | undefined | null> => {
+        if (!declaredEvents) return undefined;
+        try {
+          return await declaredEvents(app);
+        } catch (err) {
+          if (!(err instanceof GrantsUnavailable)) throw err;
+          req.log.error({ err: err.message, app }, 'declared events check failed');
+          void reply.code(503).send({ error: 'unavailable', message: `What this app ${what === 'reads' ? 'reads' : 'publishes'} can’t be checked right now. Try again in a moment.` });
+          return null;
+        }
       };
 
       /** The events `app` may see: those on a floor (or none, the deployment's) where it holds events:subscribe. Undefined when grants can't be checked. */
@@ -574,7 +587,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             body: Type.Object({ events: Type.Array(ref(NewDomainEventSchema), { minItems: 1, maxItems: 100 }) }, { additionalProperties: false }),
             response: {
               202: Type.Object({ added: Type.Integer(), repeated: Type.Integer() }, { description: 'Kept' }),
-              400: refused("A topic outside the publisher's, an unknown floor, a floor the app isn't on, or a payload over 16 KB"),
+              400: refused("A topic outside the publisher's, an unknown floor, a floor the app isn't on, a payload over 16 KB, or (for an app that declares its types) a type or version it doesn't declare, or a payload its schema refuses"),
               403: refused("Not a service nor an app acting for a person, not this publisher's topics, no events:publish scope, or a scope the delegation doesn't carry"),
               503: refused("Floors or grants can't be checked right now"),
             },
@@ -591,18 +604,13 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         if ((service.kind === 'platform') !== (owner === 'platform')) {
           return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'AUGUR’s own services publish on "platform." topics.' : '"platform." topics belong to AUGUR’s own services.' });
         }
-        // An app that declares the types it publishes is held to them: a declared topic, a declared version, a payload that fits (ADR 0104).
-        const versions = req.body.events.map((e) => e.version);
-        if (service.kind !== 'platform' && declaredEvents) {
-          let declared: DeclaredEvents | undefined;
-          try {
-            declared = await declaredEvents(service.app);
-          } catch (err) {
-            if (!(err instanceof GrantsUnavailable)) throw err;
-            req.log.error({ err: err.message, app: service.app }, 'declared events check failed');
-            return reply.code(503).send({ error: 'unavailable', message: 'What this app publishes can’t be checked right now. Try again in a moment.' });
-          }
-          if (declared) {
+        // An app that declares the types it publishes is held to them: a declared topic, a declared version, a payload that fits
+        // (ADR 0104). Only a version so checked is kept with an event.
+        const versions: (number | undefined)[] = req.body.events.map(() => undefined);
+        if (service.kind !== 'platform') {
+          const declared = await declaredOf(req, reply, service.app, 'publishes');
+          if (declared === null) return reply;
+          if (declared?.publishes.length) {
             for (const [i, e] of req.body.events.entries()) {
               const checked = payloadCheck(service.app, declared, e);
               if ('problem' in checked) return reply.code(400).send({ error: 'bad_request', message: checked.problem });
@@ -655,7 +663,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             response: {
               200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor to read on from' }),
               400: refused('A topic that is not a topic, nor a family such as folio.*'),
-              403: refused('Not a service nor an app acting for a person, no events:subscribe scope, or a scope the delegation doesn’t carry'),
+              403: refused('Not a service nor an app acting for a person, no events:subscribe scope, a scope the delegation doesn’t carry, or only topics the app’s manifest doesn’t say it reads'),
               410: Type.Object({ error: Type.Literal('gone'), message: Type.String(), after: Type.String({ description: 'How far events were pruned: rebuild, then read on with this as `after`' }) }, { description: 'Events after `after` were pruned: the follower has missed some' }),
               503: refused("Grants can't be checked right now"),
             },
@@ -669,16 +677,12 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           if (!caller) return reply;
           // An app that says what it reads is given only that (ADR 0104); asking only for what it doesn't read is refused, saying so.
           let reads: string[] | undefined;
-          if (caller.kind !== 'platform' && declaredEvents) {
-            try {
-              reads = (await declaredEvents(caller.app))?.reads;
-            } catch (err) {
-              if (!(err instanceof GrantsUnavailable)) throw err;
-              req.log.error({ err: err.message, app: caller.app }, 'declared events check failed');
-              return reply.code(503).send({ error: 'unavailable', message: 'What this app reads can’t be checked right now. Try again in a moment.' });
-            }
+          if (caller.kind !== 'platform') {
+            const declared = await declaredOf(req, reply, caller.app, 'reads');
+            if (declared === null) return reply;
+            reads = readable(declared?.reads);
             if (reads && !topics.some((t) => topicsOverlap(t, reads!))) {
-              return reply.code(403).send({ error: 'forbidden', message: `${caller.app} doesn’t say in its manifest that it reads ${topics.join(', ')}. It reads ${reads.length ? reads.join(', ') : 'nothing'} (contributes.events.reads).` });
+              return reply.code(403).send({ error: 'forbidden', message: `${caller.app} doesn’t say in its manifest that it reads ${topics.join(', ')}. It reads ${declared!.reads!.length ? declared!.reads!.join(', ') : 'only AUGUR’s own topics'} (contributes.events.reads).` });
             }
           }
           const limit = req.query.limit ?? 100;
