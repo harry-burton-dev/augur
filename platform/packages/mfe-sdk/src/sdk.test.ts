@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { fakeContext } from './testing/context.js';
 import {
   createEventBus,
   explainEntity,
@@ -79,6 +80,52 @@ describe('event bus', () => {
     expect(later).not.toHaveBeenCalled();
     bus.emit('x', 2);
     expect(later).toHaveBeenCalledWith(2);
+  });
+
+  it('treats a handler removed and added again during an emit as new, and holds a handler once', () => {
+    const bus = createEventBus();
+    const second = vi.fn();
+    let offSecond = () => {};
+    let swapped = false;
+    bus.on('x', () => {
+      if (swapped) return;
+      swapped = true;
+      offSecond();
+      offSecond = bus.on('x', second);
+    });
+    offSecond = bus.on('x', second);
+    bus.on('x', second);
+    bus.emit('x', 1);
+    expect(second).not.toHaveBeenCalled();
+    bus.emit('x', 2);
+    expect(second).toHaveBeenCalledOnce();
+  });
+
+  it('tells onError of each throw and each rejected promise, with the type, after the others have run', async () => {
+    const failed: [string, string][] = [];
+    const bus = createEventBus({ onError: (err, type) => failed.push([type, (err as Error).message]) });
+    const after = vi.fn();
+    bus.on('t', () => {
+      throw new Error('thrown');
+    });
+    bus.on('t', async () => {
+      throw new Error('rejected');
+    });
+    bus.on('t', () => expect(failed).toEqual([]));
+    bus.on('t', after);
+    bus.emit('t', 1);
+    expect(after).toHaveBeenCalledOnce();
+    await Promise.resolve();
+    expect(failed).toEqual([['t', 'thrown'], ['t', 'rejected']]);
+  });
+
+  it("fakeContext's bus fails the test at the emit, once every handler has run", () => {
+    const ctx = fakeContext();
+    const after = vi.fn();
+    ctx.bus.on('t', () => expect(1).toBe(2));
+    ctx.bus.on('t', after);
+    expect(() => ctx.bus.emit('t', 1)).toThrow();
+    expect(after).toHaveBeenCalledOnce();
   });
 });
 
