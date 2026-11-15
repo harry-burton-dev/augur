@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## A migration stuck behind a lock stops its service and says who holds it
+
+**From** unreleased
+
+A service's migration now waits at most a minute for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`), where it used to wait for ever. It then rolls back, the service stops and Docker starts it again, and `pc logs <service>` names the migration, the lock and the session holding it. The knowledge graph's migration job is restarted three times, then stays stopped, and the knowledge service with it, until you run `pc up -d` again. A service also waits at most 10 seconds for a database connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached. Nothing to do on most servers. A backup running while you upgrade holds every table until it ends, so start an upgrade once the night's backup has finished. If a service keeps restarting after the upgrade and its log says a migration gave up, end the session it names (or the app holding it), or raise the setting in `.env` and run `pc up -d`; it reaches AUGUR's own services, and an app's migrations keep the default ([Limits and health](../../run/limits/#logs-memory-and-health)).
+
 ## Postgres keeps connections back for AUGUR
 
 **From** unreleased
