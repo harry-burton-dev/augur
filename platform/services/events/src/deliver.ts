@@ -4,18 +4,18 @@
  * and in order, as `POST /api/<id>/augur/events` with the events service's own token (the gateway signs a caller
  * naming the service) and an idempotency key that is the same on every attempt.
  *
- * A part that is down (it doesn't answer, or says it is unavailable: 502, 503, 504) holds every event for its app,
- * tried again with growing waits for up to a day; then the event at the head is set aside. A part that answers
- * anything else but 2xx can't take that one event: it is held beside the line and tried a few more times (later
- * events on its topic wait behind it, so a topic keeps its order), then set aside, while events on other topics go
- * on (PER-462). What is set aside is kept, recorded in Activity, and listed for admins. An app that has taken
+ * A part that is down (it doesn't answer, isn't there for AUGUR, or asks to wait; or a second event fails with a
+ * server error before any gets through) holds every event for its app, tried again with growing waits for up to a
+ * day; then the event in front is set aside. A part that answers anything else but 2xx can't take that one event:
+ * it is held beside the line and tried a few more times (later events on its topic wait behind it, so a topic keeps
+ * its order), then set aside, while events on other topics go on (PER-462). What is set aside is kept, recorded in Activity, and listed for admins. An app that has taken
  * nothing for an hour is stalled, which Admin → Apps shows with the reason. An event on a floor where the app is
  * off, or the app's own events, aren't sent to it.
  */
 import { eventDeliveryKey, GrantsUnavailable, IDEMPOTENCY_KEY_HEADER, PART_EVENTS_PATH, serviceHeaders, withDeadline, type DeclaredEventsLookup, type GrantedApp, type GrantLookup, type NewAuditEntry, type ServiceCredentials } from '@augur/service-kit';
 import { topicMatches, type DomainEvent, type EventStore } from './store.ts';
 import { readable } from './event-types.ts';
-import type { Delivery, HeldEvent, Outcome } from './deliveries.ts';
+import type { Delivery, HeldEvent, HoldHow, Outcome } from './deliveries.ts';
 
 /** How long a part may be down before the event at the head of its line is set aside (spec 8.6: a day). */
 export const GIVE_UP_AFTER_MS = 24 * 3_600_000;
@@ -37,8 +37,11 @@ export const backoffMs = (failures: number): number => Math.min(1000 * 2 ** Math
 /** The wait before try `failures + 1` of one event its part can't take: `retryMs`, doubling, up to MAX_BACKOFF_MS. */
 export const retryBackoffMs = (failures: number, retryMs: number): number => Math.min(retryMs * 2 ** Math.max(0, failures - 1), MAX_BACKOFF_MS);
 
-/** `down`: the part didn't answer, or said it is unavailable, so nothing for its app goes until it answers. */
-export type SendResult = { ok: true } | { ok: false; reason: string; down?: boolean };
+/**
+ * `down`: the part didn't answer, isn't there for AUGUR (401, 403, 404), or said to wait (408, 429, 502, 503, 504), so
+ * nothing for its app goes until it answers. `status`: what it answered otherwise.
+ */
+export type SendResult = { ok: true } | { ok: false; reason: string; down?: boolean; status?: number };
 /** Sends one event to an app's part; says in words why it didn't get through. Never throws. */
 export type SendEvent = (app: string, event: DomainEvent) => Promise<SendResult>;
 
@@ -49,8 +52,8 @@ export interface SendOptions {
   fetchImpl?: typeof fetch;
 }
 
-/** What the gateway or a part answers when the part can't be reached or is unavailable, rather than refusing the event. */
-const UNAVAILABLE = new Set([502, 503, 504]);
+/** What the gateway or a part answers when the part can't be reached, isn't there for AUGUR, or asks to wait, rather than refusing the event. */
+const UNAVAILABLE = new Set([401, 403, 404, 408, 429, 502, 503, 504]);
 
 /** Sends events to parts through the gateway as the events service itself. */
 export const sendThroughGateway = ({ gatewayUrl, credentials, fetchImpl = fetch }: SendOptions): SendEvent => {
@@ -69,7 +72,7 @@ export const sendThroughGateway = ({ gatewayUrl, credentials, fetchImpl = fetch 
     if (res.ok) return { ok: true };
     const body = (await res.json().catch(() => ({}))) as { message?: string };
     const reason = `${app}’s part answered ${res.status}${body.message ? `: ${body.message}` : ''}`;
-    return UNAVAILABLE.has(res.status) ? { ok: false, reason, down: true } : { ok: false, reason };
+    return UNAVAILABLE.has(res.status) ? { ok: false, reason, down: true } : { ok: false, reason, status: res.status };
   };
 };
 
@@ -116,7 +119,7 @@ export const deliveryStatus = (d: Delivery, now = Date.now()): { state: 'ok' | '
     if (d.dropped) words.push(`${d.dropped} ${d.dropped === 1 ? 'event was' : 'events were'} passed over after a day of failures.`);
     if (d.retrying) words.push(`${d.retrying} ${d.retrying === 1 ? 'event is' : 'events are'} being tried again.`);
     if (d.setAside) words.push(`${d.setAside} ${d.setAside === 1 ? 'event was set aside: the part couldn’t take it.' : 'events were set aside: the part couldn’t take them.'}`);
-    return { state: 'ok', words: words.join(' ') };
+    return { state: d.retrying ? 'retrying' : 'ok', words: words.join(' ') };
   }
   const since = new Date(d.failingSince).getTime();
   const stalled = now - since >= STALLED_AFTER_MS;
@@ -145,8 +148,45 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
     return { ...row, cursor: to, failures: 0, failingSince: null, lastError: null, nextAt: null };
   };
 
+  /** Puts the event beside the app's line and moves the cursor past it, together; undefined when another instance moved first. */
+  const holdAndMove = async (app: string, row: Delivery, event: DomainEvent, how: HoldHow): Promise<Delivery | undefined> => {
+    if (!(await store.deliveries.holdAndAdvance(app, row.cursor, event, how))) return undefined;
+    return { ...row, cursor: event.seq, failures: 0, failingSince: null, lastError: null, nextAt: null };
+  };
+
   const failedOnce = (report: DeliveryReport, app: string) => {
     if (!report.failed.includes(app)) report.failed.push(app);
+  };
+
+  /**
+   * The events each app's part failed with a server error (500, say) since it last took one. A second, different
+   * event failing so means the part is broken rather than one event bad: it is taken as down, so nothing is set aside
+   * for a fault that would hit every event. Kept per instance; the lease means one instance drives an app at a time.
+   */
+  const serverErrors = new Map<string, Set<string>>();
+
+  /** Whether a failed send means the part is down, holding every event for the app. */
+  const isDown = (app: string, seq: string, sent: { down?: boolean; status?: number }) => {
+    if (sent.down) return true;
+    if (!sent.status || sent.status < 500) return false;
+    const seen = serverErrors.get(app) ?? new Set<string>();
+    seen.add(seq);
+    serverErrors.set(app, seen);
+    return seen.size >= 2;
+  };
+
+  /** Whether the app takes this event: not its own, a topic it reads, a floor where it subscribes. Undefined when that can't be asked. */
+  const wantedBy = async (app: string, event: DomainEvent): Promise<boolean | undefined> => {
+    if (event.publisher === app) return false;
+    try {
+      const reads = declaredEvents && readable((await declaredEvents(app))?.reads);
+      return (!reads || topicMatches(event.topic, reads)) && (await subscribesOn(grants, app, event.workspace?.id));
+    } catch (err) {
+      if (!(err instanceof GrantsUnavailable)) throw err;
+      log?.warn({ app, err: err.message }, 'could not check where an app subscribes; trying again later');
+      problem = `The registry can’t be asked where apps subscribe (${err.message}).`;
+      return undefined;
+    }
   };
 
   /** Says an event was set aside: logged, and recorded once in Activity with what it was and why. */
@@ -155,6 +195,9 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
     log?.error({ app, seq: event.seq, topic: event.topic, attempts, reason }, 'event set aside: its part couldn’t take it');
     await audit?.({ actor: SERVICE_ACTOR, app: 'events', action: 'delivery.set-aside', target: app, detail: { seq: event.seq, id: event.id, topic: event.topic, attempts, reason } }, `delivery.set-aside:${app}:${event.seq}`);
   };
+
+  /** Whether the part has been down for a day, so the event in front is set aside. */
+  const downForADay = (row: Delivery) => row.failingSince !== null && now() - new Date(row.failingSince).getTime() >= GIVE_UP_AFTER_MS;
 
   /** Records the part down against the event above the cursor; nothing goes for the app until the wait is over. */
   const partDown = async (app: string, row: Delivery, seq: string, reason: string, report: DeliveryReport) => {
@@ -169,24 +212,33 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
 
   /**
    * Tries again, first on each topic, the events held beside the app's line that are due; each that gets through lets
-   * the next on its topic go. Answers the row, healthy once something got through, or undefined when the part is down.
+   * the next on its topic go. Answers the row, healthy once something got through, or undefined when the pass stops
+   * there: the part is down, or the registry can't say what the app takes.
    */
   const retryHeld = async (app: string, row: Delivery, report: DeliveryReport): Promise<Delivery | undefined> => {
     for (const first of await store.deliveries.heldFirst(app)) {
       let held: HeldEvent | undefined = first;
       while (held && (!held.nextAt || new Date(held.nextAt).getTime() <= now())) {
         const [event] = await store.readEvents({ topics: [held.topic], after: (BigInt(held.seq) - 1n).toString(), upTo: held.seq, limit: 1 });
-        const sent: SendResult = event ? await send(app, event) : { ok: false, reason: 'It was pruned before its part took it' };
-        if (sent.ok) {
-          await store.deliveries.unhold(app, held.seq);
+        // What the app takes may have changed while the event waited: one it no longer takes goes.
+        const wanted = event ? await wantedBy(app, event) : true;
+        if (wanted === undefined) return undefined;
+        const sent: SendResult | undefined = !wanted ? undefined : event ? await send(app, event) : { ok: false, reason: 'It was pruned before its part took it' };
+        if (!sent) {
+          await store.deliveries.unhold(app, held.seq, false);
+          report.skipped++;
+        } else if (sent.ok) {
+          await store.deliveries.unhold(app, held.seq, true);
+          serverErrors.delete(app);
           row = { ...row, failures: 0, failingSince: null, lastError: null, nextAt: null };
           report.delivered++;
-        } else if (sent.down) {
+        } else if (event && isDown(app, held.seq, sent) && !downForADay(row)) {
           await partDown(app, row, held.seq, sent.reason, report);
           return undefined;
         } else {
+          // Tried as often as allowed, or a day of the part being down: set aside, so the events behind it can go.
           const attempts = held.attempts + 1;
-          const last = !event || attempts >= maxAttempts;
+          const last = !event || attempts >= maxAttempts || downForADay(row);
           await store.deliveries.retried(app, held.seq, { attempts, lastError: sent.reason, at: new Date(now()), ...(last ? { setAside: true } : { nextAt: new Date(now() + retryBackoffMs(attempts, retryMs)) }) });
           if (!last) {
             failedOnce(report, app);
@@ -195,7 +247,7 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
           }
           await setAside(app, held, attempts, sent.reason, report);
         }
-        await store.deliveries.claim(app, leaseSeconds).catch(() => false);
+        await store.deliveries.renew(app, leaseSeconds).catch(() => undefined);
         [held] = await store.deliveries.heldFirst(app, held.topic);
       }
     }
@@ -230,34 +282,21 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
         }
         if (events.length === 0) return;
         for (const event of events) {
-          let wanted = event.publisher !== app;
-          if (wanted) {
-            try {
-              const reads = declaredEvents && readable((await declaredEvents(app))?.reads);
-              wanted = (!reads || topicMatches(event.topic, reads)) && (await subscribesOn(grants, app, event.workspace?.id));
-            } catch (err) {
-              if (!(err instanceof GrantsUnavailable)) throw err;
-              log?.warn({ app, err: err.message }, 'could not check where an app subscribes; trying again later');
-              problem = `The registry can’t be asked where apps subscribe (${err.message}).`;
-              return;
-            }
-          }
+          const wanted = await wantedBy(app, event);
+          if (wanted === undefined) return;
           if (wanted && waiting.has(event.topic)) {
             // Its topic keeps its order: it waits beside the line, behind the event there being tried again.
-            await store.deliveries.hold(app, event, { attempts: 0 });
-            const moved = await move(app, row, event.seq, 'held');
+            const moved = await holdAndMove(app, row, event, { attempts: 0 });
             if (!moved) return;
             row = moved;
             continue;
           }
           const sent = wanted ? await send(app, event) : undefined;
-          if (sent && !sent.ok && sent.down) {
-            const since = row.failingSince ? new Date(row.failingSince).getTime() : now();
-            if (now() - since < GIVE_UP_AFTER_MS) return void (await partDown(app, row, event.seq, sent.reason, report));
+          if (sent && !sent.ok && isDown(app, event.seq, sent)) {
+            if (!downForADay(row)) return void (await partDown(app, row, event.seq, sent.reason, report));
             // A day of the part being down: this event is set aside, kept, so the ones behind it can go.
             const attempts = row.failures + 1;
-            await store.deliveries.hold(app, event, { attempts, lastError: sent.reason, firstFailedAt: new Date(since), setAside: true });
-            const moved = await move(app, row, event.seq, 'held');
+            const moved = await holdAndMove(app, row, event, { attempts, lastError: sent.reason, firstFailedAt: new Date(row.failingSince!), setAside: true });
             if (!moved) return;
             row = moved;
             await setAside(app, event, attempts, sent.reason, report);
@@ -266,8 +305,7 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
           if (sent && !sent.ok) {
             // The part answered, but can't take this one: it is held beside the line, to be tried again, and the rest go on.
             const last = maxAttempts <= 1;
-            await store.deliveries.hold(app, event, { attempts: 1, lastError: sent.reason, firstFailedAt: new Date(now()), ...(last ? { setAside: true } : { nextAt: new Date(now() + retryBackoffMs(1, retryMs)) }) });
-            const moved = await move(app, row, event.seq, 'held');
+            const moved = await holdAndMove(app, row, event, { attempts: 1, lastError: sent.reason, firstFailedAt: new Date(now()), ...(last ? { setAside: true } : { nextAt: new Date(now() + retryBackoffMs(1, retryMs)) }) });
             if (!moved) return;
             row = moved;
             if (last) await setAside(app, event, 1, sent.reason, report);
@@ -281,10 +319,12 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
           const moved = await move(app, row, event.seq, sent ? 'sent' : 'skipped');
           if (!moved) return;
           row = moved;
-          if (sent) report.delivered++;
-          else report.skipped++;
+          if (sent) {
+            serverErrors.delete(app);
+            report.delivered++;
+          } else report.skipped++;
           // The lease is held for as long as events keep going through.
-          await store.deliveries.claim(app, leaseSeconds).catch(() => false);
+          await store.deliveries.renew(app, leaseSeconds).catch(() => undefined);
         }
         if (events.length < batch) return;
       }

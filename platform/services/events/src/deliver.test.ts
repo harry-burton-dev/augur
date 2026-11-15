@@ -24,8 +24,8 @@ const part = () => {
   return {
     got,
     send,
-    /** The part can't take these events (every one without `which`): it answered, but not 2xx. */
-    fail: (reason: string, which?: (event: DomainEvent) => boolean) => ((answer = { ok: false, reason }), (only = which)),
+    /** The part can't take these events (every one without `which`): it answered `status`. */
+    fail: (reason: string, which?: (event: DomainEvent) => boolean, status = 422) => ((answer = { ok: false, reason, status }), (only = which)),
     /** The part is down: it couldn't be reached, or said it is unavailable. */
     down: (reason: string) => ((answer = { ok: false, reason, down: true }), (only = undefined)),
     recover: () => ((answer = { ok: true }), (only = undefined)),
@@ -49,7 +49,7 @@ describe('backoff and status', () => {
     expect(deliveryStatus(row, t0)).toEqual({ state: 'ok', words: 'Nothing to deliver yet.' });
     expect(deliveryStatus({ ...row, deliveredAt: '2026-03-01T09:59:00.000Z' }, t0).state).toBe('ok');
     expect(deliveryStatus({ ...row, deliveredAt: '2026-03-01T09:59:00.000Z', dropped: 1, droppedAt: '2026-03-01T09:00:00.000Z' }, t0).words).toBe('Taking events. 1 event was passed over after a day of failures.');
-    expect(deliveryStatus({ ...row, deliveredAt: '2026-03-01T09:59:00.000Z', retrying: 1, setAside: 2 }, t0)).toEqual({ state: 'ok', words: 'Taking events. 1 event is being tried again. 2 events were set aside: the part couldn’t take them.' });
+    expect(deliveryStatus({ ...row, deliveredAt: '2026-03-01T09:59:00.000Z', retrying: 1, setAside: 2 }, t0)).toEqual({ state: 'retrying', words: 'Taking events. 1 event is being tried again. 2 events were set aside: the part couldn’t take them.' });
     const failing = { ...row, failures: 3, lastError: 'notes’s part answered 500', failingSince: '2026-03-01T09:30:00.000Z' };
     expect(deliveryStatus(failing, t0)).toEqual({ state: 'retrying', words: 'Retrying: notes’s part answered 500.' });
     expect(deliveryStatus(failing, t0 + STALLED_AFTER_MS)).toMatchObject({ state: 'stalled', words: expect.stringMatching(/^Not taking events: /) });
@@ -168,7 +168,7 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
       { topic: 'folio.document.published', id: 'a1', payload: {} },
       { topic: 'folio.document.withdrawn', id: 'b1', payload: {} },
     ]);
-    theirs.fail('notes’s part answered 500', (e) => e.topic === 'folio.document.published');
+    theirs.fail('notes’s part answered 500', (e) => e.topic === 'folio.document.published', 500);
     expect(await d.tick()).toMatchObject({ delivered: 1, failed: ['notes'], setAside: 0 });
     expect(theirs.got.map((g) => g.event.id)).toEqual(['a1', 'b1']);
     // The app's own line is healthy: only a1 waits, to be tried again.
@@ -224,13 +224,39 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
       { topic: 'folio.document.published', id: 'a1', payload: {} },
       { topic: 'folio.document.published', id: 'a2', payload: {} },
     ]);
-    theirs.fail('notes’s part answered 500', (e) => e.id === 'a1');
+    theirs.fail('notes’s part answered 500', (e) => e.id === 'a1', 500);
     await d.tick();
     theirs.recover();
     clock += 60_000;
     expect(await d.tick()).toMatchObject({ delivered: 2, setAside: 0 });
     expect(theirs.got.map((g) => g.event.id)).toEqual(['a1', 'a1', 'a2']);
     expect((await db.store.deliveries.list())[0]).toMatchObject({ retrying: 0, setAside: 0 });
+  });
+
+  it('takes a part that fails a second event with a server error as down, holding everything and setting nothing aside (PER-462)', async () => {
+    let clock = Date.parse('2026-03-01T10:00:00Z');
+    const theirs = part();
+    const d = eventDeliverer({ store: db.store, subscribers, grants, send: theirs.send, now: () => clock, attempts: 2, retryMs: 1000 });
+    await d.tick();
+    await db.store.publish('folio', [
+      { topic: 'folio.document.published', id: 'a1', payload: {} },
+      { topic: 'folio.document.withdrawn', id: 'b1', payload: {} },
+      { topic: 'folio.document.archived', id: 'c1', payload: {} },
+    ]);
+    theirs.fail('notes’s part answered 500', undefined, 500);
+    expect(await d.tick()).toMatchObject({ delivered: 0, failed: ['notes'] });
+    // a1 was held before the part was known to be broken; b1 stopped the line, and c1 was never tried.
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['a1', 'b1']);
+    for (let i = 0; i < 6; i++) {
+      clock += 600_000;
+      await d.tick();
+    }
+    expect(await db.store.deliveries.setAside()).toEqual([]);
+    expect((await db.store.deliveries.list())[0]).toMatchObject({ failingSince: '2026-03-01T10:00:00.000Z', retrying: 1 });
+    theirs.recover();
+    clock += 600_000;
+    expect(await d.tick()).toMatchObject({ delivered: 3, setAside: 0 });
+    expect(theirs.got.slice(-3).map((g) => g.event.id).sort()).toEqual(['a1', 'b1', 'c1']);
   });
 
   it('keeps the place of an app turned off, and forgets one whose grant is gone, recording that', async () => {

@@ -51,8 +51,17 @@ export interface HeldEvent {
   setAsideAt: string | null;
 }
 
-/** What moving the cursor past an event means for the row; `held`: it went beside the line. */
-export type Outcome = 'sent' | 'skipped' | 'held';
+/** How an event goes beside the line: tried `attempts` times so far (0: waiting behind another), or set aside at once. */
+export interface HoldHow {
+  attempts: number;
+  nextAt?: Date;
+  lastError?: string;
+  firstFailedAt?: Date;
+  setAside?: boolean;
+}
+
+/** What moving the cursor past an event means for the row. */
+export type Outcome = 'sent' | 'skipped';
 
 export interface DeliveryStore {
   list(): Promise<Delivery[]>;
@@ -60,22 +69,27 @@ export interface DeliveryStore {
   ensure(app: string): Promise<Delivery>;
   /** Takes the app's lease for `seconds` when nobody holds it; false when another instance is driving the app. */
   claim(app: string, seconds: number): Promise<boolean>;
+  /** Extends a lease this instance holds by `seconds` from now, while it goes on driving the app. */
+  renew(app: string, seconds: number): Promise<void>;
   /** Gives the lease back. */
   release(app: string): Promise<void>;
-  /** Moves the cursor from `from` to `to` after an event was sent, skipped or held; false when another instance moved it first. */
+  /** Moves the cursor from `from` to `to` after an event was sent or skipped; false when another instance moved it first. */
   advance(app: string, from: string, to: string, outcome: Outcome): Promise<boolean>;
   /** Records a failed attempt at the event above `cursor`; nothing when the cursor has moved since. */
   failed(app: string, cursor: string, error: string, nextAt: Date, failingSince: Date): Promise<boolean>;
   /** Forgets the app's place and what it still had to try again; what was set aside is kept. */
   forget(app: string): Promise<void>;
-  /** Puts an event beside the app's line; nothing when it is there already. */
-  hold(app: string, event: { seq: string; id: string; topic: string }, how: { attempts: number; nextAt?: Date; lastError?: string; firstFailedAt?: Date; setAside?: boolean }): Promise<void>;
+  /**
+   * Puts the event above `from` beside the app's line and moves the cursor to it, in one transaction; false, and
+   * nothing done, when another instance moved the cursor first.
+   */
+  holdAndAdvance(app: string, from: string, event: { seq: string; id: string; topic: string }, how: HoldHow): Promise<boolean>;
   /** The topics on which the app has an event still to try again. */
   heldTopics(app: string): Promise<Set<string>>;
   /** The first event still to try on the app's topic, or on each of its topics without one. */
   heldFirst(app: string, topic?: string): Promise<HeldEvent[]>;
-  /** A held event got through: it goes, and the app's part is taking events. */
-  unhold(app: string, seq: string): Promise<void>;
+  /** A held event goes: delivered (the app's part is taking events), or no longer for the app. */
+  unhold(app: string, seq: string, delivered: boolean): Promise<void>;
   /** A held event failed again at `at`: it waits until `nextAt`, or is set aside. */
   retried(app: string, seq: string, how: { attempts: number; lastError: string; at: Date; nextAt?: Date; setAside?: boolean }): Promise<void>;
   /** What was set aside, newest first; one app's with `app`. */
@@ -207,6 +221,10 @@ export class PgDeliveryStore implements DeliveryStore {
     return (rowCount ?? 0) > 0;
   }
 
+  async renew(app: string, seconds: number) {
+    await this.pool.query(`update events.deliveries set lease_until = now() + make_interval(secs => $2) where app = $1 and lease_until is not null`, [app, seconds]);
+  }
+
   async release(app: string) {
     await this.pool.query('update events.deliveries set lease_until = null where app = $1', [app]);
   }
@@ -230,17 +248,44 @@ export class PgDeliveryStore implements DeliveryStore {
     return (rowCount ?? 0) > 0;
   }
 
-  async forget(app: string) {
-    await this.pool.query('delete from events.deliveries where app = $1', [app]);
-    await this.pool.query('delete from events.delivery_held where app = $1 and set_aside_at is null', [app]);
+  /** Runs `fn` in one transaction on one connection. */
+  private async inTransaction<T>(fn: (client: pg.PoolClient) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const result = await fn(client);
+      await client.query('commit');
+      return result;
+    } catch (err) {
+      await client.query('rollback').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
-  async hold(app: string, event: { seq: string; id: string; topic: string }, how: { attempts: number; nextAt?: Date; lastError?: string; firstFailedAt?: Date; setAside?: boolean }) {
-    await this.pool.query(
-      `insert into events.delivery_held (app, seq, event_id, topic, attempts, next_at, last_error, first_failed_at, set_aside_at)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, case when $9::boolean then now() end) on conflict (app, seq) do nothing`,
-      [app, event.seq, event.id, event.topic, how.attempts, how.nextAt ?? null, how.lastError?.slice(0, 1000) ?? null, how.firstFailedAt ?? null, how.setAside ?? false],
-    );
+  async forget(app: string) {
+    // The place and what was still to be tried go together, so a later grant can't be sent events from before.
+    await this.inTransaction(async (client) => {
+      await client.query('delete from events.deliveries where app = $1', [app]);
+      await client.query('delete from events.delivery_held where app = $1 and set_aside_at is null', [app]);
+    });
+  }
+
+  async holdAndAdvance(app: string, from: string, event: { seq: string; id: string; topic: string }, how: HoldHow) {
+    return this.inTransaction(async (client) => {
+      const { rowCount } = await client.query(
+        `update events.deliveries set cursor = $3, failures = 0, next_at = null, last_error = null, failing_since = null, updated_at = now() where app = $1 and cursor = $2`,
+        [app, from, event.seq],
+      );
+      if (!rowCount) return false;
+      await client.query(
+        `insert into events.delivery_held (app, seq, event_id, topic, attempts, next_at, last_error, first_failed_at, set_aside_at)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, case when $9::boolean then now() end) on conflict (app, seq) do nothing`,
+        [app, event.seq, event.id, event.topic, how.attempts, how.nextAt ?? null, how.lastError?.slice(0, 1000) ?? null, how.firstFailedAt ?? null, how.setAside ?? false],
+      );
+      return true;
+    });
   }
 
   async heldTopics(app: string) {
@@ -257,8 +302,9 @@ export class PgDeliveryStore implements DeliveryStore {
     return rows.map(fromHeld);
   }
 
-  async unhold(app: string, seq: string) {
+  async unhold(app: string, seq: string, delivered: boolean) {
     await this.pool.query('delete from events.delivery_held where app = $1 and seq = $2', [app, seq]);
+    if (!delivered) return;
     await this.pool.query(
       `update events.deliveries set failures = 0, next_at = null, last_error = null, failing_since = null, delivered_at = now(), updated_at = now() where app = $1`,
       [app],
