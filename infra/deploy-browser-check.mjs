@@ -8,7 +8,8 @@
 // With APP_RELEASE (an app's release file), ISSUER (the sign-in realm) and APP_SECRET (the app's sign-in secret,
 // as the app runner works it out), the same admin then installs that app through the app runner, as broken mode
 // does with Starter: it signs in from the command line as well (the device grant, approved in this browser),
-// installs the release, opens the app, has infra/deploy-test.sh stop its parts (it writes $OUT/<id>.stop and
+// installs the release, opens the app, calls AUGUR with the app's own token (one call its scopes allow, one they
+// don't), has infra/deploy-test.sh stop its parts (it writes $OUT/<id>.stop and
 // waits for $OUT/<id>.stopped), sees the pane say it failed, removes it, and checks its sign-in is gone.
 //
 // Writes a screenshot of each page to $OUT (default ./browser-check) and exits 1 on any failure.
@@ -289,10 +290,41 @@ async function runnerJob(token, body, minutes) {
   return seen;
 }
 
-/** Whether the app's own sign-in (its client in the realm, client-credentials grant) gives a token: the HTTP status and error. */
+/** Whether the app's own sign-in (its client in the realm, client-credentials grant) gives a token: the HTTP status and error, and the token. */
 async function appSignIn(id) {
   const res = await form('token', { grant_type: 'client_credentials', client_id: `app-${id}`, client_secret: process.env.APP_SECRET });
-  return { ok: res.status === 200 && Boolean(res.body.access_token), said: `HTTP ${res.status}${res.body.error ? ` ${res.body.error}` : ''}` };
+  return { ok: res.status === 200 && Boolean(res.body.access_token), said: `HTTP ${res.status}${res.body.error ? ` ${res.body.error}` : ''}`, token: res.body.access_token };
+}
+
+// Two calls an app makes with its own token through the gateway, each held to a scope (the gateway's ROUTE_SCOPES,
+// platform/services/gateway/src/grants.ts): one its manifest asks for, which its install grants, and one it doesn't.
+const GRANTED_CALL = { scope: 'events:subscribe', path: '/api/events/v1/domain-events?topics=platform.*&limit=1' };
+const REFUSED_CALL = { scope: 'people:read', path: '/api/identity/v1/directory' };
+
+/**
+ * The app's own token, through the gateway (spec 8.3): a call within a scope it was granted answers, and one needing
+ * a scope it wasn't is refused with 403, reason forbidden, naming that scope. The first shows the token is good, so
+ * the refusal is the scope's.
+ */
+async function appCalls(r, token) {
+  const name = r.manifest?.name ?? r.id;
+  const asks = r.manifest?.scopes ?? [];
+  if (!asks.includes(GRANTED_CALL.scope) || asks.includes(REFUSED_CALL.scope)) {
+    fail(`${name}'s manifest asks for ${asks.join(', ') || 'no scopes'}: the check's own-token calls need it to ask for ${GRANTED_CALL.scope} and not ${REFUSED_CALL.scope}`);
+    return;
+  }
+  const call = async (path) => {
+    const res = await fetch(new URL(path, base).href, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(CALL_MS) });
+    return { status: res.status, body: await res.json().catch(() => ({})) };
+  };
+  const granted = await call(GRANTED_CALL.path);
+  if (granted.status === 200) pass(`${name}'s own token reads ${GRANTED_CALL.path.split('?')[0]} through the gateway (${GRANTED_CALL.scope}, granted)`);
+  else fail(`${name}'s own token can't read ${GRANTED_CALL.path.split('?')[0]}, which ${GRANTED_CALL.scope} allows (HTTP ${granted.status}: ${granted.body.detail ?? granted.body.message ?? ''})`);
+  const refused = await call(REFUSED_CALL.path);
+  const reason = refused.body.reason ?? refused.body.error;
+  const detail = refused.body.detail ?? refused.body.message ?? '';
+  if (refused.status === 403 && reason === 'forbidden' && detail.includes(`(${REFUSED_CALL.scope})`)) pass(`${name}'s own token is refused ${REFUSED_CALL.path}, which needs ${REFUSED_CALL.scope} (HTTP 403 ${reason}: ${detail})`);
+  else fail(`${name}'s own token calling ${REFUSED_CALL.path}, which needs ${REFUSED_CALL.scope}, answered HTTP ${refused.status} ${reason ?? ''}: ${detail}, not 403 forbidden naming the scope`);
 }
 
 /**
@@ -351,8 +383,10 @@ async function throughTheRunner(r) {
   }
   await shot(`${id}-installed`);
   const before = await appSignIn(id);
-  if (before.ok) pass(`${name}'s own sign-in (app-${id}) gives a token while it's installed`);
-  else fail(`${name}'s own sign-in (app-${id}) gives no token while it's installed (${before.said})`);
+  if (before.ok) {
+    pass(`${name}'s own sign-in (app-${id}) gives a token while it's installed`);
+    await appCalls(r, before.token);
+  } else fail(`${name}'s own sign-in (app-${id}) gives no token while it's installed (${before.said})`);
 
   // Its parts stopped, as a crash would leave them: the gateway can't reach it, and its pane must say so.
   meantToFail.push(`/api/${id}/`);
