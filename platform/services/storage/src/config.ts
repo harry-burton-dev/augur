@@ -40,6 +40,8 @@ export interface StorageConfig {
    * as a retired app's does, after the runner's backup. Only on its own, with APP_STORAGE empty.
    */
   retireNow?: string;
+  /** When the runner's job that removes it started (APP_STORAGE_BACKUP_AFTER): the last backup must be newer (ADR 0103). */
+  retireAfter?: Date;
   /**
    * The secret of the registry's key to the bucket of apps' frontends (FRONTENDS_BUCKET_SECRET),
    * 64 hex characters. Without it apps' frontends aren't kept by version (docs/upgrade.md).
@@ -114,6 +116,9 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     if (reserved) problems.push(`APP_STORAGE_RETIRE: ${reserved}`);
     if (ids.length || env.APP_STORAGE_DROP) problems.push('APP_STORAGE_RETIRE takes an app’s data away on its own: leave APP_STORAGE and APP_STORAGE_DROP empty beside it.');
   }
+  const retireAfter = env.APP_STORAGE_BACKUP_AFTER ? new Date(env.APP_STORAGE_BACKUP_AFTER) : undefined;
+  if (retireNow && (!retireAfter || Number.isNaN(retireAfter.getTime())))
+    problems.push('APP_STORAGE_RETIRE needs APP_STORAGE_BACKUP_AFTER, the time (ISO 8601) the app runner’s job started: the last backup must be newer before anything goes.');
   const dropping = env.APP_STORAGE_DROP || undefined;
   // Taking a preview's storage away is that preview's job alone, so it stops at any problem.
   if (dropping) problems.push(...skipped.map(({ problem }) => problem));
@@ -143,7 +148,7 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     apps,
     skipped,
     retire,
-    ...(retireNow ? { retireNow } : {}),
+    ...(retireNow ? { retireNow, retireAfter } : {}),
     appConnections,
     ...(dropping ? { drop: { app: dropping, ...(({ databasePassword, bucketSecret }) => ({ databasePassword, bucketSecret }))(secretsOf(dropping)) } } : {}),
     ...(frontendsSecret ? { frontendsSecret } : {}),

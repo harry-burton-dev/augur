@@ -7,6 +7,7 @@
 import { startupLog } from '@augur/service-kit';
 import pg from 'pg';
 import { configFromEnv, envPrefix, FRONTENDS_BUCKET, FRONTENDS_KEY, type StorageConfig } from './config.ts';
+import { BACKUP_STATUS_DIR, backupProblem, readBackupMarker } from './backup-marker.ts';
 import { garageAdmin, GarageError, keyIdFor, keyNameFor } from './garage.ts';
 import { dropDatabase, markRetired, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, retiredApps, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
 import { emptyBucket } from './s3.ts';
@@ -41,8 +42,14 @@ if (config.drop) {
 }
 
 // An app removed from the server whose grace period ended: its data goes, after the runner's backup, and nothing else is done.
+// Only behind that backup (ADR 0103): a good one of the database and apps' files, taken since the runner's job started.
 if (config.retireNow) {
   const app = config.retireNow;
+  const refused = backupProblem(await readBackupMarker(BACKUP_STATUS_DIR), config.retireAfter!, Boolean(config.garage));
+  if (refused) {
+    log.error(`${app}’s data stays for now: ${refused}`);
+    process.exit(1);
+  }
   const sql = new pg.Client({ connectionString: config.databaseUrl });
   await sql.connect();
   try {

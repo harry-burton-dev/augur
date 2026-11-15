@@ -98,11 +98,20 @@ describe('configFromEnv', () => {
 
   it('takes one removed app’s data away on its own (APP_STORAGE_RETIRE), never AUGUR’s own', () => {
     const base = { DATABASE_URL: 'postgres://a:b@db/platform', APP_SECRETS_KEY: 'k'.repeat(64) };
-    expect(configFromEnv({ ...base, APP_STORAGE_RETIRE: 'notes' })).toMatchObject({ retireNow: 'notes' });
-    const bad = configFromEnv({ ...base, APP_STORAGE_RETIRE: 'registry' });
+    const after = '2026-11-15T02:00:00.000Z';
+    expect(configFromEnv({ ...base, APP_STORAGE_RETIRE: 'notes', APP_STORAGE_BACKUP_AFTER: after })).toMatchObject({ retireNow: 'notes', retireAfter: new Date(after) });
+    const bad = configFromEnv({ ...base, APP_STORAGE_RETIRE: 'registry', APP_STORAGE_BACKUP_AFTER: after });
     expect('problems' in bad && bad.problems).toEqual([expect.stringContaining('APP_STORAGE_RETIRE:')]);
-    const beside = configFromEnv({ ...base, APP_STORAGE: 'maps', MAPS_DATABASE_PASSWORD: 'p'.repeat(16), MAPS_BUCKET_SECRET: 'b'.repeat(64), APP_STORAGE_RETIRE: 'notes' });
+    const beside = configFromEnv({ ...base, APP_STORAGE: 'maps', MAPS_DATABASE_PASSWORD: 'p'.repeat(16), MAPS_BUCKET_SECRET: 'b'.repeat(64), APP_STORAGE_RETIRE: 'notes', APP_STORAGE_BACKUP_AFTER: after });
     expect('problems' in beside && beside.problems).toEqual([expect.stringContaining('on its own')]);
+  });
+
+  it('takes a removed app’s data away only with the time its backup must be newer than (ADR 0103)', () => {
+    const base = { DATABASE_URL: 'postgres://a:b@db/platform', APP_STORAGE_RETIRE: 'notes' };
+    const none = configFromEnv(base);
+    expect('problems' in none && none.problems).toEqual([expect.stringContaining('APP_STORAGE_BACKUP_AFTER')]);
+    const wrong = configFromEnv({ ...base, APP_STORAGE_BACKUP_AFTER: 'yesterday' });
+    expect('problems' in wrong && wrong.problems).toEqual([expect.stringContaining('APP_STORAGE_BACKUP_AFTER')]);
   });
 
   it('reads the apps whose data goes once (RETIRED_APPS), and refuses an id that isn’t an app’s', () => {

@@ -1856,6 +1856,14 @@
         "storage": "default"
       }
     },
+    "APP_STORAGE_BACKUP_AFTER": {
+      "type": "string",
+      "description": "When the app runner's job that takes a removed app's data away started (ISO 8601): the storage job drops it only when the last backup is a good one, apps' files included, taken since then (ADR 0103). Set by the app runner beside APP_STORAGE_RETIRE.",
+      "x-internal": "updater",
+      "x-via": {
+        "storage": "default"
+      }
+    },
     "RETIRED_APPS": {
       "type": "string",
       "description": "Apps AUGUR no longer runs whose data the storage job takes away, once on each server (ADR 0075).",
