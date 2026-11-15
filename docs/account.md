@@ -12,7 +12,7 @@ Identity serves the account under `/v1/me/*`, behind the gateway, for the signed
 | `GET /me/security` | Password, code apps, passkeys, recovery codes, whether they must sign in with a second step, linked organisation sign-ins, and the `kc_action` for each change. |
 | `GET /me/sessions`, `DELETE /me/sessions/{id}`, `DELETE /me/sessions?keep=` | Where they're signed in, and signing out of one, everywhere else, or everywhere. A session that isn't theirs is not found. |
 | `GET /me/sign-ins` | Recent sign-ins, failed sign-ins and changes to how they sign in, from Keycloak's events (kept for `REALM_SIGN_IN_EVENT_DAYS`). |
-| `GET /me/preferences`, `PUT /me/preferences` | Motion, density, away (with a message and an end), time zone, notification choices, pinned apps and the floor to start on. |
+| `GET /me/preferences`, `PUT /me/preferences` | Motion, density, whether ` alone opens the shell (`summonKey`), away (with a message and an end), time zone, notification choices, pinned apps and the floor to start on. |
 | `GET /me/leave`, `POST /me/leave`, `DELETE /me/leave` | Asking to leave, with a note, and taking it back. People don't delete their own account (ADR 0040): admins are told once (a notification that needs them, from Admin) and an admin's leaver flow closes it ([people.md](people.md)). Each is recorded in Activity. |
 | `GET /me/data` | A copy of what AUGUR keeps about them, as a JSON file: profile, credentials (their kind and label, never a secret), linked sign-ins, sessions, sign-ins, preferences, the request to leave, and from events their notifications, inbox and Activity (`GET /v1/people/{id}/data`, which only identity may call). A part it can't read is named in `missing`, with why. Apps' own content, such as documents, isn't in it yet. Each download is recorded in Activity. |
 
@@ -40,7 +40,7 @@ It is built from Common's parts for a place to work in that never scrolls: `Sect
 | Language and region | Their language, from the ones the deployment offers (`REALM_LANGUAGES`, the same as sign-in; kept as their `locale`, so sign-in pages and emails use it; with one language offered it says so and who can offer more); how dates and times are written (`dateFormat`, a region such as en-GB, and `clock`, 12- or 24-hour, each with an example); and the time zone (unless they choose one, the organisation's from Admin → Organisation, else the browser's; the section says which they follow). AUGUR's own words are in English for now, and it says so. |
 | Home and apps | The floor AUGUR opens on at its front door (`startFloor`; their own unless chosen, and a floor that is no longer theirs says so); pinned apps, first on Home and in the list of apps (`pinned`); recent apps, with a way to clear them; and each app's own settings. |
 | Privacy and data | Download my data; what others see about you (name and email to everyone signed in, through the people picker; away to everyone, beside your name; the rest to you and administrators); and asking to leave, pressed twice, with a way to take it back. |
-| About and help | What's running, and the keys. |
+| About and help | What's running, and the keys, with the switch that turns off ` as a way to open the shell (WCAG 2.1.4); Ctrl or ⌘ K always opens it. |
 
 An app that names its kinds of notification in its manifest (`notifications.kinds`) lists them under it, each On Home or Quiet (`quietKinds`, as `<app>:<kind>`); a quiet kind lands in the stream without a pulse, uncounted, and never on Home or as a toast.
 

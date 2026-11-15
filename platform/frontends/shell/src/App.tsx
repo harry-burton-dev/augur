@@ -407,7 +407,12 @@ export function Host({
   useEffect(() => {
     if (!accountSection) return;
     const hold = (e: KeyboardEvent) => {
-      const summon = (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k');
+      // The kit's own rule (shell.tsx): ` only outside a text field and while it's on, Ctrl or ⌘ K unless a part took it.
+      const el = e.composedPath()[0] as HTMLElement | undefined;
+      const typing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+      const summon =
+        (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing && shellRef.current?.summonKeyOn !== false) ||
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.defaultPrevented);
       if (summon) e.stopPropagation();
     };
     window.addEventListener('keydown', hold, { capture: true });

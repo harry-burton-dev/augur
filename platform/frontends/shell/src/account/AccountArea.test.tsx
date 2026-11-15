@@ -256,7 +256,8 @@ describe('the Account area', () => {
     const keys = () => [...document.querySelectorAll('.account-keys kbd')].map((k) => k.textContent);
     const { props } = await open('about');
     expect(keys()).toContain('`');
-    const toggle = document.querySelector<HTMLElement>('[role="switch"], input[type="checkbox"]')!;
+    const label = [...document.querySelectorAll('label')].find((l) => l.textContent?.includes('Open with `'))!;
+    const toggle = label.querySelector<HTMLElement>('[role="switch"], input[type="checkbox"]') ?? document.getElementById(label.htmlFor)!;
     await act(async () => toggle.click());
     expect(props.onPreference).toHaveBeenCalledWith('summonKey', false);
     act(() => root!.unmount());
