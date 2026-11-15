@@ -1596,6 +1596,9 @@ paths:
                     type: integer
                   repeated:
                     type: integer
+                  warning:
+                    type: string
+                    description: "For an app on contract 3 that declares no types it publishes: refused from the next release"
                 description: Kept
         "400":
           description: A topic outside the publisher's, an unknown floor, a floor the app isn't on, a payload over 16 KB, or (for an app that declares its types) a type or version it doesn't declare, or a payload its schema refuses
@@ -1659,6 +1662,9 @@ paths:
                       $ref: "#/components/schemas/DomainEvent"
                   next:
                     type: string
+                  warning:
+                    type: string
+                    description: "For an app on contract 3 that doesn’t declare what it reads: refused from the next release"
                 description: The next events, and the cursor to read on from
         "400":
           description: A topic that is not a topic, nor a family such as folio.*

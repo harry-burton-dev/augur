@@ -97,6 +97,8 @@ describe('registry grants', () => {
     const declared = { reads: ['folio.*'], publishes: [{ topic: 'notes.note.added', version: 1, schema: { type: 'object' } }] };
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
       if (String(url).endsWith('/v1/apps/old/events')) return Response.json({ app: 'old' });
+      if (String(url).endsWith('/v1/apps/quiet/events')) return Response.json({ app: 'quiet', contract: 3 });
+      if (String(url).endsWith('/v1/apps/said/events')) return Response.json({ app: 'said', contract: 3, events: declared });
       if (String(url).endsWith('/v1/apps/gone/events')) return new Response(null, { status: 404 });
       return status === 200 ? Response.json({ app: 'notes', events: declared }) : new Response(null, { status });
     });
@@ -104,6 +106,9 @@ describe('registry grants', () => {
     expect(await events('notes')).toEqual(declared);
     expect(await events('old')).toBeUndefined();
     expect(await events('gone')).toBeUndefined();
+    // An app on contract 3 always has an answer, so one that declares nothing can be told apart.
+    expect(await events('quiet')).toEqual({ publishes: [], contract: 3 });
+    expect(await events('said')).toEqual({ ...declared, contract: 3 });
     t = 30_001;
     status = 502;
     expect(await events('notes')).toEqual(declared);

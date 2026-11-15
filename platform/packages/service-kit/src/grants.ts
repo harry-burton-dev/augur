@@ -187,9 +187,14 @@ export interface DeclaredEventType {
 export interface DeclaredEvents {
   reads?: string[];
   publishes: DeclaredEventType[];
+  /** The app's contract major when it is on contract 3, which must declare what it reads and publishes. */
+  contract?: number;
 }
 
-/** The domain events an app declares, or undefined when it declares none (an older app, or one not registered). */
+/**
+ * The domain events an app declares, or undefined when it declares none (an older app, or one not registered). An app
+ * on contract 3 always has an answer, with its `contract`, so a caller can tell one that declares nothing.
+ */
 export type DeclaredEventsLookup = (app: string) => Promise<DeclaredEvents | undefined>;
 
 /**
@@ -207,7 +212,10 @@ export const registryDeclaredEvents = ({ registryUrl, credentials, ttlMs = 30_00
     try {
       const res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/events`, { headers: await serviceHeaders(credentials) });
       if (res.status === 404) events = undefined;
-      else if (res.ok) events = ((await res.json()) as { events?: DeclaredEvents }).events;
+      else if (res.ok) {
+        const body = (await res.json()) as { contract?: number; events?: DeclaredEvents };
+        events = body.contract === undefined ? body.events : { ...(body.events ?? { publishes: [] }), contract: body.contract };
+      }
       else throw new Error(`it answered ${res.status}`);
     } catch (err) {
       if (hit) return hit.events;
