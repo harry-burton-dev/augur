@@ -16,7 +16,8 @@ Follow [Install AUGUR](../install/), with these differences:
 
 - **`SERVER_RING=preview`** in step 2. It takes preview (beta) releases by default.
 - **It reports to Backstage** (step 6, item 1), so its bake hours and its heartbeat reach Backstage with no
-  override or hand export. Give it its own `TS_HOSTNAME` and its own entry in `org/deployments.yaml`.
+  override or hand export. Give it its own `TS_HOSTNAME` and its own entry in
+  Backstage's catalog of deployments.
 - **Everything else is its own**: its own read key, its own bucket (or its own path in one), its own auth key
   if they aren't reusable. Nothing is shared with production, so a mistake on staging stays there.
 - **The same size as production**, so what it shows about memory and speed holds there.

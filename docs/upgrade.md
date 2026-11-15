@@ -557,7 +557,8 @@ Two defaults changed (ADR 0020, amended 2 November):
 
 From this release a deployment can tell the company's Backstage what it runs (ADR 0019). Nothing changes until you set it up; until then the Upgrade Centre's Reporting section, under Worth knowing on its front page, says reporting isn't set up and what to set.
 
-1. Add the deployment to Backstage's `org/deployments.yaml`, if it isn't there, and note its `metadata.name`.
+1. Add the deployment to Backstage's catalog of deployments, if it isn't there, and note its `metadata.name`.
+   The portal's README ("Deployments") says where that file is; the portal's GitHub token must be able to read it.
 2. Set `DEPLOYMENT_ID` in `.env` to that name, with `PORTAL_URL` set to the Backstage address. Then `docker compose up -d registry`.
 3. Copy the deployment's public key, shown by `GET /api/registry/v1/platform/reporting` as an admin (or **Copy key** in the Upgrade Centre's Reporting section), into the annotation `augur.dev/report-key` on that entry, and let Backstage read the catalog again.
 

@@ -34,7 +34,7 @@ loadConfigOrExit('registry', [
   { name: 'RELEASE_CHANNEL', about: 'stable, beta or dev (default: dev on the workbench, beta on a preview server, stable on a production one, which takes nothing else; only the workbench takes dev).' },
   { name: 'PIPELINE_FEED_URL', about: 'where the pipeline feed is (default: feed:pipeline beside the release feed on GitHub’s container registry, else off).' },
   { name: 'PORTAL_URL', about: 'the company’s Backstage, which the Upgrade Centre links to and this deployment reports what it runs to (optional).' },
-  { name: 'DEPLOYMENT_ID', about: 'this deployment’s name in Backstage’s catalog (org/deployments.yaml), such as augur-workbench; without it nothing is reported.' },
+  { name: 'DEPLOYMENT_ID', about: 'this deployment’s name in Backstage’s catalog of deployments, such as augur-workbench; without it nothing is reported.' },
   { name: 'DEPLOYMENT_REPORTING', about: 'off: don’t report what this server runs to Backstage, or export it (default on).' },
   { name: 'PLATFORM_URL', about: 'where AUGUR is; on the workbench, Live on the workbench loads apps only from machines on its tailnet (https://<machine>.<tailnet>.ts.net).' },
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
