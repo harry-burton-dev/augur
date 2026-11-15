@@ -41,6 +41,7 @@ import { payloadChecker, readable } from './event-types.ts';
 import { deliveryStatus, subscribesOn, type PushingState } from './deliver.ts';
 import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
 import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, SetAsideEvent as SetAsideEventSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
+import { undeclaredLog, undeclaredWarning } from './undeclared.ts';
 import { topicMatches, topicsOverlap, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** Filters the audit log and its download share, beyond time and floor. */
@@ -210,6 +211,7 @@ const READ_AUDIT: ShadowQuestion = { action: 'can_read_audit', resource: { type:
 export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, declaredEvents, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }), shadow = noShadow }: EventsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
   const payloadCheck = payloadChecker();
+  const logUndeclared = undeclaredLog((o, m) => app.log.warn(o, m));
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
@@ -284,19 +286,6 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           void reply.code(503).send({ error: 'unavailable', message: `What this app ${what === 'reads' ? 'reads' : 'publishes'} can’t be checked right now. Try again in a moment.` });
           return null;
         }
-      };
-
-      /**
-       * What an app on contract 3 that doesn't declare its reads or its published types is told (PER-462). It must; for
-       * this release it is only warned, in the answer and the log, and the release after refuses it.
-       */
-      const undeclared = (req: FastifyRequest, app: string, declared: DeclaredEvents | undefined, what: 'reads' | 'publishes'): string | undefined => {
-        if (declared?.contract !== 3) return undefined;
-        if (what === 'reads' ? declared.reads !== undefined : declared.publishes.length > 0) return undefined;
-        const field = `contributes.events.${what}`;
-        const warning = `${app} is on contract 3 but its manifest doesn’t declare what it ${what === 'reads' ? 'reads' : 'publishes'} (${field}). It must: from the next release this is refused. Its publisher adds ${field} to its manifest.`;
-        req.log.warn({ app, field }, 'undeclared domain events');
-        return warning;
       };
 
       /** The events `app` may see: those on a floor (or none, the deployment's) where it holds events:subscribe. Undefined when grants can't be checked. */
@@ -627,7 +616,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         if (service.kind !== 'platform') {
           const declared = await declaredOf(req, reply, service.app, 'publishes');
           if (declared === null) return reply;
-          warning = undeclared(req, service.app, declared, 'publishes');
+          warning = undeclaredWarning(service.app, declared, 'publishes');
           if (declared?.publishes.length) {
             for (const [i, e] of req.body.events.entries()) {
               const checked = payloadCheck(service.app, declared, e);
@@ -654,6 +643,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         const events: NewDomainEvent[] = req.body.events.map((e, i) => ({ topic: e.topic, id: e.id, payload: e.payload, floor: e.workspace ? places.get(e.workspace) : undefined, ...(versions[i] ? { version: versions[i] } : {}) }));
         const result = await store.publish(serviceName(service), events);
         req.log.info({ service: serviceName(service), ...result }, 'domain events published');
+        if (warning && service.kind !== 'platform') logUndeclared(service.app, 'publishes');
         return reply.code(202).send({ ...result, ...(warning ? { warning } : {}) });
         },
       );
@@ -706,7 +696,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           if (caller.kind !== 'platform') {
             const declared = await declaredOf(req, reply, caller.app, 'reads');
             if (declared === null) return reply;
-            warning = undeclared(req, caller.app, declared, 'reads');
+            warning = undeclaredWarning(caller.app, declared, 'reads');
             reads = readable(declared?.reads);
             if (reads && !topics.some((t) => topicsOverlap(t, reads!))) {
               return reply.code(403).send({ error: 'forbidden', message: `${caller.app} doesn’t say in its manifest that it reads ${topics.join(', ')}. It reads ${declared!.reads!.length ? declared!.reads!.join(', ') : 'only AUGUR’s own topics'} (contributes.events.reads).` });
@@ -728,6 +718,7 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           const declaredOnly = reads ? read.filter((e) => topicMatches(e.topic, reads!)) : read;
           const events = caller.kind === 'platform' ? read : await visibleTo(req, caller.app, declaredOnly);
           if (events === undefined) return reply.code(503).send({ error: 'unavailable', message: 'What this app may do can’t be checked right now. Try again in a moment.' });
+          if (warning && caller.kind !== 'platform') logUndeclared(caller.app, 'reads');
           return { events, next, ...(warning ? { warning } : {}) };
         },
       );

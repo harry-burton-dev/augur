@@ -15,6 +15,7 @@
 import { eventDeliveryKey, GrantsUnavailable, IDEMPOTENCY_KEY_HEADER, PART_EVENTS_PATH, serviceHeaders, withDeadline, type DeclaredEventsLookup, type GrantedApp, type GrantLookup, type NewAuditEntry, type ServiceCredentials } from '@augur/service-kit';
 import { topicMatches, type DomainEvent, type EventStore } from './store.ts';
 import { readable } from './event-types.ts';
+import { undeclaredLog, undeclaredWarning } from './undeclared.ts';
 import type { Delivery, HeldEvent, HoldHow, Outcome } from './deliveries.ts';
 
 /** How long a part may be down before the event at the head of its line is set aside (spec 8.6: a day). */
@@ -137,6 +138,7 @@ export const subscribesOn = async (grants: GrantLookup, app: string, floor: stri
 
 /** Delivers to every subscribing app that is due; one pass at a time. */
 export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, send, audit, attempts: maxAttempts = DELIVERY_ATTEMPTS, retryMs = RETRY_MS, now = Date.now, batch = 100, leaseSeconds = LEASE_SECONDS, log }: DelivererOptions) => {
+  const logUndeclared = undeclaredLog((o, m) => log?.warn(o, m), now);
   let running: Promise<DeliveryReport> | undefined;
   let again = false;
   /** What stopped the last pass, if anything: the registry or the database not answering. */
@@ -179,7 +181,9 @@ export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, sen
   const wantedBy = async (app: string, event: DomainEvent): Promise<boolean | undefined> => {
     if (event.publisher === app) return false;
     try {
-      const reads = declaredEvents && readable((await declaredEvents(app))?.reads);
+      const declared = declaredEvents && (await declaredEvents(app));
+      if (log && undeclaredWarning(app, declared, 'reads')) logUndeclared(app, 'reads');
+      const reads = declaredEvents && readable(declared?.reads);
       return (!reads || topicMatches(event.topic, reads)) && (await subscribesOn(grants, app, event.workspace?.id));
     } catch (err) {
       if (!(err instanceof GrantsUnavailable)) throw err;

@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-An app on contract 3 whose manifest doesn't say what it reads (`contributes.events.reads`), or declares no types it publishes (`contributes.events.publishes`), still publishes and reads events in this release, but the events service logs a warning for each call (`undeclared domain events` in `pc logs events`) and tells the app. From the next release it is refused. Nothing to do on the server. If the log names an app you rely on, ask its publisher for a release that declares its events before you upgrade again.
+An app on contract 3 whose manifest doesn't say what it reads (`contributes.events.reads`), or declares no types it publishes (`contributes.events.publishes`), still publishes and reads events in this release, but the events service logs a warning (`undeclared domain events` in `pc logs events`, at most once every 10 minutes for each app and side, pushed deliveries included) and answers the app's own calls with a `warning`. From the next release it is refused. Nothing to do on the server. If the log names an app you rely on, ask its publisher for a release that declares its events before you upgrade again.
 
 ## An app's id stays with the repository that first installed it
 

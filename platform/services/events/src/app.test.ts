@@ -510,11 +510,11 @@ describe.runIf(DATABASE_URL)('events', () => {
       const sent = await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('d1')] } });
       expect(sent.statusCode).toBe(202);
       expect(sent.json().warning).toBe(
-        'folio is on contract 3 but its manifest doesn’t declare what it publishes (contributes.events.publishes). It must: from the next release this is refused. Its publisher adds contributes.events.publishes to its manifest.',
+        'folio is on contract 3 but its manifest declares no types it publishes (contributes.events.publishes). It must: from the next release this is refused. Its publisher adds contributes.events.publishes to its manifest.',
       );
       const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers });
       await expect.poll(async () => (await read(platform)).json().events.length).toBe(1);
-      expect((await read(as('folio'))).json()).toMatchObject({ events: [{ id: 'd1' }], warning: expect.stringMatching(/doesn’t declare what it reads \(contributes\.events\.reads\)/) });
+      expect((await read(as('folio'))).json()).toMatchObject({ events: [{ id: 'd1' }], warning: expect.stringMatching(/doesn’t say what it reads \(contributes\.events\.reads\)/) });
       // One that declares, and one on contract 2, hear nothing of it.
       expect((await read(as('notes'))).json()).not.toHaveProperty('warning');
       expect((await read(as('ledger'))).json()).not.toHaveProperty('warning');
