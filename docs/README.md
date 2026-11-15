@@ -27,7 +27,8 @@ the build's environment.
 
 To serve the site from a container, build `docs/Dockerfile` from the repository root (the build reads
 `contracts/` and `platform/` too). It serves the static site with nginx on port 8080, and takes
-`DOCS_SITE_URL` and `DOCS_BASE` as build arguments:
+`DOCS_SITE_URL` and `DOCS_BASE` as build arguments. The site is served under `DOCS_BASE` in the container
+too, so a proxy in front passes paths through unchanged:
 
 ```sh
 docker build -f docs/Dockerfile --build-arg DOCS_SITE_URL=https://docs.example.org -t augur-docs .
