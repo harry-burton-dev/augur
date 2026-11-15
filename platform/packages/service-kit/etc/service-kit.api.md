@@ -563,7 +563,7 @@ export const DEFAULT_GATEWAY_URL = "http://gateway:8080";
 export const DEFAULT_MIGRATION_IDLE_TIMEOUT_MS = 60000;
 
 // @public
-export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 30000;
+export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 60000;
 
 // @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;

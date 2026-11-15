@@ -41,6 +41,8 @@ describe('steadyPool', () => {
     expect(connectTimeoutMs({ DATABASE_CONNECT_TIMEOUT_SECONDS: '0' })).toBe(0);
     expect(connectTimeoutMs({})).toBe(10_000);
     expect(connectTimeoutMs({ DATABASE_CONNECT_TIMEOUT_SECONDS: '-1' })).toBe(10_000);
+    // Past what a timer can hold, Node would fire it at once.
+    expect(connectTimeoutMs({ DATABASE_CONNECT_TIMEOUT_SECONDS: '3000000' })).toBe(10_000);
   });
 
   it('bounds how long a caller waits for a connection, keeping a bound the pool was made with', () => {

@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-A service's migration now waits at most 30 seconds for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`), where it used to wait for ever. It then rolls back, the service stops and Docker starts it again, and `pc logs <service>` names the migration, the lock and the session holding it. A service also waits at most 10 seconds for a database connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached. Nothing to do on most servers. If a service keeps restarting after the upgrade and its log says a migration gave up, end the session it names (or the app holding it), or raise the setting in `.env` and run `pc up -d` ([Limits and health](../../run/limits/#logs-memory-and-health)).
+A service's migration now waits at most a minute for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`), where it used to wait for ever. It then rolls back, the service stops and Docker starts it again, and `pc logs <service>` names the migration, the lock and the session holding it. A service also waits at most 10 seconds for a database connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached. Nothing to do on most servers. A backup running while you upgrade holds every table until it ends, so start an upgrade once the night's backup has finished. If a service keeps restarting after the upgrade and its log says a migration gave up, end the session it names (or the app holding it), or raise the setting in `.env` and run `pc up -d` ([Limits and health](../../run/limits/#logs-memory-and-health)).
 
 ## Postgres keeps connections back for AUGUR
 

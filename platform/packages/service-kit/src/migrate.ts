@@ -19,14 +19,14 @@ type Client = Awaited<ReturnType<Pool['connect']>>;
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;
 
-/** Thirty seconds: far longer than another instance's ordinary migrations take, short enough that a stuck one is named in the logs within a minute. */
-export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 30_000;
+/** A minute: as long as a service's own query may hold a lock (DATABASE_STATEMENT_TIMEOUT_SECONDS), and a stuck migration is still named in the logs soon. */
+export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 60_000;
 /** A minute: the runner never pauses inside its transaction, so this only ends one whose process hung or vanished, freeing its locks. */
 export const DEFAULT_MIGRATION_IDLE_TIMEOUT_MS = 60_000;
 
 /**
  * How long a migration waits for a lock, the schema's migration lock or a table's, before it gives up and is rolled
- * back: DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS (AUGUR’s docs, Limits and health), 30 seconds when unset or empty,
+ * back: DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS (AUGUR’s docs, Limits and health), a minute when unset or empty,
  * and no limit at 0.
  */
 export const migrationLockTimeoutMs = (env: Record<string, string | undefined> = process.env): number =>
@@ -59,8 +59,8 @@ const LOCK_NOT_AVAILABLE = '55P03';
 
 /**
  * The sessions holding the schema's migration lock or a lock on one of its tables, as a person reads them. A login may
- * see only its own sessions' details in pg_stat_activity (an app's or a service's own login), so another role's
- * session is named by its pid alone. Never the session's query: it can hold a password or a person's data.
+ * see only its own sessions' details in pg_stat_activity (an app's or a service's own login), so for another role's
+ * session it says who and which app, but not what it is doing. Never the session's query: it can hold a password or a person's data.
  */
 const holders = async (client: Client, schema: string): Promise<string> => {
   try {
@@ -75,9 +75,13 @@ const holders = async (client: Client, schema: string): Promise<string> => {
       [LOCK_NAMESPACE.migrations, schema],
     );
     const said = (rows as { pid: number; usename: string | null; application_name: string | null; state: string | null; open_for: number | null }[]).map((r) =>
-      r.state === null
-        ? `pid ${r.pid} (not visible to this role)`
-        : `pid ${r.pid} (${[r.usename, r.application_name && `"${r.application_name}"`, r.state, r.open_for !== null && `its transaction open ${r.open_for}s`].filter(Boolean).join(', ')})`,
+      `pid ${r.pid} (${[
+        r.usename,
+        r.application_name && `"${r.application_name}"`,
+        ...(r.state === null ? ['its state not visible to this role'] : [r.state, r.open_for !== null && `its transaction open ${r.open_for}s`]),
+      ]
+        .filter(Boolean)
+        .join(', ')})`,
     );
     return said.length ? `Held by ${said.join('; ')}.` : `No session holding a lock on ${schema} can be seen now; it may have ended.`;
   } catch (err) {

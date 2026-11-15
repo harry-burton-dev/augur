@@ -1391,7 +1391,7 @@
     "DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS": {
       "type": "string",
       "description": "How long a service's migration waits for a lock another session holds before it gives up, rolls back and stops the service, saying who holds it (0 for no limit).",
-      "default": "30",
+      "default": "60",
       "x-services": [
         "identity",
         "registry",

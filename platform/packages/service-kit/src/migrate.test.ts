@@ -9,11 +9,11 @@ describe('runMigrations', () => {
     await expect(runMigrations(pool, { schema: 'a; drop table b', migrations: [] })).rejects.toThrow(/schema name/);
   });
 
-  it('reads its lock and idle limits from the settings, 30 and 60 seconds when unset or nonsense', () => {
+  it('reads its lock and idle limits from the settings, 60 and 60 seconds when unset or nonsense', () => {
     expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: '5' })).toBe(5_000);
     expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: '0' })).toBe(0);
-    expect(migrationLockTimeoutMs({})).toBe(30_000);
-    expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: 'soon' })).toBe(30_000);
+    expect(migrationLockTimeoutMs({})).toBe(60_000);
+    expect(migrationLockTimeoutMs({ DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: 'soon' })).toBe(60_000);
     expect(migrationIdleTimeoutMs({ DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: '90' })).toBe(90_000);
     expect(migrationIdleTimeoutMs({ DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: '' })).toBe(60_000);
   });
@@ -146,7 +146,7 @@ describe.runIf(process.env.DATABASE_URL)('runMigrations on Postgres', () => {
       await whileHeld('select pg_advisory_xact_lock($1, hashtext($2))', [LOCK_NAMESPACE.migrations, schema], async (holder) => {
         const failed = await runMigrations(own, { schema, migrations, lockTimeoutMs: 300 }).catch((err: unknown) => err);
         expect(failed).toBeInstanceOf(MigrationLockTimeout);
-        expect((failed as Error).message).toContain(`pid ${holder} (not visible to this role)`);
+        expect((failed as Error).message).toMatch(new RegExp(`pid ${holder} \\(platform, [^)]*its state not visible to this role\\)`));
       });
     } finally {
       await own.end();
