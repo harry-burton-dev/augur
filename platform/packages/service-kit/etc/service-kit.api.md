@@ -528,6 +528,7 @@ export const decidesFrom: (value: string | undefined) => ReadonlySet<string> | "
 
 // @public
 export interface DeclaredEvents {
+    contract?: number;
     // (undocumented)
     publishes: DeclaredEventType[];
     // (undocumented)

@@ -15,6 +15,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 Grafana now has two routes that don't go through AUGUR: `ALERT_OUTSIDE_URL` gets every alert and its all-clear, and `ALERT_HEARTBEAT_URL` gets a heartbeat every minute, so a service there raises the alarm when the server stops. Both are optional, and alerts still reach deployment admins as notices. On a production server, set both in `.env` and run `pc up -d otel-lgtm registry`: until you do, the registry tells its deployment admins once a week that alerts reach no one outside AUGUR ([Observability, Alerts](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#alerts)).
 
+## An app on contract 3 must declare its domain events
+
+**From** unreleased
+
+An app on contract 3 whose manifest doesn't say what it reads (`contributes.events.reads`), or declares no types it publishes (`contributes.events.publishes`), still publishes and reads events in this release, but the events service logs a warning (`undeclared domain events` in `pc logs events`, at most once every 10 minutes for each app and side, pushed deliveries included) and answers the app's own calls with a `warning`. From the next release it is refused. Nothing to do on the server. If the log names an app you rely on, ask its publisher for a release that declares its events before you upgrade again.
+
 ## An app's id stays with the repository that first installed it
 
 **From** unreleased
