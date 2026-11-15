@@ -25,6 +25,15 @@ the generator's tests.
 `DOCS_SITE_URL` (the site's origin) and `DOCS_BASE` (the path it's served under, `/` unless set) come from
 the build's environment.
 
+To serve the site from a container, build `docs/Dockerfile` from the repository root (the build reads
+`contracts/` and `platform/` too). It serves the static site with nginx on port 8080, and takes
+`DOCS_SITE_URL` and `DOCS_BASE` as build arguments:
+
+```sh
+docker build -f docs/Dockerfile --build-arg DOCS_SITE_URL=https://docs.example.org -t augur-docs .
+docker run -p 4321:8080 augur-docs
+```
+
 ## Sections and readers
 
 | Section | Folder | Who it's for |
