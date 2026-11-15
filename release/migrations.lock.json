@@ -15,7 +15,8 @@
     "013_one_write_each": "bc5a54d4d61ebdd2",
     "014_forget_notes": "0cac794f806dba79",
     "015_deliveries": "829e243f80ba63e0",
-    "016_pruned_up_to": "1e6acd592cfb0b0e"
+    "016_pruned_up_to": "1e6acd592cfb0b0e",
+    "017_event_version": "44eda96b32446374"
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",

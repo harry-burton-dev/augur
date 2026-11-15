@@ -7,8 +7,9 @@
  * and the passing recorded in Activity. An app that has taken nothing for an hour is stalled, which Admin → Apps
  * shows with the reason. An event on a floor where the app is off, or the app's own events, aren't sent to it.
  */
-import { eventDeliveryKey, GrantsUnavailable, IDEMPOTENCY_KEY_HEADER, PART_EVENTS_PATH, serviceHeaders, withDeadline, type GrantedApp, type GrantLookup, type NewAuditEntry, type ServiceCredentials } from '@augur/service-kit';
-import type { DomainEvent, EventStore } from './store.ts';
+import { eventDeliveryKey, GrantsUnavailable, IDEMPOTENCY_KEY_HEADER, PART_EVENTS_PATH, serviceHeaders, withDeadline, type DeclaredEventsLookup, type GrantedApp, type GrantLookup, type NewAuditEntry, type ServiceCredentials } from '@augur/service-kit';
+import { topicMatches, type DomainEvent, type EventStore } from './store.ts';
+import { readable } from './event-types.ts';
 import type { Delivery, Outcome } from './deliveries.ts';
 
 /** How long a part may fail before the event it can't take is passed over (spec 8.6: a day). */
@@ -60,6 +61,8 @@ export interface DelivererOptions {
   subscribers: () => Promise<GrantedApp[]>;
   /** What an app holds on a floor; an event on a floor where it lacks events:subscribe isn't sent there. */
   grants: GrantLookup;
+  /** What each app declares about events (ADR 0104): one that says what it reads is sent only that. */
+  declaredEvents?: DeclaredEventsLookup;
   send: SendEvent;
   /** Records an event passed over after a day of failures, and an app's place forgotten; `key` makes a repeat harmless. */
   audit?: (entry: NewAuditEntry, key: string) => Promise<void>;
@@ -105,7 +108,7 @@ const SERVICE_ACTOR = { id: 'events', kind: 'service' as const };
 export const subscribesOn = async (grants: GrantLookup, app: string, floor: string | undefined): Promise<boolean> => (await grants(app, floor)).includes('events:subscribe');
 
 /** Delivers to every subscribing app that is due; one pass at a time. */
-export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = Date.now, batch = 100, leaseSeconds = LEASE_SECONDS, log }: DelivererOptions) => {
+export const eventDeliverer = ({ store, subscribers, grants, declaredEvents, send, audit, now = Date.now, batch = 100, leaseSeconds = LEASE_SECONDS, log }: DelivererOptions) => {
   let running: Promise<DeliveryReport> | undefined;
   let again = false;
   /** What stopped the last pass, if anything: the registry or the database not answering. */
@@ -143,7 +146,8 @@ export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = 
           let wanted = event.publisher !== app;
           if (wanted) {
             try {
-              wanted = await subscribesOn(grants, app, event.workspace?.id);
+              const reads = declaredEvents && readable((await declaredEvents(app))?.reads);
+              wanted = (!reads || topicMatches(event.topic, reads)) && (await subscribesOn(grants, app, event.workspace?.id));
             } catch (err) {
               if (!(err instanceof GrantsUnavailable)) throw err;
               log?.warn({ app, err: err.message }, 'could not check where an app subscribes; trying again later');

@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## An app that declares its domain events is held to them
+
+**From** unreleased
+
+An app whose manifest says which events it reads (`contributes.events.reads`) is given only those, and one that declares the types it publishes can publish only those, each payload checked against its version's schema (ADR 0104). Events now carry the `version` of their type. Apps that declare nothing work as before. Nothing to do on the server.
+
 ## An app reads only the domain events on its floors, and hears when it fell behind
 
 **From** unreleased

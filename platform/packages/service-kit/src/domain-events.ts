@@ -15,6 +15,8 @@ export interface NewDomainEvent {
   payload: unknown;
   /** The floor it happened on, if any. */
   workspace?: string;
+  /** The version of its type the payload follows, of those the manifest declares; without it, the newest its payload fits (ADR 0104). */
+  version?: number;
 }
 
 /** One event as followers read it. */
@@ -26,6 +28,8 @@ export interface DomainEvent {
   publisher: string;
   at: string;
   workspace?: { id: string; path: string[] };
+  /** The version of its type the payload follows, when its publisher declares its types (ADR 0104). */
+  version?: number;
   payload: unknown;
 }
 
@@ -76,8 +80,11 @@ export const OUTBOX_TABLE_SQL = `
   );
   create index if not exists outbox_unsent on outbox (id) where sent_at is null;`;
 
-/** Adds an event to the outbox. Call it inside the transaction that makes the change. */
-export async function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id'> & { id?: string }): Promise<void> {
+/**
+ * Adds an event to the outbox. Call it inside the transaction that makes the change. It goes at the newest
+ * version of its type the app declares that its payload fits (ADR 0104); to pin a version, publish it directly.
+ */
+export async function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id' | 'version'> & { id?: string }): Promise<void> {
   await db.query(
     event.id
       ? 'insert into outbox (topic, workspace_id, payload, event_id) values ($1, $2, $3, $4)'

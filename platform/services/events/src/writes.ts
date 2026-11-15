@@ -94,16 +94,16 @@ export const insertEvents = async (client: pg.ClientBase, publisher: string, eve
   // Each event added is announced as the transaction commits; one already sent isn't.
   const { rows } = await client.query<{ added: number }>(
     `with added as (
-       insert into events.domain_events (topic, id, publisher, workspace_id, workspace_path, payload)
-       select e.topic, e.id, $1, e.workspace_id, e.workspace_path, coalesce(e.payload, 'null'::jsonb)
-       from jsonb_to_recordset($2::jsonb) as e(topic text, id text, workspace_id text, workspace_path text[], payload jsonb)
+       insert into events.domain_events (topic, id, publisher, workspace_id, workspace_path, version, payload)
+       select e.topic, e.id, $1, e.workspace_id, e.workspace_path, e.version, coalesce(e.payload, 'null'::jsonb)
+       from jsonb_to_recordset($2::jsonb) as e(topic text, id text, workspace_id text, workspace_path text[], version integer, payload jsonb)
        on conflict (publisher, id) do nothing
        returning seq
      ), told as (
        select pg_notify($3, json_build_object('ref', seq::text)::text) from added
      )
      select (select count(*) from added)::int as added, (select count(*) from told) as told`,
-    [publisher, JSON.stringify(events.map((e) => ({ topic: e.topic, id: e.id, workspace_id: e.floor?.id ?? null, workspace_path: e.floor?.path ?? null, payload: e.payload ?? null }))), EVENT_CHANNEL],
+    [publisher, JSON.stringify(events.map((e) => ({ topic: e.topic, id: e.id, workspace_id: e.floor?.id ?? null, workspace_path: e.floor?.path ?? null, version: e.version ?? null, payload: e.payload ?? null }))), EVENT_CHANNEL],
   );
   const added = rows[0]?.added ?? 0;
   return { added, repeated: events.length - added };

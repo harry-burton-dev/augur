@@ -1,4 +1,4 @@
-import { callerCheckFromEnv, commonSettings, createJobs, DEFAULT_GATEWAY_URL, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, createJobs, DEFAULT_GATEWAY_URL, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryDeclaredEvents, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
 import { Mailer, mailRelayFromEnv, organisationSender } from '@augur/service-kit/mail';
 import { buildApp } from './app.ts';
 import { eventDeliverer, sendThroughGateway, type PushingState } from './deliver.ts';
@@ -50,6 +50,8 @@ const { REGISTRY_URL = 'http://localhost:8082', IDENTITY_URL = 'http://localhost
 const credentials = platformCredentialsFromEnv('events');
 if (!credentials) log.warn('SERVICE_CLIENT_SECRET is not set: apps’ grants can’t be checked, so only platform services can notify or write the audit log.');
 const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
+// What each app's manifest says it reads, and each type it publishes (ADR 0104).
+const declaredEvents = credentials ? registryDeclaredEvents({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 // The inbox kinds each app's manifest declares; an item of another kind is refused.
 const inboxKinds = credentials ? registryInboxKinds({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 // The notification kinds each app's manifest declares; a notification of another kind is refused.
@@ -74,6 +76,7 @@ const deliverer =
         store,
         subscribers: () => granted('events:subscribe'),
         grants,
+        declaredEvents,
         send: sendThroughGateway({ gatewayUrl: process.env.GATEWAY_URL || DEFAULT_GATEWAY_URL, credentials }),
         audit: async (entry, key) => void (await store.appendAudit(entry, undefined, 'events', { key })),
         log: deliveryLog,
@@ -84,7 +87,7 @@ if (!deliverer) log.warn(`${notPushing} Events aren’t pushed to apps; they can
 const pushing = (): PushingState => (deliverer ? { on: true, ...(deliverer.problem ? { problem: deliverer.problem } : {}) } : { on: false, why: notPushing, whoCanChange: 'Whoever runs this deployment sets it in .env.' });
 // Each admin and lead check is also asked of the permissions service, to compare (shadow mode, ADR 0085).
 const shadow = shadowFromEnv(credentials, log);
-const app = await buildApp({ shadow, callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, pushing });
+const app = await buildApp({ shadow, callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, declaredEvents, pushing });
 // Pushing stops before the database closes, so no pass is cut halfway.
 const stopDelivering = deliverer?.start();
 await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => stopDelivering?.(), () => database.close()] });
