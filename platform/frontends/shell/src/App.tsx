@@ -148,7 +148,7 @@ const requieted = (list: ShellNotification[], known: ReadonlyMap<string, ServerN
   });
 /** Pinned apps first, in their order, then the few opened most recently. */
 /** What the Shell draws from someone's preferences, the app bar's place among them (PDR-020 D4). */
-const shellSettings = (p: Preferences) => ({ reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts, barStop: p.barStop ?? 1 }) as const;
+const shellSettings = (p: Preferences) => ({ reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts, summonKey: p.summonKey !== false, barStop: p.barStop ?? 1 }) as const;
 const keptClose = (pinned: string[] = [], recent: string[] = []) => [...new Set([...pinned, ...recent.slice(0, 6)])];
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
@@ -440,7 +440,12 @@ export function Host({
   useEffect(() => {
     if (!accountSection) return;
     const hold = (e: KeyboardEvent) => {
-      const summon = (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k');
+      // The kit's own rule (shell.tsx): ` only outside a text field and while it's on, Ctrl or ⌘ K unless a part took it.
+      const el = e.composedPath()[0] as HTMLElement | undefined;
+      const typing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+      const summon =
+        (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing && shellRef.current?.summonKeyOn !== false) ||
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.defaultPrevented);
       if (summon) e.stopPropagation();
     };
     window.addEventListener('keydown', hold, { capture: true });
@@ -1028,7 +1033,7 @@ export function Host({
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-      if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts') prefs.set(key, !!value);
+      if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts' || key === 'summonKey') prefs.set(key, !!value);
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       else if (key === 'barStop' && (value === 0 || value === 1 || value === 2 || value === 3)) prefs.set('barStop', value);
       applyPreferences(prefs.current);

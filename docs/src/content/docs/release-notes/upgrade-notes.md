@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## An app's id stays with the repository that first installed it
+
+**From** unreleased
+
+The registry now refuses a release under an app's id when another repository signed it, and keeps that rule after the app is removed. Apps already installed are bound to the repository of the release they run now. Nothing to do, unless you meant to swap an app for another publisher's under the same id: that one now needs an id of its own.
+
 ## An event an app's part can't take no longer holds the rest
 
 **From** unreleased

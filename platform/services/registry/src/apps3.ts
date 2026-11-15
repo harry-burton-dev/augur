@@ -8,6 +8,7 @@ import Type from 'typebox';
 import { contractValidators, type AppManifest3 } from '@augur/app-tools/validate';
 import type { AppEntry } from './manifest.ts';
 import { stable } from './release-check.ts';
+import { provisionalOf } from './provisional.ts';
 import type { AppJob } from './store.ts';
 
 /** A catalogue entry as the registry keeps it: for a contract 3 app, with its manifest beside. */
@@ -67,6 +68,7 @@ export const notHandedOver = (m: AppManifest3) => `${m.name} ${m.version} is ins
 export const entryOf3 = (m: AppManifest3): KeptEntry => {
   const c = (m.contributes ?? {}) as Record<string, unknown> & { intents?: { handles?: string[] } };
   const pick = <K extends keyof AppEntry>(key: K, value: unknown) => (value === undefined ? {} : ({ [key]: value } as Pick<AppEntry, K>));
+  const p = provisionalOf(m);
   return {
     id: m.id,
     name: m.name,
@@ -79,13 +81,13 @@ export const entryOf3 = (m: AppManifest3): KeptEntry => {
     sdk: '*',
     ...pick('description', m.description),
     ...pick('icon', m.icon),
-    ...pick('requiredRole', m.requiredRole),
+    ...pick('requiredRole', p.requiredRole),
     ...pick('floors', m.floors),
     ...pick('scopes', m.scopes),
     ...pick('maxUpload', m.maxUpload),
     ...pick('previews', m.previews),
-    ...pick('links', m.links),
-    ...pick('bindings', m.bindings),
+    ...pick('links', p.links),
+    ...pick('bindings', p.bindings),
     ...pick('handles', c.intents?.handles),
     ...pick('search', c.search),
     ...pick('inbox', c.inbox),
@@ -97,7 +99,8 @@ export const entryOf3 = (m: AppManifest3): KeptEntry => {
 /** What the shell is sent for a contract 3 app (spec 9.6): its manifest, with the limit in force, the previews on for the caller and its contract. */
 export const served3 = (m: AppManifest3, filled: { maxUpload: number; previewsOn?: string[] }): AppManifest3 & { maxUpload: number; requiredRole?: string } => {
   const { $schema: _schema, ...manifest } = m as AppManifest3 & { $schema?: string };
-  return { ...manifest, contract: m.contract, maxUpload: filled.maxUpload, ...(filled.previewsOn?.length ? { previewsOn: filled.previewsOn } : {}) };
+  // The provisional fields this registry knows, at the top, wherever the manifest set them: the shell reads them there.
+  return { ...manifest, ...provisionalOf(m), contract: m.contract, maxUpload: filled.maxUpload, ...(filled.previewsOn?.length ? { previewsOn: filled.previewsOn } : {}) };
 };
 
 /**

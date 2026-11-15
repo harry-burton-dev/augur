@@ -9,6 +9,7 @@ import { APP_RELEASE_2_SCHEMA, asksOf2, type AppRelease2 } from '@augur/app-tool
 import { isOfferedScope, reservedIdProblem } from '@augur/service-kit';
 import { platformApps } from './manifest.ts';
 import { eventsProblems } from './event-types.ts';
+import { provisionalOf, setTwice, topLevelProvisional, unknownProvisional } from './provisional.ts';
 
 /** The contract majors this registry serves (spec 11.1, 11.5). Contract 3 has no compatibility path (11.6). */
 export const SERVED_CONTRACTS: readonly number[] = [3];
@@ -179,8 +180,8 @@ const ruleRefusals = (release: AppRelease2, offered: Required<Omit<Offered, 'kno
   for (const [key, what] of [['places', 'place'], ['commands', 'command'], ['about', 'About section'], ['settings', 'setting']] as const) {
     for (const id of repeated(list(key).map((x) => (typeof x.id === 'string' ? x.id : undefined)))) out.push(`The ${what} id ${id} is used twice.`);
   }
-  const bindings = m.bindings as unknown;
-  const links = m.links as { entities?: unknown } | undefined;
+  for (const f of setTwice(m)) out.push(`The manifest sets ${f} both at its top and under provisional: keep the one under provisional.`);
+  const { bindings, links } = provisionalOf(m);
   if (bindings !== undefined && !links?.entities) out.push('The manifest has bindings, but no links.entities to bind them to.');
   if (!m.frontend && !parts.length) out.push(`${m.name} has neither a frontend nor parts: an app needs at least one.`);
   if (m.frontend && !release.frontend) out.push(`The manifest has a frontend, but the release carries no frontend bundle.`);
@@ -193,6 +194,10 @@ const ruleWarnings = (release: AppRelease2): string[] => {
   const m = release.manifest as AppManifest3 & { icon?: string };
   const c = (m.contributes ?? {}) as Record<string, unknown>;
   const list = (key: string) => (Array.isArray(c[key]) ? (c[key] as Record<string, unknown>[]) : []);
+  const twice = setTwice(m);
+  for (const f of topLevelProvisional(m).filter((f) => !twice.includes(f))) out.push(`${m.name} sets ${f} at the top of its manifest. Contract 3 reads it under provisional, and from the next release only there.`);
+  // Ignored, as the contract promises, but said: a misspelt requiredRole would otherwise open the app to everyone unseen.
+  for (const f of unknownProvisional(m)) out.push(`${m.name} sets provisional.${f}, which this AUGUR doesn’t know: it installs without it. If it is a misspelling, ${m.name}’s publisher needs to fix it.`);
   for (const [key, what] of [['places', 'place'], ['commands', 'command']] as const) {
     for (const x of list(key)) {
       if (x.label === m.name) out.push(`${m.name}’s ${what} "${String(x.label)}" has the app’s own label.`);
