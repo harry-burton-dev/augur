@@ -1150,7 +1150,7 @@ export function Host({
         toasts={toasts.map((t) => ({ id: t.id, text: t.text, ...(t.open ? { action: { label: 'Open', onPress: () => homeAsks.current?.open(t.id) } } : {}) }))}
         onDone={toastDone}
       />
-      <Contained part="Urgent notices">
+      <Contained part="Urgent notices" resetOn={urgent}>
         <UrgentNotices
           queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
           appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
@@ -1161,7 +1161,7 @@ export function Host({
       </Contained>
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app' && !(screen?.kind === 'desk' && manifest && desktopApp(manifest))} />
       {accountSection ? (
-        <Contained part="The Account area" resetOn={accountSection}>
+        <Contained part="The Account area" again={{ label: 'Close', onPress: () => showAccount(null) }}>
           <AccountArea
             section={accountSection}
             onSection={showAccount}
@@ -1216,7 +1216,7 @@ export function Host({
       </Dialog>
       <Dialog open={inboxOpen} onClose={() => setInboxOpen(false)} size="read" heading="Inbox" summary="Work that waits on you and your teams." cancelLabel="Close">
         {inboxOpen && manifest ? (
-          <Contained part="The Inbox">
+          <Contained part="The Inbox" resetOn={inboxVersion}>
             <InboxView
               client={inbox}
               manifest={manifest}

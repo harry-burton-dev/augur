@@ -25,14 +25,17 @@ export default defineMicroFrontend({
     }
     const root = createRoot(el);
     roots.set(el, root);
-    // A throw in Home stops only Home (FE-3): the rail and the apps still work, and it says whose fault it is.
-    // The same words as the shell's own stopped parts (shell/src/host/contained.tsx).
+    // A throw in Home stops only Home (FE-3): the rail and the apps still work, and it says whose fault it is,
+    // as the shell's own stopped parts do (shell/src/host/contained.tsx). It's reported as an uncaught error is,
+    // so the deployment's browser telemetry hears of it.
     root.render(
       <StateBoundary
         heading="Home stopped"
-        body="It's a fault in AUGUR, not in anything you did, and the rest of the screen still works. An admin of this AUGUR can pass it on to whoever runs it: when it happened helps them find it."
+        body="It's a fault here, not in anything you did, and the rest of the screen still works. An admin can pass it on to whoever runs this place: when it happened helps them find it."
         action="Try again"
-        onError={(err) => console.error('Home stopped', err)}
+        onError={(err) => {
+          if (typeof globalThis.reportError === 'function') globalThis.reportError(err);
+        }}
       >
         <Home ctx={ctx} />
       </StateBoundary>,

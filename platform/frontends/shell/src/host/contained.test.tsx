@@ -1,7 +1,7 @@
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Contained } from './contained.js';
+import { Contained, stoppedWords } from './contained.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,7 +43,7 @@ describe('Contained', () => {
     const alert = host.querySelector('[role="alert"]')!;
     expect(alert.textContent).toContain('The Inbox stopped');
     expect(alert.textContent).toMatch(/fault in AUGUR/);
-    expect(alert.textContent).toMatch(/admin/);
+    expect(alert.textContent).toMatch(/admin of AUGUR here/);
     expect(stopped).toHaveBeenCalledWith(expect.objectContaining({ message: 'cannot read name of undefined' }));
     broken = false;
     act(() => (alert.querySelector('button') as HTMLButtonElement).click());
@@ -57,7 +57,7 @@ describe('Contained', () => {
       const [floor, setFloor] = useState(1);
       move = setFloor;
       return (
-        <Contained part="The Account area" resetOn={floor}>
+        <Contained part="The Account area" resetOn={floor} onStopped={() => {}}>
           <Breaks />
         </Contained>
       );
@@ -69,13 +69,39 @@ describe('Contained', () => {
     expect(host.textContent).toContain('Working again');
   });
 
+  it('keeps a working part as it is when resetOn changes', () => {
+    broken = false;
+    let mounts = 0;
+    const Counts = () => {
+      useState(() => mounts++);
+      return <p>Fine</p>;
+    };
+    let move: (n: number) => void = () => {};
+    const Moves = () => {
+      const [section, setSection] = useState(1);
+      move = setSection;
+      return (
+        <Contained part="The Account area" resetOn={section}>
+          <Counts />
+        </Contained>
+      );
+    };
+    act(() => root.render(<Moves />));
+    act(() => move(2));
+    expect(mounts).toBe(1);
+  });
+
+  it('names the deployment’s own product', () => {
+    expect(stoppedWords('The Inbox', { rest: true, product: 'Skein' }).body).toMatch(/fault in Skein.*admin of Skein here/);
+  });
+
   it('offers a reload in place of trying again, for the whole screen', () => {
     const reload = vi.fn(() => {
       broken = false;
     });
     act(() =>
       root.render(
-        <Contained part="AUGUR's screen" reload={reload}>
+        <Contained part="Everything" page again={{ label: 'Reload', onPress: reload }} onStopped={() => {}}>
           <Breaks />
         </Contained>,
       ),

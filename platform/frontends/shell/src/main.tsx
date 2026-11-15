@@ -26,7 +26,7 @@ startSession(auth, { location: window.location, history: window.history })
     if (session === 'redirecting') return;
     // A throw the shell's own parts don't hold stops only this, and says so (FE-3), rather than leaving a blank page.
     root.render(
-      <Contained part="AUGUR's screen" reload={() => window.location.reload()}>
+      <Contained part="The screen" page again={{ label: 'Reload', onPress: () => window.location.reload() }}>
         <Host session={session} />
       </Contained>,
     );

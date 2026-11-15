@@ -1,6 +1,6 @@
 import { createEventBus, type EventBus, type MountContext } from '@augur/mfe-sdk';
 import { act } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import home, { HOME_CHANNEL, needsWords, type HomeState } from './entry.js';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -181,8 +181,15 @@ describe('home, design direction previews (PER-283)', () => {
 });
 
 describe('when Home throws', () => {
-  it('stops only Home, says it is AUGUR’s to fix and who passes it on, and tries again', () => {
+  afterEach(() => vi.restoreAllMocks());
+  it('stops only Home, says it isn’t the person’s fault and who passes it on, reports it, and tries again', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    const reported = vi.fn();
+    const realReport = globalThis.reportError;
+    globalThis.reportError = reported;
+    onTestFinished(() => {
+      globalThis.reportError = realReport;
+    });
     let answer: HomeState = { needs: [null as never], cards: [] };
     const bus = createEventBus();
     bus.on(HOME_CHANNEL.ready, () => bus.emit(HOME_CHANNEL.state, answer));
@@ -190,13 +197,13 @@ describe('when Home throws', () => {
     mount(el, ctx(bus));
     const alert = el.querySelector('[role="alert"]');
     expect(alert?.textContent).toContain('Home stopped');
-    expect(alert?.textContent).toMatch(/fault in AUGUR/);
+    expect(alert?.textContent).toMatch(/fault here/);
     expect(alert?.textContent).toMatch(/admin/);
+    expect(reported).toHaveBeenCalledWith(expect.any(TypeError));
     answer = state;
     press([...el.querySelectorAll('button')].find((b) => b.textContent === 'Try again'));
     expect(el.querySelector('[role="alert"]')).toBeNull();
     expect(title(el)).toContain('Sam');
     unmount(el);
-    vi.restoreAllMocks();
   });
 });
