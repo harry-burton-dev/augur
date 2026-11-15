@@ -154,7 +154,30 @@ whose() {
 # first_error ERRORS: the first of them, safe inside JSON.
 first_error() { printf '%s\n' "$1" | head -n 1 | sed 's/^psql:[^:]*:[0-9]*: //' | tr -d '"\\\t' | cut -c1-200; }
 
+# not_regranted DUMP ERRORS: ERRORS without those at the dump's grants of pg_use_reserved_connections. Those
+# grants name the database's own superuser (GRANTED BY platform), and only the bootstrap superuser (postgres,
+# here) may grant a predefined role, so they can't come back in this scratch database. Nothing is lost on a
+# real restore: the storage job and the knowledge service grant the reserve again each time they start.
+not_regranted() {
+  printf '%s\n' "$2" > "$scratch/all-errors"
+  gunzip -c "$1" | awk -v errs="$scratch/all-errors" '
+    /^GRANT pg_use_reserved_connections TO / { regrant[NR] = 1 }
+    END {
+      while ((getline e < errs) > 0) {
+        if (e == "") continue
+        if (match(e, /^psql:[^:]*:[0-9]+:/)) {
+          at = substr(e, 1, RLENGTH - 1)
+          sub(/^.*:/, "", at)
+          if ((at + 0) in regrant) continue
+        }
+        print e
+      }
+    }
+  '
+}
+
 errors=$(real_errors "$scratch/errors")
+[ -z "$errors" ] || errors=$(not_regranted "$file" "$errors")
 # An app's data that doesn't come back is that app's to fix, and never stops AUGUR's upgrade (ADR 0073):
 # it's reported for the app, and only AUGUR's own errors fail the test.
 not_restored=""
