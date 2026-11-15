@@ -77,14 +77,8 @@ export class DomainEventStream {
           if (done) break;
           const parsed = parseEvents<BrowserDomainEvent>(buffer + value, 'domain-event');
           buffer = parsed.rest;
-          // A handler that throws never stops the stream.
-          for (const e of parsed.events) {
-            try {
-              bus.emit(e.topic, e);
-            } catch (err) {
-              console.error(`A handler for ${e.topic} failed`, err);
-            }
-          }
+          // A handler that throws never stops the stream: the bus reports it and goes on.
+          for (const e of parsed.events) bus.emit(e.topic, e);
         }
       } catch {
         if (signal.aborted) return;
