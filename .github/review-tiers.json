@@ -1,5 +1,5 @@
 {
-  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. harryOk: the High paths that also wait for Harry's ok. deployTest: the paths whose change runs on a server, which get the deploy test before merging. Globs follow node:path matchesGlob. A bot's pull request (Renovate) has no description to check: it needs only Harry's ok on his paths. next: the rules that take over after the shadow week; reported on every pull request, but only these decide the check.",
+  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. Generated files (notCount) don't count towards the tier, nor (ignoreRenames) do files only renamed. harryOk: the paths that wait for Harry's ok, kept to what can't be undone: migrations, backups and Postgres, Promote to stable and Halt. harryOkWhen: rules on what a change adds or takes away, for a workflow that gains privilege, a riskier trigger or a new action. autoOk: each High pull request that merges without his ok gets an auto-ok record. deployTest: the paths whose change runs on a server, which get the deploy test before merging. Globs follow node:path matchesGlob. A bot's pull request (Renovate) has no description to check: it needs only Harry's ok on his paths.",
   "high": [
     "platform/services/updater/**",
     "platform/services/identity/**",
@@ -26,7 +26,6 @@
     "scripts/pipeline*",
     "scripts/check-migrations*",
     "scripts/review-tier*",
-    "docs/release-channels.md",
     "REVIEW.md",
     "platform/services/storage/**"
   ],
@@ -36,7 +35,10 @@
     "**/*.test.mjs",
     "**/*.testing.ts",
     "**/README.md",
-    "infra/docker-compose.yml"
+    "infra/docker-compose.yml",
+    "infra/deploy-test.sh",
+    "infra/deploy-browser-check.mjs",
+    ".github/pull_request_template.md"
   ],
   "low": [
     "**/*.md",
@@ -55,24 +57,49 @@
     "docs/release-channels.md",
     "docs/deploy*"
   ],
+  "notCount": [
+    "release/migrations.lock.json",
+    "release/kit.json",
+    "pnpm-lock.yaml"
+  ],
+  "ignoreRenames": true,
   "harryOk": [
-    "platform/services/updater/**",
-    "platform/services/identity/src/**",
-    "platform/services/permissions/src/**",
+    "platform/services/*/src/migrat*",
+    "platform/services/*/src/migrations/**",
     "infra/deploy/backup/**",
     "infra/deploy/postgres/**",
-    "infra/release-*",
-    "release/augur-release.json",
-    "release/app-repos.json",
-    ".github/workflows/**",
-    "scripts/*release*",
     "scripts/promote*",
     "scripts/halt*",
-    "scripts/publish-feed*",
-    "scripts/mirror-release*",
-    ".github/review-tiers.json",
-    "REVIEW.md"
+    ".github/workflows/promote.yml",
+    ".github/workflows/halt.yml"
   ],
+  "harryOkWhen": [
+    {
+      "paths": [
+        ".github/workflows/**",
+        ".github/actions/**"
+      ],
+      "added": "^\\s*permissions:|: *write\\b|\\bsecrets\\b|id-token|pull_request_target|workflow_run|issue_comment|uses:\\s*['\"]?docker://",
+      "why": "gives a workflow more privilege or a riskier trigger"
+    },
+    {
+      "paths": [
+        ".github/workflows/**",
+        ".github/actions/**"
+      ],
+      "removed": "^\\s*permissions:|: *(read|none)\\b",
+      "why": "takes a limit off a workflow's token"
+    },
+    {
+      "paths": [
+        ".github/workflows/**",
+        ".github/actions/**"
+      ],
+      "newAction": true,
+      "why": "uses an action no workflow used before"
+    }
+  ],
+  "autoOk": true,
   "deployTest": [
     "infra/**",
     "release/**",
@@ -85,123 +112,5 @@
     "package.json",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml"
-  ],
-  "next": {
-    "about": "The rules that take over after the shadow week (REVIEW.md). Harry's ok is only for a change that is hard to undo (migrations, backups, the release path), widens who can do what (sign-in, permissions, the updater, a workflow's privileges or a new action) or changes these rules. notCount: generated files, which don't count towards the tier; with ignoreRenames, a file only renamed doesn't either (it still counts for Harry's ok). harryOkWhen: a rule on what a change adds, not only where. At the switch these move to the top of this file with autoOk: true, so that each High change merged without Harry's ok goes in the auto-ok log.",
-    "high": [
-      "platform/services/updater/**",
-      "platform/services/identity/**",
-      "platform/services/permissions/**",
-      "platform/services/gateway/**",
-      "platform/services/events/**",
-      "platform/services/registry/**",
-      "platform/services/*/src/store.ts",
-      "platform/services/*/src/migrat*",
-      "platform/services/*/src/migrations/**",
-      "platform/packages/service-kit/**",
-      "platform/packages/mfe-sdk/src/**",
-      "platform/packages/mfe-sdk/etc/**",
-      "platform/packages/app-tools/**",
-      "platform/frontends/sign-in-theme/**",
-      "infra/**",
-      "release/**",
-      ".github/**",
-      "scripts/*release*",
-      "scripts/promote*",
-      "scripts/halt*",
-      "scripts/publish-feed*",
-      "scripts/mirror-release*",
-      "scripts/pipeline*",
-      "scripts/check-migrations*",
-      "scripts/review-tier*",
-      "REVIEW.md",
-      "platform/services/storage/**"
-    ],
-    "notHigh": [
-      "**/*.test.ts",
-      "**/*.test.tsx",
-      "**/*.test.mjs",
-      "**/*.testing.ts",
-      "**/README.md",
-      "infra/docker-compose.yml",
-      "infra/deploy-test.sh",
-      "infra/deploy-browser-check.mjs",
-      ".github/pull_request_template.md"
-    ],
-    "low": [
-      "**/*.md",
-      ".changeset/**",
-      "**/*.test.ts",
-      "**/*.test.tsx",
-      "**/*.test.mjs",
-      "**/*.stories.tsx",
-      "docs/src/content/**"
-    ],
-    "notLow": [
-      "REVIEW.md",
-      "AGENTS.md",
-      "CLAUDE.md",
-      "docs/upgrade.md",
-      "docs/release-channels.md",
-      "docs/deploy*"
-    ],
-    "notCount": [
-      "release/migrations.lock.json",
-      "release/kit.json",
-      "pnpm-lock.yaml"
-    ],
-    "ignoreRenames": true,
-    "harryOk": [
-      "platform/services/updater/**",
-      "platform/services/identity/src/**",
-      "platform/services/permissions/src/**",
-      "platform/services/*/src/migrat*",
-      "platform/services/*/src/migrations/**",
-      "infra/deploy/backup/**",
-      "infra/deploy/postgres/**",
-      "infra/release-*",
-      "release/augur-release.json",
-      "release/app-repos.json",
-      "scripts/*release*",
-      "scripts/promote*",
-      "scripts/halt*",
-      "scripts/publish-feed*",
-      "scripts/mirror-release*",
-      "scripts/review-tier*",
-      ".github/workflows/release.yml",
-      ".github/workflows/promote.yml",
-      ".github/workflows/halt.yml",
-      ".github/workflows/feed.yml",
-      ".github/workflows/review.yml",
-      ".github/workflows/attribution.yml",
-      ".github/review-tiers.json",
-      "REVIEW.md"
-    ],
-    "harryOkWhen": [
-      {
-        "paths": [
-          ".github/workflows/**",
-          ".github/actions/**"
-        ],
-        "added": "^\\s*permissions:|: *write\\b|\\bsecrets\\b|id-token|pull_request_target|workflow_run|issue_comment|uses:\\s*['\"]?docker://",
-        "why": "gives a workflow more privilege or a riskier trigger"
-      },
-      {
-        "paths": [
-          ".github/workflows/**",
-          ".github/actions/**"
-        ],
-        "removed": "^\\s*permissions:|: *(read|none)\\b",
-        "why": "takes a limit off a workflow's token"
-      },
-      {
-        "paths": [
-          ".github/workflows/**",
-          ".github/actions/**"
-        ],
-        "newAction": true,
-        "why": "uses an action no workflow used before"
-      }
-    ]
-  }
+  ]
 }

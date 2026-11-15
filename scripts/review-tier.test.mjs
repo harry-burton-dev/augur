@@ -44,7 +44,7 @@ test('names that start with a dot match like any other', () => {
   assert.equal(tierOf(['infra/deploy/.env.example'], tiers).tier, 'High');
   assert.equal(needsDeployTest(['infra/deploy/.env.example'], tiers), true);
   assert.equal(tierOf(['.changeset/a.md'], tiers).tier, 'Low');
-  assert.equal(needsHarry(['.github/workflows/ci.yml'], tiers), true);
+  assert.equal(needsHarry(['infra/deploy/backup/.keep'], tiers), true);
 });
 
 test('tests of High code alone are Low', () => {
@@ -83,12 +83,13 @@ test("High on Harry's paths needs his ok; other High doesn't", () => {
   assert.deepEqual(problems({ tier: 'High', body: body(), lines: 120 }), []);
 });
 
-test("Harry's paths are the release path, the updater, sign-in, permissions, backups and workflows", () => {
-  assert.equal(needsHarry(['platform/services/updater/src/upgrade.ts'], tiers), true);
-  assert.equal(needsHarry(['.github/workflows/release.yml'], tiers), true);
+test("Harry's paths are what can't be undone: migrations, backups, Promote to stable and Halt", () => {
+  assert.equal(needsHarry(['platform/services/events/src/migrations/014_a.sql'], tiers), true);
   assert.equal(needsHarry(['infra/deploy/backup/backup.sh'], tiers), true);
+  assert.equal(needsHarry(['.github/workflows/promote.yml'], tiers), true);
+  assert.equal(needsHarry(['platform/services/updater/src/upgrade.ts'], tiers), false);
+  assert.equal(needsHarry(['.github/workflows/release.yml'], tiers), false);
   assert.equal(needsHarry(['platform/services/events/src/store.ts'], tiers), false);
-  assert.equal(needsHarry(['platform/services/identity/src/two-step.test.ts'], tiers), false);
 });
 
 test('the dev stack and upgrade notes are not High', () => {
@@ -115,24 +116,27 @@ test('High over 400 lines needs a reason', () => {
 
 // The next rules: what takes over after the shadow week (REVIEW.md).
 const changes = (lines = {}, gone = {}) => ({ added: (path) => lines[path] ?? [], removed: (path) => gone[path] ?? [], knownActions: new Set(['actions/checkout', 'pnpm/action-setup']) });
-const nextVerdict = (paths, rules, context) => verdict(paths, rules.next, context);
+const nextVerdict = (paths, rules, context) => verdict(paths, rules.next ?? rules, context);
 
-test('the next rules ask Harry about what is hard to undo, widens access or changes the rules', () => {
+test('the rules ask Harry only about what is hard to undo or widens access', () => {
   for (const path of [
     'platform/services/events/src/migrations/014_floors.sql',
     'infra/deploy/backup/backup.sh',
+    'infra/deploy/postgres/init.sql',
     'scripts/promote.mjs',
-    '.github/workflows/release.yml',
-    '.github/review-tiers.json',
-    'platform/services/identity/src/two-step.ts',
-    'platform/services/updater/src/upgrade.ts',
+    'scripts/halt.mjs',
   ]) {
     assert.ok(nextVerdict([path], tiers, changes()).harry.length, path);
   }
 });
 
-test('the next rules keep busy areas High without asking Harry', () => {
+test('busy areas, the updater, sign-in and the review rules stay High without asking Harry', () => {
   for (const path of [
+    'platform/services/identity/src/two-step.ts',
+    'platform/services/updater/src/upgrade.ts',
+    '.github/workflows/release.yml',
+    '.github/review-tiers.json',
+    'REVIEW.md',
     'platform/services/registry/src/app-entry.ts',
     'platform/services/gateway/src/routes.ts',
     'platform/packages/service-kit/src/jobs.ts',
