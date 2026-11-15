@@ -57,6 +57,8 @@ test('takes a secret file from .env (top-level secrets with environment) as reac
   const gateway = 'services:\n  gateway:\n    environment:\n      SIGNING_KEY_FILE: /run/secrets/signing_key\n    secrets: [signing_key, { source: other }]\n';
   const secrets = '\nsecrets:\n  signing_key: { environment: SIGNING_KEY }\n  other: { file: ./other }\n';
   assert.deepEqual(composeServices(gateway + secrets).gateway.secretKeys, ['SIGNING_KEY']);
+  // A secret the service never names in a <NAME>_FILE doesn't reach it.
+  assert.deepEqual(composeServices(gateway.replace('SIGNING_KEY_FILE: /run/secrets/signing_key', 'OTHER: x') + secrets).gateway.secretKeys, []);
   const s = structuredClone(schema);
   s.properties.SIGNING_KEY = { writeOnly: true, 'x-services': ['gateway'] };
   const withGateway = (extra) => settingsProblems({ schema: s, code, files: { ...files, 'infra/deploy/compose.yml': compose.replace(/^services:\n/m, gateway) + extra } });

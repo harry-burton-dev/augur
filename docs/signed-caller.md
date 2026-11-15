@@ -72,7 +72,7 @@ The gateway signs with `CALLER_SIGNING_KEY` (64 hex characters, `openssl rand -h
 The set at `/api/gateway/v1/caller-keys` can hold two keys: the one the gateway signs with, then the one that comes next. A service fetches the set at least once a minute, and again whenever a token names a key id it doesn't have, so a service believes a token signed with either key of the set within a minute of the gateway publishing it. To change the key without refusing a call:
 
 1. Put the new key in `CALLER_SIGNING_KEY_NEXT` and run `pc up -d gateway`. Callers are still signed with the old key; the new one is only published.
-2. Wait two minutes, so every service has fetched the set with both keys, then swap them: the new key into `CALLER_SIGNING_KEY` and the old one into `CALLER_SIGNING_KEY_NEXT`, then `pc up -d gateway`. Tokens already signed with the old key keep working until they expire.
+2. Wait two minutes, so every service has fetched the set with both keys, then swap them: the new key into `CALLER_SIGNING_KEY` and the old one into `CALLER_SIGNING_KEY_NEXT`, then `pc up -d --force-recreate gateway` (the key reaches the gateway as a file, and Compose doesn't start it again for a changed file on its own). Tokens already signed with the old key keep working until they expire.
 3. After `APP_DELEGATION_SECONDS` (five minutes unless set), the longest any signed caller lasts, empty `CALLER_SIGNING_KEY_NEXT` and run `pc up -d gateway` again.
 
 A key you think has leaked is changed the same way, without waiting in step 3: anyone holding the old one can sign callers until it is gone from the set and a minute has passed.

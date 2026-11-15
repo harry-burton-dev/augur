@@ -57,9 +57,17 @@ x-telemetry: &telemetry
   # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
   SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
 
-# Required secrets that reach a service only as a file (secrets, at the end): Compose still stops without them.
+# The secrets that reach a service only as a file (secrets, at the end) are required: Compose stops without one,
+# here, as it does for a value in a service's environment.
 x-required-secrets:
   - ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
+  - ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+  - ${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env}
+  - ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+  - ${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env}
+  - ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
+  - ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+  - ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
 
 x-service: &service
   <<: *hardened
@@ -718,8 +726,8 @@ services:
       # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
       # knowledge asks on each request. While it can't answer, nobody settles or raises.
       PERMISSIONS_URL: http://permissions:8087
-    # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
     secrets: [knowledge_client_secret]
+    # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
     depends_on:
@@ -869,7 +877,8 @@ services:
       - ./observability/grafana/dashboards:/otel-lgtm/augur-dashboards:ro
 
 # Secrets AUGUR's own services read as files (<NAME>_FILE, the service kit's loadConfig), never from their
-# environment, where `docker inspect` and a crash report would show them. Each still comes from .env.
+# environment, where `docker inspect` and a crash report would show them. Each still comes from .env. Compose
+# doesn't recreate a service when only its secret's value changes: after changing one, pc up -d --force-recreate <service>.
 secrets:
   caller_signing_key: { environment: CALLER_SIGNING_KEY }
   identity_client_secret: { environment: IDENTITY_CLIENT_SECRET }

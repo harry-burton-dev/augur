@@ -620,20 +620,25 @@ counted_apart() {
 }
 
 # A secret compose.yml hands a service as a file (its top-level secrets, from .env) is in neither that service's
-# environment, which `docker inspect` and a crash report show, nor its log.
+# environment, which `docker inspect` and a crash report show, nor its log, and is in its file.
 secrets_kept_out() {
-  local pairs service secret key value id bad=""
-  pairs=$(pc config --format json | jq -r '.secrets as $s | .services | to_entries[] | .key as $svc | (.value.secrets // [])[] | "\($svc) \(.source) \($s[.source].environment // "")"')
-  while read -r service secret key; do
+  local triples service path key value id env logs bad=""
+  triples=$(pc config --format json | jq -r '.secrets as $s | .services | to_entries[] | .key as $svc | (.value.secrets // [])[] | "\($svc) \(.target // ("/run/secrets/" + .source)) \($s[.source].environment // "")"')
+  while read -r service path key; do
     [ -n "$key" ] || continue
-    value=$(sed -n "s/^$key=//p" "$deploy/.env" | tail -n 1)
+    # As Compose reads .env: the last line for the key wins, and quotes around the value aren't part of it.
+    value=$(grep "^$key=" "$deploy/.env" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\\(.*\\)'$/\\1/" || true)
     [ -n "$value" ] || continue
+    [ "${path#/}" != "$path" ] || path=/run/secrets/$path
     for id in $(pc ps -q "$service"); do
-      if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id" | grep -qF -- "$value"; then bad="$bad $service:environment($key)"; fi
-      if docker logs "$id" 2>&1 | grep -qF -- "$value"; then bad="$bad $service:log($key)"; fi
-      if ! docker exec "$id" cat "/run/secrets/$secret" 2>/dev/null | grep -qxF -- "$value"; then bad="$bad $service:file($secret)"; fi
+      # Read whole, not piped into grep -q: under pipefail a writer cut off early would hide a match.
+      env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id")
+      logs=$(docker logs "$id" 2>&1)
+      if grep -F -- "$value" <<< "$env" >/dev/null; then bad="$bad $service:environment($key)"; fi
+      if grep -F -- "$value" <<< "$logs" >/dev/null; then bad="$bad $service:log($key)"; fi
+      if [ "$(docker exec "$id" cat "$path" 2>/dev/null)" != "$value" ]; then bad="$bad $service:file($path)"; fi
     done
-  done <<< "$pairs"
+  done <<< "$triples"
   if [ -n "$bad" ]; then
     echo "Secrets meant for files only were found where they shouldn't be, or missing from their file:$bad" >&2
     return 1
