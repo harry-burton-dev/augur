@@ -48,4 +48,25 @@ describe('the registry’s grants', () => {
     const grant = await registryGrantsFor({ registryUrl: 'http://registry', fetchImpl })('upgrades');
     expect(grant).toEqual({ name: 'Upgrade Centre', on: true, scopes: ['notifications:send'], platformScopes: ['deployment:upgrade'] });
   });
+
+  it('keeps "not installed" only a moment, so a just-installed app is granted at once (PER-424)', async () => {
+    let now = 0;
+    let installed = false;
+    let asked = 0;
+    const fetchImpl = (async () => {
+      asked += 1;
+      return installed ? Response.json({ on: true, scopes: [] }) : new Response(null, { status: 404 });
+    }) as unknown as typeof fetch;
+    const grantsOf = registryGrantsFor({ registryUrl: 'http://registry', ttlMs: 30_000, missMs: 2_000, fetchImpl, now: () => now });
+    expect(await grantsOf('starter')).toBeUndefined();
+    installed = true;
+    now = 1_000;
+    expect(await grantsOf('starter')).toBeUndefined();
+    now = 2_000;
+    expect(await grantsOf('starter')).toEqual({ on: true, scopes: [] });
+    // A grant is kept for the whole `ttlMs`.
+    now = 20_000;
+    await grantsOf('starter');
+    expect(asked).toBe(2);
+  });
 });
