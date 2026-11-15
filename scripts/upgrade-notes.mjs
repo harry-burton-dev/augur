@@ -14,19 +14,22 @@ export const NOTES_FILE = 'docs/upgrade.md';
 const SECTION = '## Release notes that need you';
 const FROM = /^\*\*From\*\* (unreleased|augur@(\d+\.\d+\.\d+))(?:\s|$)/;
 
-/** Each note's heading, the line it's on, and what its From line says (undefined when it has none). */
+/** Each note's heading, the line it's on and its last line, and what its From line says (undefined when it has none). */
 export function notesOf(markdown) {
   const lines = markdown.split('\n');
   const start = lines.indexOf(SECTION);
   if (start < 0) return undefined;
   const notes = [];
-  for (let i = start + 1; i < lines.length && !lines[i].startsWith('## '); i++) {
+  let i = start + 1;
+  for (; i < lines.length && !lines[i].startsWith('## '); i++) {
     if (!lines[i].startsWith('### ')) continue;
+    if (notes.length) notes[notes.length - 1].end = i;
     let j = i + 1;
     while (j < lines.length && lines[j].trim() === '') j++;
     const m = FROM.exec(lines[j] ?? '');
     notes.push({ heading: lines[i].slice(4), line: i + 1, from: m ? m[1] : undefined, version: m?.[2] });
   }
+  if (notes.length) notes[notes.length - 1].end = i;
   return notes;
 }
 
