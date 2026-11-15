@@ -480,6 +480,9 @@ export interface ConnectionPool {
 }
 
 // @public
+export const connectTimeoutMs: (env?: Record<string, string | undefined>) => number;
+
+// @public
 export const createJobs: (options: JobsOptions) => Jobs;
 
 // @public
@@ -512,6 +515,15 @@ export interface DatabaseResult<R extends DatabaseRow = DatabaseRow> {
 export type DatabaseRow = Record<string, unknown>;
 
 // @public
+export class DatabaseUnavailable extends Error {
+    constructor(timeoutMs: number, options?: ErrorOptions);
+    // (undocumented)
+    readonly name = "DatabaseUnavailable";
+    // (undocumented)
+    readonly timeoutMs: number;
+}
+
+// @public
 export const decidesFrom: (value: string | undefined) => ReadonlySet<string> | "all";
 
 // @public
@@ -539,10 +551,19 @@ export interface DeclaredEventType {
 export const DEFAULT_CACHE_ENTRIES = 5000;
 
 // @public
+export const DEFAULT_CONNECT_TIMEOUT_MS = 10000;
+
+// @public
 export const DEFAULT_DELEGATION_SECONDS = 300;
 
 // @public
 export const DEFAULT_GATEWAY_URL = "http://gateway:8080";
+
+// @public
+export const DEFAULT_MIGRATION_IDLE_TIMEOUT_MS = 60000;
+
+// @public
+export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 30000;
 
 // @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
@@ -1163,6 +1184,12 @@ export const loadConfig: (service: string, settings: Setting[], env?: NodeJS.Pro
 export const loadConfigOrExit: (service: string, settings: Setting[], env?: NodeJS.ProcessEnv) => SettingState[];
 
 // @public
+export const LOCK_NAMESPACE: {
+    readonly migrations: 1096089601;
+    readonly auditOutbox: 1096089602;
+};
+
+// @public
 export const MAIL_SECURITY: readonly ["starttls", "tls", "none"];
 
 // @public
@@ -1207,6 +1234,25 @@ export interface Migration {
     // (undocumented)
     sql: string;
 }
+
+// @public
+export const migrationIdleTimeoutMs: (env?: Record<string, string | undefined>) => number;
+
+// @public
+export class MigrationLockTimeout extends Error {
+    constructor(schema: string,
+    migration: string | undefined, timeoutMs: number, message: string, options?: ErrorOptions);
+    readonly migration: string | undefined;
+    // (undocumented)
+    readonly name = "MigrationLockTimeout";
+    // (undocumented)
+    readonly schema: string;
+    // (undocumented)
+    readonly timeoutMs: number;
+}
+
+// @public
+export const migrationLockTimeoutMs: (env?: Record<string, string | undefined>) => number;
 
 // @public
 export const MODEL_CALL_TIMEOUT_MS = 180000;
@@ -1687,6 +1733,8 @@ export const ruleChain: (place: FloorPlace) => string[];
 export const runMigrations: (pool: Pool_2, input: {
     schema: string;
     migrations: readonly Migration[];
+    lockTimeoutMs?: number;
+    idleTimeoutMs?: number;
 }) => Promise<void>;
 
 // @public (undocumented)
