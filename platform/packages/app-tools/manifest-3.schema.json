@@ -22,11 +22,11 @@
     "contract": {
       "type": "integer",
       "const": 3,
-      "description": "The one contract major the app speaks (decision 8, option A). It fixes the gateway API, SDK, Quill and resource-type majors the shell and runner serve. Under option B this field is replaced by `majors` (see the spec, section 11)."
+      "description": "The one contract major the app speaks. It fixes the gateway API, SDK, Quill and resource-type majors the shell and runner serve, which move together (decision D8: one contract major, not one per surface)."
     },
     "description": { "type": "string", "maxLength": 140, "description": "One line shown under the app's name." },
     "icon": { "type": "string", "maxLength": 40, "description": "A kit icon name (Lucide, through Common's Icon)." },
-    "requiredRole": { "type": "string", "maxLength": 60, "description": "Only people with this role can open it." },
+    "requiredRole": { "type": "string", "maxLength": 60, "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
     "floors": {
       "type": "array",
       "items": { "enum": ["personal", "team", "org"] },
@@ -223,6 +223,21 @@
         }
       }
     },
+    "links": { "$ref": "#/$defs/links", "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
+    "bindings": { "$ref": "#/$defs/bindings", "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
+    "provisional": {
+      "type": "object",
+      "description": "Fields contract 3 hasn't frozen: each may change or go in a minor release. A registry ignores a field here that it doesn't know, so a manifest that sets a newer one still installs on an older AUGUR, without it. Anywhere else an unknown field is refused.",
+      "properties": {
+        "requiredRole": { "type": "string", "maxLength": 60, "description": "Only people with this role can open it. Provisional until permissions decide who opens an app (ctx.can())." },
+        "links": { "$ref": "#/$defs/links" },
+        "bindings": { "$ref": "#/$defs/bindings" }
+      },
+      "dependentRequired": { "bindings": ["links"] }
+    }
+  },
+  "dependentRequired": { "bindings": ["links"] },
+  "$defs": {
     "links": {
       "type": "object",
       "additionalProperties": false,
@@ -236,10 +251,7 @@
       "maxItems": 10,
       "uniqueItems": true,
       "description": "With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound."
-    }
-  },
-  "dependentRequired": { "bindings": ["links"] },
-  "$defs": {
+    },
     "eventType": {
       "type": "object",
       "additionalProperties": false,
