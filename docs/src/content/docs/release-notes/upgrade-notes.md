@@ -21,6 +21,12 @@ When an app's part answers but can't take an event, the events service now tries
 
 A service's migration now waits at most a minute for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`), where it used to wait for ever. It then rolls back, the service stops and Docker starts it again, and `pc logs <service>` names the migration, the lock and the session holding it. The knowledge graph's migration job is restarted three times, then stays stopped, and the knowledge service with it, until you run `pc up -d` again. A service also waits at most 10 seconds for a database connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached. Nothing to do on most servers. A backup running while you upgrade holds every table until it ends, so start an upgrade once the night's backup has finished. If a service keeps restarting after the upgrade and its log says a migration gave up, end the session it names (or the app holding it), or raise the setting in `.env` and run `pc up -d`; it reaches AUGUR's own services, and an app's migrations keep the default ([Limits and health](../../run/limits/#logs-memory-and-health)).
 
+## Apps' frontends hold no pages or SVGs
+
+**From** unreleased
+
+Under `/apps/` the front door now serves only the file types an app's frontend needs (scripts, styles, JSON, source maps, images other than SVG, fonts, WebAssembly) and answers 404 for anything else, such as an `.html` or `.svg` file, because one opened at its address would run as AUGUR's own page. The registry refuses a frontend bundle that holds one, so an app release with one fails to install; its developer rebuilds it without (`augur-app bundle` now says which file). Every file under `/apps/`, `/assets/` and `/shared/` also carries `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy. No app AUGUR knows of ships such a file, so there is nothing to do on the server. An installed app that does hold a file of another type keeps working, but that file is answered 404, so anything its pages draw from it goes missing until its developer releases the app again without it.
+
 ## Postgres keeps connections back for AUGUR
 
 **From** unreleased

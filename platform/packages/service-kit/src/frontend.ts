@@ -31,6 +31,57 @@ export const frontendPathProblem = (path: string): string | undefined => {
   return undefined;
 };
 
+/**
+ * The file types a frontend may hold, by extension, each with the Content-Type the registry stores it with.
+ * /apps/ is on the shell's own origin, so a page or an SVG there, opened at its address, would run script as
+ * the shell and could read the person's session: those are never held. The rest is what app frontends ship
+ * (scripts, styles, JSON and source maps, images, fonts, WebAssembly), none of which runs as a page. The front
+ * door serves the same list (infra/deploy/nginx.conf, held to it by frontend.test.ts) and refuses anything else.
+ */
+export const FRONTEND_TYPES: Readonly<Record<string, string>> = Object.freeze({
+  js: 'text/javascript; charset=utf-8',
+  mjs: 'text/javascript; charset=utf-8',
+  css: 'text/css; charset=utf-8',
+  json: 'application/json',
+  map: 'application/json',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  ico: 'image/x-icon',
+  woff: 'font/woff',
+  woff2: 'font/woff2',
+  ttf: 'font/ttf',
+  otf: 'font/otf',
+  wasm: 'application/wasm',
+});
+
+const extensionOf = (path: string) => {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+};
+
+/** The Content-Type a frontend's file is served as, or undefined when a frontend may not hold it. */
+export const frontendTypeOf = (path: string): string | undefined => {
+  const ext = extensionOf(path);
+  return Object.hasOwn(FRONTEND_TYPES, ext) ? FRONTEND_TYPES[ext] : undefined;
+};
+
+/** Why a frontend may not hold this file (what, why and the fix), or undefined when it may. */
+export const frontendTypeProblem = (path: string): string | undefined => {
+  if (frontendTypeOf(path)) return undefined;
+  const ext = extensionOf(path);
+  const what = ext ? `is a .${ext} file` : 'has no file extension';
+  return (
+    `"${path}" ${what}, and a frontend holds only ${Object.keys(FRONTEND_TYPES).map((t) => `.${t}`).join(', ')}. ` +
+    'Apps are served from the shell’s own address, so a page or an SVG there could run as the shell. ' +
+    'Leave it out of the build, or make it one of those (an icon is a kit icon by name, or a PNG).'
+  );
+};
+
 /** Every file under `dir`, sorted, so the same build always packs to the same bytes. */
 export const readFrontend = (dir: string): FrontendFile[] => {
   const files: FrontendFile[] = [];
@@ -77,11 +128,11 @@ const header = (path: string, size: number): Buffer => {
   return h;
 };
 
-/** The files as one gzipped tarball, the form a frontend travels in to the registry and in an app's bundle. */
+/** The files as one gzipped tarball, the form a frontend travels in to the registry and in an app's bundle. Throws FrontendProblem for a file a frontend may not hold. */
 export const packFrontend = (files: FrontendFile[]): Buffer => {
   const parts: Buffer[] = [];
   for (const file of [...files].sort((a, b) => (a.path < b.path ? -1 : 1))) {
-    const problem = frontendPathProblem(file.path);
+    const problem = frontendPathProblem(file.path) ?? frontendTypeProblem(file.path);
     if (problem) throw new FrontendProblem(problem);
     parts.push(header(file.path, file.data.length), file.data, Buffer.alloc((BLOCK - (file.data.length % BLOCK)) % BLOCK));
   }
@@ -106,7 +157,7 @@ const paxPath = (data: Buffer) => {
 
 /**
  * The files in a gzipped tarball, checked: regular files and directories only, every path
- * one a browser can ask for, within FRONTEND_LIMITS. Throws FrontendProblem saying what's wrong.
+ * one a browser can ask for and of a type in FRONTEND_TYPES, within FRONTEND_LIMITS. Throws FrontendProblem saying what's wrong.
  */
 export const unpackFrontend = (tarball: Buffer, limits: { files: number; bytes: number } = FRONTEND_LIMITS): FrontendFile[] => {
   let tar: Buffer;
@@ -137,7 +188,7 @@ export const unpackFrontend = (tarball: Buffer, limits: { files: number; bytes: 
     }
     if (type === 'g' || type === '5') continue;
     if (type !== '0') throw new FrontendProblem(`"${path}" isn’t a plain file; a frontend holds only files and folders.`);
-    const problem = frontendPathProblem(path);
+    const problem = frontendPathProblem(path) ?? frontendTypeProblem(path);
     if (problem) throw new FrontendProblem(problem);
     if (seen.has(path)) throw new FrontendProblem(`"${path}" is in the tarball twice.`);
     seen.add(path);
