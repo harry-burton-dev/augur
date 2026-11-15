@@ -63,7 +63,7 @@ const store: AppStore = database;
 const { EVENTS_URL } = process.env;
 const credentials = platformCredentialsFromEnv('registry');
 // Each entry is kept in the registry's database first and sent from there, so none is lost while the events service is down.
-const auditing = EVENTS_URL && credentials ? auditOutbox({ pool: database.pool, table: 'registry.audit_outbox', eventsUrl: EVENTS_URL, credentials, onError: (err) => log.warn(`Audit entries are waiting to be sent: ${(err as Error).message}`) }) : undefined;
+const auditing = EVENTS_URL && credentials ? auditOutbox({ pool: database.pool, table: 'registry.audit_outbox', eventsUrl: EVENTS_URL, credentials, onError: (err) => log.warn((err as Error).message) }) : undefined;
 auditing?.start();
 const audit = auditing && ((entry: NewAuditEntry, workspace?: string) => auditing.add(entry, workspace));
 if (!audit) log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: changes to the catalogue are not audited.');

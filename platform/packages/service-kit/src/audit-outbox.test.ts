@@ -64,10 +64,45 @@ describe.runIf(process.env.DATABASE_URL)('the audit outbox', () => {
     expect(await outbox.flush()).toBe(3);
     expect([...events.kept.values()].map((k) => [k.entry.target, k.workspace])).toEqual([['u-1', 'w-finance'], ['u-2', null]]);
     expect(events.kept.has('mine')).toBe(false);
-    expect(errors).toEqual([expect.objectContaining({ message: expect.stringMatching(/Set aside audit entry mine \(identity department\.renamed\).*400/) })]);
-    const { rows } = await pool.query(`select key, sent_at, refused_why from ${table} order by id`);
-    expect(rows.map((r) => [r.key, !!r.sent_at, !!r.refused_why])).toEqual([[expect.any(String), true, false], ['mine', true, true], [expect.any(String), true, false]]);
+    expect(errors).toEqual([expect.objectContaining({ status: 400, message: expect.stringMatching(/Set aside audit entry mine \(identity department\.renamed\).*400/) })]);
+    // What was sent is gone; what was set aside stays to look at, until its person is forgotten.
+    const { rows } = await pool.query(`select key, refused_why from ${table} order by id`);
+    expect(rows).toEqual([{ key: 'mine', refused_why: expect.stringContaining('unknown floor') }]);
     expect(await outbox.flush()).toBe(0);
+    await outbox.forget('u-someone-else');
+    expect((await pool.query(`select key from ${table}`)).rows).toHaveLength(1);
+    await outbox.forget('u-admin');
+    expect((await pool.query(`select key from ${table}`)).rows).toHaveLength(0);
+  });
+
+  it('waits on a refusal that can be put right (403), and drains before a step that must come after every entry', async () => {
+    await pool.query(`delete from ${table}`);
+    const events = fakeAudit();
+    let forbidden = true;
+    const fetchImpl = (async (url: string, init: RequestInit) => (forbidden ? new Response('{"message":"not granted audit:write"}', { status: 403 }) : events.fetchImpl(url, init))) as typeof fetch;
+    const outbox = auditOutbox({ pool, table, eventsUrl: 'http://events:8084', credentials, fetchImpl });
+    await outbox.add({ actor: { id: 'u-admin', kind: 'user' }, app: 'identity', action: 'person.left', target: 'u-3' });
+    await expect(outbox.drain()).rejects.toThrow(/waiting to be sent: .*403/);
+    expect((await pool.query(`select refused_at from ${table}`)).rows).toEqual([{ refused_at: null }]);
+    forbidden = false;
+    await outbox.drain();
+    expect([...events.kept.values()].map((k) => k.entry.target)).toEqual(['u-3']);
+    expect((await pool.query(`select key from ${table}`)).rows).toHaveLength(0);
+  });
+
+  it('sends from one instance at a time, so order holds', async () => {
+    const holder = await pool.connect();
+    try {
+      await holder.query('select pg_advisory_lock(hashtext($1))', [table]);
+      const events = fakeAudit();
+      const outbox = auditOutbox({ pool, table, eventsUrl: 'http://events:8084', credentials, fetchImpl: events.fetchImpl });
+      await outbox.add({ actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'app.updated', target: 'x' });
+      expect(await outbox.flush()).toBe(0);
+      await holder.query('select pg_advisory_unlock(hashtext($1))', [table]);
+      expect(await outbox.flush()).toBe(1);
+    } finally {
+      holder.release();
+    }
   });
 
   it('stops at the first entry it can’t send yet, keeping the ones before it sent', async () => {

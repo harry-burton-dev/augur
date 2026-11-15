@@ -108,7 +108,7 @@ if (ownSecret || keycloakAdmin) {
 const { EVENTS_URL } = process.env;
 const credentials = platformCredentialsFromEnv('identity');
 // Each entry is kept in identity's database first and sent from there, so none is lost while the events service is down.
-const auditing = EVENTS_URL && credentials ? auditOutbox({ pool, table: 'identity.audit_outbox', eventsUrl: EVENTS_URL, credentials, onError: (err) => log.warn(`Audit entries are waiting to be sent: ${(err as Error).message}`) }) : undefined;
+const auditing = EVENTS_URL && credentials ? auditOutbox({ pool, table: 'identity.audit_outbox', eventsUrl: EVENTS_URL, credentials, onError: (err) => log.warn((err as Error).message) }) : undefined;
 auditing?.start();
 const audit = auditing && ((entry: NewAuditEntry, workspace?: string) => auditing.add(entry, workspace));
 if (!audit) log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: admins’ changes to people and departments are not audited.');
@@ -131,11 +131,14 @@ const dataFrom = credentials
 let copyNow: (() => Promise<unknown>) | undefined;
 
 // A deleted leaver's personal values leave Activity first (ADR 0072): the events service removes them. Sign-ins
-// are copied first, so one still on its way can't land after the last redaction with their IP address.
+// are copied first and every audit entry waiting is sent, so none still on its way can land after the last redaction
+// with their IP address; and the outbox forgets any it set aside about them.
 const redact =
   EVENTS_URL && credentials
     ? async (person: string) => {
         await copyNow?.();
+        await auditing?.drain();
+        await auditing?.forget(person);
         return callService({ method: 'POST', url: `${EVENTS_URL.replace(/\/$/, '')}/v1/audit/redact`, credentials, body: { person }, what: 'remove a deleted person’s details from Activity' });
       }
     : undefined;

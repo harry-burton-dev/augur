@@ -108,7 +108,12 @@ export async function notify({ eventsUrl, credentials, workspace, fetchImpl, not
 }
 
 /** Adds an entry to the platform's audit log. A preview's entries say which pull request they're from. */
-export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl, entry: { key = randomUUID(), ...entry }, env }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
+export async function recordAudit({ entry: { key = randomUUID(), ...entry }, ...options }: EventsOptions & { entry: NewAuditEntry }): Promise<void> {
+  await postAudit({ ...options, entry, key, attempts: 3 });
+}
+
+/** One POST of an entry to /v1/audit under its key; recordAudit and the audit outbox both send this way. */
+export async function postAudit({ eventsUrl, credentials, workspace, fetchImpl, entry, key, attempts, env }: EventsOptions & { entry: Omit<NewAuditEntry, 'key'>; key: string; attempts: number }): Promise<void> {
   const pr = previewOf(env);
   await callService({
     method: 'POST',
@@ -118,7 +123,7 @@ export async function recordAudit({ eventsUrl, credentials, workspace, fetchImpl
     what: `record ${entry.action} in the audit log`,
     workspace,
     headers: { 'idempotency-key': key },
-    attempts: 3,
+    attempts,
     fetchImpl,
   });
 }

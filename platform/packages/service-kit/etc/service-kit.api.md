@@ -182,7 +182,9 @@ export const auditFor: (app: string, log: (entry: AppAuditEntry) => void, env?: 
 // @public (undocumented)
 export interface AuditOutbox {
     add(entry: NewAuditEntry, workspace?: string, db?: Queryable): Promise<void>;
+    drain(): Promise<void>;
     flush(): Promise<number>;
+    forget(person: string): Promise<void>;
     // (undocumented)
     start(): void;
     // (undocumented)
@@ -196,6 +198,7 @@ export const auditOutbox: (input: {
     eventsUrl: string;
     credentials: ServiceCredentials;
     fetchImpl?: typeof fetch;
+    env?: Record<string, string | undefined>;
     batch?: number;
     intervalMs?: number;
     onError?: (err: unknown) => void;
@@ -1481,6 +1484,13 @@ export const poolCheck: (name: string, pool: {
 }) => ReadyCheck;
 
 // @public
+export function postAudit(input: EventsOptions & {
+    entry: Omit<NewAuditEntry, 'key'>;
+    key: string;
+    attempts: number;
+}): Promise<void>;
+
+// @public
 export const previewOf: (env?: Record<string, string | undefined>) => number | undefined;
 
 // @public
@@ -1744,6 +1754,8 @@ export const serviceCallerId: (service: string) => string;
 
 // @public (undocumented)
 export class ServiceCallError extends Error {
+    constructor(message: string, status?: number);
+    readonly status?: number;
 }
 
 // @public
