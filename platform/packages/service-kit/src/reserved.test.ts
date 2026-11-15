@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { RESERVED_APP_IDS, reservedIdProblem } from './reserved.js';
 
@@ -28,5 +28,13 @@ describe('the ids AUGUR keeps', () => {
   it('keeps every platform service’s and platform app’s id', () => {
     const dirs = (path: string) => readdirSync(new URL(path, repo), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
     for (const id of [...dirs('platform/services/'), ...dirs('platform/frontends/')]) expect(Object.keys(RESERVED_APP_IDS)).toContain(id);
+  });
+
+  it('keeps the first part of every path the front door serves itself, since an app is served at /<id>', () => {
+    const nginx = readFileSync(new URL('infra/deploy/nginx.conf', repo), 'utf8');
+    // A prefix or exact location (/recover, = /api/identity/v1/token) or a regular expression's (~ ^/sso/(admin…)).
+    const firsts = [...nginx.matchAll(/^\s*location\s+(?:[=~]\*?|\^~)?\s*\^?\/([a-z][a-z0-9-]*)/gm)].map((m) => m[1]);
+    expect(firsts).toContain('api');
+    expect([...new Set(firsts)].filter((first) => !Object.hasOwn(RESERVED_APP_IDS, first))).toEqual([]);
   });
 });
