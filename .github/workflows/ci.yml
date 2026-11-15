@@ -629,7 +629,7 @@ jobs:
           # A row whose file never reached the bucket: an app that wouldn't load after this restore.
           docker exec pg psql -U platform -qc "insert into registry.app_frontends values ('lost', '2.0.0', '2.0.0_aaaaaaaaaaaa', '[\"remote.js\"]')"
           backup
-          ! check > /tmp/files.json
+          if check > /tmp/files.json; then cat /tmp/files.json; echo 'A row whose file is missing passed the check.'; exit 1; fi
           cat /tmp/files.json
           jq -e '(.ok | not) and .rows == 4 and .missing == 1 and .firstMissing == "apps/lost/2.0.0_aaaaaaaaaaaa/remote.js"' /tmp/files.json
 
