@@ -227,7 +227,7 @@ function partsOf(props: SectionProps): FitPart[] {
     case 'about':
       return [
         { id: 'running', label: 'What’s running', content: <Running {...props} /> },
-        { id: 'keys', label: 'Keys', content: <Keys /> },
+        { id: 'keys', label: 'Keys', content: <Keys {...props} /> },
       ];
   }
 }
@@ -1232,8 +1232,8 @@ function Running({ version, product, rows }: SectionProps) {
   );
 }
 
-const KEYS: [string, string][] = [
-  ['`', 'Open or close the shell (also Ctrl or ⌘ K)'],
+const keysFor = (summonKey: boolean): [string, string][] => [
+  summonKey ? ['`', 'Open or close the shell (also Ctrl or ⌘ K)'] : ['Ctrl or ⌘ K', 'Open or close the shell'],
   ['← →', 'Move along the arc'],
   ['Enter', 'Open'],
   ['x', 'Dismiss a notification'],
@@ -1241,17 +1241,22 @@ const KEYS: [string, string][] = [
   ['Alt PgUp PgDn', 'Up or down a floor'],
 ];
 
-function Keys() {
+// WCAG 2.1.4 (Character Key Shortcuts): the one-key shortcut can be turned off, and the list says what opens the shell.
+function Keys({ prefs, onPreference }: SectionProps) {
+  const summonKey = prefs.summonKey !== false;
   return (
-    <dl className="account-keys">
-      {KEYS.map(([k, what]) => (
-        <div key={k}>
-          <dt>
-            <kbd>{k}</kbd>
-          </dt>
-          <dd>{what}</dd>
-        </div>
-      ))}
-    </dl>
+    <>
+      <Toggle label="Open with `" hint="The one key opens and closes the shell. Off, Ctrl or ⌘ K still does." checked={summonKey} onChange={(on) => onPreference('summonKey', on)} />
+      <dl className="account-keys">
+        {keysFor(summonKey).map(([k, what]) => (
+          <div key={k}>
+            <dt>
+              <kbd>{k}</kbd>
+            </dt>
+            <dd>{what}</dd>
+          </div>
+        ))}
+      </dl>
+    </>
   );
 }
