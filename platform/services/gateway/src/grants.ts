@@ -41,13 +41,14 @@ export interface RegistryGrantsOptions {
 /** Apps and floors to remember at once; past this the oldest is forgotten first. */
 const MAX_REMEMBERED = 5000;
 
-/** Asks the registry what an app is granted where, as the gateway, remembering each answer for `ttlMs`. */
+/**
+ * Asks the registry what an app is granted where, as the gateway, remembering each grant for `ttlMs` and that an app
+ * isn't installed for `missMs`. Calls asking the same at once share one ask.
+ */
 export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, missMs = 2_000, fetchImpl = fetch, now = Date.now }: RegistryGrantsOptions): AppGrants => {
   const cache = new Map<string, { grant: AppGrant | undefined; at: number }>();
-  return async (app, workspace) => {
-    const key = `${app} ${workspace ?? ''}`;
-    const hit = cache.get(key);
-    if (hit && now() - hit.at < (hit.grant ? ttlMs : missMs)) return hit.grant;
+  const asking = new Map<string, Promise<AppGrant | undefined>>();
+  const ask = async (app: string, workspace: string | undefined, key: string): Promise<AppGrant | undefined> => {
     const url = new URL(`${registryUrl.replace(/\/$/, '')}/v1/apps/${encodeURIComponent(app)}/grants`);
     if (workspace) url.searchParams.set('workspace', workspace);
     let res: Response;
@@ -77,6 +78,17 @@ export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, missMs 
     cache.set(key, { grant, at: now() });
     if (cache.size > MAX_REMEMBERED) cache.delete(cache.keys().next().value!);
     return grant;
+  };
+  return async (app, workspace) => {
+    const key = `${app} ${workspace ?? ''}`;
+    const hit = cache.get(key);
+    if (hit && now() - hit.at < (hit.grant ? ttlMs : missMs)) return hit.grant;
+    let pending = asking.get(key);
+    if (!pending) {
+      pending = ask(app, workspace, key).finally(() => asking.delete(key));
+      asking.set(key, pending);
+    }
+    return pending;
   };
 };
 

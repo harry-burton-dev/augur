@@ -391,6 +391,23 @@ describe('gateway', () => {
       await lookup(alex, 'nothing');
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
+
+    it('keeps using the person’s catalogue while asking again, and keeps it when the registry can’t answer', async () => {
+      let now = 0;
+      let up = true;
+      const fetchImpl = vi.fn(async () => {
+        if (!up) throw new Error('refused');
+        return Response.json([{ id: 'notes' }]);
+      });
+      const lookup = registryAppAccess({ registryUrl: 'http://registry', fetchImpl: fetchImpl as unknown as typeof fetch, now: () => now });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
+      await lookup(alex, 'notes');
+      up = false;
+      now = 5_000;
+      expect((await lookup(alex, 'starter')).has('notes')).toBe(true);
+      expect((await lookup(alex, 'notes')).has('notes')).toBe(true);
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('floors', () => {

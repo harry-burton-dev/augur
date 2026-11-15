@@ -35,24 +35,27 @@ const MAX_REMEMBERED = 5000;
  * Reads the catalogue the registry gives the person on the floor, the same one their shell gets: an
  * app turned off, blocked on that floor, or needing a role they don't have isn't in it. Each app's
  * limit (`maxUpload`, lowered by an admin) comes with it. Remembered for a short while, so turning an
- * app off reaches the gateway within `ttlMs`.
+ * app off reaches the gateway within `ttlMs`. A call for an app the remembered catalogue doesn't have
+ * asks again, at most once each `missMs`, since that app may have just been installed (PER-424); the
+ * remembered one is kept, and used, until the new one comes.
  */
 export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, missMs = 2_000, fetchImpl = fetch, now = Date.now }: RegistryAppAccessOptions): AppAccess => {
-  const remembered = new Map<string, { apps: Promise<Map<string, AppAllowed>>; at: number }>();
-  const ask = (caller: Caller, key: string) => {
+  type Remembered = { apps: Promise<Map<string, AppAllowed>>; at: number; again?: Promise<Map<string, AppAllowed>>; missedAt?: number };
+  const remembered = new Map<string, Remembered>();
+  const catalogue = async (caller: Caller) => {
     const floor = caller.workspace?.id;
-    const apps = (async () => {
-      let res: Response;
-      try {
-        const headers = { ...callerHeaders(caller), ...(signer ? await signedCallerHeaders(signer, caller, 'registry') : {}) };
-        res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/manifest${floor ? `?workspace=${encodeURIComponent(floor)}` : ''}`, { headers });
-      } catch (err) {
-        throw new AppAccessUnavailable(`the registry could not be reached (${(err as Error).message})`);
-      }
-      if (!res.ok) throw new AppAccessUnavailable(`the registry answered ${res.status}`);
-      const list = (await res.json()) as { id: string; name?: string; maxUpload?: number }[];
-      return new Map(list.map((a) => [a.id, { ...(a.name ? { name: a.name } : {}), ...(typeof a.maxUpload === 'number' ? { maxUpload: a.maxUpload } : {}) }]));
-    })();
+    let res: Response;
+    try {
+      const headers = { ...callerHeaders(caller), ...(signer ? await signedCallerHeaders(signer, caller, 'registry') : {}) };
+      res = await withDeadline(fetchImpl)(`${registryUrl.replace(/\/$/, '')}/v1/manifest${floor ? `?workspace=${encodeURIComponent(floor)}` : ''}`, { headers });
+    } catch (err) {
+      throw new AppAccessUnavailable(`the registry could not be reached (${(err as Error).message})`);
+    }
+    if (!res.ok) throw new AppAccessUnavailable(`the registry answered ${res.status}`);
+    const list = (await res.json()) as { id: string; name?: string; maxUpload?: number }[];
+    return new Map(list.map((a) => [a.id, { ...(a.name ? { name: a.name } : {}), ...(typeof a.maxUpload === 'number' ? { maxUpload: a.maxUpload } : {}) }]));
+  };
+  const remember = (key: string, apps: Promise<Map<string, AppAllowed>>) => {
     remembered.delete(key);
     remembered.set(key, { apps, at: now() });
     apps.catch(() => remembered.get(key)?.apps === apps && remembered.delete(key));
@@ -62,13 +65,23 @@ export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, missMs 
   return async (caller, app) => {
     const key = `${caller.id} ${caller.workspace?.id ?? ''}`;
     const hit = remembered.get(key);
-    if (!hit || now() - hit.at >= ttlMs) return ask(caller, key);
+    if (!hit || now() - hit.at >= ttlMs) return remember(key, catalogue(caller));
     const apps = await hit.apps;
-    // An app their last answer didn't have may have just been installed: asked again, at most once each `missMs`.
-    if (app === undefined || apps.has(app) || now() - hit.at < missMs) return apps;
-    // Another call may have asked again meanwhile; it joins that ask.
-    const current = remembered.get(key);
-    return current && current !== hit ? current.apps : ask(caller, key);
+    if (app === undefined || apps.has(app)) return apps;
+    if (hit.again) return hit.again;
+    if (now() - Math.max(hit.at, hit.missedAt ?? -Infinity) < missMs) return apps;
+    hit.missedAt = now();
+    // The new catalogue replaces the remembered one only once it comes; if it can't be had, the remembered one stays.
+    hit.again = catalogue(caller)
+      .then(
+        (fresh) => {
+          if (remembered.get(key) === hit) remember(key, Promise.resolve(fresh));
+          return fresh;
+        },
+        () => apps,
+      )
+      .finally(() => (hit.again = undefined));
+    return hit.again;
   };
 };
 
