@@ -46,7 +46,8 @@ Have these ready. The preflight (step 3) checks what it can of them before anyth
    The server doesn't need Tailscale installed itself. The `tailscale` container joins your tailnet as its
    own machine, named after `TS_HOSTNAME`.
 3. **Its entry in Backstage**, if it reports there (a staging server must): the deployment's name in
-   Backstage's `org/deployments.yaml`, and Backstage's address. Step 6 joins them up.
+   Backstage's catalog of deployments
+   (the portal's README, "Deployments", says where that is), and Backstage's address. Step 6 joins them up.
 4. **A read key**, only if AUGUR's packages aren't public to you: one GitHub token with only
    **read:packages**. After step 1, save it as `infra/deploy/secrets/github-read-key` (owned by user 1000),
    set `GITHUB_READ_USER` in `.env`, and sign Docker in with it once (`docker login ghcr.io`). The
@@ -206,7 +207,7 @@ exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
 
 1. **Report to Backstage**
    ([upgrade guide](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md#reporting-to-backstage)):
-   set `DEPLOYMENT_ID` to the deployment's name in `org/deployments.yaml` and `PORTAL_URL` to Backstage's
+   set `DEPLOYMENT_ID` to its name in Backstage's catalog of deployments and `PORTAL_URL` to Backstage's
    address, then `pc up -d registry`. Copy the deployment's key (**Copy key** in Deployment's Reporting
    section) into the entry's `augur.dev/report-key` annotation. Within 15 minutes Backstage shows the
    deployment, and from then it raises the alarm when a report is more than 30 minutes late, so it notices
