@@ -3,6 +3,8 @@
 # restored to any moment since the oldest base backup, not only to last night's dump (ADR 0064).
 # Each finished WAL file is gzipped into /wal-archive by archive-wal.sh; the backup container takes the
 # nightly base backups, prunes the archive, copies both off the server and tests a restore each week.
+# Connections: at most POSTGRES_MAX_CONNECTIONS, of which POSTGRES_RESERVED_CONNECTIONS only AUGUR's own logins may
+# use (the storage job grants them pg_use_reserved_connections), so apps holding the rest can't lock AUGUR out.
 # Runs as root, as the image's own entrypoint does: it hands the archive folder to postgres, then starts it.
 set -eu
 mkdir -p /wal-archive
@@ -12,4 +14,6 @@ exec docker-entrypoint.sh postgres \
   -c archive_mode=on \
   -c "archive_command=/bin/sh /etc/augur/archive-wal.sh %p %f" \
   -c "archive_timeout=${PITR_ARCHIVE_SECONDS:-900}" \
-  -c hba_file=/etc/augur/pg_hba.conf
+  -c hba_file=/etc/augur/pg_hba.conf \
+  -c "max_connections=${POSTGRES_MAX_CONNECTIONS:-200}" \
+  -c "reserved_connections=${POSTGRES_RESERVED_CONNECTIONS:-40}"

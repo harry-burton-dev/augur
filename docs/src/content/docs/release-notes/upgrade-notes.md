@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Postgres keeps connections back for AUGUR
+
+**From** unreleased
+
+Postgres now takes at most 200 connections (`POSTGRES_MAX_CONNECTIONS`, Postgres's own default was 100) and keeps 40 of them for AUGUR's own logins (`POSTGRES_RESERVED_CONNECTIONS`), so apps can't take every connection. Keycloak's pool is now at most 20 (it was 100) and OpenFGA's 20. Upgrading restarts Postgres once, which takes a few seconds. Nothing to do.
+
 ## Each container has a share of the server
 
 **From** unreleased

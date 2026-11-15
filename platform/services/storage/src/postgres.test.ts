@@ -162,6 +162,19 @@ describe.runIf(process.env.DATABASE_URL)('a platform service’s database login'
       await client.end();
     }
   });
+
+  it('may use the connections Postgres keeps back, which an app’s login may not (reserved_connections)', async () => {
+    await provisionServiceDatabase(admin, { service, password: 'service-password-123' });
+    const may = async (role: string) => (await admin.query(`select pg_has_role($1, 'pg_use_reserved_connections', 'usage') as may`, [role])).rows[0].may;
+    expect(await may(serviceRoleFor(service))).toBe(true);
+    const app = `resvapp${process.pid}`;
+    try {
+      await provisionDatabase(admin, { app, password: 'app-password-1234' });
+      expect(await may(roleFor(app))).toBe(false);
+    } finally {
+      await dropDatabase(admin, app);
+    }
+  });
 });
 
 describe.runIf(process.env.DATABASE_URL)('Keycloak’s database login', () => {
@@ -190,6 +203,7 @@ describe.runIf(process.env.DATABASE_URL)('Keycloak’s database login', () => {
       const owner = await inside.query(`select pg_get_userbyid(datdba) as owner from pg_database where datname = $1`, [database]);
       expect(owner.rows).toEqual([{ owner: role }]);
       expect((await inside.query(`select tableowner from pg_tables where tablename = 'realm'`)).rows).toEqual([{ tableowner: role }]);
+      expect((await inside.query(`select pg_has_role($1, 'pg_use_reserved_connections', 'usage') as may`, [role])).rows).toEqual([{ may: true }]);
     } finally {
       await inside.end();
     }

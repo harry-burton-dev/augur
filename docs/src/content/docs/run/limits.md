@@ -43,6 +43,18 @@ The front door (`web`) holds every caller to a few limits:
 - **An app's own sign-in** (`POST /api/identity/v1/token`, where a part fetches its token with its client
   secret) is held to the sign-in rate above, not the API's.
 
+## Database connections
+
+Postgres takes at most 200 connections at once (`POSTGRES_MAX_CONNECTIONS`), and keeps 40 of them
+(`POSTGRES_RESERVED_CONNECTIONS`) for AUGUR's own logins: its services, Keycloak and OpenFGA. The storage job
+lets those logins use them each time it runs, and an app's login never may, so apps holding every other
+connection can't lock AUGUR out of its own database. Each app's login holds at most 30 (`APP_DATABASE_CONNECTIONS`).
+Each AUGUR service's pool holds at most 10, Keycloak's 20 (`KEYCLOAK_DB_POOL_MAX`) and OpenFGA's 20
+(`OPENFGA_DB_POOL_MAX`): about 130 together, so the defaults leave room for a few apps. With many apps, raise
+`POSTGRES_MAX_CONNECTIONS` (each connection takes a few MB of the server's memory) and run `pc up -d`, which
+restarts Postgres. `pc exec postgres psql -U platform -c 'select usename, count(*) from pg_stat_activity group by 1'`
+shows who holds them.
+
 ## Logs, memory and health
 
 - **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES`),

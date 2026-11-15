@@ -70,6 +70,17 @@ export async function dropSchemasAndRole(sql: Sql, schemas: string[], role: stri
   await sql.query(`drop role ${pg.escapeIdentifier(role)}`);
 }
 
+/**
+ * Lets one of AUGUR's own logins use the connections Postgres keeps back from everyone else (`reserved_connections`),
+ * so apps holding every ordinary connection can't lock AUGUR out of its own database. An app's login never gets this.
+ * The login is NOINHERIT, so the grant says to inherit. Postgres before 16 has no such role, and nothing is done.
+ */
+export async function mayUseReservedConnections(sql: Sql, role: string): Promise<void> {
+  const { rows } = await sql.query<{ has: boolean }>(`select to_regrole('pg_use_reserved_connections') is not null as has`);
+  if (!rows[0]?.has) return;
+  await sql.query(`grant pg_use_reserved_connections to ${pg.escapeIdentifier(role)} with inherit true`);
+}
+
 /** A platform service's database login: "identity" → platform_identity. Its schema is named after the service. */
 export const serviceRoleFor = (service: string) => `platform_${service.replace(/-/g, '_')}`;
 
@@ -132,6 +143,7 @@ export async function provisionServiceDatabase(sql: Sql, { service, password }: 
   await sql.query(`create schema if not exists ${jobs} authorization ${quoted}`);
   await sql.query(`alter schema ${jobs} owner to ${quoted}`);
   await sql.query(`alter role ${quoted} set search_path = ${schema}, public`);
+  await mayUseReservedConnections(sql, role);
   return handOverSchema(sql, service, role);
 }
 
@@ -147,5 +159,6 @@ export async function provisionKeycloakDatabase(sql: Sql, { role, password }: { 
   const { rows } = await sql.query<{ db: string }>('select current_database() as db');
   await sql.query(`alter database ${pg.escapeIdentifier(rows[0].db)} owner to ${quoted}`);
   await sql.query(`alter schema public owner to ${quoted}`);
+  await mayUseReservedConnections(sql, role);
   return handOverSchema(sql, 'public', role);
 }

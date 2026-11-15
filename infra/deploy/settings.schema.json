@@ -805,6 +805,46 @@
       ],
       "x-docs": "docs/src/content/docs/run/restore-to-a-point-in-time.md#how-it-works"
     },
+    "POSTGRES_MAX_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The most connections Postgres takes at once, from every service and app together.",
+      "default": "200",
+      "x-services": [
+        "postgres"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
+    "POSTGRES_RESERVED_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "Of those, how many only AUGUR's own logins may use, so apps holding the rest can't lock AUGUR out of its database.",
+      "default": "40",
+      "x-services": [
+        "postgres"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
+    "KEYCLOAK_DB_POOL_MAX": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The most database connections Keycloak holds at once.",
+      "default": "20",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
+    "OPENFGA_DB_POOL_MAX": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The most database connections OpenFGA holds at once.",
+      "default": "20",
+      "x-services": [
+        "openfga"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
     "MODEL_API_URL": {
       "type": "string",
       "description": "An OpenAI-style API for the model behind Agents, or stand-in; without it models stay off.",
