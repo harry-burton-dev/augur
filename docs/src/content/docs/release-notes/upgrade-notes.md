@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Each container has a share of the server
+
+**From** unreleased
+
+Every container AUGUR builds (its services, the front door, OpenFGA and its jobs) now has a memory limit of 1g (the updater 2g) and may run at most 512 processes. Each app's part runs with at most 256 processes and goes first when the server runs out of memory, from its next install, update or settings change. Nothing to do on most servers. If `pc ps` shows one of AUGUR's services restarting after the upgrade, or a job exited with 137, set `SERVICE_MEM_LIMIT` (or `UPDATER_MEM_LIMIT`) higher in `.env` and run `pc up -d`; `docker stats --no-stream` shows what each uses now.
+
 ## An app that declares its domain events is held to them
 
 **From** unreleased
