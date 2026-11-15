@@ -672,13 +672,15 @@ export const buildApp = async ({
             description: [
               'The topics an app on contract 3 says it reads and each type it publishes, with its version and payload',
               "schema, from its manifest in force (ADR 0104). The events service holds the app to them. `events` is",
-              'absent when the app declares none; `reads` is absent when it doesn’t say what it reads.',
+              'absent when the app declares none; `reads` is absent when it doesn’t say what it reads. `contract` is',
+              'the app’s contract major, for an app on contract 3, which must declare both.',
             ].join(' '),
             params: params('id'),
             response: {
               200: Type.Object(
                 {
                   app: Type.String(),
+                  contract: Type.Optional(Type.Integer({ description: 'Its contract major, for an app on contract 3; absent for one on contract 2' })),
                   events: Type.Optional(
                     Type.Object({
                       reads: Type.Optional(Type.Array(Type.String(), { description: 'Topics, or families such as folio.*' })),
@@ -699,8 +701,9 @@ export const buildApp = async ({
           if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services read what an app declares about events.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-          const events = declaredEvents(manifest3Of(found.entry));
-          return { app: found.entry.id, ...(events ? { events } : {}) };
+          const m3 = manifest3Of(found.entry);
+          const events = declaredEvents(m3);
+          return { app: found.entry.id, ...(m3 ? { contract: m3.contract } : {}), ...(events ? { events } : {}) };
         },
       );
 

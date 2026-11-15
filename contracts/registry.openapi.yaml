@@ -2629,7 +2629,7 @@ paths:
   /apps/{id}/events:
     get:
       summary: The domain events an app declares (platform services)
-      description: The topics an app on contract 3 says it reads and each type it publishes, with its version and payload schema, from its manifest in force (ADR 0104). The events service holds the app to them. `events` is absent when the app declares none; `reads` is absent when it doesn’t say what it reads.
+      description: The topics an app on contract 3 says it reads and each type it publishes, with its version and payload schema, from its manifest in force (ADR 0104). The events service holds the app to them. `events` is absent when the app declares none; `reads` is absent when it doesn’t say what it reads. `contract` is the app’s contract major, for an app on contract 3, which must declare both.
       parameters:
         - schema:
             type: string
@@ -2648,6 +2648,9 @@ paths:
                 properties:
                   app:
                     type: string
+                  contract:
+                    type: integer
+                    description: Its contract major, for an app on contract 3; absent for one on contract 2
                   events:
                     type: object
                     required:
