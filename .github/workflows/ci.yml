@@ -587,6 +587,51 @@ jobs:
           docker start pg
           timeout 120 sh -c 'until docker exec pg psql -U platform -tAc "select pg_is_in_recovery()" 2>/dev/null | grep -qx f; do sleep 1; done'
           test "$(docker exec pg psql -U platform -tAc "select count(*) from registry.apps where id = 'kept'")" = 1
+      - name: A night's backup brings apps' files back with the rows that name them, and fails when one doesn't
+        run: |
+          image() { sed -n "/^  $1:/,/^  [a-z]/s/^    image: //p" infra/deploy/compose.yml | head -n 1; }
+          # A real Garage, as compose.yml runs it, with apps' frontends in its bucket.
+          secret=$(openssl rand -hex 32)
+          docker run -d --name garage -p 127.0.0.1:3900:3900 -e GARAGE_RPC_SECRET="$secret" -e GARAGE_ADMIN_TOKEN="$secret" \
+            -v "$PWD/infra/deploy/garage/garage.toml:/etc/garage.toml:ro" -v garage-meta:/var/lib/garage/meta -v garage-data:/var/lib/garage/data "$(image garage)"
+          g() { docker exec garage /garage "$@"; }
+          timeout 60 sh -c 'until docker exec garage /garage status >/dev/null 2>&1; do sleep 1; done'
+          g layout assign -z ci -c 1G "$(g node id -q | cut -d@ -f1)"
+          g layout apply --version 1
+          g bucket create augur-frontends
+          g key create ci > /tmp/key.txt
+          g bucket allow --read --write augur-frontends --key ci
+          key=$(grep -oE 'GK[0-9a-f]{24}' /tmp/key.txt | head -n 1) && secret_key=$(grep -oE '\b[0-9a-f]{64}\b' /tmp/key.txt | head -n 1)
+          put() {
+            printf '%s\n' "$1" | curl -fsS --aws-sigv4 "aws:amz:garage:s3" --user "$key:$secret_key" \
+              -H "x-amz-content-sha256: UNSIGNED-PAYLOAD" -T - "http://127.0.0.1:3900/augur-frontends/$1"
+          }
+          # The registry's rows for them: one build in a folder of its own, one kept before folders.
+          docker exec -i pg psql -U platform -v ON_ERROR_STOP=1 <<'SQL'
+          create table registry.app_frontends (app_id text, version text, folder text, files jsonb);
+          insert into registry.app_frontends values ('demo', '1.0.0', '1.0.0_3f2a9c1b7d4e', '["remote.js", "style.css"]'), ('old', '0.1.0', null, '["remote.js"]');
+          SQL
+          put apps/demo/1.0.0_3f2a9c1b7d4e/remote.js && put apps/demo/1.0.0_3f2a9c1b7d4e/style.css && put apps/old/0.1.0/remote.js
+          # An older build's file, which the registry keeps when a newer build of the version replaces it: counted, not failed.
+          put apps/demo/1.0.0_000000000000/remote.js
+          backup() {
+            g meta snapshot
+            docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
+              -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v garage-meta:/objects/meta:ro -v garage-data:/objects/data:ro \
+              "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --now
+            sleep 1
+          }
+          newest() { sudo sh -c "ls -1 /tmp/backups/$1 | sort | tail -n 1"; }
+          check() { infra/deploy/backup/files-check.sh "$(newest 'platform-*T*Z.sql.gz')" "$(newest 'objects-*T*Z.tar.gz')"; }
+          backup
+          check | tee /tmp/files.json
+          jq -e '.ok and .rows == 3 and .missing == 0 and .orphans == 1' /tmp/files.json
+          # A row whose file never reached the bucket: an app that wouldn't load after this restore.
+          docker exec pg psql -U platform -qc "insert into registry.app_frontends values ('lost', '2.0.0', '2.0.0_aaaaaaaaaaaa', '[\"remote.js\"]')"
+          backup
+          ! check > /tmp/files.json
+          cat /tmp/files.json
+          jq -e '(.ok | not) and .rows == 4 and .missing == 1 and .firstMissing == "apps/lost/2.0.0_aaaaaaaaaaaa/remote.js"' /tmp/files.json
 
   # The deploy test before the merge, for a pull request that changes what runs on a server (REVIEW.md):
   # this checkout's images built here, a fresh server on them, then the newest release that isn't a dev build or
