@@ -14,8 +14,14 @@ The paths a pull request changes set its tier (`.github/review-tiers.json`). Its
   registry, service-kit, migrations and stores, the SDK's public contract, app-tools, `infra/`, `release/` and
   `.github/`. Needs what Medium needs, under 400 changed lines (or a reason), and:
   - **the deploy test before the merge** where the change runs on a server (`deployTest`): CI's `deploy-test` job;
-  - **Harry's ok** on his paths (`harryOk`: the release path, the updater, sign-in, permissions, backups and
-    workflows). In this order:
+  - **Harry's ok** only on what can't be undone or gives more access (`harryOk` and `harryOkWhen`): a new or
+    changed migration (its entry in the migrations lock) and the migration runner, backups and Postgres, Promote
+    to stable and Halt, the updater's trusted signers, the Review check's own script, workflow and tiers (so no
+    pull request can switch the check off), and a workflow or local action that gains privilege (adds
+    `permissions:`, a `write` scope, `secrets`, `id-token`, a `pull_request_target`, `workflow_run` or
+    `issue_comment` trigger, a `container:`, `services:` or `image:`, or a `docker://` step, or takes away a
+    `permissions:` block or a `read` scope) or uses an action no workflow used before. Every other High pull request merges on green and goes in the auto-ok log
+    (below). For his ok, in this order:
     1. Merge fresh `origin/main` and push. Wait for CI to be green, with only the Review check red.
     2. Ask Harry the three questions below in the thread, and wait for his "ok".
     3. Add the `harry-ok` label, and nothing else. Never add it without his ok. The Review check records the
@@ -30,32 +36,21 @@ the same token. Harry reading the three answers is the gate; the check makes sur
 A bot's pull request (Renovate) has no description to check: CI, the deploy test where it applies, and Harry's
 ok on his paths are its gates.
 
-## The next rules and the auto-ok log
+## The auto-ok log
 
-Harry's ok is meant for changes that are hard to undo, widen who can do what, or change these rules. Most High
-pull requests are neither, so `next` in `.github/review-tiers.json` holds the rules that take over after a
-shadow week (PER-438):
+Harry chose (PER-438) to be asked only about what can't be undone or gives more access. Generated files
+(`notCount`: the migrations lock, `release/kit.json`, the pnpm lockfile) don't set the tier, nor do files only
+renamed (`ignoreRenames`), though a rename still counts for his ok.
 
-- **Harry's ok** only on migrations, backups and Postgres, the release path and its workflows, the updater,
-  sign-in and permissions, and these rules; and on any workflow or local action that gains privilege (adds
-  `permissions:`, a `write` scope, `secrets`, `id-token`, a `pull_request_target`, `workflow_run` or
-  `issue_comment` trigger or a `docker://` step, or takes away a `permissions:` block or a `read` scope) or uses an action no workflow used before.
-- **High without his ok** for the rest of today's High paths: the deploy test, the description's sections and
-  the `/code-review` run are their gates, and they merge on green.
-- **Not counted:** generated files (`notCount`: the migrations lock, `release/kit.json`, the pnpm lockfile)
-  don't set the tier, nor do files only renamed (`ignoreRenames`), though a rename still counts for Harry's ok.
-  The deploy test harness, `docs/release-channels.md` and the PR template are no longer High.
-
-Until the switch, the Review check reports what the next rules make of each pull request, but only the
-current rules decide it. When a pull request merges, the Review workflow's record job writes an **auto-ok
-record** on it (a comment and the `auto-ok` label) if it waited for Harry's ok and the next rules wouldn't have
-asked him: what merged, the paths that set its tier, its checks, and its Not run, How to undo and Risk. That is
-the log of what he would have been spared, and the control centre reads it.
+When a High pull request merges without his ok, the Review workflow's record job writes an **auto-ok record** on
+it (a comment and the `auto-ok` label): what merged, the paths that set its tier, its checks, and its Not run,
+How to undo and Risk. That is the log he reads instead of being asked, and the control centre reads it too.
 
 If Harry reads a record and would not have said ok, he adds the `harry-would-not` label. That is a miss: the
-rule that let it through is tightened before the switch, or, after it, by the next pull request to this file.
-The switch itself moves `next` to the top of the tiers file with `autoOk: true`, which is a change to the rules
-and needs his ok. From then on, each High change that merges without his ok gets the record.
+next pull request to this file or the tiers file tightens the rule that let it through.
+
+A tiers file may hold `next`, rules to try for a week first: the Review check reports what they make of each
+pull request, and the record job also logs a merge that waited for him but wouldn't have under them.
 
 ## Before you open the pull request
 

@@ -9,10 +9,10 @@
 // node scripts/review-tier.mjs                in CI on a pull request (BASE_REF, PR_BODY, PR_LABELS, TIERS_FILE)
 // node scripts/review-tier.mjs --deploy-test  writes deploytest=true|false to $GITHUB_OUTPUT and always passes
 // node scripts/review-tier.mjs --record       on a merged pull request: writes its auto-ok record to RECORD_FILE
-//                                             when it merged without Harry's ok under the next rules (REVIEW.md)
+//                                             when it merged without Harry's ok (REVIEW.md: the auto-ok log)
 //
-// The tiers file may carry `next`: the rules that take over after a shadow week. They are worked out and
-// reported on every pull request, but only the current rules decide whether the check passes.
+// The tiers file may also carry `next`, rules on trial: they are worked out and reported on every pull request,
+// and a merge they would have spared Harry is logged, but only the current rules decide the check.
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { matchesGlob } from 'node:path';
@@ -76,7 +76,8 @@ export const actionsIn = (lines) =>
 export const verdict = (paths, rules, { renamed = [], ...lines } = {}) => {
   const counting = paths.filter((p) => !any(p, rules.notCount));
   const { tier, because } = tierOf(rules.ignoreRenames ? counting.filter((p) => !renamed.includes(p)) : counting, rules);
-  const harry = harryReasons(counting, rules, lines);
+  // Generated files still count for Harry's ok: a new entry in the migrations lock is a new migration.
+  const harry = harryReasons(paths, rules, lines);
   return { tier: harry.length ? 'High' : tier, because: harry.length && tier !== 'High' ? harry : because, harry };
 };
 
@@ -86,7 +87,7 @@ export const verdict = (paths, rules, { renamed = [], ...lines } = {}) => {
  * (`autoOk` in the tiers file): it is High and merged without his ok. Otherwise nothing is logged.
  */
 export const logged = ({ now, next, autoOk = false }) =>
-  next ? now.harry.length > 0 && !next.harry.length : autoOk && now.tier === 'High' && !now.harry.length;
+  (autoOk && now.tier === 'High' && !now.harry.length) || Boolean(next && now.harry.length > 0 && !next.harry.length);
 
 const clip = (text = '', max = 400) => {
   const flat = text.trim().replace(/\s+/g, ' ');
@@ -119,8 +120,8 @@ export const autoOkComment = (record) => {
     .join('\n');
 };
 
-/** Whether any path runs on a server, so the deploy test must pass before the merge. */
-export const needsDeployTest = (paths, tiers) => paths.some((p) => any(p, tiers.deployTest) && !any(p, tiers.notHigh));
+/** Whether any path runs on a server, so the deploy test must pass before the merge. Tests don't (`notDeployTest`, or else `notHigh`). */
+export const needsDeployTest = (paths, tiers) => paths.some((p) => any(p, tiers.deployTest) && !any(p, tiers.notDeployTest ?? tiers.notHigh));
 
 /** The body's `## Heading` sections, by heading, each with its text. */
 export const sectionsOf = (body) => {
@@ -214,7 +215,7 @@ const actionsAt = (base) => {
 
 /**
  * The tiers as the base branch has them, so a pull request can't loosen the rules it is checked by (a change
- * to the tiers file is itself High and waits for Harry). Only where the base has no tiers file yet, the pull
+ * to the tiers file waits for Harry's ok). Only where the base has no tiers file yet, the pull
  * request that adds it, are its own used.
  */
 const tiersAt = (base, file) => {
@@ -274,7 +275,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     const found = sectionsOf(PR_BODY);
     const record = {
       v: 1,
-      phase: next ? 'shadow' : 'live',
+      phase: tiers.autoOk === true && !harry ? 'live' : 'shadow',
       repo: GITHUB_REPOSITORY,
       pr: Number(PR_NUMBER) || PR_NUMBER,
       title: PR_TITLE,
