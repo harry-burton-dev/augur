@@ -2,6 +2,7 @@
 // source on their floor and reads the belief back, and the fence holds at the seam as it does in the store.
 // Each person's standing comes from a stand-in for identity. The service's pool is kg_app, signed in with
 // its own password, as on a deployment.
+import { callerHeaders } from '@augur/service-kit';
 import type { FastifyInstance } from 'fastify';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { knowledgeDb } from './db.testing.ts';
@@ -158,6 +159,38 @@ describe.skipIf(!DATABASE_URL)('the knowledge service over HTTP', () => {
     expect(held.json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('isn’t granted to apps') });
 
     expect((await app.inject({ method: 'GET', url: '/v1/floors' })).statusCode).toBe(401);
+  });
+
+  it('holds an app to the floor it was opened on, and refuses an app calling as itself', async () => {
+    await act('alice', own.alice, 'retain', report('R12', 'MV Private Note'));
+    await act('alice', ORG, 'retain', report('R13', 'MV Org Thing'));
+    const forApp = as('alice', 'team-a', { app: 'notes', scopes: ['knowledge:read'] });
+    const read = (floor: string, headers: Record<string, string>) => app.inject({ url: `/v1/floors/${floor}/entities`, headers });
+
+    // Its scopes were granted on team-a: a floor Alice can see from elsewhere isn't the app's to read.
+    expect((await read('team-a', forApp)).statusCode).toBe(200);
+    expect((await read(own.alice, forApp)).json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('another floor') });
+    expect((await read(ORG, forApp)).json()).toMatchObject({ status: 403, reason: 'not_allowed' });
+    // With no floor checked at all, it is asked for one.
+    expect((await read(ORG, as('alice', undefined, { app: 'notes', scopes: ['knowledge:read'] }))).json()).toMatchObject({ status: 400, reason: 'floor_required' });
+    expect((await app.inject({ url: '/v1/floors', headers: as('alice', undefined, { app: 'notes', scopes: ['knowledge:read'] }) })).json()).toMatchObject({ status: 400, reason: 'floor_required' });
+    // Alice herself still reads each of them.
+    expect((await get('alice', `/v1/floors/${ORG}/entities`, 'team-a')).statusCode).toBe(200);
+
+    // An app's own token names no person: it reads nothing, and can't make someone's own floor its own.
+    const itself = (floor: string, kind: 'org' | 'personal') =>
+      callerHeaders({ id: 'app:notes', name: 'Notes', departments: [], roles: [], app: 'notes', scopes: ['knowledge:read', 'knowledge:extract'], workspace: { id: floor, kind, role: 'member' } });
+    expect((await read(ORG, itself(ORG, 'org'))).json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('as itself') });
+    expect((await app.inject({ url: '/v1/floors', headers: itself(own.bob, 'personal') })).statusCode).toBe(403);
+    const kept = await app.inject({ method: 'POST', url: '/v1/actions/retain', headers: { ...itself(ORG, 'org'), 'idempotency-key': key() }, payload: report('R14') });
+    expect(kept.json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('as itself') });
+    // The ontology is on no floor, so it stays readable with knowledge:read.
+    expect((await app.inject({ url: '/v1/ontology', headers: itself(ORG, 'org') })).statusCode).toBe(200);
+    // Nor does anyone else who isn't a person: one of AUGUR's own services, named as the gateway names it.
+    const service = callerHeaders({ id: 'augur:events', name: 'events', departments: [], roles: [], workspace: { id: own.bob, kind: 'personal', role: 'member' } });
+    expect((await app.inject({ url: '/v1/floors', headers: service })).json()).toMatchObject({ status: 403, reason: 'not_allowed', detail: expect.stringContaining('Only a person') });
+    expect((await db.admin.query('select 1 from kg.floors where id = $1', [own.bob])).rowCount).toBe(0);
+    expect((await get('bob', '/v1/floors', own.bob)).statusCode).toBe(200);
   });
 
   it('serves its catalogue and versions', async () => {
