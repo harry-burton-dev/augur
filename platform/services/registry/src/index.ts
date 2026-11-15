@@ -12,7 +12,7 @@ import { cosignFeedCheck, feedSigner, repoOfFeed, TRUSTED_ROOT_IN_REGISTRY } fro
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { reportingFrom } from './report.ts';
 import { ringFrom, takesPreview } from './ring.ts';
-import { OUTSIDE_ROUTES, unroutedNotice, type OutsideRoute } from './alerts.ts';
+import { unroutedNotice, unroutedOn } from './alerts.ts';
 import { PgAppStore, type AppStore } from './store.ts';
 import { updateNotices } from './notices.ts';
 
@@ -160,18 +160,20 @@ if (EVENTS_URL && credentials) {
 } else log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: a deleted person’s name stays on the upgrades they asked for.');
 
 // A production server's admins hear, weekly, while an alert route outside AUGUR isn't set (unroutedNotice).
-const unrouted = (Object.keys(OUTSIDE_ROUTES) as OutsideRoute[]).filter((key) => !process.env[key]);
-if (ring === 'production' && unrouted.length) {
+// The first try waits for the events service to start beside it; the key keeps it to one a week.
+const unrouted = unroutedOn(ring, process.env);
+if (unrouted.length) {
   log.warn(`${unrouted.join(' and ')} not set: on this production server, an alert about AUGUR itself can reach no one (docs/observability.md, Alerts).`);
   if (EVENTS_URL && credentials) {
-    const tell = () => {
-      const notification = unroutedNotice(unrouted);
-      if (notification) notify({ eventsUrl: EVENTS_URL, credentials, notification }).catch((err) => log.error(`The missing alert routes weren’t told: ${(err as Error).message}`));
-    };
-    tell();
-    const timer = setInterval(tell, 6 * 60 * 60_000);
+    const tell = () => void notify({ eventsUrl: EVENTS_URL, credentials, notification: unroutedNotice(unrouted)! }).catch((err) => log.error(`The missing alert routes weren’t told yet; the registry tries again within the hour (${(err as Error).message}).`));
+    const first = setTimeout(tell, 2 * 60_000);
+    const timer = setInterval(tell, 60 * 60_000);
+    first.unref();
     timer.unref();
-    serving.onStop(() => clearInterval(timer));
+    serving.onStop(() => {
+      clearTimeout(first);
+      clearInterval(timer);
+    });
   }
 }
 

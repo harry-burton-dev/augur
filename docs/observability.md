@@ -32,10 +32,10 @@ Grafana evaluates AUGUR's rules every 30 seconds (`infra/deploy/observability/gr
 
 Each alert, and its all-clear, reaches deployment admins as a notice through the registry (`POST /v1/platform/alerts`, with `ALERT_WEBHOOK_TOKEN`). Grafana sends one notice per incident and repeats a firing one only daily. Email through the deployment's relay joins this once AUGUR has SMTP settings. Grafana sits outside the gateway and the notices, so it still sees them fail; the registry is the one part it needs to tell anyone.
 
-**Outside AUGUR.** A notice needs the registry, the events service and the mail path, so an alert about one of them may reach no one. Two settings in `.env` send alerts off the server without AUGUR, and a production server needs both. Until both are set, the registry tells its deployment admins once a week, and logs it at start.
+**Outside AUGUR.** A notice needs the registry, the events service and the mail path, so an alert about one of them may reach no one. Two settings in `.env` send alerts off the server without AUGUR, and a production server needs both. Until both are set, the registry tells its deployment admins once a week, and logs it at start. It knows only what `.env` says: if Grafana isn't restarted after a change, the heartbeat service sees no beats and raises the alarm.
 
-- `ALERT_OUTSIDE_URL`: every alert, and its all-clear, also goes to this webhook as Grafana's webhook body. Use a chat channel's incoming webhook that takes it, an on-call service, or a relay of your own.
-- `ALERT_HEARTBEAT_URL`: Grafana posts the watchdog here every minute. Point it at a heartbeat (dead-man switch) service, such as a push monitor, set to raise the alarm after about five minutes of silence. When the beats stop, the server, Grafana or the server's way out is down.
+- `ALERT_OUTSIDE_URL`: every alert, and its all-clear, also goes to this webhook, in Grafana's webhook body (the Alertmanager shape). Use an on-call or chat service's Grafana or Alertmanager integration, or a relay of your own. A chat channel's plain incoming webhook (Slack, Teams) refuses that body, so the alerts would be lost.
+- `ALERT_HEARTBEAT_URL`: Grafana posts the watchdog here about every minute (60 to 90 seconds). Point it at a heartbeat (dead-man switch) service, such as a push monitor, set to raise the alarm after about five minutes of silence. When the beats stop, the server, Grafana or the server's way out is down.
 
 An unset route points at the registry's `/v1/platform/alerts/unrouted`, which drops what it gets, so Grafana always has an address. After setting either, run `pc up -d otel-lgtm registry`. To prove them, press **Test** on **Outside AUGUR** and **Heartbeat** under **Alerting → Contact points**: each address gets a test alert.
 

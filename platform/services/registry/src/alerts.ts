@@ -101,6 +101,7 @@ const WEEK = 7 * 24 * 60 * 60_000;
 export function unroutedNotice(missing: readonly OutsideRoute[], now = Date.now()): NewNotification | undefined {
   if (!missing.length) return undefined;
   const what = missing.map((key) => `${key} (${OUTSIDE_ROUTES[key]})`).join(' and ');
+  const them = missing.length > 1 ? ['aren’t', 'they are', 'them'] : ['isn’t', 'it is', 'it'];
   return {
     app: ALERTS_APP,
     recipients: [],
@@ -108,10 +109,17 @@ export function unroutedNotice(missing: readonly OutsideRoute[], now = Date.now(
     key: `alerts-unrouted:${[...missing].sort().join(',')}:${Math.floor(now / WEEK)}`,
     level: 'needs',
     title: 'Alerts reach no one outside AUGUR',
-    detail: `This is a production server, and ${what} isn’t set in its .env. Until it is, an alert about the registry, the notices or the whole server can reach no one. A deployment admin with the server sets it (docs/observability.md, Alerts).`.slice(0, 1000),
+    detail: `This is a production server, and ${what} ${them[0]} set in its .env. Until ${them[1]}, an alert about the registry, the notices or the whole server can reach no one. A deployment admin with the server sets ${them[2]} (docs/observability.md, Alerts).`.slice(0, 1000),
     link: '/status',
   };
 }
+
+/**
+ * The routes outside AUGUR a server is missing, from compose's `${KEY:+set}` (it passes only whether each is
+ * set). Only a production server must have them: elsewhere this is empty.
+ */
+export const unroutedOn = (ring: string, env: Record<string, string | undefined>): OutsideRoute[] =>
+  ring === 'production' ? (Object.keys(OUTSIDE_ROUTES) as OutsideRoute[]).filter((key) => !env[key]) : [];
 
 const sameToken = (given: string, expected: string) => {
   const a = Buffer.from(given);
