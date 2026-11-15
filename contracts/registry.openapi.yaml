@@ -1507,6 +1507,7 @@ components:
                   - failed
                   - went-back
                   - after-watch
+                  - contract-2
               unit:
                 type: string
               message:

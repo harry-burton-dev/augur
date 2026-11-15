@@ -124,3 +124,8 @@ the person's sign-in, so every other app runs in the sandbox. It stays in the ap
 team moves it to the app contract you can let it load in the page on this server: name it in `IN_PAGE_APPS`
 (ids split by commas or spaces), then `pc up -d registry`. Take it out once the app is released on the app
 contract.
+
+`IN_PAGE_APPS` is going: a coming release removes it, and then no app AUGUR didn't make loads into the
+shell's page. Until then, Deployment's **Needs you** lists every app still on contract 2 and whether it opens
+only because `IN_PAGE_APPS` names it, and the registry's log says which apps the setting lets in each time
+it starts.

@@ -361,7 +361,7 @@ export const Overview = Type.Object(
     ),
     needsYou: Type.Array(
       Type.Object({
-        kind: Type.Enum(['halted', 'failed', 'went-back', 'after-watch']),
+        kind: Type.Enum(['halted', 'failed', 'went-back', 'after-watch', 'contract-2']),
         unit: Type.String(),
         message: Type.String(),
         result: Type.Optional(Type.Object({ kind: Type.Enum(RESULT_KINDS), id: Type.String() }, { description: 'The result to mark looked at' })),

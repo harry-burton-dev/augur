@@ -47,6 +47,20 @@ const SUNDAY_2AM = '2026-11-01T02:30:00Z';
 const MONDAY = '2026-11-02T12:00:00Z';
 
 describe.runIf(DATABASE_URL)('the Upgrade Centre overview (ADR 0020)', () => {
+  it('lists every app still on contract 2, saying whether it opens only through IN_PAGE_APPS (PER-472)', async () => {
+    await db.reset();
+    const updates = new UpdateChecker({ feed: async () => [], running: { version: '0.13.0', channel: 'stable' }, channel: 'stable', ring: 'production' });
+    const asApp = async (headers: Record<string, string | string[] | undefined>) => (headers.authorization === 'Bearer app-library' ? { kind: 'app' as const, app: 'library' } : verifyService(headers));
+    const library = { id: 'library', name: 'Library', route: '/library', entry: '/apps/library/entry.js', version: '0.1.0', sdk: '^1.0.0 || ^2.0.0' };
+    const allowed = await db.app({ verifyService: asApp, updates, inPageApps: ['library'] });
+    expect((await allowed.inject({ method: 'PUT', url: '/v1/apps/library', headers: { authorization: 'Bearer app-library' }, payload: library })).statusCode).toBe(201);
+    const needs = (await allowed.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json().needsYou;
+    expect(needs).toEqual([{ kind: 'contract-2', unit: 'library', message: expect.stringMatching(/^Library is on contract 2 and opens only because IN_PAGE_APPS names it\. A coming release/) }]);
+    // Taken out of IN_PAGE_APPS, it no longer opens, and the overview says so.
+    const refused = await db.app({ verifyService: asApp, updates, inPageApps: [] });
+    expect((await refused.inject({ method: 'GET', url: '/v1/platform/overview', headers: admin })).json().needsYou).toEqual([{ kind: 'contract-2', unit: 'library', message: expect.stringMatching(/^Library is on contract 2, so it doesn’t open/) }]);
+  });
+
   it('shows AUGUR with its default record, in a sentence, and what Automatic does with the next release', async () => {
     const { app } = await server([release('0.13.1'), release('0.13.0')], MONDAY);
     expect((await app.inject({ method: 'GET', url: '/v1/platform/overview', headers: editor })).statusCode).toBe(403);

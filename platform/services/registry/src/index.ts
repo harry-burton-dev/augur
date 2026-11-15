@@ -93,6 +93,7 @@ const defaults = parseAppIds(process.env.DEFAULT_APPS, 'DEFAULT_APPS');
 // A break-glass: apps not made by AUGUR that may still load into the shell's page on contract 2 (ADR 0076).
 const inPage = parseAppIds(process.env.IN_PAGE_APPS, 'IN_PAGE_APPS');
 if (defaults.problems.length || inPage.problems.length) throw new Error([...defaults.problems, ...inPage.problems].join(' '));
+if (inPage.apps.length) log.warn(`IN_PAGE_APPS lets ${inPage.apps.join(', ')} into the shell’s page on contract 2: a coming release removes IN_PAGE_APPS, and they stop opening then.`);
 // The publisher's feed is signed by its Release feed workflow (ADR 0017); FEED_SIGNER names another
 // signer, for a fork. Checked offline when the deployment has Sigstore's trust root (docs/mirror.md).
 const signer = process.env.FEED_SIGNER || feedSigner(repoOfFeed(feedUrl) ?? repoOfFeed(DEFAULT_OCI_FEED_URL)!);

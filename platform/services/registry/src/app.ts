@@ -845,9 +845,9 @@ export const buildApp = async ({
         : undefined;
       await app.register(featurePreviewRoutes({ store, roles, ring: updates.ring, serviceOf, record, chainOf }));
       await app.register(appRunnerRoutes({ store, roles, live, updates: appUpdates, ring: updates.ring, allowPrPreviews, sdkVersion: SDK_VERSION, audit: audit && ((entry) => audit(entry)), serviceOf, record, timeZone, now, ...(releaseFetch ? { releaseFetch } : {}), ...(platformUrl ? { platformUrl } : {}), ...(dataGraceDays ? { dataGraceDays } : {}), ...(defaultApps ? { defaultApps } : {}), ...(knowledge ? { knowledge } : {}) }));
-      await app.register(overviewRoutes({ store, roles, updates, appUpdates, timeZone, record, now, reporting }));
+      await app.register(overviewRoutes({ store, roles, updates, appUpdates, timeZone, record, now, reporting, inPageApps }));
       // What this deployment runs, reported to Backstage (ADR 0019).
-      const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now });
+      const overview = overviewBuilder({ store, updates, appUpdates, timeZone, now, inPageApps });
       const sender = new ReportSender({ reporting, store, overview, fetchImpl: reportFetch, now, log: { info: (m) => app.log.info(m), warn: (m) => app.log.warn(m) } });
       await app.register(reportRoutes({ reporting, roles, store, sender, overview, now }));
       sender.start();

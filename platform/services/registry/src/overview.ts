@@ -24,6 +24,7 @@ import { CHANGE_SIGN_IN_MS, DEPLOYMENT_ADMIN, needsDeploymentAdmin, roleChecks, 
 import type { AppJob, AppStore, InstalledApp, Upgrade } from './store.ts';
 import { actorOf, isFleetCaller, requesterOf } from './fleet.ts';
 import { updatesView, type Halt, type UpdateChecker, type UpdatesView } from './updates.ts';
+import { manifest3Of } from './apps3.ts';
 
 /** A finished upgrade (AUGUR) or install (an app), as the overview shows the last one. */
 export interface UnitResult {
@@ -60,7 +61,7 @@ export interface UnitOverview {
 }
 
 export interface OverviewNeed {
-  kind: 'halted' | 'failed' | 'went-back' | 'after-watch';
+  kind: 'halted' | 'failed' | 'went-back' | 'after-watch' | 'contract-2';
   unit: string;
   message: string;
   /** The result to mark looked at, for failed and went-back. */
@@ -114,7 +115,21 @@ export interface OverviewInput {
   appReleases: AppFeedRelease[];
   names: Record<string, string>;
   states: StoredDesiredState[];
+  /** The enabled apps not made by AUGUR still on contract 2, and whether IN_PAGE_APPS lets each into the shell's page. */
+  contract2?: { app: string; name: string; inPage: boolean }[];
 }
+
+/**
+ * Why an app on contract 2 needs an admin: a coming release stops loading any app AUGUR didn't make into the shell's
+ * page (ADR 0076), so one IN_PAGE_APPS lets in stops opening then, and one it doesn't already doesn't open.
+ */
+export const contract2Need = ({ app, name, inPage }: { app: string; name: string; inPage: boolean }): OverviewNeed => ({
+  kind: 'contract-2',
+  unit: app,
+  message: inPage
+    ? `${name} is on contract 2 and opens only because IN_PAGE_APPS names it. A coming release of AUGUR removes IN_PAGE_APPS, and ${name} stops opening then: ask its team for a release on the app contract before you upgrade.`
+    : `${name} is on contract 2, so it doesn’t open: only AUGUR’s own apps load into its page. Ask its team for a release on the app contract, or remove it.`,
+});
 
 /** Builds the overview from what the registry knows. Pure, for tests. */
 export const overviewOf = (input: OverviewInput): Overview => {
@@ -183,6 +198,7 @@ export const overviewOf = (input: OverviewInput): Overview => {
     const need = resultNeed(u);
     if (need) needsYou.push(need);
   }
+  for (const c of input.contract2 ?? []) needsYou.push(contract2Need(c));
 
   return {
     ring,
@@ -205,11 +221,13 @@ export interface OverviewRouteOptions {
   reporting?: { mode: 'send' | 'file' | 'off'; why: string };
   /** Today's admin roles, each check compared with the permissions service (shadow mode). */
   roles?: RoleChecks;
+  /** The apps not made by AUGUR that IN_PAGE_APPS lets into the shell's page on contract 2. */
+  inPageApps?: readonly string[];
 }
 
 /** The overview from the registry's store and checkers, for the routes and for the deployment's report. */
 export const overviewBuilder =
-  ({ store, updates, appUpdates, timeZone, now = () => new Date() }: Pick<OverviewRouteOptions, 'store' | 'updates' | 'appUpdates' | 'timeZone' | 'now'>) =>
+  ({ store, updates, appUpdates, timeZone, now = () => new Date(), inPageApps = [] }: Pick<OverviewRouteOptions, 'store' | 'updates' | 'appUpdates' | 'timeZone' | 'now' | 'inPageApps'>) =>
   async (): Promise<Overview> => {
     const ring = updates.ring;
     const [records, upgrades, installed, jobs, states] = await Promise.all([store.records(), store.upgrades(), store.installedApps(), store.appJobs(), store.desiredStates()]);
@@ -225,11 +243,13 @@ export const overviewBuilder =
       appReleases: appUpdates.result.releases,
       names: Object.fromEntries(records.map((r) => [r.entry.id, r.entry.name])),
       states,
+      // Every registered app is one AUGUR didn't make: its own frontends aren't in the store.
+      contract2: records.filter((r) => r.enabled && !manifest3Of(r.entry)).map((r) => ({ app: r.entry.id, name: r.entry.name, inPage: inPageApps.includes(r.entry.id) })),
     });
   };
 
 export const overviewRoutes =
-  ({ store, updates, appUpdates, timeZone, record, now = () => new Date(), reporting, roles = roleChecks() }: OverviewRouteOptions) =>
+  ({ store, updates, appUpdates, timeZone, record, now = () => new Date(), reporting, roles = roleChecks(), inPageApps }: OverviewRouteOptions) =>
   async (plain: FastifyInstance) => {
     const app = plain.withTypeProvider<TypeBoxTypeProvider>();
     const ring = updates.ring;
@@ -238,7 +258,7 @@ export const overviewRoutes =
       return roles.admin(site, caller, 'admin') ? caller : undefined;
     };
 
-    const built = overviewBuilder({ store, updates, appUpdates, timeZone, now });
+    const built = overviewBuilder({ store, updates, appUpdates, timeZone, now, inPageApps });
     // Whether Backstage sees what this server runs (ADR 0019), so the Upgrade Centre can say when it doesn't.
     const overview = async (): Promise<Overview> => ({ ...(await built()), ...(reporting ? { reporting: { mode: reporting.mode, why: reporting.why } } : {}) });
 
