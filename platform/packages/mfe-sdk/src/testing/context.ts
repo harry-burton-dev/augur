@@ -99,7 +99,8 @@ export const fakeContext = (options: FakeContextOptions = {}): FakeContext => {
   const ctx: FakeContext = {
     user: { ...testUser, ...options.user },
     getToken,
-    bus: options.bus ?? createEventBus(),
+    // A failing check in a handler fails the test at the emit, once every handler has run.
+    bus: options.bus ?? createEventBus({ onError: (err) => { throw err; } }),
     async raise(intent) {
       raised.push(intent);
     },
