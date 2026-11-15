@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## An app reads only the domain events on its floors, and hears when it fell behind
+
+**From** unreleased
+
+`GET /v1/domain-events` now gives an app only the events on floors where it holds `events:subscribe`, and those on no floor; AUGUR's own services still read every floor's (ADR 0104). A follower whose place is behind what was pruned (`DOMAIN_EVENTS_KEEP_DAYS`, 30 days) gets **410** with the oldest event still kept, where it used to skip the missing ones silently. The service kit's `followEvents` takes an `onGap(oldest)` to rebuild and read on; an app on an older kit sees each read fail until it is rebuilt. Nothing to do on the server. An app that reads events across floors should check its floors' grants in Admin → Apps.
+
 ## A retired or removed app's data waits one release before it's dropped
 
 **From** unreleased

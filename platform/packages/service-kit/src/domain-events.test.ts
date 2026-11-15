@@ -184,6 +184,20 @@ describe('followEvents', () => {
     expect(saved).toEqual(['40', '41', '45']);
   });
 
+  it('is told when events past its place were pruned: it rebuilds and reads on from the oldest kept, or says so (ADR 0104)', async () => {
+    const gone = (async () => new Response(JSON.stringify({ error: 'gone', message: 'Events up to 90 were pruned.', oldest: '91' }), { status: 410 })) as unknown as typeof fetch;
+    let place: string | undefined = '40';
+    const rebuilt: string[] = [];
+    const options = { eventsUrl: 'http://events:8084', credentials, fetchImpl: gone, topics: ['platform.team.*'], handle: async () => undefined };
+    const cursor = { load: async () => place, save: async (seq: string) => void (place = seq) };
+    expect(await followEvents({ ...options, cursor, onGap: async (oldest) => void rebuilt.push(oldest) }).poll()).toBe(0);
+    expect([rebuilt, place]).toEqual([['91'], '90']);
+    // Without a way to rebuild, it never moves on past what it missed.
+    place = '40';
+    await expect(followEvents({ ...options, cursor }).poll()).rejects.toThrow(/missed events up to 91: Events up to 90 were pruned\. It needs rebuilding/);
+    expect(place).toBe('40');
+  });
+
   it('hands over each event once, in order, keeping its place after each', async () => {
     const events = fakeEvents();
     events.kept.push(...['a', 'b', 'c'].map((id, i) => ({ seq: String(i + 1), id, topic: 'folio.document.published', publisher: 'folio', at: '', payload: { id } })));
