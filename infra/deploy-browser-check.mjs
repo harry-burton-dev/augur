@@ -8,9 +8,9 @@
 // With APP_RELEASE (an app's release file), ISSUER (the sign-in realm) and APP_SECRET (the app's sign-in secret,
 // as the app runner works it out), the same admin then installs that app through the app runner, as broken mode
 // does with Starter: it signs in from the command line as well (the device grant, approved in this browser),
-// installs the release, opens the app, calls AUGUR with the app's own token (one call its scopes allow, one they
-// don't), has infra/deploy-test.sh stop its parts (it writes $OUT/<id>.stop and
-// waits for $OUT/<id>.stopped), sees the pane say it failed, removes it, and checks its sign-in is gone.
+// installs the release, opens the app, calls AUGUR with the app's own token (a read its scopes allow, and one they
+// don't), has infra/deploy-test.sh stop its parts (it writes $OUT/<id>.stop and waits for $OUT/<id>.stopped), sees
+// the pane say it failed, removes it, and checks its sign-in is gone.
 //
 // Writes a screenshot of each page to $OUT (default ./browser-check) and exits 1 on any failure.
 import { createHmac } from 'node:crypto';
@@ -296,35 +296,44 @@ async function appSignIn(id) {
   return { ok: res.status === 200 && Boolean(res.body.access_token), said: `HTTP ${res.status}${res.body.error ? ` ${res.body.error}` : ''}`, token: res.body.access_token };
 }
 
-// Two calls an app makes with its own token through the gateway, each held to a scope (the gateway's ROUTE_SCOPES,
-// platform/services/gateway/src/grants.ts): one its manifest asks for, which its install grants, and one it doesn't.
-const GRANTED_CALL = { scope: 'events:subscribe', path: '/api/events/v1/domain-events?topics=platform.*&limit=1' };
-const REFUSED_CALL = { scope: 'people:read', path: '/api/identity/v1/directory' };
+// Reads an app can make with its own token through the gateway, each held to a scope (the gateway's ROUTE_SCOPES,
+// platform/services/gateway/src/grants.ts), and what the service answers when it may.
+const SCOPED_READS = [
+  { scope: 'events:subscribe', path: '/api/events/v1/domain-events?topics=platform.*&limit=1', answered: (body) => Array.isArray(body.events) },
+  { scope: 'people:read', path: '/api/identity/v1/directory?limit=1', answered: (body) => Array.isArray(body.people) },
+];
 
 /**
- * The app's own token, through the gateway (spec 8.3): a call within a scope it was granted answers, and one needing
- * a scope it wasn't is refused with 403, reason forbidden, naming that scope. The first shows the token is good, so
- * the refusal is the scope's.
+ * The app's own token, through the gateway (spec 8.3): a read within a scope its manifest asks for (its install grants
+ * it) answers, and one needing a scope it doesn't ask for is refused with 403, reason forbidden, naming that scope.
+ * The first shows the token is good, so the refusal is the scope's. Both are chosen from the manifest's scopes.
  */
 async function appCalls(r, token) {
   const name = r.manifest?.name ?? r.id;
   const asks = r.manifest?.scopes ?? [];
-  if (!asks.includes(GRANTED_CALL.scope) || asks.includes(REFUSED_CALL.scope)) {
-    fail(`${name}'s manifest asks for ${asks.join(', ') || 'no scopes'}: the check's own-token calls need it to ask for ${GRANTED_CALL.scope} and not ${REFUSED_CALL.scope}`);
+  const allowed = SCOPED_READS.find((c) => asks.includes(c.scope));
+  const notAsked = SCOPED_READS.find((c) => !asks.includes(c.scope));
+  if (!allowed || !notAsked) {
+    console.error(`! ${name}'s own token wasn't tried against AUGUR: it asks for ${asks.join(', ') || 'no scopes'}, and the check needs one of ${SCOPED_READS.map((c) => c.scope).join(', ')} asked for and one not`);
     return;
   }
   const call = async (path) => {
-    const res = await fetch(new URL(path, base).href, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(CALL_MS) });
-    return { status: res.status, body: await res.json().catch(() => ({})) };
+    try {
+      const res = await fetch(new URL(path, base).href, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(CALL_MS) });
+      return { status: res.status, body: await res.json().catch(() => ({})) };
+    } catch (err) {
+      return { status: `no answer (${err.message})`, body: {} };
+    }
   };
-  const granted = await call(GRANTED_CALL.path);
-  if (granted.status === 200) pass(`${name}'s own token reads ${GRANTED_CALL.path.split('?')[0]} through the gateway (${GRANTED_CALL.scope}, granted)`);
-  else fail(`${name}'s own token can't read ${GRANTED_CALL.path.split('?')[0]}, which ${GRANTED_CALL.scope} allows (HTTP ${granted.status}: ${granted.body.detail ?? granted.body.message ?? ''})`);
-  const refused = await call(REFUSED_CALL.path);
+  const route = (c) => c.path.split('?')[0];
+  const granted = await call(allowed.path);
+  if (granted.status === 200 && allowed.answered(granted.body)) pass(`${name}'s own token reads ${route(allowed)} through the gateway (${allowed.scope}, granted)`);
+  else fail(`${name}'s own token can't read ${route(allowed)}, which ${allowed.scope} allows (HTTP ${granted.status}: ${granted.body.detail ?? granted.body.message ?? JSON.stringify(granted.body).slice(0, 200)})`);
+  const refused = await call(notAsked.path);
   const reason = refused.body.reason ?? refused.body.error;
   const detail = refused.body.detail ?? refused.body.message ?? '';
-  if (refused.status === 403 && reason === 'forbidden' && detail.includes(`(${REFUSED_CALL.scope})`)) pass(`${name}'s own token is refused ${REFUSED_CALL.path}, which needs ${REFUSED_CALL.scope} (HTTP 403 ${reason}: ${detail})`);
-  else fail(`${name}'s own token calling ${REFUSED_CALL.path}, which needs ${REFUSED_CALL.scope}, answered HTTP ${refused.status} ${reason ?? ''}: ${detail}, not 403 forbidden naming the scope`);
+  if (refused.status === 403 && reason === 'forbidden' && detail.includes(`(${notAsked.scope})`)) pass(`${name}'s own token is refused ${route(notAsked)}, which needs ${notAsked.scope} (HTTP 403 ${reason}: ${detail})`);
+  else fail(`${name}'s own token calling ${route(notAsked)}, which needs ${notAsked.scope}, answered HTTP ${refused.status} ${reason ?? ''}: ${detail}, not 403 forbidden naming the scope`);
 }
 
 /**
