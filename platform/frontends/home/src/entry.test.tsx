@@ -179,3 +179,24 @@ describe('home, design direction previews (PER-283)', () => {
     unmount(el);
   });
 });
+
+describe('when Home throws', () => {
+  it('stops only Home, says it is AUGUR’s to fix and who passes it on, and tries again', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    let answer: HomeState = { needs: [null as never], cards: [] };
+    const bus = createEventBus();
+    bus.on(HOME_CHANNEL.ready, () => bus.emit(HOME_CHANNEL.state, answer));
+    const el = document.createElement('div');
+    mount(el, ctx(bus));
+    const alert = el.querySelector('[role="alert"]');
+    expect(alert?.textContent).toContain('Home stopped');
+    expect(alert?.textContent).toMatch(/fault in AUGUR/);
+    expect(alert?.textContent).toMatch(/admin/);
+    answer = state;
+    press([...el.querySelectorAll('button')].find((b) => b.textContent === 'Try again'));
+    expect(el.querySelector('[role="alert"]')).toBeNull();
+    expect(title(el)).toContain('Sam');
+    unmount(el);
+    vi.restoreAllMocks();
+  });
+});
