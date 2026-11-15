@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { frontendDigest, frontendPathProblem, FrontendProblem, frontendTypeOf, frontendTypeProblem, packFrontend, publishFrontend, readFrontend, unpackFrontend } from './frontend.ts';
+import { frontendDigest, frontendPathProblem, FrontendProblem, FRONTEND_TYPES, frontendTypeOf, frontendTypeProblem, packFrontend, publishFrontend, readFrontend, unpackFrontend } from './frontend.ts';
 
 const built = () => {
   const dir = mkdtempSync(join(tmpdir(), 'frontend-'));
@@ -109,5 +110,20 @@ describe('publishFrontend', () => {
     const base = { registryUrl: 'http://registry:8082', credentials, app: 'expenses', version: '1.2.0', dir: built() };
     expect(await publishFrontend({ ...base, fetchImpl: answer(501) })).toBe(false);
     await expect(publishFrontend({ ...base, fetchImpl: answer(409) })).rejects.toThrow('answered 409: Different files.');
+  });
+});
+
+describe('the front door', () => {
+  it('serves under /apps/ exactly the file types a frontend may hold', () => {
+    const conf = readFileSync(fileURLToPath(new URL('../../../../infra/deploy/nginx.conf', import.meta.url)), 'utf8');
+    const served = /location ~\* \^\/apps\/\(\?!\.\*\\\.\(\?:([^)]+)\)\$\)/.exec(conf)?.[1];
+    expect(served, 'the refusing location in nginx.conf').toBeDefined();
+    const pattern = new RegExp(`^(?:${served})$`, 'i');
+    const known = ['js', 'mjs', 'css', 'json', 'map', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'avif', 'ico', 'woff', 'woff2', 'ttf', 'otf', 'wasm', 'svg', 'html', 'xhtml', 'xml', 'txt', 'pdf'];
+    for (const ext of new Set([...known, ...Object.keys(FRONTEND_TYPES)])) expect(pattern.test(ext), ext).toBe(Object.hasOwn(FRONTEND_TYPES, ext));
+  });
+
+  it('keeps the list from being changed at run time', () => {
+    expect(Object.isFrozen(FRONTEND_TYPES)).toBe(true);
   });
 });

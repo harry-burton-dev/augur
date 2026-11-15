@@ -36,9 +36,9 @@ export const frontendPathProblem = (path: string): string | undefined => {
  * /apps/ is on the shell's own origin, so a page or an SVG there, opened at its address, would run script as
  * the shell and could read the person's session: those are never held. The rest is what app frontends ship
  * (scripts, styles, JSON and source maps, images, fonts, WebAssembly), none of which runs as a page. The front
- * door serves the same list (infra/deploy/nginx.conf) and refuses anything else.
+ * door serves the same list (infra/deploy/nginx.conf, held to it by frontend.test.ts) and refuses anything else.
  */
-export const FRONTEND_TYPES: Readonly<Record<string, string>> = {
+export const FRONTEND_TYPES: Readonly<Record<string, string>> = Object.freeze({
   js: 'text/javascript; charset=utf-8',
   mjs: 'text/javascript; charset=utf-8',
   css: 'text/css; charset=utf-8',
@@ -54,8 +54,9 @@ export const FRONTEND_TYPES: Readonly<Record<string, string>> = {
   woff: 'font/woff',
   woff2: 'font/woff2',
   ttf: 'font/ttf',
+  otf: 'font/otf',
   wasm: 'application/wasm',
-};
+});
 
 const extensionOf = (path: string) => {
   const name = path.slice(path.lastIndexOf('/') + 1);
