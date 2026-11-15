@@ -1,6 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { AUDIT_OUTBOX_COLUMNS, auditOutbox } from './audit-outbox.js';
+import { LOCK_NAMESPACE } from './locks.js';
 
 const credentials = { name: 'identity', getToken: async () => 'platform-identity' };
 
@@ -93,12 +94,12 @@ describe.runIf(process.env.DATABASE_URL)('the audit outbox', () => {
   it('sends from one instance at a time, so order holds', async () => {
     const holder = await pool.connect();
     try {
-      await holder.query('select pg_advisory_lock(hashtext($1))', [table]);
+      await holder.query('select pg_advisory_lock($1, hashtext($2))', [LOCK_NAMESPACE.auditOutbox, table]);
       const events = fakeAudit();
       const outbox = auditOutbox({ pool, table, eventsUrl: 'http://events:8084', credentials, fetchImpl: events.fetchImpl });
       await outbox.add({ actor: { id: 'registry', kind: 'service' }, app: 'registry', action: 'app.updated', target: 'x' });
       expect(await outbox.flush()).toBe(0);
-      await holder.query('select pg_advisory_unlock(hashtext($1))', [table]);
+      await holder.query('select pg_advisory_unlock($1, hashtext($2))', [LOCK_NAMESPACE.auditOutbox, table]);
       expect(await outbox.flush()).toBe(1);
     } finally {
       holder.release();

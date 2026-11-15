@@ -8,7 +8,7 @@
  */
 import pg from 'pg';
 import { loadConfig } from './config.js';
-import { statementTimeoutMs, steadyPool } from './pools.js';
+import { connectTimeoutMs, statementTimeoutMs, steadyPool } from './pools.js';
 
 /** A row's shape: column names to values. */
 export type DatabaseRow = Record<string, unknown>;
@@ -52,6 +52,7 @@ export const appDatabaseFromEnv = (service: string, env: NodeJS.ProcessEnv = pro
       user: env.DATABASE_USER,
       password: env.DATABASE_PASSWORD,
       max: Number(env.DATABASE_CONNECTIONS || 0) || undefined,
+      connectionTimeoutMillis: connectTimeoutMs(env),
     }),
     undefined,
     statementTimeoutMs(env),
