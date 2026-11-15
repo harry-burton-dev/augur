@@ -115,8 +115,8 @@ export interface OverviewInput {
   appReleases: AppFeedRelease[];
   names: Record<string, string>;
   states: StoredDesiredState[];
-  /** The enabled apps not made by AUGUR still on contract 2, and whether IN_PAGE_APPS lets each into the shell's page. */
-  contract2?: { app: string; name: string; inPage: boolean }[];
+  /** The apps not made by AUGUR still on contract 2, and whether IN_PAGE_APPS lets each into the shell's page. */
+  contract2?: { app: string; inPage: boolean }[];
 }
 
 /**
@@ -198,7 +198,7 @@ export const overviewOf = (input: OverviewInput): Overview => {
     const need = resultNeed(u);
     if (need) needsYou.push(need);
   }
-  for (const c of input.contract2 ?? []) needsYou.push(contract2Need(c));
+  for (const c of input.contract2 ?? []) needsYou.push(contract2Need({ ...c, name: input.names[c.app] ?? c.app }));
 
   return {
     ring,
@@ -243,8 +243,9 @@ export const overviewBuilder =
       appReleases: appUpdates.result.releases,
       names: Object.fromEntries(records.map((r) => [r.entry.id, r.entry.name])),
       states,
-      // Every registered app is one AUGUR didn't make: its own frontends aren't in the store.
-      contract2: records.filter((r) => r.enabled && !manifest3Of(r.entry)).map((r) => ({ app: r.entry.id, name: r.entry.name, inPage: inPageApps.includes(r.entry.id) })),
+      // Every registered app is one AUGUR didn't make: its own frontends aren't in the store. One turned off is listed
+      // too, since it won't open when it's turned back on after IN_PAGE_APPS goes.
+      contract2: records.filter((r) => !manifest3Of(r.entry)).map((r) => ({ app: r.entry.id, inPage: inPageApps.includes(r.entry.id) })),
     });
   };
 

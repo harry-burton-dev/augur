@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-A coming release removes `IN_PAGE_APPS`: after it, no app AUGUR didn't make loads into the shell's page, so an app on contract 2 that the setting lets in today stops opening. From this release, Deployment's **Needs you** lists each app still on contract 2 and says whether it opens only because `IN_PAGE_APPS` names it, and the registry logs which apps the setting lets in each time it starts (`IN_PAGE_APPS lets` in `pc logs registry`). Nothing to do on the server now. For each app listed, ask its team for a release on the app contract, install it, then take the app out of `IN_PAGE_APPS` and run `pc up -d registry`.
+A coming release removes `IN_PAGE_APPS`: after it, no app AUGUR didn't make loads into the shell's page, so an app on contract 2 that the setting lets in today stops opening. From this release, Deployment's **Needs you** lists each app still on contract 2 and says whether it opens only because `IN_PAGE_APPS` names it, and the registry logs the apps the setting names each time it starts (`IN_PAGE_APPS names` in `pc logs registry`). It is a warning: it doesn't mark the deployment unhealthy in its report to Backstage. Nothing to do on the server now. For each app listed, ask its team for a release on the app contract, install it, then take the app out of `IN_PAGE_APPS` and run `pc up -d registry`.
 
 ## The binding events are gone
 

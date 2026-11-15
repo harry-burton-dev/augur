@@ -75,7 +75,8 @@ const attr = (key: string, value: string) => ({ key, value: { stringValue: value
 
 /** The record of what this deployment runs, from the Upgrade Centre's overview. Pure, for tests. */
 export function reportOf(overview: Overview, { deployment, reason, now }: { deployment: string; reason: ReportReason; now: Date }) {
-  const needs = overview.needsYou;
+  // An app still on contract 2 is a warning before an upgrade, not something failing (PER-472).
+  const needs = overview.needsYou.filter((n) => n.kind !== 'contract-2');
   const healthOf = (unit: string) => {
     const need = needs.find((n) => n.unit === unit);
     return need ? { healthy: false, status: need.message } : { healthy: true, status: 'Runs as it should.' };

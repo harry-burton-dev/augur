@@ -127,5 +127,5 @@ contract.
 
 `IN_PAGE_APPS` is going: a coming release removes it, and then no app AUGUR didn't make loads into the
 shell's page. Until then, Deployment's **Needs you** lists every app still on contract 2 and whether it opens
-only because `IN_PAGE_APPS` names it, and the registry's log says which apps the setting lets in each time
+only because `IN_PAGE_APPS` names it, and the registry's log names the apps the setting holds each time
 it starts.

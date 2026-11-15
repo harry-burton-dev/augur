@@ -158,7 +158,9 @@ const ask = (v: View, rows: UnitRow[]): RemoteNode => {
     });
   }
   const items = needsYou(o, v.data.installs?.installed ?? []);
-  const first = items[0];
+  // An app still on contract 2 is a warning before an upgrade: it never hides the upgrade it warns about.
+  const first = items.find((i) => i.kind !== 'contract-2');
+  const contract2 = items.find((i) => i.kind === 'contract-2');
   if (first) {
     return quill('quill-notice', { tone: 'needs', heading: first.title, action: 'Review', more: items.length > 1 ? items.length - 1 : undefined, onAction: () => v.on.go(unitPath(first.unit, AUGUR)) }, first.why);
   }
@@ -173,6 +175,9 @@ const ask = (v: View, rows: UnitRow[]): RemoteNode => {
       .filter(Boolean)
       .join(' ');
     return quill('quill-notice', { tone: 'needs', heading: `Update available: AUGUR ${u.next}`, ...(v.may ? { action: 'Review the upgrade', onAction: () => v.on.go(pathOf({ page: 'augur' })) } : {}) }, body);
+  }
+  if (contract2) {
+    return quill('quill-notice', { tone: 'needs', heading: contract2.title, action: 'Review', more: items.length > 1 ? items.length - 1 : undefined, onAction: () => v.on.go(unitPath(contract2.unit, AUGUR)) }, contract2.why);
   }
   return null;
 };

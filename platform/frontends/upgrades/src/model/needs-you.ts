@@ -44,7 +44,7 @@ export const needsYou = (overview: Overview, apps: InstalledApp[]): NeedsYouItem
         n.kind === 'halted'
           ? { verb: 'Move off it', to: unitPath(n.unit) }
           : n.kind === 'contract-2'
-            ? { verb: 'See the apps', to: '/apps' }
+            ? { verb: 'Open it', to: unitPath(n.unit) }
             : { verb: 'Open the log', to: n.result ? `/history#${n.result.id}` : '/history' },
       result: n.result,
     }));

@@ -32,6 +32,14 @@ const overview = (extra: Partial<Overview> = {}): Overview => ({
   ...extra,
 });
 
+describe('the record’s health', () => {
+  it('stays healthy for an app still on contract 2, which is a warning, not a fault (PER-472)', () => {
+    const at = new Date('2026-11-15T12:00:00Z');
+    const report = reportOf(overview({ needsYou: [{ kind: 'contract-2', unit: 'library', message: 'Library is on contract 2.' }] }), { deployment: 'augur-workbench', reason: 'started', now: at });
+    expect(report.health).toMatchObject({ healthy: true, status: 'Everything runs as it should.' });
+  });
+});
+
 describe('the record’s timer', () => {
   it('logs a failure to make the record, and looks again', async () => {
     vi.useFakeTimers();
