@@ -42,6 +42,44 @@ describe('event bus', () => {
     expect(handler).toHaveBeenCalledOnce();
     expect(handler).toHaveBeenCalledWith({ id: 'd1' });
   });
+
+  it('still reaches every handler when one throws, and reports the throw', () => {
+    const bus = createEventBus();
+    const order: string[] = [];
+    const thrown: unknown[] = [];
+    const report = (err: unknown) => thrown.push(err);
+    const realReport = globalThis.reportError;
+    globalThis.reportError = report;
+    try {
+      bus.on('document.published', () => {
+        order.push('first');
+        throw new Error('broken handler');
+      });
+      bus.on('document.published', () => order.push('second'));
+      expect(() => bus.emit('document.published', { id: 'd1' })).not.toThrow();
+      expect(order).toEqual(['first', 'second']);
+      expect(thrown).toEqual([expect.objectContaining({ message: 'broken handler' })]);
+    } finally {
+      globalThis.reportError = realReport;
+    }
+  });
+
+  it('reaches, as the DOM does, only handlers there when it was emitted and still there at their turn', () => {
+    const bus = createEventBus();
+    const later = vi.fn();
+    let offSecond = () => {};
+    bus.on('x', () => {
+      offSecond();
+      bus.on('x', later);
+    });
+    const second = vi.fn();
+    offSecond = bus.on('x', second);
+    bus.emit('x', 1);
+    expect(second).not.toHaveBeenCalled();
+    expect(later).not.toHaveBeenCalled();
+    bus.emit('x', 2);
+    expect(later).toHaveBeenCalledWith(2);
+  });
 });
 
 describe('resolveIntent', () => {
