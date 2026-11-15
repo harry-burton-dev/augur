@@ -2,49 +2,52 @@ import { expect, test, type Page } from '@playwright/test';
 import { check, failOnPageErrors, rail, reference } from './reference';
 
 /**
- * Reflow (WCAG 2.2, 1.4.10): at 320 CSS px wide, the width of a 1280 px screen at 400%, the shell needs no
- * sideways scrolling and cuts nothing off. The desktop's bar folds what doesn't fit into More; with an app
- * open, the rail, the app's head and its screen stay inside the window.
+ * Reflow (WCAG 2.2, 1.4.10): at 320 CSS px wide, the width of a 1280 px screen at 400%, the shell cuts
+ * nothing off and nothing in it scrolls sideways. With the one app the dev shell has, the desktop's bar is
+ * the logo and that app's tile; the kit's own tests hold how More folds a fuller bar (shell-kit desktopFit).
  */
 const NARROW = { width: 320, height: 640 };
 
-/** Whether the page scrolls sideways, and anything shown that runs past the window's right edge. */
-const pastTheEdge = (page: Page, within: string) =>
-  page.evaluate((selector) => {
+/**
+ * What the shell draws that a person at this width can't reach: anything shown past either edge of the window
+ * that no part of the page clips on purpose, and anything whose content runs sideways out of its own box,
+ * scrolled or cut (words cut short with an ellipsis are allowed).
+ */
+const cutOff = (page: Page) =>
+  page.evaluate(() => {
     const width = document.documentElement.clientWidth;
-    const scrolls = document.scrollingElement!.scrollWidth > width;
-    const clipped = (el: Element) => {
-      for (let up = el.parentElement; up; up = up.parentElement) {
-        const { overflowX } = getComputedStyle(up);
-        if (overflowX === 'auto' || overflowX === 'scroll') return true;
-      }
+    const shown = (el: Element) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+    const name = (el: Element) => `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') ?? '').split(' ')[0]} (${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)})`;
+    const clippedBy = (el: Element) => {
+      for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) if (getComputedStyle(up).overflowX !== 'visible') return true;
       return false;
     };
-    const past = [...document.querySelectorAll(`${selector} *`)]
-      .filter((el) => {
-        const box = el.getBoundingClientRect();
-        const style = getComputedStyle(el);
-        return box.width > 0 && box.right > width + 1 && style.visibility !== 'hidden' && style.opacity !== '0' && !clipped(el);
-      })
-      .map((el) => `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') ?? '').split(' ')[0]} (${el.getAttribute('aria-label') ?? el.textContent?.trim().slice(0, 30)})`);
-    return { scrolls, past };
-  }, within);
+    const all = [...document.querySelectorAll('.aerie-shell, .aerie-shell *')].filter(shown);
+    const past = all.filter((el) => {
+      const box = el.getBoundingClientRect();
+      return box.width > 0 && (box.right > width + 1 || box.left < -1) && !clippedBy(el);
+    });
+    const sideways = all.filter((el) => {
+      const style = getComputedStyle(el);
+      return style.overflowX !== 'visible' && style.textOverflow !== 'ellipsis' && el.scrollWidth > el.clientWidth + 1;
+    });
+    return { past: past.map(name), sideways: sideways.map(name) };
+  });
 
 failOnPageErrors();
 
 test.use({ viewport: NARROW });
 
-test('at 320 px the desktop and its bar fit the window, the rest under More', async ({ page }) => {
+test('at 320 px the desktop and its bar cut nothing off', async ({ page }) => {
   await page.goto('/');
   const bar = page.getByRole('navigation', { name: 'App bar', exact: true });
-  await expect(bar).toBeVisible();
   await expect(bar.locator('.aerie-bar-tile').first()).toBeVisible();
-  expect(await pastTheEdge(page, '.aerie-shell-bar')).toEqual({ scrolls: false, past: [] });
+  expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });
 
-test('at 320 px an open app, its rail, head and screen fit the window', async ({ page }) => {
+test('at 320 px an open app, its rail, head and screen cut nothing off', async ({ page }) => {
   await page.goto(`/${reference.id}`);
   await expect(check(page, 'person')).toBeVisible();
   await expect(rail(page)).toBeVisible();
-  expect(await pastTheEdge(page, '.aerie-shell')).toEqual({ scrolls: false, past: [] });
+  expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });
