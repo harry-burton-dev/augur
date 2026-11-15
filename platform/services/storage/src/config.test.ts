@@ -27,6 +27,7 @@ describe('configFromEnv', () => {
       skipped: [],
       appConnections: 30,
       services: [],
+      release: '',
       retire: [],
     });
   });

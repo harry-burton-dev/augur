@@ -57,6 +57,7 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
 export const RESERVED_APP_ID_PREFIXES: Readonly<Record<string, string>> = {
   'augur-': 'AUGUR’s own buckets',
   'pg-': 'the database’s own schemas',
+  'retired-': 'apps’ data set aside before it is dropped (retired_<app>, retired-<app>)',
 };
 
 /** Why an app can't take `id` because AUGUR keeps it, or undefined when it can. */

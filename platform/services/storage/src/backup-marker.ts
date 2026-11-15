@@ -32,17 +32,24 @@ export async function readBackupMarker(dir: string): Promise<unknown> {
 const isMarker = (m: unknown): m is BackupMarker => typeof m === 'object' && m !== null && typeof (m as BackupMarker).at === 'string' && typeof (m as BackupMarker).ok === 'boolean';
 
 /**
- * Why nothing may be dropped yet, or nothing when the last backup noted is `file`, the one the job just took, and it
- * worked and (with object storage) holds apps' files.
+ * Why nothing may be dropped yet, or nothing when the last backup noted worked, holds apps' files (with object storage)
+ * and is the one wanted: `file`, the one the job just took, or any taken `since` the data was set aside, which nothing
+ * has written to since. The marker's time is to the second, so `since` is too.
  */
-export function backupProblem(marker: unknown, file: string, objects: boolean): string | undefined {
+export function backupProblem(marker: unknown, want: { file: string } | { since: Date }, objects: boolean): string | undefined {
   if (marker === undefined) return 'No backup has been noted (backups/status/last-backup.json is missing), so nothing was dropped.';
   if (!isMarker(marker)) {
     const why = typeof marker === 'object' && marker !== null && 'unreadable' in marker ? ` (${String((marker as { unreadable: unknown }).unreadable)})` : '';
     return `The note of the last backup (backups/status/last-backup.json) can’t be read${why}, so nothing was dropped.`;
   }
-  if (marker.file !== file) return `The last backup noted, at ${marker.at}, is ${marker.file ?? 'not a dump'}, not ${file}, the one taken for this. Nothing was dropped.`;
+  if ('file' in want && marker.file !== want.file) return `The last backup noted, at ${marker.at}, is ${marker.file ?? 'not a dump'}, not ${want.file}, the one taken for this. Nothing was dropped.`;
   if (!marker.ok) return `The backup at ${marker.at} failed: ${marker.problem ?? 'it says no more.'} Nothing was dropped.`;
+  if ('since' in want) {
+    const since = new Date(Math.floor(want.since.getTime() / 1000) * 1000);
+    if (Number.isNaN(Date.parse(marker.at)) || Date.parse(marker.at) < since.getTime())
+      return `The last backup, at ${marker.at}, was taken before its data was set aside (${since.toISOString().replace('.000Z', 'Z')}), so it may not hold it. Nothing was dropped.`;
+    if (!marker.file) return `The backup at ${marker.at} names no database dump. Nothing was dropped.`;
+  }
   if (objects && !marker.objects) return `The backup at ${marker.at} holds no copy of apps’ files. Nothing was dropped.`;
   return undefined;
 }

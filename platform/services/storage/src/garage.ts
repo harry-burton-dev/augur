@@ -121,6 +121,31 @@ export const garageAdmin = ({ url, token, fetchImpl = fetch }: GarageOptions) =>
     },
 
     /**
+     * Gives the bucket called `from` the name `to` instead, and takes every key's access to it away, so nothing that
+     * opened it opens it now. True when it was moved, or had been; false when there was no such bucket. A name `to`
+     * that another bucket has stops it.
+     */
+    async moveBucket(from: string, to: string): Promise<boolean> {
+      const info = async (alias: string) => {
+        try {
+          return await call<{ id: string; keys?: { accessKeyId: string }[] }>('GET', `GetBucketInfo?globalAlias=${encodeURIComponent(alias)}`);
+        } catch (err) {
+          if (!(err instanceof GarageError) || err.status !== 404) throw err;
+          return undefined;
+        }
+      };
+      const there = await info(to);
+      const bucket = await info(from);
+      if (!bucket) return Boolean(there);
+      if (there && there.id !== bucket.id) throw new GarageError(409, 'BucketAlreadyExists', `${to} is another bucket’s name already, so ${from} can’t be moved there.`);
+      if (!there) await call('POST', 'AddBucketAlias', { bucketId: bucket.id, globalAlias: to });
+      await call('POST', 'RemoveBucketAlias', { bucketId: bucket.id, globalAlias: from });
+      for (const { accessKeyId } of bucket.keys ?? [])
+        await call('POST', 'DenyBucketKey', { bucketId: bucket.id, accessKeyId, permissions: { read: true, write: true, owner: true } });
+      return true;
+    },
+
+    /**
      * A new key named `name` that may read and write the bucket, for when the app's own secret isn't known (an app
      * retired after its secrets left .env). Its id is random, so deleting it afterwards (deleteKey) costs nothing.
      */

@@ -67,7 +67,8 @@
       "type": "string",
       "description": "The AUGUR release this server runs, such as 0.1.1.",
       "x-services": [
-        "compose"
+        "compose",
+        "storage"
       ],
       "x-via": {
         "updater": ".env"

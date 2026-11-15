@@ -54,6 +54,12 @@ Every release has been through the [deploy test](https://drive.google.com/drive/
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+### A retired or removed app's data waits one release before it's dropped
+
+**From** unreleased
+
+An app taken out of AUGUR (`RETIRED_APPS`), or removed from the server once its grace period ends, no longer loses its data at once. Its schemas are renamed `retired_<app>`, its login can't sign in, and its bucket moves to `retired-<app>`. It is dropped on the next AUGUR release, and only when a backup taken since it was set aside worked and holds apps' files (ADR 0103). So the disk holds that data for one release longer. A server upgrading from before 0.24.0 sets the four apps that used to ship with AUGUR aside this way instead of dropping them. No app may now take an id starting `retired-`. To bring set-aside data back first, see [app-storage.md](app-storage.md). Nothing to do.
+
 ### The backup before an upgrade always copies apps' files
 
 **From** unreleased

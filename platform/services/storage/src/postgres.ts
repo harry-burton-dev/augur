@@ -54,16 +54,9 @@ export async function provisionDatabase(sql: Sql, { app, password, connections =
   await sql.query(`alter role ${role} set search_path = ${schema}, public`);
 }
 
-/** The apps whose data is already gone (or was kept, being in APP_STORAGE too), from the storage job's own note of them. */
-export async function retiredApps(sql: Sql): Promise<Set<string>> {
-  await sql.query('create table if not exists public.storage_retired_apps (app text primary key, outcome text not null, at timestamptz not null default now())');
-  const { rows } = await sql.query<{ app: string }>('select app from public.storage_retired_apps');
-  return new Set(rows.map((r) => r.app));
-}
-
 /**
- * Notes that a retired app's data was taken away, or kept, so it isn't done again. An app removed from the server
- * (`again`) is noted each time, as one id can be installed and removed more than once.
+ * Notes that a retired app's data was taken away, or kept, so it isn't done again (the table is retirement.ts's). An
+ * app removed from the server (`again`) is noted each time, as one id can be installed and removed more than once.
  */
 export async function markRetired(sql: Sql, app: string, outcome: 'removed' | 'kept', again = false): Promise<void> {
   await sql.query(

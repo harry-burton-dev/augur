@@ -1193,7 +1193,8 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
 
   /**
    * Takes away the data of an app removed from the server once its grace period ended (spec 5.5): a backup first,
-   * then its database login and schemas, its bucket, its scratch volumes and its sign-in. The registry forgets its
+   * then its scratch volumes and its sign-in; its database login, schemas and bucket are set aside, and dropped with a
+   * later AUGUR release (ADR 0103). The registry forgets its
    * settings and grants when this is done.
    */
   const purge = async (job: AppJob, report: JobReporter) => {
@@ -1208,7 +1209,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       step: 'remove',
       state: 'done',
       outcome: 'done',
-      message: `Its database, bucket${volumes.length ? `, ${volumes.length} scratch ${volumes.length === 1 ? 'folder' : 'folders'}` : ''} and sign-in are gone. Backup ${file} was taken first.`,
+      message: `Its sign-in${volumes.length ? ` and ${volumes.length} scratch ${volumes.length === 1 ? 'folder are' : 'folders are'}` : ' is'} gone. Its database and bucket are set aside, out of reach, and dropped with a later AUGUR release. Backup ${file} was taken first.`,
     });
   };
 
