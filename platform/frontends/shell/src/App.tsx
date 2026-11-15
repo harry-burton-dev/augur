@@ -287,22 +287,35 @@ export function Host({
   const toastDone = useCallback((id: string) => setToasts((list) => list.filter((t) => t.id !== id)), []);
   /**
    * An upgrade or a rollback swaps the shell's files under an open tab (host/build.ts). Asked again when the tab
-   * comes back into view and when the notification stream reconnects; said once, as a notification whose button reloads.
+   * comes back into view or into focus and when the notification stream reconnects. Each build the server moves
+   * to is said once, as a notification whose button reloads; a later move replaces it.
    */
-  const buildNoticeId = useRef<string | undefined>(undefined);
-  const checkBuild = useCallback(async () => {
-    if (buildNoticeId.current) return;
-    const change = buildChange({ version: __SHELL_VERSION__, build: __SHELL_BUILD__ }, await servedBuild(fetchImpl));
-    if (!change || buildNoticeId.current) return;
-    const words = buildNotice(change, productName());
-    const n: ShellNotification = { ...toShellNotification('platform', { title: words.title, body: words.body, needsYou: true }), actions: [{ label: words.action }] };
-    buildNoticeId.current = n.id;
-    tell(n);
+  const buildNoticed = useRef<{ id: string; build: string } | undefined>(undefined);
+  const buildCheck = useRef<Promise<void> | undefined>(undefined);
+  const checkBuild = useCallback(() => {
+    buildCheck.current ??= (async () => {
+      const served = await servedBuild(fetchImpl);
+      const change = buildChange({ version: __SHELL_VERSION__, build: __SHELL_BUILD__ }, served);
+      const shell = shellRef.current;
+      if (!change || !served || !shell || buildNoticed.current?.build === served.build) return;
+      if (buildNoticed.current) shell.notifications = shell.notifications.filter((n) => n.id !== buildNoticed.current!.id);
+      const words = buildNotice(change, productName());
+      const n: ShellNotification = { ...toShellNotification('platform', { title: words.title, body: words.body, needsYou: true }), actions: [{ label: words.action }] };
+      buildNoticed.current = { id: n.id, build: served.build };
+      tell(n);
+    })().finally(() => {
+      buildCheck.current = undefined;
+    });
+    return buildCheck.current;
   }, [fetchImpl, tell]);
   useEffect(() => {
     const onShow = () => document.visibilityState === 'visible' && void checkBuild();
     document.addEventListener('visibilitychange', onShow);
-    return () => document.removeEventListener('visibilitychange', onShow);
+    window.addEventListener('focus', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onShow);
+      window.removeEventListener('focus', onShow);
+    };
   }, [checkBuild]);
   const prefs = useMemo(
     () =>
@@ -850,7 +863,7 @@ export function Host({
     const shell = shellRef.current;
     if (!shell) return;
     const known = fromEvents.current;
-    let streamDown = false;
+    let connected = 0;
     const f = new NotificationFeed({
       getToken: session.getToken,
       fetchImpl,
@@ -872,9 +885,9 @@ export function Host({
       },
       onState: (state) => {
         shell.setStream(state);
-        // Back after it dropped: services restart in an upgrade, so the shell's own files may have changed too.
-        if (streamDown && !state.loading && !state.error) void checkBuild();
-        streamDown = !!state.error;
+        // Connected again (after it dropped or the server closed it): services restart in an upgrade, so the
+        // shell's own files may have changed too.
+        if (!state.loading && !state.error && ++connected > 1) void checkBuild();
       },
       onInbox: () => {
         refreshInbox();
@@ -963,7 +976,7 @@ export function Host({
     };
     // A button on a notification raises its intent, as the app would itself, and the notification is done with.
     const actOn = (id: string, index: number) => {
-      if (id === buildNoticeId.current) return window.location.reload();
+      if (id === buildNoticed.current?.id) return window.location.reload();
       const intent = actions.current.intentFor(id, index);
       if (!intent) return;
       const server = fromEvents.current.get(id);
