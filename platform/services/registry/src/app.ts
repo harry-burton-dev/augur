@@ -15,7 +15,6 @@ import {
   health,
   identifyService,
   packageVersion,
-  recordAudit,
   ruleChain,
   PLATFORM_SCOPES,
   SCOPES,
@@ -25,7 +24,6 @@ import {
   type FloorLookup,
   type FloorPlace,
   type NewAuditEntry,
-  type ServiceCredentials,
   type ServiceIdentity,
   type ServiceVerifier,
   signedCallers,
@@ -165,10 +163,6 @@ export interface RegistryOptions {
   shadow?: Shadow;
   now?: () => Date;
 }
-
-/** Records audit entries with the events service, as the registry. */
-export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry, workspace?: string) =>
-  recordAudit({ eventsUrl, credentials, entry, workspace });
 
 /** A registered app as admins see it in the catalogue. */
 /** What the app's manifest asks to be sent in one request, in MB. */

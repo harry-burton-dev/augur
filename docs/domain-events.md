@@ -158,4 +158,6 @@ Person events are on no floor, so they reach services, not browsers; team and me
 
 An audit entry and the event it stands for are one transaction: both are kept or neither is. `recordAudit` sends an `Idempotency-Key`, one for all of a call's tries, so a retry keeps one entry and one event. Give an entry your own `key` when a later run may say it again, as identity does for `person.left`.
 
+Identity and the registry don't call `recordAudit` themselves: each keeps its entries in its own database first (`audit_outbox`, the service kit's `auditOutbox`) and sends them from there, oldest first, each with its key. So an admin's change is audited, and its event published, even if the events service was down when it was made or the service restarted before it was sent. An entry the events service refuses (400 or 413, an unknown floor say) is set aside, marked with `refused_at` and `refused_why`, and logged. To send one again, clear its `sent_at` and `refused_at`.
+
 `PLATFORM_TOPICS` in the service kit names them. The API is in [contracts/events.openapi.yaml](../contracts/events.openapi.yaml).

@@ -1,7 +1,7 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import Type from 'typebox';
-import { callerFromHeaders, health, identifyService, packageVersion, recordAudit, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceCredentials, type ServiceVerifier, signedCallers, type CallerCheck, type Shadow } from '@augur/service-kit';
+import { callerFromHeaders, health, identifyService, packageVersion, ServiceAuthUnavailable, problemDetails, serviceFastifyOptions, type NewAuditEntry, type GrantLookup, type ServiceVerifier, signedCallers, type CallerCheck, type Shadow } from '@augur/service-kit';
 import { adminRoutes } from './admin.ts';
 import type { LifecycleStore } from './lifecycle.ts';
 import { describeApi } from './contract.ts';
@@ -58,10 +58,6 @@ export interface IdentityOptions {
   /** Compares this service's own admin checks with the permissions service (shadow mode, ADR 0085). */
   shadow?: Shadow;
 }
-
-/** Records audit entries with the events service, as identity. */
-export const auditTo = (eventsUrl: string, credentials: ServiceCredentials) => (entry: NewAuditEntry, workspace?: string) =>
-  recordAudit({ eventsUrl, credentials, entry, workspace });
 
 /**
  * Who people are. Sign-in itself is the OIDC provider's job (Keycloak locally);

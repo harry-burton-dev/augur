@@ -174,7 +174,32 @@ export interface AskModelOptions {
 export type AudienceLookup = (principals: readonly string[]) => Promise<string[]>;
 
 // @public
+export const AUDIT_OUTBOX_COLUMNS = "\n  id bigint generated always as identity primary key,\n  key text not null unique,\n  workspace_id text,\n  entry jsonb not null,\n  created_at timestamptz not null default now(),\n  sent_at timestamptz,\n  refused_at timestamptz,\n  refused_why text";
+
+// @public
 export const auditFor: (app: string, log: (entry: AppAuditEntry) => void, env?: NodeJS.ProcessEnv) => AppAudit;
+
+// @public (undocumented)
+export interface AuditOutbox {
+    add(entry: NewAuditEntry, workspace?: string, db?: Queryable): Promise<void>;
+    flush(): Promise<number>;
+    // (undocumented)
+    start(): void;
+    // (undocumented)
+    stop(): void;
+}
+
+// @public
+export const auditOutbox: (input: {
+    pool: ConnectionPool & Queryable;
+    table: string;
+    eventsUrl: string;
+    credentials: ServiceCredentials;
+    fetchImpl?: typeof fetch;
+    batch?: number;
+    intervalMs?: number;
+    onError?: (err: unknown) => void;
+}) => AuditOutbox;
 
 // @public
 export interface Binding {

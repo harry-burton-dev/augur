@@ -111,6 +111,23 @@ export const migrations: Migration[] = [
   ...organisationMoreMigrations,
   ...lifecycleDeletionMigrations,
   ...positionMigrations,
+  {
+    id: 'audit_outbox_001',
+    sql: `
+      -- Audit entries on their way to the events service (ADR 0104): kept here first, so an admin's change is
+      -- audited, and its domain event published, even while the events service is down. auditOutbox sends them.
+      create table identity.audit_outbox (
+        id bigint generated always as identity primary key,
+        key text not null unique,
+        workspace_id text,
+        entry jsonb not null,
+        created_at timestamptz not null default now(),
+        sent_at timestamptz,
+        refused_at timestamptz,
+        refused_why text
+      );
+      create index audit_outbox_unsent on identity.audit_outbox (id) where sent_at is null;`,
+  },
 ];
 
 export class PgPreferenceStore implements PreferenceStore {

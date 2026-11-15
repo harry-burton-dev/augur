@@ -1,6 +1,6 @@
 import pg from 'pg';
-import { auditTo, buildApp } from './app.ts';
-import { callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, notify, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, shadowFromEnv, startupLog, steadyPool, poolCheck, serve } from '@augur/service-kit';
+import { buildApp } from './app.ts';
+import { auditOutbox, callerCheckFromEnv, callService, commonSettings, loadConfigOrExit, notify, platformCredentialsFromEnv, registryGrants, serviceVerifierFromEnv, shadowFromEnv, startupLog, steadyPool, poolCheck, serve, type NewAuditEntry } from '@augur/service-kit';
 import { KeycloakAppClients, retrying, type AppClients } from './clients.ts';
 import { KeycloakDirectory, type Directory } from './directory.ts';
 import { KeycloakAccounts, type AccountSource } from './me.ts';
@@ -107,7 +107,10 @@ if (ownSecret || keycloakAdmin) {
 // Identity signs in as itself (platform-identity) to write the audit log.
 const { EVENTS_URL } = process.env;
 const credentials = platformCredentialsFromEnv('identity');
-const audit = EVENTS_URL && credentials ? auditTo(EVENTS_URL, credentials) : undefined;
+// Each entry is kept in identity's database first and sent from there, so none is lost while the events service is down.
+const auditing = EVENTS_URL && credentials ? auditOutbox({ pool, table: 'identity.audit_outbox', eventsUrl: EVENTS_URL, credentials, onError: (err) => log.warn(`Audit entries are waiting to be sent: ${(err as Error).message}`) }) : undefined;
+auditing?.start();
+const audit = auditing && ((entry: NewAuditEntry, workspace?: string) => auditing.add(entry, workspace));
 if (!audit) log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: admins’ changes to people and departments are not audited.');
 
 // What apps are granted, so one with people:read can look people up for sharing.
@@ -188,4 +191,4 @@ if (directory) {
 
 // Each admin check is also asked of the permissions service, to compare (shadow mode, ADR 0085).
 const app = await buildApp({ shadow: shadowFromEnv(credentials, log), callers: callerCheckFromEnv('identity'), store, workspaces, directory, accounts, appClients, audit, verifyService: serviceVerifierFromEnv(), grants, tell, dataFrom, languages: realmLookFromEnv(process.env, (m) => log.warn(m)).languages, organisation, lifecycle, redact });
-await serve(app, { port, ready: [poolCheck('database', pool)], close: [() => pool.end()] });
+await serve(app, { port, ready: [poolCheck('database', pool)], close: [() => auditing?.stop(), () => pool.end()] });
