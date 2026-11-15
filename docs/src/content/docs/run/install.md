@@ -21,10 +21,11 @@ your laptop ──tailnet──▶ tailscale ──▶ web (nginx) ─┬─ /  
                                                     └─ /sso/  ──▶ keycloak (sign-in) ──────────────────────▶ postgres
 ```
 
-:::caution[Reaching it]
-Today a deployment is reached only through a private [Tailscale](https://tailscale.com) network, a
-**tailnet**: there are no open ports, and Tailscale gives it an HTTPS address only your devices can reach.
-Installing on your own network without Tailscale is [planned](../../planned/).
+:::note[Reaching it]
+A deployment is reached one of two ways. Through a private [Tailscale](https://tailscale.com) network, a
+**tailnet**, as this page does by default: there are no open ports, and Tailscale gives it an HTTPS address
+only your devices can reach. Or [behind your own proxy](#behind-your-own-proxy): your organisation's load
+balancer or reverse proxy serves its HTTPS address and passes requests on to it, and Tailscale doesn't run.
 :::
 
 ## Before you start
@@ -78,6 +79,9 @@ cp infra/deploy/.env.example infra/deploy/.env && chmod 600 infra/deploy/.env
 alias pc='docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env'
 ```
 
+Behind your own proxy, the alias names `compose.proxy.yml` too:
+`alias pc='docker compose -f infra/deploy/compose.yml -f infra/deploy/compose.proxy.yml --env-file infra/deploy/.env'`.
+
 Every command after this runs from that folder and uses `pc`; put the alias in your shell's profile. The
 folder's name doesn't matter. The Compose project, which Docker names the volumes and networks after, is
 called `platform` unless `COMPOSE_PROJECT_NAME` in `.env` names another. Set it, if at all, before the first
@@ -98,6 +102,31 @@ files, so keep any change of yours in `.env` or a `compose.override.yml`, as the
 this one hasn't stays. Compose ignores it, and if a later upgrade through the updater takes it for an edit, it
 says which file to delete.
 
+## Behind your own proxy
+
+Instead of Tailscale, your organisation's proxy or load balancer can stand in front of AUGUR. It serves
+`PLATFORM_URL` over HTTPS with your own certificate, and passes each request on, over plain HTTP, to AUGUR's
+front door on this server. `compose.proxy.yml` sets that up beside `compose.yml`: Tailscale doesn't run, and
+the front door listens at `PROXY_LISTEN`. In `.env`:
+
+```sh
+COMPOSE_FILE=compose.yml:compose.proxy.yml   # the updater runs these files too
+PROXY_LISTEN=127.0.0.1:8080                  # a proxy on another machine: this server's address it reaches
+PLATFORM_URL=https://augur.example.org       # the address your proxy serves, with no path
+TRUSTED_PROXIES=10.0.4.10                    # your proxy's addresses (Limits and health)
+```
+
+Leave `TS_AUTHKEY` and `TS_HOSTNAME` out, and use the `pc` alias with `compose.proxy.yml` (step 1). Your proxy
+must:
+
+- pass the caller's address in `X-Forwarded-For`, and the `Host` it was asked for;
+- allow long-lived responses (server-sent events under `/api/`) and uploads up to `MAX_UPLOAD_MB`;
+- be the only way in: nothing else should reach `PROXY_LISTEN`.
+
+The front door tells AUGUR's services the scheme was `https`, so only an HTTPS proxy works. Move an installed
+server to its own proxy only after upgrading it to a release with `compose.proxy.yml`: the updater before
+that release runs `compose.yml` alone.
+
 ## 2. Fill in the settings
 
 Open `infra/deploy/.env` and fill in these, which only you know:
@@ -107,7 +136,6 @@ Open `infra/deploy/.env` and fill in these, which only you know:
 | --- | --- |
 | `PLATFORM_VERSION` | The AUGUR release this server runs, such as 0.1.1. |
 | `PLATFORM_URL` | AUGUR's address: https://&lt;TS_HOSTNAME>.&lt;your tailnet>.ts.net. |
-| `TS_AUTHKEY` | A Tailscale auth key. A secret. |
 | `PLATFORM_ADMIN_USER` | The first person who can sign in; identity gives them the deployment-admin role when nobody has it. |
 | `PLATFORM_ADMIN_PASSWORD` | That person's password, for the first sign-in only. A secret. |
 | `PLATFORM_ADMIN_EMAIL` | That person's email address. |
@@ -120,6 +148,8 @@ The preflight (step 3) fills in these 22 secrets, each with 64 random hex charac
 - `PLATFORM_VERSION` is the release you checked out, without `augur@`, for example `0.24.0`.
 - `PLATFORM_URL` is `https://<TS_HOSTNAME>.<tailnet name>`, for example `https://platform.tail1234.ts.net`,
   with no trailing slash.
+- `TS_AUTHKEY` is the Tailscale auth key from Before you start. Behind [your own proxy](#behind-your-own-proxy)
+  there's none, and `PLATFORM_URL` is the address your proxy serves.
 - `PLATFORM_ADMIN_*` is you: the first person who can sign in, as an admin and deployment admin. The password
   is only for the first sign-in, when you're asked to choose a new one. `PLATFORM_ADMIN_DEPARTMENT` is your
   department (`Administration` unless you change it). People see its name, so give it the one your

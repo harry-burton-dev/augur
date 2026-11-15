@@ -1,5 +1,6 @@
 # The whole platform on one server, reached privately over Tailscale at
-# https://<TS_HOSTNAME>.<your tailnet>.ts.net. See AUGUR's docs, Install AUGUR.
+# https://<TS_HOSTNAME>.<your tailnet>.ts.net, or through your organisation's own proxy with
+# COMPOSE_FILE=compose.yml:compose.proxy.yml in .env (compose.proxy.yml). See AUGUR's docs, Install AUGUR.
 #   cp infra/deploy/.env.example infra/deploy/.env   # then fill it in
 #   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
 # Runs the images CI built for the platform release PLATFORM_VERSION. To build them from this
@@ -90,7 +91,8 @@ services:
     entrypoint: ["/bin/sh", "/config/start.sh"]
     hostname: ${TS_HOSTNAME:-platform}
     environment:
-      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
+      # Needed to join the tailnet the first time (tailscale/start.sh says so when it's missing).
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
       TS_HOSTNAME: ${TS_HOSTNAME:-platform}
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"

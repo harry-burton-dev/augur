@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto';
 import { access, chmod, mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, statfs, writeFile, type FileHandle } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { composeFiles } from './env-file.ts';
 import { parseRef, pullArtifactLayer, type ArtifactAuth } from './oci.ts';
 import { partsFor } from './parts.ts';
 import { ALIASES, RELAYED, type AppHost, type PlatformPart, type RunnerState } from './runner.ts';
@@ -122,11 +123,16 @@ export const command = (file: string, args: string[], env: Record<string, string
     if (input !== undefined) child.stdin?.end(input);
   });
 
+/** `-f` for each compose file the deployment runs (COMPOSE_FILE in its .env, or compose.yml). */
+const composeArgs = async (dir: string, envFile: string) => composeFiles(dir, await readFile(envFile, 'utf8').catch(() => '')).flatMap((file) => ['-f', file]);
+
 export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrls = partsFor().health, gatewayUrl = 'http://gateway:8080', signInUrl, signIn }: ServerOptions): Server & { login(registry: string, user: string, token: string): Promise<void>; replaceSelf(): Promise<void> } => {
   // Only what the CLIs need: a PLATFORM_VERSION here would win over the settings file.
   const env = (more: Record<string, string> = {}) => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig, ...more });
   const envFile = join(dir, '.env');
-  const compose = (args: string[], more?: Record<string, string>) => command('docker', ['compose', '-f', join(dir, 'compose.yml'), '--env-file', envFile, ...args], env(more));
+  // The compose files the deployment runs: COMPOSE_FILE in its .env (compose.yml:compose.proxy.yml, say), as by hand.
+  const compose = async (args: string[], more?: Record<string, string>) =>
+    command('docker', ['compose', ...(await composeArgs(dir, envFile)), '--env-file', envFile, ...args], env(more));
 
   return {
     readEnv: () => readFile(envFile, 'utf8'),
@@ -390,7 +396,7 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
   const env = () => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig });
   const appsDir = join(dir, 'apps');
   const apps = (args: string[]) => command('docker', ['compose', '-p', 'augur-apps', '-f', join(appsDir, 'compose.yml'), ...args], env());
-  const platform = (args: string[]) => command('docker', ['compose', '-f', join(dir, 'compose.yml'), '--env-file', join(dir, '.env'), ...args], env());
+  const platform = async (args: string[]) => command('docker', ['compose', ...(await composeArgs(dir, join(dir, '.env'))), '--env-file', join(dir, '.env'), ...args], env());
 
   const docker = (args: string[]) => command('docker', args, env());
 

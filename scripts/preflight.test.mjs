@@ -96,3 +96,25 @@ test('filling secrets writes only blank x-generate ones, in place or at the end'
   assert.deepEqual(fillSecrets(out, schema).filled, [], 'a set value is never changed');
   assert.match(fillSecrets('PLATFORM_URL=x', schema, () => 'e').text, /^PLATFORM_URL=x\nPOSTGRES_PASSWORD=e\nGARAGE_RPC_SECRET=e\n$/);
 });
+
+// Behind the organisation's own proxy (compose.proxy.yml), Tailscale doesn't run.
+const proxied = (extra) => ready({ COMPOSE_FILE: 'compose.yml:compose.proxy.yml', PLATFORM_URL: 'https://augur.example.org', TS_AUTHKEY: '', ...extra });
+
+test('behind your own proxy, an install needs no Tailscale key and PLATFORM_URL is any https address', () => {
+  assert.deepEqual(stops(proxied(), { composeFiles: ['compose.yml', 'compose.proxy.yml'] }), []);
+  const checks = installChecks({ release: fresh, schema, env: proxied(), host: { composeFiles: ['compose.yml', 'compose.proxy.yml'] } });
+  assert.ok(checks.some((c) => c.ok && /^Address: https:\/\/augur\.example\.org, served by your proxy in front/.test(c.text)), checks.map((c) => c.text).join('\n'));
+  assert.ok(checks.some((c) => c.ok && /PROXY_LISTEN.*127\.0\.0\.1:8080/.test(c.text)));
+  // With Tailscale, the key is still wanted.
+  assert.ok(stops(ready({ TS_AUTHKEY: '' })).some((t) => /Set TS_AUTHKEY/.test(t)));
+});
+
+test('an install stops on a COMPOSE_FILE naming a file that isn’t there', () => {
+  assert.ok(stops(proxied({ COMPOSE_FILE: 'compose.yml:compose.proxi.yml' }), { composeFiles: ['compose.yml', 'compose.proxy.yml'] }).some((t) => /compose\.proxi\.yml.*isn’t in infra\/deploy/.test(t)));
+});
+
+test('an upgrade behind your own proxy doesn’t ask for TS_AUTHKEY', () => {
+  const withKey = { ...release, settings: { ...release.settings, required: [...release.settings.required, 'TS_AUTHKEY'] } };
+  assert.deepEqual(preflight(withKey, env({ COMPOSE_FILE: "compose.yml:compose.proxy.yml" })).errors, []);
+  assert.match(preflight(withKey, env()).errors[0], /TS_AUTHKEY/);
+});

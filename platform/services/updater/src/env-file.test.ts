@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { envQuoted, envValue, withEnvValue } from './env-file.ts';
+import { composeFiles, envQuoted, envValue, withEnvValue } from './env-file.ts';
 
 describe('the settings file', () => {
   const text = '# The release\nPLATFORM_VERSION=0.2.0\nPLATFORM_URL="https://augur.example.org"\n# PLATFORM_IMAGES=ghcr.io/x\nEMPTY=\n';
@@ -22,5 +22,19 @@ describe('the settings file', () => {
     expect(envQuoted('Acme & Co $HOME')).toBe("'Acme & Co $HOME'");
     expect(envQuoted("it's")).toBeUndefined();
     expect(envQuoted('a\nB=c')).toBeUndefined();
+  });
+});
+
+describe('the compose files a deployment runs', () => {
+  it('is compose.yml, unless COMPOSE_FILE in .env names others, as Compose reads them', () => {
+    expect(composeFiles('/srv/augur', 'A=1\n')).toEqual(['/srv/augur/compose.yml']);
+    expect(composeFiles('/srv/augur', 'COMPOSE_FILE=compose.yml:compose.proxy.yml\n')).toEqual(['/srv/augur/compose.yml', '/srv/augur/compose.proxy.yml']);
+    expect(composeFiles('/srv/augur', "COMPOSE_FILE='compose.yml: compose.proxy.yml'\n")).toEqual(['/srv/augur/compose.yml', '/srv/augur/compose.proxy.yml']);
+    expect(composeFiles('/srv/augur', 'COMPOSE_FILE=\n')).toEqual(['/srv/augur/compose.yml']);
+  });
+
+  it('refuses a file outside the deployment’s folder, which the updater neither checks nor writes', () => {
+    expect(() => composeFiles('/srv/augur', 'COMPOSE_FILE=compose.yml:../other.yml\n')).toThrow(/COMPOSE_FILE/);
+    expect(() => composeFiles('/srv/augur', 'COMPOSE_FILE=/etc/compose.yml\n')).toThrow(/COMPOSE_FILE/);
   });
 });
