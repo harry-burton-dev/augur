@@ -720,6 +720,7 @@ export const followEvents: (input: EventsAddress & {
         save(seq: string): Promise<void>;
     };
     handle(event: DomainEvent): Promise<void>;
+    onGap?: (prunedUpTo: string) => Promise<void>;
     batch?: number;
     intervalMs?: number;
     onError?: (err: unknown) => void;

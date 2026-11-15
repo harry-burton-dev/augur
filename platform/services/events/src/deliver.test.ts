@@ -83,11 +83,11 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     await db.store.publish('notes', [{ topic: 'notes.note.made', id: 'n1', payload: {} }]);
     await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd3', payload: { document: 'd3' }, floor: floor('w-finance') }]);
     const report = await d.tick();
-    expect(report).toEqual({ delivered: 2, skipped: 2, failed: [], dropped: 0 });
+    expect(report).toEqual({ delivered: 2, skipped: 2, failed: [], dropped: 0, behind: [] });
     expect(theirs.got.map((g) => [g.app, g.event.id])).toEqual([['notes', 'd1'], ['notes', 'd3']]);
     expect(theirs.got[0]!.event).toMatchObject({ topic: 'folio.document.published', publisher: 'folio', payload: { document: 'd1' } });
     // Nothing is sent twice.
-    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], dropped: 0 });
+    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], dropped: 0, behind: [] });
     expect(theirs.got).toHaveLength(2);
   });
 
@@ -113,7 +113,7 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     expect(new Set(theirs.got.map((g) => eventDeliveryKey(g.event))).size).toBe(1);
     theirs.recover();
     clock += 2000;
-    expect(await d.tick()).toEqual({ delivered: 2, skipped: 0, failed: [], dropped: 0 });
+    expect(await d.tick()).toEqual({ delivered: 2, skipped: 0, failed: [], dropped: 0, behind: [] });
     expect(theirs.got.map((g) => g.event.id)).toEqual(['d1', 'd1', 'd1', 'd2']);
     expect((await db.store.deliveries.list())[0]).toMatchObject({ failures: 0, failingSince: null, lastError: null, nextAt: null });
   });
@@ -164,6 +164,39 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
     expect(audited.at(-1)).toMatchObject({ action: 'delivery.forgotten', target: 'notes', key: expect.stringMatching(/^delivery\.forgotten:notes:/) });
   });
 
+  it('says once when an app missed events that were pruned while it was off, then goes on from what is left', async () => {
+    const theirs = part();
+    let list = [{ app: 'notes', name: 'Notes', enabled: false }];
+    const d = eventDeliverer({ store: db.store, subscribers: async () => list, grants, send: theirs.send, audit: async (e, key) => void audited.push({ ...e, key } as NewAuditEntry) });
+    await d.tick();
+    await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd1', payload: {} }]);
+    await db.store.pruneEvents(0);
+    await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd2', payload: {} }]);
+    list = [{ app: 'notes', name: 'Notes', enabled: true }];
+    expect(await d.tick()).toMatchObject({ delivered: 1, behind: ['notes'] });
+    expect(theirs.got.map((g) => g.event.id)).toEqual(['d2']);
+    expect(audited.at(-1)).toMatchObject({ action: 'delivery.gap', target: 'notes', key: expect.stringMatching(/^delivery\.gap:notes:/) });
+    expect(await d.tick()).toMatchObject({ behind: [] });
+  });
+
+  it('says so once even when nothing is left after what was pruned', async () => {
+    let list = [{ app: 'notes', name: 'Notes', enabled: false }];
+    const d = eventDeliverer({ store: db.store, subscribers: async () => list, grants, send: part().send });
+    await d.tick();
+    await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd1', payload: {} }]);
+    await db.store.pruneEvents(0);
+    list = [{ app: 'notes', name: 'Notes', enabled: true }];
+    expect(await d.tick()).toMatchObject({ delivered: 0, behind: ['notes'] });
+    expect(await d.tick()).toMatchObject({ behind: [] });
+  });
+
+  it('starts a new subscriber after what was pruned, not behind it', async () => {
+    await db.store.publish('folio', [{ topic: 'folio.document.published', id: 'd1', payload: {} }]);
+    await db.store.pruneEvents(0);
+    const d = eventDeliverer({ store: db.store, subscribers, grants, send: part().send });
+    expect(await d.tick()).toMatchObject({ behind: [] });
+  });
+
   it('waits out a registry that can’t say who subscribes, saying so, instead of failing', async () => {
     const theirs = part();
     let down = true;
@@ -176,7 +209,7 @@ describe.runIf(DATABASE_URL)('delivering events to parts', () => {
       grants,
       send: theirs.send,
     });
-    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], dropped: 0 });
+    expect(await d.tick()).toEqual({ delivered: 0, skipped: 0, failed: [], dropped: 0, behind: [] });
     expect(d.problem).toBe('The registry can’t be asked which apps subscribe (The registry answered 503.).');
     down = false;
     await d.tick();

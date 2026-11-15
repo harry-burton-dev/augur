@@ -6,7 +6,7 @@ Services tell each other what happened through **domain events**: "folio.documen
 
 A topic is the publisher's id, then what happened, dotted and lowercase: `folio.document.published`. An app publishes only on its own topics (`<its id>.*`); `platform.*` belongs to the platform. Followers ask for exact topics or families: `folio.*`.
 
-An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. Any service with `events:subscribe` can read any topic, so a follower that needs the document asks its owner's API, which checks who may see it.
+An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. An app reads only the events on floors where it holds `events:subscribe`, and those on no floor (the organisation's); AUGUR's own services read every floor's (ADR 0104). Even so, a follower that needs the document asks its owner's API, which checks who may see it.
 
 ## Publishing
 
@@ -58,7 +58,7 @@ followEvents({
 }).start();
 ```
 
-Events come in the order they were committed, never with a gap: publishers take turns, so nothing gets a `seq` until the one before it has committed, and a follower can't pass a `seq` that is still to appear. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` in `.env` changes it), so a follower that's been off for longer starts from what's left.
+Events come in the order they were committed, never with a gap: publishers take turns, so nothing gets a `seq` until the one before it has committed, and a follower can't pass a `seq` that is still to appear. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` in `.env` changes it). A follower that's been off for longer is told, never left to skip them silently: a read whose `after` is behind what was pruned answers **410** with `after`, how far events were pruned (ADR 0104). It must rebuild what it keeps from events (from its owner's API, as at the start), then read on with that `after`; `followEvents` calls its `onGap(after)` to do that, and without one each read fails saying so. A read with no `after` at all starts afresh from the oldest kept.
 
 ### When someone leaves
 
@@ -96,7 +96,7 @@ app.post(PART_EVENTS_PATH, async (req, reply) => {
 });
 ```
 
-You don't get your own events, nor events on floors where your app isn't on or lacks `events:subscribe`; an event on no floor counts as the organisation's. An app an admin turns off keeps its place and catches up when turned on again; one whose grant is withdrawn loses its place (recorded as `delivery.forgotten`). A newly granted app starts from the events after the grant, not from the beginning; `GET /v1/domain-events?after=` is still there for catching up on what came before.
+You don't get your own events, nor events on floors where your app isn't on or lacks `events:subscribe`; an event on no floor counts as the organisation's. An app an admin turns off keeps its place and catches up when turned on again, unless events it hadn't taken were pruned meanwhile: then it gets what is left, and the gap is recorded once in the audit log (`delivery.gap`, with the place it was at and how far events were pruned), so its data can be rebuilt; one whose grant is withdrawn loses its place (recorded as `delivery.forgotten`). A newly granted app starts from the events after the grant, not from the beginning; `GET /v1/domain-events?after=` is still there for catching up on what came before.
 
 ## In the browser
 

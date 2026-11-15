@@ -437,6 +437,43 @@ describe.runIf(DATABASE_URL)('events', () => {
       expect((await read(`topics=folio.*&after=${rest.next}`)).json()).toEqual({ events: [], next: rest.next });
     });
 
+    it('lets an app read only the events on floors where it may subscribe, and the deployment’s own (ADR 0104)', async () => {
+      // Notes may follow on Finance and below, and the deployment's own events; not on Legal.
+      const onFloors = async (app: string, workspace?: string) =>
+        app === 'folio' ? (['events:publish', 'events:subscribe'] as const) : app === 'notes' && (!workspace || places[workspace]?.path.includes('w-finance')) ? (['events:subscribe'] as const) : ([] as const);
+      const app = (open = await db.app({ verifyService, grants: onFloors, floors }));
+      await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('fin', 'w-finance'), published('legal', 'w-legal'), published('pay', 'w-payroll'), published('all')] } });
+      const read = (query: string, headers = as('notes')) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers });
+      await expect.poll(async () => (await read('topics=folio.*', platform)).json().events.length).toBe(4);
+      expect((await read('topics=folio.*')).json().events.map((e: { id: string }) => e.id)).toEqual(['fin', 'pay', 'all']);
+      // A page full of events it can't see still moves the cursor on past them, so none is read again.
+      const page = (await read('topics=folio.*&limit=2')).json();
+      expect(page.events.map((e: { id: string }) => e.id)).toEqual(['fin']);
+      expect((await read(`topics=folio.*&after=${page.next}`)).json().events.map((e: { id: string }) => e.id)).toEqual(['pay', 'all']);
+      // AUGUR's own services read every floor's.
+      expect((await read('topics=folio.*', platform)).json().events.map((e: { id: string }) => e.id)).toEqual(['fin', 'legal', 'pay', 'all']);
+    });
+
+    it('answers 410 to a cursor behind what was pruned, with how far they were pruned, so a follower knows to rebuild (ADR 0104)', async () => {
+      const app = (open = await db.app({ verifyService, grants, floors }));
+      await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('old1'), published('old2'), published('new')] } });
+      const read = (query: string) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers: as('notes') });
+      await expect.poll(async () => (await read('topics=folio.*')).json().events.length).toBe(3);
+      const [old1, old2, kept] = (await read('topics=folio.*')).json().events as { seq: string }[];
+      await db.pool.query("update events.domain_events set at = now() - interval '40 days' where id in ('old1', 'old2')");
+      expect(await db.store.pruneEvents(30)).toBe(2);
+      const gone = await read(`topics=folio.*&after=${old1.seq}`);
+      expect([gone.statusCode, gone.json()]).toMatchObject([410, { error: 'gone', message: expect.stringMatching(/pruned/), after: old2.seq }]);
+      // A follower that had read as far as what was pruned missed nothing, and nor did one starting afresh.
+      expect((await read(`topics=folio.*&after=${old2.seq}`)).json().events).toMatchObject([{ id: 'new' }]);
+      expect((await read('topics=folio.*')).json().events).toMatchObject([{ id: 'new' }]);
+      // Pruning everything still remembers how far it went.
+      await db.pool.query("update events.domain_events set at = now() - interval '40 days'");
+      await db.store.pruneEvents(30);
+      expect((await read(`topics=folio.*&after=${old2.seq}`)).statusCode).toBe(410);
+      expect((await read(`topics=folio.*&after=${kept.seq}`)).statusCode).toBe(200);
+    });
+
     it('keeps each publisher to its own topics and scope', async () => {
       const app = (open = await db.app({ verifyService, grants, floors }));
       const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });

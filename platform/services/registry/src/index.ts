@@ -145,6 +145,8 @@ if (EVENTS_URL && credentials) {
     credentials,
     cursor: { load: () => store.followedTo(), save: (seq) => store.setFollowedTo(seq) },
     deleted: ({ person }) => store.forgetPerson(person),
+    // Deletions it missed can't be asked for again: said, so an admin knows to check upgrades for names (ADR 0104).
+    onGap: async (upTo) => log.error(`The registry missed events up to ${upTo}, pruned while it was away: a person deleted then may still be named on upgrades they asked for.`),
     onError: (err) => log.error(`A deleted person’s name couldn’t be forgotten yet; the registry tries again (${(err as Error).message}).`),
   });
   leavers.start();

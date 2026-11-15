@@ -80,6 +80,8 @@ export interface DeliveryReport {
   failed: string[];
   /** Events given up on after a day. */
   dropped: number;
+  /** Apps whose place was behind what was pruned: they missed events and need rebuilding (ADR 0104). */
+  behind: string[];
 }
 
 /** What a person reads about an app's deliveries in Admin → Apps; `since` is when the trouble began, for Admin to put a date to. */
@@ -98,6 +100,9 @@ export const deliveryStatus = (d: Delivery, now = Date.now()): { state: 'ok' | '
 export type PushingState = { on: true; problem?: string } | { on: false; why: string; whoCanChange: string };
 
 const SERVICE_ACTOR = { id: 'events', kind: 'service' as const };
+
+/** Whether an app takes events on a floor (none: the deployment's own): it holds events:subscribe there. Pushed and read alike. */
+export const subscribesOn = async (grants: GrantLookup, app: string, floor: string | undefined): Promise<boolean> => (await grants(app, floor)).includes('events:subscribe');
 
 /** Delivers to every subscribing app that is due; one pass at a time. */
 export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = Date.now, batch = 100, leaseSeconds = LEASE_SECONDS, log }: DelivererOptions) => {
@@ -121,12 +126,24 @@ export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = 
     try {
       for (;;) {
         const events = await store.readEvents({ topics: ['*'], after: row.cursor, limit: batch });
+        // A place behind what was pruned means events went before this app took them (asked after the read, so a prune
+        // in between can't slip past): it is said once, the place moves up to what is left, and the read starts again.
+        const pruned = await store.prunedUpTo();
+        if (pruned !== undefined && BigInt(row.cursor) < BigInt(pruned)) {
+          report.behind.push(app);
+          log?.error({ app, cursor: row.cursor, prunedUpTo: pruned }, 'an app missed events that were pruned before it took them');
+          await audit?.({ actor: SERVICE_ACTOR, app: 'events', action: 'delivery.gap', target: app, detail: { cursor: row.cursor, prunedUpTo: pruned } }, `delivery.gap:${app}:${row.cursor}`);
+          const moved = await move(app, row, pruned, 'skipped');
+          if (!moved) return;
+          row = moved;
+          continue;
+        }
         if (events.length === 0) return;
         for (const event of events) {
           let wanted = event.publisher !== app;
           if (wanted) {
             try {
-              wanted = (await grants(app, event.workspace?.id)).includes('events:subscribe');
+              wanted = await subscribesOn(grants, app, event.workspace?.id);
             } catch (err) {
               if (!(err instanceof GrantsUnavailable)) throw err;
               log?.warn({ app, err: err.message }, 'could not check where an app subscribes; trying again later');
@@ -171,7 +188,7 @@ export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = 
   };
 
   const pass = async (): Promise<DeliveryReport> => {
-    const report: DeliveryReport = { delivered: 0, skipped: 0, failed: [], dropped: 0 };
+    const report: DeliveryReport = { delivered: 0, skipped: 0, failed: [], dropped: 0, behind: [] };
     let apps: GrantedApp[];
     try {
       apps = await subscribers();
@@ -209,7 +226,7 @@ export const eventDeliverer = ({ store, subscribers, grants, send, audit, now = 
         // Never an unhandled rejection: a pass that can't run (the database away) waits for the next.
         problem = `Deliveries couldn’t be looked at (${err instanceof Error ? err.message : String(err)}).`;
         log?.error({ err: String(err) }, 'delivery pass failed');
-        return { delivered: 0, skipped: 0, failed: [], dropped: 0 };
+        return { delivered: 0, skipped: 0, failed: [], dropped: 0, behind: [] };
       })
       .finally(() => {
         running = undefined;

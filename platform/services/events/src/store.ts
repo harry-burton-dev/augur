@@ -207,8 +207,10 @@ export interface EventStore {
   readEvents(query: EventsQuery): Promise<DomainEvent[]>;
   /** The highest seq committed, of any topic; undefined with no events kept. */
   lastSeq(): Promise<string | undefined>;
-  /** Forgets events older than this many days; returns how many went. */
+  /** Forgets events older than this many days, and remembers the highest seq it forgot; returns how many went. */
   pruneEvents(keepDays: number): Promise<number>;
+  /** The highest seq ever pruned: a follower whose cursor is below it has missed events (ADR 0104). */
+  prunedUpTo(): Promise<string | undefined>;
   /** Removes Activity entries older than this many days (the retention period, ADR 0040); returns how many went. */
   pruneAudit(keepDays: number): Promise<number>;
   /**
@@ -360,6 +362,15 @@ export const migrations: Migration[] = [
       where exists (select 1 from events.audit r where r.action = 'audit.redacted' and starts_with(n.key, 'leave:' || (r.detail->>'person') || ':'));`,
   },
   deliveriesMigration,
+  {
+    id: '016_pruned_up_to',
+    sql: `
+      -- How far pruning has gone: a follower behind it is told so (410), never left to skip events silently (ADR 0104).
+      create table events.domain_events_pruned (
+        one boolean primary key default true check (one),
+        up_to bigint not null
+      );`,
+  },
 ];
 
 /** Each new notification, by id. The channels carry ids only: see `refIn`. */
@@ -705,8 +716,22 @@ export class PgEventStore implements EventStore {
   }
 
   async pruneEvents(keepDays: number) {
-    const { rowCount } = await this.pool.query(`delete from events.domain_events where at < now() - make_interval(days => $1)`, [keepDays]);
-    return rowCount ?? 0;
+    // The high-water mark moves in the same statement as the delete, so a follower is never told less than went.
+    const { rows } = await this.pool.query<{ n: number }>(
+      `with gone as (delete from events.domain_events where at < now() - make_interval(days => $1) returning seq),
+       mark as (
+         insert into events.domain_events_pruned (up_to) select seq from gone order by seq desc limit 1
+         on conflict (one) do update set up_to = greatest(events.domain_events_pruned.up_to, excluded.up_to)
+       )
+       select count(*)::int as n from gone`,
+      [keepDays],
+    );
+    return rows[0]?.n ?? 0;
+  }
+
+  async prunedUpTo() {
+    const { rows } = await this.pool.query<{ up_to: string }>('select up_to from events.domain_events_pruned');
+    return rows[0]?.up_to ?? undefined;
   }
 
   /** Resolves once the database answers: the service's readiness check. */
