@@ -229,14 +229,16 @@
       "type": "object",
       "description": "Fields contract 3 hasn't frozen: each may change or go in a minor release. A registry ignores a field here that it doesn't know, so a manifest that sets a newer one still installs on an older AUGUR, without it. Anywhere else an unknown field is refused.",
       "properties": {
-        "requiredRole": { "type": "string", "maxLength": 60, "description": "Only people with this role can open it. Provisional until permissions decide who opens an app (ctx.can())." },
-        "links": { "$ref": "#/$defs/links" },
+        "requiredRole": { "type": "string", "minLength": 1, "maxLength": 60, "description": "Only people with this role can open it. Provisional until permissions decide who opens an app (ctx.can())." },
+        "links": {
+          "type": "object",
+          "properties": { "entities": { "type": "boolean" } },
+          "description": "As the top-level links, open to fields a later release adds, which a registry that doesn't know them ignores."
+        },
         "bindings": { "$ref": "#/$defs/bindings" }
-      },
-      "dependentRequired": { "bindings": ["links"] }
+      }
     }
   },
-  "dependentRequired": { "bindings": ["links"] },
   "$defs": {
     "links": {
       "type": "object",

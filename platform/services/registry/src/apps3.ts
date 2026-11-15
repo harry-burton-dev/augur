@@ -99,9 +99,8 @@ export const entryOf3 = (m: AppManifest3): KeptEntry => {
 /** What the shell is sent for a contract 3 app (spec 9.6): its manifest, with the limit in force, the previews on for the caller and its contract. */
 export const served3 = (m: AppManifest3, filled: { maxUpload: number; previewsOn?: string[] }): AppManifest3 & { maxUpload: number; requiredRole?: string } => {
   const { $schema: _schema, ...manifest } = m as AppManifest3 & { $schema?: string };
-  // The role the shell gates it on, wherever the manifest set it.
-  const { requiredRole } = provisionalOf(m);
-  return { ...manifest, contract: m.contract, maxUpload: filled.maxUpload, ...(requiredRole ? { requiredRole } : {}), ...(filled.previewsOn?.length ? { previewsOn: filled.previewsOn } : {}) };
+  // The provisional fields this registry knows, at the top, wherever the manifest set them: the shell reads them there.
+  return { ...manifest, ...provisionalOf(m), contract: m.contract, maxUpload: filled.maxUpload, ...(filled.previewsOn?.length ? { previewsOn: filled.previewsOn } : {}) };
 };
 
 /**

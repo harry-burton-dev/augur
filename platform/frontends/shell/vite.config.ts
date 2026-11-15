@@ -206,7 +206,9 @@ const DEV_FLOORS: Record<string, { kind: string; role: string }> = { 'dev-me': {
 
 const devApp = (dir: string | undefined) => {
   if (!dir) return undefined;
-  const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
+  const read = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; provisional?: { requiredRole?: unknown }; [key: string]: unknown };
+  // The role at the top, as the registry serves it: from provisional (contract 3), or for one more release from the top.
+  const manifest = read.provisional?.requiredRole === undefined ? read : { ...read, requiredRole: read.provisional.requiredRole };
   const roles = (process.env.DEV_ROLES ?? '').split(',').map((r) => r.trim()).filter(Boolean);
   // DEV_APP_ENTRY serves a built entry instead of the source.
   // DEV_PREVIEWS turns the app's feature previews on for the stand-in person: ids, comma separated, or `all`.
