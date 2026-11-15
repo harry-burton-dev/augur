@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import { deliveriesMigration, PgDeliveryStore, type DeliveryStore } from './deliveries.ts';
+import { deliveriesMigration, heldMigration, PgDeliveryStore, type DeliveryStore } from './deliveries.ts';
 import { digestMigration, PgDigestStore, type DigestStore } from './digests.ts';
 import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
@@ -392,6 +392,7 @@ export const migrations: Migration[] = [
       -- The version of its type an event's payload follows, when its publisher declares its types (ADR 0104).
       alter table events.domain_events add column version integer;`,
   },
+  heldMigration,
 ];
 
 /** Each new notification, by id. The channels carry ids only: see `refIn`. */
@@ -748,6 +749,8 @@ export class PgEventStore implements EventStore {
        select count(*)::int as n from gone`,
       [keepDays],
     );
+    // What was set aside goes with the events it stood for.
+    await this.pool.query('delete from events.delivery_held where set_aside_at < now() - make_interval(days => $1)', [keepDays]);
     return rows[0]?.n ?? 0;
   }
 
