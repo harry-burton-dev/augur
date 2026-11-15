@@ -720,7 +720,8 @@ describe('the app runner', () => {
     t.did.length = 0;
     t.calls.did.length = 0;
     expect(await t.run(purge)).toBe('done');
-    expect(t.did.filter((d) => /^(backup|retire|remove volumes)/.test(d))).toEqual(['backup', 'retire notes', 'remove volumes app-notes-web-scratch']);
+    // The storage job drops only behind the backup just taken (ADR 0103), so it's told which that is.
+    expect(t.did.filter((d) => /^(backup|retire|remove volumes)/.test(d))).toEqual(['backup', 'retire notes behind platform-20261030-0100.sql.gz', 'remove volumes app-notes-web-scratch']);
     expect(t.calls.did).toEqual(['no credential notes']);
   });
 

@@ -24,7 +24,8 @@
 # can't push the real backups out of retention. The result goes in $STATUS_DIR/offsite.json. Without
 # RESTIC_REPOSITORY nothing leaves the server, and Status says so.
 #   backup.sh --once           today's backup if there isn't one, then stops
-#   backup.sh --now            a fresh backup whatever there is (the updater's, before an upgrade), then stops;
+#   backup.sh --now            a fresh backup of the database and apps' files whatever there is (the updater's,
+#                              before an upgrade or before it drops a removed app's data), then stops;
 #                              fails when it can't be taken
 #   backup.sh --restore-test   restores the newest backup into a throwaway database and checks it
 #   backup.sh --restore-test --offsite   the same, from the newest in the off-server copy
@@ -70,32 +71,33 @@ status_written() {
   mv "$STATUS_DIR/$1.partial" "$STATUS_DIR/$1"
 }
 
-# noted OK FILE PROBLEM: writes last-backup.json for Status.
+# noted OK FILE PROBLEM [OBJECTS]: writes last-backup.json for Status, and for the storage job, which drops an
+# app's data only behind a good one taken since its job started, with apps' files in it (ADR 0103).
 noted() {
   {
     printf '{"at":"%s","ok":%s' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1"
     [ -n "$2" ] && printf ',"file":"%s","bytes":%s' "$(basename "$2")" "$(wc -c < "$2" | tr -d ' ')"
+    [ -n "${4:-}" ] && printf ',"objects":"%s"' "$(basename "$4")"
     [ -n "$3" ] && printf ',"problem":"%s"' "$3"
     printf '}\n'
   } > "$STATUS_DIR/last-backup.json.partial"
   status_written last-backup.json
 }
 
-# objects NAME [now]: tars apps' files into objects-NAME.tar.gz. Nothing to do without object storage.
+# objects NAME: tars apps' files into objects-NAME.tar.gz, and says which in $objects_file. Nothing to do
+# without object storage. Every backup takes them afresh (ADR 0103): one from earlier in the day would miss
+# what apps wrote since, and the copy before a drop must hold everything that goes.
 # The volumes are live: Garage can remove a block, or replace an hourly snapshot, while tar reads them,
 # and BusyBox's tar then fails the whole archive. So it tries again, up to three times, before giving up.
 objects() {
+  objects_file=
   [ -d "$OBJECTS_DIR/data" ] || return 0
   tarball="$BACKUP_DIR/objects-$1.tar.gz"
-  # The updater's backup before an upgrade: apps' files don't change in an upgrade, so one from today will do.
-  if [ -n "${2:-}" ] && ls "$BACKUP_DIR"/objects-"$(date -u +%Y-%m-%d)"*.tar.gz >/dev/null 2>&1; then
-    echo "backup: apps' files already backed up today, kept"
-    return 0
-  fi
   for try in 1 2 3; do
     # Everything of Garage's metadata but its live database; the snapshots hold a consistent copy.
     if tar -czf "$tarball.partial" -C "$OBJECTS_DIR" --exclude='meta/db.sqlite*' meta data; then
       mv "$tarball.partial" "$tarball"
+      objects_file=$tarball
       echo "backup: wrote $tarball ($(du -h "$tarball" | cut -f1))"
       return 0
     fi
@@ -106,8 +108,7 @@ objects() {
   return 1
 }
 
-# backup [NAME [now]]: today's backup, or platform-NAME.sql.gz (and objects-NAME.tar.gz). With `now` (the
-# updater's), apps' files are taken only when today has none yet. Returns 1 when any of it failed.
+# backup [NAME]: today's backup, or platform-NAME.sql.gz (and objects-NAME.tar.gz). Returns 1 when any of it failed.
 backup() {
   name=${1:-$(date -u +%Y-%m-%d)}
   file="$BACKUP_DIR/platform-$name.sql.gz"
@@ -115,8 +116,8 @@ backup() {
   if pg_dumpall --clean --if-exists | gzip > "$file.partial"; then
     mv "$file.partial" "$file"
     echo "backup: wrote $file ($(du -h "$file" | cut -f1))"
-    if objects "$name" "${2:-}"; then
-      noted true "$file" ""
+    if objects "$name"; then
+      noted true "$file" "" "$objects_file"
     else
       noted false "$file" "The database was backed up, but apps' files could not be. Earlier backups are kept."
       failed=1
@@ -421,7 +422,7 @@ if [ "${1:-}" = "--adopt-offsite" ]; then
 fi
 # Named after the moment, so it sorts after today's and the restore test picks it.
 if [ "${1:-}" = "--now" ]; then
-  backup "$(date -u +%Y-%m-%dT%H%M%SZ)" now
+  backup "$(date -u +%Y-%m-%dT%H%M%SZ)"
   exit $?
 fi
 # Only the long-running container gets here (and --once). A server that copied off with the script from
@@ -449,7 +450,7 @@ if offsite_on && [ -e "$today" ] && ! { [ -e "$STATUS_DIR/offsite.json" ] && gre
   # Today's was taken before AUGUR had started (a new server): a fresh one, now it has, is what goes.
   if ! { gunzip -c "$today" 2>/dev/null || true; } | grep -qm 1 '^CREATE TABLE registry\.apps '; then
     failed=
-    backup "$(date -u +%Y-%m-%dT%H%M%SZ)" now || true
+    backup "$(date -u +%Y-%m-%dT%H%M%SZ)" || true
     latest=$(ls -1 "$BACKUP_DIR"/platform-*.sql.gz 2>/dev/null | sort | tail -n 1 || true)
     offsite "${latest:-$today}" || true
   else
