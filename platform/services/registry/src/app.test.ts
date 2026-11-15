@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { callerHeaders, GATEWAY_CALLER, packFrontend, type FloorPlace } from '@augur/service-kit';
 import { MemoryFrontendFiles, servedEntry } from './frontends.ts';
@@ -20,6 +24,13 @@ const as = (client: string) => ({ authorization: `Bearer ${client}` });
 const service = as('app-library');
 
 const ids = (body: { id: string }[]) => body.map((a) => a.id);
+
+/** A gzipped tarball packed by GNU tar, not packFrontend, so it can hold what packFrontend refuses. */
+const tarOf = (files: { path: string; data: Buffer }[]) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontend-'));
+  for (const f of files) writeFileSync(join(dir, f.path), f.data);
+  return execFileSync('tar', ['czf', '-', '-C', dir, ...files.map((f) => f.path)]);
+};
 
 // The org, Finance with Payroll below it, Legal, and someone's own floor.
 const places: Record<string, FloorPlace> = {
@@ -370,6 +381,19 @@ describe.runIf(DATABASE_URL)('registry', () => {
     await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', entry: '/apps/library/main.js' } });
     expect((await served()).entry).toBe('/apps/library/main.js');
     expect(entries.filter((e) => e.action === 'app.frontend-published')).toHaveLength(3);
+  });
+
+  it('refuses a frontend holding a page or an SVG, which could run as the shell’s own page, and keeps none of it', async () => {
+    const frontendFiles = new MemoryFrontendFiles();
+    const app = await db.app({ verifyService, frontendFiles });
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/x?" + sessionStorage.length)</script></svg>');
+    for (const [path, data] of [['icon.svg', svg], ['index.html', Buffer.from('<script>alert(1)</script>')]] as const) {
+      // Packed by hand, as packFrontend now refuses it too.
+      const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.1.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: tarOf([{ path: 'entry.js', data: Buffer.from('') }, { path, data }]) });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().message).toMatch(new RegExp(`"${path.replace('.', '\\.')}" is a \\.${path.split('.').pop()} file.*\\.js, \\.mjs, \\.css`));
+    }
+    expect(frontendFiles.objects.size).toBe(0);
   });
 
   it('still serves a frontend kept before builds had folders from its version’s own', () => {

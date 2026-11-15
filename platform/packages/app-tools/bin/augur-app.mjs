@@ -88,6 +88,21 @@ const imageRepo = () => {
 const bundle = async (channel) => {
   const { id, version } = manifest();
   const repo = imageRepo();
+  // The frontend is packed first: a file it may not hold (a page or an SVG, which could run as the shell at
+  // its /apps/ address) stops the release before anything is pushed.
+  let tarball = null;
+  let digest = null;
+  if (parts.includes('frontend')) {
+    const { packFrontend, readFrontend, frontendDigest } = await import('@augur/service-kit');
+    const dist = join(root, 'frontend', 'dist');
+    if (!existsSync(dist)) throw new Error('frontend/dist is missing: build the frontend first.');
+    try {
+      tarball = packFrontend(readFrontend(dist));
+      digest = frontendDigest(tarball);
+    } catch (err) {
+      throw new Error(`frontend/dist can’t be released: ${err.message}`, { cause: err });
+    }
+  }
   const out = mkdtempSync(join(tmpdir(), 'augur-app-'));
   let service = null;
   if (parts.includes('service')) {
@@ -99,15 +114,11 @@ const bundle = async (channel) => {
     service = `${repo}/${id}@${digest}`;
   }
   let frontend = null;
-  if (parts.includes('frontend')) {
-    const dist = join(root, 'frontend', 'dist');
-    if (!existsSync(dist)) throw new Error('frontend/dist is missing: build the frontend first.');
-    const { packFrontend, readFrontend, frontendDigest } = await import('@augur/service-kit');
-    const tarball = packFrontend(readFrontend(dist));
+  if (tarball) {
     writeFileSync(join(out, 'frontend.tar.gz'), tarball);
     const pushed = JSON.parse(run('oras', ['push', `${repo}/${id}-frontend:${version},${channel}`, '--artifact-type', 'application/vnd.augur.frontend.v1', '--annotation', `org.opencontainers.image.version=${version}`, '--format', 'json', `frontend.tar.gz:${FRONTEND_MEDIA_TYPE}`], { cwd: out }));
     run('cosign', ['sign', '--yes', `${repo}/${id}-frontend@${pushed.digest}`], { stdio: ['ignore', 2, 2] });
-    frontend = { artifact: `${repo}/${id}-frontend@${pushed.digest}`, digest: frontendDigest(tarball) };
+    frontend = { artifact: `${repo}/${id}-frontend@${pushed.digest}`, digest };
   }
   return { service, frontend, channel };
 };
