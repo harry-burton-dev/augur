@@ -11,10 +11,10 @@ export interface KnownUpstreams {
 }
 
 /**
- * Where apps' services are, as the registry says. Throws when that can't be found out. Given `missing`, an app the
- * caller looked for and wasn't told of, the registry is asked again sooner, since that app may have just been installed.
+ * Where apps' services are, as the registry says. Throws when that can't be found out. Given the `app` the caller is
+ * looking for, an answer that doesn't have it is asked again sooner, since that app may have just been installed.
  */
-export type AppUpstreams = (missing?: string) => Promise<KnownUpstreams>;
+export type AppUpstreams = (app?: string) => Promise<KnownUpstreams>;
 
 export class UpstreamsUnavailable extends Error {}
 
@@ -53,9 +53,10 @@ export const registryUpstreams = ({ registryUrl, signer, ttlMs = 30_000, missMs 
     const { apps, previews } = (await res.json()) as Partial<KnownUpstreams>;
     return { apps: apps ?? {}, previews: previews ?? {} };
   };
-  return async (missing) => {
-    const mayBeNew = missing !== undefined && now() - askedAt >= missMs;
-    if (last && now() - last.at < ttlMs && !(mayBeNew && !(missing in last.upstreams.apps))) return last.upstreams;
+  return async (app) => {
+    const fresh = last && now() - last.at < ttlMs;
+    const missed = app !== undefined && last && !(app in last.upstreams.apps) && now() - askedAt >= missMs;
+    if (last && fresh && !missed) return last.upstreams;
     if (!asking) askedAt = now();
     asking ??= ask()
       .then((upstreams) => {
