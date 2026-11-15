@@ -303,6 +303,7 @@ export const Preferences = Type.Object(
     density: Type.Optional(choice(['comfortable', 'compact'])),
     areaTitles: Type.Optional(Type.Boolean({ description: 'Area title cards on arriving at a floor or opening an app; on unless false' })),
     toasts: Type.Optional(Type.Boolean({ description: 'Each new notification also said once as a toast; off unless true' })),
+    summonKey: Type.Optional(Type.Boolean({ description: '` alone opens and closes the shell; on unless false (WCAG 2.1.4)' })),
     barStop: Type.Optional(
       Type.Union([Type.Literal(0), Type.Literal(1), Type.Literal(2), Type.Literal(3)], {
         description: 'Where the app bar rests on the desktop: under the band (0), upper (1, the default), lower (2) or at the bottom (3)',
