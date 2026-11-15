@@ -10,6 +10,9 @@ describe('the ids AUGUR keeps', () => {
     expect(reservedIdProblem('keycloak')).toContain('the sign-in service');
     expect(reservedIdProblem('augur-frontends')).toContain('starts with augur-');
     expect(reservedIdProblem('pg-stats')).toContain('the database’s own schemas');
+    // A retired or removed app's data waits under retired_<id> and retired-<id> (ADR 0103).
+    expect(reservedIdProblem('retired-notes')).toContain('apps’ data set aside');
+    expect(reservedIdProblem('retired')).toContain('apps’ data set aside');
     expect(reservedIdProblem('notes')).toBeUndefined();
     expect(reservedIdProblem('storage-test-1')).toBeUndefined();
     expect(reservedIdProblem('constructor')).toBeUndefined();

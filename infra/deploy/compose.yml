@@ -272,8 +272,9 @@ services:
       GARAGE_ADMIN_URL: http://garage:3903
       # The apps named in .env that keep data outside the app runner (the runner sets up its own apps' storage).
       APP_STORAGE: ${APP_STORAGE:-}
-      # The apps that shipped with AUGUR until ADR 0075: their database logins, schemas and buckets go, once on each
-      # server (after the upgrade's backup), and are remembered as gone so an app installed later under one of these ids keeps its own.
+      # The apps that shipped with AUGUR until ADR 0075: their database logins, schemas and buckets are set aside, once
+      # on each server, and dropped with a later release behind a fresh backup (ADR 0103). Each is remembered, so an
+      # app installed later under one of these ids keeps its own.
       RETIRED_APPS: folio atlas mandate auspex
       # The platform's services that get a login owning only their own schema, each with its
       # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.

@@ -18,7 +18,7 @@ const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; 
     if (path === 'ApplyClusterLayout') return json(200, {});
     if (path.startsWith('GetBucketInfo')) {
       const id = state.buckets[url.searchParams.get('globalAlias')!];
-      return id ? json(200, { id }) : json(404, { code: 'NoSuchBucket', message: 'no' });
+      return id ? json(200, { id, keys: state.keys.filter((k) => `b-${k.name.replace(/^app-/, '')}` === id).map((k) => ({ accessKeyId: k.id })) }) : json(404, { code: 'NoSuchBucket', message: 'no' });
     }
     if (path === 'CreateBucket') return json(200, { id: (state.buckets[body.globalAlias] = `b-${body.globalAlias}`) });
     if (path === 'ListKeys') return json(200, state.keys);
@@ -28,6 +28,12 @@ const fakeGarage = (state: { roles: unknown[]; buckets: Record<string, string>; 
       return json(200, state.keys.push({ id: body.accessKeyId, name: body.name }));
     }
     if (path === 'AllowBucketKey') return json(200, {});
+    if (path === 'AddBucketAlias') return json(200, (state.buckets[body.globalAlias] = body.bucketId));
+    if (path === 'RemoveBucketAlias') {
+      if (state.buckets[body.globalAlias] === body.bucketId) delete state.buckets[body.globalAlias];
+      return json(200, {});
+    }
+    if (path === 'DenyBucketKey') return json(200, {});
     if (path.startsWith('UpdateBucket')) return json(200, { id: url.searchParams.get('id'), websiteAccess: body.websiteAccess.enabled });
     if (path.startsWith('DeleteBucket')) {
       const alias = Object.keys(state.buckets).find((k) => state.buckets[k] === url.searchParams.get('id'));
@@ -126,5 +132,25 @@ describe('garageAdmin', () => {
     const { garage, calls } = fakeGarage({ roles: [], buckets: {}, keys: [] });
     await garage.ensureWebsite('b-augur-frontends');
     expect(calls).toEqual(['UpdateBucket?id=b-augur-frontends']);
+  });
+
+  it('moves a bucket to another name, taking every key off it, and goes on from where a try stopped', async () => {
+    const { garage, calls, state } = fakeGarage({ roles: [], buckets: { notes: 'b-notes' }, keys: [{ id: 'GK1', name: 'app-notes' }] });
+    expect(await garage.moveBucket('notes', 'retired-notes')).toBe(true);
+    expect(state.buckets).toEqual({ 'retired-notes': 'b-notes' });
+    expect(calls).toEqual(['GetBucketInfo?globalAlias=retired-notes', 'GetBucketInfo?globalAlias=notes', 'AddBucketAlias', 'RemoveBucketAlias', 'DenyBucketKey']);
+    calls.length = 0;
+    // Done already: the old name is gone and the new one is there; the keys are taken off it again, in case that's where a try stopped.
+    expect(await garage.moveBucket('notes', 'retired-notes')).toBe(true);
+    expect(calls).toEqual(['GetBucketInfo?globalAlias=retired-notes', 'GetBucketInfo?globalAlias=notes', 'DenyBucketKey']);
+    expect(await garage.hasBucket('retired-notes')).toBe(true);
+    expect(await garage.hasBucket('notes')).toBe(false);
+    // Nothing to move.
+    expect(await garage.moveBucket('maps', 'retired-maps')).toBe(false);
+  });
+
+  it('won’t move a bucket onto a name another bucket has', async () => {
+    const { garage } = fakeGarage({ roles: [], buckets: { notes: 'b-notes', 'retired-notes': 'b-old' }, keys: [] });
+    await expect(garage.moveBucket('notes', 'retired-notes')).rejects.toThrow(/retired-notes is another bucket’s name already/);
   });
 });

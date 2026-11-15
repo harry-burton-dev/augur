@@ -55,6 +55,8 @@ export interface StorageConfig {
    * each with its password (<SERVICE>_DATABASE_PASSWORD).
    */
   services: { service: string; databasePassword: string }[];
+  /** The AUGUR release this server runs (PLATFORM_VERSION): what an app's data is set aside in, and dropped after (ADR 0103). */
+  release: string;
   /** Keycloak's own login and database (KEYCLOAK_DATABASE_PASSWORD, KEYCLOAK_DATABASE), when set. */
   keycloak?: { database: string; role: string; password: string };
 }
@@ -156,6 +158,7 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     ...(dropping ? { drop: { app: dropping, ...(({ databasePassword, bucketSecret }) => ({ databasePassword, bucketSecret }))(secretsOf(dropping)) } } : {}),
     ...(frontendsSecret ? { frontendsSecret } : {}),
     services,
+    release: env.PLATFORM_VERSION ?? '',
     ...(keycloakPassword ? { keycloak: { database: env.KEYCLOAK_DATABASE || 'keycloak', role: env.KEYCLOAK_DATABASE_USER || 'keycloak', password: keycloakPassword } } : {}),
   };
 };
