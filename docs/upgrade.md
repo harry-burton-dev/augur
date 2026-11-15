@@ -54,6 +54,12 @@ Every release has been through the [deploy test](https://drive.google.com/drive/
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+### Say where the proxy in front is: TRUSTED_PROXIES
+
+**From** unreleased
+
+The front door believes the caller's address that the proxy in front passes on (X-Forwarded-For) only from `TRUSTED_PROXIES`. Unset, that is the private ranges and loopback, as before, so nothing changes. Behind a load balancer, set it to the load balancer's addresses, so that nothing else on your network can pass for another caller in the front door's limits ([Limits and health](src/content/docs/run/limits.md)).
+
 Adding a note: put it at the top, with `**From** unreleased` as its first line. The Version packages pull request writes the release in, and `pnpm check:upgrade-notes` fails a note without one.
 
 ### A server's first upgrade starts by itself, and a fleet can run a server
