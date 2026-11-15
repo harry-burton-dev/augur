@@ -500,6 +500,49 @@ describe('gateway', () => {
     await expect(registryUpstreams({ registryUrl: 'http://registry:8082', signer, fetchImpl })()).rejects.toBeInstanceOf(UpstreamsUnavailable);
   });
 
+  it('asks the registry again soon for an app it was not told of, at most once a while (PER-424)', async () => {
+    let now = 0;
+    let asked = 0;
+    let apps: Record<string, string> = { notes: 'http://notes:8090' };
+    const fetchImpl = (async () => {
+      asked += 1;
+      return new Response(JSON.stringify({ apps }));
+    }) as unknown as typeof fetch;
+    const upstreamsOf = registryUpstreams({ registryUrl: 'http://registry:8082', ttlMs: 30_000, missMs: 2_000, fetchImpl, now: () => now });
+    expect((await upstreamsOf('notes')).apps).toEqual({ notes: 'http://notes:8090' });
+    // Known apps keep the cached answer; a missing one asks again only once a `missMs` has passed since the last ask.
+    now = 1_000;
+    await upstreamsOf('starter');
+    await upstreamsOf('notes');
+    expect(asked).toBe(1);
+    apps = { ...apps, starter: 'http://starter:8090' };
+    now = 2_500;
+    expect((await upstreamsOf('starter')).apps.starter).toBe('http://starter:8090');
+    expect(asked).toBe(2);
+    // Now known, it is served from the answer, and an app that never was asks at most once each `missMs`.
+    now = 3_000;
+    await upstreamsOf('starter');
+    await upstreamsOf('nothing');
+    now = 4_000;
+    await upstreamsOf('nothing');
+    expect(asked).toBe(2);
+    now = 4_600;
+    await upstreamsOf('nothing');
+    expect(asked).toBe(3);
+  });
+
+  it('serves a just-installed app without waiting for its cached answer about apps', async () => {
+    let apps: Record<string, string> = {};
+    const fetchImpl = (async () => new Response(JSON.stringify({ apps }))) as unknown as typeof fetch;
+    let now = 0;
+    const app = await buildApp({ upstreams: {}, auth, apps: registryUpstreams({ registryUrl: 'http://registry:8082', fetchImpl, now: () => now }) });
+    const open = async () => (await app.inject({ method: 'GET', url: '/api/starter/echo', headers: { authorization: `Bearer ${await sign(ada)}` } })).statusCode;
+    expect(await open()).toBe(404);
+    apps = { starter: url };
+    now = 2_000;
+    expect(await open()).toBe(200);
+  });
+
   it('reads app services from a name=url list', () => {
     expect(parseUpstreams('library=http://library:8083, sample=http://sample:8090')).toEqual({
       library: 'http://library:8083',

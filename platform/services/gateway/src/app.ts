@@ -797,7 +797,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         let upstream: string | undefined;
         let previews: Record<string, string> | undefined;
         try {
-          const known = name in upstreams ? undefined : await appUpstreams();
+          const known = name in upstreams ? undefined : await appUpstreams(name);
           upstream = known?.apps[name];
           previews = known?.previews[name];
         } catch (err) {
