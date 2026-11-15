@@ -28,6 +28,23 @@ test('it leaves out what isn’t an address and says so, so nothing can be writt
   assert.match(said, /10\.0\.0\.0\/8;deny.*left out/);
 });
 
+test('it leaves out what only looks like an address, which nginx would refuse to start on', () => {
+  for (const bad of ['10.0.0.256', '999.1.1.1', '10.0.0.0/33', ':', 'a:', 'fd00:::1', '1::2::3', 'fd00::/129', '10.0.0.0/8/8']) {
+    assert.equal(run(bad).from, '', bad);
+  }
+  assert.equal(run('::1 2001:db8::/32 fe80::1:2:3:4').from, 'set_real_ip_from ::1; set_real_ip_from 2001:db8::/32; set_real_ip_from fe80::1:2:3:4; ');
+});
+
+test('none believes no one, quietly, for a front door with no proxy in front', () => {
+  assert.deepEqual(run('none'), { from: '', said: '' });
+});
+
+test('an entry is never read as a file name', () => {
+  const { said } = run('*');
+  assert.equal(said.split('\n').filter(Boolean).length, 2, said);
+  assert.match(said, /has \*, which/);
+});
+
 test('with nothing usable it believes no one, and says every caller then counts as the proxy', () => {
   const { from, said } = run('nonsense');
   assert.equal(from, '');

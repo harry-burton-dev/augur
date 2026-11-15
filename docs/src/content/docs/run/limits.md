@@ -22,9 +22,9 @@ The front door (`web`) holds every caller to a few limits:
   (200) let through at once, since a page fires many calls together; sign-in takes `SSO_RATE_PER_SECOND` (10)
   with `SSO_RATE_BURST` (50). Past them the answer is 429, *Too Many Requests*. The address is the one the
   proxy in front saw, passed on in `X-Forwarded-For` and only believed from `TRUSTED_PROXIES`: addresses or
-  ranges, separated by spaces or commas (the private ranges and loopback unless set). Behind a load balancer,
-  name its addresses, so nobody else on those ranges can say they are someone else. An entry that isn't an
-  address is left out, and the web container's log says so.
+  ranges, separated by spaces or commas (the private ranges and loopback unless set), or `none` when nothing
+  stands in front of it. Behind a load balancer, name its addresses, so nobody else on those ranges can say
+  they are someone else. An entry that isn't an address is left out, and the web container's log says so.
 - **The largest upload**, `MAX_UPLOAD_MB` (2048). Each app has its own lower limit under it.
 - **Calls to apps' parts.** The gateway waits `APP_CONNECT_TIMEOUT_MS` (5000) to reach an app's part and
   answers 502 when it can't. A part gets `APP_RESPONSE_TIMEOUT_MS` (60000) to start answering, and the same

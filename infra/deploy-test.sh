@@ -385,13 +385,17 @@ up() {
   return 1
 }
 
-# The front door believes X-Forwarded-For from the proxy in front only (TRUSTED_PROXIES, here its default): nginx's
-# config, as the image wrote it at start, says set_real_ip_from for each, and nothing was left out on the way.
+# The front door believes X-Forwarded-For from the proxy in front only (TRUSTED_PROXIES): nginx's config, as the
+# image wrote it at start, says set_real_ip_from for each entry the deployment sets (the private ranges and
+# loopback when it sets none, as here and on a server upgraded from before the setting), and nothing was left out.
 trusts_the_proxy() {
-  local said
+  local said want got
+  want=$(grep -m1 '^TRUSTED_PROXIES=' "$dir/.env" | cut -d= -f2- | tr ',' ' ')
+  want=$(printf '%s' "${want:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1}" | xargs -n1 | sort | xargs)
+  got=$(pc exec -T web sh -c "grep -o 'set_real_ip_from [^;]*;' /etc/nginx/conf.d/default.conf" | sed 's/set_real_ip_from //; s/;$//' | sort | xargs)
   said=$(pc logs web 2>&1 | grep 'trusted-proxies:' || true)
-  if [ -n "$said" ] || ! pc exec -T web grep -q 'set_real_ip_from 10.0.0.0/8;' /etc/nginx/conf.d/default.conf; then
-    echo "The front door doesn't believe the proxy in front as TRUSTED_PROXIES says (infra/deploy/trusted-proxies.envsh):"$'\n'"${said:-no set_real_ip_from 10.0.0.0/8 in its config}" >&2
+  if [ -n "$said" ] || [ "$got" != "$want" ]; then
+    echo "The front door doesn't believe the proxy in front as TRUSTED_PROXIES says (infra/deploy/trusted-proxies.envsh): it believes '$got', not '$want'."$'\n'"$said" >&2
     return 1
   fi
 }
@@ -665,6 +669,7 @@ case "$mode" in
     tables "$retired" > "$work/after"
     kept "$work/before" "$work/after"
     on_version "$local_tag"
+    trusts_the_proxy
     backup_restores "Upgrade from augur@$from to this checkout"
     echo "Versions before: $old" >&2
     echo "Versions after:  $new" >&2

@@ -46,7 +46,6 @@ ENV APP_ORIGINS=""
 ENV LIVE_ORIGINS="" SERVER_RING=""
 # Who the front door believes about a caller's address: the proxy in front, from TRUSTED_PROXIES (the private
 # ranges unless set), written as nginx's set_real_ip_from by infra/deploy/trusted-proxies.envsh at each start.
-ENV TRUSTED_PROXIES=""
 COPY --chmod=755 infra/deploy/trusted-proxies.envsh /docker-entrypoint.d/14-trusted-proxies.envsh
 COPY --chmod=755 infra/deploy/live-origins.envsh /docker-entrypoint.d/15-live-origins.envsh
 # Where apps load the UI kit from (ADR 0048): the bundle in this image at /kit/, unless KIT_URL names
