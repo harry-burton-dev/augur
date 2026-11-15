@@ -87,7 +87,6 @@ export const entryOf3 = (m: AppManifest3): KeptEntry => {
     ...pick('maxUpload', m.maxUpload),
     ...pick('previews', m.previews),
     ...pick('links', p.links),
-    ...pick('bindings', p.bindings),
     ...pick('handles', c.intents?.handles),
     ...pick('search', c.search),
     ...pick('inbox', c.inbox),

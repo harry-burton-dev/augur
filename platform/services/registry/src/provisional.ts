@@ -1,9 +1,9 @@
 import type { AppManifest3 } from '@augur/app-tools/validate';
 
 /** The fields contract 3 hasn't frozen, which a manifest sets under `provisional` (manifest-3.schema.json). */
-export const PROVISIONAL_FIELDS = ['requiredRole', 'links', 'bindings'] as const;
+export const PROVISIONAL_FIELDS = ['requiredRole', 'links'] as const;
 type Field = (typeof PROVISIONAL_FIELDS)[number];
-export type Provisional = { requiredRole?: string; links?: { entities?: boolean }; bindings?: string[] };
+export type Provisional = { requiredRole?: string; links?: { entities?: boolean } };
 
 const blockOf = (m: AppManifest3) => (typeof m.provisional === 'object' && m.provisional !== null ? (m.provisional as Record<string, unknown>) : {});
 

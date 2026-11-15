@@ -16,7 +16,6 @@ export * from './models.js';
 export * from './storage.js';
 export * from './domain-events.js';
 export * from './audit-outbox.js';
-export * from './bindings.js';
 export * from './signed-caller.js';
 export * from './delegation.js';
 export * from './people.js';

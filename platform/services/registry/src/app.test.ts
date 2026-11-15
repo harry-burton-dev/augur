@@ -547,20 +547,12 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect(grants.json().notificationKinds).toEqual(['comment']);
     });
 
-    it('takes the types an app binds to entities, refuses reserved or stray ones, and lists them for services', async () => {
+    it('takes no binding types and lists no entity links, now the binding events are gone (D6)', async () => {
       const app = await db.app({ verifyService });
       const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, ...extra } });
-      expect((await put({ links: { entities: true }, bindings: ['Record'] })).statusCode).toBe(400);
-      expect((await put({ links: { entities: true }, bindings: ['record', 'record'] })).statusCode).toBe(400);
-      expect((await put({ links: { entities: true }, bindings: ['entity'] })).json().message).toContain('"entity"');
-      expect((await put({ bindings: ['record'] })).json().message).toContain('links.entities');
-      expect((await put({ links: { entities: true }, bindings: ['record', 'library'] })).statusCode).toBe(201);
-      const listed = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/entity-links', headers });
-      expect((await listed(as('app-atlas'))).json()).toEqual([{ app: 'library', types: ['record', 'library'] }]);
-      expect((await listed(as('platform-events'))).statusCode).toBe(200);
-      expect((await listed(admin)).statusCode).toBe(403);
-      await put({});
-      expect((await listed(as('app-atlas'))).json()).toEqual([]);
+      expect((await put({ links: { entities: true }, bindings: ['record'] })).statusCode).toBe(400);
+      expect((await put({ links: { entities: true } })).statusCode).toBe(201);
+      expect((await app.inject({ method: 'GET', url: '/v1/entity-links', headers: as('app-atlas') })).statusCode).toBe(404);
     });
 
     it('tells platform services which apps are granted a scope', async () => {

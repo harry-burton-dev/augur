@@ -224,7 +224,6 @@
       }
     },
     "links": { "$ref": "#/$defs/links", "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
-    "bindings": { "$ref": "#/$defs/bindings", "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
     "provisional": {
       "type": "object",
       "description": "Fields contract 3 hasn't frozen: each may change or go in a minor release. A registry ignores a field here that it doesn't know, so a manifest that sets a newer one still installs on an older AUGUR, without it. Anywhere else an unknown field is refused.",
@@ -234,8 +233,7 @@
           "type": "object",
           "properties": { "entities": { "type": "boolean" } },
           "description": "As the top-level links, open to fields a later release adds, which a registry that doesn't know them ignores."
-        },
-        "bindings": { "$ref": "#/$defs/bindings" }
+        }
       }
     }
   },
@@ -244,15 +242,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": { "entities": { "type": "boolean" } },
-      "description": "The app binds its things to entities and publishes the binding events (ADR 0025, 0066). Stands until the floor graphs specification decides otherwise (ADR 0077 point 7)."
-    },
-    "bindings": {
-      "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" },
-      "minItems": 1,
-      "maxItems": 10,
-      "uniqueItems": true,
-      "description": "With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound."
+      "description": "The app links its things to entities in Data Atlas (ADR 0025). Stands until the floor graphs specification decides otherwise (ADR 0077 point 7)."
     },
     "eventType": {
       "type": "object",

@@ -197,15 +197,18 @@ describe.runIf(DATABASE_URL)('fields contract 3 hasn’t frozen, under provision
     expect((await t.catalogue(finance)).find((a) => a.id === 'notes')).toMatchObject({ requiredRole: 'finance' });
   });
 
-  it('refuses one set in both places rather than guess, and holds bindings to links under provisional too', () => {
+  it('refuses one set in both places rather than guess', () => {
     const both = checkRelease(releaseOf('notes', '1.2.0', { requiredRole: 'finance', provisional: { requiredRole: 'admin' } }));
     expect(both.refusals).toEqual(['The manifest sets requiredRole both at its top and under provisional: keep the one under provisional.']);
     expect(both.warnings.join(' ')).not.toMatch(/requiredRole/);
-    // Half moved: bindings at the top, links under provisional, is one rule across both.
-    expect(checkRelease(releaseOf('notes', '1.2.0', { bindings: ['claim'], provisional: { links: { entities: true } } })).refusals).toEqual([]);
     expect(manifest3Problems({ ...releaseOf('notes', '1.2.0').manifest, provisional: { requiredRole: '' } }).join(' ')).toMatch(/requiredRole/);
-    expect(checkRelease(releaseOf('notes', '1.2.0', { provisional: { links: { entities: true }, bindings: ['claim'] } })).refusals).toEqual([]);
-    expect(checkRelease(releaseOf('notes', '1.2.0', { provisional: { bindings: ['claim'] } })).refusals.join(' ')).toMatch(/bindings/);
+  });
+
+  it('knows no bindings, now the binding events are gone (D6): ignored under provisional, refused at the top', () => {
+    const under = checkRelease(releaseOf('notes', '1.2.0', { provisional: { links: { entities: true }, bindings: ['claim'] } }));
+    expect(under.refusals).toEqual([]);
+    expect(under.warnings).toContain('Notes sets provisional.bindings, which this AUGUR doesn’t know: it installs without it. If it is a misspelling, Notes’s publisher needs to fix it.');
+    expect(manifest3Problems({ ...releaseOf('notes', '1.2.0').manifest, bindings: ['claim'] }).join(' ')).toMatch(/bindings/);
   });
 });
 

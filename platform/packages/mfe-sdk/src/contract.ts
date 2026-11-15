@@ -120,15 +120,16 @@ export interface AppManifestEntry {
    */
   notifications?: { kinds: NotificationKind[] };
   /**
-   * What the app links its things to elsewhere in AUGUR (SDK 2.1). `entities: true` says it binds
-   * its things to entities and publishes the binding events (ADR 0066), so the entity catalogue
-   * follows them and shows what uses each entity.
+   * What the app links its things to elsewhere in AUGUR (SDK 2.1). `entities: true` says it links
+   * its things to entities in Data Atlas (ADR 0025).
    */
   links?: { entities?: boolean };
   /**
    * With `links.entities`, the types of thing the app binds, as its topics name them (SDK 2.1):
    * each is published on `<app id>.<type>.entity-bound` and `-unbound`. Lowercase, up to 10, and
    * never `entity` or `role`, which the events' payload uses.
+   * @deprecated The binding events are gone (D6): the registry no longer takes or serves this, so it
+   * is never set. It stays in the type until the next SDK major.
    */
   bindings?: string[];
   /**

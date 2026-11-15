@@ -9,7 +9,7 @@ import { APP_RELEASE_2_SCHEMA, asksOf2, type AppRelease2 } from '@augur/app-tool
 import { isOfferedScope, reservedIdProblem } from '@augur/service-kit';
 import { platformApps } from './manifest.ts';
 import { eventsProblems } from './event-types.ts';
-import { provisionalOf, setTwice, topLevelProvisional, unknownProvisional } from './provisional.ts';
+import { setTwice, topLevelProvisional, unknownProvisional } from './provisional.ts';
 
 /** The contract majors this registry serves (spec 11.1, 11.5). Contract 3 has no compatibility path (11.6). */
 export const SERVED_CONTRACTS: readonly number[] = [3];
@@ -181,8 +181,6 @@ const ruleRefusals = (release: AppRelease2, offered: Required<Omit<Offered, 'kno
     for (const id of repeated(list(key).map((x) => (typeof x.id === 'string' ? x.id : undefined)))) out.push(`The ${what} id ${id} is used twice.`);
   }
   for (const f of setTwice(m)) out.push(`The manifest sets ${f} both at its top and under provisional: keep the one under provisional.`);
-  const { bindings, links } = provisionalOf(m);
-  if (bindings !== undefined && !links?.entities) out.push('The manifest has bindings, but no links.entities to bind them to.');
   if (!m.frontend && !parts.length) out.push(`${m.name} has neither a frontend nor parts: an app needs at least one.`);
   if (m.frontend && !release.frontend) out.push(`The manifest has a frontend, but the release carries no frontend bundle.`);
   return out;
