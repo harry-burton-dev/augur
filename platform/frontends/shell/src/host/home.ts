@@ -99,7 +99,7 @@ export function settingsOf(app: AppManifestEntry, floor: Pick<Workspace, 'kind' 
 
 /**
  * The cards for Home on this floor: apps the person opened most recently first; then, of the rest, apps for the work
- * (pillar apps and every other app) before platform apps, each in the catalogue's order; at most six (ADR 0032).
+ * (pillar apps and every other app) before platform apps, each in the catalogue's order; at most six (ADR 0077).
  * An app this shell can't open keeps its card, which says why and who can change it (Nothing is obtuse).
  */
 export function cardsFor(manifest: AppManifestEntry[], floor: Pick<Workspace, 'kind' | 'role'>, recent: string[]): HomeCard[] {

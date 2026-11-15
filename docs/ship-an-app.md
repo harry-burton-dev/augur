@@ -57,7 +57,7 @@ To go back, use **Go back** on the app's page in the Upgrade Centre, or hold the
 
 ## An app in its own repository
 
-Apps are moving out of this repository into their own (ADR 0012). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
+Apps are moving out of this repository into their own (ADR 0077). Such an app releases from its own repository the same way, as `app/<id>@<version>` with its `app-release.json`, signed by that repository's own `release.yml` (and `app-dev.yml`, `app-preview.yml` for dev builds and previews).
 
 An app on the app contract (contract 3, ADR 0075) also keeps `score/<part>.score.yaml` for each of its parts, and `augur-app validate` checks the manifest and those files against the contract's schemas, which `@augur/app-tools` ships (`manifest-3.schema.json`, `score-part-1.schema.json`, `app-release-2.schema.json`); its release file is `augur.app-release/v2`, which `@augur/app-tools/release2` writes with every part's image pinned by digest (`augur-app publish` writes it once the template moves to contract 3; today it writes v1).
 
@@ -82,4 +82,4 @@ Servers still read one feed, AUGUR's (ADR 0047):
 - A server's app runner trusts only the repositories `APP_PUBLISHERS` in its `.env` lists, so each server lists the app's repository before installing it.
 - The first release a server installs from the new repository takes over the data the old one left, so the updater takes a backup of the database first, and the install's first step names the file. Later releases from that repository install as usual. A version installed before this rule (its record names no repository) gets the same backup at its next update.
 
-A platform or pillar app (ADR 0032) is listed here like any other: no app ships inside AUGUR's release (ADR 0075).
+A platform or pillar app (ADR 0077) is listed here like any other: no app ships inside AUGUR's release (ADR 0075).
