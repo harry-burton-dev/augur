@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-Postgres now takes at most 200 connections (`POSTGRES_MAX_CONNECTIONS`, Postgres's own default was 100) and keeps 40 of them for AUGUR's own logins (`POSTGRES_RESERVED_CONNECTIONS`), so apps can't take every connection. Keycloak's pool is now at most 20 (it was 100) and OpenFGA's 20. Upgrading restarts Postgres once, which takes a few seconds. Nothing to do.
+Postgres now takes at most 200 connections (`POSTGRES_MAX_CONNECTIONS`, Postgres's own default was 100) and keeps 40 of them for AUGUR's own logins (`POSTGRES_RESERVED_CONNECTIONS`), so apps can't take every connection. Keycloak's pool is now at most 20 (it was 100) and OpenFGA's 20. Postgres takes the new limits when it next starts, and an upgrade through Deployment doesn't restart it: run `pc up -d postgres` after the upgrade, which takes it down for a few seconds.
 
 ## Each container has a share of the server
 

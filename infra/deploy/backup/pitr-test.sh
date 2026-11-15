@@ -96,7 +96,11 @@ done
 # A restore to a time leaves its target in the live postgresql.auto.conf, and every later base backup
 # carries it: taken out here, or the replay would stop at that old moment.
 sed -i '/^[[:space:]]*recovery_target/d' "$scratch/data/postgresql.auto.conf"
+# Replaying needs at least the connections the live server had when the backup was taken (its control file says),
+# which start.sh sets on the command line, where the backup's own files don't carry it.
+connections=$(su postgres -c "PATH='$PATH' pg_controldata $scratch/data" 2>/dev/null | sed -n 's/^max_connections setting: *//p')
 cat >> "$scratch/data/postgresql.auto.conf" <<CONF
+max_connections = ${connections:-200}
 restore_command = 'test -f $scratch/wal/%f.gz && gunzip -c $scratch/wal/%f.gz > %p'
 recovery_target_action = 'promote'
 listen_addresses = ''
