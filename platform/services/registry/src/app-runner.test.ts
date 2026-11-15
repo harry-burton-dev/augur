@@ -120,15 +120,20 @@ describe.runIf(DATABASE_URL)('an app id stays with the publisher that first inst
     const { server, ask } = await setup();
     const finish = async (id: string) =>
       server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${id}/progress`, headers: runner, payload: { step: 'switch', state: 'done', outcome: 'done' } });
+    const fail = async (id: string) =>
+      server.inject({ method: 'POST', url: `/v1/app-runner/jobs/${id}/progress`, headers: runner, payload: { step: 'health', state: 'failed', outcome: 'failed' } });
+    const bound = async (app: string) => (await db.store.appPublishers()).find((p) => p.app === app);
     const other = releaseOf('notes', '1.3.0', {}, { signer: { repository: 'someone-else/notes', workflow: '.github/workflows/release.yml' } });
-    // Nothing installed yet binds the id: a job that failed or was taken back doesn't count.
-    expect(await db.store.appPublisher('notes')).toBeUndefined();
+    // An install that failed or was taken back doesn't bind the id.
+    await fail((await ask({ action: 'install', release: other })).json().id);
+    await db.store.cancelAppJob((await ask({ action: 'install', release: other })).json().id);
+    expect(await bound('notes')).toBeUndefined();
     await finish((await ask({ action: 'install', release })).json().id);
-    expect(await db.store.appPublisher('notes')).toMatchObject({ app: 'notes', repository: release.signer.repository });
+    expect(await bound('notes')).toMatchObject({ app: 'notes', repository: release.signer.repository });
     const refused = await ask({ action: 'install', release: other });
     expect(refused.statusCode).toBe(400);
     expect(refused.json().message).toBe(
-      `notes was first installed from ${release.signer.repository}, and an app’s id stays with its first publisher. This release is signed by someone-else/notes: it needs an id of its own.`,
+      `notes was first installed from ${release.signer.repository}, and an app’s id stays with its first publisher. This release is signed by someone-else/notes: its publisher needs to give it an id of its own.`,
     );
     // The same publisher's next release still installs.
     const next = await ask({ action: 'install', release: releaseOf('notes', '1.3.0') });
@@ -136,11 +141,11 @@ describe.runIf(DATABASE_URL)('an app id stays with the publisher that first inst
     await db.store.cancelAppJob(next.json().id);
     // Removed, its data gone and the registry having forgotten it, the id is still its publisher's.
     await db.store.forgetApp('notes', 'u-1');
-    expect(await db.store.appPublisher('notes')).toMatchObject({ repository: release.signer.repository });
+    expect(await bound('notes')).toMatchObject({ repository: release.signer.repository });
     expect((await ask({ action: 'install', release: other })).statusCode).toBe(400);
   });
 
-  it('binds an app installed before this rule to the publisher of its first install', async () => {
+  it('binds an app installed before this rule to the publisher of the release it runs', async () => {
     await setup();
     const job = (id: string, r: object, at: string) => [id, JSON.stringify(r), at];
     await db.pool.query(
@@ -154,7 +159,7 @@ describe.runIf(DATABASE_URL)('an app id stays with the publisher that first inst
     await db.pool.query(`delete from registry.migrations where id = '029_app_publishers'`);
     await db.pool.query('drop table registry.app_publishers');
     await db.store.migrate();
-    expect(await db.store.appPublisher('ledger')).toMatchObject({ repository: 'first/ledger', boundAt: '2026-11-01T00:00:00.000Z' });
+    expect((await db.store.appPublishers()).find((p) => p.app === 'ledger')).toMatchObject({ repository: 'later/ledger', boundAt: '2026-11-02T00:00:00.000Z' });
   });
 });
 

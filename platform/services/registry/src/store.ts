@@ -410,10 +410,8 @@ export interface AppStore {
   deferDataDeletion(app: string, after: (failures: number) => Date, problem: string): Promise<{ failures: number; dueAt: Date } | undefined>;
   /** Forgets everything the registry kept of an app whose data went: its settings' values, developers, follow, deletion and its catalogue entry with its floors' grants. */
   forgetApp(app: string, by: string): Promise<void>;
-  /** The publisher the app id is bound to; undefined until a release installs under it. Never forgotten, so an id isn't taken over once its app is removed. */
-  appPublisher(app: string): Promise<AppPublisher | undefined>;
-  /** Binds the app id to this repository, unless it is bound already. */
-  bindPublisher(app: string, repository: string): Promise<void>;
+  /** The publisher each app id is bound to, from its first install's release (D9). Never forgotten, so an id isn't taken over once its app is removed. */
+  appPublishers(): Promise<AppPublisher[]>;
   /** Forgets values removed before `before`; how many it forgot. */
   dropRemovedSettings(before: Date): Promise<number>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
@@ -844,12 +842,12 @@ export const migrations: Migration[] = [
         repository text not null,
         bound_at timestamptz not null default now()
       );
-      -- An app installed before this: bound to the repository of its first install.
+      -- An app installed before this: bound to the repository of the release it runs now, so its own updates still install.
       insert into registry.app_publishers (app_id, repository, bound_at)
         select distinct on (app_id) app_id, release->'signer'->>'repository', coalesce(finished_at, requested_at)
         from registry.app_jobs
         where action = 'install' and state = 'done' and pr is null and release->'signer'->>'repository' is not null
-        order by app_id, finished_at, requested_at;`,
+        order by app_id, finished_at desc nulls last, requested_at desc;`,
   },
 ];
 
@@ -1209,7 +1207,11 @@ export class PgAppStore implements AppStore {
          where id = $1 returning *`,
         [id, JSON.stringify(steps), outcome?.state ?? 'running', outcome?.message ?? null, Boolean(outcome), outcome?.upstream ?? null],
       );
-      return fromAppJobRow(updated[0]);
+      const job = fromAppJobRow(updated[0]);
+      // Its first install binds the id to the release's publisher for good (D9), in the same transaction as the job ending.
+      if (outcome?.state === 'done' && job.action === 'install' && job.pr === undefined && job.release)
+        await client.query('insert into registry.app_publishers (app_id, repository) values ($1, $2) on conflict do nothing', [job.app, job.release.signer.repository]);
+      return job;
     });
   }
 
@@ -1443,14 +1445,9 @@ export class PgAppStore implements AppStore {
     await this.remove(app, by);
   }
 
-  async appPublisher(app: string) {
-    const { rows } = await this.pool.query<{ app_id: string; repository: string; bound_at: Date }>('select * from registry.app_publishers where app_id = $1', [app]);
-    const r = rows[0];
-    return r && { app: r.app_id, repository: r.repository, boundAt: r.bound_at.toISOString() };
-  }
-
-  async bindPublisher(app: string, repository: string) {
-    await this.pool.query('insert into registry.app_publishers (app_id, repository) values ($1, $2) on conflict do nothing', [app, repository]);
+  async appPublishers() {
+    const { rows } = await this.pool.query<{ app_id: string; repository: string; bound_at: Date }>('select * from registry.app_publishers order by app_id');
+    return rows.map((r) => ({ app: r.app_id, repository: r.repository, boundAt: r.bound_at.toISOString() }));
   }
 
   async dropRemovedSettings(before: Date) {

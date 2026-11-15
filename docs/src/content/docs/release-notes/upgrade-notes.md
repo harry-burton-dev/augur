@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-The registry now refuses a release under an app's id when another repository signed it, and keeps that rule after the app is removed. Apps already installed are bound to the repository of their first install. Nothing to do, unless you meant to swap an app for another publisher's under the same id: that one now needs an id of its own.
+The registry now refuses a release under an app's id when another repository signed it, and keeps that rule after the app is removed. Apps already installed are bound to the repository of the release they run now. Nothing to do, unless you meant to swap an app for another publisher's under the same id: that one now needs an id of its own.
 
 ## Postgres keeps connections back for AUGUR
 
