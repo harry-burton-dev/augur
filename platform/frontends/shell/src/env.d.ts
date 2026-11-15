@@ -5,6 +5,8 @@ interface ImportMetaEnv {
 }
 /** The shell's release version, from its package.json at build time. */
 declare const __SHELL_VERSION__: string;
+/** Different for every build of the shell (host/build.ts). */
+declare const __SHELL_BUILD__: string;
 
 interface ImportMeta {
   readonly env: ImportMetaEnv;
