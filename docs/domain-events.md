@@ -96,7 +96,7 @@ app.post(PART_EVENTS_PATH, async (req, reply) => {
 });
 ```
 
-You don't get your own events, nor events on floors where your app isn't on or lacks `events:subscribe`; an event on no floor counts as the organisation's. An app an admin turns off keeps its place and catches up when turned on again; one whose grant is withdrawn loses its place (recorded as `delivery.forgotten`). A newly granted app starts from the events after the grant, not from the beginning; `GET /v1/domain-events?after=` is still there for catching up on what came before.
+You don't get your own events, nor events on floors where your app isn't on or lacks `events:subscribe`; an event on no floor counts as the organisation's. An app an admin turns off keeps its place and catches up when turned on again, unless events it hadn't taken were pruned meanwhile: then it gets what is left, and the gap is recorded once in the audit log (`delivery.gap`, with the place it was at and how far events were pruned), so its data can be rebuilt; one whose grant is withdrawn loses its place (recorded as `delivery.forgotten`). A newly granted app starts from the events after the grant, not from the beginning; `GET /v1/domain-events?after=` is still there for catching up on what came before.
 
 ## In the browser
 

@@ -100,7 +100,7 @@ export class PgDeliveryStore implements DeliveryStore {
   async ensure(app: string) {
     // The latest seq is read only when the row is new, so an existing row costs one select.
     await this.pool.query(
-      `insert into events.deliveries (app, cursor) values ($1, coalesce((select max(seq) from events.domain_events), 0)) on conflict (app) do nothing`,
+      `insert into events.deliveries (app, cursor) values ($1, coalesce((select max(seq) from events.domain_events), (select up_to from events.domain_events_pruned), 0)) on conflict (app) do nothing`,
       [app],
     );
     const { rows } = await this.pool.query<Row>(`select ${COLUMNS} from events.deliveries where app = $1`, [app]);
