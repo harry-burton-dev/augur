@@ -125,9 +125,9 @@ describe('the server’s ring', () => {
       return updatesView({ checker, apps: [] });
     };
     const dev = release('0.4.1-dev.48', 'dev');
-    // An admin upgraded this server once and it finished, so Automatic may start (ADR 0020, amended 2 Nov).
     const byHand = { version: '0.4.0', state: 'done' as const, requestedBy: 'u-1' };
-    expect(automaticDevUpgrade(await workbench([dev]), [])).toBeUndefined();
+    // A server's first upgrade starts by itself too: nobody has to run one by hand first (ADR 0100).
+    expect(automaticDevUpgrade(await workbench([dev]), [])).toBe('0.4.1-dev.48');
     expect(automaticDevUpgrade(await workbench([dev]), [byHand])).toBe('0.4.1-dev.48');
     expect(automaticDevUpgrade(await workbench([dev]), [byHand, { version: '0.4.1-dev.48', state: 'rolled-back', requestedBy: 'automatic' }])).toBeUndefined();
     expect(automaticDevUpgrade(await workbench([dev], 'preview'), [byHand])).toBeUndefined();

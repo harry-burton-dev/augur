@@ -14,6 +14,7 @@ import {
   CALLER_TOKEN_HEADER,
   callerHeaders,
   callerOfService,
+  FLEET_CALLER,
   CallerKeysUnavailable,
   callerSignerFromEnv,
   CallerTokenError,
@@ -35,6 +36,7 @@ import {
   endStreamsOnStop,
 } from '@augur/service-kit';
 import { authenticate, AuthError, authFromEnv, signInKeysUrl, type AuthConfig, type Authenticated } from './auth.ts';
+import { FLEET_REFUSED, FLEET_ROUTE, fleetMayCall, isFleet } from './fleet.ts';
 import { AppGrantsUnavailable, holds, notAllowed, registryGrantsFor, scopeFor, type AppGrant, type AppGrants } from './grants.ts';
 import { appFailure, appLimitsFromEnv, InFlight, platformFailure, platformLimitsFromEnv, platformPoolOptions, poolOptions, STREAM_ROUTE, type AppLimits, type PlatformLimits } from './limits.ts';
 import { describeApi } from './contract.ts';
@@ -324,6 +326,12 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     // AUGUR's own services reach each other inside the deployment; through the gateway one reaches only an app's part
     // (events pushes events to parts, spec 8.6), as a caller named after it, which the part checks (isServiceCaller).
     if (req.identity.kind === 'service') {
+      // The fleet's client (ADR 0100) reaches the registry's routes for what the server runs, and nothing else.
+      if (isFleet(req.identity.service)) {
+        if (req.routeOptions.url !== FLEET_ROUTE || !fleetMayCall(req.method, req.url)) return reply.code(403).send({ error: 'forbidden', message: FLEET_REFUSED });
+        req.caller = FLEET_CALLER;
+        return;
+      }
       // Decided by the matched route, as for public routes: an app proxy is `/api/<name>` or `/api/:name`, and the
       // gateway's own routes and the platform's services are neither.
       const target = /^\/api\/([^/]+)/.exec(req.routeOptions.url ?? '')?.[1];
@@ -626,6 +634,11 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         // The part receives the delegated caller, which it carries on its own calls for the person.
         req.signedCaller = { [CALLER_TOKEN_HEADER]: await signDelegation(signer, req.caller, { app: id, scopes: grant.scopes, lifetimeSeconds: delegationSeconds }) };
       }
+    } else if (req.identity?.kind === 'service' && isFleet(req.identity.service) && req.caller) {
+      // The fleet's client, on one of the registry's routes the request hook let through: signed for the registry,
+      // which holds it to the server's ring (ADR 0100).
+      req.signedCaller = await signedCallerHeaders(signer, req.caller, name);
+      return;
     } else if (req.identity?.kind === 'service' && req.caller) {
       // A platform service's token (spec 8.6): only to an app's part, and only an app that is on, signed for that part to check.
       if (toPlatform) return refuse(403, 'forbidden', 'AUGUR’s own services reach each other inside the deployment, not through the gateway.');

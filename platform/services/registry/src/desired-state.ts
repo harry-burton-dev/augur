@@ -134,16 +134,6 @@ export const stepOf = (from: string, to: string): 'major' | 'minor' | 'patch' | 
 /** Whether `to` is a 0.x minor over `from`, which counts as a major. */
 export const isZeroMinor = (from: string, to: string) => semver.major(from) === 0 && semver.major(to) === 0 && semver.minor(to) > semver.minor(from);
 
-/**
- * Why Automatic doesn't start AUGUR upgrades on this server yet, or nothing: it waits until an admin
- * has upgraded AUGUR here once and it finished (ADR 0020, amended 2 Nov), so the real upgrade chain is
- * first tried with someone watching.
- */
-export const firstUpgradeProblem = (history: { requestedBy: string; state: string }[]) =>
-  history.some((u) => u.requestedBy !== 'automatic' && u.state === 'done')
-    ? undefined
-    : 'Automatic starts after an admin has upgraded AUGUR on this server once and it finished. Upgrade once from here and watch it.';
-
 /** Why the pin keeps `version` out, or nothing. */
 export const pinProblem = (state: Pick<DesiredState, 'pin' | 'unit'>, version: string) =>
   state.pin && !semver.satisfies(version, state.pin, { includePrerelease: true }) ? `${version} is outside the pin ${state.pin}.` : undefined;

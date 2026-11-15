@@ -1,5 +1,5 @@
 {
-  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. harryOk: the High paths that also wait for Harry's ok. deployTest: the paths whose change runs on a server, which get the deploy test before merging. Globs follow node:path matchesGlob. A bot's pull request (Renovate) has no description to check: it needs only Harry's ok on his paths.",
+  "about": "Review tiers by path (REVIEW.md). A pull request is High if any path matches high (and not notHigh), Low if every path matches low (and not notLow), otherwise Medium. Generated files (notCount) don't count towards the tier, nor (ignoreRenames) do files only renamed. harryOk: the paths that wait for Harry's ok, kept to what can't be undone or gives more access: migrations, backups and Postgres, Promote to stable and Halt, the updater's trusted signers, and the review check's own script, workflow and tiers, so no pull request can switch the check off. harryOkWhen: rules on what a change adds or takes away, for a new or changed migration (its lock entry) and a workflow that gains privilege, a riskier trigger or a new action. autoOk: each High pull request that merges without his ok gets an auto-ok record. deployTest: the paths whose change runs on a server, which get the deploy test before merging, apart from notDeployTest (tests). Globs follow node:path matchesGlob. A bot's pull request (Renovate) has no description to check: it needs only Harry's ok on his paths.",
   "high": [
     "platform/services/updater/**",
     "platform/services/identity/**",
@@ -26,7 +26,6 @@
     "scripts/pipeline*",
     "scripts/check-migrations*",
     "scripts/review-tier*",
-    "docs/release-channels.md",
     "REVIEW.md",
     "platform/services/storage/**"
   ],
@@ -36,7 +35,10 @@
     "**/*.test.mjs",
     "**/*.testing.ts",
     "**/README.md",
-    "infra/docker-compose.yml"
+    "infra/docker-compose.yml",
+    "infra/deploy-test.sh",
+    "infra/deploy-browser-check.mjs",
+    ".github/pull_request_template.md"
   ],
   "low": [
     "**/*.md",
@@ -59,24 +61,61 @@
     "docs/release-channels.md",
     "docs/deploy*"
   ],
+  "notCount": [
+    "release/migrations.lock.json",
+    "release/kit.json",
+    "pnpm-lock.yaml"
+  ],
+  "ignoreRenames": true,
   "harryOk": [
-    "platform/services/updater/**",
-    "platform/services/identity/src/**",
-    "platform/services/permissions/src/**",
+    "platform/services/*/src/migrat*",
+    "platform/services/*/src/migrations/**",
+    "platform/packages/service-kit/src/migrate.ts",
+    "platform/services/updater/src/signers.ts",
     "infra/deploy/backup/**",
     "infra/deploy/postgres/**",
-    "infra/release-*",
-    "release/augur-release.json",
-    "release/app-repos.json",
-    ".github/workflows/**",
-    "scripts/*release*",
     "scripts/promote*",
     "scripts/halt*",
-    "scripts/publish-feed*",
-    "scripts/mirror-release*",
-    ".github/review-tiers.json",
-    "REVIEW.md"
+    ".github/workflows/promote.yml",
+    ".github/workflows/halt.yml",
+    "scripts/review-tier*",
+    ".github/workflows/review.yml",
+    ".github/review-tiers.json"
   ],
+  "harryOkWhen": [
+    {
+      "paths": [
+        "release/migrations.lock.json"
+      ],
+      "added": "\"\\d{3}_",
+      "why": "adds or changes a migration"
+    },
+    {
+      "paths": [
+        ".github/workflows/**",
+        ".github/actions/**"
+      ],
+      "added": "^\\s*permissions:|: *write\\b|\\bsecrets\\b|id-token|pull_request_target|workflow_run|issue_comment|uses:\\s*['\"]?docker://|^\\s*(container|services):|^\\s*image:",
+      "why": "gives a workflow more privilege, a riskier trigger or a new image"
+    },
+    {
+      "paths": [
+        ".github/workflows/**",
+        ".github/actions/**"
+      ],
+      "removed": "^\\s*permissions:|: *(read|none)\\b",
+      "why": "takes a limit off a workflow's token"
+    },
+    {
+      "paths": [
+        ".github/workflows/**",
+        ".github/actions/**"
+      ],
+      "newAction": true,
+      "why": "uses an action no workflow used before"
+    }
+  ],
+  "autoOk": true,
   "deployTest": [
     "infra/**",
     "release/**",
@@ -89,5 +128,13 @@
     "package.json",
     "pnpm-workspace.yaml",
     "pnpm-lock.yaml"
+  ],
+  "notDeployTest": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.test.mjs",
+    "**/*.testing.ts",
+    "**/README.md",
+    "infra/docker-compose.yml"
   ]
 }

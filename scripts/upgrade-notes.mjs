@@ -13,7 +13,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 export const NOTES_FILE = 'docs/src/content/docs/release-notes/upgrade-notes.md';
 const FROM = /^\*\*From\*\* (unreleased|augur@(\d+\.\d+\.\d+))(?:\s|$)/;
 
-/** Each note's heading (each `## ` on the page is one), the line it's on, and what its From line says (undefined when it has none). */
+/** Each note's heading (each `## ` on the page is one), the line it's on and the line after its last, and what its From line says (undefined when it has none). */
 export function notesOf(markdown) {
   const lines = markdown.split('\n');
   const notes = [];
@@ -22,11 +22,13 @@ export function notesOf(markdown) {
     const marker = /^\s*(```|~~~)/.exec(lines[i])?.[1];
     if (marker) fence = fence === undefined ? marker : fence === marker ? undefined : fence;
     if (fence || !lines[i].startsWith('## ')) continue;
+    if (notes.length) notes[notes.length - 1].end = i;
     let j = i + 1;
     while (j < lines.length && lines[j].trim() === '') j++;
     const m = FROM.exec(lines[j] ?? '');
     notes.push({ heading: lines[i].slice(3), line: i + 1, from: m ? m[1] : undefined, version: m?.[2] });
   }
+  if (notes.length) notes[notes.length - 1].end = lines.length;
   return notes;
 }
 

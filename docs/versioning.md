@@ -52,11 +52,14 @@ No app ships with AUGUR (ADR 0075): every app, platform or pillar, releases in i
 | `channel` | `beta` while AUGUR is 0.x, then `stable`. |
 | `upgradeFrom` | The AUGUR versions a deployment can upgrade from in one step. After a breaking release, only the release before it. |
 | `changed` | The parts this release moves. |
-| `breaking` | Why it's breaking: a part's major bump, or a part removed. |
+| `breaking` | Why it's breaking: a part's major bump, a part removed, or a store's image moved. |
 | `settings` | Every setting in `infra/deploy/.env.example`, the ones a deployment must set, and which were added or removed since the last release. |
 | `parts` | Every part and its version. |
+| `stores` | The images that keep AUGUR's data: Postgres and Garage as `infra/deploy/compose.yml` runs them, Keycloak and OpenFGA as `infra/service.Dockerfile` builds on them. |
 
 How the AUGUR version moves: a breaking change in any part bumps the major (the minor while in beta), a feature or a new part bumps the minor, and anything else the patch. A release that moves no part and no setting doesn't change it.
+
+A release that moves a store's image is breaking, whatever its parts do. Each store changes its data when it starts (a Postgres major rewrites its files, Keycloak, OpenFGA and Garage migrate what they keep on a new minor), and the old image can't be started again on what the new one changed. A move is a new image name, a new major or minor, or for Postgres a new Postgres major (the `pg16` in pgvector's tag); a patch or a new digest isn't. Being breaking, the release needs the one before it first, and the updater won't go back to the release before by itself if the new one fails its checks: going back means restoring the backup taken before the upgrade ([Upgrade AUGUR, Going back](src/content/docs/run/upgrade.md#going-back)). While a store has moved since the release file, `pnpm check:release` fails until [Upgrade notes](src/content/docs/release-notes/upgrade-notes.md) has a note marked `**From** unreleased` whose heading names the store and which says how to go back, and a changeset that bumps a part is waiting, so a Version packages PR releases the move.
 
 Before a new minor or major is released, write its **What's new** for people in `platform/frontends/shell/src/account/whats-new.ts`: a few things they can now do, and where, in plain words, not the changelog. The shell shows it in Account → About and help, with the deployment's name for AUGUR in place of `{product}`. Patches keep their release's.
 

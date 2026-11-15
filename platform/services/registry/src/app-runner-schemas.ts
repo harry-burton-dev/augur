@@ -158,7 +158,7 @@ export const AppInstalls = Type.Object(
               id: Type.String(),
               action: Type.Enum(JOB_ACTIONS),
               version: Type.Optional(Type.String()),
-              requestedBy: Type.String({ description: "A person's id; automatic, for an update or a preview the registry asked for; or deployment, for a default app (DEFAULT_APPS)" }),
+              requestedBy: Type.String({ description: "A person's id; automatic, for an update or a preview the registry asked for; deployment, for a default app (DEFAULT_APPS); or platform-fleet, for the fleet's client (ADR 0100)" }),
               requestedAt: dateTime(),
               state: Type.Enum(JOB_STATES),
               message: Type.Optional(Type.String()),

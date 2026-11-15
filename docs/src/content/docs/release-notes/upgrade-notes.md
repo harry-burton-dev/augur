@@ -9,6 +9,14 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## A server's first upgrade starts by itself, and a fleet can run a server
+
+**From** unreleased
+
+Automatic no longer waits for one upgrade by hand on each server: a new server takes its first upgrade under its desired state, like any later one, and **Needs you** stops asking for it. The watch, going back by itself and the rule that a 0.x minor waits for an admin all stay. To keep a server from upgrading by itself, set its policy to **Ask first** or **On hold** on the Deployment page.
+
+`FLEET_CLIENT_SECRET` is new and optional. With it, the fleet's machine client (`platform-fleet`) may change what this server runs from its deployment file, with nobody signed in, within the server's ring: on production only stable releases nobody halted ([Run deployments from files, The fleet's client](../../run/from-files/#the-fleets-client)). Leave it unset unless a fleet runs this server.
+
 ## The gateway's caller signing key is required
 
 **From** unreleased
