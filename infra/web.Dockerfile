@@ -69,6 +69,8 @@ COPY --chmod=755 infra/deploy/kit-url.envsh /docker-entrypoint.d/16-kit-url.envs
 ENV API_RATE_PER_SECOND=30 API_RATE_BURST=200 SSO_RATE_PER_SECOND=10 SSO_RATE_BURST=50 MAX_UPLOAD_MB=2048 KEYCLOAK_CONSOLE=closed
 # nginx fills in ${APP_ORIGINS}, ${LIVE_ORIGINS}, ${KIT_ORIGIN}, ${SCRIPT_HASHES} and ${REAL_IP_FROM} from the environment when the container starts.
 COPY infra/deploy/nginx.conf /etc/nginx/templates/default.conf.template
+# The headers on files that are never a page (/apps/, /assets/, /shared/), which nginx.conf includes in each.
+COPY infra/deploy/not-a-page.conf /etc/nginx/augur/not-a-page.conf
 COPY --from=build /site /usr/share/nginx/html
 COPY --from=build /index.template.html /usr/share/nginx/index.template.html
 # The shell's page is written from the template at each start, by nginx's own user.
