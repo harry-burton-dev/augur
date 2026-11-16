@@ -26,14 +26,14 @@
 //                                      before can't run on, unless the app is going up a major (src/migrations.mjs)
 // Images go to ghcr.io/<owner>/<repo>/<id> and <id>-frontend (IMAGE_REPO overrides ghcr.io/<owner>/<repo>).
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { appCatalog, CATALOG_FILE, catalogText, repoSlug } from '../src/catalog.mjs';
 import { readApp, validateApp } from '../src/validate.mjs';
 import { appRelease, appTag, changelogSection, channelOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion, releaseNotes, signerOf } from '../src/release.mjs';
 import { readCheckout, releaseOf2 } from '../src/release2.mjs';
-import { APP_LOCK, appLockOf, appLockText, lintWith, mayBreakSince, newestStable, problemsFor, SQUAWK_CONFIG } from '../src/migrations.mjs';
+import { APP_LOCK, appLockText, fingerprint, gitIn, lintWith, lockOnBranch, majorChangesets, mayBreakSince, mergeAppLocks, problemsFor, releasedLock, SQUAWK_CONFIG } from '../src/migrations.mjs';
 import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
@@ -59,46 +59,6 @@ const builtMigrations = async () => {
   const list = module.MIGRATIONS ?? module.migrations;
   if (!Array.isArray(list)) throw new Error('service/src/migrations.ts must export its migrations as MIGRATIONS.');
   return list;
-};
-
-/** Git in the app's checkout, quiet. */
-const git = (...args) => run('git', args, { stdio: ['ignore', 'pipe', 'ignore'] });
-
-/** The lock at `ref` (a tag or a branch on origin), fetched if need be; {} when it has none. */
-const lockAt = (ref, fetchRef) => {
-  try {
-    if (fetchRef) git('fetch', '--quiet', '--depth=1', 'origin', fetchRef);
-  } catch {
-    // already here, or not on origin
-  }
-  try {
-    return JSON.parse(git('show', `${ref}:${APP_LOCK}`));
-  } catch {
-    return {};
-  }
-};
-
-/** The version of the newest stable release, from origin's tags, or undefined before the first. */
-const releasedVersion = (id, version) => {
-  try {
-    const tags = git('ls-remote', '--tags', '--refs', 'origin', `refs/tags/app/${id}@*`).split('\n').map((l) => l.split('refs/tags/')[1]).filter(Boolean);
-    return newestStable(tags, id, version);
-  } catch {
-    return undefined;
-  }
-};
-
-/** Whether a major changeset waits, so the next release may break the tables. */
-const majorWaiting = () => {
-  const dir = mkdtempSync(join(tmpdir(), 'changesets-'));
-  try {
-    execFileSync('pnpm', ['changeset', 'status', `--output=${join(dir, 'status.json')}`], { cwd: root, stdio: 'ignore' });
-    return (JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8')).releases ?? []).some((r) => r.type === 'major');
-  } catch {
-    return false;
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
 };
 
 /** Gives the manifest and each package this version, in this checkout only. */
@@ -269,8 +229,10 @@ const main = async ([mode, ...args]) => {
     }
   } else if (mode === 'migrations') {
     const { id, version } = manifest();
-    const list = await builtMigrations();
-    if (!list) return console.log('This app keeps no migrations (no service/src/migrations.ts).');
+    const kept = existsSync(join(root, APP_LOCK));
+    // An app that once kept migrations must still show them, or a shipped one could go unnoticed.
+    const list = (await builtMigrations()) ?? (kept ? [] : undefined);
+    if (!list) return console.log('This app keeps no migrations (no service/src/migrations.ts, no lock).');
     const text = appLockText(list);
     if (args[0] === 'sync') {
       writeFileSync(join(root, APP_LOCK), text);
@@ -278,16 +240,20 @@ const main = async ([mode, ...args]) => {
     }
     if (args[0] !== 'check') throw new Error('Usage: augur-app migrations sync|check');
     const problems = [];
-    if (!existsSync(join(root, APP_LOCK)) || readFileSync(join(root, APP_LOCK), 'utf8') !== text) problems.push(`${APP_LOCK} doesn’t match the migrations. Run: pnpm build && augur-app migrations sync, and commit it.`);
-    const released = releasedVersion(id, version);
-    const shipped = released ? lockAt(`refs/tags/app/${id}@${released}`, `refs/tags/app/${id}@${released}:refs/tags/app/${id}@${released}`) : {};
+    if (!kept || readFileSync(join(root, APP_LOCK), 'utf8') !== text) problems.push(`${APP_LOCK} doesn’t match the migrations. Run: pnpm build && augur-app migrations sync, and commit it.`);
+    const git = gitIn(root);
+    const { tag, lock: shipped } = releasedLock({ git, prefix: `app/${id}@`, version, path: APP_LOCK });
+    const released = tag?.slice(`app/${id}@`.length);
     const frozenAt = process.env.MIGRATIONS_FROZEN_AT;
-    const frozen = frozenAt ? lockAt(frozenAt, `${frozenAt.replace(/^origin\//, '')}:refs/remotes/${frozenAt}`) : {};
-    const mayBreak = mayBreakSince(version, released) || majorWaiting() ? new Set([id]) : new Set();
+    const frozen = frozenAt ? lockOnBranch({ git, ref: frozenAt, path: APP_LOCK }) : undefined;
+    // The frontend and the service release together, so a major for either makes the app's next release a major.
+    const ownPackages = parts.map((p) => readJson(`${p}/package.json`).name);
+    const goingMajor = mayBreakSince(version, released) || ownPackages.some((name) => majorChangesets(root).has(name));
     const lint = lintWith({ squawk: join(root, 'node_modules/.bin/squawk'), config: SQUAWK_CONFIG });
-    problems.push(...problemsFor({ [id]: list.map((m) => ({ id: m.id, hash: appLockOf([m])[m.id], sql: m.sql })) }, { [id]: { ...shipped, ...frozen } }, mayBreak, { lint, frozenAt }));
+    const all = { [id]: list.map((m) => ({ id: m.id, hash: fingerprint(m.sql), sql: m.sql })) };
+    problems.push(...problemsFor(all, { [id]: mergeAppLocks(shipped, frozen) }, goingMajor ? new Set([id]) : new Set(), { lint, frozenAt }));
     if (problems.length) throw new Error(problems.map((p) => `✗ ${p}`).join('\n'));
-    console.log(`${list.length} migration${list.length === 1 ? '' : 's'}: they only add, and the released ones are untouched${released ? ` (since ${id} ${released})` : ''}.`);
+    console.log(`${list.length} migration${list.length === 1 ? '' : 's'}: they only add, and the released ones are untouched (${released ? `since ${id} ${released}` : `${id} has no stable release yet`}${frozenAt ? `, and what's on ${frozenAt}` : ''}).`);
   } else {
     console.error('Usage: augur-app pending | dev <run> | preview <pr> <run> | bundle <channel> | describe [bundle.json] | publish <bundle.json> | release describe|publish … | clean-devs [<tag>...] | clean-previews <pr> [<tag>...] | validate | catalog [--check] | migrations sync|check');
     process.exit(2);

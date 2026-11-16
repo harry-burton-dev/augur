@@ -1,11 +1,11 @@
 // The migration rules an app shares with AUGUR (ADR 0053): its lock, what it released and when it may break.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { appLockOf, appLockText, fingerprint, mayBreakSince, newestStable, problemsFor, SQUAWK_CONFIG } from './migrations.mjs';
+import { appLockOf, appLockText, fingerprint, majorChangesets, mayBreakSince, mergeAppLocks, mergeLocks, newestStable, problemsFor, SQUAWK_CONFIG } from './migrations.mjs';
 
 const migrations = [
   { id: '001_kept_events', sql: 'create table kept_events (id text primary key);' },
@@ -22,11 +22,12 @@ test('an app’s lock names each migration in order, with its fingerprint', () =
 
 test('what shipped is the newest stable release at or below the app’s version, never a dev build or a preview', () => {
   const tags = ['app/notes@1.2.0', 'app/notes@1.10.0', 'app/notes@1.11.0-dev.4', 'app/notes@2.0.0', 'app/other@9.0.0', 'kit@3.0.0'];
-  assert.equal(newestStable(tags, 'notes', '1.10.3'), '1.10.0');
-  assert.equal(newestStable(tags, 'notes', '1.11.0-dev.5'), '1.10.0');
-  assert.equal(newestStable(tags, 'notes', '2.0.0'), '2.0.0');
-  assert.equal(newestStable(tags, 'notes', '1.0.0'), undefined);
-  assert.equal(newestStable([], 'notes', '0.0.0'), undefined);
+  assert.equal(newestStable(tags, 'app/notes@', '1.10.3'), 'app/notes@1.10.0');
+  assert.equal(newestStable(tags, 'app/notes@', '1.11.0-dev.5'), 'app/notes@1.10.0');
+  assert.equal(newestStable(tags, 'app/notes@', '2.0.0'), 'app/notes@2.0.0');
+  assert.equal(newestStable(tags, 'app/notes@', '1.0.0'), undefined);
+  assert.equal(newestStable(tags, 'kit@', '9.0.0'), 'kit@3.0.0');
+  assert.equal(newestStable([], 'app/notes@', '0.0.0'), undefined);
 });
 
 test('an app may break its tables only when it goes up a major past what it released', () => {
@@ -51,6 +52,23 @@ test('a new migration the release before can’t run on fails, unless the app ma
   assert.deepEqual(problemsFor(all(dropped), shipped, new Set(['notes']), { lint }), []);
 });
 
+test('where a released lock and the frozen branch disagree, the released fingerprint wins: servers ran it', () => {
+  assert.deepEqual(mergeAppLocks({ '001': 'released' }, { '001': 'changed', '002': 'new' }), { '001': 'released', '002': 'new' });
+  assert.deepEqual(mergeLocks({ s: { '001': 'released' } }, { s: { '001': 'changed' } }), { s: { '001': 'released' } });
+  assert.deepEqual(mergeAppLocks(undefined, undefined), {});
+});
+
+test('a waiting changeset that takes a package up a major is found, quoted or not', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'changesets-'));
+  mkdirSync(join(dir, '.changeset'));
+  writeFileSync(join(dir, '.changeset/README.md'), '---\n"@x/readme": major\n---\n');
+  writeFileSync(join(dir, '.changeset/a.md'), '---\n"@apps/notes": major\n"@apps/notes-frontend": minor\n---\n\nDrops a column.\n');
+  writeFileSync(join(dir, '.changeset/b.md'), "---\n'@apps/other': 'major'\n---\n");
+  writeFileSync(join(dir, '.changeset/c.md'), '---\n---\n');
+  assert.deepEqual([...majorChangesets(dir)].sort(), ['@apps/notes', '@apps/other']);
+  assert.deepEqual([...majorChangesets(join(dir, 'none'))], []);
+});
+
 test('an app is held to AUGUR’s own Squawk rules', () => {
   const rules = (text) => text.replace(/^#[^\n]*\n/gm, '');
   assert.equal(rules(readFileSync(SQUAWK_CONFIG, 'utf8')), rules(readFileSync(new URL('../../../../.squawk.toml', import.meta.url), 'utf8')));
@@ -65,7 +83,9 @@ test('augur-app migrations: sync writes the lock, and check holds what the newes
   mkdirSync(join(dir, 'service/src'), { recursive: true });
   mkdirSync(join(dir, 'service/dist'));
   mkdirSync(join(dir, 'node_modules/.bin'), { recursive: true });
-  symlinkSync(squawk, join(dir, 'node_modules/.bin/squawk'));
+  // pnpm's .bin entry finds Squawk from where it sits, so the app's runs the repository's by its own path.
+  writeFileSync(join(dir, 'node_modules/.bin/squawk'), `#!/bin/sh\nexec "${squawk}" "$@"\n`, { mode: 0o755 });
+  mkdirSync(join(dir, '.changeset'));
   writeFileSync(join(dir, 'service/src/migrations.ts'), '');
   manifestAt('0.1.0');
   built(migrations.slice(0, 1));
@@ -73,13 +93,14 @@ test('augur-app migrations: sync writes the lock, and check holds what the newes
   const cli = (...args) => execFileSync('node', [bin, 'migrations', ...args], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { cwd: dir, stdio: 'pipe' });
 
+  git('init', '--quiet');
+  git('remote', 'add', 'origin', dir);
   assert.throws(() => cli('check'), /migrations.lock.json doesn’t match/);
   assert.match(cli('sync'), /Wrote service\/migrations.lock.json/);
-  git('init', '--quiet');
+  assert.match(cli('check'), /no stable release yet/);
   git('add', 'manifest.json', 'service');
   git('commit', '--quiet', '-m', 'release');
   git('tag', 'app/notes@0.1.0');
-  git('remote', 'add', 'origin', dir);
   assert.match(cli('check'), /since notes 0.1.0/);
 
   built([{ ...migrations[0], sql: 'create table kept_events (id uuid primary key);' }]);
@@ -89,6 +110,20 @@ test('augur-app migrations: sync writes the lock, and check holds what the newes
   built([migrations[0], { id: '002_drop', sql: 'alter table kept_events drop column id;' }]);
   cli('sync');
   assert.throws(() => cli('check'), /002_drop does what the release before it can't run on/);
-  manifestAt('1.0.0');
+  writeFileSync(join(dir, '.changeset/drop.md'), '---\n"@apps/notes": major\n---\n');
+  assert.throws(() => cli('check'), /002_drop does what the release before it can't run on/, 'a major for another package isn’t this app’s');
+  writeFileSync(join(dir, 'service/package.json'), JSON.stringify({ name: '@apps/notes' }));
   assert.match(cli('check'), /2 migrations/);
+  rmSync(join(dir, '.changeset/drop.md'));
+  manifestAt('1.0.0');
+  assert.match(cli('check'), /2 migrations.*since notes 0.1.0/);
+
+  // Migrations that move out of service/src/migrations.ts still have to account for the ones that shipped.
+  rmSync(join(dir, 'service/src/migrations.ts'));
+  assert.throws(() => cli('check'), /001_kept_events shipped in a release and is gone/);
+
+  // A check that can't read what shipped fails rather than passing on nothing.
+  git('remote', 'set-url', 'origin', join(dir, 'nowhere'));
+  writeFileSync(join(dir, 'service/src/migrations.ts'), '');
+  assert.throws(() => cli('check'), /git ls-remote failed/);
 });
