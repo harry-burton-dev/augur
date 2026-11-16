@@ -83,7 +83,7 @@ import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
 import { contractMessage, SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
 import { declaredEvents, eventsChangeProblems, eventsProblems } from './event-types.ts';
-import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -867,7 +867,7 @@ export const buildApp = async ({
             response: {
               200: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Updated' },
               201: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Registered' },
-              400: refused("The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed"),
+              400: refused('The manifest is invalid, or its id does not match the path'),
               403: refused("Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest (error contract_2)"),
               409: refused('The id belongs to a platform app, or the route is taken'),
               503: refused("The sign-in service can't be reached to check the app's token"),
@@ -880,7 +880,8 @@ export const buildApp = async ({
           if (isManifest3(req.body)) return register3(req, reply, req.body, by);
           // Contract 2 is retired (PER-472): its code would load into the shell's own page, which only AUGUR's own frontends may.
           const entry = req.body as AppEntry;
-          return reply.code(403).send({ error: 'contract_2', message: contractMessage(2, undefined, { name: entry.name, version: entry.version }) });
+          const on3 = (await store.records()).find((r) => r.entry.id === req.params.id && manifest3Of(r.entry));
+          return reply.code(403).send({ error: 'contract_2', message: on3 ? staysOn3(on3.entry.name) : contractMessage(2, undefined, { name: entry.name, version: entry.version }) });
         },
       );
 

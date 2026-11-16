@@ -4373,7 +4373,7 @@ paths:
                     description: "An app on contract 3: its manifest (manifest-3.schema.json in @augur/app-tools), registered by the app runner from the release it installed"
                 description: Registered
         "400":
-          description: The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed
+          description: The manifest is invalid, or its id does not match the path
           content:
             application/problem+json:
               schema:

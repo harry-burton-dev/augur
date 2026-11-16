@@ -2,6 +2,8 @@
 
 This takes you from nothing to an app running in AUGUR's shell. An app is three things in `apps/<id>/`: a **frontend** the shell mounts, a **service** with the app's own API, and a **manifest** that tells the registry about both. The app reaches the platform only through `@augur/mfe-sdk` (in the browser), `@augur/service-kit` (in its service) and the gateway. It never imports another app, and the platform never imports it.
 
+**Contract 2 is retired.** The registry refuses every contract 2 manifest (error `contract_2`), so the parts of this guide where an app's service, or `pnpm register-app`, registers the app itself no longer work: on the app contract the app runner installs a release and registers it. Those parts are being rewritten for the app contract.
+
 ## 1. Start it
 
 Every app starts from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), in a repository of its own (ADR 0077). On GitHub, **Use this template** to make `augur-expenses`, clone it next to your AUGUR checkout, and name it:
