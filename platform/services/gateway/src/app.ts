@@ -9,6 +9,7 @@ import {
   APP_HEADER,
   PERSONA_HEADER,
   appCallerId,
+  isAppItself,
   appClientId,
   CALLER_KEYS_PATH,
   CALLER_TOKEN_HEADER,
@@ -372,6 +373,19 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       const floor = delegated ? delegated.workspace?.id : asked;
       if (delegated && !floor) return reply.code(400).send({ error: 'bad_request', message: 'This delegation names no floor, so there is none to check the app on. Ask the person to open the app again.' });
       if (delegated && asked !== undefined && asked !== floor) return reply.code(400).send({ error: 'bad_request', message: `This call is for someone on another floor than the ${WORKSPACE_HEADERS.id} it names.` });
+      if (delegated) {
+        // The person must still be on that floor, as for their own call: leaving it ends what the app may do for them there.
+        if (!floorsOf) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now.' });
+        try {
+          const stood = (await floorsOf(delegated)).find((f) => f.id === floor);
+          if (!stood) return reply.code(403).send({ error: 'forbidden', message: 'The person this app is acting for is no longer on that floor, or it no longer exists.' });
+          delegated = { ...delegated, workspace: stood };
+        } catch (err) {
+          if (!(err instanceof FloorLookupError)) throw err;
+          req.log.error({ err: err.message }, 'floor check failed');
+          return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now. Try again in a moment.' });
+        }
+      }
       let grant: AppGrant | undefined;
       try {
         grant = await grantsOf(id, floor);
@@ -596,6 +610,17 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       drop();
       return reply.code(status).send({ error, message });
     };
+    // Whether the app is on for this person where they stand, as the registry gives their shell; undefined when that can't be found out.
+    const onFor = async (caller: Caller, id: string): Promise<boolean | undefined> => {
+      if (!appAccess) return true;
+      try {
+        return (await appAccess(caller, id)).has(id);
+      } catch (err) {
+        if (!(err instanceof AppAccessUnavailable)) throw err;
+        req.log.error({ err: err.message }, 'app access check failed');
+        return undefined;
+      }
+    };
     const toPlatform = PLATFORM_SERVICES.includes(name);
     // Every caller passed on names the organisation the call is in, as identity says it now (this never waits); a
     // delegation keeps the one it was signed with only while the gateway knows none.
@@ -607,6 +632,14 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
     // An app's own token, or a part calling onward for a person (spec 8.3): within the grant, or refused naming the scope.
     if (req.identity?.kind === 'app' && req.caller && req.grant) {
       const { app: id } = req.identity;
+      // A part calling onward for a person: the app must still be on for them where they stood, as for their own call
+      // (turned off or blocked for them there is not on), however long ago the delegation was signed. Their roles are
+      // the ones the delegation was signed with, as their own sign-in's are until it refreshes.
+      if (!isAppItself(req.caller)) {
+        const on = await onFor(req.caller, id);
+        if (on === undefined) return refuse(503, 'unavailable', 'Whether this app may still act for this person can’t be checked right now. Try again in a moment.');
+        if (!on) return refuse(403, 'forbidden', `${appName(id, req.grant)} isn’t available to the person it is acting for on their floor, so it can’t act for them there.`);
+      }
       const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
       const granted = scope === null || (scope !== undefined && req.grant.scopes.includes(scope) && (req.caller.scopes?.includes(scope) ?? true));
       if (!granted) return refuse(403, 'forbidden', notAllowed(appName(id, req.grant), scope, req.url));
@@ -637,14 +670,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       }
       if (toPlatform) {
         // The app must be on for this person here, as for a call to its own routes: blocked or needing a role they lack is not on.
-        try {
-          const apps = appAccess ? await appAccess(req.caller, id) : undefined;
-          if (apps && !apps.has(id)) return refuse(403, 'forbidden', 'That app isn’t available to you on this floor.');
-        } catch (err) {
-          if (!(err instanceof AppAccessUnavailable)) throw err;
-          req.log.error({ err: err.message }, 'app access check failed');
-          return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
-        }
+        const on = await onFor(req.caller, id);
+        if (on === undefined) return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
+        if (!on) return refuse(403, 'forbidden', 'That app isn’t available to you on this floor.');
         const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
         if (scope === undefined || (scope !== null && !holds(grant, scope))) return refuse(403, 'forbidden', notAllowed(appName(id, grant), scope, req.url));
         // The service sees the person with the app and its scopes beside them, and applies the smaller access.
