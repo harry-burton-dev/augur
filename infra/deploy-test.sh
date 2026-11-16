@@ -651,28 +651,51 @@ counted_apart() {
 # A secret compose.yml hands a service as a file (its top-level secrets, from .env) is in neither that service's
 # environment, which `docker inspect` and a crash report show, nor its log, and is in its file.
 secrets_kept_out() {
-  local triples service path key value id env logs bad=""
-  triples=$(pc config --format json | jq -r '.secrets as $s | .services | to_entries[] | .key as $svc | (.value.secrets // [])[] | "\($svc) \(.target // ("/run/secrets/" + .source)) \($s[.source].environment // "")"')
-  while read -r service path key; do
-    [ -n "$key" ] || continue
-    # As Compose reads .env: the last line for the key wins, and quotes around the value aren't part of it.
-    value=$(grep "^$key=" "$deploy/.env" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\\(.*\\)'$/\\1/" || true)
-    [ -n "$value" ] || continue
-    [ "${path#/}" != "$path" ] || path=/run/secrets/$path
-    for id in $(pc ps -q "$service"); do
+  local triples service path key keys k value part id bad=""
+  # As Compose reads .env: the last line for the key wins, and quotes around the value aren't part of it.
+  env_value() { grep "^$1=" "$deploy/.env" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\\(.*\\)'$/\\1/" || true; }
+  # Every container of the service, the one-shot jobs' exited ones too: the file must hold $2, and neither
+  # it nor any of the secrets after it may be in the container's environment or log.
+  kept_in() {
+    local path=$1 whole=$2 env logs; shift 2
+    for id in $(pc ps -a -q "$service"); do
       # Read whole, not piped into grep -q: under pipefail a writer cut off early would hide a match.
       env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id")
       logs=$(docker logs "$id" 2>&1)
-      if grep -F -- "$value" <<< "$env" >/dev/null; then bad="$bad $service:environment($key)"; fi
-      if grep -F -- "$value" <<< "$logs" >/dev/null; then bad="$bad $service:log($key)"; fi
-      if [ "$(docker exec "$id" cat "$path" 2>/dev/null)" != "$value" ]; then bad="$bad $service:file($path)"; fi
+      for part in "$whole" "$@"; do
+        [ -n "$part" ] || continue
+        if grep -F -- "$part" <<< "$env" >/dev/null; then bad="$bad $service:environment($path)"; fi
+        if grep -F -- "$part" <<< "$logs" >/dev/null; then bad="$bad $service:log($path)"; fi
+      done
+      # docker cp reads a stopped container's files as well as a running one's.
+      if [ "$(docker cp "$id:$path" - 2>/dev/null | tar -xO 2>/dev/null)" != "$whole" ]; then bad="$bad $service:file($path)"; fi
     done
+  }
+  triples=$(pc config --format json | jq -r '.secrets as $s | .services | to_entries[] | .key as $svc | (.value.secrets // [])[] | "\($svc) \(.target // ("/run/secrets/" + .source)) \($s[.source].environment // "")"')
+  while read -r service path key; do
+    [ -n "$key" ] || continue
+    value=$(env_value "$key")
+    [ -n "$value" ] || continue
+    [ "${path#/}" != "$path" ] || path=/run/secrets/$path
+    kept_in "$path" "$value"
+  done <<< "$triples"
+  # Config files whose content names a secret from .env (each service's database address, with its password):
+  # the file holds the whole content as Compose fills it in, and neither it nor any secret it names is elsewhere.
+  triples=$(pc config --format json | jq -r '.configs as $c | .services | to_entries[] | .key as $svc | (.value.configs // [])[] | "\($svc) \(.target // ("/" + .source)) \(.source)"')
+  while read -r service path key; do
+    [ -n "$key" ] || continue
+    [ "${path#/}" != "$path" ] || path=/$path
+    value=$(pc config --format json | jq -r --arg k "$key" '.configs[$k].content // ""')
+    keys=$(pc config --no-interpolate --format json | jq -r --arg k "$key" '.configs[$k].content // ""' | grep -oE '\$\{[A-Z][A-Z0-9_]*' | cut -c3- || true)
+    local named=()
+    for k in $keys; do named+=("$(env_value "$k")"); done
+    kept_in "$path" "$value" "${named[@]}"
   done <<< "$triples"
   if [ -n "$bad" ]; then
     echo "Secrets meant for files only were found where they shouldn't be, or missing from their file:$bad" >&2
     return 1
   fi
-  echo "Each secret compose.yml gives as a file is in its file, and in no environment or log of the service that reads it." >&2
+  echo "Each secret compose.yml gives as a file, alone or in a config file, is in its file, and in no environment or log of the service that reads it." >&2
 }
 
 # The updater's safety backup before an upgrade, and the restore test it must pass, on this release's data:

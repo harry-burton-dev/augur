@@ -91,7 +91,6 @@ x-service: &service
     # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
     OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
-    DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/platform
   depends_on:
     postgres: { condition: service_healthy }
 
@@ -410,6 +409,7 @@ services:
     <<: *hardened
     restart: on-failure:3
     command: ["node", "dist/realm-job.js"]
+    configs: [{ source: identity_database_url, target: /run/secrets/database_url }]
     environment:
       NODE_ENV: production
       KEYCLOAK_URL: http://keycloak:8080/sso
@@ -444,7 +444,7 @@ services:
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
       # Identity's database, read for the organisation's email sender (Admin → Organisation), which replaces SMTP_FROM.
-      DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      DATABASE_URL_FILE: /run/secrets/database_url
     depends_on:
       keycloak: { condition: service_healthy }
       postgres: { condition: service_healthy }
@@ -524,13 +524,14 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    configs: [{ source: identity_database_url, target: /run/secrets/database_url }]
     environment:
       <<: *env
       PORT: 8081
       # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
       PERMISSIONS_URL: http://permissions:8087
       # Its own login, owning only the identity schema.
-      DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      DATABASE_URL_FILE: /run/secrets/database_url
       # Admin's People screen: identity manages people in Keycloak as its own client, whose rights in
       # the realm (people, departments and apps' sign-ins, not the realm's settings) are given by
       # keycloak-config. Keycloak's master admin is never in identity's settings. Departments are
@@ -557,6 +558,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    configs: [{ source: registry_database_url, target: /run/secrets/database_url }]
     environment:
       <<: *env
       PORT: 8082
@@ -564,7 +566,7 @@ services:
       PERMISSIONS_URL: http://permissions:8087
       SERVICE_CLIENT_SECRET_FILE: /run/secrets/registry_client_secret
       # Its own login, owning only the registry schema.
-      DATABASE_URL: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      DATABASE_URL_FILE: /run/secrets/database_url
       # Asked at install what the knowledge graph offers apps.
       KNOWLEDGE_URL: http://knowledge:8086
       # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
@@ -621,6 +623,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    configs: [{ source: events_database_url, target: /run/secrets/database_url }]
     environment:
       <<: *env
       PORT: 8084
@@ -628,7 +631,7 @@ services:
       # Asked beside each admin and lead check, to compare answers before checks move there (shadow mode, docs/permissions.md).
       PERMISSIONS_URL: http://permissions:8087
       # Its own login, owning only the events schema: the audit log, notifications and domain events.
-      DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      DATABASE_URL_FILE: /run/secrets/database_url
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
       # How often an event an app's part can't take is tried, and the first wait between tries, before it is set aside (5 and 30 when empty; docs/domain-events.md).
@@ -661,6 +664,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    configs: [{ source: models_database_url, target: /run/secrets/database_url }]
     environment:
       <<: *env
       PORT: 8085
@@ -670,7 +674,7 @@ services:
       PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
       SERVICE_CLIENT_SECRET: "${MODELS_CLIENT_SECRET:-}"
       # Its own login, owning only the models schema.
-      DATABASE_URL: postgres://platform_models:${MODELS_DATABASE_PASSWORD:?set MODELS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      DATABASE_URL_FILE: /run/secrets/database_url
       MODEL_API_URL: "${MODEL_API_URL:-}"
       MODEL_API_KEY: "${MODEL_API_KEY:-}"
       MODEL_NAME: "${MODEL_NAME:-}"
@@ -688,10 +692,12 @@ services:
     <<: *hardened
     restart: on-failure:3
     command: ["node", "dist/migrate-job.js"]
+    configs: [{ source: knowledge_migrate_database_url, target: /run/secrets/database_url }]
+    secrets: [knowledge_database_password]
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
-      KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
+      DATABASE_URL_FILE: /run/secrets/database_url
+      KNOWLEDGE_DATABASE_PASSWORD_FILE: /run/secrets/knowledge_database_password
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
       DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
       DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
@@ -713,6 +719,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    configs: [{ source: knowledge_database_url, target: /run/secrets/database_url }]
     environment:
       <<: *env
       PORT: 8086
@@ -725,7 +732,7 @@ services:
       KNOWLEDGE_REFLECT_DAILY_BUDGET: ${KNOWLEDGE_REFLECT_DAILY_BUDGET:-400}
       KNOWLEDGE_REFLECT_FLOOR_BUDGET: ${KNOWLEDGE_REFLECT_FLOOR_BUDGET:-100}
       SERVICE_CLIENT_SECRET_FILE: /run/secrets/knowledge_client_secret
-      DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      DATABASE_URL_FILE: /run/secrets/database_url
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
       # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
       # knowledge asks on each request. While it can't answer, nobody settles or raises.
@@ -780,12 +787,13 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    configs: [{ source: permissions_database_url, target: /run/secrets/database_url }]
     environment:
       <<: *env
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
       # Its own login, the one OpenFGA keeps its tables under: persona sessions sit beside them (ADR 0086).
-      DATABASE_URL: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      DATABASE_URL_FILE: /run/secrets/database_url
       PERSONA_DEPLOYMENT_ADMIN_MINUTES: ${PERSONA_DEPLOYMENT_ADMIN_MINUTES:-60}
       PERSONA_ORG_ADMIN_MINUTES: ${PERSONA_ORG_ADMIN_MINUTES:-480}
       OPENFGA_TOKEN_FILE: /run/secrets/openfga_token
@@ -896,6 +904,26 @@ secrets:
   knowledge_client_secret: { environment: KNOWLEDGE_CLIENT_SECRET }
   openfga_token: { environment: OPENFGA_TOKEN }
   permissions_client_secret: { environment: PERMISSIONS_CLIENT_SECRET }
+  knowledge_database_password: { environment: KNOWLEDGE_DATABASE_PASSWORD }
+
+# Each of AUGUR's own services' database address, with its login's password, as a file it reads through
+# DATABASE_URL_FILE (the service kit) rather than in its environment. Compose writes each into its container as
+# it starts (Compose 2.24 or newer). After changing one of those passwords in .env, pc up -d --force-recreate <service>.
+configs:
+  identity_database_url:
+    content: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+  registry_database_url:
+    content: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+  events_database_url:
+    content: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+  models_database_url:
+    content: postgres://platform_models:${MODELS_DATABASE_PASSWORD:?set MODELS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+  knowledge_migrate_database_url:
+    content: postgres://platform:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/platform
+  knowledge_database_url:
+    content: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
+  permissions_database_url:
+    content: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
 
 networks:
   default:

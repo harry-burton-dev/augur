@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## AUGUR's services read their database address from a file
+
+**From** unreleased
+
+Identity, the registry, events, models, the knowledge graph and permissions, and the setup jobs of identity and the knowledge graph, now get their `DATABASE_URL`, with its password, as a file (`/run/secrets/database_url`), not in their environment, so `docker inspect` on them no longer shows a database password ([Settings and secrets](../../run/settings/#secrets-as-files)). Nothing in `.env` changes. As with the other secrets as files, this needs Docker Compose 2.24 or newer. Compose doesn't start a service again when only a database password changes in `.env`, so after changing one, run `pc up -d --force-recreate`, not a plain `pc up -d`: that would change the login's password and leave the service with the old one.
+
 ## Each app has a database of its own: remove apps before upgrading
 
 **From** unreleased
