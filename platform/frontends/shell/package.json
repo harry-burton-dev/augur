@@ -27,7 +27,7 @@
     "semver": "catalog:"
   },
   "devDependencies": {
-    "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.6.5",
+    "@augur/kit-bundle": "npm:@harry-burton-dev/augur-kit-bundle@0.6.6",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
