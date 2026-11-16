@@ -16,7 +16,9 @@ const auth = new UserManager({
   silent_redirect_uri: `${window.location.origin}${SILENT_CALLBACK_PATH}`,
   post_logout_redirect_uri: `${window.location.origin}/`,
   scope: 'openid profile email',
-  automaticSilentRenew: true,
+  // Renewed when a call needs a token (session.ts), one renewal at a time: the sign-in service takes each refresh
+  // token once, so a timer renewing beside it would race it.
+  automaticSilentRenew: false,
   // Tokens are kept in this page's memory only, never in its storage, where any script on this origin could read
   // them (PER-453). A reload or a new tab asks the sign-in service again (session.ts). Only a sign-in's passing
   // state (its PKCE verifier) is kept in storage, to survive the trip to the sign-in page.

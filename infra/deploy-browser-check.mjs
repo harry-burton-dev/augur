@@ -103,8 +103,7 @@ try {
   await page.locator('#username').fill(user);
   await page.locator('#password').fill(password);
   await page.locator('#kc-login').click();
-  const signedIn = (url) => url.origin === new URL(base).origin && !url.pathname.startsWith('/sso/');
-  for (let step = 0; step < 4 && !signedIn(new URL(page.url())); step++) {
+  for (let step = 0; step < 4 && !isSignedIn(new URL(page.url())); step++) {
     await page.waitForLoadState('domcontentloaded');
     const before = page.url();
     if (await page.locator('#password-new').count()) {
@@ -121,9 +120,9 @@ try {
       await page.locator('#userLabel').fill('deploy test');
       await page.locator('[type=submit]').first().click();
     }
-    await page.waitForURL((url) => signedIn(url) || url.href !== before, { timeout: 30_000 }).catch(() => {});
+    await page.waitForURL((url) => isSignedIn(url) || url.href !== before, { timeout: 30_000 }).catch(() => {});
   }
-  await page.waitForURL(signedIn, { timeout: 30_000 });
+  await page.waitForURL(isSignedIn, { timeout: 30_000 });
   account.signedInAt = Date.now();
   pass('the first admin signs in, sets a password and a one-time-code app');
 
@@ -168,18 +167,26 @@ try {
 
   if (release) await throughTheRunner(release);
 
-  // The same in the other engines people use: Firefox's, and Safari's (WebKit).
-  for (const [name, engine] of [['Firefox', firefox], ['WebKit', webkit]]) {
-    const other = await engine.launch();
-    const otherPage = await other.newPage({ viewport: { width: 1440, height: 900 } });
-    try {
-      await signInAgain(otherPage);
-      await keptInMemory(otherPage, name);
-    } catch (err) {
-      fail(`${name}: stopped: ${err.message.split('\n')[0]}`);
-      await otherPage.screenshot({ path: join(out, `${name.toLowerCase()}-stopped.png`) }).catch(() => {});
-    } finally {
-      await other.close();
+  // The same in the other engines people use, Firefox's and Safari's (WebKit). Once: not again in the app runner's run.
+  if (!release) {
+    for (const [name, engine] of [['Firefox', firefox], ['WebKit', webkit]]) {
+      let other;
+      try {
+        other = await engine.launch();
+        const otherPage = await other.newPage({ viewport: { width: 1440, height: 900 } });
+        otherPage.on('pageerror', (err) => errors.push(`${name}: ${err.message}`));
+        try {
+          await signInAgain(otherPage);
+          await keptInMemory(otherPage, name);
+        } catch (err) {
+          fail(`${name}: stopped at ${otherPage.url()}: ${err.message.split('\n')[0]}`);
+          await otherPage.screenshot({ path: join(out, `${name.toLowerCase()}-stopped.png`) }).catch(() => {});
+        }
+      } catch (err) {
+        fail(`${name} didn't start: ${err.message.split('\n')[0]}`);
+      } finally {
+        await other?.close();
+      }
     }
   }
 } catch (err) {
@@ -219,10 +226,12 @@ async function signInAgain(p) {
  * without the sign-in page: the shell asks the sign-in service in a hidden frame.
  */
 async function keptInMemory(p, name) {
-  const home = new URL('/@me/home', base).href;
+  // The first app the check was given, which opens on the person's own floor.
+  const app = apps[0];
+  const home = new URL(`/@me/${app}`, base).href;
   const opensSignedIn = async (q, what) => {
     try {
-      await q.locator('[data-app="home"]').first().waitFor({ state: 'visible', timeout: 30_000 });
+      await q.locator(`[data-app="${app}"]`).first().waitFor({ state: 'visible', timeout: 30_000 });
       if (!isSignedIn(new URL(q.url()))) throw new Error(`it is at ${q.url()}`);
       pass(`${name}: ${what} stays signed in, without the sign-in page`);
     } catch (err) {

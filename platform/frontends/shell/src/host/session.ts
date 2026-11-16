@@ -48,6 +48,8 @@ export interface SignedIn {
   access_token: string;
   refresh_token?: string;
   expired?: boolean;
+  /** Seconds until the access token runs out. */
+  expires_in?: number;
   state?: unknown;
 }
 
@@ -71,19 +73,33 @@ const withParam = (path: string, key: string, value: string) => {
   return `${url.pathname}${url.search}${url.hash}`;
 };
 
+/** Renewed this long before it runs out, so a call never sets out with a token about to expire. */
+const RENEW_WITHIN_SECONDS = 30;
+
+/** The renewal under way for each sign-in client: one at a time, shared by every call that needs a token meanwhile. */
+const renewing = new WeakMap<Authenticator, Promise<SignedIn | null>>();
+
 /**
- * A usable sign-in. When it has expired it is renewed with the refresh token, which the sign-in service replaces at
- * each use. With none in memory (a reload, a new tab) or a refresh turned down, the sign-in service is asked in a
- * hidden frame, which answers from its own session. Null when neither works and the person has to sign in.
+ * A usable sign-in. When it has expired, or nearly, it is renewed with the refresh token, which the sign-in service
+ * replaces at each use. With none in memory (a reload, a new tab) or a refresh turned down, the sign-in service is
+ * asked in a hidden frame, which answers from its own session. Null when neither works and the person has to sign
+ * in. Only one renewal runs at a time: the sign-in service takes each refresh token once, and a second use of one
+ * ends the shell's sign-in for every tab, so the calls waiting meanwhile share it.
  */
 const current = async (auth: Authenticator): Promise<SignedIn | null> => {
   const user = await auth.getUser();
-  if (user && !user.expired) return user;
-  if (user?.refresh_token) {
-    const renewed = await auth.signinSilent().catch(() => null);
-    if (renewed) return renewed;
-  }
-  return auth.signinSilent({ forceIframeAuth: true }).catch(() => null);
+  if (user && !user.expired && (user.expires_in ?? Infinity) > RENEW_WITHIN_SECONDS) return user;
+  const pending = renewing.get(auth);
+  if (pending) return pending;
+  const renewal = (async () => {
+    if (user?.refresh_token) {
+      const renewed = await auth.signinSilent().catch(() => null);
+      if (renewed) return renewed;
+    }
+    return auth.signinSilent({ forceIframeAuth: true }).catch(() => null);
+  })().finally(() => renewing.delete(auth));
+  renewing.set(auth, renewal);
+  return renewal;
 };
 
 async function loadMe(fetchImpl: typeof fetch, url: string, token: string): Promise<User> {

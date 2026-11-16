@@ -102,6 +102,33 @@ describe('startSession', () => {
     expect(fetchImpl).toHaveBeenCalledWith('/api/identity/v1/me', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer framed' }) }));
   });
 
+  it('renews a sign-in about to run out before using it', async () => {
+    const auth = fakeAuth({ access_token: 'old', refresh_token: 'r', expires_in: 10 });
+    const fetchImpl = vi.fn(okFetch);
+    await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledWith('/api/identity/v1/me', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer renewed' }) }));
+  });
+
+  it('runs one renewal at a time, shared by every call waiting for a token, since a refresh token works once', async () => {
+    let user: SignedIn = { access_token: 'first', refresh_token: 'r1' };
+    let finish = () => {};
+    const signinSilent = vi.fn(
+      () =>
+        new Promise<SignedIn>((resolve) => {
+          finish = () => resolve((user = { access_token: 'second', refresh_token: 'r2' }));
+        }),
+    );
+    const auth = fakeAuth(null, { getUser: vi.fn(async () => user), signinSilent });
+    const session = await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
+    if (session === 'redirecting') throw new Error('expected a session');
+    user = { ...user, expired: true };
+    const tokens = Promise.all([session.getToken(), session.getToken(), session.getToken()]);
+    await vi.waitFor(() => expect(signinSilent).toHaveBeenCalled());
+    finish();
+    expect(await tokens).toEqual(['second', 'second', 'second']);
+    expect(signinSilent).toHaveBeenCalledTimes(1);
+  });
+
   it('says so plainly when the platform turns the sign-in down', async () => {
     const denied = vi.fn(async () => new Response('{}', { status: 401 })) as unknown as typeof fetch;
     await expect(startSession(fakeAuth({ access_token: 't' }), { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: denied })).rejects.toThrow(
