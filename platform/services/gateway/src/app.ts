@@ -747,7 +747,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       const { authorization, [CALLER_TOKEN_HEADER]: __, ...named } = withoutCallerHeaders(headers);
       const clean = Object.fromEntries(Object.entries(named).filter(([k]) => !isGatewayHeader(k)));
       const keepToken = request.identity?.kind === 'app' && authorization ? { authorization } : {};
-      return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...(service ? callerHeaders(request.caller) : {}), ...request.signedCaller } : {}) };
+      return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(service && request.caller ? callerHeaders(request.caller) : {}), ...request.signedCaller };
     },
   });
 

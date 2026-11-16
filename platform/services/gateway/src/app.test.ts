@@ -508,7 +508,8 @@ describe('gateway', () => {
     const app = await buildApp({ upstreams: {}, auth, apps, access: async () => new Map([['notes', {}]]) });
     const res = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign(ada)}` } });
     expect(res.statusCode).toBe(200);
-    expect(res.json()['x-augur-caller']).toBeTruthy();
+    // The preview is called as the developer who chose it.
+    expect(JSON.parse(Buffer.from(String(res.json()['x-augur-caller']).split('.')[1]!, 'base64url').toString()).sub).toBe('u-1');
     const other = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign({ ...ada, sub: 'u-2' })}` } });
     expect(other.statusCode).toBeGreaterThanOrEqual(500);
   });
