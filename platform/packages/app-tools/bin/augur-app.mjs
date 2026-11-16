@@ -33,7 +33,7 @@ import { appCatalog, CATALOG_FILE, catalogText, repoSlug } from '../src/catalog.
 import { readApp, validateApp } from '../src/validate.mjs';
 import { appRelease, appTag, changelogSection, channelOf, devVersion, FRONTEND_MEDIA_TYPE, oldDevBuilds, previewPrOf, previewVersion, releaseNotes, signerOf } from '../src/release.mjs';
 import { readCheckout, releaseOf2 } from '../src/release2.mjs';
-import { APP_LOCK, appLockText, fingerprint, gitIn, lintWith, lockOnBranch, majorChangesets, mayBreakSince, mergeAppLocks, problemsFor, releasedLock, SQUAWK_CONFIG } from '../src/migrations.mjs';
+import { APP_LOCK, appLockText, fingerprint, gitIn, lintWith, lockOnBranch, majorReleases, mayBreakSince, mergeAppLocks, problemsFor, releasedLock, SQUAWK_CONFIG } from '../src/migrations.mjs';
 import { pathToFileURL } from 'node:url';
 
 const root = process.cwd();
@@ -230,28 +230,31 @@ const main = async ([mode, ...args]) => {
   } else if (mode === 'migrations') {
     const { id, version } = manifest();
     const kept = existsSync(join(root, APP_LOCK));
-    // An app that once kept migrations must still show them, or a shipped one could go unnoticed.
-    const list = (await builtMigrations()) ?? (kept ? [] : undefined);
-    if (!list) return console.log('This app keeps no migrations (no service/src/migrations.ts, no lock).');
-    const text = appLockText(list);
+    const built = await builtMigrations();
+    if (!built && !kept) return console.log('This app keeps no migrations (no service/src/migrations.ts, no lock).');
     if (args[0] === 'sync') {
-      writeFileSync(join(root, APP_LOCK), text);
+      // An empty lock would forget what shipped: the lock goes only by hand, with the app's database.
+      if (!built) throw new Error(`service/src/migrations.ts is gone, so ${APP_LOCK} isn’t rewritten. Put the migrations back, or delete the lock if the app no longer keeps a database.`);
+      writeFileSync(join(root, APP_LOCK), appLockText(built));
       return console.log(`Wrote ${APP_LOCK}.`);
     }
     if (args[0] !== 'check') throw new Error('Usage: augur-app migrations sync|check');
+    // An app that once kept migrations must still show them, or a shipped one could go unnoticed.
+    const list = built ?? [];
     const problems = [];
-    if (!kept || readFileSync(join(root, APP_LOCK), 'utf8') !== text) problems.push(`${APP_LOCK} doesn’t match the migrations. Run: pnpm build && augur-app migrations sync, and commit it.`);
+    if (!kept || readFileSync(join(root, APP_LOCK), 'utf8') !== appLockText(list)) problems.push(`${APP_LOCK} doesn’t match the migrations. Run: pnpm build && augur-app migrations sync, and commit it.`);
     const git = gitIn(root);
-    const { tag, lock: shipped } = releasedLock({ git, prefix: `app/${id}@`, version, path: APP_LOCK });
-    const released = tag?.slice(`app/${id}@`.length);
+    const { version: released, lock: shipped } = releasedLock({ git, prefix: `app/${id}@`, version, path: APP_LOCK });
     const frozenAt = process.env.MIGRATIONS_FROZEN_AT;
     const frozen = frozenAt ? lockOnBranch({ git, ref: frozenAt, path: APP_LOCK }) : undefined;
-    // The frontend and the service release together, so a major for either makes the app's next release a major.
-    const ownPackages = parts.map((p) => readJson(`${p}/package.json`).name);
-    const goingMajor = mayBreakSince(version, released) || ownPackages.some((name) => majorChangesets(root).has(name));
+    // The migrations are the service's, so the app may break its tables when the service goes up a major.
+    const service = existsSync(join(root, 'service/package.json')) ? readJson('service/package.json').name : undefined;
+    const majors = service ? majorReleases(root) : { names: new Set() };
+    const goingMajor = mayBreakSince(version, released) || majors.names.has(service);
     const lint = lintWith({ squawk: join(root, 'node_modules/.bin/squawk'), config: SQUAWK_CONFIG });
     const all = { [id]: list.map((m) => ({ id: m.id, hash: fingerprint(m.sql), sql: m.sql })) };
     problems.push(...problemsFor(all, { [id]: mergeAppLocks(shipped, frozen) }, goingMajor ? new Set([id]) : new Set(), { lint, frozenAt }));
+    if (problems.length && majors.why) problems.push(`Changesets couldn’t say whether a major changeset waits for the service, so none was counted: ${majors.why}. It needs the history back to the base branch (in CI, actions/checkout with fetch-depth: 0).`);
     if (problems.length) throw new Error(problems.map((p) => `✗ ${p}`).join('\n'));
     console.log(`${list.length} migration${list.length === 1 ? '' : 's'}: they only add, and the released ones are untouched (${released ? `since ${id} ${released}` : `${id} has no stable release yet`}${frozenAt ? `, and what's on ${frozenAt}` : ''}).`);
   } else {

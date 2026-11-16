@@ -19,7 +19,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { fallback, fingerprint, gitIn, lintWith, lockOnBranch, majorChangesets, mergeLocks, problemsFor as problemsWith, releasedLock } from '../platform/packages/app-tools/src/migrations.mjs';
+import { fallback, fingerprint, gitIn, lintWith, lockOnBranch, majorReleases, mergeLocks, problemsFor as problemsWith, releasedLock } from '../platform/packages/app-tools/src/migrations.mjs';
 
 export { fallback, mergeLocks };
 
@@ -64,7 +64,7 @@ const lockOf = (all) => Object.fromEntries(Object.entries(all).map(([name, list]
 
 /** Packages that may break their tables in this change: a major changeset waiting, or already bumped past the release. */
 const allowedToBreak = () => {
-  const allowed = majorChangesets(root);
+  const allowed = majorReleases(root).names;
   if (existsSync(join(root, RELEASE_FILE))) {
     const released = readJson(RELEASE_FILE).parts;
     for (const dir of serviceDirs()) {
@@ -105,4 +105,9 @@ const main = async () => {
   console.log('Migrations only add, and released ones are untouched.');
 };
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main().catch((e) => {
+    console.error(`✗ ${e.message}`);
+    process.exit(1);
+  });
+}

@@ -6,7 +6,7 @@
 //     Squawk has no rule for. A reviewed `-- squawk-ignore <rule>` comment lets a statement through.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,11 +86,13 @@ export const lintWith = ({ squawk, config }) => (migrations) => {
 
 export const fingerprint = (sql) => createHash('sha256').update(sql.trim()).digest('hex').slice(0, 16);
 
-/** Every lock entry in `a` (what released) or `b` (what's on the frozen branch), in that order. Where both have a migration, `a`'s fingerprint wins: servers ran that one. */
-const merged = (a = {}, b = {}) => Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((id) => [id, a[id] ?? b[id]]));
-export const mergeLocks = (a = {}, b = {}) => Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((name) => [name, merged(a[name], b[name])]));
+const union = (a, b, pick) => Object.fromEntries([...new Set([...Object.keys(a), ...Object.keys(b)])].map((k) => [k, pick(a[k], b[k])]));
+/** An app's lock, from `released` and `frozen` (the frozen branch's), in that order. Where both have a migration, the released fingerprint wins: servers ran that one. */
+const merged = (released = {}, frozen = {}) => union(released, frozen, (r, f) => r ?? f);
+/** Every service's lock, merged the same way. */
+export const mergeLocks = (released = {}, frozen = {}) => union(released, frozen, merged);
 
-/** An app's lock, merged the same way: `released` wins over `frozen`. */
+/** An app's lock, merged so. */
 export const mergeAppLocks = merged;
 
 /**
@@ -169,56 +171,70 @@ export const gitIn = (cwd) => (...args) => {
   }
 };
 
-/** Fetches `refspec` from origin, keeping a full clone full: only a shallow one fetches shallow. */
-const fetch = (git, refspec) => git('fetch', '--quiet', ...(git('rev-parse', '--is-shallow-repository').trim() === 'true' ? ['--depth=1'] : []), 'origin', refspec);
+const NEEDS_ORIGIN = 'The check reads what shipped from the remote named origin, so it needs one it can reach (in CI, the checkout’s own).';
 
-/** The JSON file at `path` in `ref`, or undefined when `ref` has no such file. */
-const fileAt = (git, ref, path) => {
-  try {
-    git('cat-file', '-e', `${ref}:${path}`);
-  } catch {
-    return undefined;
-  }
-  return JSON.parse(git('show', `${ref}:${path}`));
-};
+/** Fetches `refspec` from origin, keeping a full clone full: only a shallow one fetches shallow. */
+const fetchFromOrigin = (git, refspec) => git('fetch', '--quiet', ...(git('rev-parse', '--is-shallow-repository').trim() === 'true' ? ['--depth=1'] : []), 'origin', refspec);
+
+/** The JSON file at `path` in `ref`, or undefined when `ref`'s tree has no such file. Throws when the tree can't be read. */
+const fileAt = (git, ref, path) => (git('ls-tree', '--name-only', ref, '--', path).trim() ? JSON.parse(git('show', `${ref}:${path}`)) : undefined);
 
 /**
  * What shipped: the lock at `path` in the newest stable release tagged `<prefix><x.y.z>` at or below
- * `version`, read from origin's tags. { tag, lock }: no tag before the first release, and no lock in a release
- * made before its migrations were locked. Throws when origin can't be read, so nothing passes unchecked.
+ * `version`, as origin has it (a local tag of the same name may point elsewhere). { tag, version, lock }: no tag
+ * before the first release, and no lock in a release made before its migrations were locked. Throws when origin
+ * can't be read, so nothing passes unchecked.
  */
 export const releasedLock = ({ git, prefix, version, path }) => {
-  const tags = git('ls-remote', '--tags', '--refs', 'origin', `refs/tags/${prefix}*`)
-    .split('\n')
-    .map((l) => l.split('refs/tags/')[1])
-    .filter(Boolean);
-  const tag = newestStable(tags, prefix, version);
-  if (!tag) return {};
   try {
-    git('rev-parse', '--verify', '--quiet', `refs/tags/${tag}`);
-  } catch {
-    fetch(git, `refs/tags/${tag}:refs/tags/${tag}`);
+    const tagged = new Map(
+      git('ls-remote', '--tags', '--refs', 'origin', `refs/tags/${prefix}*`)
+        .split('\n')
+        .filter(Boolean)
+        .map((l) => l.split(/\s+/))
+        .map(([sha, ref]) => [ref.slice('refs/tags/'.length), sha]),
+    );
+    const tag = newestStable([...tagged.keys()], prefix, version);
+    if (!tag) return {};
+    const commit = `${tagged.get(tag)}^{commit}`;
+    try {
+      git('cat-file', '-e', commit);
+    } catch {
+      fetchFromOrigin(git, `refs/tags/${tag}`);
+    }
+    return { tag, version: tag.slice(prefix.length), lock: fileAt(git, commit, path) };
+  } catch (e) {
+    throw new Error(`Can’t read what shipped in the newest ${prefix}<version> release: ${e.message}\n${NEEDS_ORIGIN}`);
   }
-  return { tag, lock: fileAt(git, `refs/tags/${tag}`, path) };
 };
 
 /** The lock at `path` on `ref` (origin/<branch>, fetched first), or undefined when the branch has none. Throws when the branch can't be read. */
 export const lockOnBranch = ({ git, ref, path }) => {
-  if (ref.startsWith('origin/')) fetch(git, `+${ref.slice('origin/'.length)}:refs/remotes/${ref}`);
-  git('rev-parse', '--verify', '--quiet', ref);
-  return fileAt(git, ref, path);
+  try {
+    if (ref.startsWith('origin/')) fetchFromOrigin(git, `+${ref.slice('origin/'.length)}:refs/remotes/${ref}`);
+    git('rev-parse', '--verify', '--quiet', `${ref}^{commit}`);
+    return fileAt(git, ref, path);
+  } catch (e) {
+    throw new Error(`Can’t read the migrations on ${ref} (MIGRATIONS_FROZEN_AT): ${e.message}\n${NEEDS_ORIGIN}`);
+  }
 };
 
-/** The packages a waiting changeset (.changeset/*.md under `root`) takes up a major. */
-export const majorChangesets = (root) => {
-  const dir = join(root, '.changeset');
-  const names = new Set();
-  if (!existsSync(dir)) return names;
-  for (const file of readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md')) {
-    const head = readFileSync(join(dir, file), 'utf8').match(/^---\r?\n([\s\S]*?)\r?\n---/)?.[1] ?? '';
-    for (const [, name] of head.matchAll(/^\s*["']?([^"'\s:]+)["']?\s*:\s*["']?major["']?\s*$/gm)) names.add(name);
+/**
+ * The packages the waiting changesets take up a major, as Changesets itself plans the release (with its fixed and
+ * linked groups), from `pnpm changeset status` in `root`: { names }, plus `why` when Changesets couldn't say,
+ * for the message (it needs the history back to the base branch).
+ */
+export const majorReleases = (root) => {
+  const dir = mkdtempSync(join(tmpdir(), 'changesets-'));
+  try {
+    execFileSync('pnpm', ['changeset', 'status', `--output=${join(dir, 'status.json')}`], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const { releases = [] } = JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8'));
+    return { names: new Set(releases.filter((r) => r.type === 'major').map((r) => r.name)) };
+  } catch (e) {
+    return { names: new Set(), why: `${(e.stderr || e.stdout || e.message).trim().split('\n').at(-1)}` };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
-  return names;
 };
 
 /** Whether an app at `version` may break its tables: it is a major past what it released (`released`). */

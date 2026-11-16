@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { appLockOf, appLockText, fingerprint, majorChangesets, mayBreakSince, mergeAppLocks, mergeLocks, newestStable, problemsFor, SQUAWK_CONFIG } from './migrations.mjs';
+import { appLockOf, appLockText, fingerprint, gitIn, mayBreakSince, mergeAppLocks, mergeLocks, newestStable, problemsFor, releasedLock, SQUAWK_CONFIG } from './migrations.mjs';
 
 const migrations = [
   { id: '001_kept_events', sql: 'create table kept_events (id text primary key);' },
@@ -58,17 +58,6 @@ test('where a released lock and the frozen branch disagree, the released fingerp
   assert.deepEqual(mergeAppLocks(undefined, undefined), {});
 });
 
-test('a waiting changeset that takes a package up a major is found, quoted or not', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'changesets-'));
-  mkdirSync(join(dir, '.changeset'));
-  writeFileSync(join(dir, '.changeset/README.md'), '---\n"@x/readme": major\n---\n');
-  writeFileSync(join(dir, '.changeset/a.md'), '---\n"@apps/notes": major\n"@apps/notes-frontend": minor\n---\n\nDrops a column.\n');
-  writeFileSync(join(dir, '.changeset/b.md'), "---\n'@apps/other': 'major'\n---\n");
-  writeFileSync(join(dir, '.changeset/c.md'), '---\n---\n');
-  assert.deepEqual([...majorChangesets(dir)].sort(), ['@apps/notes', '@apps/other']);
-  assert.deepEqual([...majorChangesets(join(dir, 'none'))], []);
-});
-
 test('an app is held to AUGUR’s own Squawk rules', () => {
   const rules = (text) => text.replace(/^#[^\n]*\n/gm, '');
   assert.equal(rules(readFileSync(SQUAWK_CONFIG, 'utf8')), rules(readFileSync(new URL('../../../../.squawk.toml', import.meta.url), 'utf8')));
@@ -76,8 +65,15 @@ test('an app is held to AUGUR’s own Squawk rules', () => {
 
 const squawk = new URL('../../../../node_modules/.bin/squawk', import.meta.url).pathname;
 
-test('augur-app migrations: sync writes the lock, and check holds what the newest stable release shipped', { skip: !existsSync(squawk) && 'Squawk isn’t installed at the repository’s root' }, () => {
-  const dir = mkdtempSync(join(tmpdir(), 'app-migrations-'));
+test('augur-app migrations: sync writes the lock, and check holds what origin’s newest stable release shipped', { skip: !existsSync(squawk) && 'Squawk isn’t installed at the repository’s root' }, () => {
+  const top = mkdtempSync(join(tmpdir(), 'app-migrations-'));
+  const origin = join(top, 'origin.git');
+  const dir = join(top, 'app');
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { cwd: dir, stdio: 'pipe', encoding: 'utf8' });
+  execFileSync('git', ['init', '--quiet', '--bare', '--initial-branch=main', origin]);
+  mkdirSync(dir);
+  git('init', '--quiet', '--initial-branch=main');
+  git('remote', 'add', 'origin', origin);
   const manifestAt = (version) => writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ id: 'notes', version }));
   const built = (list) => writeFileSync(join(dir, 'service/dist/migrations.js'), `export const MIGRATIONS = ${JSON.stringify(list)};`);
   mkdirSync(join(dir, 'service/src'), { recursive: true });
@@ -85,45 +81,62 @@ test('augur-app migrations: sync writes the lock, and check holds what the newes
   mkdirSync(join(dir, 'node_modules/.bin'), { recursive: true });
   // pnpm's .bin entry finds Squawk from where it sits, so the app's runs the repository's by its own path.
   writeFileSync(join(dir, 'node_modules/.bin/squawk'), `#!/bin/sh\nexec "${squawk}" "$@"\n`, { mode: 0o755 });
-  mkdirSync(join(dir, '.changeset'));
+  writeFileSync(join(dir, 'service/package.json'), JSON.stringify({ name: '@apps/notes' }));
   writeFileSync(join(dir, 'service/src/migrations.ts'), '');
   manifestAt('0.1.0');
   built(migrations.slice(0, 1));
   const bin = new URL('../bin/augur-app.mjs', import.meta.url).pathname;
-  const cli = (...args) => execFileSync('node', [bin, 'migrations', ...args], { cwd: dir, encoding: 'utf8', stdio: 'pipe' });
-  const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args], { cwd: dir, stdio: 'pipe' });
+  const cli = (args, env = {}) => execFileSync('node', [bin, 'migrations', ...args.split(' ')], { cwd: dir, encoding: 'utf8', stdio: 'pipe', env: { ...process.env, ...env } });
 
-  git('init', '--quiet');
-  git('remote', 'add', 'origin', dir);
   assert.throws(() => cli('check'), /migrations.lock.json doesn’t match/);
   assert.match(cli('sync'), /Wrote service\/migrations.lock.json/);
   assert.match(cli('check'), /no stable release yet/);
   git('add', 'manifest.json', 'service');
   git('commit', '--quiet', '-m', 'release');
   git('tag', 'app/notes@0.1.0');
+  git('push', '--quiet', 'origin', 'main', 'app/notes@0.1.0');
   assert.match(cli('check'), /since notes 0.1.0/);
 
   built([{ ...migrations[0], sql: 'create table kept_events (id uuid primary key);' }]);
   cli('sync');
-  assert.throws(() => cli('check'), /001_kept_events changed after it shipped/);
+  assert.throws(() => cli('check'), /001_kept_events changed after it shipped in a release/);
+  // Origin's tag counts, not a local one of the same name moved onto the change.
+  git('commit', '--quiet', '-am', 'change 001');
+  git('tag', '-f', 'app/notes@0.1.0');
+  assert.throws(() => cli('check'), /001_kept_events changed after it shipped in a release/);
+  git('reset', '--quiet', '--hard', 'HEAD~1');
 
-  built([migrations[0], { id: '002_drop', sql: 'alter table kept_events drop column id;' }]);
+  // What's on main counts as shipped too, once MIGRATIONS_FROZEN_AT names it.
+  built(migrations);
   cli('sync');
-  assert.throws(() => cli('check'), /002_drop does what the release before it can't run on/);
-  writeFileSync(join(dir, '.changeset/drop.md'), '---\n"@apps/notes": major\n---\n');
-  assert.throws(() => cli('check'), /002_drop does what the release before it can't run on/, 'a major for another package isn’t this app’s');
-  writeFileSync(join(dir, 'service/package.json'), JSON.stringify({ name: '@apps/notes' }));
+  git('commit', '--quiet', '-am', 'add 002');
+  git('push', '--quiet', 'origin', 'main');
+  built([migrations[0], { ...migrations[1], sql: 'alter table kept_events add column kept_on date;' }]);
+  cli('sync');
   assert.match(cli('check'), /2 migrations/);
-  rmSync(join(dir, '.changeset/drop.md'));
+  assert.throws(() => cli('check', { MIGRATIONS_FROZEN_AT: 'origin/main' }), /002_kept_at changed after it shipped \(in a release or on origin\/main\)/);
+
+  // A new migration the release before can't run on fails, and says when Changesets couldn't look for a major.
+  built([...migrations, { id: '003_drop', sql: 'alter table kept_events drop column kept_at;' }]);
+  cli('sync');
+  assert.throws(() => cli('check'), (e) => /003_drop does what the release before it can't run on/.test(e.stderr) && /Changesets couldn’t say/.test(e.stderr));
   manifestAt('1.0.0');
-  assert.match(cli('check'), /2 migrations.*since notes 0.1.0/);
+  assert.match(cli('check'), /3 migrations.*since notes 0.1.0/);
 
   // Migrations that move out of service/src/migrations.ts still have to account for the ones that shipped.
   rmSync(join(dir, 'service/src/migrations.ts'));
   assert.throws(() => cli('check'), /001_kept_events shipped in a release and is gone/);
+  assert.throws(() => cli('sync'), /isn’t rewritten/);
+  assert.ok(readFileSync(join(dir, 'service/migrations.lock.json'), 'utf8').includes('003_drop'));
+
+  // A shallow clone without the release's commit fetches it, and stays shallow.
+  const shallow = join(top, 'shallow');
+  execFileSync('git', ['clone', '--quiet', '--depth=1', '--no-tags', `file://${origin}`, shallow]);
+  const read = releasedLock({ git: gitIn(shallow), prefix: 'app/notes@', version: '0.1.0', path: 'service/migrations.lock.json' });
+  assert.deepEqual([read.tag, read.version, Object.keys(read.lock)], ['app/notes@0.1.0', '0.1.0', ['001_kept_events']]);
 
   // A check that can't read what shipped fails rather than passing on nothing.
-  git('remote', 'set-url', 'origin', join(dir, 'nowhere'));
   writeFileSync(join(dir, 'service/src/migrations.ts'), '');
-  assert.throws(() => cli('check'), /git ls-remote failed/);
+  git('remote', 'set-url', 'origin', join(top, 'nowhere'));
+  assert.throws(() => cli('check'), /Can’t read what shipped[\s\S]*remote named origin/);
 });
