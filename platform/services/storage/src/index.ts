@@ -10,7 +10,7 @@ import pg from 'pg';
 import { configFromEnv, envPrefix, FRONTENDS_BUCKET, FRONTENDS_KEY, type StorageConfig } from './config.ts';
 import { BACKUP_STATUS_DIR, backupProblem, readBackupMarker } from './backup-marker.ts';
 import { garageAdmin, GarageError, keyIdFor, keyNameFor } from './garage.ts';
-import { dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { databaseFor, dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
 import { dropDue, markKept, prepareRetirements, retiredBucketFor, retirements, setAside, type Buckets } from './retirement.ts';
 import { emptyBucket } from './s3.ts';
 
@@ -31,7 +31,7 @@ if (config.drop) {
   } finally {
     await sql.end();
   }
-  log.info(`${app}’s database login and schema are gone`);
+  log.info(`${app}’s database login and database are gone`);
   if (config.garage) {
     const { s3Url } = config.garage;
     const had = await garageAdmin(config.garage).removeBucket(app, async () => {
@@ -113,6 +113,14 @@ const forApp = async (app: string, work: () => Promise<void>) => {
 
 const client = new pg.Client({ connectionString: config.databaseUrl });
 await client.connect();
+// Another database on the same server, as the same admin login: an app's own, to set it up.
+const open: OpenDatabase = async (database) => {
+  const url = new URL(config.databaseUrl);
+  url.pathname = `/${database}`;
+  const other = new pg.Client({ connectionString: url.toString() });
+  await other.connect();
+  return other;
+};
 try {
   await prepareDatabase(client);
   for (const { service, databasePassword } of config.services) {
@@ -121,8 +129,8 @@ try {
   }
   for (const { app, databasePassword } of config.apps) {
     await forApp(app, async () => {
-      await provisionDatabase(client, { app, password: databasePassword, connections: config.appConnections });
-      log.info(`${app} has database login ${roleFor(app)}, owning schema ${schemaFor(app)}, at most ${config.appConnections} connections`);
+      await provisionDatabase(client, { app, password: databasePassword, connections: config.appConnections, open });
+      log.info(`${app} has database login ${roleFor(app)}, owning database ${databaseFor(app)}, at most ${config.appConnections} connections`);
     });
   }
 } finally {

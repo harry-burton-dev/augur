@@ -9,6 +9,14 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Each app has a database of its own: apps installed before are installed again
+
+**From** unreleased
+
+An app installed from this release on gets its own database (`app_<id>`) on AUGUR's Postgres, owned by its login, instead of a schema in AUGUR's. Its login can't connect to AUGUR's database or another app's, so no app can read another's tables or hold the locks AUGUR's migrations take. Backups take every database as before.
+
+An app installed before keeps its tables where they are, and they aren't moved. After the upgrade it doesn't start: `pc logs storage` and Admin → Apps say it was installed before each app had its own database. Remove it in Admin → Apps and install it again. Its data goes when it's removed (after the usual backup, and set aside until a later release, as ever), so copy out anything you want to keep first.
+
 ## Apps' parts get only the signed caller
 
 **From** unreleased

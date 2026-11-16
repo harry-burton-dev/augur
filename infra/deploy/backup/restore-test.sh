@@ -98,14 +98,19 @@ real_errors() {
 # AUGUR's own schemas in its database. Any other schema there is an app's: <id>, and <id>_jobs for its jobs.
 : "${PLATFORM_SCHEMAS:=public identity registry events models pg_catalog}"
 
-# whose DUMP ERRORS: each of ERRORS (psql's, one a line) as "<whose><tab><error>": the app whose schema
-# the failing statement was in, or "augur" for AUGUR's own (its schemas, Keycloak's database, logins,
-# and anything it can't tell). psql names the dump's line each error was at; the statement there, or
+# whose DUMP ERRORS: each of ERRORS (psql's, one a line) as "<whose><tab><error>": the app whose database
+# (app_<id>) or, for an app installed before apps had their own, whose schema in AUGUR's, the failing statement
+# was in, or "augur" for AUGUR's own (its schemas, Keycloak's database, logins, and anything it can't tell). psql names the dump's line each error was at; the statement there, or
 # the COPY it was in, names the schema.
 whose() {
   printf '%s\n' "$2" > "$scratch/real-errors"
   gunzip -c "$1" | awk -v errs="$scratch/real-errors" -v platform=" $PLATFORM_SCHEMAS " '
     function owner() {
+      if (db ~ /^app_[a-z0-9_]+$/) {
+        app = substr(db, 5)
+        gsub(/_/, "-", app)
+        return app
+      }
       if (db != "platform" || schema == "" || index(platform, " " schema " ")) return "augur"
       app = schema
       sub(/_jobs$/, "", app)

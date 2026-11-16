@@ -1,20 +1,35 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dropDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { databaseFor, dropDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
 
 describe('an app’s schema', () => {
   it('is never one named for a part of AUGUR, made or dropped', async () => {
     const said: string[] = [];
     const sql = { query: async (text: string) => (said.push(text), { rows: [], rowCount: 0 }) } as unknown as Parameters<typeof provisionDatabase>[0];
-    await expect(provisionDatabase(sql, { app: 'registry', password: 'p'.repeat(20) })).rejects.toThrow('No schema was made for it: "registry" is kept for the registry');
+    await expect(provisionDatabase(sql, { app: 'registry', password: 'p'.repeat(20), open: () => Promise.reject(new Error('not opened')) })).rejects.toThrow('No schema was made for it: "registry" is kept for the registry');
     await expect(dropDatabase(sql, 'public')).rejects.toThrow('Nothing was dropped');
     expect(said).toEqual([]);
   });
 });
 
+/** Another database on the test's server, as its admin login. */
+const urlOf = (database: string, user?: string, password?: string) => {
+  const url = new URL(process.env.DATABASE_URL!);
+  url.pathname = `/${database}`;
+  if (user) url.username = user;
+  if (password !== undefined) url.password = password;
+  return url.toString();
+};
+const open: OpenDatabase = async (database) => {
+  const client = new pg.Client({ connectionString: urlOf(database) });
+  await client.connect();
+  return client;
+};
+
 // Runs wherever DATABASE_URL points at a Postgres with pgvector; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
   const app = `storage-test-${process.pid}`;
+  const other = `storage-other-${process.pid}`;
   let admin: pg.Client;
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
@@ -22,24 +37,20 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
     await prepareDatabase(admin);
   });
   afterAll(async () => {
-    await admin.query(`drop schema if exists ${schemaFor(app)} cascade`);
-    await admin.query(`drop schema if exists ${jobsSchemaFor(app)} cascade`);
-    await admin.query(`drop owned by ${roleFor(app)}`).catch(() => {});
-    await admin.query(`drop role if exists ${roleFor(app)}`);
+    await dropDatabase(admin, app);
+    await dropDatabase(admin, other);
     await admin.end();
   });
 
-  const asApp = async (password: string) => {
-    const url = new URL(process.env.DATABASE_URL!);
-    url.username = roleFor(app);
-    url.password = password;
-    const client = new pg.Client({ connectionString: url.toString() });
+  const asApp = async (password: string, database = databaseFor(app), user = roleFor(app)) => {
+    const client = new pg.Client({ connectionString: urlOf(database, user, password) });
     await client.connect();
     return client;
   };
 
-  it('owns a schema for its jobs too', async () => {
-    await provisionDatabase(admin, { app, password: 'jobs-password-456' });
+  it('owns a database of its own, with a schema for its jobs too', async () => {
+    await provisionDatabase(admin, { app, password: 'jobs-password-456', open });
+    expect((await admin.query('select pg_get_userbyid(datdba) as owner from pg_database where datname = $1', [databaseFor(app)])).rows).toEqual([{ owner: roleFor(app) }]);
     const client = await asApp('jobs-password-456');
     try {
       await client.query(`create table ${jobsSchemaFor(app)}.workflow_status (id text)`);
@@ -49,36 +60,53 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
     }
   });
 
-  it('owns its schema, can use pgvector and pg_trgm, and can’t reach the platform’s schemas', async () => {
-    await provisionDatabase(admin, { app, password: 'first-password-123' });
-    await admin.query('create schema if not exists storage_test_platform');
-    await admin.query('create table if not exists storage_test_platform.secrets (x int)');
+  it('owns its schema there, can use pgvector and pg_trgm, and can’t create in public', async () => {
+    await provisionDatabase(admin, { app, password: 'first-password-123', open });
     const client = await asApp('first-password-123');
     try {
       await client.query('create table notes (id int primary key, embedding vector(3))');
       await client.query(`insert into notes values (1, '[1,2,3]')`);
       expect((await client.query(`select ${schemaFor(app)}.notes.id from notes`)).rows).toEqual([{ id: 1 }]);
       expect((await client.query(`select similarity('Northern Tern', 'N. Tern') > 0.3 as near`)).rows).toEqual([{ near: true }]);
-      await expect(client.query('select * from storage_test_platform.secrets')).rejects.toThrow(/permission denied/);
       await expect(client.query('create table public.stray (x int)')).rejects.toThrow(/permission denied/);
     } finally {
       await client.end();
-      await admin.query('drop schema storage_test_platform cascade');
     }
   });
 
+  // The exit check of P1 (PER-456): AUGUR's database is out of reach, so are its migrations' advisory locks, and so is another app's.
+  it('can’t connect to AUGUR’s database or another app’s, and no one else can connect to its own', async () => {
+    await provisionDatabase(admin, { app, password: 'first-password-123', open });
+    await provisionDatabase(admin, { app: other, password: 'other-password-123', open });
+    const platform = new URL(process.env.DATABASE_URL!).pathname.slice(1);
+    await expect(asApp('first-password-123', platform)).rejects.toThrow(/permission denied for database/);
+    await expect(asApp('first-password-123', databaseFor(other))).rejects.toThrow(/permission denied for database/);
+    await expect(asApp('other-password-123', databaseFor(app), roleFor(other))).rejects.toThrow(/permission denied for database/);
+  });
+
   it('holds at most its share of connections, so it can’t take AUGUR’s (ADR 0073)', async () => {
-    await provisionDatabase(admin, { app, password: 'first-password-123', connections: 7 });
+    await provisionDatabase(admin, { app, password: 'first-password-123', connections: 7, open });
     expect((await admin.query('select rolconnlimit from pg_roles where rolname = $1', [roleFor(app)])).rows).toEqual([{ rolconnlimit: 7 }]);
   });
 
   it('takes a new password when .env changes, and is otherwise unchanged', async () => {
-    await provisionDatabase(admin, { app, password: 'second-password-456' });
-    await provisionDatabase(admin, { app, password: 'second-password-456' });
+    await provisionDatabase(admin, { app, password: 'second-password-456', open });
+    await provisionDatabase(admin, { app, password: 'second-password-456', open });
     await expect(asApp('first-password-123')).rejects.toThrow(/password authentication failed/);
     const client = await asApp('second-password-456');
     expect((await client.query('select count(*)::int as n from notes')).rows).toEqual([{ n: 1 }]);
     await client.end();
+  });
+
+  it('is refused, saying why, for an app installed before apps had databases of their own', async () => {
+    const old = `storage-old-${process.pid}`;
+    await admin.query(`create schema ${schemaFor(old)}`);
+    try {
+      await expect(provisionDatabase(admin, { app: old, password: 'old-password-1234', open })).rejects.toThrow(/installed before each app had a database of its own.*install it again/);
+      expect((await admin.query('select 1 from pg_database where datname = $1', [databaseFor(old)])).rowCount).toBe(0);
+    } finally {
+      await dropDatabase(admin, old);
+    }
   });
 });
 
@@ -91,14 +119,17 @@ describe.runIf(process.env.DATABASE_URL)('a preview’s scratch database', () =>
   });
   afterAll(() => admin.end());
 
-  it('goes, login, schema and all, and going twice is fine', async () => {
-    await provisionDatabase(admin, { app, password: 'preview-password-789' });
-    await admin.query(`create table ${schemaFor(app)}.notes (id int)`);
-    await admin.query(`alter table ${schemaFor(app)}.notes owner to ${roleFor(app)}`);
+  it('goes, login, database and all, even while it is connected, and going twice is fine', async () => {
+    await provisionDatabase(admin, { app, password: 'preview-password-789', open });
+    const own = await open(databaseFor(app));
+    // Dropping it cuts this connection, which says so as an error.
+    (own as pg.Client).on('error', () => {});
+    await own.query(`create table ${schemaFor(app)}.notes (id int)`);
+    await own.query(`alter table ${schemaFor(app)}.notes owner to ${roleFor(app)}`);
     await dropDatabase(admin, app);
+    await own.end().catch(() => {});
     expect((await admin.query('select 1 from pg_roles where rolname = $1', [roleFor(app)])).rowCount).toBe(0);
-    expect((await admin.query('select 1 from information_schema.schemata where schema_name = $1', [schemaFor(app)])).rowCount).toBe(0);
-    expect((await admin.query('select 1 from information_schema.schemata where schema_name = $1', [jobsSchemaFor(app)])).rowCount).toBe(0);
+    expect((await admin.query('select 1 from pg_database where datname = $1', [databaseFor(app)])).rowCount).toBe(0);
     await dropDatabase(admin, app);
   });
 });
@@ -169,7 +200,7 @@ describe.runIf(process.env.DATABASE_URL)('a platform service’s database login'
     expect(await may(serviceRoleFor(service))).toBe(true);
     const app = `resvapp${process.pid}`;
     try {
-      await provisionDatabase(admin, { app, password: 'app-password-1234' });
+      await provisionDatabase(admin, { app, password: 'app-password-1234', open });
       expect(await may(roleFor(app))).toBe(false);
     } finally {
       await dropDatabase(admin, app);
