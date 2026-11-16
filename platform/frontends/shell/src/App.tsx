@@ -1,4 +1,4 @@
-import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { createEventBus, floorFetch, IntentCancelled, isIntentCancelled, SDK_VERSION, type AppManifestEntry, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import {
   Button,
   defaultFunctions,
@@ -62,6 +62,7 @@ import {
   PreferenceSync,
   previewLine,
   previewPr,
+  handlerFor,
   RequestBroker,
   routeIntent,
   screenFor,
@@ -89,10 +90,13 @@ import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { isWorkerApp } from './host/apps3.js';
 import { PaneSlot } from './host/pane-target.js';
+import { Contained } from './host/contained.js';
 import { buildChange, buildNotice, servedBuild } from './host/build.js';
 import { InboxView } from './inbox/InboxView.js';
 
 /** The apps this shell can open: an intent goes to one of them, and Find asks only them. One it can't open still says why where it is listed. */
+/** How many choices of which app opens an intent are kept (identity's intentApps). */
+const MAX_INTENT_CHOICES = 50;
 const openable = (apps: AppManifestEntry[]) => apps.filter((a) => !incompatibility(a));
 
 export interface HostProps {
@@ -586,22 +590,56 @@ export function Host({
   const [raised, setRaised] = useState(0);
   const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path) : undefined), [manifest, floor, where, raised]);
 
+  // Two apps that handle one intent: the person chooses the first time, and the choice is kept (PER-468).
+  const askingWhich = useRef(false);
+  const choosingRef = useRef<{ done: (app?: AppManifestEntry) => void } | null>(null);
+  const [choosing, setChoosing] = useState<{ intent: Intent; apps: AppManifestEntry[]; done: (app?: AppManifestEntry) => void } | null>(null);
+  const handlerOf = useCallback(
+    async (apps: AppManifestEntry[], intent: Intent): Promise<AppManifestEntry> => {
+      // Their saved choices first: a choice made before the load would otherwise replace them all.
+      const found = handlerFor(apps, intent, (await prefs.load()).intentApps);
+      if ('app' in found) return found.app;
+      if (askingWhich.current) throw new IntentError('You’re already choosing which app opens something. Choose that one first.');
+      askingWhich.current = true;
+      const app = await new Promise<AppManifestEntry | undefined>((done) => {
+        choosingRef.current = { done };
+        setChoosing({ intent, apps: found.choose, done });
+      }).finally(() => {
+        askingWhich.current = false;
+        choosingRef.current = null;
+        setChoosing(null);
+      });
+      if (!app) throw new IntentCancelled();
+      // The newest 50 at most, as Identity keeps.
+      choose('intentApps', [...(prefs.current.intentApps ?? []).filter((c) => c.intent !== intent.type), { intent: intent.type, app: app.id }].slice(-MAX_INTENT_CHOICES));
+      return app;
+    },
+    [prefs, choose],
+  );
+
+  // A new floor has other apps: an "Open with" still open is for the old one's, so it closes unanswered.
+  useEffect(() => () => choosingRef.current?.done(), [floor?.id]);
+
   const raise = useCallback(
     async (intent: Intent) => {
       if (!manifest) return;
       try {
-        routeIntent(openable(manifest), intent, (app) => {
+        const apps = openable(manifest);
+        const app = await handlerOf(apps, intent);
+        routeIntent(apps, intent, () => {
           pendingIntent.current = intent;
           setRaised((n) => n + 1);
           navigate(hrefFor(app));
-        });
+        }, app);
       } catch (err) {
+        // Closing "Open with" is the person changing their mind: nothing opens, and nothing failed.
+        if (isIntentCancelled(err)) return;
         if (!(err instanceof IntentError)) throw err;
         tell(toShellNotification('platform', { title: err.message }));
         throw err;
       }
     },
-    [manifest, navigate, tell],
+    [manifest, navigate, tell, handlerOf],
   );
 
   /**
@@ -632,19 +670,22 @@ export function Host({
 
   // An app asks another for an answer: the answering app opens over it in a dialog.
   const request = useCallback(
-    <T,>(intent: Intent): Promise<T> => {
-      if (!manifest) return Promise.reject(new IntentError('Apps are still loading. Try again in a moment.'));
+    async <T,>(intent: Intent): Promise<T> => {
+      if (!manifest) throw new IntentError('Apps are still loading. Try again in a moment.');
       let started: ReturnType<RequestBroker['begin']>;
       try {
-        started = broker.current.begin(openable(manifest), intent);
+        // One request at a time: said before asking which app, so the person never chooses for nothing.
+        if (broker.current.current) throw new IntentError(`${broker.current.current.app.name} is already open for another request. Finish that first.`);
+        const apps = openable(manifest);
+        started = broker.current.begin(apps, intent, await handlerOf(apps, intent));
       } catch (err) {
         if (err instanceof IntentError) tell(toShellNotification('platform', { title: err.message }));
-        return Promise.reject(err);
+        throw err;
       }
       setAnswering(started.request);
       return (started.answer as Promise<T>).finally(() => setAnswering(null));
     },
-    [manifest, tell],
+    [manifest, tell, handlerOf],
   );
 
   // A new floor makes a new context, so the open app is mounted again on it.
@@ -1194,44 +1235,48 @@ export function Host({
         toasts={toasts.map((t) => ({ id: t.id, text: t.text, ...(t.open ? { action: { label: 'Open', onPress: () => homeAsks.current?.open(t.id) } } : {}) }))}
         onDone={toastDone}
       />
-      <UrgentNotices
-        queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
-        appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
-        floorName={(id) => session.floors.find((f) => f.id === id)?.name}
-        me={session.user.name}
-        onOpen={(id) => homeAsks.current?.open(id)}
-      />
+      <Contained part="Urgent notices" resetOn={urgent}>
+        <UrgentNotices
+          queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
+          appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
+          floorName={(id) => session.floors.find((f) => f.id === id)?.name}
+          me={session.user.name}
+          onOpen={(id) => homeAsks.current?.open(id)}
+        />
+      </Contained>
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app' && !(screen?.kind === 'desk' && manifest && desktopApp(manifest))} />
       {accountSection ? (
-        <AccountArea
-          section={accountSection}
-          onSection={showAccount}
-          onClose={() => showAccount(null)}
-          api={accountApi}
-          prefs={chosen}
-          onPreference={choose}
-          onLanguage={chooseLanguage}
-          orgTimeZone={orgTimeZone}
-          onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
-          onSignOut={() => void session.signOut()}
-          apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
-          floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
-          ownFloor={home.id}
-          appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
-          mountSettings={mountSettings}
-          unmountSettings={unmountSettings}
-          shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
-          product={productName()}
-          version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
-          actionStatus={actionStatus}
-          actAs={{
-            personas: heldPersonas,
-            ...(actingSession ? { session: actingSession } : {}),
-            start: async (persona, reason, minutes) => acting.set(await personaClient.start(persona, reason, minutes)),
-            stop: stopActing,
-            signInAgain: () => window.location.assign(`${SIGN_IN_AGAIN_PATH}?return=${encodeURIComponent(`${window.location.pathname}?${ACCOUNT_PARAM}=security&${ACTING_PARAM}=again`)}`),
-          }}
-        />
+        <Contained part="The Account area" again={{ label: 'Close', onPress: () => showAccount(null) }}>
+          <AccountArea
+            section={accountSection}
+            onSection={showAccount}
+            onClose={() => showAccount(null)}
+            api={accountApi}
+            prefs={chosen}
+            onPreference={choose}
+            onLanguage={chooseLanguage}
+            orgTimeZone={orgTimeZone}
+            onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
+            onSignOut={() => void session.signOut()}
+            apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
+            floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
+            ownFloor={home.id}
+            appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
+            mountSettings={mountSettings}
+            unmountSettings={unmountSettings}
+            shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
+            product={productName()}
+            version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
+            actionStatus={actionStatus}
+            actAs={{
+              personas: heldPersonas,
+              ...(actingSession ? { session: actingSession } : {}),
+              start: async (persona, reason, minutes) => acting.set(await personaClient.start(persona, reason, minutes)),
+              stop: stopActing,
+              signInAgain: () => window.location.assign(`${SIGN_IN_AGAIN_PATH}?return=${encodeURIComponent(`${window.location.pathname}?${ACCOUNT_PARAM}=security&${ACTING_PARAM}=again`)}`),
+            }}
+          />
+        </Contained>
       ) : null}
       {problem && (
         <section className="problem" role="alert">
@@ -1254,23 +1299,46 @@ export function Host({
       >
         <div ref={setRequestStage} className="request-stage" />
       </Dialog>
+      <Dialog
+        open={!!choosing}
+        onClose={() => choosing?.done()}
+        size="read"
+        heading="Open with"
+        summary="More than one app can open this. The one you choose opens it from now on; you can change that in Account, under Home and apps."
+        cancelLabel="Cancel"
+      >
+        {choosing ? (
+          <ul className="intent-choice" data-intent={choosing.intent.type}>
+            {choosing.apps.map((a) => (
+              <li key={a.id}>
+                <strong>{a.name}</strong>
+                <Button kind="secondary" size="sm" onPress={() => choosing.done(a)}>
+                  Open with {a.name}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Dialog>
       <Dialog open={inboxOpen} onClose={() => setInboxOpen(false)} size="read" heading="Inbox" summary="Work that waits on you and your teams." cancelLabel="Close">
         {inboxOpen && manifest ? (
-          <InboxView
-            client={inbox}
-            manifest={manifest}
-            floors={session.floors}
-            here={floorId}
-            me={session.user.id}
-            counts={inboxCounts}
-            version={inboxVersion}
-            fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
-            onChanged={refreshInbox}
-            onOpen={(item) => {
-              setInboxOpen(false);
-              openInboxItem(item);
-            }}
-          />
+          <Contained part="The Inbox" resetOn={inboxVersion}>
+            <InboxView
+              client={inbox}
+              manifest={manifest}
+              floors={session.floors}
+              here={floorId}
+              me={session.user.id}
+              counts={inboxCounts}
+              version={inboxVersion}
+              fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
+              onChanged={refreshInbox}
+              onOpen={(item) => {
+                setInboxOpen(false);
+                openInboxItem(item);
+              }}
+            />
+          </Contained>
         ) : null}
       </Dialog>
       <Dialog

@@ -1,4 +1,4 @@
-import { noShadow, type Caller, type Shadow, type ShadowQuestion } from '@augur/service-kit';
+import { isPlatformScope, noShadow, type Caller, type Shadow, type ShadowQuestion } from '@augur/service-kit';
 
 /**
  * The realm role that runs the deployment (ADR 0022): only its holders upgrade AUGUR, go back to an
@@ -26,6 +26,10 @@ export const CHANGE_SIGN_IN_MS = 10 * 60 * 1000;
  * `can_manage_apps`, or `admin` where the check is about the server's state); `deployment-admin` runs the
  * server (one of the deployment's relations, such as `can_upgrade`). Both are asked as any persona the caller
  * holds, which is how today's roles are copied in (one admin persona each).
+ *
+ * A call made for an app (the caller carries `app`) passes neither, whatever the person holds, unless the app is
+ * one of AUGUR's own frontends (it carries a platform scope, ADR 0083). Otherwise any app an admin opens could
+ * widen its own grant, put itself on floors or unpin its own entry.
  */
 export interface RoleChecks {
   /** Whether the caller holds `admin`. `site` names the check, the same at every call, such as `registry.catalogue`. */
@@ -42,6 +46,7 @@ export type DeploymentAction = 'can_upgrade' | 'can_install_apps' | 'can_remove_
 export const roleChecks = (shadow: Shadow = noShadow): RoleChecks => {
   const holds = (site: string, caller: Caller | undefined, role: string, question: ShadowQuestion): caller is Caller => {
     if (!caller) return false;
+    if (caller.app !== undefined && !(caller.scopes ?? []).some(isPlatformScope)) return false;
     const held = caller.roles.includes(role);
     shadow.check(site, caller, question, held);
     return held;

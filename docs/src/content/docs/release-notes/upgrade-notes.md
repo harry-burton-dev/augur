@@ -15,6 +15,21 @@ Each note starts with the release it came in (**From**). If your server already 
 
 The updater now takes its backup and restore test before an upgrade (and before it drops a removed app's data) in a container of their own made from the `backup` service (`compose run`), instead of `docker exec` into the running one, and the Docker proxy no longer lets it exec into any container (`EXEC: 0`). This is a first step: the proxy still lets it create containers, which a later release takes away. Every backup run, by hand too, now waits for any other to finish (a lock in `infra/deploy/backups/`) and says so: a `pc exec backup /bin/sh /backup/backup.sh --now` during the nightly backup waits for it, for up to three hours, and an upgrade asked for then waits up to 30 minutes, then stops and says why. An upgrade leaves the proxy running as it was, so after upgrading run `pc up -d docker-proxy` to take exec away. If you later go back to an earlier release by hand, run `pc up -d docker-proxy` again then, since an earlier updater needs exec for its backups.
 
+## Apps' parts get only the signed caller
+
+**From** unreleased
+
+The gateway no longer sends an app's part the plain `x-user-*`, `x-workspace-*` and acting-app headers, only the caller it signs. Apps made from the app template check that already. An app whose part still reads the plain headers without the service kit's `signedCallers` hook answers as if nobody were signed in: update it before you upgrade, or remove it.
+
+## Some secrets reach their services as files, which needs Docker Compose 2.24
+
+**From** unreleased
+
+The gateway's `CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registry, events, the knowledge graph and permissions, `ALERT_WEBHOOK_TOKEN` and `OPENFGA_TOKEN` now reach the services that read them as files under `/run/secrets/`, not in their environment, so `docker inspect` on those services no longer shows them. Keycloak, its setup job, OpenFGA and Grafana still get some of them in their environment ([Settings and secrets](../../run/settings/#secrets-as-files)). They stay in `.env` as before: nothing in `.env` changes. Two things to know:
+
+- Compose's `secrets:` with `environment:` needs Docker Compose 2.24 or newer. Before you upgrade, run `docker compose version` on the server. An upgrade through Deployment uses the updater's own Compose, but `pc up` by hand uses the server's, and on an older one it stops on the `secrets:` section of `compose.yml`: update the Docker Compose plugin.
+- Compose doesn't start a service again when only one of these secrets changes in `.env`. After changing one, run `pc up -d --force-recreate <service>`. Changing the gateway's key ([Signed caller](https://github.com/harry-burton-dev/augur/blob/main/docs/signed-caller.md)) now says so.
+
 ## Alerts can leave the server without AUGUR
 
 **From** unreleased

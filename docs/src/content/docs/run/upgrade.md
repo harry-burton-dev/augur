@@ -67,8 +67,8 @@ and containers whose image didn't change keep running. Keycloak and Postgres onl
 
 ## Check it worked
 
-Every release has been upgraded to from the release before, with data, and gone back from, in AUGUR's own
-tests. Your server can still differ, so check it yourself too.
+Every release has been upgraded to from the newest release before it, with data, and gone back from, in AUGUR's
+own tests: both by code alone and by restoring the backup taken before the upgrade, as in [Going back](#going-back). Your server can still differ, so check it yourself too.
 
 - `pc ps` shows each of AUGUR's services as `healthy` about a minute after it starts. One that stays
   `unhealthy` or `starting` is the one to look at in `pc logs`.

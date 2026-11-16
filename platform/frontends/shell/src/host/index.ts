@@ -2,7 +2,7 @@ export { matchRoute, hrefFor } from './routes.js';
 export { CATALOGUE_TOPICS, incompatibility, inPageRefusal, keepSame, loadManifest, ManifestError, type InPageApp } from './manifest.js';
 export { AppMounter, MountError, type ImportEntry } from './mount.js';
 export { StageMounter, workerCards } from './stage.js';
-export { routeIntent, IntentError, RequestBroker, type OpenRequest } from './intents.js';
+export { handlerFor, routeIntent, IntentError, RequestBroker, type IntentChoice, type OpenRequest } from './intents.js';
 export { toShellNotification, NotificationActions } from './notifications.js';
 export { startSession, CALLBACK_PATH, type Session } from './session.js';
 export { NotificationFeed, fromServer, isQuiet, type ServerNotification } from './feed.js';
