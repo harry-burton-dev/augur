@@ -2253,7 +2253,7 @@ paths:
                               description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)"
                             inPage:
                               type: boolean
-                              description: "An app on contract 2 the shell may load into its own page: one of AUGUR's own, or one the deployment names in IN_PAGE_APPS. The shell opens no other contract 2 app (ADR 0076)"
+                              description: One of AUGUR's own frontends on contract 2, which the shell loads into its own page. The shell opens no other contract 2 app (ADR 0076)
                               enum:
                                 - true
                     - type: object
@@ -4284,7 +4284,7 @@ paths:
   /apps/{id}:
     put:
       summary: Register an app, or update it
-      description: "An app on contract 3 (its manifest carries `contract`) is taken only when it is the manifest of a release an admin had the app runner install, under way or installed before; it is checked against manifest-3.schema.json first. Otherwise, called by an app's own service on the internal network, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. Unknown fields are refused. AUGUR's own apps (home, admin) and routes another app already has cannot be taken. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An entry that is a full address must be on an origin an admin has allowed (see /origins); a path is served by the platform itself and always may. An app an admin removed can't register itself again: only an admin or a platform service (the app runner) can."
+      description: "Takes only a contract 3 manifest (it carries `contract`): the manifest of a release an admin had the app runner install, under way or installed before, checked against manifest-3.schema.json first. It is sent by the app's own service, signed in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), which may register only its own id; by a platform service signed in as its own client (platform-<name>); or by an admin through the gateway. A contract 2 manifest is refused (error contract_2): only AUGUR's own frontends load into the shell's page, and they are not registered. Every version is kept (the last 5, plus a pinned one); an app an admin has pinned keeps serving its pinned version. An app an admin removed can't register itself again: only an admin or a platform service (the app runner) can."
       requestBody:
         required: true
         content:
@@ -4379,7 +4379,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest of an app the deployment doesn't allow into the shell's page (IN_PAGE_APPS)
+          description: Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest (error contract_2)
           content:
             application/problem+json:
               schema:

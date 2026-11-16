@@ -63,17 +63,13 @@ import {
   DEFAULT_UPLOAD_MB,
   entryOriginProblem,
   MAX_UPLOAD_MB,
-  menuWarnings,
   parseOrigin,
   PLATFORM_APP_OWN_SCOPES,
   PLATFORM_APP_SCOPES,
   platformApps,
   platformManifests3,
-  settingsProblem,
-  surfaceProblem,
   floorKindsOf,
   unbuiltApps,
-  versionProblem,
   type AppEntry,
   type CategoryInForce,
 } from './manifest.ts';
@@ -85,9 +81,9 @@ import { UpdateChecker } from './updates.ts';
 import { folderOf, frontendFolder, servedEntry, type FrontendFiles } from './frontends.ts';
 import { upstreamProblem } from './upstreams.ts';
 import type { ReleaseFetch } from './release-fetch.ts';
-import { SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
+import { contractMessage, SERVED_CONTRACTS, type KnowledgeOffer } from './release-check.ts';
 import { declaredEvents, eventsChangeProblems, eventsProblems } from './event-types.ts';
-import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, staysOn3, inPageProblem, type KeptEntry } from './apps3.ts';
+import { AppManifest3Body, entryOf3, ownServed, frontendHandedOver, handedOver, versionRecut, isManifest3, manifest3Of, manifest3Problems, notHandedOver, Served3, served3, type KeptEntry } from './apps3.ts';
 import type { AppManifest3 } from '@augur/app-tools/validate';
 import semver from 'semver';
 import {
@@ -140,11 +136,6 @@ export interface RegistryOptions {
   dataGraceDays?: number;
   /** The apps this deployment installs by default (DEFAULT_APPS, spec 9.7). */
   defaultApps?: string[];
-  /**
-   * The apps not made by AUGUR that may still load into the shell's own page on contract 2 (IN_PAGE_APPS), a
-   * break-glass while they move to the app contract. Empty by default: only AUGUR's own frontends load there.
-   */
-  inPageApps?: readonly string[];
   /** The pipeline feed, for the Upgrade Centre's line from dev to production. Without it the line is off. */
   pipeline?: PipelineReader;
   /** The company's Backstage (PORTAL_URL), which the Upgrade Centre links to and the deployment reports to. */
@@ -225,7 +216,6 @@ export const buildApp = async ({
   platformUrl,
   dataGraceDays,
   defaultApps,
-  inPageApps = [],
   knowledge,
   allowPrPreviews = true,
   pipeline,
@@ -352,8 +342,8 @@ export const buildApp = async ({
               // Only the kind in force (ADR 0077): a claim the registry doesn't honour never reaches the shell.
               const { category: _asked, ...rest } = served;
               const { category } = kindOf(r.entry, feed);
-              // Only an app the deployment allows into the shell's page is marked so; the shell opens no other (ADR 0076).
-              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}), ...(inPageApps.includes(r.entry.id) ? { inPage: true as const } : {}) };
+              // Never marked inPage: only AUGUR's own frontends load into the shell's page, and the shell says why it won't open this (ADR 0076).
+              return { ...rest, ...(category ? { category } : {}), ...(from ? { entry: from } : {}), maxUpload: uploadLimitOf(r), ...(on.length ? { previewsOn: on } : {}) };
             });
           // AUGUR's own apps' feature previews, at the server's default: on for those who turned them on.
           const platform = platformApps
@@ -861,20 +851,15 @@ export const buildApp = async ({
           schema: {
             summary: 'Register an app, or update it',
             description: [
-              'An app on contract 3 (its manifest carries `contract`) is taken only when it is the',
-            'manifest of a release an admin had the app runner install, under way or installed',
-            'before; it is checked against manifest-3.schema.json first.',
-            "Otherwise, called by an app's own service on the internal network, signed in as",
-              'itself (a bearer token for its Keycloak client app-<id>, audience',
-              'platform-services), which may register only its own id; by a platform',
-              'service signed in as its own client (platform-<name>); or by an admin',
-              'through the gateway.',
-              "Unknown fields are refused. AUGUR's own apps (home, admin) and",
-              'routes another app already has cannot be taken. Every version is kept',
-              '(the last 5, plus a pinned one); an app an admin has pinned keeps',
-              'serving its pinned version. An entry that is a full address must be on',
-              'an origin an admin has allowed (see /origins); a path is served by the',
-              "platform itself and always may. An app an admin removed can't register",
+              'Takes only a contract 3 manifest (it carries `contract`): the manifest of a release an',
+              'admin had the app runner install, under way or installed before, checked against',
+              "manifest-3.schema.json first. It is sent by the app's own service, signed in as itself",
+              '(a bearer token for its Keycloak client app-<id>, audience platform-services), which may',
+              'register only its own id; by a platform service signed in as its own client',
+              '(platform-<name>); or by an admin through the gateway. A contract 2 manifest is refused',
+              '(error contract_2): only AUGUR\'s own frontends load into the shell\'s page, and they are',
+              "not registered. Every version is kept (the last 5, plus a pinned one); an app an admin",
+              "has pinned keeps serving its pinned version. An app an admin removed can't register",
               'itself again: only an admin or a platform service (the app runner) can.',
             ].join(' '),
             params: params('id'),
@@ -883,7 +868,7 @@ export const buildApp = async ({
               200: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Updated' },
               201: { ...Type.Union([ref(AppManifestEntry), AppManifest3Body]), description: 'Registered' },
               400: refused("The manifest is invalid, its id does not match the path, or its entry loads from an origin that isn't allowed"),
-              403: refused("Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest of an app the deployment doesn't allow into the shell's page (IN_PAGE_APPS)"),
+              403: refused("Neither the app itself, a platform service nor an admin, the app itself after an admin removed it, a contract 3 manifest of no release the runner was given, or a contract 2 manifest (error contract_2)"),
               409: refused('The id belongs to a platform app, or the route is taken'),
               503: refused("The sign-in service can't be reached to check the app's token"),
             },
@@ -893,47 +878,9 @@ export const buildApp = async ({
           const by = await changedBy(req, reply, req.params.id);
           if (!by) return reply;
           if (isManifest3(req.body)) return register3(req, reply, req.body, by);
+          // Contract 2 is retired (PER-472): its code would load into the shell's own page, which only AUGUR's own frontends may.
           const entry = req.body as AppEntry;
-          // An app installed on contract 3 never goes back to a contract 2 manifest: that would load its code outside the sandbox.
-          const on3 = (await store.records()).find((r) => r.entry.id === req.params.id && manifest3Of(r.entry));
-          if (on3) return reply.code(403).send({ error: 'forbidden', message: staysOn3(on3.entry.name) });
-          if (entry.id !== req.params.id) return reply.code(400).send({ error: 'bad_request', message: `The manifest is for "${entry.id}", not "${req.params.id}".` });
-          const badVersion = versionProblem(entry) ?? surfaceProblem(entry) ?? settingsProblem(entry);
-          if (badVersion) return reply.code(400).send({ error: 'bad_request', message: badVersion });
-          const warnings = menuWarnings(entry);
-          if (warnings.length) req.log.warn({ app: entry.id, warnings }, 'menu breaks the shell principles; accepted');
-          const badOrigin = entryOriginProblem(entry, await allowedOrigins());
-          if (badOrigin) return reply.code(400).send({ error: 'bad_request', message: badOrigin });
-          const conflict = conflictFor(entry, await store.list());
-          if (conflict) return reply.code(409).send({ error: 'conflict', message: conflict });
-          // Only AUGUR's own frontends load into the shell's page, and any app a deployment named as a break-glass.
-          if (!inPageApps.includes(req.params.id)) return reply.code(403).send({ error: 'forbidden', message: inPageProblem(entry.name) });
-          // A kind the app may not claim is kept and explained to admins, never a reason to refuse it (ADR 0077).
-          const { refused } = kindOf(entry, await feedApps());
-          if (refused) req.log.warn({ app: entry.id, asked: refused.asked }, 'category not honoured; accepted');
-          // Its sign-in outlives a removal, and a first registration is granted what it asks for: only an admin or the runner brings it back.
-          if (by.kind === 'service' && by.id === entry.id && (await staysRemoved(entry.id))) {
-            req.log.warn({ app: entry.id }, 'a removed app tried to register itself; refused');
-            return reply.code(403).send({ error: 'forbidden', message: `An admin removed ${entry.name}, so it can’t register itself again. An admin has to register it, or install it again.` });
-          }
-          try {
-            const created = await store.put(entry, by.id);
-            const asked = (await store.records()).find((r) => r.entry.id === entry.id);
-            const pinned = asked?.pinnedVersion;
-            const held = pinned !== undefined && pinned !== entry.version;
-            req.log.info({ app: entry.id, version: entry.version, by: by.id, held }, created ? 'app registered' : held ? 'app version kept, pinned elsewhere' : 'app updated');
-            await record(req, {
-              actor: by,
-              app: 'registry',
-              action: created ? 'app.registered' : 'app.updated',
-              target: entry.id,
-              detail: { version: entry.version, ...(held ? { heldAt: pinned } : {}) },
-            });
-            return reply.code(created ? 201 : 200).send(entry);
-          } catch (err) {
-            if (err instanceof RouteTakenError) return reply.code(409).send({ error: 'conflict', message: err.message });
-            throw err;
-          }
+          return reply.code(403).send({ error: 'contract_2', message: contractMessage(2, undefined, { name: entry.name, version: entry.version }) });
         },
       );
 

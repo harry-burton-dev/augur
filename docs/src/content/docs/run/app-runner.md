@@ -120,7 +120,6 @@ Docker's default address pools hold about 30 networks, so a server with more app
 ## Apps made before the app contract
 
 An app on app contract 2 that AUGUR didn't make doesn't open: code in the shell's page runs as the shell, with
-the person's sign-in, so every other app runs in the sandbox. It stays in the app bar and says why. While its
-team moves it to the app contract you can let it load in the page on this server: name it in `IN_PAGE_APPS`
-(ids split by commas or spaces), then `pc up -d registry`. Take it out once the app is released on the app
-contract.
+the person's sign-in, so every other app runs in the sandbox. It stays in the app bar and says why. The
+registry refuses every contract 2 manifest (error `contract_2`), so the app opens again only once its team
+releases it on the app contract. Until then, remove it in Admin → Apps.

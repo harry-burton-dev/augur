@@ -48,7 +48,7 @@ export const standInFetch = (app: AppManifestEntry, real: typeof fetch = (...arg
   let preferences: unknown = {};
   const account = devAccount();
   const inbox = devInbox(app);
-  // On a developer's own machine their app may load into the page on contract 2, as IN_PAGE_APPS allows on a deployment.
+  // On a developer's own machine their app may load into the page on contract 2, which no deployment allows.
   const inPage = (a: AppManifestEntry) => (isWorkerApp(a) ? a : { ...a, inPage: true });
   const catalogue = [...(app.id === devHome.id ? [app] : [devHome, app]), ...also.filter((a) => a.id !== app.id && a.id !== devHome.id)].map(inPage);
   return async (input, init) => {

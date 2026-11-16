@@ -94,7 +94,7 @@ describe('AppMounter', () => {
     const load = vi.fn(async () => ({ default: { mount: vi.fn() } }));
     const m = new AppMounter(document.createElement('div'), load);
     const outsider = app('mandate', '/mandate', { inPage: undefined });
-    await expect(m.mount(outsider, ctx())).rejects.toThrow(/Mandate loads into AUGUR.s own page.*app contract.*IN_PAGE_APPS/);
+    await expect(m.mount(outsider, ctx())).rejects.toThrow(/Mandate loads into AUGUR.s own page.*app contract/);
     expect(load).not.toHaveBeenCalled();
   });
 

@@ -93,7 +93,7 @@ describe('glance cards', () => {
     expect(old.unavailable).toMatch(/made for an older version of AUGUR.*Its team needs to release/);
     // A card's code runs in the shell's page too: one from an app that may not load there stays, saying why, and never loads.
     const outsider = app('mandate', { inPage: undefined, surfaces: [card('personal')] });
-    expect(cardsFor([outsider], me, [])[0].unavailable).toMatch(/loads into AUGUR.s own page.*IN_PAGE_APPS/);
+    expect(cardsFor([outsider], me, [])[0].unavailable).toMatch(/loads into AUGUR.s own page.*app contract/);
   });
 
   it('mounts a card from its app’s entry, once per entry, and puts it away', async () => {

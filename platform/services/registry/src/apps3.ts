@@ -54,13 +54,6 @@ export const frontendHandedOver = (jobs: AppJob[], app: string, version: string,
 export const versionRecut = (jobs: AppJob[], app: string, version: string, digest: string): AppJob | undefined =>
   jobs.find((j) => j.app === app && (j.action === 'install' || j.action === 'preview') && (j.state === 'running' || j.state === 'done') && j.release?.version === version && j.release.frontend !== null && j.release.frontend?.digest !== digest);
 
-/** Why a contract 2 registration can't replace an app installed on contract 3. */
-export const staysOn3 = (name: string) => `${name} is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.`;
-
-/** Why the registry won't take a contract 2 manifest: it would load the app's code into the shell's own page. */
-export const inPageProblem = (name: string) =>
-  `${name} loads into AUGUR's own page, which only AUGUR's own apps may. Its team needs to release it on the app contract; until then an admin can allow it on this deployment with IN_PAGE_APPS.`;
-
 /** Why the registry won't take a contract 3 manifest it didn't hand the runner. */
 export const notHandedOver = (m: AppManifest3) => `${m.name} ${m.version} is installed from the app feed, through Admin → Apps: only a release the app runner was given can register it.`;
 

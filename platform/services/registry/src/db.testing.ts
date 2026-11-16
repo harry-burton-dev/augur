@@ -4,10 +4,8 @@
 import pg from 'pg';
 import { afterAll, beforeAll, beforeEach } from 'vitest';
 import { buildApp, type RegistryOptions } from './app.ts';
+import type { AppEntry } from './manifest.ts';
 import { PgAppStore } from './store.ts';
-
-/** The contract 2 apps the tests register: allowed into the shell's page, as IN_PAGE_APPS would. */
-export const TEST_IN_PAGE_APPS = ['library', 'notes', 'other', 'ledger', 'board', 'atlas', 'papers', 'lib', 'copy', 'mandate', 'rogue', 'odd'];
 
 /** Where the tests' Postgres is. Without it, the tests that need one are skipped, saying so. */
 export const DATABASE_URL = process.env.DATABASE_URL;
@@ -24,6 +22,12 @@ export const registryDb = () => {
     reset: () => Promise<void>;
     /** The registry on this store; `opts` adds to it. */
     app: (opts?: Partial<RegistryOptions>) => ReturnType<typeof buildApp>;
+    /**
+     * Puts `entry` in the store as an app registered on contract 2 before it was retired (PER-472), by
+     * `by` (the app itself unless named). The registry refuses a contract 2 manifest now, but a store can
+     * still hold one it took, and everything it keeps about an app is kept for those too.
+     */
+    seed: (entry: object, by?: string) => Promise<boolean>;
   };
   if (!DATABASE_URL) return db;
 
@@ -36,7 +40,13 @@ export const registryDb = () => {
     const pool = new pg.Pool({ connectionString: DATABASE_URL });
     await pool.query('drop schema if exists registry cascade');
     const store = await PgAppStore.connect(DATABASE_URL);
-    Object.assign(db, { pool, store, reset, app: (opts: Partial<RegistryOptions> = {}) => buildApp({ store, inPageApps: TEST_IN_PAGE_APPS, ...opts }) });
+    Object.assign(db, {
+      pool,
+      store,
+      reset,
+      app: (opts: Partial<RegistryOptions> = {}) => buildApp({ store, ...opts }),
+      seed: (entry: object, by?: string) => store.put(entry as AppEntry, by ?? (entry as AppEntry).id),
+    });
   });
   beforeEach(reset);
   afterAll(async () => {

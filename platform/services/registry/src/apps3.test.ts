@@ -77,7 +77,7 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
     const v2 = { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/x/evil.js', version: '1.2.1', sdk: '^2.0.0' };
     const res = await t.register(v2);
     expect(res.statusCode).toBe(403);
-    expect(res.json().message).toBe('Notes is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.');
+    expect(res.json()).toMatchObject({ error: 'contract_2', message: 'Notes 1.2.1 speaks contract 2, and this AUGUR serves 3; the app needs a release on contract 3.' });
     expect((await t.register(v2, fresh())).statusCode).toBe(403);
   });
 
