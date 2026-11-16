@@ -82,7 +82,7 @@ const withParam = (path: string, key: string, value: string) => {
  */
 export const RENEW_WITHIN_SECONDS = 60;
 
-const fresh = (user: SignedIn | null): user is SignedIn => !!user && !user.expired && (user.expires_in ?? Infinity) > RENEW_WITHIN_SECONDS;
+const fresh = (user: SignedIn | null): boolean => !!user && !user.expired && (user.expires_in ?? Infinity) > RENEW_WITHIN_SECONDS;
 
 /**
  * A usable sign-in, from `auth`. When it has run out, or nearly, it is renewed with the refresh token, which the
