@@ -43,7 +43,14 @@ const cutOff = (page: Page) =>
     const runsPast = (box: Element) => {
       const edge = box.getBoundingClientRect().left + box.clientLeft + box.clientWidth + 1;
       const found = [...box.querySelectorAll('*')].filter(shown).filter((el) => el.getBoundingClientRect().right > edge);
-      return found.filter((el) => !found.some((other) => other !== el && other.contains(el))).slice(0, 3).map((el) => `${name(el)} by ${Math.round(el.getBoundingClientRect().right - edge)}px`);
+      const outermost = found.filter((el) => !found.some((other) => other !== el && other.contains(el))).slice(0, 3);
+      // The first one's parents, each with its width, so the part that won't shrink shows.
+      const chain: string[] = [];
+      for (let up = outermost[0]?.parentElement; up && up !== box; up = up.parentElement) {
+        const style = getComputedStyle(up);
+        chain.push(`${up.tagName.toLowerCase()}.${String(up.getAttribute('class') ?? '').split(' ')[0]} ${Math.round(up.getBoundingClientRect().width)}/${up.scrollWidth}px min ${style.minWidth}`);
+      }
+      return [...outermost.map((el) => `${name(el)} by ${Math.round(el.getBoundingClientRect().right - edge)}px`), ...(chain.length ? [`in ${chain.join(' < ')}`] : [])];
     };
     return { past: past.map(name), sideways: sideways.map((el) => [name(el), ...runsPast(el)].join(' ← ')) };
   });
@@ -57,6 +64,15 @@ const atRest = (page: Page) =>
     await Promise.all(finite.map((a) => a.finished.catch(() => undefined)));
   });
 
+/**
+ * The title card brings its name in at twice its tracking and clips that entrance on purpose: the name is fitted to
+ * the window at rest. This waits until the name has settled, while the card still shows (it fades after that).
+ */
+const cardSettled = (page: Page) =>
+  page.locator('.aerie-card').evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity && !(a instanceof CSSAnimation && a.animationName === 'aerie-card-life')).map((a) => a.finished.catch(() => undefined))),
+  );
+
 failOnPageErrors();
 
 test.use({ viewport: NARROW });
@@ -65,6 +81,12 @@ test('at 320 px the desktop and its bar cut nothing off', async ({ page }) => {
   await page.goto('/');
   const bar = page.getByRole('navigation', { name: 'App bar', exact: true });
   await expect(bar.locator('.aerie-bar-tile').first()).toBeVisible();
+  // The desktop names its floor on the title card too: checked once the name has settled, and again once it has gone.
+  if (await page.locator('.aerie-card').count()) {
+    await cardSettled(page);
+    expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
+    await expect(page.locator('.aerie-card')).toHaveCount(0);
+  }
   await atRest(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });
@@ -73,12 +95,11 @@ test('at 320 px an open app, its rail, head and screen cut nothing off', async (
   await page.goto(`/${reference.id}`);
   await expect(check(page, 'person')).toBeVisible();
   await expect(rail(page)).toBeVisible();
-  // Opening the app names it on the title card, which brings the name in at twice its tracking and clips that
-  // entrance on purpose: the name is fitted to the window at rest. So the card is checked once its name has settled,
-  // while it still shows (it fades after that, so on a slow runner this check may see less of it)...
+  // Opening the app names it on the title card, checked once its name has settled (on a slow runner this may see
+  // less of it, since it fades after that)...
   const card = page.locator('.aerie-card');
   await expect(card).toBeAttached();
-  await card.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity && !(a instanceof CSSAnimation && a.animationName === 'aerie-card-life')).map((a) => a.finished.catch(() => undefined))));
+  await cardSettled(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
   // ...and the app's screen once the card has gone, since the shell holds the screen out of sight behind it.
   await expect(card).toHaveCount(0);
