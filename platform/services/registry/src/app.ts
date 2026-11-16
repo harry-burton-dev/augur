@@ -672,13 +672,15 @@ export const buildApp = async ({
             description: [
               'The topics an app on contract 3 says it reads and each type it publishes, with its version and payload',
               "schema, from its manifest in force (ADR 0104). The events service holds the app to them. `events` is",
-              'absent when the app declares none; `reads` is absent when it doesn’t say what it reads.',
+              'absent when the app declares none; `reads` is absent when it doesn’t say what it reads. `contract` is',
+              'the app’s contract major, for an app on contract 3, which must declare both.',
             ].join(' '),
             params: params('id'),
             response: {
               200: Type.Object(
                 {
                   app: Type.String(),
+                  contract: Type.Optional(Type.Integer({ description: 'Its contract major, for an app on contract 3; absent for one on contract 2' })),
                   events: Type.Optional(
                     Type.Object({
                       reads: Type.Optional(Type.Array(Type.String(), { description: 'Topics, or families such as folio.*' })),
@@ -699,8 +701,9 @@ export const buildApp = async ({
           if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services read what an app declares about events.' });
           const found = (await store.records()).find((r) => r.entry.id === req.params.id);
           if (!found) return reply.code(404).send({ error: 'not_found', message: `No app "${req.params.id}" is registered.` });
-          const events = declaredEvents(manifest3Of(found.entry));
-          return { app: found.entry.id, ...(events ? { events } : {}) };
+          const m3 = manifest3Of(found.entry);
+          const events = declaredEvents(m3);
+          return { app: found.entry.id, ...(m3 ? { contract: m3.contract } : {}), ...(events ? { events } : {}) };
         },
       );
 
@@ -821,46 +824,6 @@ export const buildApp = async ({
           if (service === undefined) return reply;
           if (service?.kind !== 'platform') return reply.code(403).send({ error: 'forbidden', message: 'Only AUGUR’s own services can list the apps granted a scope.' });
           return (await store.records()).filter((r) => usableScopes(r).includes(req.params.scope)).map((r) => ({ app: r.entry.id, name: r.entry.name, enabled: r.enabled }));
-        },
-      );
-
-      /**
-       * The apps that link their things to entities (manifest links.entities, SDK 2.1) and the types
-       * they bind, so a follower such as the entity catalogue subscribes to exactly those topics
-       * (`<app>.<type>.entity-bound` and `-unbound`, ADR 0066) rather than every event each app sends.
-       */
-      app.get(
-        '/entity-links',
-        {
-          schema: {
-            summary: 'The apps that bind their things to entities, and the types they bind (services only)',
-            description: [
-              'Every registered app whose manifest sets links.entities, with the types of thing it names in',
-              'bindings, each published on <app>.<type>.entity-bound and <app>.<type>.entity-unbound (ADR 0066).',
-              'An app that sets links.entities without bindings has no types listed: follow its <app>.* topics',
-              "and read each event with the service kit's readBinding. For any service, AUGUR's own or an app's.",
-            ].join(' '),
-            response: {
-              200: Type.Array(
-                Type.Object({
-                  app: Type.String({ description: "The app's id" }),
-                  types: Type.Array(Type.String(), { description: 'The types of thing it binds (its manifest\'s bindings)' }),
-                }),
-                { description: 'The apps that link to entities, by id' },
-              ),
-              403: refused('Not a service'),
-              503: refused("The sign-in service that checks the caller's token can't be reached right now"),
-            },
-          },
-        },
-        async (req, reply) => {
-          const service = await serviceOf(req, reply);
-          if (service === undefined) return reply;
-          if (!service) return reply.code(403).send({ error: 'forbidden', message: 'Only a service can ask which apps link to entities.' });
-          return (await store.records())
-            .filter((r) => r.entry.links?.entities)
-            .map((r) => ({ app: r.entry.id, types: r.entry.bindings ?? [] }))
-            .sort((a, b) => a.app.localeCompare(b.app));
         },
       );
 

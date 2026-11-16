@@ -580,6 +580,10 @@ services:
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
       # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
       ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/alert_webhook_token
+      # Only whether Grafana's routes outside AUGUR are set, never their addresses: a production server's
+      # admins are told while one isn't.
+      ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:+set}
+      ALERT_HEARTBEAT_URL: ${ALERT_HEARTBEAT_URL:+set}
       SERVER_RING: ${SERVER_RING:-}
       # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
@@ -858,6 +862,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
       # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      # Read by contact-points.yaml: the routes that leave the server without AUGUR. Unset, each points at the
+      # registry, which drops what it gets, so Grafana always has an address.
+      ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:-http://registry:8082/v1/platform/alerts/unrouted}
+      ALERT_HEARTBEAT_URL: ${ALERT_HEARTBEAT_URL:-http://registry:8082/v1/platform/alerts/unrouted}
       # Prometheus and Pyroscope answer inside the container only, as Loki and Tempo do (lgtm/*.yaml): Grafana
       # reads them at 127.0.0.1, and nothing on the networks can query what the services logged.
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h --web.listen-address=127.0.0.1:9090

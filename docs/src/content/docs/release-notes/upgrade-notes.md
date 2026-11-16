@@ -18,6 +18,30 @@ The gateway's `CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registr
 - Compose's `secrets:` with `environment:` needs Docker Compose 2.24 or newer. Before you upgrade, run `docker compose version` on the server. An upgrade through Deployment uses the updater's own Compose, but `pc up` by hand uses the server's, and on an older one it stops on the `secrets:` section of `compose.yml`: update the Docker Compose plugin.
 - Compose doesn't start a service again when only one of these secrets changes in `.env`. After changing one, run `pc up -d --force-recreate <service>`. Changing the gateway's key ([Signed caller](https://github.com/harry-burton-dev/augur/blob/main/docs/signed-caller.md)) now says so.
 
+## Alerts can leave the server without AUGUR
+
+**From** unreleased
+
+Grafana now has two routes that don't go through AUGUR: `ALERT_OUTSIDE_URL` gets every alert and its all-clear, and `ALERT_HEARTBEAT_URL` gets a heartbeat every minute, so a service there raises the alarm when the server stops. Both are optional, and alerts still reach deployment admins as notices. On a production server, set both in `.env` and run `pc up -d otel-lgtm registry`: until you do, the registry tells its deployment admins once a week that alerts reach no one outside AUGUR ([Observability, Alerts](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#alerts)).
+
+## The binding events are gone
+
+**From** unreleased
+
+AUGUR no longer has entity binding events (`<app>.<type>.entity-bound` and `-unbound`): the registry's `GET /v1/entity-links` answers 404, and a manifest's `bindings` is accepted but no longer read (a contract 3 release that sets it installs with a warning saying so). Nothing in AUGUR or the apps it installs used them. Nothing to do on the server.
+
+## An app on contract 3 must declare its domain events
+
+**From** unreleased
+
+An app on contract 3 whose manifest doesn't say what it reads (`contributes.events.reads`), or declares no types it publishes (`contributes.events.publishes`), still publishes and reads events in this release, but the events service logs a warning (`undeclared domain events` in `pc logs events`, at most once every 10 minutes for each app and side, pushed deliveries included) and answers the app's own calls with a `warning`. From the next release it is refused. Nothing to do on the server. If the log names an app you rely on, ask its publisher for a release that declares its events before you upgrade again.
+
+## An app's id stays with the repository that first installed it
+
+**From** unreleased
+
+The registry now refuses a release under an app's id when another repository signed it, and keeps that rule after the app is removed. Apps already installed are bound to the repository of the release they run now. Nothing to do, unless you meant to swap an app for another publisher's under the same id: that one now needs an id of its own.
+
 ## An event an app's part can't take no longer holds the rest
 
 **From** unreleased

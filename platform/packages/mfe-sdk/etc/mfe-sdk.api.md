@@ -23,6 +23,7 @@ export type AppCategory = (typeof APP_CATEGORIES)[number];
 export interface AppManifestEntry {
     ai?: boolean;
     areas?: AppArea[];
+    // @deprecated
     bindings?: string[];
     category?: AppCategory;
     description?: string;

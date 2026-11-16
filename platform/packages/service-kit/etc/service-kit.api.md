@@ -205,35 +205,6 @@ export const auditOutbox: (input: {
 }) => AuditOutbox;
 
 // @public
-export interface Binding {
-    app: string;
-    entity: string;
-    id: string;
-    more?: Record<string, string>;
-    role?: string;
-    type: string;
-}
-
-// @public
-export interface BindingApp {
-    // (undocumented)
-    app: string;
-    types: string[];
-}
-
-// @public (undocumented)
-export type BindingChange = 'bound' | 'unbound';
-
-// @public
-export const bindingEvent: (binding: Binding, change: BindingChange, workspace?: string) => Omit<NewDomainEvent, "id">;
-
-// @public
-export const bindingTopics: (app: string, type: string) => {
-    bound: string;
-    unbound: string;
-};
-
-// @public
 export class BoundedMap<K, V> {
     constructor(max?: number);
     // (undocumented)
@@ -528,6 +499,7 @@ export const decidesFrom: (value: string | undefined) => ReadonlySet<string> | "
 
 // @public
 export interface DeclaredEvents {
+    contract?: number;
     // (undocumented)
     publishes: DeclaredEventType[];
     // (undocumented)
@@ -772,14 +744,6 @@ export class FloorsUnavailable extends Error {
 
 // @public
 export const FLUSH_TELEMETRY: unique symbol;
-
-// @public
-export interface FollowedBinding extends Binding {
-    // (undocumented)
-    change: BindingChange;
-    // (undocumented)
-    workspace?: string;
-}
 
 // Warning: (ae-forgotten-export) The symbol "EventsAddress" needs to be exported by the entry point index.d.ts
 //
@@ -1421,9 +1385,6 @@ export interface OpenStream {
 export const OUTBOX_TABLE_SQL = "\n  create table if not exists outbox (\n    id bigint generated always as identity primary key,\n    event_id text not null unique default gen_random_uuid()::text,\n    topic text not null,\n    workspace_id text,\n    payload jsonb not null,\n    created_at timestamptz not null default now(),\n    sent_at timestamptz,\n    refused_at timestamptz,\n    refused_why text\n  );\n  create index if not exists outbox_unsent on outbox (id) where sent_at is null;";
 
 // @public
-export const outboxBinding: (db: Queryable, binding: Binding, change: BindingChange, workspace?: string) => Promise<void>;
-
-// @public
 export const outboxRelay: (input: EventsAddress & {
     pool: ConnectionPool;
     batch?: number;
@@ -1645,9 +1606,6 @@ export interface Queryable {
 }
 
 // @public
-export const readBinding: (event: Pick<DomainEvent, "topic" | "payload" | "workspace">) => FollowedBinding | undefined;
-
-// @public
 export const readFrontend: (dir: string) => FrontendFile[];
 
 // @public
@@ -1693,9 +1651,6 @@ export interface RegisterOptions {
     // (undocumented)
     retryMs?: number;
 }
-
-// @public
-export const registryBindingApps: (input: GrantsOptions) => (() => Promise<BindingApp[]>);
 
 // @public
 export const registryDeclaredEvents: (input: GrantsOptions) => DeclaredEventsLookup;

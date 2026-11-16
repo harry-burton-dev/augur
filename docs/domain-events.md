@@ -24,7 +24,7 @@ On the app contract, the manifest says which events the app reads and each type 
 
 Reading needs `events:subscribe` and publishing `events:publish`. Each type is under the app's own id, once per version, with its payload's JSON Schema (an object, at most 16 KB). Within a version a type only gains optional fields; anything else is a new version, declared beside the old one, and a release may stop declaring an old version once it no longer publishes it. The registry refuses a release that breaks these rules, before it installs, and AUGUR's services read what an app declares from the registry (`GET /v1/apps/<id>/events`). Leaving out `reads` says nothing about what the app reads; `"reads": []` says it reads nothing.
 
-The events service holds an app that declares them to what it says. One that says what it `reads` is given only those topics and AUGUR's own (`platform.*`), pulled or pushed, and asking only for others answers 403 with what it does read. One that declares what it `publishes` can publish only those types: each event names its `version`, or, without one (as for every event sent through the outbox), goes at the newest declared version its payload fits; its payload must fit that version's schema, or the call answers 400 and the outbox sets the row aside. Followers see each event's `version`. An app that declares nothing is held only to its scopes and floors, as before.
+The events service holds an app that declares them to what it says. One that says what it `reads` is given only those topics and AUGUR's own (`platform.*`), pulled or pushed, and asking only for others answers 403 with what it does read. One that declares what it `publishes` can publish only those types: each event names its `version`, or, without one (as for every event sent through the outbox), goes at the newest declared version its payload fits; its payload must fit that version's schema, or the call answers 400 and the outbox sets the row aside. Followers see each event's `version`. An app on contract 2 that declares nothing is held only to its scopes and floors, as before. An app on contract 3 must declare both: for this release one that leaves out `reads`, or declares no types it `publishes`, is still served, and each publish or read answers with a `warning` saying so (the kit's clients don't surface it yet), and the events service logs it at most once every 10 minutes for each app and side, pushed deliveries included. From the next release it is refused.
 
 ## Publishing
 
@@ -45,16 +45,6 @@ outboxRelay({ pool: db, eventsUrl: EVENTS_URL, credentials: appCredentialsFromEn
 ```
 
 Each outbox row has its own event id, so if a send is repeated the events service keeps one. A row the events service refuses for what it is (400 or 413) is set aside: left in the table marked sent, with `refused_at` and `refused_why` so it can be told from one delivered, and reported through `onError`, so pass one. The rows behind it carry on. A refusal can be for the moment, such as an app blocked on a floor for a few minutes: to send such rows again, `update outbox set sent_at = null, refused_at = null, refused_why = null where refused_at is not null`. An outbox made before these columns gets them the first time a row is set aside. Without a database change to go with it, `publishEvents({ eventsUrl, credentials, events })` sends at once.
-
-### Entity bindings
-
-When people link one of an app's things to an entity in Data Atlas, the app keeps the link and publishes it in one shape, so Atlas reads every app's the same way (ADR 0025, ADR 0066):
-
-| Topic | Payload |
-| --- | --- |
-| `<app>.<type>.entity-bound`, `<app>.<type>.entity-unbound` | `{ <type>: id, entity, role?, ...more ids }` |
-
-`mandate.intent.entity-bound { intent, entity, role }` and `folio.record.entity-bound { record, library, level, link, entity, role }` are two. `outboxBinding(client, binding, 'bound' | 'unbound', workspace)` in the service kit writes one to the outbox, and `readBinding(event)` reads any app's back, or answers undefined for an event that isn't one.
 
 ## Following
 
