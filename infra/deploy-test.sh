@@ -636,31 +636,48 @@ counted_apart() {
   echo "The gateway counted $calls calls to /api/$app under apps, not platform." >&2
 }
 
-# A secret compose.yml hands a service as a file (its top-level secrets, from .env) is in neither that service's
-# environment, which `docker inspect` and a crash report show, nor its log, and is in its file.
+# The secrets AUGUR made itself (ADR 0107; .env sets none of them on a fresh install): each service's own folder
+# holds exactly what infra/deploy/made-secrets.json gives it, and no container's environment or log holds any of
+# them. The services started through secrets-env.sh have theirs only in their process, never in their config.
 secrets_kept_out() {
-  local triples service path key value id env logs bad=""
-  triples=$(pc config --format json | jq -r '.secrets as $s | .services | to_entries[] | .key as $svc | (.value.secrets // [])[] | "\($svc) \(.target // ("/run/secrets/" + .source)) \($s[.source].environment // "")"')
-  while read -r service path key; do
-    [ -n "$key" ] || continue
-    # As Compose reads .env: the last line for the key wins, and quotes around the value aren't part of it.
-    value=$(grep "^$key=" "$deploy/.env" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\\(.*\\)'$/\\1/" || true)
-    [ -n "$value" ] || continue
-    [ "${path#/}" != "$path" ] || path=/run/secrets/$path
+  local names name value made='{}' spec service file want got id env logs bad=""
+  names=$(jq -r '.properties | to_entries[] | select(.value["x-generate"]) | .key' "$deploy/settings.schema.json")
+  for name in $names; do
+    value=$(pc exec -T backup cat "/made-secrets/$name" 2>/dev/null || true)
+    if [ -z "$value" ]; then bad="$bad made($name)"; continue; fi
+    made=$(jq --arg k "$name" --arg v "$value" '.[$k] = $v' <<< "$made")
+  done
+  # Every one made, and no two the same.
+  if [ "$(jq '[.[]] | unique | length' <<< "$made")" != "$(wc -w <<< "$names")" ]; then bad="$bad made(some-alike)"; fi
+  spec=$(jq -c 'to_entries | map(select(.key | startswith("$") | not)) | .[]' "$deploy/made-secrets.json")
+  while read -r entry; do
+    service=$(jq -r .key <<< "$entry")
     for id in $(pc ps -q "$service"); do
-      # Read whole, not piped into grep -q: under pipefail a writer cut off early would hide a match.
-      env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id")
-      logs=$(docker logs "$id" 2>&1)
-      if grep -F -- "$value" <<< "$env" >/dev/null; then bad="$bad $service:environment($key)"; fi
-      if grep -F -- "$value" <<< "$logs" >/dev/null; then bad="$bad $service:log($key)"; fi
-      if [ "$(docker exec "$id" cat "$path" 2>/dev/null)" != "$value" ]; then bad="$bad $service:file($path)"; fi
+      for file in $(jq -r '.value | keys[]' <<< "$entry"); do
+        # The template with each {NAME} filled in from what was made (the test's .env sets no others).
+        want=$(jq -r --arg f "$file" --argjson made "$made" '.value[$f] | gsub("\\{(?<n>[A-Z][A-Z0-9_]*)\\}"; $made[.n] // "")' <<< "$entry")
+        got=$(docker exec "$id" cat "/run/augur/secrets/$file" 2>/dev/null || echo "<none>")
+        if [ "$got" != "$want" ]; then bad="$bad $service:file($file)"; fi
+      done
     done
-  done <<< "$triples"
+  done <<< "$spec"
+  for id in $(pc ps -q); do
+    service=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$id")
+    # Read whole, not piped into grep -q: under pipefail a writer cut off early would hide a match.
+    env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id")
+    logs=$(docker logs "$id" 2>&1)
+    for name in $names; do
+      value=$(jq -r --arg k "$name" '.[$k] // empty' <<< "$made")
+      [ -n "$value" ] || continue
+      if grep -F -- "$value" <<< "$env" >/dev/null; then bad="$bad $service:environment($name)"; fi
+      if grep -F -- "$value" <<< "$logs" >/dev/null; then bad="$bad $service:log($name)"; fi
+    done
+  done
   if [ -n "$bad" ]; then
-    echo "Secrets meant for files only were found where they shouldn't be, or missing from their file:$bad" >&2
+    echo "The secrets AUGUR made aren't where they should be, or are where they shouldn't be:$bad" >&2
     return 1
   fi
-  echo "Each secret compose.yml gives as a file is in its file, and in no environment or log of the service that reads it." >&2
+  echo "AUGUR made each of its $(wc -w <<< "$names") secrets, handed each service only its own as files, and none is in a container's environment or log." >&2
 }
 
 # The updater's safety backup before an upgrade, and the restore test it must pass, on this release's data:

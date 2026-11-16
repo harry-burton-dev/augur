@@ -139,6 +139,8 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   if (byHand.length) stop(`Set ${byHand.join(', ')} in .env (AUGUR’s docs, Install AUGUR).`);
   if (generated.length) stop(`${generated.length} secret${generated.length === 1 ? '' : 's'} still blank (${generated.join(', ')}): run this again with --fill-secrets.`);
   if (!missing.length) pass(`Settings: all ${required.length} required settings are set.`);
+  const made = Object.keys(props).filter((key) => props[key]['x-generate'] && !env[key]);
+  if (made.length) pass(`Secrets: AUGUR makes ${made.length} on first start and keeps them (${made.join(', ')}).`);
   const misfits = Object.entries(env)
     .filter(([, value]) => value !== '')
     .map(([key, value]) => (lookup(key) ? misfit(key, value, lookup(key)) : undefined))

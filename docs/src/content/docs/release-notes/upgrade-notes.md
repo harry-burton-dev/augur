@@ -15,14 +15,25 @@ Each note starts with the release it came in (**From**). If your server already 
 
 The gateway no longer sends an app's part the plain `x-user-*`, `x-workspace-*` and acting-app headers, only the caller it signs. Apps made from the app template check that already. An app whose part still reads the plain headers without the service kit's `signedCallers` hook answers as if nobody were signed in: update it before you upgrade, or remove it.
 
-## Some secrets reach their services as files, which needs Docker Compose 2.24
+## AUGUR makes its own secrets, and hands each service only its own
 
 **From** unreleased
 
-The gateway's `CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registry, events, the knowledge graph and permissions, `ALERT_WEBHOOK_TOKEN` and `OPENFGA_TOKEN` now reach the services that read them as files under `/run/secrets/`, not in their environment, so `docker inspect` on those services no longer shows them. Keycloak, its setup job, OpenFGA and Grafana still get some of them in their environment ([Settings and secrets](../../run/settings/#secrets-as-files)). They stay in `.env` as before: nothing in `.env` changes. Two things to know:
+A new `make-secrets` job runs first on every `up`. For each of the 22 secrets a deployment used to fill in
+(the database passwords, the sign-in secrets, `CALLER_SIGNING_KEY`, Garage's keys, `OPENFGA_TOKEN`,
+`GRAFANA_ADMIN_PASSWORD`, `ALERT_WEBHOOK_TOKEN`), a value in `.env` wins, so **your server keeps every secret it
+has and nothing in `.env` changes**. Then it writes each service only the secrets it reads, into a volume of its
+own mounted at `/run/augur/secrets`, so the services no longer have them in their environment, where `docker inspect`
+showed them ([Settings and secrets](../../run/settings/#secrets-augur-makes)). While `.env` still sets them, the
+`make-secrets` and `storage` containers still have them in theirs; once AUGUR keeps them (after the first `up`) you
+can take them out of `.env`, as long as the off-server copy has run since. A new deployment can leave them out of
+`.env` altogether: AUGUR makes them on first start and keeps them in the `secrets` volume.
 
-- Compose's `secrets:` with `environment:` needs Docker Compose 2.24 or newer. Before you upgrade, run `docker compose version` on the server. An upgrade through Deployment uses the updater's own Compose, but `pc up` by hand uses the server's, and on an older one it stops on the `secrets:` section of `compose.yml`: update the Docker Compose plugin.
-- Compose doesn't start a service again when only one of these secrets changes in `.env`. After changing one, run `pc up -d --force-recreate <service>`. Changing the gateway's key ([Signed caller](https://github.com/harry-burton-dev/augur/blob/main/docs/signed-caller.md)) now says so.
+- The backup's off-server copy now also carries the `secrets` volume, beside `.env`. On a server whose secrets
+  are all in `.env` it holds the same values.
+- After changing one of these secrets in `.env`, run `pc up -d`, then `pc up -d --force-recreate` the services
+  that read it (`infra/deploy/made-secrets.json` lists them): Compose doesn't start a service again for a
+  changed file on its own.
 
 ## Alerts can leave the server without AUGUR
 

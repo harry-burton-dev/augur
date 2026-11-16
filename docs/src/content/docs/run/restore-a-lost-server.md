@@ -56,7 +56,8 @@ restic restore <augur-db id> --target /restore
 restic restore <augur-files id> --target /restore
 ```
 
-`infra/deploy/restore/` now has `deploy/.env` and `deploy/secrets/`, `backups/platform-<date>.sql.gz`,
+`infra/deploy/restore/` now has `deploy/.env` and `deploy/secrets/`, `made-secrets/` (the secrets AUGUR made;
+copies from before it made them have none), `backups/platform-<date>.sql.gz`,
 `objects/{data,meta}` and, once the knowledge graph has had something forgotten,
 `knowledge-ledger/forget-ledger.jsonl`.
 
@@ -68,6 +69,9 @@ in step 1, unpack that one's bundle over this folder, or its tag's files for a r
 
 ```sh
 install -m 600 infra/deploy/restore/deploy/.env infra/deploy/.env
+# The secrets AUGUR made: into .env, where a value wins, so the new server keeps the old one's (the database's
+# logins need them). Each is one line, named after its setting.
+for f in infra/deploy/restore/made-secrets/*; do [ -f "$f" ] && printf '%s=%s\n' "${f##*/}" "$(cat "$f")"; done >> infra/deploy/.env
 cp -R infra/deploy/restore/deploy/secrets infra/deploy/
 # The services that read secrets/ (the registry and the updater) run as user 1000.
 sudo chown -R 1000 infra/deploy/secrets && sudo chmod -R go-rwx infra/deploy/secrets

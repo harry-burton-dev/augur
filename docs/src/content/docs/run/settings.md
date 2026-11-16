@@ -37,19 +37,40 @@ Any secret (a password, a client secret, a bucket key, `DATABASE_URL`) can be gi
 `<NAME>_FILE` to its path inside the container, for a Docker secret or a file decrypted at deploy, and leave
 `<NAME>` unset. The file's contents, less a final newline, are used.
 
-`compose.yml` already does this for eight secrets AUGUR's own services read: the gateway's
-`CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registry, events, the knowledge graph and permissions
-(`IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `KNOWLEDGE_CLIENT_SECRET`,
-`PERMISSIONS_CLIENT_SECRET`), `ALERT_WEBHOOK_TOKEN` for the registry and `OPENFGA_TOKEN` for the permissions
-service. You still set them in `.env`. Compose hands each to the service that reads it as a file under
-`/run/secrets/` (Compose's `secrets:` with `environment:`, which needs Docker Compose 2.24 or newer), so it isn't
-in that service's environment, where `docker inspect` would show it. Compose doesn't start a service again when
-only its secret changes: after changing one of these in `.env`, run `pc up -d --force-recreate <service>`.
+## Secrets AUGUR makes
 
-Still passed in the environment for now: the database passwords inside each `DATABASE_URL`; the sign-in secrets
-of models and the updater; and the secrets Keycloak, its setup job, Garage, OpenFGA and Grafana read. Some of
-the eight are among them: Keycloak and its setup job hold the services' sign-in secrets, OpenFGA holds
-`OPENFGA_TOKEN` and Grafana `ALERT_WEBHOOK_TOKEN`, so `docker inspect` on those containers still shows them.
+AUGUR makes its own secrets: every database password, Keycloak's admin password, each service's sign-in
+secret, the gateway's `CALLER_SIGNING_KEY`, Garage's keys, `OPENFGA_TOKEN`, `GRAFANA_ADMIN_PASSWORD` and
+`ALERT_WEBHOOK_TOKEN` (the [install guide](../install/#2-fill-in-env) lists them). A new deployment leaves them out
+of `.env`, so a platform host such as Coolify needs only the settings a person chooses.
+
+On every `up`, the `make-secrets` job goes through each one before anything else starts:
+
+1. If `.env` (or the platform host's settings) sets it, that value wins. A server set up before AUGUR made its
+   secrets keeps all of its own this way, and changes nothing.
+2. Otherwise it keeps the one it made before, in the `secrets` volume.
+3. Otherwise it makes one: 64 random hex characters.
+
+Then it writes each service only the secrets that service reads, into a volume of its own (`secrets-<service>`,
+mounted at `/run/augur/secrets`), as `infra/deploy/made-secrets.json` says: the gateway gets its key, the
+registry its sign-in secret and its `DATABASE_URL`, and so on. No service sees another's, none of them is in a
+service's environment where `docker inspect` would show it, and only the job and the backup see the whole set.
+A secret `.env` still sets is in the environment of the job and of the storage job, which reads all of `.env`:
+once AUGUR keeps it, it can come out of `.env`.
+AUGUR's own services and the backup read the folder through `SECRETS_DIR`; Postgres and Garage read their files
+themselves; and Keycloak, OpenFGA and Grafana are started through `secrets-env.sh`, which hands them theirs as
+environment variables inside the container only.
+
+To read one, such as Grafana's or Keycloak's admin password: `pc exec backup cat /made-secrets/GRAFANA_ADMIN_PASSWORD`.
+
+To change one, set the new value in `.env` and run `pc up -d`, then `pc up -d --force-recreate` the services
+that read it (made-secrets.json lists them): Compose doesn't start a service again only because a file it reads
+changed. A database password changes on the next `up`, as the storage job sets each login's password from it.
+
+The `secrets` volume is part of the deployment's data: the [off-server copy](../backups/#off-server-copy) carries
+it beside `.env`, and [Restore a lost server](../restore-a-lost-server/) puts it back. Losing it on a server that
+never set the secrets in `.env` means its database logins no longer match, so don't remove AUGUR's volumes
+(`pc down -v`) on a server you mean to keep.
 
 ## Organisation settings
 
@@ -88,8 +109,9 @@ A deployment can be stricter, never looser: `REALM_PASSWORD_MIN_LENGTH`, `REALM_
 `REALM_ADMIN_EVENT_DAYS` in `.env`. `pc logs keycloak-config` says what it changed.
 
 It is the only part of AUGUR that signs in as Keycloak's master admin (`KEYCLOAK_ADMIN_USER`,
-`KEYCLOAK_ADMIN_PASSWORD`). If you change that password in Keycloak's console, change it in `.env` too, or
-the job (and so identity) won't start. If identity's log says its own sign-in lacks the rights it needs
+`KEYCLOAK_ADMIN_PASSWORD`, which AUGUR makes unless `.env` sets it). If you change that password in Keycloak's
+console, set the new one in `.env` too and run `pc up -d --force-recreate keycloak-config`, or the job (and so
+identity) won't start. If identity's log says its own sign-in lacks the rights it needs
 (someone changed them in the console, say), run the job again: `pc up -d keycloak-config identity`. A change
 made by hand in the console to something the job sets is put back on the next `up`.
 
@@ -110,7 +132,8 @@ Organisation can ask everyone for one; no role needs it on its own.
 ## If every deployment admin is locked out
 
 Keycloak's own admin is the way back in. Keep its password (`KEYCLOAK_ADMIN_PASSWORD`) somewhere safe and
-offline.
+offline: after the first start, `pc exec backup cat /made-secrets/KEYCLOAK_ADMIN_PASSWORD` shows the one AUGUR
+made.
 
 1. Open Keycloak's console: set `KEYCLOAK_CONSOLE=open` in `.env` and run `pc up -d`
    ([Limits at the front door](../limits/#limits-at-the-front-door)).

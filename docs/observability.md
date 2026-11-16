@@ -6,7 +6,7 @@ Every AUGUR service sends traces, metrics and logs over OpenTelemetry (ADR 0034)
 
 It's on in every deployment: compose runs otel-lgtm (Grafana's all-in-one OpenTelemetry image) and every service sends to it at `http://otel-lgtm:4318`.
 
-1. In `.env`, set `GRAFANA_ADMIN_PASSWORD` (`openssl rand -hex 16`) and `ALERT_WEBHOOK_TOKEN` (`openssl rand -hex 32`). Both are required, even with `OTEL_LGTM_REPLICAS=0`, since Grafana with no password would take admin/admin; an upgrade from the Upgrade Centre makes both up. Then run `pc up -d`. A deployment that had the `observability` profile can take it out of `COMPOSE_PROFILES`; it does nothing now.
+1. AUGUR makes `GRAFANA_ADMIN_PASSWORD` and `ALERT_WEBHOOK_TOKEN` itself unless `.env` sets them (AUGUR's docs, Settings and secrets, Secrets AUGUR makes), so Grafana never takes admin/admin. `pc exec backup cat /made-secrets/GRAFANA_ADMIN_PASSWORD` shows the password. A deployment that had the `observability` profile can take it out of `COMPOSE_PROFILES`; it does nothing now.
 2. Grafana answers on the server only, at `http://127.0.0.1:3001`. From your own machine, run `ssh -L 3001:127.0.0.1:3001 <server>` and open `http://localhost:3001`. Sign in as `admin`. AUGUR's dashboard and alert rules are in the AUGUR folder.
 
 It keeps 72 hours of traces, metrics and logs and is held to `OTEL_LGTM_MEM_LIMIT` (2 GB unless set).

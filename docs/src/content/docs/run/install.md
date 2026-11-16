@@ -148,7 +148,7 @@ Open `infra/deploy/.env` and fill in these, which only you know:
 | `PLATFORM_ADMIN_FIRST_NAME` | That person's first name. |
 | `PLATFORM_ADMIN_LAST_NAME` | That person's last name. |
 
-The preflight (step 3) fills in these 22 secrets, each with 64 random hex characters: `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `PERMISSIONS_DATABASE_PASSWORD`, `KNOWLEDGE_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `FRONTENDS_BUCKET_SECRET`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `MODELS_CLIENT_SECRET`, `KNOWLEDGE_CLIENT_SECRET`, `PERMISSIONS_CLIENT_SECRET`, `CALLER_SIGNING_KEY`, `GRAFANA_ADMIN_PASSWORD`, `ALERT_WEBHOOK_TOKEN`, `OPENFGA_TOKEN`.
+AUGUR makes these 22 secrets itself on first start, each 64 random hex characters, so leave them out of `.env`: `POSTGRES_PASSWORD`, `KEYCLOAK_ADMIN_PASSWORD`, `IDENTITY_DATABASE_PASSWORD`, `REGISTRY_DATABASE_PASSWORD`, `EVENTS_DATABASE_PASSWORD`, `MODELS_DATABASE_PASSWORD`, `PERMISSIONS_DATABASE_PASSWORD`, `KNOWLEDGE_DATABASE_PASSWORD`, `KEYCLOAK_DATABASE_PASSWORD`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`, `FRONTENDS_BUCKET_SECRET`, `IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `MODELS_CLIENT_SECRET`, `KNOWLEDGE_CLIENT_SECRET`, `PERMISSIONS_CLIENT_SECRET`, `CALLER_SIGNING_KEY`, `GRAFANA_ADMIN_PASSWORD`, `ALERT_WEBHOOK_TOKEN`, `OPENFGA_TOKEN`. Set one only to keep a value of your own; it wins ([Settings and secrets](../settings/#secrets-augur-makes)).
 <!-- /settings -->
 
 - `PLATFORM_VERSION` is the release you checked out, without `augur@`, for example `0.24.0`.
@@ -173,27 +173,26 @@ The preflight (step 3) fills in these 22 secrets, each with 64 random hex charac
   (`home` unless you set it). Set it empty for a bare desktop. The logo button at the start of the app bar
   goes there. It takes effect at the next `pc up -d`.
 
-The secrets are made for you in step 3. Each is a long random string, different from every other, and
-Compose refuses to start without the required ones. To set one yourself instead, `openssl rand -hex 32` makes
-one.
+AUGUR makes the secrets itself when it first starts, each a long random string different from every other, and
+keeps them ([Secrets AUGUR makes](../settings/#secrets-augur-makes)). To set one yourself instead,
+`openssl rand -hex 32` makes one; a value in `.env` wins.
 
 **Database logins.** `POSTGRES_PASSWORD` is Postgres's admin login, used only by the storage job and
 backups. Each of AUGUR's services and Keycloak connects with its own login, which owns only its own schema
 (Keycloak: its own database) and can't read anyone else's. The storage job makes them from the
-`*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins, so changing one in `.env` and running
+`*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins, so setting one in `.env` and running
 `pc up -d` changes it.
 
 ## 3. Run the preflight
 
-The preflight fills in the secrets and checks the server can take AUGUR, before anything starts. It needs
-nothing but Docker:
+The preflight checks the server can take AUGUR, before anything starts. It needs nothing but Docker:
 
 ```sh
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur" -w /augur node:22-alpine node scripts/preflight.mjs --install --fill-secrets
+docker run --rm -u "$(id -u):$(id -g)" -v "$PWD:/augur" -w /augur node:22-alpine node scripts/preflight.mjs --install
 ```
 
-`--fill-secrets` writes a random value into each blank secret in `.env` and never changes one that's set.
-Then it checks, one line each:
+With `--fill-secrets` it also writes a random value into each blank secret in `.env`, for a server that keeps
+its secrets there; it never changes one that's set. It checks, one line each:
 
 - **Release**: the deploy files are the release `PLATFORM_VERSION` names.
 - **Settings**: every required setting is set, and each value fits what it must be: `PLATFORM_URL` an https
@@ -208,12 +207,8 @@ Then it checks, one line each:
 - **Memory and disk**, against the size above.
 - And, for reading, what isn't set up yet: reporting to Backstage, the off-server copy, email.
 
-A line starting `✗` stops the install: fix it and run the command again (without `--fill-secrets` it changes
-nothing). Lines starting `-` are for reading. When it ends `✓ Ready`, go on.
-
-`KEYCLOAK_ADMIN_PASSWORD`, which it made, is Keycloak's own admin: the
-[way back in](../settings/#if-every-deployment-admin-is-locked-out) if every deployment admin loses their
-sign-in. Copy it from `.env` into your password manager now.
+A line starting `✗` stops the install: fix it and run the command again (it changes nothing). Lines starting
+`-` are for reading. When it ends `✓ Ready`, go on.
 
 ## 4. Start AUGUR
 
@@ -223,8 +218,12 @@ pc up -d
 
 The first pull takes a minute or two. Keycloak needs about a minute to start, and Tailscale fetches its
 certificate on the first request, so the first page can be slow. `pc ps` shows each container `healthy` when
-it's ready, and the jobs that run once (`storage`, `keycloak-config`, `backup-tools`, `knowledge-migrate`) as
-exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
+it's ready, and the jobs that run once (`make-secrets`, `storage`, `keycloak-config`, `backup-tools`,
+`knowledge-migrate`) as exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
+
+Keycloak's own admin, `KEYCLOAK_ADMIN_PASSWORD`, which AUGUR made, is the
+[way back in](../settings/#if-every-deployment-admin-is-locked-out) if every deployment admin loses their
+sign-in. Copy it into your password manager now: `pc exec backup cat /made-secrets/KEYCLOAK_ADMIN_PASSWORD`.
 
 ## 5. Sign in and check it
 
@@ -258,7 +257,7 @@ exited with `0`. `pc logs <service>` says what's wrong with one that isn't.
 5. **Turn on the updater**, if this server should upgrade itself
    ([The updater](../updater/#turn-it-on)).
 
-Run the preflight once more (without `--fill-secrets`): what's left under `-` is what you chose not to set
+Run the preflight once more: what's left under `-` is what you chose not to set
 up. Write down where this deployment's bucket is, its Backstage name and its ring with its other records.
 
 ## Check it worked
