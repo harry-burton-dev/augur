@@ -141,6 +141,20 @@ const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
   { method: /^GET$/, path: /^\/api\/events\/v1\/deliveries(\/|$)/, scope: 'deployment:health' },
 ];
 
+/**
+ * The calls an app makes on its own registry entry with no scope: reading it, registering itself and giving it a
+ * version's frontend. Anything else on its entry (its scopes, floors, pin, removing it) is an admin's, and needs
+ * the platform scope `ROUTE_SCOPES` names, which only AUGUR's own frontends hold.
+ */
+const ownEntry = (app: string) => {
+  const entry = `^/api/registry/v1/apps/${app}`;
+  return [
+    { method: /^GET$/, path: new RegExp(`${entry}(/|$)`) },
+    { method: /^PUT$/, path: new RegExp(`${entry}/?$`) },
+    { method: /^PUT$/, path: new RegExp(`${entry}/versions/[^/]+/frontend/?$`) },
+  ];
+};
+
 /** Whether a grant holds a scope: an app's own scopes, or for one of AUGUR's own frontends, its platform scopes (ADR 0083). */
 export const holds = (grant: Pick<AppGrant, 'scopes' | 'platformScopes'>, scope: string): boolean =>
   isPlatformScope(scope) ? (grant.platformScopes ?? []).includes(scope) : grant.scopes.includes(scope);
@@ -156,7 +170,7 @@ export const scopeFor = (method: string, url: string, app: string, platformServi
   if (!name) return undefined;
   if (name === app) return null;
   if (!platformServices.includes(name)) return undefined;
-  if (name === 'registry' && new RegExp(`^/api/registry/v1/apps/${app}(/|$)`).test(path)) return null;
+  if (name === 'registry' && ownEntry(app).some((r) => r.method.test(method) && r.path.test(path))) return null;
   return ROUTE_SCOPES.find((r) => r.method.test(method) && r.path.test(path))?.scope;
 };
 
