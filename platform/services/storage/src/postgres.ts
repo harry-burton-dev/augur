@@ -45,10 +45,6 @@ export async function provisionDatabase(sql: Sql, { app, password, connections =
   // A schema named for a part of AUGUR (identity, registry, public…) would sit among the platform's own.
   const reserved = reservedIdProblem(app);
   if (reserved) throw new Error(`No schema was made for it: ${reserved}`);
-  // An app installed before apps had databases of their own keeps its tables in this one: it is installed again,
-  // never moved (Harry, PER-456), and until then it gets nothing new.
-  const shared = await sql.query('select 1 from pg_namespace where nspname = $1', [schemaFor(app)]);
-  if (shared.rowCount) throw new Error(`${app} was installed before each app had a database of its own, and its tables are still in AUGUR’s: remove it in Admin → Apps and install it again (its data goes, after a backup).`);
   const role = pg.escapeIdentifier(roleFor(app));
   const database = pg.escapeIdentifier(databaseFor(app));
   const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
@@ -61,12 +57,17 @@ export async function provisionDatabase(sql: Sql, { app, password, connections =
   await sql.query(`alter database ${database} owner to ${role}`);
   await sql.query(`revoke all on database ${database} from public`);
   await sql.query(`grant connect on database ${database} to ${role}`);
+  // AUGUR's own database is out of its reach: an earlier release granted it connect, and going back to one grants it again.
+  const { rows } = await sql.query<{ db: string }>('select current_database() as db');
+  await sql.query(`revoke all on database ${pg.escapeIdentifier(rows[0].db)} from ${role}`);
   const own = await open(databaseFor(app));
   try {
     // Its own database's public schema would be its login's (pg_database_owner): kept the admin login's, as in
     // AUGUR's, so its tables go in its own schema and the extensions there stay as made.
     await own.query('alter schema public owner to current_user');
-    await prepareDatabase(own);
+    await own.query('revoke create on schema public from public');
+    await own.query('create extension if not exists vector');
+    await own.query('create extension if not exists pg_trgm');
     // Its tables, and apart from them its jobs' runs and schedules (the kit's jobs on DBOS).
     for (const name of [schemaFor(app), jobsSchemaFor(app)]) {
       const schema = pg.escapeIdentifier(name);
@@ -77,6 +78,19 @@ export async function provisionDatabase(sql: Sql, { app, password, connections =
     await own.end();
   }
   await sql.query(`alter role ${role} set search_path = ${pg.escapeIdentifier(schemaFor(app))}, public`);
+}
+
+/**
+ * Whether `app` was installed before apps had databases of their own: its schema is in AUGUR's database (`sql`'s) and
+ * it has no database yet. A release before this one, gone back to, makes an empty schema for an app that has one; that
+ * isn't counted.
+ */
+export async function inSharedDatabase(sql: Sql, app: string): Promise<boolean> {
+  const { rows } = await sql.query<{ shared: boolean }>(
+    'select exists (select 1 from pg_namespace where nspname = $1) and not exists (select 1 from pg_database where datname = $2) as shared',
+    [schemaFor(app), databaseFor(app)],
+  );
+  return rows[0]?.shared === true;
 }
 
 /** Takes an app's (or a preview's) login and database away, with everything in them. Nothing happens when there's none. */
@@ -187,6 +201,8 @@ export async function provisionKeycloakDatabase(sql: Sql, { role, password }: { 
   await sql.query(exists.rowCount ? `alter role ${quoted} with ${options}` : `create role ${quoted} with ${options}`);
   const { rows } = await sql.query<{ db: string }>('select current_database() as db');
   await sql.query(`alter database ${pg.escapeIdentifier(rows[0].db)} owner to ${quoted}`);
+  // Its owner connects; nobody else's login does, apps' among them.
+  await sql.query(`revoke all on database ${pg.escapeIdentifier(rows[0].db)} from public`);
   await sql.query(`alter schema public owner to ${quoted}`);
   await mayUseReservedConnections(sql, role);
   return handOverSchema(sql, 'public', role);

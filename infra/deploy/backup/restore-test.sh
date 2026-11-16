@@ -105,9 +105,12 @@ real_errors() {
 whose() {
   printf '%s\n' "$2" > "$scratch/real-errors"
   gunzip -c "$1" | awk -v errs="$scratch/real-errors" -v platform=" $PLATFORM_SCHEMAS " '
-    function owner() {
-      if (db ~ /^app_[a-z0-9_]+$/) {
-        app = substr(db, 5)
+    function owner(  where) {
+      # A statement about a database (CREATE, ALTER, GRANT ON DATABASE) comes before its \connect, so it names it.
+      where = (target != "" ? target : db)
+      if (where ~ /^(retired_)?app_[a-z0-9_]+$/) {
+        app = where
+        sub(/^(retired_)?app_/, "", app)
         gsub(/_/, "-", app)
         return app
       }
@@ -145,9 +148,15 @@ whose() {
       db = $2
       gsub(/"/, "", db)
       schema = ""
+      target = ""
     }
     /^[A-Z]/ {
       schema = ""
+      target = ""
+      if (match($0, /DATABASE "?[a-z_][a-z0-9_]*/)) {
+        target = substr($0, RSTART + 9, RLENGTH - 9)
+        gsub(/"/, "", target)
+      }
       if (match($0, /SCHEMA [a-z_][a-z0-9_]*/)) schema = substr($0, RSTART + 7, RLENGTH - 7)
       else if (match($0, /[a-z_][a-z0-9_]*\.[a-z_"]/)) schema = substr($0, RSTART, RLENGTH - 2)
       if ($0 ~ /^COPY / && $0 ~ /FROM stdin;$/) copying = 1

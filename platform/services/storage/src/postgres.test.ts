@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { databaseFor, dropDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
+import { databaseFor, dropDatabase, inSharedDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
 
 describe('an app’s schema', () => {
   it('is never one named for a part of AUGUR, made or dropped', async () => {
@@ -76,9 +76,11 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
 
   // The exit check of P1 (PER-456): AUGUR's database is out of reach, so are its migrations' advisory locks, and so is another app's.
   it('can’t connect to AUGUR’s database or another app’s, and no one else can connect to its own', async () => {
+    const platform = new URL(process.env.DATABASE_URL!).pathname.slice(1);
+    // What a release before granted it, or grants it again when gone back to, is taken away.
+    await admin.query(`grant connect on database ${platform} to ${roleFor(app)}`);
     await provisionDatabase(admin, { app, password: 'first-password-123', open });
     await provisionDatabase(admin, { app: other, password: 'other-password-123', open });
-    const platform = new URL(process.env.DATABASE_URL!).pathname.slice(1);
     await expect(asApp('first-password-123', platform)).rejects.toThrow(/permission denied for database/);
     await expect(asApp('first-password-123', databaseFor(other))).rejects.toThrow(/permission denied for database/);
     await expect(asApp('other-password-123', databaseFor(app), roleFor(other))).rejects.toThrow(/permission denied for database/);
@@ -98,12 +100,17 @@ describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {
     await client.end();
   });
 
-  it('is refused, saying why, for an app installed before apps had databases of their own', async () => {
+  it('tells an app installed before apps had databases of their own from an empty schema a release before made', async () => {
     const old = `storage-old-${process.pid}`;
     await admin.query(`create schema ${schemaFor(old)}`);
     try {
-      await expect(provisionDatabase(admin, { app: old, password: 'old-password-1234', open })).rejects.toThrow(/installed before each app had a database of its own.*install it again/);
-      expect((await admin.query('select 1 from pg_database where datname = $1', [databaseFor(old)])).rowCount).toBe(0);
+      expect(await inSharedDatabase(admin, old)).toBe(true);
+      expect(await inSharedDatabase(admin, `${old}-none`)).toBe(false);
+      // Gone back to a release before, which makes the schema again for an app that has its own database.
+      await admin.query(`drop schema ${schemaFor(old)}`);
+      await provisionDatabase(admin, { app: old, password: 'old-password-1234', open });
+      await admin.query(`create schema ${schemaFor(old)}`);
+      expect(await inSharedDatabase(admin, old)).toBe(false);
     } finally {
       await dropDatabase(admin, old);
     }

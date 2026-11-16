@@ -100,7 +100,9 @@ export async function setAside({ sql, buckets, app, release, again = false }: { 
   }
   if (await exists(sql, 'database', databaseFor(app))) {
     if (await exists(sql, 'database', retiredDatabaseFor(app))) throw new Error(`database ${retiredDatabaseFor(app)} is there already, so ${databaseFor(app)} can’t be set aside.`);
-    // Its app is stopped by now; whatever it left connected is let go, since a database in use can't be renamed.
+    // Its app is stopped by now. Its login stops signing in first, then whatever it left connected is let go, since a
+    // database in use can't be renamed.
+    if (await exists(sql, 'role', roleFor(app))) await sql.query(`alter role ${pg.escapeIdentifier(roleFor(app))} with nologin`);
     await sql.query('select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()', [databaseFor(app)]);
     await sql.query(`alter database ${pg.escapeIdentifier(databaseFor(app))} rename to ${pg.escapeIdentifier(retiredDatabaseFor(app))}`);
     found = true;

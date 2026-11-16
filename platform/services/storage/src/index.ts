@@ -1,4 +1,4 @@
-// Gives the platform's services and Keycloak each a database login of their own, and apps their storage: for each app in APP_STORAGE, a database login that owns one schema,
+// Gives the platform's services and Keycloak each a database login of their own, and apps their storage: for each app in APP_STORAGE, a database login that owns a database of its own,
 // and a bucket with a key that opens only it. Runs to the end and stops, on every `up`; running it
 // again changes nothing unless a secret in .env changed. See docs/app-storage.md.
 // With APP_STORAGE_DROP, it instead takes one pull request's preview's scratch storage away. The apps in
@@ -10,7 +10,7 @@ import pg from 'pg';
 import { configFromEnv, envPrefix, FRONTENDS_BUCKET, FRONTENDS_KEY, type StorageConfig } from './config.ts';
 import { BACKUP_STATUS_DIR, backupProblem, readBackupMarker } from './backup-marker.ts';
 import { garageAdmin, GarageError, keyIdFor, keyNameFor } from './garage.ts';
-import { databaseFor, dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
+import { databaseFor, dropDatabase, inSharedDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
 import { dropDue, markKept, prepareRetirements, retiredBucketFor, retirements, setAside, type Buckets } from './retirement.ts';
 import { emptyBucket } from './s3.ts';
 
@@ -89,7 +89,7 @@ if (config.retireNow) {
   } finally {
     await sql.end();
   }
-  log.info(`${app} was removed from the server and its time to come back ended: its database login, schemas and bucket are set aside, and go with a later AUGUR release.`);
+  log.info(`${app} was removed from the server and its time to come back ended: its database login, data and bucket are set aside, and go with a later AUGUR release.`);
   process.exit(0);
 }
 
@@ -127,8 +127,15 @@ try {
     const handed = await provisionServiceDatabase(client, { service, password: databasePassword });
     log.info(`${service} has database login ${serviceRoleFor(service)}, owning schema ${service}${handed ? ` (handed it ${handed} things the admin login made)` : ''}`);
   }
+  await prepareRetirements(client);
   for (const { app, databasePassword } of config.apps) {
     await forApp(app, async () => {
+      // An app installed before apps had databases of their own starts again in one: its tables in AUGUR's, its login
+      // and its bucket are set aside as a removed app's are, and go with a later release (Harry, PER-456).
+      if (await inSharedDatabase(client, app)) {
+        await setAside({ sql: client, buckets, app, release: config.release, again: true });
+        log.warn(`${app} was installed before each app had a database of its own: its data is set aside (retired_${schemaFor(app)}), it starts empty in database ${databaseFor(app)}, and the old data goes with a later AUGUR release.`);
+      }
       await provisionDatabase(client, { app, password: databasePassword, connections: config.appConnections, open });
       log.info(`${app} has database login ${roleFor(app)}, owning database ${databaseFor(app)}, at most ${config.appConnections} connections`);
     });
@@ -139,10 +146,7 @@ try {
 
 if (config.keycloak) {
   const { database, role, password } = config.keycloak;
-  const url = new URL(config.databaseUrl);
-  url.pathname = `/${database}`;
-  const keycloak = new pg.Client({ connectionString: url.toString() });
-  await keycloak.connect();
+  const keycloak = await open(database);
   try {
     const handed = await provisionKeycloakDatabase(keycloak, { role, password });
     log.info(`Keycloak has database login ${role}, owning database ${database}${handed ? ` (handed it ${handed} things the admin login made)` : ''}`);
@@ -207,7 +211,7 @@ async function ensureKeyOf(garage: ReturnType<typeof garageAdmin>, app: string, 
         const did = await setAside({ sql, buckets, app, release: config.release });
         log.info(
           did === 'set aside'
-            ? `${app} no longer ships with AUGUR: its database login, schemas and bucket are set aside, and go with a later AUGUR release.`
+            ? `${app} no longer ships with AUGUR: its database login, data and bucket are set aside, and go with a later AUGUR release.`
             : `${app} no longer ships with AUGUR, and had no data here.`,
         );
       } catch (err) {
