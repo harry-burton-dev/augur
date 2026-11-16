@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## An app's calls for a person are checked on the floor they stand on
+
+**From** unreleased
+
+When an app's part calls AUGUR for a person, the gateway now checks the app's grant on the floor that person was on, not the organisation's. An app that is on for the organisation but turned off on a team is refused there for those calls, as it already was for the person's own. An app on only for some teams now works there. Nothing to do on the server. If an app is refused where you expect it to work, check its floors in Admin → Apps.
+
 ## `PERMISSIONS_DECIDES=all` now moves the registry's checks too
 
 **From** unreleased

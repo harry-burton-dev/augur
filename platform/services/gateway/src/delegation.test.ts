@@ -61,7 +61,7 @@ describe('a call made for an app', () => {
 
   it('lets a person’s call for an app reach an AUGUR API only within the app’s grant, naming the app to the service (8.5)', async () => {
     const app = await gateway();
-    const headers = async () => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: 'notes' });
+    const headers = async () => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: 'notes', 'x-workspace-id': 'w1' });
     const ok = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: await headers(), payload: {} });
     expect(ok.statusCode).toBe(200);
     expect(await callerIn(ok, 'events')).toMatchObject({ id: 'u-1', app: 'notes', scopes: ['notifications:send'] });
@@ -77,7 +77,7 @@ describe('a call made for an app', () => {
     const grants: AppGrants = async (app) =>
       app === 'upgrades' ? { name: 'Upgrade Centre', on: true, scopes: [], platformScopes: ['deployment:upgrade'] } : app === 'notes' ? { name: 'Notes', on: true, scopes: ['notifications:send'] } : undefined;
     const app = await buildApp({ upstreams: { events: url, registry: url, notes: url }, auth, signer, appGrants: grants, floors, access: async () => new Map([['notes', { name: 'Notes', maxUpload: 10 }], ['upgrades', { name: 'Upgrade Centre', maxUpload: 1 }]]), monitor: new HealthMonitor({ probes: [] }) });
-    const asFor = async (id: string) => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: id });
+    const asFor = async (id: string) => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: id, 'x-workspace-id': 'w1' });
     const goBack = await app.inject({ method: 'PUT', url: '/api/registry/v1/platform/go-back', headers: await asFor('upgrades'), payload: { version: '0.24.1' } });
     expect(goBack.statusCode).toBe(200);
     expect(await callerIn(goBack, 'registry')).toMatchObject({ id: 'u-1', app: 'upgrades', scopes: ['deployment:upgrade'], roles: ['editor'] });
@@ -102,7 +102,7 @@ describe('a call made for an app', () => {
       monitor: new HealthMonitor({ probes: [] }),
       personaSessions: async () => true,
     });
-    const asFor = async (id: string) => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: id, 'x-augur-persona': 'admin.u-1' });
+    const asFor = async (id: string) => ({ authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: id, 'x-augur-persona': 'admin.u-1', 'x-workspace-id': 'w1' });
     const goBack = await app.inject({ method: 'PUT', url: '/api/registry/v1/platform/go-back', headers: await asFor('upgrades'), payload: { version: '0.24.1' } });
     expect(goBack.statusCode).toBe(200);
     expect(await callerIn(goBack, 'registry')).toMatchObject({ id: 'u-1', persona: 'admin.u-1', app: 'upgrades' });
@@ -211,9 +211,38 @@ describe('a call made for an app', () => {
     expect(b.statusCode).toBe(401);
   });
 
+  it('reads a delegated call’s grant on the floor the person stood on, and refuses another floor named beside it', async () => {
+    const asked: (string | undefined)[] = [];
+    const app = await gateway(async (id, workspace) => (asked.push(workspace), appGrants(id, workspace)));
+    const call = async (person: Caller, floor?: string) =>
+      app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: { authorization: `Bearer ${await signApp('notes')}`, [DELEGATION_HEADER]: await signDelegation(signer, person, { app: 'notes', scopes: ['notifications:send'], lifetimeSeconds: 120 }), ...(floor ? { 'x-workspace-id': floor } : {}) }, payload: {} });
+    const alexOnW1: Caller = { id: 'u-1', name: 'Alex Rivera', roles: [], departments: [], workspace: w1 };
+    expect((await call(alexOnW1)).statusCode).toBe(200);
+    expect((await call(alexOnW1, 'w1')).statusCode).toBe(200);
+    expect(asked).toEqual(['w1', 'w1']);
+    const crossed = await call(alexOnW1, 'off-floor');
+    expect(crossed.statusCode).toBe(400);
+    expect(crossed.json().message).toBe('This call is for someone on another floor than the x-workspace-id it names.');
+    // A delegation that names no floor is refused, whether or not the part names one: it can't add one.
+    for (const floor of [undefined, 'w1']) {
+      const none = await call({ ...alexOnW1, workspace: undefined }, floor);
+      expect(none.statusCode).toBe(400);
+      expect(none.json().message).toBe('This delegation names no floor, so there is none to check the app on. Ask the person to open the app again.');
+    }
+    expect(asked).toEqual(['w1', 'w1']);
+  });
+
+  it('refuses a person’s call made for an app that names no floor', async () => {
+    const app = await gateway();
+    const res = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: { authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: 'notes' }, payload: {} });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toBe('Say which floor this call is for (x-workspace-id): an app is turned on floor by floor.');
+    expect((await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: 'notes' } })).statusCode).toBe(400);
+  });
+
   it('holds a delegated call to the scopes the delegation carried, not only the grant (8.5)', async () => {
     const app = await gateway();
-    const person: Caller = { id: 'u-1', name: 'Alex Rivera', roles: [], departments: [] };
+    const person: Caller = { id: 'u-1', name: 'Alex Rivera', roles: [], departments: [], workspace: w1 };
     const narrow = await signDelegation(signer, person, { app: 'notes', scopes: [], lifetimeSeconds: 120 });
     const res = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: { authorization: `Bearer ${await signApp('notes')}`, [DELEGATION_HEADER]: narrow }, payload: {} });
     expect(res.statusCode).toBe(403);
