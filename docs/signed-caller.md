@@ -23,7 +23,7 @@ app.get('/v1/claims', async (req, reply) => {
 
 The hook drops every `x-user-*` header a request brings, the floor's kind and role, and the acting-app headers of a delegated caller (below). It puts back the caller from a valid signed token, so `callerFromHeaders` reads only what the gateway said. A request with a bad, expired or someone else's token gets 401. One with no token has no caller, which is how another service's own calls arrive: they prove who they are with their own sign-in, as before.
 
-New apps made from augur-app-template have the hook already (the service kit's `appServer`). An app that hasn't added it keeps working, because the gateway still sends the plain headers beside the token, but it is trusting the network.
+New apps made from augur-app-template have the hook already (the service kit's `appServer`). An app's part gets only the signed token, never the plain `x-user-*` headers, so a part without the hook sees nobody signed in. AUGUR's own services still get the plain headers beside the token.
 
 ## Acting for a person: the delegated caller
 
@@ -42,7 +42,7 @@ app.addHook('onRequest', signedCallers(callerCheckFromEnv('app-expenses')));
 
 `callerFromHeaders` then gives the person with `app` and `scopes` beside them (`isDelegated`, `delegationAllows(caller, 'people:read')`), and a part applies the smaller of the two. When the part calls AUGUR for that person it sends its own app token (a client-credentials grant at `POST /api/identity/v1/token`, the only grant the gateway passes on to the sign-in service) and the delegated caller it received in `x-augur-delegation`; the gateway checks the delegation is for that app and still valid (`delegationCheck`), holds the call to the scopes the delegation carries as well as the app's grant, then signs a fresh one-minute caller for the target. No token for the person reaches a part.
 
-An app's own token, with no delegation, is admitted only for an app the registry knows and has on ("Notes isn’t installed here", "Notes is turned off"), and only for the routes its grant covers, its own routes and its own registry entry; the caller the gateway signs then names the app (`app:<id>`, with `app` and `scopes`) and the app's own token goes on with the call, so a service still reads which app is calling the way it did before.
+An app's own token, with no delegation, is admitted only for an app the registry knows and has on ("Notes isn’t installed here", "Notes is turned off"), and only for the routes its grant covers, its own routes and, on its own registry entry, reading its settings, grants and events, registering itself and giving it a version's frontend (anything else there, such as its scopes, floors or pin, needs an admin's platform scope); the caller the gateway signs then names the app (`app:<id>`, with `app` and `scopes`) and the app's own token goes on with the call, so a service still reads which app is calling the way it did before.
 
 ### Acting as an admin persona
 
