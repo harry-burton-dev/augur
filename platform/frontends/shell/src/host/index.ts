@@ -4,7 +4,7 @@ export { AppMounter, MountError, type ImportEntry } from './mount.js';
 export { StageMounter, workerCards } from './stage.js';
 export { routeIntent, IntentError, RequestBroker, type OpenRequest } from './intents.js';
 export { toShellNotification, NotificationActions } from './notifications.js';
-export { startSession, CALLBACK_PATH, SILENT_CALLBACK_PATH, type Session } from './session.js';
+export { startSession, CALLBACK_PATH, RENEW_WITHIN_SECONDS, SILENT_CALLBACK_PATH, type Session } from './session.js';
 export { NotificationFeed, fromServer, isQuiet, type ServerNotification } from './feed.js';
 export { screenFor, groupsFor, groupOf, pagesOf, pageAt, toShellApp, areaOf, titleFor, productName, findPages } from './menus.js';
 export { PreferenceSync, applyPreferences } from './preferences.js';

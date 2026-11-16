@@ -13,7 +13,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 **From** unreleased
 
-The shell no longer keeps anyone's tokens in the browser's session storage, where any script running on AUGUR's address could read them: it holds them in the page's memory only. A reload or a new tab now gets a sign-in from the sign-in service in a hidden frame, so people stay signed in as before without seeing the sign-in page. The realm job also turns on refresh token rotation (`revokeRefreshToken`): each refresh token works once, and a used one is refused. A sign-in an earlier release left in a tab's session storage is removed the first time that tab opens AUGUR again. Nothing to do on the server.
+The shell no longer keeps anyone's tokens in the browser's session storage, where any script running on AUGUR's address could read them: it holds them in the page's memory only. A reload or a new tab now gets a sign-in from the sign-in service in a hidden frame, so people stay signed in without seeing the sign-in page. An open tab renews its sign-in shortly before it runs out, as before, so it stays signed in until the realm's idle or maximum session limit. The realm job also turns on refresh token rotation (`revokeRefreshToken`): each refresh token works once, and a used one is refused. A sign-in an earlier release left in a tab's session storage is removed the first time that tab opens AUGUR again. Nothing to do on the server.
 
 The Content-Security-Policy on files under `/apps/`, `/assets/` and `/shared/` is now enforced, where it was report-only, so a page or an SVG opened from there runs no script. No app AUGUR knows of serves one, so nothing changes for them.
 

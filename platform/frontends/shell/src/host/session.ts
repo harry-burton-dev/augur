@@ -42,6 +42,9 @@ export interface Authenticator {
   signinRedirectCallback(url?: string): Promise<SignedIn>;
   signinSilent(args?: { forceIframeAuth?: boolean }): Promise<SignedIn | null>;
   signoutRedirect(): Promise<void>;
+  removeUser(): Promise<void>;
+  /** Told shortly before the access token runs out (RENEW_WITHIN_SECONDS), to renew an open tab in the background. */
+  events?: { addAccessTokenExpiring(callback: () => void): unknown };
 }
 
 export interface SignedIn {
@@ -73,33 +76,42 @@ const withParam = (path: string, key: string, value: string) => {
   return `${url.pathname}${url.search}${url.hash}`;
 };
 
-/** Renewed this long before it runs out, so a call never sets out with a token about to expire. */
-const RENEW_WITHIN_SECONDS = 30;
+/**
+ * Renewed this long before it runs out, so a call never sets out with a token about to expire. The same margin tells
+ * the sign-in client when to say a token is about to expire (main.tsx), which renews an open tab in the background.
+ */
+export const RENEW_WITHIN_SECONDS = 60;
 
-/** The renewal under way for each sign-in client: one at a time, shared by every call that needs a token meanwhile. */
-const renewing = new WeakMap<Authenticator, Promise<SignedIn | null>>();
+const fresh = (user: SignedIn | null): user is SignedIn => !!user && !user.expired && (user.expires_in ?? Infinity) > RENEW_WITHIN_SECONDS;
 
 /**
- * A usable sign-in. When it has expired, or nearly, it is renewed with the refresh token, which the sign-in service
- * replaces at each use. With none in memory (a reload, a new tab) or a refresh turned down, the sign-in service is
- * asked in a hidden frame, which answers from its own session. Null when neither works and the person has to sign
- * in. Only one renewal runs at a time: the sign-in service takes each refresh token once, and a second use of one
- * ends the shell's sign-in for every tab, so the calls waiting meanwhile share it.
+ * A usable sign-in, from `auth`. When it has run out, or nearly, it is renewed with the refresh token, which the
+ * sign-in service replaces at each use. With none in memory (a reload, a new tab) or a refresh turned down, the
+ * sign-in service is asked in a hidden frame, which answers from its own session. Null when neither works and the
+ * person has to sign in.
+ *
+ * The sign-in service takes each refresh token once, and a second use of one ends the shell's sign-in in every tab.
+ * So only one renewal runs at a time, shared by every call that needs a token meanwhile, and a refresh token that
+ * failed is dropped, never sent again: it may have been taken even though its answer was lost.
  */
-const current = async (auth: Authenticator): Promise<SignedIn | null> => {
-  const user = await auth.getUser();
-  if (user && !user.expired && (user.expires_in ?? Infinity) > RENEW_WITHIN_SECONDS) return user;
-  const pending = renewing.get(auth);
-  if (pending) return pending;
-  const renewal = (async () => {
+const signedInWith = (auth: Authenticator) => {
+  let renewing: Promise<SignedIn | null> | undefined;
+  const renew = async () => {
+    // Another renewal may have finished since the caller looked.
+    const user = await auth.getUser();
+    if (fresh(user)) return user;
     if (user?.refresh_token) {
       const renewed = await auth.signinSilent().catch(() => null);
       if (renewed) return renewed;
+      await auth.removeUser().catch(() => undefined);
     }
     return auth.signinSilent({ forceIframeAuth: true }).catch(() => null);
-  })().finally(() => renewing.delete(auth));
-  renewing.set(auth, renewal);
-  return renewal;
+  };
+  return async (): Promise<SignedIn | null> => {
+    const user = await auth.getUser();
+    if (fresh(user)) return user;
+    return (renewing ??= renew().finally(() => (renewing = undefined)));
+  };
 };
 
 async function loadMe(fetchImpl: typeof fetch, url: string, token: string): Promise<User> {
@@ -124,6 +136,7 @@ export async function startSession(
   auth: Authenticator,
   { location, history, fetchImpl = fetch, meUrl = '/api/identity/v1/me', floorsUrl = '/api/identity/v1/me/workspaces' }: StartOptions,
 ): Promise<Session | 'redirecting'> {
+  const current = signedInWith(auth);
   if (location.pathname === CALLBACK_PATH) {
     let signedIn: SignedIn;
     try {
@@ -137,17 +150,19 @@ export async function startSession(
   } else if (location.pathname === SIGN_IN_AGAIN_PATH) {
     await auth.signinRedirect({ state: returnPath(new URLSearchParams(location.search).get('return')), prompt: 'login', max_age: 0 });
     return 'redirecting';
-  } else if (!(await current(auth))) {
+  } else if (!(await current())) {
     await auth.signinRedirect({ state: location.pathname + location.search });
     return 'redirecting';
   }
 
   const getToken = async () => {
-    const signedIn = await current(auth);
+    const signedIn = await current();
     if (!signedIn) throw new SessionError('Your session has ended. Sign in again.');
     return signedIn.access_token;
   };
   const token = await getToken();
+  // An open tab stays signed in while nothing calls AUGUR, as the sign-in service's idle limit allows.
+  auth.events?.addAccessTokenExpiring(() => void current());
   const [me, mine] = await Promise.allSettled([loadMe(fetchImpl, meUrl, token), loadFloors(fetchImpl, floorsUrl, token)]);
   // Who they are matters more: its problem is the one to show.
   if (me.status === 'rejected') throw me.reason;

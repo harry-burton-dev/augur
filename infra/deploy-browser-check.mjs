@@ -1,7 +1,8 @@
 // Opens a running AUGUR in a real browser, as its first admin would, and checks what unit and
 // contract tests can't see on a release's own images: sign-in works, the shell and the apps that
 // ship with it render, the UI kit comes from KIT_URL, held to its hashes (ADR 0048), and the shell keeps no token in
-// the page's storage while a reload and a second tab stay signed in, in Chromium, Firefox and WebKit (PER-453).
+// the page's storage while a reload and a second tab stay signed in (PER-453): in Chromium, and in a run without
+// APP_RELEASE in Firefox and WebKit too.
 // infra/deploy-test.sh runs it in Playwright's container after a fresh install. See The deploy test in the AUGUR handbook, 03 Architecture/Engineering.
 //
 //   node deploy-browser-check.mjs <front door> <admin user> <admin password> <app id>...
@@ -175,6 +176,14 @@ try {
         other = await engine.launch();
         const otherPage = await other.newPage({ viewport: { width: 1440, height: 900 } });
         otherPage.on('pageerror', (err) => errors.push(`${name}: ${err.message}`));
+        otherPage.on('requestfailed', (req) => {
+          const url = new URL(req.url());
+          if (isCode(url.pathname)) badResponses.push(`${name}: ${url.pathname} (${req.failure()?.errorText})`);
+        });
+        otherPage.on('response', (res) => {
+          const url = new URL(res.url());
+          if (url.origin === new URL(base).origin && (res.status() >= 500 || (res.status() >= 400 && isCode(url.pathname)))) badResponses.push(`${name}: ${url.pathname} (HTTP ${res.status()})`);
+        });
         try {
           await signInAgain(otherPage);
           await keptInMemory(otherPage, name);
