@@ -180,8 +180,9 @@ one.
 **Database logins.** `POSTGRES_PASSWORD` is Postgres's admin login, used only by the storage job and
 backups. Each of AUGUR's services and Keycloak connects with its own login, which owns only its own schema
 (Keycloak: its own database) and can't read anyone else's. The storage job makes them from the
-`*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins, so changing one in `.env` and running
-`pc up -d` changes it.
+`*_DATABASE_PASSWORD` values on every `up`, as it does apps' logins. Each service reads its password from a file
+Compose writes when it makes the container, so after changing one in `.env`, run `pc up -d --force-recreate`:
+a plain `pc up -d` changes the login's password but leaves the service with the old one.
 
 ## 3. Run the preflight
 

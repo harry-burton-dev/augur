@@ -46,10 +46,20 @@ service. You still set them in `.env`. Compose hands each to the service that re
 in that service's environment, where `docker inspect` would show it. Compose doesn't start a service again when
 only its secret changes: after changing one of these in `.env`, run `pc up -d --force-recreate <service>`.
 
-Still passed in the environment for now: the database passwords inside each `DATABASE_URL`; the sign-in secrets
-of models and the updater; and the secrets Keycloak, its setup job, Garage, OpenFGA and Grafana read. Some of
-the eight are among them: Keycloak and its setup job hold the services' sign-in secrets, OpenFGA holds
-`OPENFGA_TOKEN` and Grafana `ALERT_WEBHOOK_TOKEN`, so `docker inspect` on those containers still shows them.
+Each of AUGUR's own services that keeps data in Postgres (identity and its setup job, the registry, events,
+models, the knowledge graph and its setup job, and permissions) reads its `DATABASE_URL` the same way, from
+`/run/secrets/database_url`, with its login's password in it. Compose writes that file from the address in
+`compose.yml` (Compose's `configs:` with `content:`), filling in the password you set in `.env`. The knowledge
+graph's setup job also gets `KNOWLEDGE_DATABASE_PASSWORD`, which it sets for `kg_app`, as a file. After changing
+one of the database passwords in `.env`, run `pc up -d --force-recreate`: the storage job sets the new password on
+the login, and only a new container gets the new file.
+
+Still passed in the environment for now: `POSTGRES_PASSWORD` to Postgres and the backup container; the storage
+job's admin `DATABASE_URL` and the database passwords it sets on each login; the sign-in secrets of models and
+the updater; and the secrets Keycloak, its setup job, Garage, OpenFGA and Grafana read. Some of the ones above
+are among them: Keycloak and its setup job hold the services' sign-in secrets, OpenFGA holds `OPENFGA_TOKEN` and
+`PERMISSIONS_DATABASE_PASSWORD`, and Grafana `ALERT_WEBHOOK_TOKEN`, so `docker inspect` on those containers still
+shows them.
 
 ## Organisation settings
 

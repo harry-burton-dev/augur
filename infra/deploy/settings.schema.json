@@ -154,7 +154,8 @@
       "x-services": [
         "postgres",
         "backup",
-        "storage"
+        "storage",
+        "knowledge-migrate"
       ],
       "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
     },
@@ -188,7 +189,8 @@
       "description": "Identity's own database login.",
       "x-services": [
         "identity",
-        "storage"
+        "storage",
+        "keycloak-config"
       ],
       "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
     },
@@ -236,7 +238,8 @@
       "description": "The permissions service's own database login (platform_permissions), which the storage job makes and OpenFGA keeps its tables under.",
       "x-services": [
         "storage",
-        "openfga"
+        "openfga",
+        "permissions"
       ],
       "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
     },

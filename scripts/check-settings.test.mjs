@@ -66,6 +66,18 @@ test('takes a secret file from .env (top-level secrets with environment) as reac
   assert.ok(withGateway('').some((p) => p.startsWith('SIGNING_KEY: gateway reads it')));
 });
 
+test('takes a .env key named in a config file’s content as reaching its service', () => {
+  const identity = 'services:\n  identity:\n    environment:\n      DATABASE_URL_FILE: /run/secrets/database_url\n    configs: [{ source: identity_url, target: /run/secrets/database_url }, other]\n';
+  const configs = '\nconfigs:\n  identity_url: { content: "postgres://u:${IDENTITY_DATABASE_PASSWORD:?set it}@db/x" }\n  other: { content: "${OTHER_KEY}" }\n';
+  assert.deepEqual(composeServices(identity + configs).identity.configContents, ['postgres://u:${IDENTITY_DATABASE_PASSWORD:?set it}@db/x']);
+  const s = structuredClone(schema);
+  s.properties.IDENTITY_DATABASE_PASSWORD = { writeOnly: true, 'x-services': ['identity'] };
+  const withIdentity = (extra) => settingsProblems({ schema: s, code, files: { ...files, 'infra/deploy/compose.yml': compose.replace(/^services:\n/m, identity) + extra } });
+  assert.ok(!withIdentity(configs).some((p) => p.startsWith('IDENTITY_DATABASE_PASSWORD: identity reads it')));
+  // Without the config file, it doesn't.
+  assert.ok(withIdentity('').some((p) => p.startsWith('IDENTITY_DATABASE_PASSWORD: identity reads it')));
+});
+
 test('passes settings that reach their services, are listed and documented', () => {
   assert.deepEqual(check(), []);
 });
