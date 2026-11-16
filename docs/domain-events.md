@@ -24,7 +24,7 @@ On the app contract, the manifest says which events the app reads and each type 
 
 Reading needs `events:subscribe` and publishing `events:publish`. Each type is under the app's own id, once per version, with its payload's JSON Schema (an object, at most 16 KB). Within a version a type only gains optional fields; anything else is a new version, declared beside the old one, and a release may stop declaring an old version once it no longer publishes it. The registry refuses a release that breaks these rules, before it installs, and AUGUR's services read what an app declares from the registry (`GET /v1/apps/<id>/events`). Leaving out `reads` says nothing about what the app reads; `"reads": []` says it reads nothing.
 
-The events service holds an app that declares them to what it says. One that says what it `reads` is given only those topics and AUGUR's own (`platform.*`), pulled or pushed, and asking only for others answers 403 with what it does read. One that declares what it `publishes` can publish only those types: each event names its `version`, or, without one (as for every event sent through the outbox), goes at the newest declared version its payload fits; its payload must fit that version's schema, or the call answers 400 and the outbox sets the row aside. Followers see each event's `version`. An app that declares nothing is held only to its scopes and floors, as before.
+The events service holds an app that declares them to what it says. One that says what it `reads` is given only those topics and AUGUR's own (`platform.*`), pulled or pushed, and asking only for others answers 403 with what it does read. One that declares what it `publishes` can publish only those types: each event names its `version`, or, without one (as for every event sent through the outbox), goes at the newest declared version its payload fits; its payload must fit that version's schema, or the call answers 400 and the outbox sets the row aside. Followers see each event's `version`. An app on contract 2 that declares nothing is held only to its scopes and floors, as before. An app on contract 3 must declare both: for this release one that leaves out `reads`, or declares no types it `publishes`, is still served, and each publish or read answers with a `warning` saying so (the kit's clients don't surface it yet), and the events service logs it at most once every 10 minutes for each app and side, pushed deliveries included. From the next release it is refused.
 
 ## Publishing
 
@@ -45,16 +45,6 @@ outboxRelay({ pool: db, eventsUrl: EVENTS_URL, credentials: appCredentialsFromEn
 ```
 
 Each outbox row has its own event id, so if a send is repeated the events service keeps one. A row the events service refuses for what it is (400 or 413) is set aside: left in the table marked sent, with `refused_at` and `refused_why` so it can be told from one delivered, and reported through `onError`, so pass one. The rows behind it carry on. A refusal can be for the moment, such as an app blocked on a floor for a few minutes: to send such rows again, `update outbox set sent_at = null, refused_at = null, refused_why = null where refused_at is not null`. An outbox made before these columns gets them the first time a row is set aside. Without a database change to go with it, `publishEvents({ eventsUrl, credentials, events })` sends at once.
-
-### Entity bindings
-
-When people link one of an app's things to an entity in Data Atlas, the app keeps the link and publishes it in one shape, so Atlas reads every app's the same way (ADR 0025, ADR 0066):
-
-| Topic | Payload |
-| --- | --- |
-| `<app>.<type>.entity-bound`, `<app>.<type>.entity-unbound` | `{ <type>: id, entity, role?, ...more ids }` |
-
-`mandate.intent.entity-bound { intent, entity, role }` and `folio.record.entity-bound { record, library, level, link, entity, role }` are two. `outboxBinding(client, binding, 'bound' | 'unbound', workspace)` in the service kit writes one to the outbox, and `readBinding(event)` reads any app's back, or answers undefined for an event that isn't one.
 
 ## Following
 
@@ -101,7 +91,14 @@ As with `followEvents`, a handler that throws gets the same event again, so doin
 
 ## Pushed to your part
 
-An app built under the app contract doesn't poll. With `events:subscribe` granted, AUGUR pushes every event your app may see to your inbound part, as `POST /augur/events` through the gateway: the body is the event (`seq`, `topic`, `payload`, `workspace`, `publisher`, `at`), the caller the gateway signed is AUGUR's events service, and `Idempotency-Key` is `events-<seq>`. Answer any 2xx once you have kept the event; AUGUR takes anything else, or no answer in time (the shorter of the events service's own call timeout, `SERVICE_CALL_TIMEOUT_SECONDS`, and the gateway's app-route timeout), as not delivered and tries again. Events come one app at a time, in order: a failing event holds the ones after it, with a second's wait doubling to ten minutes. After a day of failures the event is passed over and recorded in the audit log (`delivery.dropped`), and an app that has taken nothing for an hour is shown as stalled, with the reason, in Admin → Apps.
+An app built under the app contract doesn't poll. With `events:subscribe` granted, AUGUR pushes every event your app may see to your inbound part, as `POST /augur/events` through the gateway: the body is the event (`seq`, `topic`, `payload`, `workspace`, `publisher`, `at`), the caller the gateway signed is AUGUR's events service, and `Idempotency-Key` is `events-<seq>`. Answer any 2xx once you have kept the event; AUGUR takes anything else, or no answer in time (the shorter of the events service's own call timeout, `SERVICE_CALL_TIMEOUT_SECONDS`, and the gateway's app-route timeout), as not delivered and tries again. Events come one app at a time, in order of `seq`, and what happens when one doesn't get through depends on why:
+
+| The part… | What waits | Then |
+| --- | --- | --- |
+| is down: no answer in time, can't be reached, isn't there for AUGUR (401, 403, 404) or asks to wait (408, 429, 502, 503, 504); or a second event fails with a server error (500, say) before any gets through, so the fault isn't one event's | every event for the app, with a second's wait doubling to ten minutes | after a day, the event at the head is set aside and the next gets a day of its own |
+| answers anything else but 2xx (answer 400, 409 or 422 for an event you will never take): it can't take this event | that event, and the later events **on its topic**, which wait behind it so a topic keeps its order. Events on other topics go on | it is tried `DOMAIN_EVENTS_DELIVERY_ATTEMPTS` times (5), the first wait `DOMAIN_EVENTS_RETRY_SECONDS` (30) and doubling to ten minutes (about 7½ minutes in all by default), then set aside, and the events behind it on its topic go |
+
+An event set aside is never lost silently: it is kept, with its app, `seq`, id, topic, how often it was tried, what the last try said, and when; it is recorded in the audit log (`delivery.set-aside`); and admins list it with `GET /v1/deliveries/set-aside` (`?app=` for one app's), as long as domain events are kept. `GET /v1/deliveries` counts, for each app, the events being tried again (`retrying`) and those set aside (`setAside`), and its `words` say so. Admin → Apps and Deployment's health page don't flag an app for events set aside yet: one whose part is otherwise taking events still shows as without trouble there, so check the list. An event set aside is behind ones on its topic that came after it, so a part that later wants it must take it out of order: read it with `GET /v1/domain-events`, or have whoever runs the deployment make it due again (`update events.delivery_held set set_aside_at = null, attempts = 0, next_at = null where app = '<id>' and seq = <seq>`). An app that has taken nothing for an hour is shown as stalled, with the reason, in Admin → Apps. Earlier releases held every event behind a failing one for up to a day, then passed it over (`delivery.dropped`); `dropped` still counts those.
 
 ```ts
 import { callerFromHeaders, IDEMPOTENCY_KEY_HEADER, isServiceCaller, PART_EVENTS_PATH, serviceOfCaller } from '@augur/service-kit';

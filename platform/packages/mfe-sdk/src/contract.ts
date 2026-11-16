@@ -2,7 +2,7 @@ import type { InboxKind } from './inbox.js';
 import type { Focus } from './refs.js';
 
 /**
- * The kinds of app that ship with AUGUR (SDK 1.11, ADR 0032): `platform`, for
+ * The kinds of app that ship with AUGUR (SDK 1.11, ADR 0077): `platform`, for
  * using and managing AUGUR, and `pillar`, the foundation of what AUGUR
  * produces. Every other app is just an app and has no kind. A later kind is
  * added in a minor, so a reader treats a value it doesn't know as no kind.
@@ -120,19 +120,20 @@ export interface AppManifestEntry {
    */
   notifications?: { kinds: NotificationKind[] };
   /**
-   * What the app links its things to elsewhere in AUGUR (SDK 2.1). `entities: true` says it binds
-   * its things to entities and publishes the binding events (ADR 0066), so the entity catalogue
-   * follows them and shows what uses each entity.
+   * What the app links its things to elsewhere in AUGUR (SDK 2.1). `entities: true` says it links
+   * its things to entities in Data Atlas (ADR 0025).
    */
   links?: { entities?: boolean };
   /**
    * With `links.entities`, the types of thing the app binds, as its topics name them (SDK 2.1):
    * each is published on `<app id>.<type>.entity-bound` and `-unbound`. Lowercase, up to 10, and
    * never `entity` or `role`, which the events' payload uses.
+   * @deprecated The binding events are gone (D6): the registry accepts this but ignores it, and it
+   * means nothing. It stays in the type until the next SDK major.
    */
   bindings?: string[];
   /**
-   * What kind of app this is (SDK 1.11, ADR 0032): `platform`, for using and
+   * What kind of app this is (SDK 1.11, ADR 0077): `platform`, for using and
    * managing AUGUR, or `pillar`, the foundation of what AUGUR produces. Only
    * apps that ship with AUGUR or come from its signed app feed can be either;
    * every other app is just an app. The registry gives the shell the kind in

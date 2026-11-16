@@ -501,6 +501,26 @@ describe.runIf(DATABASE_URL)('events', () => {
       await expect.poll(async () => (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers: platform })).json().events.map((e: { id: string; version?: number }) => [e.id, e.version])).toEqual([['d1', 1], ['d2', 2], ['d5', 1]]);
     });
 
+    it('warns an app on contract 3 that declares nothing, in the answer, and still takes its events for this release (PER-462)', async () => {
+      // folio is on contract 3 and declares nothing; notes is on contract 3 and declares both; ledger is on contract 2.
+      const declaredEvents = async (app: string) =>
+        app === 'folio' ? { publishes: [], contract: 3 } : app === 'notes' ? { reads: ['folio.*'], publishes: [{ topic: 'notes.note.added', version: 1, schema: { type: 'object' } }], contract: 3 } : undefined;
+      const both = async () => ['events:publish', 'events:subscribe'] as const;
+      const app = (open = await db.app({ verifyService, grants: both, floors, declaredEvents }));
+      const sent = await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('d1')] } });
+      expect(sent.statusCode).toBe(202);
+      expect(sent.json().warning).toBe(
+        'folio is on contract 3 but its manifest declares no types it publishes (contributes.events.publishes). It must: from the next release this is refused. Its publisher adds contributes.events.publishes to its manifest.',
+      );
+      const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers });
+      await expect.poll(async () => (await read(platform)).json().events.length).toBe(1);
+      expect((await read(as('folio'))).json()).toMatchObject({ events: [{ id: 'd1' }], warning: expect.stringMatching(/doesn’t say what it reads \(contributes\.events\.reads\)/) });
+      // One that declares, and one on contract 2, hear nothing of it.
+      expect((await read(as('notes'))).json()).not.toHaveProperty('warning');
+      expect((await read(as('ledger'))).json()).not.toHaveProperty('warning');
+      expect((await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('notes'), payload: { events: [{ topic: 'notes.note.added', id: 'n1', payload: {} }] } })).json()).not.toHaveProperty('warning');
+    });
+
     it('answers 410 to a cursor behind what was pruned, with how far they were pruned, so a follower knows to rebuild (ADR 0104)', async () => {
       const app = (open = await db.app({ verifyService, grants, floors }));
       await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('old1'), published('old2'), published('new')] } });

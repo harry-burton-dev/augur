@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Publishes AUGUR's library packages (every package in platform/packages) to GitHub Packages, so
-// apps in their own repositories can build against them (ADR 0012, docs/versioning.md).
+// apps in their own repositories can build against them (ADR 0077, docs/versioning.md).
 //
 // GitHub's npm registry only takes packages scoped to the repository's owner, so @augur/<name> is
 // published as @<owner>/augur-<name>. App repositories alias it back, and their imports don't change:

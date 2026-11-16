@@ -282,7 +282,7 @@
       "properties": {
         "entities": {
           "type": "boolean",
-          "description": "The app binds its things to entities and publishes the binding events (ADR 0066), so the entity catalogue follows them"
+          "description": "The app links its things to entities in Data Atlas (ADR 0025)"
         }
       },
       "additionalProperties": false,
@@ -291,14 +291,9 @@
     "bindings": {
       "type": "array",
       "items": {
-        "type": "string",
-        "pattern": "^[a-z][a-z0-9-]{0,39}$",
-        "description": "A type of thing the app binds, as it names it in its topics: \"intent\""
+        "type": "string"
       },
-      "minItems": 1,
-      "maxItems": 10,
-      "uniqueItems": true,
-      "description": "With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound (SDK 2.1)"
+      "description": "Retired (D6): the binding events are gone, so this is accepted and ignored. It goes in a later release."
     },
     "scopes": {
       "type": "array",
@@ -405,7 +400,7 @@
         "platform",
         "pillar"
       ],
-      "description": "The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed"
+      "description": "The kind of app it says it is (SDK 1.11, ADR 0077). Only honoured for apps that ship with AUGUR or come from its app feed"
     },
     "areas": {
       "type": "array",

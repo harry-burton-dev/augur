@@ -1,3 +1,7 @@
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { callerHeaders, GATEWAY_CALLER, packFrontend, type FloorPlace } from '@augur/service-kit';
 import { MemoryFrontendFiles, servedEntry } from './frontends.ts';
@@ -20,6 +24,13 @@ const as = (client: string) => ({ authorization: `Bearer ${client}` });
 const service = as('app-library');
 
 const ids = (body: { id: string }[]) => body.map((a) => a.id);
+
+/** A gzipped tarball packed by GNU tar, not packFrontend, so it can hold what packFrontend refuses. */
+const tarOf = (files: { path: string; data: Buffer }[]) => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontend-'));
+  for (const f of files) writeFileSync(join(dir, f.path), f.data);
+  return execFileSync('tar', ['czf', '-', '-C', dir, ...files.map((f) => f.path)]);
+};
 
 // The org, Finance with Payroll below it, Legal, and someone's own floor.
 const places: Record<string, FloorPlace> = {
@@ -372,6 +383,19 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(entries.filter((e) => e.action === 'app.frontend-published')).toHaveLength(3);
   });
 
+  it('refuses a frontend holding a page or an SVG, which could run as the shell’s own page, and keeps none of it', async () => {
+    const frontendFiles = new MemoryFrontendFiles();
+    const app = await db.app({ verifyService, frontendFiles });
+    const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/x?" + sessionStorage.length)</script></svg>');
+    for (const [path, data] of [['icon.svg', svg], ['index.html', Buffer.from('<script>alert(1)</script>')]] as const) {
+      // Packed by hand, as packFrontend now refuses it too.
+      const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.1.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: tarOf([{ path: 'entry.js', data: Buffer.from('') }, { path, data }]) });
+      expect(res.statusCode).toBe(400);
+      expect(res.json().message).toMatch(new RegExp(`"${path.replace('.', '\\.')}" is a \\.${path.split('.').pop()} file.*\\.js, \\.mjs, \\.css`));
+    }
+    expect(frontendFiles.objects.size).toBe(0);
+  });
+
   it('still serves a frontend kept before builds had folders from its version’s own', () => {
     const kept = [{ app: 'library', version: '0.1.0', digest: 'sha256:a', files: ['entry.js'], bytes: 1, publishedBy: 'library', publishedAt: '' }];
     expect(servedEntry({ ...library, entry: '/apps/library/entry.js' }, kept).entry).toBe('/apps/library/0.1.0/entry.js');
@@ -523,20 +547,12 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect(grants.json().notificationKinds).toEqual(['comment']);
     });
 
-    it('takes the types an app binds to entities, refuses reserved or stray ones, and lists them for services', async () => {
+    it('ignores the binding types an app names and lists no entity links, now the binding events are gone (D6)', async () => {
       const app = await db.app({ verifyService });
       const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, ...extra } });
-      expect((await put({ links: { entities: true }, bindings: ['Record'] })).statusCode).toBe(400);
-      expect((await put({ links: { entities: true }, bindings: ['record', 'record'] })).statusCode).toBe(400);
-      expect((await put({ links: { entities: true }, bindings: ['entity'] })).json().message).toContain('"entity"');
-      expect((await put({ bindings: ['record'] })).json().message).toContain('links.entities');
-      expect((await put({ links: { entities: true }, bindings: ['record', 'library'] })).statusCode).toBe(201);
-      const listed = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/entity-links', headers });
-      expect((await listed(as('app-atlas'))).json()).toEqual([{ app: 'library', types: ['record', 'library'] }]);
-      expect((await listed(as('platform-events'))).statusCode).toBe(200);
-      expect((await listed(admin)).statusCode).toBe(403);
-      await put({});
-      expect((await listed(as('app-atlas'))).json()).toEqual([]);
+      // Accepted for a release, so an app that still sets it registers, but nothing reads it.
+      expect((await put({ links: { entities: true }, bindings: ['record'] })).statusCode).toBe(201);
+      expect((await app.inject({ method: 'GET', url: '/v1/entity-links', headers: as('app-atlas') })).statusCode).toBe(404);
     });
 
     it('tells platform services which apps are granted a scope', async () => {
@@ -628,7 +644,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     });
   });
 
-  describe('kinds of app (ADR 0032)', () => {
+  describe('kinds of app (ADR 0077)', () => {
     const manifestFor = (id: string, name: string, category?: string) => ({ ...library, id, name, route: `/${id}`, entry: `/apps/${id}/entry.js`, handles: [], ...(category ? { category } : {}) });
 
     it('reports the kind in force: its own apps and feed apps’ claims, and no one else’s', async () => {

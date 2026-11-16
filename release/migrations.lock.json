@@ -16,7 +16,8 @@
     "014_forget_notes": "0cac794f806dba79",
     "015_deliveries": "829e243f80ba63e0",
     "016_pruned_up_to": "1e6acd592cfb0b0e",
-    "017_event_version": "44eda96b32446374"
+    "017_event_version": "44eda96b32446374",
+    "018_delivery_held": "d01ea784aa7866f7"
   },
   "@augur/identity": {
     "001_preferences": "148165f8cbddebab",
@@ -86,6 +87,7 @@
     "025_app_internet": "97b8f75745392bd7",
     "026_app_setting_values": "cae50d23ea12b791",
     "027_app_data_deletions": "695124f1b85ca011",
-    "028_audit_outbox": "1b82478bb103828e"
+    "028_audit_outbox": "1b82478bb103828e",
+    "029_app_publishers": "0ed58cfdf114b318"
   }
 }

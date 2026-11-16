@@ -1205,6 +1205,24 @@
       ],
       "x-docs": "docs/domain-events.md#following"
     },
+    "DOMAIN_EVENTS_DELIVERY_ATTEMPTS": {
+      "type": "string",
+      "description": "How many times an event an app's part answers but can't take is tried before it is set aside, so the events behind it go.",
+      "default": "5",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
+    },
+    "DOMAIN_EVENTS_RETRY_SECONDS": {
+      "type": "string",
+      "description": "The wait in seconds before such an event is tried again, doubling each time, up to ten minutes.",
+      "default": "30",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
+    },
     "INBOX_KEEP_DAYS": {
       "type": "string",
       "description": "How many days closed inbox items are kept before they go, with their history (the audit log keeps every step).",
@@ -1372,6 +1390,50 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },
+    "DATABASE_CONNECT_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service waits for a database connection, a free one or a new one, before it answers that the database can't be reached right now (0 for no limit).",
+      "default": "10",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service's migration waits for a lock another session holds before it gives up, rolls back and stops the service, saying who holds it (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a migration's transaction may sit idle before Postgres ends it and frees its locks, as when its service hung (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
     "SEED_ALLOWED": {
       "type": "string",
       "enum": [
@@ -1405,6 +1467,28 @@
       "x-services": [
         "registry",
         "otel-lgtm"
+      ],
+      "x-docs": "docs/observability.md#alerts"
+    },
+    "ALERT_OUTSIDE_URL": {
+      "type": "string",
+      "pattern": "^https?://",
+      "writeOnly": true,
+      "description": "A webhook outside AUGUR that gets every alert and its all-clear too, in Grafana's webhook body, such as an on-call or chat service's Grafana or Alertmanager integration, so an alert about AUGUR itself still reaches someone. Set it on a production server: until it's set, its admins are told weekly.",
+      "x-services": [
+        "otel-lgtm",
+        "registry"
+      ],
+      "x-docs": "docs/observability.md#alerts"
+    },
+    "ALERT_HEARTBEAT_URL": {
+      "type": "string",
+      "pattern": "^https?://",
+      "writeOnly": true,
+      "description": "A heartbeat service outside AUGUR that Grafana tells every minute, and that raises the alarm when the beats stop: the dead-man switch for the whole server. Set it on a production server: until it's set, its admins are told weekly.",
+      "x-services": [
+        "otel-lgtm",
+        "registry"
       ],
       "x-docs": "docs/observability.md#alerts"
     },

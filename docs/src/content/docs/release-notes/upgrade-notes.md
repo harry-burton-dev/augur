@@ -9,6 +9,48 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Alerts can leave the server without AUGUR
+
+**From** unreleased
+
+Grafana now has two routes that don't go through AUGUR: `ALERT_OUTSIDE_URL` gets every alert and its all-clear, and `ALERT_HEARTBEAT_URL` gets a heartbeat every minute, so a service there raises the alarm when the server stops. Both are optional, and alerts still reach deployment admins as notices. On a production server, set both in `.env` and run `pc up -d otel-lgtm registry`: until you do, the registry tells its deployment admins once a week that alerts reach no one outside AUGUR ([Observability, Alerts](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#alerts)).
+
+## The binding events are gone
+
+**From** unreleased
+
+AUGUR no longer has entity binding events (`<app>.<type>.entity-bound` and `-unbound`): the registry's `GET /v1/entity-links` answers 404, and a manifest's `bindings` is accepted but no longer read (a contract 3 release that sets it installs with a warning saying so). Nothing in AUGUR or the apps it installs used them. Nothing to do on the server.
+
+## An app on contract 3 must declare its domain events
+
+**From** unreleased
+
+An app on contract 3 whose manifest doesn't say what it reads (`contributes.events.reads`), or declares no types it publishes (`contributes.events.publishes`), still publishes and reads events in this release, but the events service logs a warning (`undeclared domain events` in `pc logs events`, at most once every 10 minutes for each app and side, pushed deliveries included) and answers the app's own calls with a `warning`. From the next release it is refused. Nothing to do on the server. If the log names an app you rely on, ask its publisher for a release that declares its events before you upgrade again.
+
+## An app's id stays with the repository that first installed it
+
+**From** unreleased
+
+The registry now refuses a release under an app's id when another repository signed it, and keeps that rule after the app is removed. Apps already installed are bound to the repository of the release they run now. Nothing to do, unless you meant to swap an app for another publisher's under the same id: that one now needs an id of its own.
+
+## An event an app's part can't take no longer holds the rest
+
+**From** unreleased
+
+When an app's part answers but can't take an event, the events service now tries it up to 5 times over about 7½ minutes (`DOMAIN_EVENTS_DELIVERY_ATTEMPTS`, `DOMAIN_EVENTS_RETRY_SECONDS`) while events on other topics go on, then sets it aside: kept, recorded in Activity as `delivery.set-aside`, and listed for admins by `GET /v1/deliveries/set-aside`. Before, it held every event behind it for a day and was then passed over. A part that is down (no answer; 401, 403, 404, 408, 429, 502, 503 or 504; or server errors on two different events) still holds everything for up to a day, as before, and the event then is set aside rather than passed over. An app that relied on events arriving strictly in `seq` order across topics now gets them in order within each topic only. Nothing to do on the server; the two settings are optional.
+
+## A migration stuck behind a lock stops its service and says who holds it
+
+**From** unreleased
+
+A service's migration now waits at most a minute for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`), where it used to wait for ever. It then rolls back, the service stops and Docker starts it again, and `pc logs <service>` names the migration, the lock and the session holding it. The knowledge graph's migration job is restarted three times, then stays stopped, and the knowledge service with it, until you run `pc up -d` again. A service also waits at most 10 seconds for a database connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached. Nothing to do on most servers. A backup running while you upgrade holds every table until it ends, so start an upgrade once the night's backup has finished. If a service keeps restarting after the upgrade and its log says a migration gave up, end the session it names (or the app holding it), or raise the setting in `.env` and run `pc up -d`; it reaches AUGUR's own services, and an app's migrations keep the default ([Limits and health](../../run/limits/#logs-memory-and-health)).
+
+## Apps' frontends hold no pages or SVGs
+
+**From** unreleased
+
+Under `/apps/` the front door now serves only the file types an app's frontend needs (scripts, styles, JSON, source maps, images other than SVG, fonts, WebAssembly) and answers 404 for anything else, such as an `.html` or `.svg` file, because one opened at its address would run as AUGUR's own page. The registry refuses a frontend bundle that holds one, so an app release with one fails to install; its developer rebuilds it without (`augur-app bundle` now says which file). Every file under `/apps/`, `/assets/` and `/shared/` also carries `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy. No app AUGUR knows of ships such a file, so there is nothing to do on the server. An installed app that does hold a file of another type keeps working, but that file is answered 404, so anything its pages draw from it goes missing until its developer releases the app again without it.
+
 ## Postgres keeps connections back for AUGUR
 
 **From** unreleased

@@ -49,6 +49,11 @@ x-telemetry: &telemetry
   SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
   # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
   DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
+  # How long a service waits for a database connection (10 seconds unless set), and how long its migration waits for
+  # a lock (60) or sits idle in its transaction (60) before it gives up. 0 for no limit.
+  DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
+  DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
+  DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS:-}
   # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
   SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
 
@@ -561,6 +566,10 @@ services:
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
       # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      # Only whether Grafana's routes outside AUGUR are set, never their addresses: a production server's
+      # admins are told while one isn't.
+      ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:+set}
+      ALERT_HEARTBEAT_URL: ${ALERT_HEARTBEAT_URL:+set}
       SERVER_RING: ${SERVER_RING:-}
       # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
@@ -607,6 +616,9 @@ services:
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
+      # How often an event an app's part can't take is tried, and the first wait between tries, before it is set aside (5 and 30 when empty; docs/domain-events.md).
+      DOMAIN_EVENTS_DELIVERY_ATTEMPTS: ${DOMAIN_EVENTS_DELIVERY_ATTEMPTS:-}
+      DOMAIN_EVENTS_RETRY_SECONDS: ${DOMAIN_EVENTS_RETRY_SECONDS:-}
       INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
       # How many days back the Inbox's Done tab looks (30 when empty; docs/inbox.md).
       INBOX_DONE_DAYS: ${INBOX_DONE_DAYS:-}
@@ -665,6 +677,9 @@ services:
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
+      DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
+      DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
+      DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS:-}
     # After a restore, it forgets again what the forget ledger names (AUGUR's docs, Backups).
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
@@ -829,6 +844,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
       # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      # Read by contact-points.yaml: the routes that leave the server without AUGUR. Unset, each points at the
+      # registry, which drops what it gets, so Grafana always has an address.
+      ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:-http://registry:8082/v1/platform/alerts/unrouted}
+      ALERT_HEARTBEAT_URL: ${ALERT_HEARTBEAT_URL:-http://registry:8082/v1/platform/alerts/unrouted}
       # Prometheus and Pyroscope answer inside the container only, as Loki and Tempo do (lgtm/*.yaml): Grafana
       # reads them at 127.0.0.1, and nothing on the networks can query what the services logged.
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h --web.listen-address=127.0.0.1:9090

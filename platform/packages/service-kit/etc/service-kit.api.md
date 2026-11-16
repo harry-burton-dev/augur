@@ -205,35 +205,6 @@ export const auditOutbox: (input: {
 }) => AuditOutbox;
 
 // @public
-export interface Binding {
-    app: string;
-    entity: string;
-    id: string;
-    more?: Record<string, string>;
-    role?: string;
-    type: string;
-}
-
-// @public
-export interface BindingApp {
-    // (undocumented)
-    app: string;
-    types: string[];
-}
-
-// @public (undocumented)
-export type BindingChange = 'bound' | 'unbound';
-
-// @public
-export const bindingEvent: (binding: Binding, change: BindingChange, workspace?: string) => Omit<NewDomainEvent, "id">;
-
-// @public
-export const bindingTopics: (app: string, type: string) => {
-    bound: string;
-    unbound: string;
-};
-
-// @public
 export class BoundedMap<K, V> {
     constructor(max?: number);
     // (undocumented)
@@ -480,6 +451,9 @@ export interface ConnectionPool {
 }
 
 // @public
+export const connectTimeoutMs: (env?: Record<string, string | undefined>) => number;
+
+// @public
 export const createJobs: (options: JobsOptions) => Jobs;
 
 // @public
@@ -512,10 +486,20 @@ export interface DatabaseResult<R extends DatabaseRow = DatabaseRow> {
 export type DatabaseRow = Record<string, unknown>;
 
 // @public
+export class DatabaseUnavailable extends Error {
+    constructor(timeoutMs: number, options?: ErrorOptions);
+    // (undocumented)
+    readonly name = "DatabaseUnavailable";
+    // (undocumented)
+    readonly timeoutMs: number;
+}
+
+// @public
 export const decidesFrom: (value: string | undefined) => ReadonlySet<string> | "all";
 
 // @public
 export interface DeclaredEvents {
+    contract?: number;
     // (undocumented)
     publishes: DeclaredEventType[];
     // (undocumented)
@@ -539,10 +523,19 @@ export interface DeclaredEventType {
 export const DEFAULT_CACHE_ENTRIES = 5000;
 
 // @public
+export const DEFAULT_CONNECT_TIMEOUT_MS = 10000;
+
+// @public
 export const DEFAULT_DELEGATION_SECONDS = 300;
 
 // @public
 export const DEFAULT_GATEWAY_URL = "http://gateway:8080";
+
+// @public
+export const DEFAULT_MIGRATION_IDLE_TIMEOUT_MS = 60000;
+
+// @public
+export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 60000;
 
 // @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
@@ -752,14 +745,6 @@ export class FloorsUnavailable extends Error {
 // @public
 export const FLUSH_TELEMETRY: unique symbol;
 
-// @public
-export interface FollowedBinding extends Binding {
-    // (undocumented)
-    change: BindingChange;
-    // (undocumented)
-    workspace?: string;
-}
-
 // Warning: (ae-forgotten-export) The symbol "EventsAddress" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -797,6 +782,9 @@ export const FRONTEND_LIMITS: {
 };
 
 // @public
+export const FRONTEND_TYPES: Readonly<Record<string, string>>;
+
+// @public
 export const frontendDigest: (tarball: Buffer) => string;
 
 // @public
@@ -813,6 +801,12 @@ export const frontendPathProblem: (path: string) => string | undefined;
 // @public (undocumented)
 export class FrontendProblem extends Error {
 }
+
+// @public
+export const frontendTypeOf: (path: string) => string | undefined;
+
+// @public
+export const frontendTypeProblem: (path: string) => string | undefined;
 
 // @public
 export const GATEWAY_CALLER: Caller;
@@ -1163,6 +1157,12 @@ export const loadConfig: (service: string, settings: Setting[], env?: NodeJS.Pro
 export const loadConfigOrExit: (service: string, settings: Setting[], env?: NodeJS.ProcessEnv) => SettingState[];
 
 // @public
+export const LOCK_NAMESPACE: {
+    readonly migrations: 1096089601;
+    readonly auditOutbox: 1096089602;
+};
+
+// @public
 export const MAIL_SECURITY: readonly ["starttls", "tls", "none"];
 
 // @public
@@ -1207,6 +1207,25 @@ export interface Migration {
     // (undocumented)
     sql: string;
 }
+
+// @public
+export const migrationIdleTimeoutMs: (env?: Record<string, string | undefined>) => number;
+
+// @public
+export class MigrationLockTimeout extends Error {
+    constructor(schema: string,
+    migration: string | undefined, timeoutMs: number, message: string, options?: ErrorOptions);
+    readonly migration: string | undefined;
+    // (undocumented)
+    readonly name = "MigrationLockTimeout";
+    // (undocumented)
+    readonly schema: string;
+    // (undocumented)
+    readonly timeoutMs: number;
+}
+
+// @public
+export const migrationLockTimeoutMs: (env?: Record<string, string | undefined>) => number;
 
 // @public
 export const MODEL_CALL_TIMEOUT_MS = 180000;
@@ -1364,9 +1383,6 @@ export interface OpenStream {
 
 // @public
 export const OUTBOX_TABLE_SQL = "\n  create table if not exists outbox (\n    id bigint generated always as identity primary key,\n    event_id text not null unique default gen_random_uuid()::text,\n    topic text not null,\n    workspace_id text,\n    payload jsonb not null,\n    created_at timestamptz not null default now(),\n    sent_at timestamptz,\n    refused_at timestamptz,\n    refused_why text\n  );\n  create index if not exists outbox_unsent on outbox (id) where sent_at is null;";
-
-// @public
-export const outboxBinding: (db: Queryable, binding: Binding, change: BindingChange, workspace?: string) => Promise<void>;
 
 // @public
 export const outboxRelay: (input: EventsAddress & {
@@ -1590,9 +1606,6 @@ export interface Queryable {
 }
 
 // @public
-export const readBinding: (event: Pick<DomainEvent, "topic" | "payload" | "workspace">) => FollowedBinding | undefined;
-
-// @public
 export const readFrontend: (dir: string) => FrontendFile[];
 
 // @public
@@ -1640,9 +1653,6 @@ export interface RegisterOptions {
 }
 
 // @public
-export const registryBindingApps: (input: GrantsOptions) => (() => Promise<BindingApp[]>);
-
-// @public
 export const registryDeclaredEvents: (input: GrantsOptions) => DeclaredEventsLookup;
 
 // @public
@@ -1687,6 +1697,8 @@ export const ruleChain: (place: FloorPlace) => string[];
 export const runMigrations: (pool: Pool_2, input: {
     schema: string;
     migrations: readonly Migration[];
+    lockTimeoutMs?: number;
+    idleTimeoutMs?: number;
 }) => Promise<void>;
 
 // @public (undocumented)

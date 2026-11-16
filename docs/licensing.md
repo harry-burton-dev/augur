@@ -64,7 +64,7 @@ offered under that licence.
 
 ## Apps in their own repositories
 
-Each app, kit and template repository (ADR 0012, ADR 0046) carries the same `LICENSE` at its root and
+Each app, kit and template repository (ADR 0077, ADR 0046) carries the same `LICENSE` at its root and
 `"license": "UNLICENSED"` in its `package.json` files. A new app made from the app template gets both.
 
 ## If AUGUR opens later
