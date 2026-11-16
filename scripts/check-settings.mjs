@@ -26,23 +26,37 @@ const OS_KEYS = new Set(['PATH', 'HOME', 'HOSTNAME', 'VITEST']);
 
 const keyPattern = '[A-Z][A-Z0-9_]*';
 
-/** A compose file's services, each with its environment (merges resolved) and whether it has an env_file. */
+/**
+ * A compose file's services, each with its environment (merges resolved), whether it has an env_file, and
+ * the .env keys it is given as secret files (top-level `secrets:` with `environment:`, read through a `<NAME>_FILE`).
+ */
 export const composeServices = (text) => {
   const doc = parse(text, { merge: true }) ?? {};
   const services = {};
+  // A secret's .env key, when the service also names the file it is mounted at in one of its <NAME>_FILE settings.
+  const secretKey = (ref, env) => {
+    const source = typeof ref === 'string' ? ref : ref?.source;
+    const target = (typeof ref === 'object' && ref?.target) || source;
+    const path = target?.startsWith('/') ? target : `/run/secrets/${target}`;
+    const named = Object.entries(env).some(([k, v]) => k.endsWith('_FILE') && String(v) === path);
+    return named ? doc.secrets?.[source]?.environment : undefined;
+  };
   for (const [name, service] of Object.entries(doc.services ?? {})) {
     let env = service?.environment ?? {};
     if (Array.isArray(env)) env = Object.fromEntries(env.map((line) => [String(line).split('=')[0], String(line).split('=').slice(1).join('=')]));
-    services[name] = { image: service?.image, environment: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, v == null ? '' : String(v)])), envFile: Boolean(service?.env_file) };
+    services[name] = { image: service?.image, environment: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, v == null ? '' : String(v)])), envFile: Boolean(service?.env_file), secretKeys: (service?.secrets ?? []).map((ref) => secretKey(ref, env)).filter(Boolean) };
   }
   return services;
 };
 
 const refers = (value, key) => new RegExp(`\\$\\{${key}(?=[}:?-])`).test(value);
 
-/** Whether `key` reaches `service`: by name for an internal setting, from .env (or an env_file) otherwise. */
+/**
+ * Whether `key` reaches `service`: by name (or as `<key>_FILE`) for an internal setting, from .env (or an env_file,
+ * or as a secret file) otherwise.
+ */
 const reaches = (service, key, internal) =>
-  internal ? key in service.environment : service.envFile || Object.values(service.environment).some((v) => refers(v, key));
+  internal ? key in service.environment || `${key}_FILE` in service.environment : service.envFile || (service.secretKeys ?? []).includes(key) || Object.values(service.environment).some((v) => refers(v, key));
 
 /** The keys .env.example lists, set or commented out. */
 export const envExampleKeys = (text) => [...text.matchAll(new RegExp(`^#?\\s*(${keyPattern})=`, 'gm'))].map((m) => m[1]);
