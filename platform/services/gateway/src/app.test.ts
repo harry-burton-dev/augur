@@ -510,6 +510,7 @@ describe('gateway', () => {
     expect(res.statusCode).toBe(200);
     // The preview is called as the developer who chose it.
     expect(JSON.parse(Buffer.from(String(res.json()['x-augur-caller']).split('.')[1]!, 'base64url').toString()).sub).toBe('u-1');
+    expect(Object.keys(res.json()).filter((k) => k.startsWith('x-user-'))).toEqual([]);
     const other = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign({ ...ada, sub: 'u-2' })}` } });
     expect(other.statusCode).toBeGreaterThanOrEqual(500);
   });
