@@ -2,7 +2,7 @@ import type { AppManifestEntry } from '@augur/mfe-sdk';
 import { CURRENT_SDK } from '../current-sdk.js';
 import { isIntentCancelled } from '@augur/mfe-sdk';
 import { describe, expect, it } from 'vitest';
-import { IntentError, RequestBroker } from './intents.js';
+import { handlerFor, IntentError, RequestBroker } from './intents.js';
 
 const app = (id: string, handles: string[] = []): AppManifestEntry => ({ id, name: id, route: `/${id}`, entry: `/apps/${id}/entry.js`, version: '0.1.0', sdk: CURRENT_SDK, handles });
 const manifest = [app('board'), app('palette', ['colour.pick'])];
@@ -44,5 +44,25 @@ describe('RequestBroker', () => {
     broker.respond('second');
     broker.cancel();
     await expect(answer).resolves.toBe('first');
+  });
+});
+
+describe('handlerFor (PER-468)', () => {
+  const two = [app('board'), app('archive', ['document.open']), app('library', ['document.open'])];
+  const open = { type: 'document.open', payload: { id: 'd1' } };
+
+  it('asks the person when two apps handle an intent, rather than settling it by id', () => {
+    expect(handlerFor(two, open)).toEqual({ choose: [two[1], two[2]] });
+    expect(() => new RequestBroker().begin(two, open)).toThrow(/archive and library all open "document.open"/);
+  });
+
+  it('keeps to their choice while that app still handles it, and asks again once it doesn’t', () => {
+    expect(handlerFor(two, open, [{ intent: 'document.open', app: 'library' }])).toEqual({ app: two[2] });
+    expect(handlerFor(two, open, [{ intent: 'document.open', app: 'gone' }])).toEqual({ choose: [two[1], two[2]] });
+    expect(handlerFor(manifest, pick, [{ intent: 'colour.pick', app: 'gone' }])).toEqual({ app: manifest[1] });
+  });
+
+  it('opens the app they chose', () => {
+    expect(new RequestBroker().begin(two, open, two[2]).request.app.id).toBe('library');
   });
 });

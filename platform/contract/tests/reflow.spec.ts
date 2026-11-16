@@ -42,6 +42,15 @@ const cutOff = (page: Page) =>
     return { past: past.map(name), sideways: sideways.map(name) };
   });
 
+/** Everything in the shell that moves and then stops has stopped, and the web font is in (the title card fits its name again when it arrives). */
+const atRest = (page: Page) =>
+  page.evaluate(async () => {
+    await document.fonts.ready;
+    const shell = document.querySelector('.aerie-shell');
+    const finite = (shell?.getAnimations({ subtree: true }) ?? []).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity);
+    await Promise.all(finite.map((a) => a.finished.catch(() => undefined)));
+  });
+
 failOnPageErrors();
 
 test.use({ viewport: NARROW });
@@ -50,6 +59,7 @@ test('at 320 px the desktop and its bar cut nothing off', async ({ page }) => {
   await page.goto('/');
   const bar = page.getByRole('navigation', { name: 'App bar', exact: true });
   await expect(bar.locator('.aerie-bar-tile').first()).toBeVisible();
+  await atRest(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });
 
@@ -57,5 +67,15 @@ test('at 320 px an open app, its rail, head and screen cut nothing off', async (
   await page.goto(`/${reference.id}`);
   await expect(check(page, 'person')).toBeVisible();
   await expect(rail(page)).toBeVisible();
+  // Opening the app names it on the title card, which brings the name in at twice its tracking and clips that
+  // entrance on purpose: the name is fitted to the window at rest. So the card is checked once its name has settled,
+  // while it still shows (it fades after that, so on a slow runner this check may see less of it)...
+  const card = page.locator('.aerie-card');
+  await expect(card).toBeAttached();
+  await card.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity && !(a instanceof CSSAnimation && a.animationName === 'aerie-card-life')).map((a) => a.finished.catch(() => undefined))));
+  expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
+  // ...and the app's screen once the card has gone, since the shell holds the screen out of sight behind it.
+  await expect(card).toHaveCount(0);
+  await atRest(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });

@@ -332,6 +332,18 @@ export const Preferences = Type.Object(
         description: 'App ids they keep first on Home and in the list of apps, in their order',
       }),
     ),
+    intentApps: Type.Optional(
+      Type.Array(
+        Type.Object(
+          {
+            intent: Type.String({ minLength: 1, maxLength: 120, description: 'An intent type, such as document.open' }),
+            app: Type.String({ minLength: 1, maxLength: 64, description: 'The app they chose to handle it' }),
+          },
+          { additionalProperties: false },
+        ),
+        { maxItems: 50, description: 'Which app opens an intent several apps handle, as they chose it the first time; one per intent type' },
+      ),
+    ),
     startFloor: Type.Optional(Type.String({ minLength: 1, maxLength: 64, description: 'The floor id AUGUR opens on when an address names none; their own floor without it' })),
     awayMessage: Type.Optional(Type.String({ maxLength: 140, description: 'What their away status says' })),
     awayUntil: Type.Optional(Type.String({ format: 'date-time', description: 'When being away ends by itself' })),

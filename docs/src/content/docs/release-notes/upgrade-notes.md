@@ -15,6 +15,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 The registry now reads `PERMISSIONS_DECIDES`, as the model gateway does. Its sites start `registry.` (docs/observability.md lists them). If your `.env` sets it to `all`, every registry check (upgrades, going back, installs, pins, the catalogue) is decided by the permissions service as soon as you upgrade, without the 7 days of comparison first. Before you upgrade, name only the model gateway's sites instead, such as `PERMISSIONS_DECIDES=models.settings.read,models.usage`, and add registry sites once Status has shown no disagreement there for 7 days. If it's empty or names only `models.` sites, there is nothing to do.
 
+## Apps' parts get only the signed caller
+
+**From** unreleased
+
+The gateway no longer sends an app's part the plain `x-user-*`, `x-workspace-*` and acting-app headers, only the caller it signs. Apps made from the app template check that already. An app whose part still reads the plain headers without the service kit's `signedCallers` hook answers as if nobody were signed in: update it before you upgrade, or remove it.
+
 ## Some secrets reach their services as files, which needs Docker Compose 2.24
 
 **From** unreleased
