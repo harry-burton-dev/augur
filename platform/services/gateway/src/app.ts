@@ -597,9 +597,10 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       return reply.code(status).send({ error, message });
     };
     const toPlatform = PLATFORM_SERVICES.includes(name);
-    // Every caller passed on names the organisation the call is in, once identity has said it (it never waits).
-    const org = req.caller && !req.caller.org ? orgFloor?.() : undefined;
-    if (org) req.caller = { ...req.caller!, org };
+    // Every caller passed on names the organisation the call is in, as identity says it now (this never waits); a
+    // delegation keeps the one it was signed with only while the gateway knows none.
+    const org = req.caller ? orgFloor?.() : undefined;
+    if (org && req.caller!.org !== org) req.caller = { ...req.caller!, org };
 
     // An admin persona is for AUGUR's own services, never an app's part.
     if (req.caller?.persona && !toPlatform) return refuse(403, 'forbidden', 'An app never acts as your admin persona. Stop “Act as” to use it.');

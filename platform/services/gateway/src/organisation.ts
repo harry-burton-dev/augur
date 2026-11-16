@@ -5,15 +5,16 @@ export type OrganisationFloor = () => string | undefined;
 
 /**
  * The organisation's floor's id, which the gateway signs on the callers it passes on as `org`. It is read from
- * identity in the background, so no call waits for it: the first read starts at once, a failed one is tried again
- * after `retryMs`, and a known id is read again after `refreshMs`, so a re-seeded identity is caught without a restart.
+ * identity in the background, so no call waits for it: the first read starts at once, and a failed one is tried again
+ * at the first call `retryMs` after it. A known id is read again at the first call `refreshMs` after the last read, so
+ * a re-seeded identity is caught without a restart.
  * Until identity answers (it is down, or older than the `id` on its organisation), callers go without `org`.
  */
 export const identityOrganisationFloor = ({
   identityUrl,
   signer,
   fetchImpl = fetch,
-  retryMs = 30_000,
+  retryMs = 5_000,
   refreshMs = 10 * 60_000,
   timeoutMs = 5_000,
   now = Date.now,

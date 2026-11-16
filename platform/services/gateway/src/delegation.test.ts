@@ -221,6 +221,10 @@ describe('a call made for an app', () => {
     expect(service.json().headers['x-user-org']).toBe('o1');
     const own = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: { authorization: `Bearer ${await signApp('notes')}`, 'x-workspace-id': 'w1' }, payload: {} });
     expect(await callerIn(own, 'events')).toMatchObject({ id: 'app:notes', org: 'o1' });
+    // A delegation signed before the organisation's id changed carries the id the gateway knows now.
+    const before = await signDelegation(signer, { id: 'u-1', name: 'Alex Rivera', roles: [], departments: [], workspace: w1, org: 'o0' }, { app: 'notes', scopes: ['notifications:send'], lifetimeSeconds: 120 });
+    const onward = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: { authorization: `Bearer ${await signApp('notes')}`, [DELEGATION_HEADER]: before }, payload: {} });
+    expect(await callerIn(onward, 'events')).toMatchObject({ id: 'u-1', org: 'o1' });
   });
 
   it('reads a delegated call’s grant on the floor the person stood on, and refuses another floor named beside it', async () => {
