@@ -37,6 +37,20 @@ Any secret (a password, a client secret, a bucket key, `DATABASE_URL`) can be gi
 `<NAME>_FILE` to its path inside the container, for a Docker secret or a file decrypted at deploy, and leave
 `<NAME>` unset. The file's contents, less a final newline, are used.
 
+`compose.yml` already does this for eight secrets AUGUR's own services read: the gateway's
+`CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registry, events, the knowledge graph and permissions
+(`IDENTITY_CLIENT_SECRET`, `REGISTRY_CLIENT_SECRET`, `EVENTS_CLIENT_SECRET`, `KNOWLEDGE_CLIENT_SECRET`,
+`PERMISSIONS_CLIENT_SECRET`), `ALERT_WEBHOOK_TOKEN` for the registry and `OPENFGA_TOKEN` for the permissions
+service. You still set them in `.env`. Compose hands each to the service that reads it as a file under
+`/run/secrets/` (Compose's `secrets:` with `environment:`, which needs Docker Compose 2.24 or newer), so it isn't
+in that service's environment, where `docker inspect` would show it. Compose doesn't start a service again when
+only its secret changes: after changing one of these in `.env`, run `pc up -d --force-recreate <service>`.
+
+Still passed in the environment for now: the database passwords inside each `DATABASE_URL`; the sign-in secrets
+of models and the updater; and the secrets Keycloak, its setup job, Garage, OpenFGA and Grafana read. Some of
+the eight are among them: Keycloak and its setup job hold the services' sign-in secrets, OpenFGA holds
+`OPENFGA_TOKEN` and Grafana `ALERT_WEBHOOK_TOKEN`, so `docker inspect` on those containers still shows them.
+
 ## Organisation settings
 
 What an admin sets in Admin → Organisation, and what a deployment's `.env` sets:

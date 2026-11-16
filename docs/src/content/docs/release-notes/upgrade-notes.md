@@ -17,6 +17,15 @@ The shell no longer keeps anyone's tokens in the browser's session storage, wher
 
 The Content-Security-Policy on files under `/apps/`, `/assets/` and `/shared/` is now enforced, where it was report-only, so a page or an SVG opened from there runs no script. No app AUGUR knows of serves one, so nothing changes for them.
 
+## Some secrets reach their services as files, which needs Docker Compose 2.24
+
+**From** unreleased
+
+The gateway's `CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registry, events, the knowledge graph and permissions, `ALERT_WEBHOOK_TOKEN` and `OPENFGA_TOKEN` now reach the services that read them as files under `/run/secrets/`, not in their environment, so `docker inspect` on those services no longer shows them. Keycloak, its setup job, OpenFGA and Grafana still get some of them in their environment ([Settings and secrets](../../run/settings/#secrets-as-files)). They stay in `.env` as before: nothing in `.env` changes. Two things to know:
+
+- Compose's `secrets:` with `environment:` needs Docker Compose 2.24 or newer. Before you upgrade, run `docker compose version` on the server. An upgrade through Deployment uses the updater's own Compose, but `pc up` by hand uses the server's, and on an older one it stops on the `secrets:` section of `compose.yml`: update the Docker Compose plugin.
+- Compose doesn't start a service again when only one of these secrets changes in `.env`. After changing one, run `pc up -d --force-recreate <service>`. Changing the gateway's key ([Signed caller](https://github.com/harry-burton-dev/augur/blob/main/docs/signed-caller.md)) now says so.
+
 ## Alerts can leave the server without AUGUR
 
 **From** unreleased

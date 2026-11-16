@@ -57,6 +57,18 @@ x-telemetry: &telemetry
   # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
   SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
 
+# The secrets that reach a service only as a file (secrets, at the end) are required: Compose stops without one,
+# here, as it does for a value in a service's environment.
+x-required-secrets:
+  - ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
+  - ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+  - ${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env}
+  - ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+  - ${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env}
+  - ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
+  - ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+  - ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
+
 x-service: &service
   <<: *hardened
   restart: unless-stopped
@@ -492,8 +504,9 @@ services:
       GATEWAY_STREAM_CONNECTIONS: ${GATEWAY_STREAM_CONNECTIONS:-}
       APP_DELEGATION_SECONDS: ${APP_DELEGATION_SECONDS:-}
       # The key it signs callers with, and the one that comes next while it is being changed (docs/signed-caller.md).
-      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
+      CALLER_SIGNING_KEY_FILE: /run/secrets/caller_signing_key
       CALLER_SIGNING_KEY_NEXT: ${CALLER_SIGNING_KEY_NEXT:-}
+    secrets: [caller_signing_key]
     volumes:
       # Only the results the backup container writes for Status, never the backups themselves.
       - ./backups/status:/backups:ro
@@ -527,7 +540,8 @@ services:
       ORG_NAME: ${ORG_NAME:-Organisation}
       # The languages people may choose in Account, the same ones keycloak-config offers at sign-in.
       REALM_LANGUAGES: ${REALM_LANGUAGES:-}
-      SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/identity_client_secret
+    secrets: [identity_client_secret]
     depends_on:
       <<: *own-login
       keycloak: { condition: service_healthy }
@@ -548,7 +562,7 @@ services:
       PORT: 8082
       # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
       PERMISSIONS_URL: http://permissions:8087
-      SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}"
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/registry_client_secret
       # Its own login, owning only the registry schema.
       DATABASE_URL: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # Asked at install what the knowledge graph offers apps.
@@ -565,7 +579,7 @@ services:
       DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
       # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
-      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/alert_webhook_token
       # Only whether Grafana's routes outside AUGUR are set, never their addresses: a production server's
       # admins are told while one isn't.
       ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:+set}
@@ -589,6 +603,7 @@ services:
       FRONTENDS_S3_URL: http://garage:3900
       # Who must sign the release feed, for AUGUR published from a fork (docs/src/content/docs/run/releases.md).
       FEED_SIGNER: ${FEED_SIGNER:-}
+    secrets: [registry_client_secret, alert_webhook_token]
     volumes:
       # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/src/content/docs/run/releases.md).
       - ./secrets:/run/secrets/augur:ro
@@ -609,7 +624,7 @@ services:
     environment:
       <<: *env
       PORT: 8084
-      SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}"
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/events_client_secret
       # Asked beside each admin and lead check, to compare answers before checks move there (shadow mode, docs/permissions.md).
       PERMISSIONS_URL: http://permissions:8087
       # Its own login, owning only the events schema: the audit log, notifications and domain events.
@@ -631,6 +646,7 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    secrets: [events_client_secret]
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
@@ -708,12 +724,13 @@ services:
       KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS: ${KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS:-600}
       KNOWLEDGE_REFLECT_DAILY_BUDGET: ${KNOWLEDGE_REFLECT_DAILY_BUDGET:-400}
       KNOWLEDGE_REFLECT_FLOOR_BUDGET: ${KNOWLEDGE_REFLECT_FLOOR_BUDGET:-100}
-      SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/knowledge_client_secret
       DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
       # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
       # knowledge asks on each request. While it can't answer, nobody settles or raises.
       PERMISSIONS_URL: http://permissions:8087
+    secrets: [knowledge_client_secret]
     # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
@@ -771,11 +788,12 @@ services:
       DATABASE_URL: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       PERSONA_DEPLOYMENT_ADMIN_MINUTES: ${PERSONA_DEPLOYMENT_ADMIN_MINUTES:-60}
       PERSONA_ORG_ADMIN_MINUTES: ${PERSONA_ORG_ADMIN_MINUTES:-480}
-      OPENFGA_TOKEN: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+      OPENFGA_TOKEN_FILE: /run/secrets/openfga_token
       # Its own sign-in, to copy floors, positions and who holds them from identity (ADR 0089), at once
       # when identity announces a change (platform.position.*, .team.*, .person.*) and whole every few minutes.
-      SERVICE_CLIENT_SECRET: ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/permissions_client_secret
       PERMISSIONS_COPY_SECONDS: ${PERMISSIONS_COPY_SECONDS:-300}
+    secrets: [openfga_token, permissions_client_secret]
     depends_on:
       openfga: { condition: service_healthy }
       identity: { condition: service_healthy }
@@ -865,6 +883,19 @@ services:
       - ./observability/grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
       - ./observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/augur.yaml:ro
       - ./observability/grafana/dashboards:/otel-lgtm/augur-dashboards:ro
+
+# Secrets AUGUR's own services read as files (<NAME>_FILE, the service kit's loadConfig), never from their
+# environment, where `docker inspect` and a crash report would show them. Each still comes from .env. Compose
+# doesn't recreate a service when only its secret's value changes: after changing one, pc up -d --force-recreate <service>.
+secrets:
+  caller_signing_key: { environment: CALLER_SIGNING_KEY }
+  identity_client_secret: { environment: IDENTITY_CLIENT_SECRET }
+  registry_client_secret: { environment: REGISTRY_CLIENT_SECRET }
+  alert_webhook_token: { environment: ALERT_WEBHOOK_TOKEN }
+  events_client_secret: { environment: EVENTS_CLIENT_SECRET }
+  knowledge_client_secret: { environment: KNOWLEDGE_CLIENT_SECRET }
+  openfga_token: { environment: OPENFGA_TOKEN }
+  permissions_client_secret: { environment: PERMISSIONS_CLIENT_SECRET }
 
 networks:
   default:
