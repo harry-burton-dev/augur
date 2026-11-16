@@ -76,7 +76,7 @@ export const platformUpgradeRoutes =
         },
       },
       async (req, reply) => {
-        if (!isAdmin(req, 'registry.upgrades.out')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
+        if (!(await isAdmin(req, 'registry.upgrades.out'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what updates are out.' });
         return updatesPage();
       },
     );
@@ -96,7 +96,7 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!roles.admin('registry.upgrades.check', caller, 'admin')) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
+        if (!caller || !(await roles.admin('registry.upgrades.check', caller, 'admin'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can check for updates.' });
         await updates.check();
         const view = await updatesPage();
         req.log.info({ by: caller.id, available: view.available?.version, problem: view.problem }, 'updates checked');
@@ -188,7 +188,7 @@ export const platformUpgradeRoutes =
         const caller = callerFromHeaders(req.headers);
         // The fleet's client upgrades with nobody signed in (ADR 0100), held to the server's ring below instead of a step-up.
         const fleet = isFleetCaller(caller);
-        if (!caller || (!fleet && !roles.deploymentAdmin('registry.upgrades.start', caller, 'can_upgrade'))) return reply.code(403).send(needsDeploymentAdmin('upgrade AUGUR'));
+        if (!caller || (!fleet && !(await roles.deploymentAdmin('registry.upgrades.start', caller, 'can_upgrade')))) return reply.code(403).send(needsDeploymentAdmin('upgrade AUGUR'));
         if (!fleet && !signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to upgrade. It’s asked for anything this drastic.' });
         }
@@ -259,7 +259,7 @@ export const platformUpgradeRoutes =
           await record(req, { actor: { id: caller?.id ?? 'unknown', kind: 'user' }, app: 'registry', action: 'platform.halted-install-refused', target: version, detail: { from, reason, why: body.message } });
           return reply.code(code).send(body);
         };
-        if (!roles.deploymentAdmin('registry.upgrades.halted', caller, 'can_upgrade')) return refuse(403, needsDeploymentAdmin('install a halted release'));
+        if (!caller || !(await roles.deploymentAdmin('registry.upgrades.halted', caller, 'can_upgrade'))) return refuse(403, needsDeploymentAdmin('install a halted release'));
         if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
           return refuse(401, { error: 'sign_in_again', message: 'Enter your password again to install a halted release. It’s asked for anything this drastic.' });
         }
@@ -315,7 +315,7 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!roles.deploymentAdmin('registry.upgrades.rollback', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('take AUGUR back to an earlier release'));
+        if (!caller || !(await roles.deploymentAdmin('registry.upgrades.rollback', caller, 'can_upgrade'))) return reply.code(403).send(needsDeploymentAdmin('take AUGUR back to an earlier release'));
         if (!signedInRecently(caller, UPGRADE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to go back. It’s asked for anything this drastic.' });
         }
@@ -351,7 +351,7 @@ export const platformUpgradeRoutes =
       },
       async (req, reply) => {
         const caller = callerFromHeaders(req.headers);
-        if (!roles.deploymentAdmin('registry.upgrades.cancel', caller, 'can_upgrade')) return reply.code(403).send(needsDeploymentAdmin('take back an upgrade'));
+        if (!caller || !(await roles.deploymentAdmin('registry.upgrades.cancel', caller, 'can_upgrade'))) return reply.code(403).send(needsDeploymentAdmin('take back an upgrade'));
         const upgrade = await store.upgrade();
         if (upgrade?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes or rolls back by itself.' });
         if (!upgrade || !(await store.cancelUpgrade(upgrade.id))) return reply.code(404).send({ error: 'not_found', message: 'No upgrade is waiting.' });

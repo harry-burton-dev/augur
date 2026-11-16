@@ -27,15 +27,15 @@ const refusal = (message: string) => {
 };
 
 /**
- * The value of `user` in a start message's body (after its length and protocol), or undefined when it has none or
- * more than one: Postgres takes the last, so a second `user` must never slip past a check of the first.
+ * Every value of each name in a start message's body (after its length and protocol). Postgres takes the last of
+ * each, so a second one must never slip past a check of the first: a check takes only a list of one.
  */
-const userOf = (body: Buffer) => {
+const paramsOf = (body: Buffer) => {
   const pairs = body.toString('utf8').split('\0');
-  const users: string[] = [];
+  const params = new Map<string, string[]>();
   // The list ends at an empty name.
-  for (let i = 0; i + 1 < pairs.length && pairs[i] !== ''; i += 2) if (pairs[i] === 'user') users.push(pairs[i + 1]!);
-  return users.length === 1 ? users[0] : undefined;
+  for (let i = 0; i + 1 < pairs.length && pairs[i] !== ''; i += 2) params.set(pairs[i]!, [...(params.get(pairs[i]!) ?? []), pairs[i + 1]!]);
+  return params;
 };
 
 /** Passes a client on to `to`, `first` being what it already sent; `unreachable` is said to it when `to` doesn't answer. */
@@ -79,8 +79,14 @@ const databaseClient = (to: { host: string; port: number }) => (client: Socket) 
       clearTimeout(timer);
       if (code === CANCEL_REQUEST) return pipeTo(client, to, held, POSTGRES_DOWN);
       if (code !== PROTOCOL_3) return refuse('The apps’ relay to Postgres only takes a Postgres start message.');
-      const user = userOf(held.subarray(8, length));
+      const params = paramsOf(held.subarray(8, length));
+      const users = params.get('user') ?? [];
+      const user = users.length === 1 ? users[0] : undefined;
       if (!user || !APP_LOGIN.test(user)) return refuse('Through the apps’ relay, only an app’s own login reaches Postgres, never AUGUR’s own logins.');
+      // And only its own database, named as its login is (PER-456); Postgres takes the login's name when none is given.
+      const databases = params.get('database') ?? [];
+      if (databases.length > 1 || (databases.length === 1 && databases[0] !== user))
+        return refuse(`Through the apps’ relay, ${user} reaches only its own database, ${user}.`);
       return pipeTo(client, to, held, POSTGRES_DOWN);
     }
   };

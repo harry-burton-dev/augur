@@ -20,6 +20,13 @@ export interface Caller {
    */
   workspace?: CallerWorkspace;
   /**
+   * The organisation the call is in: its floor's id, which a call names in `X-Workspace-Id` for the whole
+   * organisation (identity's `GET /v1/organisation` gives it as `id`). The gateway signs it on the callers it
+   * passes on; absent means the gateway doesn't know it yet (identity hasn't answered since it started). A
+   * deployment has one organisation today; a principal of `org` means this one.
+   */
+  org?: string;
+  /**
    * The app acting for the person (contract 3, spec 8.5): set when the gateway signed a delegated
    * caller for a call made for an app, from the host's `x-augur-app` or a part's delegation. A
    * service that sees it applies the smaller of the person's access and `scopes`. Absent means the
@@ -51,6 +58,7 @@ export const CALLER_HEADERS = {
   roles: 'x-user-roles',
   signedInAt: 'x-user-signed-in-at',
   persona: 'x-user-persona',
+  org: 'x-user-org',
 } as const;
 
 /**
@@ -108,6 +116,7 @@ export const callerHeaders = (caller: Caller): Record<string, string> => ({
   [CALLER_HEADERS.roles]: caller.roles.map(encodeURIComponent).join(','),
   ...(caller.signedInAt ? { [CALLER_HEADERS.signedInAt]: caller.signedInAt } : {}),
   ...(caller.persona ? { [CALLER_HEADERS.persona]: encodeURIComponent(caller.persona) } : {}),
+  ...(caller.org ? { [CALLER_HEADERS.org]: encodeURIComponent(caller.org) } : {}),
   ...(caller.workspace
     ? {
         [WORKSPACE_HEADERS.id]: encodeURIComponent(caller.workspace.id),
@@ -141,6 +150,7 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
   const kind = one(headers[WORKSPACE_HEADERS.kind]);
   const app = one(headers[DELEGATION_HEADERS.app]);
   const persona = one(headers[CALLER_HEADERS.persona]);
+  const org = one(headers[CALLER_HEADERS.org]);
   return {
     id: decode(id),
     name: decode(one(headers[CALLER_HEADERS.name]) ?? id),
@@ -153,6 +163,7 @@ export const callerFromHeaders = (headers: Headers): Caller | undefined => {
       : {}),
     ...(app ? { app: decode(app), scopes: list(one(headers[DELEGATION_HEADERS.scopes])) } : {}),
     ...(persona ? { persona: decode(persona) } : {}),
+    ...(org ? { org: decode(org) } : {}),
   };
 };
 

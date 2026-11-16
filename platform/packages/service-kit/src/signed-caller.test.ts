@@ -36,6 +36,14 @@ describe('signed caller', () => {
     expect(res.json().caller).toEqual(acting);
   });
 
+  it('signs the organisation the call is in', async () => {
+    const gateway = callerSigner();
+    const app = await service(callerCheckFor(gateway, 'identity'));
+    const inOrg = { ...sam, org: 'o1' };
+    const res = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: await signedCallerHeaders(gateway, inOrg, 'identity') });
+    expect(res.json().caller).toEqual(inOrg);
+  });
+
   it('drops x-user-* headers that come without a signature', async () => {
     const app = await service(callerCheckFor(callerSigner(), 'identity'));
     const res = await app.inject({ remoteAddress: ON_THE_NETWORK, url: '/who', headers: callerHeaders({ ...sam, roles: ['admin'] }) });
