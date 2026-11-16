@@ -30,6 +30,15 @@ describe('what an app’s call needs', () => {
     expect(scopeFor('HEAD', '/api/registry/v1/apps/notes/settings', 'notes', platform)).toBeNull();
     expect(scopeFor('PUT', '/api/registry/v1/apps/notes/upstream', 'notes', platform)).toBeUndefined();
     expect(scopeFor('GET', '/api/registry/v1/apps/notes-2/floors', 'notes', platform)).toBe('apps:manage');
+    expect(scopeFor('GET', '/api/registry/v1/apps/notes/floors', 'notes', platform)).toBe('apps:manage');
+    expect(scopeFor('GET', '/api/registry/v1/apps/notes/versions', 'notes', platform)).toBe('deployment:apps');
+    expect(scopeFor('HEAD', '/api/registry/v1/apps', 'admin', platform)).toBe('apps:manage');
+  });
+
+  it('refuses a path the proxy would turn into another', () => {
+    expect(scopeFor('GET', '/api/registry/v1/apps/notes/settings\\..\\..\\..\\platform\\updates', 'notes', platform)).toBeUndefined();
+    expect(scopeFor('PUT', '/api/registry/v1/apps/notes/versions/%2e%2e/frontend', 'notes', platform)).toBeUndefined();
+    expect(scopeFor('GET', '/api/registry/v1/apps/notes/../../platform/updates', 'notes', platform)).toBeUndefined();
     expect(scopeFor('GET', '/api/registry/v1/manifest', 'notes', platform)).toBeUndefined();
   });
 
