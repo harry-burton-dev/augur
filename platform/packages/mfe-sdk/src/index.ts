@@ -1,6 +1,6 @@
 export * from './contract.js';
 export { createEventBus, type EventBusOptions } from './bus.js';
-export { intentHandlers, resolveIntent, IntentCancelled, IntentError, isIntentCancelled, isIntentError } from './intents.js';
+export { resolveIntent, IntentCancelled, IntentError, isIntentCancelled, isIntentError } from './intents.js';
 export { floorFetch, WORKSPACE_HEADER } from './floors.js';
 export {
   DOCUMENT_OPEN,

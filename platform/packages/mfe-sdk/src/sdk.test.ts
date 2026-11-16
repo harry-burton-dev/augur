@@ -18,7 +18,6 @@ import {
   isLibraryRef,
   type LibraryRef,
   pickDocument,
-  intentHandlers,
   resolveIntent,
   type AppManifestEntry,
   type DocumentRef,
@@ -142,16 +141,6 @@ describe('resolveIntent', () => {
 
   it('returns undefined when nothing handles it', () => {
     expect(resolveIntent(manifest, { type: 'entity.open', payload: {} })).toBeUndefined();
-  });
-});
-
-describe('intentHandlers (PER-468)', () => {
-  const app = (id: string, handles?: string[]): AppManifestEntry => ({ id, name: id, route: `/${id}`, entry: `/${id}.js`, version: '0.1.0', ...(handles ? { handles } : {}) });
-
-  it('names every app that handles an intent, so two are never settled by id order', () => {
-    const manifest = [app('home'), app('archive', ['document.open']), app('library', ['document.open'])];
-    expect(intentHandlers(manifest, { type: 'document.open', payload: {} }).map((a) => a.id)).toEqual(['archive', 'library']);
-    expect(intentHandlers(manifest, { type: 'entity.open', payload: {} })).toEqual([]);
   });
 });
 

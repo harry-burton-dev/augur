@@ -1,4 +1,4 @@
-import { IntentCancelled, IntentError, intentHandlers, type AppManifestEntry, type Intent } from '@augur/mfe-sdk';
+import { IntentCancelled, IntentError, type AppManifestEntry, type Intent } from '@augur/mfe-sdk';
 
 export { IntentError };
 
@@ -13,7 +13,7 @@ export interface IntentChoice {
  * still do. Otherwise the apps to ask them to choose between, never one picked by its id.
  */
 export function handlerFor(manifest: AppManifestEntry[], intent: Intent, chosen: IntentChoice[] = []): { app: AppManifestEntry } | { choose: AppManifestEntry[] } {
-  const apps = intentHandlers(manifest, intent);
+  const apps = manifest.filter((a) => a.handles?.includes(intent.type));
   if (!apps.length) throw new IntentError(`No app you can open handles "${intent.type}".`);
   if (apps.length === 1) return { app: apps[0]! };
   const kept = chosen.find((c) => c.intent === intent.type);
@@ -24,7 +24,10 @@ export function handlerFor(manifest: AppManifestEntry[], intent: Intent, chosen:
 /** The app that answers an intent when only one does; with several, the person has to be asked first. */
 const onlyHandler = (manifest: AppManifestEntry[], intent: Intent): AppManifestEntry => {
   const found = handlerFor(manifest, intent);
-  if ('choose' in found) throw new IntentError(`${found.choose.map((a) => a.name).join(' and ')} both handle "${intent.type}": choose one first.`);
+  if ('choose' in found) {
+    const names = found.choose.map((a) => a.name);
+    throw new IntentError(`${names.slice(0, -1).join(', ')} and ${names.at(-1)} all open "${intent.type}". Choose one first.`);
+  }
   return found.app;
 };
 

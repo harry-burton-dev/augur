@@ -53,7 +53,7 @@ describe('handlerFor (PER-468)', () => {
 
   it('asks the person when two apps handle an intent, rather than settling it by id', () => {
     expect(handlerFor(two, open)).toEqual({ choose: [two[1], two[2]] });
-    expect(() => new RequestBroker().begin(two, open)).toThrow(/archive and library both handle "document.open"/);
+    expect(() => new RequestBroker().begin(two, open)).toThrow(/archive and library all open "document.open"/);
   });
 
   it('keeps to their choice while that app still handles it, and asks again once it doesn’t', () => {

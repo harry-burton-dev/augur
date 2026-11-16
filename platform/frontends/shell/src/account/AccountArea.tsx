@@ -897,7 +897,7 @@ function OpensWith({ prefs, onPreference, apps, rows }: SectionProps) {
         keyOf={(c) => c.intent}
         empty={<Note>You haven’t had to choose yet.</Note>}
         render={(c) => (
-          <Line title={c.intent} detail={nameOf(c.app) ? `Opens in ${nameOf(c.app)}` : 'Opens in an app that isn’t on this floor'}>
+          <Line title={nameOf(c.app) ?? 'An app that isn’t on this floor'} detail={`Chosen to open ${c.intent}`}>
             <Button kind="tertiary" size="sm" onPress={() => onPreference('intentApps', chosen.filter((x) => x.intent !== c.intent))}>
               Forget
             </Button>
