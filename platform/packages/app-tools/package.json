@@ -29,6 +29,7 @@
     },
     "./package.json": "./package.json",
     "./migrations": {
+      "types": "./src/migrations.d.ts",
       "default": "./src/migrations.mjs"
     }
   },
@@ -52,6 +53,7 @@
     "src/release.d.ts",
     "src/catalog.d.ts",
     "src/migrations.mjs",
+    "src/migrations.d.ts",
     "squawk.toml"
   ],
   "scripts": {
