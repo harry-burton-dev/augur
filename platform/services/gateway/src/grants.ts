@@ -95,8 +95,8 @@ export const registryGrantsFor = ({ registryUrl, signer, ttlMs = 30_000, missMs 
 /**
  * Which scope a call to one of AUGUR's APIs needs when an app makes it (spec 8.3), the same scopes the services
  * check as their second line. A route not listed here is not one an app may call: an app reaches AUGUR only
- * for what it can be granted, and reaches its own routes (`/api/<id>/*`) and its own registry entry with no
- * scope at all.
+ * for what it can be granted, and reaches its own routes (`/api/<id>/*`), and some calls on its own registry
+ * entry (`OWN_ENTRY`), with no scope at all.
  */
 const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
   { method: /^POST$/, path: /^\/api\/events\/v1\/notifications\/?$/, scope: 'notifications:send' },
@@ -141,22 +141,40 @@ const ROUTE_SCOPES: { method: RegExp; path: RegExp; scope: string }[] = [
   { method: /^GET$/, path: /^\/api\/events\/v1\/deliveries(\/|$)/, scope: 'deployment:health' },
 ];
 
+/**
+ * The calls an app makes on its own registry entry with no scope, matched on the path after
+ * `/api/registry/v1/apps/<id>`: reading its settings, grants and events, registering itself and giving it a
+ * version's frontend. Anything else on its entry is an admin's: what `ROUTE_SCOPES` lists needs a platform scope,
+ * which only AUGUR's own frontends hold, and the rest (such as its upstream) no app may call.
+ */
+const OWN_ENTRY: readonly { method: RegExp; rest: RegExp }[] = [
+  { method: /^GET$/, rest: /^\/(settings|grants|events)\/?$/ },
+  { method: /^PUT$/, rest: /^\/?$/ },
+  { method: /^PUT$/, rest: /^\/versions\/[^/]+\/frontend\/?$/ },
+];
+
+/** A backslash or a dot segment, which the proxy turns into another path than the one checked here. */
+const UNSAFE_PATH = /\\|(^|\/)(\.|%2e){1,2}(\/|$)/i;
+
 /** Whether a grant holds a scope: an app's own scopes, or for one of AUGUR's own frontends, its platform scopes (ADR 0083). */
 export const holds = (grant: Pick<AppGrant, 'scopes' | 'platformScopes'>, scope: string): boolean =>
   isPlatformScope(scope) ? (grant.platformScopes ?? []).includes(scope) : grant.scopes.includes(scope);
 
-/** What a scope lets an app do, in words for a refusal: "send notifications (notifications:send)". */
 /**
  * What an app's call to `/api/<service>/…` needs: a scope's name, `null` for a route it may always call (its own
- * routes, its own registry entry), or `undefined` for a route apps don't call.
+ * routes, `OWN_ENTRY` on its registry entry), or `undefined` for a route apps don't call.
  */
-export const scopeFor = (method: string, url: string, app: string, platformServices: readonly string[]): string | null | undefined => {
+export const scopeFor = (asked: string, url: string, app: string, platformServices: readonly string[]): string | null | undefined => {
   const path = url.split('?')[0]!;
   const name = /^\/api\/([^/?#]+)/.exec(path)?.[1];
   if (!name) return undefined;
   if (name === app) return null;
   if (!platformServices.includes(name)) return undefined;
-  if (name === 'registry' && new RegExp(`^/api/registry/v1/apps/${app}(/|$)`).test(path)) return null;
+  if (UNSAFE_PATH.test(path)) return undefined;
+  // Fastify answers HEAD with the GET route, so it needs what GET needs.
+  const method = asked === 'HEAD' ? 'GET' : asked;
+  const own = `/api/registry/v1/apps/${app}`;
+  if (name === 'registry' && path.startsWith(own) && OWN_ENTRY.some((r) => r.method.test(method) && r.rest.test(path.slice(own.length)))) return null;
   return ROUTE_SCOPES.find((r) => r.method.test(method) && r.path.test(path))?.scope;
 };
 
