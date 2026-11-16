@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { databaseFor, dropDatabase, inSharedDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
+import { databaseFor, dropDatabase, inSharedDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor, opener } from './postgres.ts';
 
 describe('an app’s schema', () => {
   it('is never one named for a part of AUGUR, made or dropped', async () => {
@@ -20,11 +20,7 @@ const urlOf = (database: string, user?: string, password?: string) => {
   if (password !== undefined) url.password = password;
   return url.toString();
 };
-const open: OpenDatabase = async (database) => {
-  const client = new pg.Client({ connectionString: urlOf(database) });
-  await client.connect();
-  return client;
-};
+const open = opener(process.env.DATABASE_URL ?? '');
 
 // Runs wherever DATABASE_URL points at a Postgres with pgvector; CI starts one for it.
 describe.runIf(process.env.DATABASE_URL)('an app’s database login', () => {

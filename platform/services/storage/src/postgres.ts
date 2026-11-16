@@ -34,6 +34,17 @@ export const databaseFor = (app: string) => roleFor(app);
 /** A connection to another database on the same server, as the same admin login, and closing it. */
 export type OpenDatabase = (database: string) => Promise<Sql & { end(): Promise<void> }>;
 
+/** Opens other databases on the server `databaseUrl` reaches, as its login. */
+export const opener =
+  (databaseUrl: string): OpenDatabase =>
+  async (database) => {
+    const url = new URL(databaseUrl);
+    url.pathname = `/${database}`;
+    const client = new pg.Client({ connectionString: url.toString() });
+    await client.connect();
+    return client;
+  };
+
 /**
  * An app's own login and the database it owns, with its two schemas in it, made or brought up to date: the
  * password is set every time, so changing it in .env and starting again changes it. Nobody else may connect
@@ -91,6 +102,13 @@ export async function inSharedDatabase(sql: Sql, app: string): Promise<boolean> 
     [schemaFor(app), databaseFor(app)],
   );
   return rows[0]?.shared === true;
+}
+
+/** The apps the registry has installed, read as the admin login; none on a server whose registry hasn't started yet. */
+export async function installedApps(sql: Sql): Promise<string[]> {
+  const { rows } = await sql.query<{ there: boolean }>(`select to_regclass('registry.apps') is not null as there`);
+  if (!rows[0]?.there) return [];
+  return (await sql.query<{ id: string }>('select id from registry.apps order by id')).rows.map((r) => r.id);
 }
 
 /** Takes an app's (or a preview's) login and database away, with everything in them. Nothing happens when there's none. */

@@ -10,7 +10,7 @@ import pg from 'pg';
 import { configFromEnv, envPrefix, FRONTENDS_BUCKET, FRONTENDS_KEY, type StorageConfig } from './config.ts';
 import { BACKUP_STATUS_DIR, backupProblem, readBackupMarker } from './backup-marker.ts';
 import { garageAdmin, GarageError, keyIdFor, keyNameFor } from './garage.ts';
-import { databaseFor, dropDatabase, inSharedDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor, type OpenDatabase } from './postgres.ts';
+import { databaseFor, dropDatabase, inSharedDatabase, installedApps, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, opener, roleFor, serviceRoleFor } from './postgres.ts';
 import { dropDue, markKept, prepareRetirements, retiredBucketFor, retirements, setAside, type Buckets } from './retirement.ts';
 import { emptyBucket } from './s3.ts';
 
@@ -113,29 +113,28 @@ const forApp = async (app: string, work: () => Promise<void>) => {
 
 const client = new pg.Client({ connectionString: config.databaseUrl });
 await client.connect();
-// Another database on the same server, as the same admin login: an app's own, to set it up.
-const open: OpenDatabase = async (database) => {
-  const url = new URL(config.databaseUrl);
-  url.pathname = `/${database}`;
-  const other = new pg.Client({ connectionString: url.toString() });
-  await other.connect();
-  return other;
-};
+// Another database on the same server, as the same admin login: an app's own, to set it up, and Keycloak's.
+const open = opener(config.databaseUrl);
 try {
   await prepareDatabase(client);
   for (const { service, databasePassword } of config.services) {
     const handed = await provisionServiceDatabase(client, { service, password: databasePassword });
     log.info(`${service} has database login ${serviceRoleFor(service)}, owning schema ${service}${handed ? ` (handed it ${handed} things the admin login made)` : ''}`);
   }
-  await prepareRetirements(client);
+  // An app still installed from before apps had databases of their own stops the upgrade here, before anything else
+  // of AUGUR starts or migrates, so the updater goes back to the release before by itself (Harry, PER-456): it is
+  // removed first, and installed again after. One removed waits for its grace period, and is set aside then.
+  const installed = await installedApps(client);
+  const shared: string[] = [];
+  for (const app of new Set([...config.apps.map((a) => a.app), ...installed])) if (await inSharedDatabase(client, app)) shared.push(app);
+  if (shared.length) {
+    log.error(
+      `${shared.join(', ')} ${shared.length > 1 ? 'were' : 'was'} installed before each app had a database of its own, so this release of AUGUR doesn’t start. Go back to the release before, remove ${shared.length > 1 ? 'them' : 'it'} in Admin → Apps (or from APP_STORAGE in .env), then upgrade again and install ${shared.length > 1 ? 'them' : 'it'} afresh. ${shared.length > 1 ? 'Their' : 'Its'} data is set aside when removed, as ever.`,
+    );
+    process.exit(1);
+  }
   for (const { app, databasePassword } of config.apps) {
     await forApp(app, async () => {
-      // An app installed before apps had databases of their own starts again in one: its tables in AUGUR's, its login
-      // and its bucket are set aside as a removed app's are, and go with a later release (Harry, PER-456).
-      if (await inSharedDatabase(client, app)) {
-        await setAside({ sql: client, buckets, app, release: config.release, again: true });
-        log.warn(`${app} was installed before each app had a database of its own: its data is set aside (retired_${schemaFor(app)}), it starts empty in database ${databaseFor(app)}, and the old data goes with a later AUGUR release.`);
-      }
       await provisionDatabase(client, { app, password: databasePassword, connections: config.appConnections, open });
       log.info(`${app} has database login ${roleFor(app)}, owning database ${databaseFor(app)}, at most ${config.appConnections} connections`);
     });

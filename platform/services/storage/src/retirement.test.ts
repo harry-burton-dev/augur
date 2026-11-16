@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { databaseFor, dropDatabase, jobsSchemaFor, provisionDatabase, roleFor, schemaFor } from './postgres.ts';
+import { databaseFor, dropDatabase, jobsSchemaFor, opener, provisionDatabase, roleFor, schemaFor } from './postgres.ts';
 import { dropDue, laterRelease, markKept, prepareRetirements, retiredBucketFor, retiredDatabaseFor, retiredJobsSchemaFor, retiredRoleFor, retiredSchemaFor, retirements, setAside, type Buckets } from './retirement.ts';
 
 describe('laterRelease', () => {
@@ -135,16 +135,7 @@ describe.runIf(process.env.DATABASE_URL)('a retired or removed app’s own datab
   const app = `owned-${process.pid}`;
   let admin: pg.Client;
   const has = async (name: string) => (await admin.query('select 1 from pg_database where datname = $1', [name])).rowCount === 1;
-  const urlOf = (database: string) => {
-    const url = new URL(process.env.DATABASE_URL!);
-    url.pathname = `/${database}`;
-    return url.toString();
-  };
-  const open = async (database: string) => {
-    const client = new pg.Client({ connectionString: urlOf(database) });
-    await client.connect();
-    return client;
-  };
+  const open = opener(process.env.DATABASE_URL ?? '');
   const log = { info: (_: string) => {}, warn: (_: string) => {} };
 
   beforeAll(async () => {
@@ -163,7 +154,7 @@ describe.runIf(process.env.DATABASE_URL)('a retired or removed app’s own datab
   it('is renamed with its data in it, even while something is still connected, then dropped behind a backup on a later release', async () => {
     await provisionDatabase(admin, { app, password: 'owned-password-123', open });
     const own = await open(databaseFor(app));
-    own.on('error', () => {});
+    (own as pg.Client).on('error', () => {});
     await own.query(`create table ${schemaFor(app)}.notes (text text); insert into ${schemaFor(app)}.notes values ('kept')`);
     expect(await setAside({ sql: admin, app, release: '0.26.0', again: true })).toBe('set aside');
     await own.end().catch(() => {});

@@ -46,7 +46,7 @@ A release that asks above a ceiling stops at the install's storage step, before 
 
 | | What it is | The app's service reads |
 | --- | --- | --- |
-| Database | A login `app_<id>` that owns a database of its own, also `app_<id>` (dashes become `_`), with the schema `<id>` in it first on its search path. The login can connect to no other database, and nobody else's can connect to its, so no app reads another's tables or holds the locks AUGUR's migrations take. The login reaches only that database through the apps' relay: not AUGUR's, Keycloak's or another app's. An app installed before each app had its own database isn't moved: on the first `up` its old tables, login and bucket are set aside, as a removed app's are, and it starts empty in its own. Postgres has [pgvector](https://github.com/pgvector/pgvector), so the app can `create table … (embedding vector(1024))`, and [pg_trgm](https://www.postgresql.org/docs/16/pgtrgm.html), for names spelt nearly alike (`similarity(label, $1)`, and `gin (label gin_trgm_ops)` indexes). | `DATABASE_URL` |
+| Database | A login `app_<id>` that owns a database of its own, also `app_<id>` (dashes become `_`), with the schema `<id>` in it first on its search path. The login can connect to no other database, and nobody else's can connect to its, so no app reads another's tables or holds the locks AUGUR's migrations take. The login reaches only that database through the apps' relay: not AUGUR's, Keycloak's or another app's. An app installed before each app had its own database isn't moved: while one is still installed, the storage step stops and names it, so AUGUR doesn't start on the new release until it is removed and installed again. Postgres has [pgvector](https://github.com/pgvector/pgvector), so the app can `create table … (embedding vector(1024))`, and [pg_trgm](https://www.postgresql.org/docs/16/pgtrgm.html), for names spelt nearly alike (`similarity(label, $1)`, and `gin (label gin_trgm_ops)` indexes). | `DATABASE_URL` |
 | Jobs | A second schema in its database, `<id>_jobs`, owned by the same login, where the service kit keeps the app's background and scheduled jobs ([jobs.md](jobs.md)). | `DATABASE_URL` |
 | Bucket | A bucket named `<id>` on [Garage](https://garagehq.deuxfleurs.fr/), an S3-compatible store, and a key that can read and write only that bucket. | `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` |
 
@@ -90,7 +90,7 @@ The `storage` service makes each app's login, schema, bucket and key from `.env`
 2. `pc up -d`. `pc logs storage` says what it made.
 3. Give the app's service these settings (in its own compose service, beside `SERVICE_CLIENT_SECRET`):
    ```yaml
-   DATABASE_URL: postgres://app_notes:${NOTES_DATABASE_PASSWORD}@postgres:5432/platform
+   DATABASE_URL: postgres://app_notes:${NOTES_DATABASE_PASSWORD}@postgres:5432/app_notes
    S3_ENDPOINT: http://garage:3900
    S3_BUCKET: notes
    S3_ACCESS_KEY_ID: …   # pc logs storage prints it: "opened by key GK…"
