@@ -57,7 +57,8 @@ if (release && (!process.env.ISSUER || !process.env.APP_SECRET)) {
 const meantToFail = [];
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+// A context of its own, so a second tab can open in it (keptInMemory).
+const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
 // Uncaught errors and broken code or styles fail the check. Console errors and other refused calls
 // are printed, not failed: a fresh server has no model, no data and no second person yet.
 const errors = [];
@@ -174,7 +175,7 @@ try {
       let other;
       try {
         other = await engine.launch();
-        const otherPage = await other.newPage({ viewport: { width: 1440, height: 900 } });
+        const otherPage = await (await other.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
         otherPage.on('pageerror', (err) => errors.push(`${name}: ${err.message}`));
         otherPage.on('requestfailed', (req) => {
           const url = new URL(req.url());
