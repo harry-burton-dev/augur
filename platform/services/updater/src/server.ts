@@ -4,7 +4,7 @@
  * same path it has on the host (PLATFORM_DIR), so Compose's relative paths name the host's files.
  */
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { access, chmod, mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, statfs, writeFile, type FileHandle } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -123,6 +123,36 @@ export const command = (file: string, args: string[], env: Record<string, string
     if (input !== undefined) child.stdin?.end(input);
   });
 
+/** How long a backup run waits for the backup container's own work (backup.sh's lock), then how long it may take. */
+export const BACKUP_WAIT_SECONDS = 2 * 60 * 60;
+const BACKUP_RUN_MS = 90 * 60_000;
+
+/**
+ * backup.sh with `flag`, in a container of its own made from the backup service (`compose run`), never `exec` into
+ * the running one: the Docker proxy gives the updater no exec (PER-455). It waits for the long-running container's
+ * own work (backup.sh's lock), and is named, so one whose time ran out is taken away. What it said.
+ */
+export const runBackup = async (
+  compose: string[],
+  env: Record<string, string>,
+  flag: '--now' | '--restore-test',
+  { run = runToEnd, remove = (name: string) => command('docker', ['rm', '--force', name], env).then(() => undefined), ms = BACKUP_WAIT_SECONDS * 1000 + BACKUP_RUN_MS } = {},
+) => {
+  const name = `augur-backup-${randomUUID().slice(0, 8)}`;
+  const said = await run('docker', [...compose, 'run', '--rm', '--no-deps', '-T', '--name', name, '-e', `LOCK_WAIT_SECONDS=${BACKUP_WAIT_SECONDS}`, 'backup', flag], env, ms);
+  if (said.code === 0) return said.logs;
+  await remove(name).catch(() => undefined);
+  if (said.code === 'timeout') throw new CommandFailed(`backup.sh ${flag} didn’t finish within ${Math.round(ms / 60_000)} minutes: pc logs backup says what held it up.`);
+  throw new CommandFailed(said.logs.trim().split('\n').filter(Boolean).slice(-3).join(' ') || `backup.sh ${flag} stopped (exit code ${said.code}).`);
+};
+
+/** The dump's file name, from what a backup run said. */
+const writtenBackup = (said: string) => {
+  const file = said.match(/backup: wrote \S*\/(platform-\S+\.sql\.gz)/)?.[1];
+  if (!file) throw new CommandFailed('The backup container didn’t say where it wrote the backup.');
+  return file;
+};
+
 /** `-f` for each compose file the deployment runs (COMPOSE_FILE in its .env, or compose.yml). */
 // No .env yet is compose.yml alone; one that can't be read stops the call, rather than run the wrong files.
 const composeArgs = async (dir: string, envFile: string) => {
@@ -138,8 +168,8 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
   const env = (more: Record<string, string> = {}) => ({ PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: dockerConfig, DOCKER_HOST: dockerHost, DOCKER_CONFIG: dockerConfig, ...more });
   const envFile = join(dir, '.env');
   // The compose files the deployment runs: COMPOSE_FILE in its .env (compose.yml:compose.proxy.yml, say), as by hand.
-  const compose = async (args: string[], more?: Record<string, string>) =>
-    command('docker', ['compose', ...(await composeArgs(dir, envFile)), '--env-file', envFile, ...args], env(more));
+  const project = async () => ['compose', ...(await composeArgs(dir, envFile)), '--env-file', envFile];
+  const compose = async (args: string[], more?: Record<string, string>) => command('docker', [...(await project()), ...args], env(more));
 
   return {
     readEnv: () => readFile(envFile, 'utf8'),
@@ -201,14 +231,9 @@ export const composeServer = ({ dir, dockerHost, dockerConfig, signer, healthUrl
     async verifySignature(ref, identity = signer.identity) {
       await command('cosign', verifyArgs(identity, signer.issuer, ref, await trustedRootIn(dir)), env());
     },
-    async backup() {
-      const said = await compose(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);
-      const file = said.match(/backup: wrote \S*\/(platform-\S+\.sql\.gz)/)?.[1];
-      if (!file) throw new CommandFailed('The backup container didn’t say where it wrote the backup.');
-      return file;
-    },
+    backup: async () => writtenBackup(await runBackup(await project(), env(), '--now')),
     async restoreTest() {
-      await compose(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--restore-test']);
+      await runBackup(await project(), env(), '--restore-test');
     },
     async pull(services, version) {
       await compose(['pull', '--quiet', ...services], { PLATFORM_VERSION: version });
@@ -454,12 +479,7 @@ export const composeAppHost = ({ dir, dockerHost, dockerConfig, signer, registry
     fetchArtifact(ref, mediaType, maxBytes) {
       return pullArtifactLayer({ ref, mediaType, maxBytes, auth: registryAuth(parseRef(ref).host) });
     },
-    async backup() {
-      const said = await platform(['exec', '-T', 'backup', '/bin/sh', '/backup/backup.sh', '--now']);
-      const file = said.match(/backup: wrote \S*\/(platform-\S+\.sql\.gz)/)?.[1];
-      if (!file) throw new CommandFailed('The backup container didn’t say where it wrote the backup.');
-      return file;
-    },
+    backup: async () => writtenBackup(await runBackup(['compose', ...(await composeArgs(dir, join(dir, '.env'))), '--env-file', join(dir, '.env')], env(), '--now')),
     async provisionStorage(app, options) {
       const connections = options?.connections ? ['-e', `APP_DATABASE_CONNECTIONS=${options.connections}`] : [];
       await platform(['run', '--rm', '--no-deps', '-e', `APP_STORAGE=${app}`, ...connections, 'storage']);

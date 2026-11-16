@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## The updater no longer reaches into running containers
+
+**From** unreleased
+
+The updater now takes its backup and restore test before an upgrade (and before it drops a removed app's data) in a container of its own made from the `backup` service (`compose run`), instead of `docker exec` into the running one, and the Docker proxy no longer lets it exec into any container (`EXEC: 0`). Every backup run, by hand too, now waits for any other to finish (a lock in `infra/deploy/backups/`): a `pc exec backup /bin/sh /backup/backup.sh --now` during the nightly backup says so and waits, for up to three hours. An upgrade leaves the proxy running as it was, so after upgrading run `pc up -d docker-proxy` to take exec away. If you later go back to an earlier release by hand, run `pc up -d docker-proxy` again then, since an earlier updater needs exec for its backups.
+
 ## Alerts can leave the server without AUGUR
 
 **From** unreleased

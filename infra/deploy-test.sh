@@ -577,6 +577,38 @@ through_the_runner() {
   echo "$name was installed, opened, kept from AUGUR's own services and logins, stopped (its pane said so) and removed through the app runner, and its sign-in went with it." >&2
 }
 
+# The updater's backup and restore test, as an upgrade takes them: in a container of their own (compose run), since
+# the Docker proxy refuses it exec into a running one. A release whose updater still uses exec is said, not failed.
+backs_up_without_exec() {
+  code=0
+  pc exec -T updater node -e 'process.exit(require("fs").readFileSync("dist/server.js", "utf8").includes("export const runBackup") ? 0 : 3)' >/dev/null 2>&1 || code=$?
+  if [ "$code" != 0 ]; then
+    [ "$code" = 3 ] || { echo "The updater's code couldn't be read, to tell how it takes backups." >&2; exit 1; }
+    echo "This release's updater takes backups with docker exec, so taking them without it wasn't tested." >&2
+    return 0
+  fi
+  backup_id=$(pc ps -q backup)
+  if refused=$(pc exec -T -e ID="$backup_id" updater sh -c 'DOCKER_CONFIG=/tmp/docker docker exec "$ID" true' 2>&1); then
+    echo "The Docker proxy let the updater exec into the backup container." >&2
+    exit 1
+  fi
+  echo "The Docker proxy refuses the updater exec: $(printf '%s\n' "$refused" | tail -n 1)" >&2
+  if ! said=$(pc exec -T updater node --input-type=module -e '
+    const { composeServer } = await import(`${process.cwd()}/dist/server.js`);
+    const server = composeServer({ dir: process.env.PLATFORM_DIR, dockerHost: process.env.DOCKER_HOST, dockerConfig: "/tmp/docker", signer: { identity: "", issuer: "" } });
+    const file = await server.backup();
+    await server.restoreTest();
+    console.log(file);
+  ' 2>&1); then
+    echo "The updater couldn't take a backup and a restore test: $said" >&2
+    exit 1
+  fi
+  said=$(printf '%s\n' "$said" | tail -n 1)
+  case "$said" in platform-*.sql.gz) echo "The updater took a backup ($said) and a restore test, with no exec." >&2 ;;
+    *) echo "The updater's backup didn't say where it wrote the backup: $said" >&2; exit 1 ;;
+  esac
+}
+
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
 # wanted: `pass`, or `fail <part>`, which must be named among the problems. Its exit code must agree.
 check_until() {
@@ -723,6 +755,7 @@ case "$mode" in
       exit 0
     fi
     check_until "As installed" pass
+    backs_up_without_exec
     # What an upgrade can leave behind: a part that doesn't come back.
     pc stop identity >&2
     check_until "With identity stopped" fail identity

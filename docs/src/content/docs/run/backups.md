@@ -21,7 +21,10 @@ time or how long to keep them with `BACKUP_HOUR_UTC` and `BACKUP_KEEP_DAYS` in `
 Everything lives in that dump: AUGUR's own data, apps' schemas, people's preferences, and Keycloak's users.
 Apps' files go beside it as `objects-YYYY-MM-DD.tar.gz`. The backup the updater takes before an upgrade, and
 before it takes a removed app's data away, is a fresh one of both, named for the minute it was taken: nothing
-is dropped unless that backup worked and holds apps' files (ADR 0103). The backups hold everyone's data and every login's
+is dropped unless that backup worked and holds apps' files (ADR 0103). The updater runs it, and the restore test
+after it, in a container of its own made from the `backup` service (`compose run`); it can't reach into the
+running one. Every run, that one and one you start by hand, waits for any other to finish first (the nightly
+backup, say), and says so. The backups hold everyone's data and every login's
 password hash, so only root can read them (the commands below read them through a container). What each run
 found goes in `infra/deploy/backups/status/`, readable by anyone, and that folder alone is what the gateway
 sees, for Deployment → Backups.

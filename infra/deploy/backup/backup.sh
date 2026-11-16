@@ -33,6 +33,9 @@
 #   backup.sh --adopt-offsite  takes the off-server copy as this server's own (a lost server set up again
 #                              from it, AUGUR's docs, Backups), then copies the newest backup there
 #   backup.sh --pitr-test      restores the newest base backup and replays every archived change since
+# One at a time: every run takes a lock in the backups folder ($LOCK_FILE), so one started beside the
+# long-running container (the updater's `compose run backup --now`, PER-455, or one by hand) waits for the
+# container's own work, and the other way round. It waits at most $LOCK_WAIT_SECONDS, then fails.
 set -eu
 # Without it a failed pg_dumpall would look like success, since gzip ends the pipe.
 # The database's image runs Debian's sh (dash), which has no pipefail, so the script runs itself in bash.
@@ -56,6 +59,8 @@ export STATUS_DIR
 : "${CONFIG_DIR:=/deploy}"
 # The knowledge graph's forget ledger, read only: it goes off the server with each day's dump.
 : "${LEDGER_DIR:=/knowledge-ledger}"
+: "${LOCK_FILE:=$BACKUP_DIR/.lock}"
+: "${LOCK_WAIT_SECONDS:=10800}"
 # What restic files the snapshots under, so retention counts days: one repository per deployment.
 : "${OFFSITE_HOST:=augur}"
 export OFFSITE_HOST
@@ -269,11 +274,11 @@ offsite_ours() {
 # point-in-time one, which replays the WAL archive onto the newest base backup.
 restore_test() {
   if offsite_on && [ -e "$STATUS_DIR/offsite.json" ] && grep -q '"ok":true' "$STATUS_DIR/offsite.json"; then
-    /bin/sh "$here/restore-test.sh" --offsite || true
+    /bin/sh "$here/restore-test.sh" --offsite 9>&- || true
   else
-    /bin/sh "$here/restore-test.sh" || true
+    /bin/sh "$here/restore-test.sh" 9>&- || true
   fi
-  ! pitr_on || /bin/sh "$here/pitr-test.sh" || true
+  ! pitr_on || /bin/sh "$here/pitr-test.sh" 9>&- || true
 }
 
 pitr_on() { [ -d "$WAL_DIR" ]; }
@@ -396,12 +401,24 @@ EOF
 
 mkdir -p "$BACKUP_DIR" "$STATUS_DIR"
 chmod 755 "$STATUS_DIR"
+# locked: takes the lock on fd 9, saying so when something else holds it.
+locked() {
+  flock -n 9 && return 0
+  echo "backup: waiting for another backup run to finish (the long-running container's nightly work, say)" >&2
+  flock -w "$LOCK_WAIT_SECONDS" 9 && return 0
+  echo "backup: another backup run held the lock for over $LOCK_WAIT_SECONDS s, so this one didn't run" >&2
+  return 1
+}
+# The restore tests' scratch Postgres runs on after a script ends, should it be left: they are started without
+# the lock (9>&-), so it can't hold it.
+exec 9> "$LOCK_FILE"
+locked || exit 1
 if [ "${1:-}" = "--pitr-test" ]; then
-  /bin/sh "$here/pitr-test.sh"
+  /bin/sh "$here/pitr-test.sh" 9>&-
   exit $?
 fi
 if [ "${1:-}" = "--restore-test" ]; then
-  /bin/sh "$here/restore-test.sh" ${2:-}
+  /bin/sh "$here/restore-test.sh" ${2:-} 9>&-
   exit $?
 fi
 if [ "${1:-}" = "--offsite" ]; then
@@ -466,8 +483,9 @@ pitr_noted
 if [ ! -e "$STATUS_DIR/restore-test.json" ] || { offsite_on && ! grep -q '"from":"offsite"' "$STATUS_DIR/restore-test.json"; }; then
   restore_test
 elif pitr_on && [ ! -e "$STATUS_DIR/pitr-test.json" ]; then
-  /bin/sh "$here/pitr-test.sh" || true
+  /bin/sh "$here/pitr-test.sh" 9>&- || true
 fi
+flock -u 9
 
 # Wakes on the hour: the nightly work at BACKUP_HOUR_UTC, and every hour the WAL archive's copy off the
 # server and pitr.json.
@@ -475,7 +493,10 @@ while :; do
   now=$(date -u +%s)
   next=$(( now - now % 3600 + 3600 ))
   sleep $(( next - now ))
-  if [ "$(date -u +%H)" -eq "$BACKUP_HOUR_UTC" ]; then
+  # The hour it woke for: a run it waits for below can go on past it.
+  hour=$(date -u +%H)
+  flock 9
+  if [ "$hour" -eq "$BACKUP_HOUR_UTC" ]; then
     failed=
     backup || true
     today="$BACKUP_DIR/platform-$(date -u +%Y-%m-%d).sql.gz"
@@ -485,4 +506,5 @@ while :; do
   fi
   pitr_offsite || true
   pitr_noted
+  flock -u 9
 done
