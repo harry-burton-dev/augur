@@ -1,4 +1,4 @@
-import { createEventBus, floorFetch, SDK_VERSION, type AppManifestEntry, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
+import { createEventBus, floorFetch, IntentCancelled, SDK_VERSION, type AppManifestEntry, type InboxItem, type Intent, type IntentReply, type MountContext, type Workspace } from '@augur/mfe-sdk';
 import {
   Button,
   defaultFunctions,
@@ -62,6 +62,7 @@ import {
   PreferenceSync,
   previewLine,
   previewPr,
+  handlerFor,
   RequestBroker,
   routeIntent,
   screenFor,
@@ -587,22 +588,43 @@ export function Host({
   const [raised, setRaised] = useState(0);
   const screen = useMemo(() => (manifest && floor ? screenFor(manifest, where.path) : undefined), [manifest, floor, where, raised]);
 
+  // Two apps that handle one intent: the person chooses the first time, and the choice is kept (PER-468).
+  const askingWhich = useRef(false);
+  const [choosing, setChoosing] = useState<{ intent: Intent; apps: AppManifestEntry[]; done: (app?: AppManifestEntry) => void } | null>(null);
+  const handlerOf = useCallback(
+    async (apps: AppManifestEntry[], intent: Intent): Promise<AppManifestEntry> => {
+      const found = handlerFor(apps, intent, prefs.current.intentApps);
+      if ('app' in found) return found.app;
+      if (askingWhich.current) throw new IntentError('Choose which app opens the one before first.');
+      askingWhich.current = true;
+      const app = await new Promise<AppManifestEntry | undefined>((done) => setChoosing({ intent, apps: found.choose, done })).finally(() => {
+        askingWhich.current = false;
+        setChoosing(null);
+      });
+      if (!app) throw new IntentCancelled();
+      choose('intentApps', [...(prefs.current.intentApps ?? []).filter((c) => c.intent !== intent.type), { intent: intent.type, app: app.id }]);
+      return app;
+    },
+    [prefs, choose],
+  );
+
   const raise = useCallback(
     async (intent: Intent) => {
       if (!manifest) return;
       try {
-        routeIntent(openable(manifest), intent, (app) => {
+        const app = await handlerOf(openable(manifest), intent);
+        routeIntent(openable(manifest), intent, () => {
           pendingIntent.current = intent;
           setRaised((n) => n + 1);
           navigate(hrefFor(app));
-        });
+        }, app);
       } catch (err) {
         if (!(err instanceof IntentError)) throw err;
         tell(toShellNotification('platform', { title: err.message }));
         throw err;
       }
     },
-    [manifest, navigate, tell],
+    [manifest, navigate, tell, handlerOf],
   );
 
   /**
@@ -633,19 +655,19 @@ export function Host({
 
   // An app asks another for an answer: the answering app opens over it in a dialog.
   const request = useCallback(
-    <T,>(intent: Intent): Promise<T> => {
-      if (!manifest) return Promise.reject(new IntentError('Apps are still loading. Try again in a moment.'));
+    async <T,>(intent: Intent): Promise<T> => {
+      if (!manifest) throw new IntentError('Apps are still loading. Try again in a moment.');
       let started: ReturnType<RequestBroker['begin']>;
       try {
-        started = broker.current.begin(openable(manifest), intent);
+        started = broker.current.begin(openable(manifest), intent, await handlerOf(openable(manifest), intent));
       } catch (err) {
         if (err instanceof IntentError) tell(toShellNotification('platform', { title: err.message }));
-        return Promise.reject(err);
+        throw err;
       }
       setAnswering(started.request);
       return (started.answer as Promise<T>).finally(() => setAnswering(null));
     },
-    [manifest, tell],
+    [manifest, tell, handlerOf],
   );
 
   // A new floor makes a new context, so the open app is mounted again on it.
@@ -1258,6 +1280,27 @@ export function Host({
         cancelLabel="Cancel"
       >
         <div ref={setRequestStage} className="request-stage" />
+      </Dialog>
+      <Dialog
+        open={!!choosing}
+        onClose={() => choosing?.done()}
+        size="read"
+        heading="Open with"
+        summary="More than one app can open this. The one you choose opens it from now on; you can change that in Account, under Home and apps."
+        cancelLabel="Cancel"
+      >
+        {choosing ? (
+          <ul className="intent-choice" data-intent={choosing.intent.type}>
+            {choosing.apps.map((a) => (
+              <li key={a.id}>
+                <strong>{a.name}</strong>
+                <Button kind="secondary" size="sm" onPress={() => choosing.done(a)}>
+                  Open with {a.name}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </Dialog>
       <Dialog open={inboxOpen} onClose={() => setInboxOpen(false)} size="read" heading="Inbox" summary="Work that waits on you and your teams." cancelLabel="Close">
         {inboxOpen && manifest ? (

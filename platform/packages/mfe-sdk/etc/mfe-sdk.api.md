@@ -349,6 +349,9 @@ export class IntentError extends Error {
     name: string;
 }
 
+// @public
+export const intentHandlers: (manifest: AppManifestEntry[], intent: Intent) => AppManifestEntry[];
+
 // @public (undocumented)
 export interface IntentReply {
     // (undocumented)
@@ -510,7 +513,7 @@ export interface Ref {
     type: string;
 }
 
-// @public
+// @public @deprecated
 export const resolveIntent: (manifest: AppManifestEntry[], intent: Intent) => AppManifestEntry | undefined;
 
 // @public

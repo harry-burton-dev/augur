@@ -1,6 +1,12 @@
 import type { AppManifestEntry, Intent } from './contract.js';
 
-/** Picks the app that handles an intent: the first manifest entry listing its type. */
+/** Every app that handles an intent, in manifest order. When there is more than one, the person chooses (SDK 3.2). */
+export const intentHandlers = (manifest: AppManifestEntry[], intent: Intent): AppManifestEntry[] => manifest.filter((app) => app.handles?.includes(intent.type));
+
+/**
+ * Picks the app that handles an intent: the first manifest entry listing its type.
+ * @deprecated Settles two handlers by manifest order. Use intentHandlers and let the person choose (SDK 3.2).
+ */
 export const resolveIntent = (manifest: AppManifestEntry[], intent: Intent): AppManifestEntry | undefined =>
   manifest.find((app) => app.handles?.includes(intent.type));
 
