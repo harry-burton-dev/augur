@@ -112,6 +112,24 @@ export interface Intent<T = unknown> {
 }
 
 // @public
+export const isIntentCancelled: (err: unknown) => boolean;
+
+// @public
+export const isIntentError: (err: unknown) => boolean;
+
+// @public
+export const isMarkingOrNone: (v: unknown) => v is Marking | undefined;
+
+// @public
+export const isRef: (v: unknown) => v is Ref;
+
+// @public
+export interface Marking {
+    label: string;
+    scheme: string;
+}
+
+// @public
 export interface Notice {
     // (undocumented)
     body?: string;
@@ -139,6 +157,17 @@ export interface PlaceItem {
     // (undocumented)
     label: string;
     path: string;
+}
+
+// @public
+export interface Ref {
+    app: string;
+    id: string;
+    // (undocumented)
+    kind: 'ref';
+    label?: string;
+    marking?: Marking;
+    type: string;
 }
 
 // @public (undocumented)
