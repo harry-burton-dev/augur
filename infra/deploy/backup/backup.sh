@@ -274,11 +274,11 @@ offsite_ours() {
 # point-in-time one, which replays the WAL archive onto the newest base backup.
 restore_test() {
   if offsite_on && [ -e "$STATUS_DIR/offsite.json" ] && grep -q '"ok":true' "$STATUS_DIR/offsite.json"; then
-    /bin/sh "$here/restore-test.sh" --offsite 9>&- || true
+    unlocked /bin/sh "$here/restore-test.sh" --offsite || true
   else
-    /bin/sh "$here/restore-test.sh" 9>&- || true
+    unlocked /bin/sh "$here/restore-test.sh" || true
   fi
-  ! pitr_on || /bin/sh "$here/pitr-test.sh" 9>&- || true
+  ! pitr_on || unlocked /bin/sh "$here/pitr-test.sh" || true
 }
 
 pitr_on() { [ -d "$WAL_DIR" ]; }
@@ -401,6 +401,9 @@ EOF
 
 mkdir -p "$BACKUP_DIR" "$STATUS_DIR"
 chmod 755 "$STATUS_DIR"
+# unlocked COMMAND...: runs COMMAND without the lock's file open, for the restore tests: their scratch Postgres could
+# run on after them, and would hold the lock.
+unlocked() { "$@" 9>&-; }
 # locked: takes the lock on fd 9, saying so when something else holds it.
 locked() {
   flock -n 9 && return 0
@@ -409,16 +412,17 @@ locked() {
   echo "backup: another backup run held the lock for over $LOCK_WAIT_SECONDS s, so this one didn't run" >&2
   return 1
 }
-# The restore tests' scratch Postgres runs on after a script ends, should it be left: they are started without
-# the lock (9>&-), so it can't hold it.
 exec 9> "$LOCK_FILE"
 locked || exit 1
+# What a run cut short left half-written goes (a run the updater gave up on, say): nothing else writes here while
+# this holds the lock.
+find "$BACKUP_DIR" -maxdepth 1 -name '*.partial' -print -exec rm -rf {} + | sed 's/^/backup: removed /'
 if [ "${1:-}" = "--pitr-test" ]; then
-  /bin/sh "$here/pitr-test.sh" 9>&-
+  unlocked /bin/sh "$here/pitr-test.sh"
   exit $?
 fi
 if [ "${1:-}" = "--restore-test" ]; then
-  /bin/sh "$here/restore-test.sh" ${2:-} 9>&-
+  unlocked /bin/sh "$here/restore-test.sh" ${2:-}
   exit $?
 fi
 if [ "${1:-}" = "--offsite" ]; then
@@ -458,7 +462,6 @@ for result in last-backup offsite restore-test pitr pitr-test; do
 done
 find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'platform-*.sql.gz' -o -name 'objects-*.tar.gz' -o -name 'pgdata-before-restore-*' \) -exec chmod 600 {} +
 find "$BACKUP_DIR" -maxdepth 1 -type d -name 'base-*' -exec chmod 700 {} +
-find "$BACKUP_DIR" -maxdepth 1 -name '*.partial' -print -exec rm -rf {} + | sed 's/^/backup: removed /'
 
 today="$BACKUP_DIR/platform-$(date -u +%Y-%m-%d).sql.gz"
 [ -e "$today" ] || backup || true
@@ -483,8 +486,10 @@ pitr_noted
 if [ ! -e "$STATUS_DIR/restore-test.json" ] || { offsite_on && ! grep -q '"from":"offsite"' "$STATUS_DIR/restore-test.json"; }; then
   restore_test
 elif pitr_on && [ ! -e "$STATUS_DIR/pitr-test.json" ]; then
-  /bin/sh "$here/pitr-test.sh" 9>&- || true
+  unlocked /bin/sh "$here/pitr-test.sh" || true
 fi
+# The day whose nightly work is done: today's, when it started after the hour (what it did above stands for it).
+if [ "$(date -u +%H)" -ge "$BACKUP_HOUR_UTC" ]; then nightly=$(date -u +%Y-%m-%d); else nightly=; fi
 flock -u 9
 
 # Wakes on the hour: the nightly work at BACKUP_HOUR_UTC, and every hour the WAL archive's copy off the
@@ -493,10 +498,16 @@ while :; do
   now=$(date -u +%s)
   next=$(( now - now % 3600 + 3600 ))
   sleep $(( next - now ))
-  # The hour it woke for: a run it waits for below can go on past it.
-  hour=$(date -u +%H)
-  flock 9
-  if [ "$hour" -eq "$BACKUP_HOUR_UTC" ]; then
+  if ! locked; then
+    # Said on Status only when it costs the nightly backup.
+    if [ "$(date -u +%H)" -ge "$BACKUP_HOUR_UTC" ] && [ "$nightly" != "$(date -u +%Y-%m-%d)" ]; then
+      noted false "" "Another backup run held the backups for over $LOCK_WAIT_SECONDS s, so the nightly backup hasn't run yet; it is tried again on the hour (pc logs backup)."
+    fi
+    continue
+  fi
+  # Due once a day from BACKUP_HOUR_UTC, so a run it waited for that went on past the hour can't skip it.
+  if [ "$(date -u +%H)" -ge "$BACKUP_HOUR_UTC" ] && [ "$nightly" != "$(date -u +%Y-%m-%d)" ]; then
+    nightly=$(date -u +%Y-%m-%d)
     failed=
     backup || true
     today="$BACKUP_DIR/platform-$(date -u +%Y-%m-%d).sql.gz"

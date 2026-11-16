@@ -578,21 +578,20 @@ through_the_runner() {
 }
 
 # The updater's backup and restore test, as an upgrade takes them: in a container of their own (compose run), since
-# the Docker proxy refuses it exec into a running one. A release whose updater still uses exec is said, not failed.
+# the Docker proxy refuses it exec into a running one.
 backs_up_without_exec() {
-  code=0
-  pc exec -T updater node -e 'process.exit(require("fs").readFileSync("dist/server.js", "utf8").includes("export const runBackup") ? 0 : 3)' >/dev/null 2>&1 || code=$?
-  if [ "$code" != 0 ]; then
-    [ "$code" = 3 ] || { echo "The updater's code couldn't be read, to tell how it takes backups." >&2; exit 1; }
-    echo "This release's updater takes backups with docker exec, so taking them without it wasn't tested." >&2
-    return 0
-  fi
   backup_id=$(pc ps -q backup)
+  [ -n "$backup_id" ] || { echo "The backup container isn't running, so the updater's backups weren't tested." >&2; exit 1; }
   if refused=$(pc exec -T -e ID="$backup_id" updater sh -c 'DOCKER_CONFIG=/tmp/docker docker exec "$ID" true' 2>&1); then
     echo "The Docker proxy let the updater exec into the backup container." >&2
     exit 1
   fi
-  echo "The Docker proxy refuses the updater exec: $(printf '%s\n' "$refused" | tail -n 1)" >&2
+  # The proxy's own refusal, not some other failure.
+  if ! printf '%s\n' "$refused" | grep -qi -e '403' -e 'forbidden'; then
+    echo "The updater's docker exec failed, but not because the Docker proxy refused it: $refused" >&2
+    exit 1
+  fi
+  echo "The Docker proxy refuses the updater exec." >&2
   if ! said=$(pc exec -T updater node --input-type=module -e '
     const { composeServer } = await import(`${process.cwd()}/dist/server.js`);
     const server = composeServer({ dir: process.env.PLATFORM_DIR, dockerHost: process.env.DOCKER_HOST, dockerConfig: "/tmp/docker", signer: { identity: "", issuer: "" } });

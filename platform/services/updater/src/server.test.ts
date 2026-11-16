@@ -238,7 +238,10 @@ describe('a backup run', () => {
       'restore-test: restoring restore-test: sign-in came back with nobody in it',
     );
     await expect(runBackup(project, {}, '--now', { remove, ms: 60_000, run: async () => ({ code: 'timeout', logs: '' }) })).rejects.toThrow(/didn’t finish within 1 minutes/);
-    expect(removed).toHaveLength(2);
+    await expect(runBackup(project, {}, '--now', { remove, ms: 60_000, run: async () => ({ code: 'timeout', logs: 'backup: waiting for another backup run to finish\n' }) })).rejects.toThrow(
+      /within 1 minutes\. It said: backup: waiting for another backup run to finish/,
+    );
+    expect(removed).toHaveLength(3);
     expect(removed.every((name) => /^augur-backup-/.test(name))).toBe(true);
   });
 });
