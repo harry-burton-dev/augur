@@ -587,7 +587,7 @@ backs_up_without_exec() {
     exit 1
   fi
   # The proxy's own refusal, not some other failure.
-  if ! printf '%s\n' "$refused" | grep -qi -e '403' -e 'forbidden'; then
+  if ! printf '%s\n' "$refused" | grep -qi 'forbidden'; then
     echo "The updater's docker exec failed, but not because the Docker proxy refused it: $refused" >&2
     exit 1
   fi

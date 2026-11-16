@@ -146,7 +146,8 @@ export const runBackup = async (
   if (said.code === 0) return said.logs;
   await remove(name).catch(() => undefined);
   const last = said.logs.trim().split('\n').filter(Boolean).slice(-3).join(' ');
-  if (said.code === 'timeout') throw new CommandFailed(`backup.sh ${flag} didn’t finish within ${Math.round(ms / 60_000)} minutes${last ? `. It said: ${last}` : ''}`);
+  if (said.code === 'timeout')
+    throw new CommandFailed(`backup.sh ${flag} didn’t finish within ${Math.round(ms / 60_000)} minutes. ${last ? `It said: ${last}` : 'It said nothing; pc logs backup shows what the backup container was at.'}`);
   throw new CommandFailed(last || `backup.sh ${flag} stopped (exit code ${said.code}).`);
 };
 

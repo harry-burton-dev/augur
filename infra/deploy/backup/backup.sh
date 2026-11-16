@@ -414,9 +414,9 @@ locked() {
 }
 exec 9> "$LOCK_FILE"
 locked || exit 1
-# What a run cut short left half-written goes (a run the updater gave up on, say): nothing else writes here while
-# this holds the lock.
-find "$BACKUP_DIR" -maxdepth 1 -name '*.partial' -print -exec rm -rf {} + | sed 's/^/backup: removed /'
+# What a backup run cut short left half-written goes (one the updater gave up on, say): no other backup run writes
+# while this holds the lock. Only this script's own (restore-to-time.sh writes beside them without the lock).
+find "$BACKUP_DIR" -maxdepth 1 \( -name 'platform-*.partial' -o -name 'objects-*.partial' -o -name 'base-*.partial' \) -print -exec rm -rf {} + | sed 's/^/backup: removed /'
 if [ "${1:-}" = "--pitr-test" ]; then
   unlocked /bin/sh "$here/pitr-test.sh"
   exit $?
@@ -462,6 +462,7 @@ for result in last-backup offsite restore-test pitr pitr-test; do
 done
 find "$BACKUP_DIR" -maxdepth 1 -type f \( -name 'platform-*.sql.gz' -o -name 'objects-*.tar.gz' -o -name 'pgdata-before-restore-*' \) -exec chmod 600 {} +
 find "$BACKUP_DIR" -maxdepth 1 -type d -name 'base-*' -exec chmod 700 {} +
+find "$BACKUP_DIR" -maxdepth 1 -name '*.partial' -print -exec rm -rf {} + | sed 's/^/backup: removed /'
 
 today="$BACKUP_DIR/platform-$(date -u +%Y-%m-%d).sql.gz"
 [ -e "$today" ] || backup || true
@@ -488,8 +489,6 @@ if [ ! -e "$STATUS_DIR/restore-test.json" ] || { offsite_on && ! grep -q '"from"
 elif pitr_on && [ ! -e "$STATUS_DIR/pitr-test.json" ]; then
   unlocked /bin/sh "$here/pitr-test.sh" || true
 fi
-# The day whose nightly work is done: today's, when it started after the hour (what it did above stands for it).
-if [ "$(date -u +%H)" -ge "$BACKUP_HOUR_UTC" ]; then nightly=$(date -u +%Y-%m-%d); else nightly=; fi
 flock -u 9
 
 # Wakes on the hour: the nightly work at BACKUP_HOUR_UTC, and every hour the WAL archive's copy off the
@@ -498,22 +497,22 @@ while :; do
   now=$(date -u +%s)
   next=$(( now - now % 3600 + 3600 ))
   sleep $(( next - now ))
-  if ! locked; then
-    # Said on Status only when it costs the nightly backup.
-    if [ "$(date -u +%H)" -ge "$BACKUP_HOUR_UTC" ] && [ "$nightly" != "$(date -u +%Y-%m-%d)" ]; then
-      noted false "" "Another backup run held the backups for over $LOCK_WAIT_SECONDS s, so the nightly backup hasn't run yet; it is tried again on the hour (pc logs backup)."
+  # The nightly work waits for another run (up to LOCK_WAIT_SECONDS), and is tried again next hour if that ran out;
+  # the hourly copy doesn't wait, so the loop never sleeps past an hour, and is done next hour instead.
+  if [ "$(date -u +%H)" -eq "$BACKUP_HOUR_UTC" ] || [ -n "${missed:-}" ]; then
+    if ! locked; then
+      missed=1
+      continue
     fi
-    continue
-  fi
-  # Due once a day from BACKUP_HOUR_UTC, so a run it waited for that went on past the hour can't skip it.
-  if [ "$(date -u +%H)" -ge "$BACKUP_HOUR_UTC" ] && [ "$nightly" != "$(date -u +%Y-%m-%d)" ]; then
-    nightly=$(date -u +%Y-%m-%d)
+    missed=
     failed=
     backup || true
     today="$BACKUP_DIR/platform-$(date -u +%Y-%m-%d).sql.gz"
     [ ! -e "$today" ] || offsite "$today" || true
     base "$(date -u +%Y-%m-%d)" || true
     [ "$(date -u +%w)" != "$RESTORE_TEST_WEEKDAY" ] || restore_test
+  else
+    flock -n 9 || { echo "backup: another backup run is going, so this hour's copy waits for the next" >&2; continue; }
   fi
   pitr_offsite || true
   pitr_noted
