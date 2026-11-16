@@ -42,6 +42,14 @@ const cutOff = (page: Page) =>
     return { past: past.map(name), sideways: sideways.map(name) };
   });
 
+/**
+ * The title card's name comes in at twice its tracking and settles (shell-kit's aerie-card-track); the card clips
+ * that entrance on purpose, and fits the name to the window only at rest. So the check waits for the entrance to
+ * end, and then holds the card at rest like everything else.
+ */
+const settled = (page: Page) =>
+  page.evaluate(() => Promise.all([...document.querySelectorAll('.aerie-card .aerie-name')].flatMap((el) => el.getAnimations().map((a) => a.finished.catch(() => undefined)))));
+
 failOnPageErrors();
 
 test.use({ viewport: NARROW });
@@ -50,6 +58,7 @@ test('at 320 px the desktop and its bar cut nothing off', async ({ page }) => {
   await page.goto('/');
   const bar = page.getByRole('navigation', { name: 'App bar', exact: true });
   await expect(bar.locator('.aerie-bar-tile').first()).toBeVisible();
+  await settled(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });
 
@@ -57,5 +66,6 @@ test('at 320 px an open app, its rail, head and screen cut nothing off', async (
   await page.goto(`/${reference.id}`);
   await expect(check(page, 'person')).toBeVisible();
   await expect(rail(page)).toBeVisible();
+  await settled(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });
