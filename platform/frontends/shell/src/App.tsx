@@ -89,6 +89,7 @@ import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { isWorkerApp } from './host/apps3.js';
 import { PaneSlot } from './host/pane-target.js';
+import { Contained } from './host/contained.js';
 import { buildChange, buildNotice, servedBuild } from './host/build.js';
 import { InboxView } from './inbox/InboxView.js';
 
@@ -1194,44 +1195,48 @@ export function Host({
         toasts={toasts.map((t) => ({ id: t.id, text: t.text, ...(t.open ? { action: { label: 'Open', onPress: () => homeAsks.current?.open(t.id) } } : {}) }))}
         onDone={toastDone}
       />
-      <UrgentNotices
-        queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
-        appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
-        floorName={(id) => session.floors.find((f) => f.id === id)?.name}
-        me={session.user.name}
-        onOpen={(id) => homeAsks.current?.open(id)}
-      />
+      <Contained part="Urgent notices" resetOn={urgent}>
+        <UrgentNotices
+          queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
+          appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
+          floorName={(id) => session.floors.find((f) => f.id === id)?.name}
+          me={session.user.name}
+          onOpen={(id) => homeAsks.current?.open(id)}
+        />
+      </Contained>
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app' && !(screen?.kind === 'desk' && manifest && desktopApp(manifest))} />
       {accountSection ? (
-        <AccountArea
-          section={accountSection}
-          onSection={showAccount}
-          onClose={() => showAccount(null)}
-          api={accountApi}
-          prefs={chosen}
-          onPreference={choose}
-          onLanguage={chooseLanguage}
-          orgTimeZone={orgTimeZone}
-          onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
-          onSignOut={() => void session.signOut()}
-          apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
-          floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
-          ownFloor={home.id}
-          appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
-          mountSettings={mountSettings}
-          unmountSettings={unmountSettings}
-          shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
-          product={productName()}
-          version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
-          actionStatus={actionStatus}
-          actAs={{
-            personas: heldPersonas,
-            ...(actingSession ? { session: actingSession } : {}),
-            start: async (persona, reason, minutes) => acting.set(await personaClient.start(persona, reason, minutes)),
-            stop: stopActing,
-            signInAgain: () => window.location.assign(`${SIGN_IN_AGAIN_PATH}?return=${encodeURIComponent(`${window.location.pathname}?${ACCOUNT_PARAM}=security&${ACTING_PARAM}=again`)}`),
-          }}
-        />
+        <Contained part="The Account area" again={{ label: 'Close', onPress: () => showAccount(null) }}>
+          <AccountArea
+            section={accountSection}
+            onSection={showAccount}
+            onClose={() => showAccount(null)}
+            api={accountApi}
+            prefs={chosen}
+            onPreference={choose}
+            onLanguage={chooseLanguage}
+            orgTimeZone={orgTimeZone}
+            onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
+            onSignOut={() => void session.signOut()}
+            apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
+            floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
+            ownFloor={home.id}
+            appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
+            mountSettings={mountSettings}
+            unmountSettings={unmountSettings}
+            shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
+            product={productName()}
+            version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
+            actionStatus={actionStatus}
+            actAs={{
+              personas: heldPersonas,
+              ...(actingSession ? { session: actingSession } : {}),
+              start: async (persona, reason, minutes) => acting.set(await personaClient.start(persona, reason, minutes)),
+              stop: stopActing,
+              signInAgain: () => window.location.assign(`${SIGN_IN_AGAIN_PATH}?return=${encodeURIComponent(`${window.location.pathname}?${ACCOUNT_PARAM}=security&${ACTING_PARAM}=again`)}`),
+            }}
+          />
+        </Contained>
       ) : null}
       {problem && (
         <section className="problem" role="alert">
@@ -1256,21 +1261,23 @@ export function Host({
       </Dialog>
       <Dialog open={inboxOpen} onClose={() => setInboxOpen(false)} size="read" heading="Inbox" summary="Work that waits on you and your teams." cancelLabel="Close">
         {inboxOpen && manifest ? (
-          <InboxView
-            client={inbox}
-            manifest={manifest}
-            floors={session.floors}
-            here={floorId}
-            me={session.user.id}
-            counts={inboxCounts}
-            version={inboxVersion}
-            fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
-            onChanged={refreshInbox}
-            onOpen={(item) => {
-              setInboxOpen(false);
-              openInboxItem(item);
-            }}
-          />
+          <Contained part="The Inbox" resetOn={inboxVersion}>
+            <InboxView
+              client={inbox}
+              manifest={manifest}
+              floors={session.floors}
+              here={floorId}
+              me={session.user.id}
+              counts={inboxCounts}
+              version={inboxVersion}
+              fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
+              onChanged={refreshInbox}
+              onOpen={(item) => {
+                setInboxOpen(false);
+                openInboxItem(item);
+              }}
+            />
+          </Contained>
         ) : null}
       </Dialog>
       <Dialog
