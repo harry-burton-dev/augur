@@ -9,6 +9,16 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Each app has a database of its own: remove apps before upgrading
+
+**From** unreleased
+
+Each app now gets its own database (`app_<id>`) on AUGUR's Postgres, owned by its login, instead of a schema in AUGUR's. Its login, through the apps' relay, reaches only that database, not AUGUR's, Keycloak's or another app's. So no app can read another's tables or hold the locks AUGUR's migrations take. Backups take every database as before.
+
+Apps installed before aren't moved. **Before you upgrade, remove every app in Admin → Apps** (and any named in `APP_STORAGE` in `.env`), after copying out anything you want to keep. Each one's data is set aside when its grace period ends, and dropped with a later release, as ever. Then upgrade, and install the apps again: each starts empty, in its own database.
+
+If an app installed before is still there, this release doesn't start. The storage step stops and names it (`pc logs storage`), before anything of AUGUR migrates, and an upgrade through Deployment goes back to the release before by itself. Remove the app there, then upgrade again.
+
 ## Apps' parts get only the signed caller
 
 **From** unreleased
