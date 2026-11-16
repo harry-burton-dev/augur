@@ -2,7 +2,7 @@
 // contract tests can't see on a release's own images: sign-in works, the shell and the apps that
 // ship with it render, the UI kit comes from KIT_URL, held to its hashes (ADR 0048), and the shell keeps no token in
 // the page's storage while a reload and a second tab stay signed in (PER-453): in Chromium, and in a run without
-// APP_RELEASE in Firefox and WebKit too.
+// APP_RELEASE in Firefox too, and in WebKit where the front door is https.
 // infra/deploy-test.sh runs it in Playwright's container after a fresh install. See The deploy test in the AUGUR handbook, 03 Architecture/Engineering.
 //
 //   node deploy-browser-check.mjs <front door> <admin user> <admin password> <app id>...
@@ -171,7 +171,12 @@ try {
 
   // The same in the other engines people use, Firefox's and Safari's (WebKit). Once: not again in the app runner's run.
   if (!release) {
-    for (const [name, engine] of [['Firefox', firefox], ['WebKit', webkit]]) {
+    // Keycloak marks its cookies Secure (the front door says the original scheme was https), and WebKit keeps no
+    // Secure cookie from a plain-http address, even localhost, so there it can't even sign in. It runs only where
+    // the front door is https; elsewhere the check says so.
+    const https = new URL(base).protocol === 'https:';
+    if (!https) console.error(`- WebKit not checked: ${base} is plain http, where WebKit drops the sign-in service's Secure cookies.`);
+    for (const [name, engine] of [['Firefox', firefox], ...(https ? [['WebKit', webkit]] : [])]) {
       let other;
       try {
         other = await engine.launch();
