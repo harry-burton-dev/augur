@@ -167,7 +167,7 @@ export const gitIn = (cwd) => (...args) => {
   try {
     return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   } catch (e) {
-    throw new Error(`git ${args[0]} failed: ${(e.stderr || e.message).trim()}`);
+    throw new Error(`git ${args[0]} failed: ${(e.stderr || e.message).trim()}`, { cause: e });
   }
 };
 
@@ -204,7 +204,7 @@ export const releasedLock = ({ git, prefix, version, path }) => {
     }
     return { tag, version: tag.slice(prefix.length), lock: fileAt(git, commit, path) };
   } catch (e) {
-    throw new Error(`Can’t read what shipped in the newest ${prefix}<version> release: ${e.message}\n${NEEDS_ORIGIN}`);
+    throw new Error(`Can’t read what shipped in the newest ${prefix}<version> release: ${e.message}\n${NEEDS_ORIGIN}`, { cause: e });
   }
 };
 
@@ -215,7 +215,7 @@ export const lockOnBranch = ({ git, ref, path }) => {
     git('rev-parse', '--verify', '--quiet', `${ref}^{commit}`);
     return fileAt(git, ref, path);
   } catch (e) {
-    throw new Error(`Can’t read the migrations on ${ref} (MIGRATIONS_FROZEN_AT): ${e.message}\n${NEEDS_ORIGIN}`);
+    throw new Error(`Can’t read the migrations on ${ref} (MIGRATIONS_FROZEN_AT): ${e.message}\n${NEEDS_ORIGIN}`, { cause: e });
   }
 };
 
