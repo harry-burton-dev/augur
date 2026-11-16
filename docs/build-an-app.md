@@ -407,7 +407,7 @@ When someone has to do something (approve, review, take an assignment), put an i
 
 An app that lets people share things with each other asks identity two things, as itself, with the `people:read` scope.
 
-- **Who someone stands for.** `identityPrincipals` from `@augur/service-kit` gives a person's principals: `person:<id>`, `team:<id>` for each team they're on, `tree:<id>` for each of those teams and every team above it, and `org`. Keep, with each thing, the principals who may see it (`tree:<finance>` for "Finance and the teams below it"), and a person may see it when the two lists overlap. Answers are kept for 30 seconds, so someone added to a team can see its things within that time.
+- **Who someone stands for.** `identityPrincipals` from `@augur/service-kit` gives a person's principals: `person:<id>`, `team:<id>` for each team they're on, `tree:<id>` for each of those teams and every team above it, and `org` (the caller's organisation, whose floor's id is `caller.org`). Keep, with each thing, the principals who may see it (`tree:<finance>` for "Finance and the teams below it"), and a person may see it when the two lists overlap. Answers are kept for 30 seconds, so someone added to a team can see its things within that time.
 - **Who to share with.** `identityDirectory` finds people and teams by name for the app's share dialog, and names the ones it has already shared with by id.
 - **The share dialog itself** needs no scope: the person choosing is signed in, so the frontend asks as them. Hand `searchPrincipals` from `@augur/mfe-sdk` to Quill's `PeoplePicker`, and name who a thing is already shared with by id with `namePrincipals`:
 
