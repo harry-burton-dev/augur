@@ -211,6 +211,18 @@ describe('a call made for an app', () => {
     expect(b.statusCode).toBe(401);
   });
 
+  it('names the organisation on every caller it signs, the delegated one included', async () => {
+    const app = await buildApp({ upstreams: { events: url, notes: url }, auth, signer, appGrants, floors, access, monitor: new HealthMonitor({ probes: [] }), organisationFloor: () => 'o1' });
+    const forApp = await app.inject({ method: 'GET', url: '/api/notes/v1/items', headers: { authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: 'notes', 'x-workspace-id': 'w1' } });
+    expect(await callerIn(forApp, appClientId('notes'))).toMatchObject({ id: 'u-1', org: 'o1', workspace: w1 });
+    const service = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: { authorization: `Bearer ${await signPerson()}`, [APP_HEADER]: 'notes', 'x-workspace-id': 'w1' }, payload: {} });
+    expect(await callerIn(service, 'events')).toMatchObject({ id: 'u-1', org: 'o1' });
+    // AUGUR's own services read it from the plain headers too.
+    expect(service.json().headers['x-user-org']).toBe('o1');
+    const own = await app.inject({ method: 'POST', url: '/api/events/v1/notifications', headers: { authorization: `Bearer ${await signApp('notes')}`, 'x-workspace-id': 'w1' }, payload: {} });
+    expect(await callerIn(own, 'events')).toMatchObject({ id: 'app:notes', org: 'o1' });
+  });
+
   it('reads a delegated call’s grant on the floor the person stood on, and refuses another floor named beside it', async () => {
     const asked: (string | undefined)[] = [];
     const app = await gateway(async (id, workspace) => (asked.push(workspace), appGrants(id, workspace)));

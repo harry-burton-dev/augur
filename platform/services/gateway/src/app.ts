@@ -42,6 +42,7 @@ import { appFailure, appLimitsFromEnv, InFlight, platformFailure, platformLimits
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
+import { identityOrganisationFloor, type OrganisationFloor } from './organisation.ts';
 import { PERSONA_ID, permissionsPersonaSessions, PersonaSessionsUnavailable, type PersonaSessionCheck } from './personas.ts';
 import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
 import { Traffic, TRAFFIC_PATH, type TrafficPart } from './traffic.ts';
@@ -180,6 +181,8 @@ export interface GatewayOptions {
   delegationSeconds?: number;
   /** Whether a person is acting as an admin persona now (ADR 0086). Defaults to asking the permissions upstream. */
   personaSessions?: PersonaSessionCheck;
+  /** The organisation's floor's id, signed on every caller as `org`. Defaults to asking the identity upstream. */
+  organisationFloor?: OrganisationFloor;
 }
 
 /**
@@ -199,7 +202,7 @@ export interface GatewayOptions {
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), platformLimits = platformLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), platformLimits = platformLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions, organisationFloor }: GatewayOptions = {}) => {
   // Mail comes from the organisation's sender (Admin → Organisation), read from identity as the gateway.
   const sender = upstreams.identity
     ? organisationSender({
@@ -221,6 +224,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const grantsOf = appGrants ?? (upstreams.registry ? registryGrantsFor({ registryUrl: upstreams.registry, signer }) : undefined);
+  const orgFloor = organisationFloor ?? (upstreams.identity ? identityOrganisationFloor({ identityUrl: upstreams.identity, signer, fetchImpl }) : undefined);
   const actingAs = personaSessions ?? (upstreams.permissions ? permissionsPersonaSessions({ permissionsUrl: upstreams.permissions, signer, fetchImpl }) : undefined);
   const inFlight = new InFlight(limits.concurrentCalls);
   // A part sends back the delegated caller the gateway signed; it is checked against the gateway's own key.
@@ -593,6 +597,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       return reply.code(status).send({ error, message });
     };
     const toPlatform = PLATFORM_SERVICES.includes(name);
+    // Every caller passed on names the organisation the call is in, once identity has said it (it never waits).
+    const org = req.caller && !req.caller.org ? orgFloor?.() : undefined;
+    if (org) req.caller = { ...req.caller!, org };
 
     // An admin persona is for AUGUR's own services, never an app's part.
     if (req.caller?.persona && !toPlatform) return refuse(403, 'forbidden', 'An app never acts as your admin persona. Stop “Act as” to use it.');

@@ -46,7 +46,7 @@ An app's own token, with no delegation, is admitted only for an app the registry
 
 ### The organisation
 
-A caller can carry the claim `org`: the organisation's floor's id, which identity gives as `id` on `GET /v1/organisation`. `callerFromHeaders` gives it as `caller.org` (`x-user-org` for AUGUR's own services). It is what a call names in `X-Workspace-Id` for the whole organisation. A deployment has one organisation today, so the principal `org` means this one. The gateway doesn't sign it yet; until it does, `org` is absent.
+A caller can carry the claim `org`: the organisation's floor's id, which identity gives as `id` on `GET /v1/organisation`. `callerFromHeaders` gives it as `caller.org` (`x-user-org` for AUGUR's own services). It is what a call names in `X-Workspace-Id` for the whole organisation. A deployment has one organisation today, so the principal `org` means this one. The gateway signs it on every caller it passes on. It reads the id from identity in the background and reads it again every ten minutes, so no call waits for it: a call made before identity first answers goes without `org`.
 
 ### Acting as an admin persona
 
