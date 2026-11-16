@@ -20,6 +20,11 @@ export interface Parts {
   readyMs: Record<string, number>;
   /** Parts every release runs, though not always from AUGUR's image: never stopped as one a release doesn't have. */
   kept: string[];
+  /**
+   * Jobs run to the end before anything else starts, when the release has them: the secrets job writes the
+   * folder every other part reads its own secrets from (ADR 0107).
+   */
+  first: string[];
 }
 
 /**
@@ -63,5 +68,6 @@ export const partsFor = (): Parts => {
     readyMs: Object.fromEntries(rows.filter((row) => row[3]).map(([name, , , ms]) => [name, ms as number])),
     // Releases before AUGUR's own Keycloak image run Keycloak's: going back to one keeps Keycloak running.
     kept: ['keycloak'],
+    first: ['make-secrets'],
   };
 };
