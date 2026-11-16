@@ -6,7 +6,7 @@ Services tell each other what happened through **domain events**: "folio.documen
 
 A topic is the publisher's id, then what happened, dotted and lowercase: `folio.document.published`. An app publishes only on its own topics (`<its id>.*`); `platform.*` belongs to the platform. Followers ask for exact topics or families: `folio.*`.
 
-An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. An app reads only the events on floors where it holds `events:subscribe`, and those on no floor (the organisation's); AUGUR's own services read every floor's (ADR 0104). Even so, a follower that needs the document asks its owner's API, which checks who may see it.
+An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. An app reads only the events on floors where it holds `events:subscribe`, and those on no floor (the organisation's); AUGUR's own services read every floor's (ADR 0104). A follower that needs more than the ids doesn't call the owning app: the gateway refuses one app calling another. It shows the person the thing through an intent (`ctx.raise`), and the owning app checks who may see it.
 
 ## Declaring them
 
