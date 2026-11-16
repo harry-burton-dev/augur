@@ -27,7 +27,10 @@
       "types": "./src/catalog.d.ts",
       "default": "./src/catalog.mjs"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./migrations": {
+      "default": "./src/migrations.mjs"
+    }
   },
   "bin": {
     "augur-app": "./bin/augur-app.mjs"
@@ -47,7 +50,9 @@
     "src/release2.d.ts",
     "src/validate.d.ts",
     "src/release.d.ts",
-    "src/catalog.d.ts"
+    "src/catalog.d.ts",
+    "src/migrations.mjs",
+    "squawk.toml"
   ],
   "scripts": {
     "test": "node --test src/*.test.mjs"
