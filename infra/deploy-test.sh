@@ -356,33 +356,45 @@ retired_by_upgrade() {
   done
 }
 
-# What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's
-# left out, and so is what the upgrade takes away on purpose ($1, app ids from retired_by_upgrade): those apps'
-# schemas, and their rows in any table that names apps (a text app_id column, or the registry's apps table),
+# What's in the database: every table with its exact row count, in AUGUR's database and in each app's own
+# (app_<id>, its tables named app_<id>:<schema>.<table>). Keycloak's own database isn't AUGUR's, so it's left out, and so is what the upgrade takes away on purpose ($1, app ids from retired_by_upgrade): those apps'
+# schemas or databases, and their rows in any table that names apps (a text app_id column, or the registry's apps table),
 # mirroring what migration 023 deletes, so that what is counted before the upgrade is what must still be there
 # after it. The same list is used for every snapshot, so they are like for like.
 tables() {
-  local id schemas='' ids=''
+  local id db schemas='' ids='' dbs=''
   for id in $1; do
     ids+="$id,"
     schemas+="${id//-/_},${id//-/_}_jobs,"
+    dbs+="app_${id//-/_},"
   done
+  dbs="{${dbs%,}}"
   ids="{${ids%,}}"
   schemas="{${schemas%,}}"
-  pc exec -T postgres psql -U platform -d platform -At -F' ' -v ON_ERROR_STOP=1 -c "
+  {
+    count_tables platform "$ids" "$schemas"
+    for db in $(pc exec -T postgres psql -U platform -d platform -At -v ON_ERROR_STOP=1 -c "select datname from pg_database where datname like 'app\\_%' and datname <> all ('$dbs'::text[]) order by 1"); do
+      count_tables "$db" '{}' '{}' | sed "s/^/$db:/"
+    done
+  } | sort
+}
+
+# count_tables DB IDS SCHEMAS: each table in DB with its row count, leaving out SCHEMAS, and rows naming IDS.
+count_tables() {
+  pc exec -T postgres psql -U platform -d "$1" -At -F' ' -v ON_ERROR_STOP=1 -c "
     select t.table_schema || '.' || t.table_name,
       (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I where %s', t.table_schema, t.table_name,
         case
           when exists (select 1 from information_schema.columns c
                        where c.table_schema = t.table_schema and c.table_name = t.table_name
                          and c.column_name = 'app_id' and c.data_type in ('text', 'character varying'))
-            then format('coalesce(app_id <> all (%L::text[]), true)', '$ids')
-          when t.table_schema = 'registry' and t.table_name = 'apps' then format('coalesce(id <> all (%L::text[]), true)', '$ids')
+            then format('coalesce(app_id <> all (%L::text[]), true)', '$2')
+          when t.table_schema = 'registry' and t.table_name = 'apps' then format('coalesce(id <> all (%L::text[]), true)', '$2')
           else 'true'
         end), false, true, '')))[1]::text
     from information_schema.tables t
     where t.table_type = 'BASE TABLE' and t.table_schema not in ('pg_catalog', 'information_schema')
-      and t.table_schema <> all ('$schemas'::text[])" | sort
+      and t.table_schema <> all ('$3'::text[])"
 }
 
 # Nothing that was there before may be gone or emptied.
