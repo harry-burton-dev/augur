@@ -67,8 +67,8 @@ and containers whose image didn't change keep running. Keycloak and Postgres onl
 
 ## Check it worked
 
-Every release has been upgraded to from the release before, with data, and gone back from, in AUGUR's own
-tests. Your server can still differ, so check it yourself too.
+Every release has been upgraded to from the newest release before it, with data, and gone back from, in AUGUR's
+own tests: both by code alone and by restoring the backup taken before the upgrade, as in [Going back](#going-back). Your server can still differ, so check it yourself too.
 
 - `pc ps` shows each of AUGUR's services as `healthy` about a minute after it starts. One that stays
   `unhealthy` or `starting` is the one to look at in `pc logs`.
@@ -118,8 +118,7 @@ migrated data:
    are still on the server, so nothing is downloaded.
 2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading,
    as in [Backups](../backups/#restore-the-database-from-a-backup). Anything changed since that backup is lost,
-   so check Admin → Activity first for what that is. Every release's deploy test goes back from it to the
-   release before both ways: on the newer tables, and by this restore of the backup taken before the upgrade.
+   so check Admin → Activity first for what that is.
 
 For one app rather than the whole of AUGUR, Deployment can go back to an earlier version of just that app
 ([The app runner](../app-runner/)).
