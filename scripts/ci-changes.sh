@@ -5,9 +5,9 @@
 #
 # A pull request is compared with where it left its base branch; a push with the push before it.
 # A run by hand, the Version packages pull request, and a change to this script or to ci.yml run
-# everything. On a push only build-test (which refills the turbo cache pull requests start from) and
-# the Storybook (main's build is Chromatic's baseline) run: the pull request ran the rest on the same
-# code, and the dev build builds the images for real.
+# everything. On a push only build-test (which refills the turbo cache pull requests start from), the
+# contract tests when the shell changed, and the Storybook (main's build is Chromatic's baseline) run: the
+# pull request ran the rest on the same code, and the dev build builds the images for real.
 set -euo pipefail
 
 out=${GITHUB_OUTPUT:-/dev/stdout}
@@ -27,9 +27,10 @@ touches() { [ "$all" = true ] || ! git diff --quiet "$range" -- "$@"; }
 say() { echo "$1=$2" >> "$out"; echo "$1: $2"; }
 pr_only() { if [ "${EVENT:-}" = push ]; then say "$1" false; elif touches "${@:2}"; then say "$1" true; else say "$1" false; fi; }
 
-# What the shell, Home and the shared packages are built from.
-pr_only contract platform/frontends platform/packages platform/contract \
-  ':!platform/frontends/admin' ':!platform/frontends/upgrades' ':!**/*.md' package.json pnpm-lock.yaml
+# What the shell, Home and the shared packages are built from. A push to main that touches them runs it
+# too: a pull request can merge with it red, and main should show it.
+if touches platform/frontends platform/packages platform/contract \
+  ':!platform/frontends/admin' ':!platform/frontends/upgrades' ':!**/*.md' package.json pnpm-lock.yaml; then say contract true; else say contract false; fi
 # The docs site, its own pnpm project, and the files its reference is generated from (docs/scripts/reference.mjs,
 # docs/astro.config.mjs).
 pr_only docs docs ':(glob,exclude)docs/*.md' contracts 'platform/packages/app-tools/*.schema.json' infra/deploy/settings.schema.json

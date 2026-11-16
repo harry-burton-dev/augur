@@ -39,7 +39,13 @@ const cutOff = (page: Page) =>
       const style = getComputedStyle(el);
       return !screenReaderOnly(el) && style.overflowX !== 'visible' && style.textOverflow !== 'ellipsis' && el.scrollWidth > el.clientWidth + 1;
     });
-    return { past: past.map(name), sideways: sideways.map(name) };
+    // For a box that scrolls sideways, what in it runs past its inner edge: the outermost part, so a failure names the cause.
+    const runsPast = (box: Element) => {
+      const edge = box.getBoundingClientRect().left + box.clientLeft + box.clientWidth + 1;
+      const found = [...box.querySelectorAll('*')].filter(shown).filter((el) => el.getBoundingClientRect().right > edge);
+      return found.filter((el) => !found.some((other) => other !== el && other.contains(el))).slice(0, 3).map((el) => `${name(el)} by ${Math.round(el.getBoundingClientRect().right - edge)}px`);
+    };
+    return { past: past.map(name), sideways: sideways.map((el) => [name(el), ...runsPast(el)].join(' ← ')) };
   });
 
 /** Everything in the shell that moves and then stops has stopped, and the web font is in (the title card fits its name again when it arrives). */
