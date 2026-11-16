@@ -15,6 +15,12 @@ Each note starts with the release it came in (**From**). If your server already 
 
 A coming release removes `IN_PAGE_APPS`: after it, no app AUGUR didn't make loads into the shell's page, so an app on contract 2 that the setting lets in today stops opening. From this release, Deployment's **Needs you** lists each app still on contract 2 and says whether it opens only because `IN_PAGE_APPS` names it, and the registry logs the apps the setting names each time it starts (`IN_PAGE_APPS names` in `pc logs registry`). It is a warning: it doesn't mark the deployment unhealthy in its report to Backstage. Nothing to do on the server now. For each app listed, ask its team for a release on the app contract, install it, then take the app out of `IN_PAGE_APPS` and run `pc up -d registry`.
 
+## Alerts can leave the server without AUGUR
+
+**From** unreleased
+
+Grafana now has two routes that don't go through AUGUR: `ALERT_OUTSIDE_URL` gets every alert and its all-clear, and `ALERT_HEARTBEAT_URL` gets a heartbeat every minute, so a service there raises the alarm when the server stops. Both are optional, and alerts still reach deployment admins as notices. On a production server, set both in `.env` and run `pc up -d otel-lgtm registry`: until you do, the registry tells its deployment admins once a week that alerts reach no one outside AUGUR ([Observability, Alerts](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#alerts)).
+
 ## The binding events are gone
 
 **From** unreleased

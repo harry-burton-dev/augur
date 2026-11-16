@@ -143,3 +143,34 @@ groups:
               expression: A
               conditions:
                 - evaluator: { type: lt, params: [1] }
+
+      # The watchdog: always firing, while Grafana, its Prometheus and the server are up. contact-points.yaml
+      # sends it only to the heartbeat (ALERT_HEARTBEAT_URL), every minute; the service there raises the
+      # alarm when the beats stop. It never becomes a notice.
+      - uid: augur-watchdog
+        title: AUGUR is watching
+        condition: C
+        for: 0s
+        noDataState: OK
+        execErrState: OK
+        labels:
+          watchdog: 'true'
+        annotations:
+          summary: 'AUGUR’s alerts are working'
+          description: 'This alert always fires while the server, Grafana and its metrics are up. When it stops reaching the heartbeat address, they aren’t.'
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange: { from: 60, to: 0 }
+            model:
+              refId: A
+              expr: vector(1)
+              instant: true
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }

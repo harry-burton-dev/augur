@@ -12,6 +12,7 @@ import { cosignFeedCheck, feedSigner, repoOfFeed, TRUSTED_ROOT_IN_REGISTRY } fro
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { reportingFrom } from './report.ts';
 import { ringFrom, takesPreview } from './ring.ts';
+import { unroutedNotice, unroutedOn } from './alerts.ts';
 import { PgAppStore, type AppStore } from './store.ts';
 import { updateNotices } from './notices.ts';
 
@@ -48,6 +49,8 @@ loadConfigOrExit('registry', [
   { name: 'DEFAULT_APPS', about: 'the apps this deployment installs from the feed by default, by id, split by commas or spaces: their asks are agreed by the deployment, and they can’t be removed while named (optional).' },
   { name: 'APP_DATA_GRACE_DAYS', about: 'how many days an app removed from the server keeps its data, settings and grants before they go (default 30, from 1 to 365).' },
   { name: 'ALERT_WEBHOOK_TOKEN', about: 'what the deployment’s Grafana sends with its alerts, so they reach deployment admins as notices (ADR 0059).', secret: true },
+  { name: 'ALERT_OUTSIDE_URL', about: 'set when the deployment’s Grafana sends every alert outside AUGUR too; compose passes only whether it is, never the address.' },
+  { name: 'ALERT_HEARTBEAT_URL', about: 'set when the deployment’s Grafana sends its heartbeat outside AUGUR; compose passes only whether it is, never the address.' },
 ]);
 
 const port = Number(process.env.PORT ?? 8082);
@@ -156,6 +159,24 @@ if (EVENTS_URL && credentials) {
   leavers.start();
   serving.onStop(() => leavers.stop());
 } else log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: a deleted person’s name stays on the upgrades they asked for.');
+
+// A production server's admins hear, weekly, while an alert route outside AUGUR isn't set (unroutedNotice).
+// The first try waits for the events service to start beside it; the key keeps it to one a week.
+const unrouted = unroutedOn(ring, process.env);
+if (unrouted.length) {
+  log.warn(`${unrouted.join(' and ')} not set: on this production server, an alert about AUGUR itself can reach no one (docs/observability.md, Alerts).`);
+  if (EVENTS_URL && credentials) {
+    const tell = () => void notify({ eventsUrl: EVENTS_URL, credentials, notification: unroutedNotice(unrouted)! }).catch((err) => log.error(`The missing alert routes weren’t told yet; the registry tries again within the hour (${(err as Error).message}).`));
+    const first = setTimeout(tell, 2 * 60_000);
+    const timer = setInterval(tell, 60 * 60_000);
+    first.unref();
+    timer.unref();
+    serving.onStop(() => {
+      clearTimeout(first);
+      clearInterval(timer);
+    });
+  }
+}
 
 // Deployment admins hear when a release is available and how each update ended, in the shell (ADR 0044).
 if (EVENTS_URL && credentials) {
