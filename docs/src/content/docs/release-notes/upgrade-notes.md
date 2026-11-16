@@ -9,6 +9,12 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Apps' parts get only the signed caller
+
+**From** unreleased
+
+The gateway no longer sends an app's part the plain `x-user-*` headers, only the caller it signs. Apps made from the app template check that already. An app whose part still reads the plain headers without the service kit's `signedCallers` hook answers as if nobody were signed in: update it before you upgrade, or remove it.
+
 ## Some secrets reach their services as files, which needs Docker Compose 2.24
 
 **From** unreleased

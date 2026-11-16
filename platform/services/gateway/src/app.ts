@@ -742,11 +742,12 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       // Who is calling comes only from the verified token. A person's token stays here: it works on every platform API,
       // so no service, an app's least of all, is handed it. An app's own token goes on with its call, because the services
       // still read which app is calling from it (their second line, spec 8.3) and it reaches only AUGUR and the app's own part.
-      // Every incoming x-augur-* and x-user-* header is dropped; the plain caller headers stay for apps that don't check the signed one yet.
+      // Every incoming x-augur-* and x-user-* header is dropped. An app's part gets only the signed caller, which it
+      // checks; AUGUR's own services get the plain caller headers beside it.
       const { authorization, [CALLER_TOKEN_HEADER]: __, ...named } = withoutCallerHeaders(headers);
       const clean = Object.fromEntries(Object.entries(named).filter(([k]) => !isGatewayHeader(k)));
       const keepToken = request.identity?.kind === 'app' && authorization ? { authorization } : {};
-      return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...callerHeaders(request.caller), ...request.signedCaller } : {}) };
+      return { ...clean, ...keepToken, [REQUEST_ID_HEADER]: request.id, ...(request.caller ? { ...(service ? callerHeaders(request.caller) : {}), ...request.signedCaller } : {}) };
     },
   });
 

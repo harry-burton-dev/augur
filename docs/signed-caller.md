@@ -23,7 +23,7 @@ app.get('/v1/claims', async (req, reply) => {
 
 The hook drops every `x-user-*` header a request brings, the floor's kind and role, and the acting-app headers of a delegated caller (below). It puts back the caller from a valid signed token, so `callerFromHeaders` reads only what the gateway said. A request with a bad, expired or someone else's token gets 401. One with no token has no caller, which is how another service's own calls arrive: they prove who they are with their own sign-in, as before.
 
-New apps made from augur-app-template have the hook already (the service kit's `appServer`). An app that hasn't added it keeps working, because the gateway still sends the plain headers beside the token, but it is trusting the network.
+New apps made from augur-app-template have the hook already (the service kit's `appServer`). An app's part gets only the signed token, never the plain `x-user-*` headers, so a part without the hook sees nobody signed in. AUGUR's own services still get the plain headers beside the token.
 
 ## Acting for a person: the delegated caller
 
