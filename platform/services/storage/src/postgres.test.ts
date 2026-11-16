@@ -1,6 +1,6 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { dropDatabase, jobsSchemaFor, markRetired, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, retiredApps, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { dropDatabase, jobsSchemaFor, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
 
 describe('an app’s schema', () => {
   it('is never one named for a part of AUGUR, made or dropped', async () => {
@@ -162,6 +162,19 @@ describe.runIf(process.env.DATABASE_URL)('a platform service’s database login'
       await client.end();
     }
   });
+
+  it('may use the connections Postgres keeps back, which an app’s login may not (reserved_connections)', async () => {
+    await provisionServiceDatabase(admin, { service, password: 'service-password-123' });
+    const may = async (role: string) => (await admin.query(`select pg_has_role($1, 'pg_use_reserved_connections', 'usage') as may`, [role])).rows[0].may;
+    expect(await may(serviceRoleFor(service))).toBe(true);
+    const app = `resvapp${process.pid}`;
+    try {
+      await provisionDatabase(admin, { app, password: 'app-password-1234' });
+      expect(await may(roleFor(app))).toBe(false);
+    } finally {
+      await dropDatabase(admin, app);
+    }
+  });
 });
 
 describe.runIf(process.env.DATABASE_URL)('Keycloak’s database login', () => {
@@ -190,26 +203,9 @@ describe.runIf(process.env.DATABASE_URL)('Keycloak’s database login', () => {
       const owner = await inside.query(`select pg_get_userbyid(datdba) as owner from pg_database where datname = $1`, [database]);
       expect(owner.rows).toEqual([{ owner: role }]);
       expect((await inside.query(`select tableowner from pg_tables where tablename = 'realm'`)).rows).toEqual([{ tableowner: role }]);
+      expect((await inside.query(`select pg_has_role($1, 'pg_use_reserved_connections', 'usage') as may`, [role])).rows).toEqual([{ may: true }]);
     } finally {
       await inside.end();
-    }
-  });
-});
-
-describe.runIf(process.env.DATABASE_URL)('a retired app (ADR 0075)', () => {
-  it('is noted once, so its data isn’t taken again when a new app reuses the name', async () => {
-    const admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
-    await admin.connect();
-    const app = `retired-test-${process.pid}`;
-    try {
-      expect((await retiredApps(admin)).has(app)).toBe(false);
-      await markRetired(admin, app, 'removed');
-      await markRetired(admin, app, 'kept');
-      expect((await retiredApps(admin)).has(app)).toBe(true);
-      expect((await admin.query('select outcome from public.storage_retired_apps where app = $1', [app])).rows).toEqual([{ outcome: 'removed' }]);
-    } finally {
-      await admin.query('delete from public.storage_retired_apps where app = $1', [app]);
-      await admin.end();
     }
   });
 });

@@ -12,7 +12,7 @@ import { JWTPayload } from 'jose';
 import { JWTVerifyGetKey } from 'jose';
 
 // @public
-export function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id'> & {
+export function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id' | 'version'> & {
     id?: string;
 }): Promise<void>;
 
@@ -174,36 +174,35 @@ export interface AskModelOptions {
 export type AudienceLookup = (principals: readonly string[]) => Promise<string[]>;
 
 // @public
+export const AUDIT_OUTBOX_COLUMNS = "\n  id bigint generated always as identity primary key,\n  key text not null unique,\n  workspace_id text,\n  entry jsonb not null,\n  created_at timestamptz not null default now(),\n  sent_at timestamptz,\n  refused_at timestamptz,\n  refused_why text";
+
+// @public
 export const auditFor: (app: string, log: (entry: AppAuditEntry) => void, env?: NodeJS.ProcessEnv) => AppAudit;
 
-// @public
-export interface Binding {
-    app: string;
-    entity: string;
-    id: string;
-    more?: Record<string, string>;
-    role?: string;
-    type: string;
-}
-
-// @public
-export interface BindingApp {
-    // (undocumented)
-    app: string;
-    types: string[];
-}
-
 // @public (undocumented)
-export type BindingChange = 'bound' | 'unbound';
+export interface AuditOutbox {
+    add(entry: NewAuditEntry, workspace?: string, db?: Queryable): Promise<void>;
+    drain(): Promise<void>;
+    flush(): Promise<number>;
+    forget(person: string): Promise<void>;
+    // (undocumented)
+    start(): void;
+    // (undocumented)
+    stop(): void;
+}
 
 // @public
-export const bindingEvent: (binding: Binding, change: BindingChange, workspace?: string) => Omit<NewDomainEvent, "id">;
-
-// @public
-export const bindingTopics: (app: string, type: string) => {
-    bound: string;
-    unbound: string;
-};
+export const auditOutbox: (input: {
+    pool: ConnectionPool & Queryable;
+    table: string;
+    eventsUrl: string;
+    credentials: ServiceCredentials;
+    fetchImpl?: typeof fetch;
+    env?: Record<string, string | undefined>;
+    batch?: number;
+    intervalMs?: number;
+    onError?: (err: unknown) => void;
+}) => AuditOutbox;
 
 // @public
 export class BoundedMap<K, V> {
@@ -452,6 +451,9 @@ export interface ConnectionPool {
 }
 
 // @public
+export const connectTimeoutMs: (env?: Record<string, string | undefined>) => number;
+
+// @public
 export const createJobs: (options: JobsOptions) => Jobs;
 
 // @public
@@ -484,16 +486,56 @@ export interface DatabaseResult<R extends DatabaseRow = DatabaseRow> {
 export type DatabaseRow = Record<string, unknown>;
 
 // @public
+export class DatabaseUnavailable extends Error {
+    constructor(timeoutMs: number, options?: ErrorOptions);
+    // (undocumented)
+    readonly name = "DatabaseUnavailable";
+    // (undocumented)
+    readonly timeoutMs: number;
+}
+
+// @public
 export const decidesFrom: (value: string | undefined) => ReadonlySet<string> | "all";
 
 // @public
+export interface DeclaredEvents {
+    contract?: number;
+    // (undocumented)
+    publishes: DeclaredEventType[];
+    // (undocumented)
+    reads?: string[];
+}
+
+// @public
+export type DeclaredEventsLookup = (app: string) => Promise<DeclaredEvents | undefined>;
+
+// @public
+export interface DeclaredEventType {
+    // (undocumented)
+    schema: Record<string, unknown>;
+    // (undocumented)
+    topic: string;
+    // (undocumented)
+    version: number;
+}
+
+// @public
 export const DEFAULT_CACHE_ENTRIES = 5000;
+
+// @public
+export const DEFAULT_CONNECT_TIMEOUT_MS = 10000;
 
 // @public
 export const DEFAULT_DELEGATION_SECONDS = 300;
 
 // @public
 export const DEFAULT_GATEWAY_URL = "http://gateway:8080";
+
+// @public
+export const DEFAULT_MIGRATION_IDLE_TIMEOUT_MS = 60000;
+
+// @public
+export const DEFAULT_MIGRATION_LOCK_TIMEOUT_MS = 60000;
 
 // @public
 export const DEFAULT_SERVICE_TIMEOUT_MS = 5000;
@@ -603,6 +645,7 @@ export interface DomainEvent {
     seq: string;
     // (undocumented)
     topic: string;
+    version?: number;
     // (undocumented)
     workspace?: {
         id: string;
@@ -651,6 +694,15 @@ export const eventCursor: (db: Queryable, follower?: string) => {
 export const eventDeliveryKey: (event: Pick<DomainEvent, "seq">) => string;
 
 // @public
+export const FLEET_CALLER: Caller;
+
+// @public
+export const FLEET_CLIENT_ID = "platform-fleet";
+
+// @public
+export const FLEET_SERVICE = "fleet";
+
+// @public
 export const floorCaller: (manifest: Pick<AppManifest, "name">) => (req: Pick<FastifyRequest, "headers">) => OnFloor;
 
 // @public
@@ -693,14 +745,6 @@ export class FloorsUnavailable extends Error {
 // @public
 export const FLUSH_TELEMETRY: unique symbol;
 
-// @public
-export interface FollowedBinding extends Binding {
-    // (undocumented)
-    change: BindingChange;
-    // (undocumented)
-    workspace?: string;
-}
-
 // Warning: (ae-forgotten-export) The symbol "EventsAddress" needs to be exported by the entry point index.d.ts
 //
 // @public
@@ -711,6 +755,7 @@ export const followEvents: (input: EventsAddress & {
         save(seq: string): Promise<void>;
     };
     handle(event: DomainEvent): Promise<void>;
+    onGap?: (prunedUpTo: string) => Promise<void>;
     batch?: number;
     intervalMs?: number;
     onError?: (err: unknown) => void;
@@ -737,6 +782,9 @@ export const FRONTEND_LIMITS: {
 };
 
 // @public
+export const FRONTEND_TYPES: Readonly<Record<string, string>>;
+
+// @public
 export const frontendDigest: (tarball: Buffer) => string;
 
 // @public
@@ -753,6 +801,12 @@ export const frontendPathProblem: (path: string) => string | undefined;
 // @public (undocumented)
 export class FrontendProblem extends Error {
 }
+
+// @public
+export const frontendTypeOf: (path: string) => string | undefined;
+
+// @public
+export const frontendTypeProblem: (path: string) => string | undefined;
 
 // @public
 export const GATEWAY_CALLER: Caller;
@@ -975,6 +1029,9 @@ export const isDelegated: (caller: Pick<Caller, "app"> | undefined) => caller is
     app: string;
 };
 
+// @public
+export const isFleetCaller: (caller?: Pick<Caller, "id">) => boolean;
+
 // @public (undocumented)
 export const isGatewayCaller: (caller?: Pick<Caller, "id">) => boolean;
 
@@ -1100,6 +1157,12 @@ export const loadConfig: (service: string, settings: Setting[], env?: NodeJS.Pro
 export const loadConfigOrExit: (service: string, settings: Setting[], env?: NodeJS.ProcessEnv) => SettingState[];
 
 // @public
+export const LOCK_NAMESPACE: {
+    readonly migrations: 1096089601;
+    readonly auditOutbox: 1096089602;
+};
+
+// @public
 export const MAIL_SECURITY: readonly ["starttls", "tls", "none"];
 
 // @public
@@ -1144,6 +1207,25 @@ export interface Migration {
     // (undocumented)
     sql: string;
 }
+
+// @public
+export const migrationIdleTimeoutMs: (env?: Record<string, string | undefined>) => number;
+
+// @public
+export class MigrationLockTimeout extends Error {
+    constructor(schema: string,
+    migration: string | undefined, timeoutMs: number, message: string, options?: ErrorOptions);
+    readonly migration: string | undefined;
+    // (undocumented)
+    readonly name = "MigrationLockTimeout";
+    // (undocumented)
+    readonly schema: string;
+    // (undocumented)
+    readonly timeoutMs: number;
+}
+
+// @public
+export const migrationLockTimeoutMs: (env?: Record<string, string | undefined>) => number;
 
 // @public
 export const MODEL_CALL_TIMEOUT_MS = 180000;
@@ -1215,6 +1297,7 @@ export interface NewDomainEvent {
     // (undocumented)
     payload: unknown;
     topic: string;
+    version?: number;
     workspace?: string;
 }
 
@@ -1300,9 +1383,6 @@ export interface OpenStream {
 
 // @public
 export const OUTBOX_TABLE_SQL = "\n  create table if not exists outbox (\n    id bigint generated always as identity primary key,\n    event_id text not null unique default gen_random_uuid()::text,\n    topic text not null,\n    workspace_id text,\n    payload jsonb not null,\n    created_at timestamptz not null default now(),\n    sent_at timestamptz,\n    refused_at timestamptz,\n    refused_why text\n  );\n  create index if not exists outbox_unsent on outbox (id) where sent_at is null;";
-
-// @public
-export const outboxBinding: (db: Queryable, binding: Binding, change: BindingChange, workspace?: string) => Promise<void>;
 
 // @public
 export const outboxRelay: (input: EventsAddress & {
@@ -1420,6 +1500,13 @@ export const poolCheck: (name: string, pool: {
 }) => ReadyCheck;
 
 // @public
+export function postAudit(input: EventsOptions & {
+    entry: Omit<NewAuditEntry, 'key'>;
+    key: string;
+    attempts: number;
+}): Promise<void>;
+
+// @public
 export const previewOf: (env?: Record<string, string | undefined>) => number | undefined;
 
 // @public
@@ -1519,9 +1606,6 @@ export interface Queryable {
 }
 
 // @public
-export const readBinding: (event: Pick<DomainEvent, "topic" | "payload" | "workspace">) => FollowedBinding | undefined;
-
-// @public
 export const readFrontend: (dir: string) => FrontendFile[];
 
 // @public
@@ -1569,7 +1653,7 @@ export interface RegisterOptions {
 }
 
 // @public
-export const registryBindingApps: (input: GrantsOptions) => (() => Promise<BindingApp[]>);
+export const registryDeclaredEvents: (input: GrantsOptions) => DeclaredEventsLookup;
 
 // @public
 export const registryGrantedApps: (input: GrantsOptions) => GrantedAppsLookup;
@@ -1613,6 +1697,8 @@ export const ruleChain: (place: FloorPlace) => string[];
 export const runMigrations: (pool: Pool_2, input: {
     schema: string;
     migrations: readonly Migration[];
+    lockTimeoutMs?: number;
+    idleTimeoutMs?: number;
 }) => Promise<void>;
 
 // @public (undocumented)
@@ -1680,6 +1766,8 @@ export const serviceCallerId: (service: string) => string;
 
 // @public (undocumented)
 export class ServiceCallError extends Error {
+    constructor(message: string, status?: number);
+    readonly status?: number;
 }
 
 // @public

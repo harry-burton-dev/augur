@@ -61,11 +61,11 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   `ghcr.io/harry-burton-dev/im-platform` (it stayed when the repository was
   renamed to `augur`). The updater and registry also still trust releases
   signed under the old repository name. Don't rename them without an
-  upgrade note in docs/upgrade.md.
+  upgrade note in docs/src/content/docs/release-notes/upgrade-notes.md.
 
 ## Structure (ADR 0002)
 - `platform/` owns the shell, SDK and services. Apps live in their own
-  repositories (ADR 0012). Nothing in `platform/`
+  repositories (ADR 0077). Nothing in `platform/`
   imports an app and apps never import each other: `pnpm check:boundaries`.
 - Apps reach AUGUR only through `@augur/*` packages, the gateway, the
   manifest and domain events.
@@ -103,13 +103,13 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   deployment or a service reads: infra/deploy/settings.schema.json) when you touch those areas.
 - Shell or kit changes: run the contract tests in `platform/contract`.
 - Before a pull request: REVIEW.md. Its tier (from the paths it changes) says what it needs before it
-  merges: the description's sections, a `/code-review` run, the deploy test, Harry's ok. The Review
-  workflow checks them.
+  merges: the description's sections, a `/code-review` run (high effort or more on the files it lists
+  under "Needs a deep review"), the deploy test. The Review workflow checks them.
 - Every PR carries a changeset (`pnpm changeset`, or `pnpm changeset --empty`),
   see docs/versioning.md.
 - When an admin upgrading must act or know something because of your change, add a note at
-  the top of "Release notes that need you" in docs/upgrade.md, starting `**From** unreleased`
-  (`pnpm check:upgrade-notes`); the Version packages PR writes its release in.
+  the top of docs/src/content/docs/release-notes/upgrade-notes.md: a `## ` heading with a line starting `**From** unreleased`
+  under it (`pnpm check:upgrade-notes`); the Version packages PR writes its release in.
 
 ## Pull requests and releases
 - Open pull requests against `main`, the only
@@ -118,9 +118,10 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
 - Only Harry makes a release stable (Actions → Promote to stable).
 - Harry's standing rule: merge your own PR once CI and the Review check are
   green, after merging fresh `origin/main` into it and re-running the checks.
-  Don't ask for a GitHub review. On Harry's paths (REVIEW.md) ask him the three
-  questions in the thread and wait for his ok; otherwise post one summary per
-  phase, ending with anything Harry must do on his server as a short numbered list.
+  Don't ask for a GitHub review, and don't ask Harry to approve a PR: the code
+  review is the gate, and the auto-ok log tells him afterwards (REVIEW.md). Post
+  one summary per phase, ending with anything Harry must do on his server as a
+  short numbered list.
 - Nothing in the repository names the tool that wrote it: no
   `Co-Authored-By` or session trailers on commits, no assistant attribution in
   pull requests, and no links to private chats or artifacts in files. The
@@ -135,5 +136,5 @@ If a rule is only in memory, it belongs here, in an ADR or in the handbook.
   only how Harry reaches his own workbench, so never design around it. Agents
   can't see Harry's servers: never assume a step there worked; ask, or give a
   command whose output he can paste.
-- Upgrades go through Deployment (`/upgrades`); docs/upgrade.md has the
+- Upgrades go through Deployment (`/upgrades`); docs/src/content/docs/run/upgrade.md has the
   manual path.

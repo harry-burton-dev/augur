@@ -89,6 +89,8 @@ import { pageKit, versionLine } from './host/kit.js';
 import { appOnScreen } from './host/telemetry.js';
 import { isWorkerApp } from './host/apps3.js';
 import { PaneSlot } from './host/pane-target.js';
+import { Contained } from './host/contained.js';
+import { buildChange, buildNotice, servedBuild } from './host/build.js';
 import { InboxView } from './inbox/InboxView.js';
 
 /** The apps this shell can open: an intent goes to one of them, and Find asks only them. One it can't open still says why where it is listed. */
@@ -147,7 +149,7 @@ const requieted = (list: ShellNotification[], known: ReadonlyMap<string, ServerN
   });
 /** Pinned apps first, in their order, then the few opened most recently. */
 /** What the Shell draws from someone's preferences, the app bar's place among them (PDR-020 D4). */
-const shellSettings = (p: Preferences) => ({ reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts, barStop: p.barStop ?? 1 }) as const;
+const shellSettings = (p: Preferences) => ({ reduceMotion: !!p.reduceMotion, density: p.density ?? 'comfortable', areaTitles: p.areaTitles !== false, toasts: !!p.toasts, summonKey: p.summonKey !== false, barStop: p.barStop ?? 1 }) as const;
 const keptClose = (pinned: string[] = [], recent: string[] = []) => [...new Set([...pinned, ...recent.slice(0, 6)])];
 const PREVIEWS_FUNCTION = { id: 'previews', label: 'Previews', icon: 'preview' };
 
@@ -178,7 +180,8 @@ export function Host({
   const shellRef = useRef<ShellModel>(shellModel);
   const stageRef = useRef<HTMLDivElement>(null);
   const mounter = useRef<StageMounter | null>(null);
-  const bus = useMemo(() => createEventBus(), []);
+  // A handler that throws is logged with the type it was handling, and the others still run.
+  const bus = useMemo(() => createEventBus({ onError: (err, type) => { console.error(`A handler for ${type} failed`, err); } }), []);
   const pendingIntent = useRef<Intent | undefined>(undefined);
   /** What the open app was last mounted with, so a catalogue that changed elsewhere doesn't mount it again. */
   const lastMount = useRef<Record<string, unknown> | null>(null);
@@ -283,6 +286,38 @@ export function Host({
     if (t) setToasts((list) => withToast(list, t));
   }, []);
   const toastDone = useCallback((id: string) => setToasts((list) => list.filter((t) => t.id !== id)), []);
+  /**
+   * An upgrade or a rollback swaps the shell's files under an open tab (host/build.ts). Asked again when the tab
+   * comes back into view or into focus and when the notification stream reconnects. Each build the server moves
+   * to is said once, as a notification whose button reloads; a later move replaces it.
+   */
+  const buildNoticed = useRef<{ id: string; build: string } | undefined>(undefined);
+  const buildCheck = useRef<Promise<void> | undefined>(undefined);
+  const checkBuild = useCallback(() => {
+    buildCheck.current ??= (async () => {
+      const served = await servedBuild(fetchImpl);
+      const change = buildChange({ version: __SHELL_VERSION__, build: __SHELL_BUILD__ }, served);
+      const shell = shellRef.current;
+      if (!change || !served || !shell || buildNoticed.current?.build === served.build) return;
+      if (buildNoticed.current) shell.notifications = shell.notifications.filter((n) => n.id !== buildNoticed.current!.id);
+      const words = buildNotice(change, productName());
+      const n: ShellNotification = { ...toShellNotification('platform', { title: words.title, body: words.body, needsYou: true }), actions: [{ label: words.action }] };
+      buildNoticed.current = { id: n.id, build: served.build };
+      tell(n);
+    })().finally(() => {
+      buildCheck.current = undefined;
+    });
+    return buildCheck.current;
+  }, [fetchImpl, tell]);
+  useEffect(() => {
+    const onShow = () => document.visibilityState === 'visible' && void checkBuild();
+    document.addEventListener('visibilitychange', onShow);
+    window.addEventListener('focus', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onShow);
+      window.removeEventListener('focus', onShow);
+    };
+  }, [checkBuild]);
   const prefs = useMemo(
     () =>
       new PreferenceSync(preferencesUrl, session.getToken, {
@@ -406,7 +441,12 @@ export function Host({
   useEffect(() => {
     if (!accountSection) return;
     const hold = (e: KeyboardEvent) => {
-      const summon = (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k');
+      // The kit's own rule (shell.tsx): ` only outside a text field and while it's on, Ctrl or ⌘ K unless a part took it.
+      const el = e.composedPath()[0] as HTMLElement | undefined;
+      const typing = !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+      const summon =
+        (e.key === '`' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing && shellRef.current?.summonKeyOn !== false) ||
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && !e.defaultPrevented);
       if (summon) e.stopPropagation();
     };
     window.addEventListener('keydown', hold, { capture: true });
@@ -829,6 +869,7 @@ export function Host({
     const shell = shellRef.current;
     if (!shell) return;
     const known = fromEvents.current;
+    let connected = 0;
     const f = new NotificationFeed({
       getToken: session.getToken,
       fetchImpl,
@@ -848,7 +889,12 @@ export function Host({
         tell(fromServer(n, quietRef.current));
         if (n.urgent) setUrgent((list) => [...list.filter((x) => x.id !== n.id), n]);
       },
-      onState: (state) => shell.setStream(state),
+      onState: (state) => {
+        shell.setStream(state);
+        // Connected again (after it dropped or the server closed it): services restart in an upgrade, so the
+        // shell's own files may have changed too.
+        if (!state.loading && !state.error && ++connected > 1) void checkBuild();
+      },
       onInbox: () => {
         refreshInbox();
         setInboxVersion((v) => v + 1);
@@ -857,7 +903,7 @@ export function Host({
     feed.current = f;
     f.start();
     return () => f.stop();
-  }, [session, fetchImpl, eventsUrl, tell, refreshInbox]);
+  }, [session, fetchImpl, eventsUrl, tell, refreshInbox, checkBuild]);
 
   // Hand the Shell its data and listen to what it asks for.
   useEffect(() => {
@@ -936,6 +982,7 @@ export function Host({
     };
     // A button on a notification raises its intent, as the app would itself, and the notification is done with.
     const actOn = (id: string, index: number) => {
+      if (id === buildNoticed.current?.id) return window.location.reload();
       const intent = actions.current.intentFor(id, index);
       if (!intent) return;
       const server = fromEvents.current.get(id);
@@ -987,7 +1034,7 @@ export function Host({
     };
     const onSetting = (e: Event) => {
       const { key, value } = (e as CustomEvent<{ key: string; value: unknown }>).detail;
-      if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts') prefs.set(key, !!value);
+      if (key === 'reduceMotion' || key === 'away' || key === 'areaTitles' || key === 'toasts' || key === 'summonKey') prefs.set(key, !!value);
       else if (key === 'density') prefs.set('density', value === 'compact' ? 'compact' : 'comfortable');
       else if (key === 'barStop' && (value === 0 || value === 1 || value === 2 || value === 3)) prefs.set('barStop', value);
       applyPreferences(prefs.current);
@@ -1148,44 +1195,48 @@ export function Host({
         toasts={toasts.map((t) => ({ id: t.id, text: t.text, ...(t.open ? { action: { label: 'Open', onPress: () => homeAsks.current?.open(t.id) } } : {}) }))}
         onDone={toastDone}
       />
-      <UrgentNotices
-        queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
-        appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
-        floorName={(id) => session.floors.find((f) => f.id === id)?.name}
-        me={session.user.name}
-        onOpen={(id) => homeAsks.current?.open(id)}
-      />
+      <Contained part="Urgent notices" resetOn={urgent}>
+        <UrgentNotices
+          queue={urgentQueue(urgent, (app) => !!manifest?.find((a) => a.id === app)?.previewsOn?.includes(URGENT_PREVIEW))}
+          appName={(id) => manifest?.find((a) => a.id === id)?.name ?? id}
+          floorName={(id) => session.floors.find((f) => f.id === id)?.name}
+          me={session.user.name}
+          onOpen={(id) => homeAsks.current?.open(id)}
+        />
+      </Contained>
       <div ref={stageRef} className="stage" hidden={screen?.kind !== 'app' && !(screen?.kind === 'desk' && manifest && desktopApp(manifest))} />
       {accountSection ? (
-        <AccountArea
-          section={accountSection}
-          onSection={showAccount}
-          onClose={() => showAccount(null)}
-          api={accountApi}
-          prefs={chosen}
-          onPreference={choose}
-          onLanguage={chooseLanguage}
-          orgTimeZone={orgTimeZone}
-          onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
-          onSignOut={() => void session.signOut()}
-          apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
-          floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
-          ownFloor={home.id}
-          appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
-          mountSettings={mountSettings}
-          unmountSettings={unmountSettings}
-          shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
-          product={productName()}
-          version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
-          actionStatus={actionStatus}
-          actAs={{
-            personas: heldPersonas,
-            ...(actingSession ? { session: actingSession } : {}),
-            start: async (persona, reason, minutes) => acting.set(await personaClient.start(persona, reason, minutes)),
-            stop: stopActing,
-            signInAgain: () => window.location.assign(`${SIGN_IN_AGAIN_PATH}?return=${encodeURIComponent(`${window.location.pathname}?${ACCOUNT_PARAM}=security&${ACTING_PARAM}=again`)}`),
-          }}
-        />
+        <Contained part="The Account area" again={{ label: 'Close', onPress: () => showAccount(null) }}>
+          <AccountArea
+            section={accountSection}
+            onSection={showAccount}
+            onClose={() => showAccount(null)}
+            api={accountApi}
+            prefs={chosen}
+            onPreference={choose}
+            onLanguage={chooseLanguage}
+            orgTimeZone={orgTimeZone}
+            onAction={(action, section) => void session.startAction(action, `${window.location.pathname}?${ACCOUNT_PARAM}=${section}`)}
+            onSignOut={() => void session.signOut()}
+            apps={(manifest ?? []).map((a) => ({ id: a.id, name: a.name, ...(a.notifications?.kinds.length ? { kinds: a.notifications.kinds } : {}) }))}
+            floors={session.floors.map((f) => ({ id: f.id, name: f.name }))}
+            ownFloor={home.id}
+            appSettings={(manifest ?? []).filter((a) => settingsOf(a, floor ?? home)).map((a) => ({ id: a.id, name: a.name }))}
+            mountSettings={mountSettings}
+            unmountSettings={unmountSettings}
+            shellClient={import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell'}
+            product={productName()}
+            version={versionLine(__SHELL_VERSION__, SDK_VERSION, pageKit())}
+            actionStatus={actionStatus}
+            actAs={{
+              personas: heldPersonas,
+              ...(actingSession ? { session: actingSession } : {}),
+              start: async (persona, reason, minutes) => acting.set(await personaClient.start(persona, reason, minutes)),
+              stop: stopActing,
+              signInAgain: () => window.location.assign(`${SIGN_IN_AGAIN_PATH}?return=${encodeURIComponent(`${window.location.pathname}?${ACCOUNT_PARAM}=security&${ACTING_PARAM}=again`)}`),
+            }}
+          />
+        </Contained>
       ) : null}
       {problem && (
         <section className="problem" role="alert">
@@ -1210,21 +1261,23 @@ export function Host({
       </Dialog>
       <Dialog open={inboxOpen} onClose={() => setInboxOpen(false)} size="read" heading="Inbox" summary="Work that waits on you and your teams." cancelLabel="Close">
         {inboxOpen && manifest ? (
-          <InboxView
-            client={inbox}
-            manifest={manifest}
-            floors={session.floors}
-            here={floorId}
-            me={session.user.id}
-            counts={inboxCounts}
-            version={inboxVersion}
-            fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
-            onChanged={refreshInbox}
-            onOpen={(item) => {
-              setInboxOpen(false);
-              openInboxItem(item);
-            }}
-          />
+          <Contained part="The Inbox" resetOn={inboxVersion}>
+            <InboxView
+              client={inbox}
+              manifest={manifest}
+              floors={session.floors}
+              here={floorId}
+              me={session.user.id}
+              counts={inboxCounts}
+              version={inboxVersion}
+              fetch={floorFetch(session.getToken, () => floorRef.current, fetchImpl)}
+              onChanged={refreshInbox}
+              onOpen={(item) => {
+                setInboxOpen(false);
+                openInboxItem(item);
+              }}
+            />
+          </Contained>
         ) : null}
       </Dialog>
       <Dialog

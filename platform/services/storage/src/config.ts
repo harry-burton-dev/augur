@@ -1,5 +1,6 @@
 /** One app the platform keeps a database schema and a bucket for, and the secrets they open with. */
 import { appSecretFor, reservedIdProblem } from '@augur/service-kit';
+import { BACKUP_FILE } from './backup-marker.ts';
 
 export interface AppStorage {
   app: string;
@@ -39,10 +40,14 @@ export interface StorageConfig {
    * An app the app runner removed from the server, whose grace period ended (APP_STORAGE_RETIRE): its data goes now,
    * as a retired app's does, after the runner's backup. Only on its own, with APP_STORAGE empty.
    */
-  retireNow?: string;
+  retireNow?: {
+    app: string;
+    /** The backup the runner took for it (APP_STORAGE_BACKUP): the last noted, and a good one, or nothing goes (ADR 0103). */
+    backup: string;
+  };
   /**
    * The secret of the registry's key to the bucket of apps' frontends (FRONTENDS_BUCKET_SECRET),
-   * 64 hex characters. Without it apps' frontends aren't kept by version (docs/upgrade.md).
+   * 64 hex characters. Without it apps' frontends aren't kept by version (docs/src/content/docs/run/app-runner.md).
    */
   frontendsSecret?: string;
   /**
@@ -50,6 +55,8 @@ export interface StorageConfig {
    * each with its password (<SERVICE>_DATABASE_PASSWORD).
    */
   services: { service: string; databasePassword: string }[];
+  /** The AUGUR release this server runs (PLATFORM_VERSION): what an app's data is set aside in, and dropped after (ADR 0103). */
+  release: string;
   /** Keycloak's own login and database (KEYCLOAK_DATABASE_PASSWORD, KEYCLOAK_DATABASE), when set. */
   keycloak?: { database: string; role: string; password: string };
 }
@@ -114,6 +121,9 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     if (reserved) problems.push(`APP_STORAGE_RETIRE: ${reserved}`);
     if (ids.length || env.APP_STORAGE_DROP) problems.push('APP_STORAGE_RETIRE takes an app’s data away on its own: leave APP_STORAGE and APP_STORAGE_DROP empty beside it.');
   }
+  const backup = env.APP_STORAGE_BACKUP ?? '';
+  if (retireNow && !BACKUP_FILE.test(backup))
+    problems.push('APP_STORAGE_RETIRE needs APP_STORAGE_BACKUP, the dump the app runner just took for it (such as platform-2026-11-15T020000Z.sql.gz): nothing goes without it.');
   const dropping = env.APP_STORAGE_DROP || undefined;
   // Taking a preview's storage away is that preview's job alone, so it stops at any problem.
   if (dropping) problems.push(...skipped.map(({ problem }) => problem));
@@ -143,11 +153,12 @@ export const configFromEnv = (env: Record<string, string | undefined> = process.
     apps,
     skipped,
     retire,
-    ...(retireNow ? { retireNow } : {}),
+    ...(retireNow ? { retireNow: { app: retireNow, backup } } : {}),
     appConnections,
     ...(dropping ? { drop: { app: dropping, ...(({ databasePassword, bucketSecret }) => ({ databasePassword, bucketSecret }))(secretsOf(dropping)) } } : {}),
     ...(frontendsSecret ? { frontendsSecret } : {}),
     services,
+    release: env.PLATFORM_VERSION ?? '',
     ...(keycloakPassword ? { keycloak: { database: env.KEYCLOAK_DATABASE || 'keycloak', role: env.KEYCLOAK_DATABASE_USER || 'keycloak', password: keycloakPassword } } : {}),
   };
 };

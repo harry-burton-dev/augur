@@ -15,6 +15,8 @@ export interface NewDomainEvent {
   payload: unknown;
   /** The floor it happened on, if any. */
   workspace?: string;
+  /** The version of its type the payload follows, of those the manifest declares; without it, the newest its payload fits (ADR 0104). */
+  version?: number;
 }
 
 /** One event as followers read it. */
@@ -26,6 +28,8 @@ export interface DomainEvent {
   publisher: string;
   at: string;
   workspace?: { id: string; path: string[] };
+  /** The version of its type the payload follows, when its publisher declares its types (ADR 0104). */
+  version?: number;
   payload: unknown;
 }
 
@@ -76,8 +80,11 @@ export const OUTBOX_TABLE_SQL = `
   );
   create index if not exists outbox_unsent on outbox (id) where sent_at is null;`;
 
-/** Adds an event to the outbox. Call it inside the transaction that makes the change. */
-export async function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id'> & { id?: string }): Promise<void> {
+/**
+ * Adds an event to the outbox. Call it inside the transaction that makes the change. It goes at the newest
+ * version of its type the app declares that its payload fits (ADR 0104); to pin a version, publish it directly.
+ */
+export async function addToOutbox(db: Queryable, event: Omit<NewDomainEvent, 'id' | 'version'> & { id?: string }): Promise<void> {
   await db.query(
     event.id
       ? 'insert into outbox (topic, workspace_id, payload, event_id) values ($1, $2, $3, $4)'
@@ -206,11 +213,16 @@ export const eventDeliveryKey = (event: Pick<DomainEvent, 'seq'>): string => `ev
  * stretch every time. If `handle` throws, the same event comes again next time, so handle each
  * one so that doing it twice does no harm. Needs the `events:subscribe` scope.
  */
-export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics, cursor, handle, batch = 100, intervalMs = 2000, onError }: EventsAddress & {
+export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics, cursor, handle, onGap, batch = 100, intervalMs = 2000, onError }: EventsAddress & {
   /** Topic names, or families such as "platform.team.*". */
   topics: string[];
   cursor: { load(): Promise<string | undefined>; save(seq: string): Promise<void> };
   handle(event: DomainEvent): Promise<void>;
+  /**
+   * Events past its place were pruned (410): rebuild what it keeps from them, then it reads on after `prunedUpTo`,
+   * how far they were pruned (ADR 0104). Without it, the follower stops there and each read fails, saying so.
+   */
+  onGap?: (prunedUpTo: string) => Promise<void>;
   batch?: number;
   intervalMs?: number;
   onError?: (err: unknown) => void;
@@ -221,7 +233,13 @@ export const followEvents = ({ eventsUrl, credentials, fetchImpl = fetch, topics
     const after = await cursor.load();
     const query = new URLSearchParams({ topics: topics.join(','), limit: String(batch), ...(after ? { after } : {}) });
     const res = await withDeadline(fetchImpl)(`${eventsUrl.replace(/\/$/, '')}/v1/domain-events?${query}`, { headers: await serviceHeaders(credentials) });
-    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; next?: string; message?: string };
+    const reply = (await res.json().catch(() => ({}))) as { events?: DomainEvent[]; next?: string; message?: string; after?: string };
+    if (res.status === 410 && reply.after && /^[0-9]+$/.test(reply.after)) {
+      if (!onGap) throw new ServiceCallError(`Following ${topics.join(', ')} missed events up to ${reply.after}: ${reply.message ?? 'they were pruned.'} It needs rebuilding (followEvents' onGap) before it can read on.`);
+      await onGap(reply.after);
+      await cursor.save(reply.after);
+      return 0;
+    }
     if (!res.ok) throw new ServiceCallError(`Couldn't read events (${topics.join(', ')}): it answered ${res.status}${reply.message ? `: ${reply.message}` : ''}.`);
     for (const event of reply.events ?? []) {
       await handle(event);

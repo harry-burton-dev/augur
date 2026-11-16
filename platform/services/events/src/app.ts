@@ -18,6 +18,8 @@ import {
   WORKSPACE_HEADERS,
   type Caller,
   type FloorLookup,
+  type DeclaredEvents,
+  type DeclaredEventsLookup,
   type GrantLookup,
   type MemberLookup,
   type AudienceLookup,
@@ -35,10 +37,12 @@ import {
   endStreamsOnStop,
 } from '@augur/service-kit';
 import { describeApi } from './contract.ts';
-import { deliveryStatus, type PushingState } from './deliver.ts';
+import { payloadChecker, readable } from './event-types.ts';
+import { deliveryStatus, subscribesOn, type PushingState } from './deliver.ts';
 import { finishRelease, inboxRoutes, teamsOf, type InboxKindLookup } from './inbox-routes.ts';
-import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
-import { topicMatches, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
+import { AuditEntry, Delivery as DeliverySchema, Pushing as PushingSchema, SetAsideEvent as SetAsideEventSchema, DomainEvent as DomainEventSchema, NewAuditEntry as NewAuditEntrySchema, NewDomainEvent as NewDomainEventSchema, NewNotification as NewNotificationSchema, Notification as NotificationSchema, empty, refused, ref, TeamNotices, TOPIC } from './schemas.ts';
+import { undeclaredLog, undeclaredWarning } from './undeclared.ts';
+import { topicMatches, topicsOverlap, type AuditEntry as AuditRecord, type AuditFilter, type DomainEvent, type EventFloor, type EventStore, type NewDomainEvent, type Notification } from './store.ts';
 
 /** Filters the audit log and its download share, beyond time and floor. */
 const AUDIT_FILTERS = {
@@ -97,6 +101,8 @@ export interface EventsOptions {
   inboxKinds?: InboxKindLookup;
   /** The notification kinds each app's manifest declares, from the registry; without it kinds aren't checked. */
   notificationKinds?: InboxKindLookup;
+  /** What each app's manifest declares about domain events (ADR 0104); without it an app reads every topic it asks for. */
+  declaredEvents?: DeclaredEventsLookup;
   /** How often an open stream sends a keep-alive, so proxies don't close it. */
   heartbeatMs?: number;
   /** How long a browser's stream of domain events lasts (STREAM_LIFETIME_MS). */
@@ -187,7 +193,7 @@ const topicList = (raw: string): { topics: string[] } | { bad: string } => {
 /** Events on no floor that still reach every browser: an app added, changed or turned off for the whole deployment. Ids only. */
 const isDeploymentWide = (topic: string) => topic.startsWith('platform.app.');
 
-const forBrowser = ({ seq, topic, id, publisher, at, workspace, payload }: DomainEvent) => ({ seq, topic, id, publisher, at, ...(workspace ? { workspace } : {}), payload });
+const forBrowser = ({ seq, topic, id, publisher, at, workspace, version, payload }: DomainEvent) => ({ seq, topic, id, publisher, at, ...(workspace ? { workspace } : {}), ...(version ? { version } : {}), payload });
 
 /** What the Shell receives: a person never sees whom else a notification went to. */
 const forCaller = ({ recipient: _, key: __, ...n }: Notification) => n;
@@ -202,8 +208,10 @@ const THIS_ORG = 'this';
 /** Reading the whole audit log, as the permissions service is asked it: an org admin's. */
 const READ_AUDIT: ShadowQuestion = { action: 'can_read_audit', resource: { type: 'org', id: THIS_ORG }, as: 'persona' };
 
-export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }), shadow = noShadow }: EventsOptions) => {
+export const buildApp = async ({ store, verifyService, grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, declaredEvents, heartbeatMs = 25_000, streamLifetimeMs = STREAM_LIFETIME_MS, callers, pushing = () => ({ on: true }), shadow = noShadow }: EventsOptions) => {
   const app = Fastify(serviceFastifyOptions()).withTypeProvider<TypeBoxTypeProvider>();
+  const payloadCheck = payloadChecker();
+  const logUndeclared = undeclaredLog((o, m) => app.log.warn(o, m));
   await app.register(problemDetails());
   await describeApi(app, `/${API_VERSION}`);
   // Before anything reads the caller: only the gateway's signed word says who is calling.
@@ -265,6 +273,34 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           return undefined;
         }
         return (await granted(req, reply, service.app, scope, workspaceOf(req))) ? service : undefined;
+      };
+
+      /** What an app declares about events, undefined for nothing; null when it can't be asked, the 503 sent. */
+      const declaredOf = async (req: FastifyRequest, reply: FastifyReply, app: string, what: 'reads' | 'publishes'): Promise<DeclaredEvents | undefined | null> => {
+        if (!declaredEvents) return undefined;
+        try {
+          return await declaredEvents(app);
+        } catch (err) {
+          if (!(err instanceof GrantsUnavailable)) throw err;
+          req.log.error({ err: err.message, app }, 'declared events check failed');
+          void reply.code(503).send({ error: 'unavailable', message: `What this app ${what === 'reads' ? 'reads' : 'publishes'} can’t be checked right now. Try again in a moment.` });
+          return null;
+        }
+      };
+
+      /** The events `app` may see: those on a floor (or none, the deployment's) where it holds events:subscribe. Undefined when grants can't be checked. */
+      const visibleTo = async (req: FastifyRequest, app: string, events: DomainEvent[]): Promise<DomainEvent[] | undefined> => {
+        const places = [...new Set(events.map((e) => e.workspace?.id ?? ''))];
+        try {
+          if (!grants) throw new GrantsUnavailable('The events service has no registry to check grants with.');
+          const lookup = grants;
+          const may = new Map(await Promise.all(places.map(async (floor) => [floor, await subscribesOn(lookup, app, floor || undefined)] as const)));
+          return events.filter((e) => may.get(e.workspace?.id ?? ''));
+        } catch (err) {
+          if (!(err instanceof GrantsUnavailable)) throw err;
+          req.log.error({ err: err.message, app }, 'grant check failed');
+          return undefined;
+        }
       };
 
       /**
@@ -552,8 +588,11 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
             ].join(' '),
             body: Type.Object({ events: Type.Array(ref(NewDomainEventSchema), { minItems: 1, maxItems: 100 }) }, { additionalProperties: false }),
             response: {
-              202: Type.Object({ added: Type.Integer(), repeated: Type.Integer() }, { description: 'Kept' }),
-              400: refused("A topic outside the publisher's, an unknown floor, a floor the app isn't on, or a payload over 16 KB"),
+              202: Type.Object(
+                { added: Type.Integer(), repeated: Type.Integer(), warning: Type.Optional(Type.String({ description: 'For an app on contract 3 that declares no types it publishes: refused from the next release' })) },
+                { description: 'Kept' },
+              ),
+              400: refused("A topic outside the publisher's, an unknown floor, a floor the app isn't on, a payload over 16 KB, or (for an app that declares its types) a type or version it doesn't declare, or a payload its schema refuses"),
               403: refused("Not a service nor an app acting for a person, not this publisher's topics, no events:publish scope, or a scope the delegation doesn't carry"),
               503: refused("Floors or grants can't be checked right now"),
             },
@@ -570,6 +609,22 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
         if ((service.kind === 'platform') !== (owner === 'platform')) {
           return reply.code(403).send({ error: 'forbidden', message: service.kind === 'platform' ? 'AUGUR’s own services publish on "platform." topics.' : '"platform." topics belong to AUGUR’s own services.' });
         }
+        // An app that declares the types it publishes is held to them: a declared topic, a declared version, a payload that fits
+        // (ADR 0104). Only a version so checked is kept with an event.
+        const versions: (number | undefined)[] = req.body.events.map(() => undefined);
+        let warning: string | undefined;
+        if (service.kind !== 'platform') {
+          const declared = await declaredOf(req, reply, service.app, 'publishes');
+          if (declared === null) return reply;
+          warning = undeclaredWarning(service.app, declared, 'publishes');
+          if (declared?.publishes.length) {
+            for (const [i, e] of req.body.events.entries()) {
+              const checked = payloadCheck(service.app, declared, e);
+              if ('problem' in checked) return reply.code(400).send({ error: 'bad_request', message: checked.problem });
+              versions[i] = checked.version;
+            }
+          }
+        }
         const places = new Map<string, EventFloor>();
         for (const id of new Set(req.body.events.flatMap((e) => (e.workspace ? [e.workspace] : [])))) {
           try {
@@ -585,10 +640,11 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           // so the outbox relay sets that one row aside rather than holding every event behind it.
           if (service.kind !== 'platform' && !(await granted(req, reply, service.app, 'events:publish', id, 400))) return reply;
         }
-        const events: NewDomainEvent[] = req.body.events.map((e) => ({ topic: e.topic, id: e.id, payload: e.payload, floor: e.workspace ? places.get(e.workspace) : undefined }));
+        const events: NewDomainEvent[] = req.body.events.map((e, i) => ({ topic: e.topic, id: e.id, payload: e.payload, floor: e.workspace ? places.get(e.workspace) : undefined, ...(versions[i] ? { version: versions[i] } : {}) }));
         const result = await store.publish(serviceName(service), events);
         req.log.info({ service: serviceName(service), ...result }, 'domain events published');
-        return reply.code(202).send(result);
+        if (warning && service.kind !== 'platform') logUndeclared(service.app, 'publishes');
+        return reply.code(202).send({ ...result, ...(warning ? { warning } : {}) });
         },
       );
 
@@ -603,7 +659,9 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
               'in. Keep the last `seq` handled and pass it as `after`, or `next`, which is',
               'as far as this read went, past events on other topics: delivery is at',
               'least once, never with a gap. Events are kept 30 days',
-              '(DOMAIN_EVENTS_KEEP_DAYS).',
+              '(DOMAIN_EVENTS_KEEP_DAYS); a cursor behind what was pruned answers 410 with how',
+              'far events were pruned, so the follower rebuilds. An app sees only events on floors where',
+              'it holds events:subscribe, and the deployment’s own (ADR 0104).',
             ].join(' '),
             querystring: Type.Object({
               topics: Type.String({ minLength: 1, maxLength: 2000, description: 'Comma separated topics, or families such as folio.*' }),
@@ -611,9 +669,17 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
               limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
             }),
             response: {
-              200: Type.Object({ events: Type.Array(ref(DomainEventSchema)), next: Type.String() }, { description: 'The next events, and the cursor to read on from' }),
+              200: Type.Object(
+                {
+                  events: Type.Array(ref(DomainEventSchema)),
+                  next: Type.String(),
+                  warning: Type.Optional(Type.String({ description: 'For an app on contract 3 that doesn’t declare what it reads: refused from the next release' })),
+                },
+                { description: 'The next events, and the cursor to read on from' },
+              ),
               400: refused('A topic that is not a topic, nor a family such as folio.*'),
-              403: refused('Not a service nor an app acting for a person, no events:subscribe scope, or a scope the delegation doesn’t carry'),
+              403: refused('Not a service nor an app acting for a person, no events:subscribe scope, a scope the delegation doesn’t carry, or only topics the app’s manifest doesn’t say it reads'),
+              410: Type.Object({ error: Type.Literal('gone'), message: Type.String(), after: Type.String({ description: 'How far events were pruned: rebuild, then read on with this as `after`' }) }, { description: 'Events after `after` were pruned: the follower has missed some' }),
               503: refused("Grants can't be checked right now"),
             },
           },
@@ -622,14 +688,38 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           const list = topicList(req.query.topics);
           if ('bad' in list) return reply.code(400).send({ error: 'bad_request', message: `"${list.bad}" is not a topic, or a family of topics such as "folio.*".` });
           const { topics } = list;
-          if (!(await fromService(req, reply, undefined, 'events:subscribe'))) return reply;
+          const caller = await fromService(req, reply, undefined, 'events:subscribe');
+          if (!caller) return reply;
+          // An app that says what it reads is given only that (ADR 0104); asking only for what it doesn't read is refused, saying so.
+          let reads: string[] | undefined;
+          let warning: string | undefined;
+          if (caller.kind !== 'platform') {
+            const declared = await declaredOf(req, reply, caller.app, 'reads');
+            if (declared === null) return reply;
+            warning = undeclaredWarning(caller.app, declared, 'reads');
+            reads = readable(declared?.reads);
+            if (reads && !topics.some((t) => topicsOverlap(t, reads!))) {
+              return reply.code(403).send({ error: 'forbidden', message: `${caller.app} doesn’t say in its manifest that it reads ${topics.join(', ')}. It reads ${declared!.reads!.length ? declared!.reads!.join(', ') : 'only AUGUR’s own topics'} (contributes.events.reads).` });
+            }
+          }
           const limit = req.query.limit ?? 100;
           const after = req.query.after ?? '0';
           // Read first: anything committed after this is above it, so nothing is skipped by moving the cursor up to it.
           const top = await store.lastSeq();
-          const events = await store.readEvents({ topics, after, upTo: top, limit });
-          if (events.length === limit) return { events, next: events.at(-1)!.seq };
-          return { events, next: top && BigInt(top) > BigInt(after) ? top : after };
+          const read = await store.readEvents({ topics, after, upTo: top, limit });
+          // A cursor behind what was pruned has missed events: the follower is told, and rebuilds (ADR 0104). Asked after
+          // the read, so a prune landing in between can't slip past. No cursor at all is a follower starting afresh.
+          const pruned = req.query.after === undefined ? undefined : await store.prunedUpTo();
+          if (pruned && BigInt(after) < BigInt(pruned)) {
+            return reply.code(410).send({ error: 'gone', message: `Events up to ${pruned} were pruned, so some after ${after} are gone. Rebuild what you keep from events, then read on with after=${pruned}.`, after: pruned });
+          }
+          const next = read.length === limit ? read.at(-1)!.seq : top && BigInt(top) > BigInt(after) ? top : after;
+          // An app sees only events on floors where it may subscribe, and the deployment's own; AUGUR's services see all (ADR 0104).
+          const declaredOnly = reads ? read.filter((e) => topicMatches(e.topic, reads!)) : read;
+          const events = caller.kind === 'platform' ? read : await visibleTo(req, caller.app, declaredOnly);
+          if (events === undefined) return reply.code(503).send({ error: 'unavailable', message: 'What this app may do can’t be checked right now. Try again in a moment.' });
+          if (warning && caller.kind !== 'platform') logUndeclared(caller.app, 'reads');
+          return { events, next, ...(warning ? { warning } : {}) };
         },
       );
 
@@ -768,6 +858,42 @@ export const buildApp = async ({ store, verifyService, grants, floors, members, 
           if (!admin) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how apps take events.' });
           const now = Date.now();
           return { deliveries: (await store.deliveries.list()).map((d) => ({ ...d, ...deliveryStatus(d, now) })), pushing: pushing() };
+        },
+      );
+
+      app.get(
+        '/deliveries/set-aside',
+        {
+          schema: {
+            summary: 'The events apps’ parts couldn’t take, set aside so the ones behind them could go (admins)',
+            description: [
+              'An event a part answers but can’t take is tried again a few times (DOMAIN_EVENTS_DELIVERY_ATTEMPTS), with the',
+              'later events on its topic waiting behind it; one a part that is down holds for a day is too. Then it is set',
+              'aside: kept here, newest first, with how often it was tried and what the last try said, and recorded in',
+              'Activity as delivery.set-aside. Kept as long as domain events are (DOMAIN_EVENTS_KEEP_DAYS). Since 1.18.',
+            ].join(' '),
+            querystring: Type.Object(
+              {
+                app: Type.Optional(Type.String({ minLength: 1, maxLength: 100, description: 'Only this app’s' })),
+                limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 500, default: 100 })),
+              },
+              { additionalProperties: false },
+            ),
+            response: {
+              200: Type.Object({ events: Type.Array(ref(SetAsideEventSchema)) }, { description: 'What was set aside, newest first' }),
+              401: refused('No signed-in caller'),
+              403: refused('Not an admin'),
+            },
+          },
+        },
+        async (req, reply) => {
+          const caller = signedIn(req, reply);
+          if (!caller) return reply;
+          const admin = caller.roles.includes('admin');
+          shadow.check('events.deliveries', caller, { action: 'can_manage_apps', resource: { type: 'org', id: THIS_ORG }, as: 'persona' }, admin);
+          if (!admin) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see how apps take events.' });
+          const events = await store.deliveries.setAside({ app: req.query.app, limit: req.query.limit ?? 100 });
+          return { events: events.map(({ nextAt: _, setAsideAt, ...e }) => ({ ...e, setAsideAt: setAsideAt! })) };
         },
       );
 

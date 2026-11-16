@@ -1,6 +1,6 @@
 /**
  * The ids an app may not take, because a part of AUGUR already answers to them. An app's id becomes its
- * /api/<id> at the gateway, its /apps/<id>/ at the front door, its Compose service when the app runner
+ * /api/<id> at the gateway, its /apps/<id>/ at the front door, its route /<id> in the shell, its Compose service when the app runner
  * runs it, its database schema and login, and its bucket, so it must not be any of these. The registry
  * refuses a manifest with one, and the storage service makes no schema for one.
  */
@@ -43,6 +43,8 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   shared: 'the shared modules’ path, /shared/',
   assets: 'the shell’s assets, /assets/',
   sandbox: 'the apps’ worker bootstrap, /sandbox/',
+  recover: 'the way back to an earlier release, /recover/',
+  legal: 'AUGUR’s licence and open-source notices, /legal/',
   // Names the deployment itself goes by: its database, sign-in realm and Compose project, and Postgres's own schemas.
   augur: 'AUGUR itself',
   platform: 'AUGUR’s database, sign-in realm and Compose project',
@@ -51,12 +53,15 @@ export const RESERVED_APP_IDS: Readonly<Record<string, string>> = {
   // Settings of the same shape as an app's own in .env (<ID>_BUCKET_SECRET, <ID>_CLIENT_SECRET), which an app with the id would be given.
   frontends: 'the registry’s key to the frontends bucket, FRONTENDS_BUCKET_SECRET',
   entra: 'the organisation’s Entra sign-in, ENTRA_CLIENT_SECRET',
+  // Its jobs schema, retired_jobs, would be where an app with the id "jobs" waits once set aside (ADR 0103).
+  retired: 'apps’ data set aside before it is dropped (retired_<app>)',
 };
 
 /** Beginnings an app's id may not have, and what they're kept for. */
 export const RESERVED_APP_ID_PREFIXES: Readonly<Record<string, string>> = {
   'augur-': 'AUGUR’s own buckets',
   'pg-': 'the database’s own schemas',
+  'retired-': 'apps’ data set aside before it is dropped (retired_<app>, retired-<app>)',
 };
 
 /** Why an app can't take `id` because AUGUR keeps it, or undefined when it can. */

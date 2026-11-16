@@ -160,8 +160,7 @@ const ask = (v: View, rows: UnitRow[]): RemoteNode => {
   const items = needsYou(o, v.data.installs?.installed ?? []);
   const first = items[0];
   if (first) {
-    const action = first.kind === 'first-upgrade' ? 'Review the upgrade' : 'Review';
-    return quill('quill-notice', { tone: 'needs', heading: first.title, action, more: items.length > 1 ? items.length - 1 : undefined, onAction: () => v.on.go(unitPath(first.unit, AUGUR)) }, first.why);
+    return quill('quill-notice', { tone: 'needs', heading: first.title, action: 'Review', more: items.length > 1 ? items.length - 1 : undefined, onAction: () => v.on.go(unitPath(first.unit, AUGUR)) }, first.why);
   }
   const augur = rows.find((r) => r.id === AUGUR);
   if (u.next && augur && augur.state !== 'up-to-date') {
@@ -247,7 +246,7 @@ export const overviewPage = (v: View): RemoteNode => {
             : { label: 'Release feed', value: `Checked ${when(v, o.checkedAt ?? u.checkedAt)}`, ...(signature(v) ? { note: signature(v) } : {}) },
           u.updaterSeenAt
             ? { label: 'Updater', value: `Last polled ${when(v, u.updaterSeenAt)}` }
-            : { label: 'Updater', value: 'Not set up', note: 'Upgrades started here wait until it is. See docs/upgrade.md.' },
+            : { label: 'Updater', value: 'Not set up', note: 'Upgrades started here wait until it is. See AUGUR’s docs, The updater.' },
         ],
       }),
       u.problem ? quill('quill-notice', { tone: 'warning', heading: 'The release feed has a problem' }, u.problem) : null,

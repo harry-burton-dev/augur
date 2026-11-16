@@ -21,7 +21,10 @@ The front door (`web`) holds every caller to a few limits:
 - **Requests a second from one address.** The API takes `API_RATE_PER_SECOND` (30), with `API_RATE_BURST`
   (200) let through at once, since a page fires many calls together; sign-in takes `SSO_RATE_PER_SECOND` (10)
   with `SSO_RATE_BURST` (50). Past them the answer is 429, *Too Many Requests*. The address is the one the
-  proxy in front saw, passed on in `X-Forwarded-For` and only believed from private addresses.
+  proxy in front saw, passed on in `X-Forwarded-For` and only believed from `TRUSTED_PROXIES`: addresses or
+  ranges, separated by spaces or commas (the private ranges and loopback unless set), or `none` when nothing
+  stands in front of it. Behind a load balancer, name its addresses, so nobody else on those ranges can say
+  they are someone else. An entry that isn't an address is left out, and the web container's log says so.
 - **The largest upload**, `MAX_UPLOAD_MB` (2048). Each app has its own lower limit under it.
 - **Calls to apps' parts.** The gateway waits `APP_CONNECT_TIMEOUT_MS` (5000) to reach an app's part and
   answers 502 when it can't. A part gets `APP_RESPONSE_TIMEOUT_MS` (60000) to start answering, and the same
@@ -40,6 +43,20 @@ The front door (`web`) holds every caller to a few limits:
 - **An app's own sign-in** (`POST /api/identity/v1/token`, where a part fetches its token with its client
   secret) is held to the sign-in rate above, not the API's.
 
+## Database connections
+
+Postgres takes at most 200 connections at once (`POSTGRES_MAX_CONNECTIONS`), and keeps 40 of them
+(`POSTGRES_RESERVED_CONNECTIONS`) for AUGUR's own logins: its services, Keycloak and OpenFGA. The storage job
+and the knowledge migration let those logins use them each time they run, and an app's login never may, so
+apps holding every other connection still leave AUGUR 40 to sign people in and answer with. Each app's login
+holds at most 30 (`APP_DATABASE_CONNECTIONS`). Each AUGUR service's pool holds at most 10 (events' jobs have a
+pool of their own too), Keycloak's 20 (`KEYCLOAK_DB_POOL_MAX`) and OpenFGA's 20 (`OPENFGA_DB_POOL_MAX`): some
+140 together when all are busy, so the defaults leave room for a few apps. With many apps, raise
+`POSTGRES_MAX_CONNECTIONS` (each connection takes a few MB of the server's memory) and run `pc up -d postgres`,
+which restarts it; the reserve and 3 for superusers must stay below it, or Postgres won't start and says why in
+`pc logs postgres`. `pc exec postgres psql -U platform -c 'select usename, count(*) from pg_stat_activity group by 1'`
+shows who holds them.
+
 ## Logs, memory and health
 
 - **Logs** are kept by Docker, at most three files of 10 MB per container (`LOG_MAX_SIZE`, `LOG_MAX_FILES`),
@@ -47,8 +64,15 @@ The front door (`web`) holds every caller to a few limits:
   which keeps 72 hours ([Observability](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md)).
 - **Memory limits** on the containers that can take a lot: Keycloak (`KEYCLOAK_MEM_LIMIT`, 2g; it sizes its
   Java heap from it) and the observability stack (`OTEL_LGTM_MEM_LIMIT`, 2g), so a runaway container is
-  restarted on its own instead of pushing AUGUR out. `pc ps` shows it restarting. Raise the limit and run
-  `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
+  restarted on its own instead of pushing AUGUR out. Every other container AUGUR builds (its services, the front
+  door, OpenFGA and its jobs) has 1g (`SERVICE_MEM_LIMIT`), the updater 2g (`UPDATER_MEM_LIMIT`), and each may
+  run at most 512 processes (`SERVICE_PIDS_LIMIT`). `pc ps` shows a service restarting, or a job (the storage
+  job, the realm job, the knowledge migration) exited with 137 and what waits on it not started. Raise the limit
+  and run `pc up -d` if it keeps happening; a server with 16 GB fits the defaults with room to spare.
+- **Apps' parts** have the memory and CPU each asks for in its manifest, at most 256 processes, and are the first
+  the kernel stops when the server runs out of memory (`oom_score_adj` 500), before AUGUR's own services and
+  Postgres. A part gets these when it's next started: an app's install, update or settings change. A container
+  from before the app contract runs as it was, without them, until it's replaced.
 - **Telemetry** goes over a network of its own: AUGUR's services send to `otel-lgtm` on it, and apps the runner
   installs aren't on it, so they can't reach `otel-lgtm` at all. Loki, Tempo and Prometheus answer only inside
   that container, to Grafana, so nothing on the networks can read what the services logged.
@@ -70,7 +94,15 @@ The front door (`web`) holds every caller to a few limits:
   model gateway up to 3 minutes. Raise it only if `pc logs` shows a slow but working server giving up.
 - **Query time limits**: Postgres cancels any one query from an AUGUR service after a minute
   (`DATABASE_STATEMENT_TIMEOUT_SECONDS`; 0 for no limit), so a query stuck on a lock or a bad plan fails its
-  request instead of holding a connection until the service runs out. Migrations are never limited.
+  request instead of holding a connection until the service runs out. A service waits at most 10 seconds
+  for a connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached
+  right now, rather than waiting for ever when its pool is used up.
+- **Migrations**: a migration may run as long as it needs, since building an index on a big table can rightly
+  take minutes. It waits at most a minute for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`),
+  such as an app's open transaction on a table it alters, then rolls back and the service stops (AUGUR's own services read the setting; an app's migrations keep the default), and `pc logs`
+  names the migration, the lock and who holds it (a session's details only where the service's login may see
+  them). Postgres ends a migration's transaction left idle for a minute (`DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS`),
+  freeing its locks. 0 turns either off.
 - **Pages of the knowledge graph**: a read that lists, such as the entities in sight from a floor, gives at
   most `KNOWLEDGE_PAGE_LIMIT` (100) a page whatever it asks for, and says when it cut a page shorter. Callers
   page on with the cursor each answer gives. A subgraph, what links to an entity, goes at most

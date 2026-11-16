@@ -55,6 +55,10 @@ export const migrate = async (admin: pg.Pool, { password }: { password: string }
   // Storage takes CONNECT on the database from public (each app login is granted its own), so kg_app needs its own grant too.
   const { rows: db } = await admin.query<{ db: string }>('select current_database() as db');
   await admin.query(`grant connect on database ${pg.escapeIdentifier(db[0]!.db)} to ${APP_LOGIN}`);
+  // It's one of AUGUR's own logins, so it may use the connections Postgres keeps back from apps (reserved_connections,
+  // Postgres 16 on), as the storage job lets the other services' logins.
+  const { rows: reserve } = await admin.query<{ has: boolean }>(`select to_regrole('pg_use_reserved_connections') is not null as has`);
+  if (reserve[0]?.has) await admin.query(`grant pg_use_reserved_connections to ${APP_LOGIN} with inherit true`);
   // The owner of everything in kg must stay a plain role: its functions run as it (fence.test.ts, T1).
   await admin.query('alter role kg_owner with nologin nosuperuser nobypassrls');
 };

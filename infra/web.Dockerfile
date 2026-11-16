@@ -44,6 +44,9 @@ LABEL org.opencontainers.image.licenses="LicenseRef-AUGUR-Proprietary"
 ENV APP_ORIGINS=""
 # Set from SERVER_RING and PLATFORM_URL when the container starts (infra/deploy/live-origins.envsh): the workbench's own tailnet, on the workbench only.
 ENV LIVE_ORIGINS="" SERVER_RING=""
+# Who the front door believes about a caller's address: the proxy in front, from TRUSTED_PROXIES (the private
+# ranges unless set), written as nginx's set_real_ip_from by infra/deploy/trusted-proxies.envsh at each start.
+COPY --chmod=755 infra/deploy/trusted-proxies.envsh /docker-entrypoint.d/14-trusted-proxies.envsh
 COPY --chmod=755 infra/deploy/live-origins.envsh /docker-entrypoint.d/15-live-origins.envsh
 # Where apps load the UI kit from (ADR 0048): the bundle in this image at /kit/, unless KIT_URL names
 # another host serving the same files. When the container starts, infra/deploy/kit-url.envsh writes the
@@ -64,8 +67,10 @@ COPY --chmod=755 infra/deploy/kit-url.envsh /docker-entrypoint.d/16-kit-url.envs
 # and the burst let through at once, for the API and for sign-in; the largest upload in MB; and
 # whether Keycloak's own admin console is served (open) or not (anything else).
 ENV API_RATE_PER_SECOND=30 API_RATE_BURST=200 SSO_RATE_PER_SECOND=10 SSO_RATE_BURST=50 MAX_UPLOAD_MB=2048 KEYCLOAK_CONSOLE=closed
-# nginx fills in ${APP_ORIGINS}, ${LIVE_ORIGINS}, ${KIT_ORIGIN} and ${SCRIPT_HASHES} from the environment when the container starts.
+# nginx fills in ${APP_ORIGINS}, ${LIVE_ORIGINS}, ${KIT_ORIGIN}, ${SCRIPT_HASHES} and ${REAL_IP_FROM} from the environment when the container starts.
 COPY infra/deploy/nginx.conf /etc/nginx/templates/default.conf.template
+# The headers on files that are never a page (/apps/, /assets/, /shared/), which nginx.conf includes in each.
+COPY infra/deploy/not-a-page.conf /etc/nginx/augur/not-a-page.conf
 COPY --from=build /site /usr/share/nginx/html
 COPY --from=build /index.template.html /usr/share/nginx/index.template.html
 # The shell's page is written from the template at each start, by nginx's own user.

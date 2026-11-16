@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Registry
-  version: 1.48.0
+  version: 1.49.0
   description: Catalogue of apps and micro frontends; serves the shell manifest.
 components:
   schemas:
@@ -379,7 +379,7 @@ components:
                       type: string
                     requestedBy:
                       type: string
-                      description: A person's id; automatic, for an update or a preview the registry asked for; or deployment, for a default app (DEFAULT_APPS)
+                      description: A person's id; automatic, for an update or a preview the registry asked for; deployment, for a default app (DEFAULT_APPS); or platform-fleet, for the fleet's client (ADR 0100)
                     requestedAt:
                       type: string
                       format: date-time
@@ -1339,7 +1339,7 @@ components:
           type: string
         deployment:
           type: string
-          description: DEPLOYMENT_ID, the deployment's name in Backstage's catalog
+          description: DEPLOYMENT_ID, the deployment's name in Backstage's catalog of deployments
         publicKey:
           type: string
           description: Base64 SPKI Ed25519 public key
@@ -1437,6 +1437,9 @@ components:
               available:
                 type: string
                 description: The newest release on its channel, when newer
+              next:
+                type: string
+                description: "AUGUR only: the release an upgrade goes to next, which may be older than available"
               halted:
                 $ref: "#/components/schemas/Halt"
               desired:
@@ -1503,7 +1506,6 @@ components:
                   - halted
                   - failed
                   - went-back
-                  - first-upgrade
                   - after-watch
               unit:
                 type: string
@@ -1670,7 +1672,7 @@ components:
               enum:
                 - platform
                 - pillar
-              description: The kind in force (ADR 0032)
+              description: The kind in force (ADR 0077)
             categoryRefused:
               type: object
               required:
@@ -2005,19 +2007,14 @@ components:
           properties:
             entities:
               type: boolean
-              description: The app binds its things to entities and publishes the binding events (ADR 0066), so the entity catalogue follows them
+              description: The app links its things to entities in Data Atlas (ADR 0025)
           additionalProperties: false
           description: What the app links its things to elsewhere in AUGUR (SDK 2.1)
         bindings:
           type: array
           items:
             type: string
-            pattern: ^[a-z][a-z0-9-]{0,39}$
-            description: 'A type of thing the app binds, as it names it in its topics: "intent"'
-          minItems: 1
-          maxItems: 10
-          uniqueItems: true
-          description: With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound (SDK 2.1)
+          description: "Retired (D6): the binding events are gone, so this is accepted and ignored. It goes in a later release."
         scopes:
           type: array
           items:
@@ -2055,7 +2052,7 @@ components:
           enum:
             - platform
             - pillar
-          description: The kind of app it says it is (SDK 1.11, ADR 0032). Only honoured for apps that ship with AUGUR or come from its app feed
+          description: The kind of app it says it is (SDK 1.11, ADR 0077). Only honoured for apps that ship with AUGUR or come from its app feed
         areas:
           type: array
           items:
@@ -2624,6 +2621,71 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /apps/{id}/events:
+    get:
+      summary: The domain events an app declares (platform services)
+      description: The topics an app on contract 3 says it reads and each type it publishes, with its version and payload schema, from its manifest in force (ADR 0104). The events service holds the app to them. `events` is absent when the app declares none; `reads` is absent when it doesn’t say what it reads. `contract` is the app’s contract major, for an app on contract 3, which must declare both.
+      parameters:
+        - schema:
+            type: string
+          in: path
+          name: id
+          required: true
+      responses:
+        "200":
+          description: What the app declares
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - app
+                properties:
+                  app:
+                    type: string
+                  contract:
+                    type: integer
+                    description: Its contract major, for an app on contract 3; absent for one on contract 2
+                  events:
+                    type: object
+                    required:
+                      - publishes
+                    properties:
+                      reads:
+                        type: array
+                        items:
+                          type: string
+                        description: Topics, or families such as folio.*
+                      publishes:
+                        type: array
+                        items:
+                          type: object
+                          required:
+                            - topic
+                            - version
+                            - schema
+                          properties:
+                            topic:
+                              type: string
+                            version:
+                              type: integer
+                            schema:
+                              type: object
+                              description: The payload's JSON Schema
+                              additionalProperties: {}
+                description: What the app declares
+        "403":
+          description: Not a platform service
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "404":
+          description: No such app is registered
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
   /apps/{id}/grants:
     get:
       summary: What an app may do on a floor (platform services and the gateway)
@@ -2759,44 +2821,6 @@ paths:
                 description: The apps granted the scope, by id
         "403":
           description: Not a platform service
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Refusal"
-        "503":
-          description: The sign-in service that checks the caller's token can't be reached right now
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/Refusal"
-  /entity-links:
-    get:
-      summary: The apps that bind their things to entities, and the types they bind (services only)
-      description: "Every registered app whose manifest sets links.entities, with the types of thing it names in bindings, each published on <app>.<type>.entity-bound and <app>.<type>.entity-unbound (ADR 0066). An app that sets links.entities without bindings has no types listed: follow its <app>.* topics and read each event with the service kit's readBinding. For any service, AUGUR's own or an app's."
-      responses:
-        "200":
-          description: The apps that link to entities, by id
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  type: object
-                  required:
-                    - app
-                    - types
-                  properties:
-                    app:
-                      type: string
-                      description: The app's id
-                    types:
-                      type: array
-                      items:
-                        type: string
-                      description: The types of thing it binds (its manifest's bindings)
-                description: The apps that link to entities, by id
-        "403":
-          description: Not a service
           content:
             application/problem+json:
               schema:
@@ -3632,7 +3656,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
     post:
       summary: Ask the app runner to install a release or remove an app (deployment admins only)
-      description: "Installing covers a first install, an upgrade and going back to an older version alike; going back to an older version holds an app on Automatic there. A release its publisher halted is refused (ADR 0018), and so is a pull request's build, or on a production server a dev build or any release not promoted to production: the feed says which, or failing that its version. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as app.install-requested or app.uninstall-requested."
+      description: "Installing covers a first install, an upgrade and going back to an older version alike; going back to an older version holds an app on Automatic there. A release its publisher halted is refused (ADR 0018), and so is a pull request's build, or on a production server a dev build or any release not promoted to production: the feed says which, or failing that its version. Needs a deployment admin who entered their password in the last 10 minutes, or it answers 401 sign_in_again. Apps that ship with AUGUR are refused. Audited as app.install-requested or app.uninstall-requested. The fleet's client (platform-fleet, ADR 0100) may ask with nobody signed in, only for a release the app feed lists (by app and version), and is recorded under its name."
       requestBody:
         required: true
         content:
@@ -3703,7 +3727,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/AppJob"
         "400":
-          description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, or a bad manifest"
+          description: "The release can't be installed: not by digest, id or version unlike its manifest's, no service, a pull request's build, one this server's ring doesn't take, one under an id another publisher holds, or a bad manifest"
           content:
             application/problem+json:
               schema:
@@ -3989,7 +4013,7 @@ paths:
   /platform/overview:
     get:
       summary: Every unit this server runs, with its desired state, what's next and what needs an admin (admins only)
-      description: "AUGUR first, then each app the app runner installed. Each unit has its desired state (ADR 0020): channel, policy, how far Automatic goes, a semver pin and the weekly windows an automatic upgrade may start in, with whether a window is open now. Needs you lists a halted release being run, and a failed or went-back result until an admin marks it looked at, and AUGUR's first upgrade on a server, which Automatic leaves to an admin."
+      description: "AUGUR first, then each app the app runner installed. Each unit has its desired state (ADR 0020): channel, policy, how far Automatic goes, a semver pin and the weekly windows an automatic upgrade may start in, with whether a window is open now. Needs you lists a halted release being run, and and a failed or went-back result until an admin marks it looked at. The fleet's client (platform-fleet, ADR 0100) reads it too, to follow what it asked for."
       responses:
         "200":
           description: The overview
@@ -4006,7 +4030,7 @@ paths:
   /platform/units/{unit}/desired-state:
     put:
       summary: Set how a unit takes new releases (deployment admins only)
-      description: "`unit` is augur or an installed app's id. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes, or it answers 401 sign_in_again. AUGUR's channel comes from RELEASE_CHANNEL, so a different one is refused with 409; a production server's apps follow stable only (409 production_server). Without timeZone the record takes the deployment's (DEPLOYMENT_TIME_ZONE). Kept in the unit's history and audited as platform.desired-state-set, with the record before."
+      description: "`unit` is augur or an installed app's id. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes, or it answers 401 sign_in_again. AUGUR's channel comes from RELEASE_CHANNEL, so a different one is refused with 409; a production server's apps follow stable only (409 production_server). Without timeZone the record takes the deployment's (DEPLOYMENT_TIME_ZONE). Kept in the unit's history and audited as platform.desired-state-set, with the record before. The fleet's client (platform-fleet, ADR 0100) may set it with nobody signed in, and is recorded under its name."
       requestBody:
         required: true
         content:
@@ -4239,6 +4263,24 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+  /platform/alerts/unrouted:
+    post:
+      summary: Where Grafana sends a route outside AUGUR that isn’t set, taken and dropped
+      description: ALERT_OUTSIDE_URL or ALERT_HEARTBEAT_URL isn’t set in the deployment’s .env, so compose points Grafana here. Nothing is kept or sent.
+      responses:
+        "202":
+          description: Dropped
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - told
+                properties:
+                  told:
+                    type: integer
+                    description: Always 0, as nothing is told
+                description: Dropped
   /apps/{id}:
     put:
       summary: Register an app, or update it
@@ -5033,7 +5075,7 @@ paths:
   /platform/upgrade:
     put:
       summary: Ask the deployment's updater to upgrade AUGUR (deployment admins only)
-      description: "`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again. Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as platform.upgrade-requested. `settings` are new settings for `.env`, each one the upgrade adds, never one that says what the server trusts (SERVER_RING and the like: set those in `.env`): they're kept in memory for the updater until the upgrade ends, never stored, and only their names are stored and audited. If the registry restarts before the updater takes them, the upgrade ends failed and says to ask again. An empty value is left out."
+      description: "`version` must be the `next` release Updates shows. Needs a deployment admin (ADR 0022) who entered their password in the last 10 minutes (x-user-signed-in-at), or it answers 401 sign_in_again. Only records the ask: the updater picks it up from /platform/upgrade/target. Audited as platform.upgrade-requested. `settings` are new settings for `.env`, each one the upgrade adds, never one that says what the server trusts (SERVER_RING and the like: set those in `.env`): they're kept in memory for the updater until the upgrade ends, never stored, and only their names are stored and audited. If the registry restarts before the updater takes them, the upgrade ends failed and says to ask again. An empty value is left out. The fleet's client (platform-fleet, ADR 0100) may ask with nobody signed in; on a production server only for a stable release its publisher hasn't halted (409), and it is recorded under its name."
       requestBody:
         required: true
         content:

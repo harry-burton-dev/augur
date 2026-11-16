@@ -2,7 +2,7 @@
  * AUGUR's updater for a Docker Compose deployment: asks the registry every half minute whether an
  * admin has asked for an upgrade, and runs it (upgrade.ts). With APP_SECRETS_KEY in .env it is the
  * app runner too: it installs, upgrades and removes apps an admin asks for (runner.ts). Optional:
- * it's the `updater` profile in infra/deploy/compose.yml, and docs/upgrade.md says what it needs.
+ * it's the `updater` profile in infra/deploy/compose.yml, and docs/src/content/docs/run/updater.md says what it needs.
  *   node dist/index.js           watch for upgrades
  *   node dist/index.js replace   replace the updater's own container (see server.ts)
  *   node dist/index.js check     one look of the watch after an upgrade, now: prints what it found
@@ -39,7 +39,7 @@ const POLL_MS = 30_000;
 const RELEASE_WORKFLOWS = AUGUR_REPOSITORIES.map((repository) => `${repository}/.github/workflows/release.yml`);
 const RELEASE_SIGNER = releaseIdentity(RELEASE_WORKFLOWS);
 const GITHUB_ISSUER = 'https://token.actions.githubusercontent.com';
-/** The deployment's read key, which the registry checks for releases with too (docs/upgrade.md). */
+/** The deployment's read key, which the registry checks for releases with too (docs/src/content/docs/run/releases.md). */
 const READ_KEY_FILE = '/run/secrets/augur/github-read-key';
 /** Before read keys: a pull token for a private image registry. */
 const PULL_TOKEN_FILE = '/run/secrets/augur/image-pull-token';
@@ -56,7 +56,7 @@ const IDENTITY_URL = setting('IDENTITY_URL', 'http://identity:8081');
 const IMAGE_SIGNER = setting('IMAGE_SIGNER', RELEASE_SIGNER);
 const GITHUB_READ_USER = setting('GITHUB_READ_USER');
 const IMAGE_PULL_USER = setting('IMAGE_PULL_USER');
-if (!PLATFORM_DIR) throw new Error('PLATFORM_DIR is not set: the updater needs the deploy folder’s path on the host (docs/upgrade.md).');
+if (!PLATFORM_DIR) throw new Error('PLATFORM_DIR is not set: the updater needs the deploy folder’s path on the host (AUGUR’s docs, The updater).');
 /**
  * Who signs AUGUR's dev builds, which only a dev server runs: the dev builds workflow on main, in the
  * repository IMAGE_SIGNER names when a fork sets it, else in the publisher's.

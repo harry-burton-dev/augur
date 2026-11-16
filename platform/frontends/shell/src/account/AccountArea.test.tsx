@@ -252,6 +252,21 @@ describe('the Account area', () => {
     expect(text()).toContain('Skein');
   });
 
+  it('turns the one-key shortcut off, and the keys list says Ctrl or ⌘ K opens the shell', async () => {
+    const keys = () => [...document.querySelectorAll('.account-keys kbd')].map((k) => k.textContent);
+    const { props } = await open('about');
+    expect(keys()).toContain('`');
+    const label = [...document.querySelectorAll('label')].find((l) => l.textContent?.includes('Open with `'))!;
+    const toggle = label.querySelector<HTMLElement>('[role="switch"], input[type="checkbox"]') ?? document.getElementById(label.htmlFor)!;
+    await act(async () => toggle.click());
+    expect(props.onPreference).toHaveBeenCalledWith('summonKey', false);
+    act(() => root!.unmount());
+    host!.remove();
+    await open('about', { prefs: { summonKey: false } });
+    expect(keys()).toContain('Ctrl or ⌘ K');
+    expect(keys()).not.toContain('`');
+  });
+
   it('closes back to the menu on Escape, and from its own button', async () => {
     const { props, button } = await open('about', { version: 'AUGUR 0.15.0' });
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;

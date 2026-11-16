@@ -437,6 +437,110 @@ describe.runIf(DATABASE_URL)('events', () => {
       expect((await read(`topics=folio.*&after=${rest.next}`)).json()).toEqual({ events: [], next: rest.next });
     });
 
+    it('lets an app read only the events on floors where it may subscribe, and the deployment’s own (ADR 0104)', async () => {
+      // Notes may follow on Finance and below, and the deployment's own events; not on Legal.
+      const onFloors = async (app: string, workspace?: string) =>
+        app === 'folio' ? (['events:publish', 'events:subscribe'] as const) : app === 'notes' && (!workspace || places[workspace]?.path.includes('w-finance')) ? (['events:subscribe'] as const) : ([] as const);
+      const app = (open = await db.app({ verifyService, grants: onFloors, floors }));
+      await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('fin', 'w-finance'), published('legal', 'w-legal'), published('pay', 'w-payroll'), published('all')] } });
+      const read = (query: string, headers = as('notes')) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers });
+      await expect.poll(async () => (await read('topics=folio.*', platform)).json().events.length).toBe(4);
+      expect((await read('topics=folio.*')).json().events.map((e: { id: string }) => e.id)).toEqual(['fin', 'pay', 'all']);
+      // A page full of events it can't see still moves the cursor on past them, so none is read again.
+      const page = (await read('topics=folio.*&limit=2')).json();
+      expect(page.events.map((e: { id: string }) => e.id)).toEqual(['fin']);
+      expect((await read(`topics=folio.*&after=${page.next}`)).json().events.map((e: { id: string }) => e.id)).toEqual(['pay', 'all']);
+      // AUGUR's own services read every floor's.
+      expect((await read('topics=folio.*', platform)).json().events.map((e: { id: string }) => e.id)).toEqual(['fin', 'legal', 'pay', 'all']);
+    });
+
+    it('gives an app that says what it reads only that, refuses what it doesn’t read, and waits out a registry that can’t say (ADR 0104)', async () => {
+      let registryUp = true;
+      const declaredEvents = async (app: string) => {
+        if (!registryUp) throw new GrantsUnavailable('down');
+        return app === 'notes' ? { reads: ['folio.document.published'], publishes: [] } : undefined;
+      };
+      const app = (open = await db.app({ verifyService, grants, floors, declaredEvents }));
+      await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('d1'), { topic: 'folio.document.withdrawn', id: 'w1', payload: {} }] } });
+      const read = (query: string, headers = as('notes')) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers });
+      await expect.poll(async () => (await read('topics=folio.*', platform)).json().events.length).toBe(2);
+      // A family it reads part of gives it that part; AUGUR's own services, and an app that doesn't say, read the lot.
+      expect((await read('topics=folio.*')).json().events.map((e: { id: string }) => e.id)).toEqual(['d1']);
+      expect((await read('topics=folio.*', platform)).json().events.map((e: { id: string }) => e.id)).toEqual(['d1', 'w1']);
+      expect((await read('topics=folio.*', as('folio'))).json().events.map((e: { id: string }) => e.id)).toEqual(['d1', 'w1']);
+      const refused = await read('topics=folio.document.withdrawn');
+      expect([refused.statusCode, refused.json().message]).toEqual([403, expect.stringMatching(/notes doesn’t say in its manifest that it reads folio\.document\.withdrawn\. It reads folio\.document\.published/)]);
+      // AUGUR's own topics are readable by any follower, declared or not.
+      expect((await read('topics=platform.*')).statusCode).toBe(200);
+      registryUp = false;
+      expect((await read('topics=folio.*')).statusCode).toBe(503);
+    });
+
+    it('holds an app that declares its event types to them: topic, version and payload (ADR 0104)', async () => {
+      const declaredEvents = async (app: string) =>
+        app === 'folio'
+          ? {
+              publishes: [
+                { topic: 'folio.document.published', version: 1, schema: { type: 'object', required: ['document'], properties: { document: { type: 'string' } } } },
+                { topic: 'folio.document.published', version: 2, schema: { type: 'object', required: ['document', 'by'], properties: { document: { type: 'string' }, by: { type: 'string' } } } },
+              ],
+            }
+          : undefined;
+      const app = (open = await db.app({ verifyService, grants, floors, declaredEvents }));
+      const publish = (events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events } });
+      expect((await publish([{ ...published('d1'), version: 1 }])).statusCode).toBe(202);
+      // Without a version, the newest declared its payload fits (an outbox row queued before an upgrade still goes)...
+      expect((await publish([{ topic: 'folio.document.published', id: 'd2', payload: { document: 'd2', by: 'u-1' } }])).statusCode).toBe(202);
+      expect((await publish([{ topic: 'folio.document.published', id: 'd5', payload: { document: 'd5' } }])).statusCode).toBe(202);
+      // ...and one it fits none of is refused against the newest.
+      const wrong = await publish([{ topic: 'folio.document.published', id: 'd3', payload: { by: 'u-1' } }]);
+      expect([wrong.statusCode, wrong.json().message]).toEqual([400, expect.stringMatching(/Event d3's payload isn't folio\.document\.published version 2: .*document/)]);
+      expect((await publish([{ topic: 'folio.document.published', id: 'd6', version: 2, payload: { document: 'd6' } }])).json().message).toMatch(/version 2: .*by/);
+      expect((await publish([{ ...published('d4'), version: 3 }])).json().message).toMatch(/declares folio\.document\.published at version 1, 2, not 3/);
+      expect((await publish([{ topic: 'folio.document.withdrawn', id: 'w1', payload: {} }])).json().message).toMatch(/doesn’t declare folio\.document\.withdrawn/);
+      await expect.poll(async () => (await app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers: platform })).json().events.map((e: { id: string; version?: number }) => [e.id, e.version])).toEqual([['d1', 1], ['d2', 2], ['d5', 1]]);
+    });
+
+    it('warns an app on contract 3 that declares nothing, in the answer, and still takes its events for this release (PER-462)', async () => {
+      // folio is on contract 3 and declares nothing; notes is on contract 3 and declares both; ledger is on contract 2.
+      const declaredEvents = async (app: string) =>
+        app === 'folio' ? { publishes: [], contract: 3 } : app === 'notes' ? { reads: ['folio.*'], publishes: [{ topic: 'notes.note.added', version: 1, schema: { type: 'object' } }], contract: 3 } : undefined;
+      const both = async () => ['events:publish', 'events:subscribe'] as const;
+      const app = (open = await db.app({ verifyService, grants: both, floors, declaredEvents }));
+      const sent = await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('d1')] } });
+      expect(sent.statusCode).toBe(202);
+      expect(sent.json().warning).toBe(
+        'folio is on contract 3 but its manifest declares no types it publishes (contributes.events.publishes). It must: from the next release this is refused. Its publisher adds contributes.events.publishes to its manifest.',
+      );
+      const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/domain-events?topics=folio.*', headers });
+      await expect.poll(async () => (await read(platform)).json().events.length).toBe(1);
+      expect((await read(as('folio'))).json()).toMatchObject({ events: [{ id: 'd1' }], warning: expect.stringMatching(/doesn’t say what it reads \(contributes\.events\.reads\)/) });
+      // One that declares, and one on contract 2, hear nothing of it.
+      expect((await read(as('notes'))).json()).not.toHaveProperty('warning');
+      expect((await read(as('ledger'))).json()).not.toHaveProperty('warning');
+      expect((await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('notes'), payload: { events: [{ topic: 'notes.note.added', id: 'n1', payload: {} }] } })).json()).not.toHaveProperty('warning');
+    });
+
+    it('answers 410 to a cursor behind what was pruned, with how far they were pruned, so a follower knows to rebuild (ADR 0104)', async () => {
+      const app = (open = await db.app({ verifyService, grants, floors }));
+      await app.inject({ method: 'POST', url: '/v1/domain-events', headers: as('folio'), payload: { events: [published('old1'), published('old2'), published('new')] } });
+      const read = (query: string) => app.inject({ method: 'GET', url: `/v1/domain-events?${query}`, headers: as('notes') });
+      await expect.poll(async () => (await read('topics=folio.*')).json().events.length).toBe(3);
+      const [old1, old2, kept] = (await read('topics=folio.*')).json().events as { seq: string }[];
+      await db.pool.query("update events.domain_events set at = now() - interval '40 days' where id in ('old1', 'old2')");
+      expect(await db.store.pruneEvents(30)).toBe(2);
+      const gone = await read(`topics=folio.*&after=${old1.seq}`);
+      expect([gone.statusCode, gone.json()]).toMatchObject([410, { error: 'gone', message: expect.stringMatching(/pruned/), after: old2.seq }]);
+      // A follower that had read as far as what was pruned missed nothing, and nor did one starting afresh.
+      expect((await read(`topics=folio.*&after=${old2.seq}`)).json().events).toMatchObject([{ id: 'new' }]);
+      expect((await read('topics=folio.*')).json().events).toMatchObject([{ id: 'new' }]);
+      // Pruning everything still remembers how far it went.
+      await db.pool.query("update events.domain_events set at = now() - interval '40 days'");
+      await db.store.pruneEvents(30);
+      expect((await read(`topics=folio.*&after=${old2.seq}`)).statusCode).toBe(410);
+      expect((await read(`topics=folio.*&after=${kept.seq}`)).statusCode).toBe(200);
+    });
+
     it('keeps each publisher to its own topics and scope', async () => {
       const app = (open = await db.app({ verifyService, grants, floors }));
       const publish = (headers: Record<string, string>, events: object[]) => app.inject({ method: 'POST', url: '/v1/domain-events', headers, payload: { events } });

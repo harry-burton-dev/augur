@@ -9,26 +9,48 @@ the parts a machine can (`scripts/review-tier.mjs`).
 The paths a pull request changes set its tier (`.github/review-tiers.json`). Its tier is its highest path.
 
 - **Low**: docs, tests, stories, changesets only. Merges on green CI.
-- **Medium**: everything else. Needs the description's sections and a pre-merge review.
+- **Medium**: everything else. Needs the description's sections, a pre-merge review, and no more than 400
+  changed lines (or a reason).
 - **High**: the updater and anything on the release path, identity, permissions, the gateway, events, the
   registry, service-kit, migrations and stores, the SDK's public contract, app-tools, `infra/`, `release/` and
-  `.github/`. Needs what Medium needs, under 400 changed lines (or a reason), and:
+  `.github/`. Needs what Medium needs, and:
   - **the deploy test before the merge** where the change runs on a server (`deployTest`): CI's `deploy-test` job;
-  - **Harry's ok** on his paths (`harryOk`: the release path, the updater, sign-in, permissions, backups and
-    workflows). In this order:
-    1. Merge fresh `origin/main` and push. Wait for CI to be green, with only the Review check red.
-    2. Ask Harry the three questions below in the thread, and wait for his "ok".
-    3. Add the `harry-ok` label, and nothing else. Never add it without his ok. The Review check records the
-       change he said ok to and turns green.
-    4. Merge. If you must push first: merging main again keeps the label; a push that changes the change takes
-       it off, and he is asked again. If the check says his ok is still being recorded, re-run it once the
-       "Harry's ok recorded" comment is there. A label that was never recorded comes off; add it again once.
+  - **a deep code review** on what can't be undone or gives more access (`harryOk` and `harryOkWhen`, named
+    so from when they waited for Harry): a new or changed migration (its entry in the migrations lock) and the
+    migration runner, backups and Postgres, Promote to stable and Halt, the updater's trusted signers, the Review
+    check's own script, workflow and tiers, and a workflow or local action that gains privilege (adds
+    `permissions:`, a `write` scope, `secrets`, `id-token`, a `pull_request_target`, `workflow_run` or
+    `issue_comment` trigger, a `container:`, `services:` or `image:`, or a `docker://` step, or takes away a
+    `permissions:` block or a `read` scope) or uses an action no workflow used before. The Review section names a
+    `/code-review` run at `high`, `xhigh` or `max` effort, in a fresh context, with every finding ranked 1 to 6
+    fixed or answered. The Review check lists these files under "Needs a deep review".
+
+  Harry is not a gate on any pull request (PER-438, 15 Nov): every High pull request merges on green and goes in
+  the auto-ok log (below), which tells him afterwards. Only he makes a release stable (Actions → Promote to
+  stable); that stays his. The `harry-ok` label is no longer needed anywhere.
 
 The Review check catches mistakes; it is not a wall against a hostile pull request, whose own workflows run with
-the same token. Harry reading the three answers is the gate; the check makes sure he is asked.
+the same token. The code review is the gate; the check makes sure one ran, deep enough for what changed.
 
-A bot's pull request (Renovate) has no description to check: CI, the deploy test where it applies, and Harry's
-ok on his paths are its gates.
+A bot's pull request (Renovate) has no description to check: CI and the deploy test where it applies are its
+gates, and the auto-ok log records it.
+
+## The auto-ok log
+
+Harry chose (PER-438) not to be asked: the code review is the gate, and the log tells him afterwards. Generated
+files (`notCount`: the migrations lock, `release/kit.json`, the pnpm lockfile) don't set the tier, nor do files
+only renamed (`ignoreRenames`), though a rename still counts for the deep review.
+
+When a High pull request merges, the Review workflow's record job writes an **auto-ok record** on it (a comment
+and the `auto-ok` label): what merged, the paths that set its tier, the files that needed a deep review, its
+checks, and its Not run, How to undo, Risk and Review. That is the log he reads, and the control centre shows it
+("Merged without you").
+
+If Harry reads a record and would not have let it through, he adds the `harry-would-not` label. That is a miss:
+the next pull request to this file or the tiers file tightens the rule, or the review, that let it through.
+
+A tiers file may hold `next`, rules to try for a week first: the Review check reports what they make of each
+pull request.
 
 ## Before you open the pull request
 
@@ -37,7 +59,15 @@ ok on his paths are its gates.
    findings ranked 1 to 6; the rest are optional. Say what you did in the Review section.
 3. At most two review rounds. The second reviews only what changed since the first. If it still finds an
    Important problem, stop and rethink the approach, and say so in the pull request.
-4. One concern per pull request. A High one over 400 lines says in Risk: "Over 400 lines because …".
+4. One concern per pull request, no more than 400 changed lines. Tests, stories, fixtures and generated files
+   don't count (`notSized` and `notCount` in the tiers file), except on the deep-review paths; the Review
+   check says how many do.
+5. A change that won't fit goes in as a series, in this order: the contract or schema, the service, the
+   frontend, then whatever removes the old path. Open each against `main` once the one before has merged.
+   Each leaves `main` working on its own, and says where it sits: "Part of PER-x, 2 of 4".
+6. One still over 400 lines says in Risk: "Over 400 lines because …", and the reason says why it could not
+   be split: recorded or generated content, a rename, a migration that must move with its store. "It is one
+   feature" is not a reason.
 
 Don't run `/security-review` as a gate: its filter drops findings that matter here (see the security angle).
 
@@ -51,7 +81,7 @@ Five sections, each with something in it:
 - `## How to undo`: revert, a setting, a later release; and whether data or a migration makes that harder.
 - `## Review`: the `/code-review` run (effort, how many findings, what was fixed or answered and why).
 
-Harry's three questions for his ok read straight off these: what isn't tested, how to undo it, and which release path.
+The three questions (what isn't tested, how to undo it, which release path) read straight off these, in the auto-ok record.
 
 ## What failure looks like here
 

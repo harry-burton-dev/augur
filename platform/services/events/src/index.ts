@@ -1,7 +1,7 @@
-import { callerCheckFromEnv, commonSettings, createJobs, DEFAULT_GATEWAY_URL, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
+import { callerCheckFromEnv, commonSettings, createJobs, DEFAULT_GATEWAY_URL, floorMembers, floorPlaces, identityAudience, identityDirectory, identityPrincipals, loadConfigOrExit, platformCredentialsFromEnv, registryDeclaredEvents, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, serviceHeaders, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
 import { Mailer, mailRelayFromEnv, organisationSender } from '@augur/service-kit/mail';
 import { buildApp } from './app.ts';
-import { eventDeliverer, sendThroughGateway, type PushingState } from './deliver.ts';
+import { DELIVERY_ATTEMPTS, eventDeliverer, RETRY_MS, sendThroughGateway, type PushingState } from './deliver.ts';
 import { finishReleases } from './inbox-routes.ts';
 import { identityDigestPeople, sendDigests } from './digests.ts';
 import { identityNoticeSettings, sendDueEmails } from './notice-emails.ts';
@@ -21,6 +21,8 @@ loadConfigOrExit('events', [
   commonSettings.gateway,
   commonSettings.permissions,
   { name: 'DOMAIN_EVENTS_KEEP_DAYS', about: 'how many days apps’ domain events are kept (default 30).' },
+  { name: 'DOMAIN_EVENTS_DELIVERY_ATTEMPTS', about: 'how many times an event an app’s part can’t take is tried before it is set aside (default 5).' },
+  { name: 'DOMAIN_EVENTS_RETRY_SECONDS', about: 'the wait before such an event is tried again, doubling each time (default 30).' },
   { name: 'INBOX_KEEP_DAYS', about: 'how many days closed inbox items are kept (default 90).' },
   { name: 'INBOX_DONE_DAYS', about: 'how many days back the Inbox’s Done tab looks (default 30).' },
   { name: 'PLATFORM_URL', about: 'AUGUR’s address, for the link back in notice emails.' },
@@ -50,6 +52,8 @@ const { REGISTRY_URL = 'http://localhost:8082', IDENTITY_URL = 'http://localhost
 const credentials = platformCredentialsFromEnv('events');
 if (!credentials) log.warn('SERVICE_CLIENT_SECRET is not set: apps’ grants can’t be checked, so only platform services can notify or write the audit log.');
 const grants = credentials ? registryGrants({ registryUrl: REGISTRY_URL, credentials }) : undefined;
+// What each app's manifest says it reads, and each type it publishes (ADR 0104).
+const declaredEvents = credentials ? registryDeclaredEvents({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 // The inbox kinds each app's manifest declares; an item of another kind is refused.
 const inboxKinds = credentials ? registryInboxKinds({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 // The notification kinds each app's manifest declares; a notification of another kind is refused.
@@ -68,12 +72,20 @@ const principals = credentials ? identityPrincipals({ identityUrl: IDENTITY_URL,
 const granted = credentials ? registryGrantedApps({ registryUrl: REGISTRY_URL, credentials }) : undefined;
 // The deliverer logs through the app once it is up; until then, with the start-up log.
 const deliveryLog = { info: (o: object, m: string) => log.info(m, o as Record<string, unknown>), warn: (o: object, m: string) => log.warn(m, o as Record<string, unknown>), error: (o: object, m: string) => log.error(m, o as Record<string, unknown>) };
+// An event a part can't take is tried DOMAIN_EVENTS_DELIVERY_ATTEMPTS (5) times, DOMAIN_EVENTS_RETRY_SECONDS (30) apart and
+// doubling, then set aside so the events behind it go (docs/domain-events.md). Anything but a whole number keeps the default.
+const whole = (value: string | undefined, fallback: number) => (value && /^[1-9][0-9]*$/.test(value) ? Number(value) : fallback);
+const deliveryAttempts = whole(process.env.DOMAIN_EVENTS_DELIVERY_ATTEMPTS, DELIVERY_ATTEMPTS);
+const retryMs = whole(process.env.DOMAIN_EVENTS_RETRY_SECONDS, RETRY_MS / 1000) * 1000;
 const deliverer =
   credentials && granted && grants
     ? eventDeliverer({
         store,
         subscribers: () => granted('events:subscribe'),
         grants,
+        declaredEvents,
+        attempts: deliveryAttempts,
+        retryMs,
         send: sendThroughGateway({ gatewayUrl: process.env.GATEWAY_URL || DEFAULT_GATEWAY_URL, credentials }),
         audit: async (entry, key) => void (await store.appendAudit(entry, undefined, 'events', { key })),
         log: deliveryLog,
@@ -84,7 +96,7 @@ if (!deliverer) log.warn(`${notPushing} Events aren’t pushed to apps; they can
 const pushing = (): PushingState => (deliverer ? { on: true, ...(deliverer.problem ? { problem: deliverer.problem } : {}) } : { on: false, why: notPushing, whoCanChange: 'Whoever runs this deployment sets it in .env.' });
 // Each admin and lead check is also asked of the permissions service, to compare (shadow mode, ADR 0085).
 const shadow = shadowFromEnv(credentials, log);
-const app = await buildApp({ shadow, callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, pushing });
+const app = await buildApp({ shadow, callers: callerCheckFromEnv('events'), store, verifyService: serviceVerifierFromEnv(), grants, floors, members, audience, directory, principals, inboxKinds, notificationKinds, declaredEvents, pushing });
 // Pushing stops before the database closes, so no pass is cut halfway.
 const stopDelivering = deliverer?.start();
 await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => stopDelivering?.(), () => database.close()] });

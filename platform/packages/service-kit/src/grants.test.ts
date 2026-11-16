@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { GrantsUnavailable, registryBindingApps, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, registryRequiredRole } from './grants.js';
+import { GrantsUnavailable, registryDeclaredEvents, registryGrantedApps, registryGrants, registryInboxKinds, registryNotificationKinds, registryRequiredRole } from './grants.js';
 
 describe('registry grants', () => {
   it('asks once per app and floor while the answer is fresh, as a platform service', async () => {
@@ -68,25 +68,29 @@ describe('registry grants', () => {
     await expect(role(answer(null, 502))).rejects.toBeInstanceOf(GrantsUnavailable);
   });
 
-  it('lists the apps that bind to entities, asks again only when stale, and keeps the last answer when the registry is down', async () => {
-    const credentials = { name: 'atlas', getToken: async () => 'atlas-token' };
+  it('says what an app declares about events, none for an app the registry doesn’t know, and keeps the last answer when it is down (ADR 0104)', async () => {
+    const credentials = { name: 'events', getToken: async () => 'events-token' };
     let t = 0;
     let status = 200;
+    const declared = { reads: ['folio.*'], publishes: [{ topic: 'notes.note.added', version: 1, schema: { type: 'object' } }] };
     const fetchImpl = vi.fn(async (url: string | URL | Request) => {
-      expect(String(url)).toBe('http://registry/v1/entity-links');
-      return status === 200 ? Response.json([{ app: 'mandate', types: ['intent'] }]) : new Response(null, { status });
+      if (String(url).endsWith('/v1/apps/old/events')) return Response.json({ app: 'old' });
+      if (String(url).endsWith('/v1/apps/quiet/events')) return Response.json({ app: 'quiet', contract: 3 });
+      if (String(url).endsWith('/v1/apps/said/events')) return Response.json({ app: 'said', contract: 3, events: declared });
+      if (String(url).endsWith('/v1/apps/gone/events')) return new Response(null, { status: 404 });
+      return status === 200 ? Response.json({ app: 'notes', events: declared }) : new Response(null, { status });
     });
-    const apps = registryBindingApps({ registryUrl: 'http://registry/', credentials, fetchImpl: fetchImpl as typeof fetch, now: () => t });
-    expect(await apps()).toEqual([{ app: 'mandate', types: ['intent'] }]);
-    await apps();
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    t = 300_001;
+    const events = registryDeclaredEvents({ registryUrl: 'http://registry/', credentials, fetchImpl: fetchImpl as typeof fetch, now: () => t });
+    expect(await events('notes')).toEqual(declared);
+    expect(await events('old')).toBeUndefined();
+    expect(await events('gone')).toBeUndefined();
+    // An app on contract 3 always has an answer, so one that declares nothing can be told apart.
+    expect(await events('quiet')).toEqual({ publishes: [], contract: 3 });
+    expect(await events('said')).toEqual({ ...declared, contract: 3 });
+    t = 30_001;
     status = 502;
-    expect(await apps()).toEqual([{ app: 'mandate', types: ['intent'] }]);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    const old = registryBindingApps({ registryUrl: 'http://registry', credentials, fetchImpl: (async () => new Response(null, { status: 404 })) as typeof fetch });
-    expect(await old()).toEqual([]);
-    const down = registryBindingApps({ registryUrl: 'http://registry', credentials, fetchImpl: (async () => new Response(null, { status: 503 })) as typeof fetch });
-    await expect(down()).rejects.toBeInstanceOf(GrantsUnavailable);
+    expect(await events('notes')).toEqual(declared);
+    const down = registryDeclaredEvents({ registryUrl: 'http://registry', credentials, fetchImpl: (async () => new Response(null, { status: 503 })) as typeof fetch });
+    await expect(down('notes')).rejects.toBeInstanceOf(GrantsUnavailable);
   });
 });

@@ -113,8 +113,8 @@ export const fakeHost = (env = ENV, network?: string) => {
     async dropStorage(id) {
       did.push(`drop ${id}`);
     },
-    async retireStorage(app) {
-      did.push(`retire ${app}`);
+    async retireStorage(app, backup) {
+      did.push(`retire ${app} behind ${backup}`);
     },
     async scratchVolumes(app) {
       return [`app-${app}-web-scratch`];

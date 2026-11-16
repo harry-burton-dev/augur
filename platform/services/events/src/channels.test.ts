@@ -25,7 +25,7 @@ describe('where a follower reads on from', () => {
   const read = async (top: string | undefined, seqs: string[], query = '') => {
     const events = seqs.map((seq) => ({ seq, topic: 'platform.person.deleted', id: seq, publisher: 'identity', at: '2026-11-06T00:00:00.000Z', payload: {} }));
     const readEvents = vi.fn(async () => events);
-    const store = { inbox: {}, lastSeq: async () => top, readEvents } as unknown as EventStore;
+    const store = { inbox: {}, lastSeq: async () => top, prunedUpTo: async () => undefined, readEvents } as unknown as EventStore;
     const app = await buildApp({ store, verifyService: async () => ({ kind: 'platform', name: 'registry' }) });
     const res = await app.inject({ method: 'GET', url: `/v1/domain-events?topics=platform.person.deleted${query}`, headers: { authorization: 'Bearer x' } });
     return { next: res.json().next as string, readEvents };

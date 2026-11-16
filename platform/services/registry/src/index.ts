@@ -1,5 +1,5 @@
-import { callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve } from '@augur/service-kit';
-import { auditTo, buildApp } from './app.ts';
+import { auditOutbox, callerCheckFromEnv, commonSettings, floorPlaces, followLeavers, loadConfigOrExit, notify, platformCredentialsFromEnv, serviceVerifierFromEnv, shadowFromEnv, startupLog, serve, type NewAuditEntry } from '@augur/service-kit';
+import { buildApp } from './app.ts';
 import { knowledgeOffer } from './knowledge-offer.ts';
 import { parseAppIds } from './defaults.ts';
 import { appFeed, appFeeds, appFeedUrls, AppUpdateChecker } from './app-updates.ts';
@@ -12,6 +12,7 @@ import { cosignFeedCheck, feedSigner, repoOfFeed, TRUSTED_ROOT_IN_REGISTRY } fro
 import { DEFAULT_FEED_URL, DEFAULT_OCI_FEED_URL, feedTokenFromEnv, readKeyFromEnv, releaseFeed, UpdateChecker, type Channel } from './updates.ts';
 import { reportingFrom } from './report.ts';
 import { ringFrom, takesPreview } from './ring.ts';
+import { unroutedNotice, unroutedOn } from './alerts.ts';
 import { PgAppStore, type AppStore } from './store.ts';
 import { updateNotices } from './notices.ts';
 
@@ -34,7 +35,7 @@ loadConfigOrExit('registry', [
   { name: 'RELEASE_CHANNEL', about: 'stable, beta or dev (default: dev on the workbench, beta on a preview server, stable on a production one, which takes nothing else; only the workbench takes dev).' },
   { name: 'PIPELINE_FEED_URL', about: 'where the pipeline feed is (default: feed:pipeline beside the release feed on GitHub’s container registry, else off).' },
   { name: 'PORTAL_URL', about: 'the company’s Backstage, which the Upgrade Centre links to and this deployment reports what it runs to (optional).' },
-  { name: 'DEPLOYMENT_ID', about: 'this deployment’s name in Backstage’s catalog (org/deployments.yaml), such as augur-workbench; without it nothing is reported.' },
+  { name: 'DEPLOYMENT_ID', about: 'this deployment’s name in Backstage’s catalog of deployments, such as augur-workbench; without it nothing is reported.' },
   { name: 'DEPLOYMENT_REPORTING', about: 'off: don’t report what this server runs to Backstage, or export it (default on).' },
   { name: 'PLATFORM_URL', about: 'where AUGUR is; on the workbench, Live on the workbench loads apps only from machines on its tailnet (https://<machine>.<tailnet>.ts.net).' },
   { name: 'SERVER_RING', about: 'dev (the workbench), preview or production (default): what kind of server this is (docs/release-channels.md).' },
@@ -48,6 +49,8 @@ loadConfigOrExit('registry', [
   { name: 'DEFAULT_APPS', about: 'the apps this deployment installs from the feed by default, by id, split by commas or spaces: their asks are agreed by the deployment, and they can’t be removed while named (optional).' },
   { name: 'APP_DATA_GRACE_DAYS', about: 'how many days an app removed from the server keeps its data, settings and grants before they go (default 30, from 1 to 365).' },
   { name: 'ALERT_WEBHOOK_TOKEN', about: 'what the deployment’s Grafana sends with its alerts, so they reach deployment admins as notices (ADR 0059).', secret: true },
+  { name: 'ALERT_OUTSIDE_URL', about: 'set when the deployment’s Grafana sends every alert outside AUGUR too; compose passes only whether it is, never the address.' },
+  { name: 'ALERT_HEARTBEAT_URL', about: 'set when the deployment’s Grafana sends its heartbeat outside AUGUR; compose passes only whether it is, never the address.' },
 ]);
 
 const port = Number(process.env.PORT ?? 8082);
@@ -62,7 +65,10 @@ const store: AppStore = database;
 // The registry signs in as itself (Keycloak client platform-registry) to write the audit log.
 const { EVENTS_URL } = process.env;
 const credentials = platformCredentialsFromEnv('registry');
-const audit = EVENTS_URL && credentials ? auditTo(EVENTS_URL, credentials) : undefined;
+// Each entry is kept in the registry's database first and sent from there, so none is lost while the events service is down.
+const auditing = EVENTS_URL && credentials ? auditOutbox({ pool: database.pool, table: 'registry.audit_outbox', eventsUrl: EVENTS_URL, credentials, onError: (err) => log.warn((err as Error).message) }) : undefined;
+auditing?.start();
+const audit = auditing && ((entry: NewAuditEntry, workspace?: string) => auditing.add(entry, workspace));
 if (!audit) log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: changes to the catalogue are not audited.');
 
 // Where floors sit comes from identity, asked as the registry.
@@ -136,7 +142,7 @@ if (!frontendFiles) log.warn('FRONTENDS_BUCKET_SECRET is not set: apps’ fronte
 
 // Apps and platform services sign in as themselves (their Keycloak clients).
 const app = await buildApp({ callers: callerCheckFromEnv('registry'), store, shadow: shadowFromEnv(credentials, log), knowledge: knowledgeOffer({ knowledgeUrl: process.env.KNOWLEDGE_URL || 'http://localhost:8086' }), verifyService: serviceVerifierFromEnv(), audit, floors, updates, frontendFiles, appUpdates, allowPrPreviews, pipeline, portalUrl, platformUrl: process.env.PLATFORM_URL || undefined, dataGraceDays, defaultApps: defaults.apps, inPageApps: inPage.apps, reporting, tailnet, timeZone, alerts: { token: process.env.ALERT_WEBHOOK_TOKEN || undefined, ...(EVENTS_URL && credentials ? { send: (notification) => notify({ eventsUrl: EVENTS_URL, credentials, notification }) } : {}) } });
-const serving = await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => updates.stop(), () => appUpdates.stop(), () => database.close()] });
+const serving = await serve(app, { port, ready: [{ name: 'database', check: () => database.ping() }], close: [() => auditing?.stop(), () => updates.stop(), () => appUpdates.stop(), () => database.close()] });
 
 // A deleted person's name goes from the upgrades they asked for (ADR 0040), and the registry keeps its own place.
 if (EVENTS_URL && credentials) {
@@ -145,11 +151,31 @@ if (EVENTS_URL && credentials) {
     credentials,
     cursor: { load: () => store.followedTo(), save: (seq) => store.setFollowedTo(seq) },
     deleted: ({ person }) => store.forgetPerson(person),
+    // Deletions it missed can't be asked for again: said, so an admin knows to check upgrades for names (ADR 0104).
+    onGap: async (upTo) => log.error(`The registry missed events up to ${upTo}, pruned while it was away: a person deleted then may still be named on upgrades they asked for.`),
     onError: (err) => log.error(`A deleted person’s name couldn’t be forgotten yet; the registry tries again (${(err as Error).message}).`),
   });
   leavers.start();
   serving.onStop(() => leavers.stop());
 } else log.warn('EVENTS_URL or SERVICE_CLIENT_SECRET is not set: a deleted person’s name stays on the upgrades they asked for.');
+
+// A production server's admins hear, weekly, while an alert route outside AUGUR isn't set (unroutedNotice).
+// The first try waits for the events service to start beside it; the key keeps it to one a week.
+const unrouted = unroutedOn(ring, process.env);
+if (unrouted.length) {
+  log.warn(`${unrouted.join(' and ')} not set: on this production server, an alert about AUGUR itself can reach no one (docs/observability.md, Alerts).`);
+  if (EVENTS_URL && credentials) {
+    const tell = () => void notify({ eventsUrl: EVENTS_URL, credentials, notification: unroutedNotice(unrouted)! }).catch((err) => log.error(`The missing alert routes weren’t told yet; the registry tries again within the hour (${(err as Error).message}).`));
+    const first = setTimeout(tell, 2 * 60_000);
+    const timer = setInterval(tell, 60 * 60_000);
+    first.unref();
+    timer.unref();
+    serving.onStop(() => {
+      clearTimeout(first);
+      clearInterval(timer);
+    });
+  }
+}
 
 // Deployment admins hear when a release is available and how each update ended, in the shell (ADR 0044).
 if (EVENTS_URL && credentials) {

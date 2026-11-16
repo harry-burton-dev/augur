@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -205,7 +206,9 @@ const DEV_FLOORS: Record<string, { kind: string; role: string }> = { 'dev-me': {
 
 const devApp = (dir: string | undefined) => {
   if (!dir) return undefined;
-  const manifest = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; [key: string]: unknown };
+  const read = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { id: string; provisional?: { requiredRole?: unknown }; [key: string]: unknown };
+  // The role at the top, as the registry serves it: from provisional (contract 3), or for one more release from the top.
+  const manifest = read.provisional?.requiredRole === undefined ? read : { ...read, requiredRole: read.provisional.requiredRole };
   const roles = (process.env.DEV_ROLES ?? '').split(',').map((r) => r.trim()).filter(Boolean);
   // DEV_APP_ENTRY serves a built entry instead of the source.
   // DEV_PREVIEWS turns the app's feature previews on for the stand-in person: ids, comma separated, or `all`.
@@ -293,12 +296,23 @@ const workerPolicy = (): Plugin => ({
 /** The shell's release, from its package.json, shown in Settings. */
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 const dev = devApp(process.env.DEV_APP);
+/** Different for every build, so an open tab can tell that the server now serves another (src/host/build.ts). */
+const build = randomUUID();
+
+/** Writes shell-build.json beside index.html: the build an open tab compares its own against. */
+const shellBuild = (): Plugin => ({
+  name: 'augur-shell-build',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({ type: 'asset', fileName: 'shell-build.json', source: JSON.stringify({ version, build }) });
+  },
+});
 
 export default defineConfig({
-  plugins: [sharedModulesMap(), react(), serveApps(), workerPolicy(), dev?.plugin],
+  plugins: [sharedModulesMap(), react(), serveApps(), workerPolicy(), shellBuild(), dev?.plugin],
   // Apps' worker bootstrap (src/sandbox/worker.ts) is bundled whole, under sandbox/, where nginx gives it the worker's policy.
   worker: { format: 'es', rollupOptions: { output: { entryFileNames: 'sandbox/[name]-[hash].js', chunkFileNames: 'sandbox/[name]-[hash].js', assetFileNames: 'sandbox/[name]-[hash][extname]' } } },
-  define: { __SHELL_VERSION__: JSON.stringify(version), ...dev?.define },
+  define: { __SHELL_VERSION__: JSON.stringify(version), __SHELL_BUILD__: JSON.stringify(build), ...dev?.define },
   server: {
     port: 5173,
     // DEV_HOST=0.0.0.0 opens it to other machines, such as your phone or the preview server, on the tailnet (*.ts.net) or DEV_ALLOWED_HOSTS.

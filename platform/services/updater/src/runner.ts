@@ -172,8 +172,12 @@ export interface AppHost {
   removeVolumes(names: string[]): Promise<void>;
   /** The app's scratch volumes (augur-scratch, labelled with the app), of every version and preview. */
   scratchVolumes(app: string): Promise<string[]>;
-  /** Runs the storage container to take an app's own data away for good: its database login and schemas, its bucket (its keys stay, and open nothing) (APP_STORAGE_RETIRE). */
-  retireStorage(app: string): Promise<void>;
+  /**
+   * Runs the storage container to take an app's own data away for good: its database login and schemas, its bucket (its
+   * keys stay, and open nothing) (APP_STORAGE_RETIRE). It refuses unless `backup`, the dump just taken for it, is the last
+   * the backup container noted and a good one with apps' files in it (APP_STORAGE_BACKUP, ADR 0103).
+   */
+  retireStorage(app: string, backup: string): Promise<void>;
   /**
    * Makes each app's network, internal so nothing on it reaches the internet, and joins to it the runner
    * itself (to see the parts' health) and the platform's parts it names; takes away the app networks not
@@ -417,6 +421,8 @@ const renderUnit = (unit: Unit, env: string) => {
       networks: [appNetwork(unit.app), ...(unit.internet && asksInternet(part) ? [internetNetwork(unit.app)] : [])],
       mem_limit: bytesOf(limits.memory),
       cpus: milliCpuOf(limits.cpu)! / 1000,
+      pids_limit: PART_PIDS_LIMIT,
+      oom_score_adj: PART_OOM_SCORE_ADJ,
       // Never privileged, no host folders, no added powers, nothing written but scratch and /tmp (spec 4.13, 10.5).
       read_only: true,
       tmpfs: [TMP],
@@ -434,6 +440,18 @@ const renderUnit = (unit: Unit, env: string) => {
   }
   return { services, volumes, secrets, files, provisioned: p };
 };
+
+/**
+ * The most processes one part may run: far more than any service needs, and a fork bomb stops there instead of
+ * taking the server's process table. With the memory and CPU each part asks for, its whole budget on the server.
+ */
+export const PART_PIDS_LIMIT = 256;
+/**
+ * When the server runs short of memory the kernel ends the process with the highest score first: an app's part goes
+ * before AUGUR's own services (0) and Postgres. Raising a container's score needs no privileges, so it holds under
+ * rootless Docker too.
+ */
+export const PART_OOM_SCORE_ADJ = 500;
 
 /** A container from before contract 3, kept as it ran until it's removed or replaced: its settings file stays beside the project. */
 const legacyContainer = (image: string, service: string, labels: Record<string, string>) => ({
@@ -729,7 +747,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
     if (refused) throw new StepFailed(refused);
     const r = release as AppRelease;
     const env = await host.readEnv();
-    if (!appSecrets(env, job.app)) throw new StepFailed('APP_SECRETS_KEY is not set in .env, so the runner can’t give the app its secrets (docs/upgrade.md, The app runner).');
+    if (!appSecrets(env, job.app)) throw new StepFailed('APP_SECRETS_KEY is not set in .env, so the runner can’t give the app its secrets (AUGUR’s docs, The app runner).');
 
     await report({ step: 'verify', state: 'running' });
     const publisher = `${r.signer.repository}/${r.signer.workflow}`;
@@ -1189,14 +1207,15 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
 
   /**
    * Takes away the data of an app removed from the server once its grace period ended (spec 5.5): a backup first,
-   * then its database login and schemas, its bucket, its scratch volumes and its sign-in. The registry forgets its
+   * then its scratch volumes and its sign-in; its database login, schemas and bucket are set aside, and dropped with a
+   * later AUGUR release (ADR 0103). The registry forgets its
    * settings and grants when this is done.
    */
   const purge = async (job: AppJob, report: JobReporter) => {
     await report({ step: 'remove', state: 'running' });
     if ((await host.readState()).apps[job.app]) throw new StepFailed(`${job.app} is installed again, so its data stays.`);
     const file = await host.backup();
-    await host.retireStorage(job.app);
+    await host.retireStorage(job.app, file);
     const volumes = await host.scratchVolumes(job.app);
     await host.removeVolumes(volumes);
     await calls.removeCredential(job.app);
@@ -1204,7 +1223,7 @@ export const appRunner = ({ host, calls, now = () => new Date() }: RunnerOptions
       step: 'remove',
       state: 'done',
       outcome: 'done',
-      message: `Its database, bucket${volumes.length ? `, ${volumes.length} scratch ${volumes.length === 1 ? 'folder' : 'folders'}` : ''} and sign-in are gone. Backup ${file} was taken first.`,
+      message: `Its sign-in${volumes.length ? ` and ${volumes.length} scratch ${volumes.length === 1 ? 'folder are' : 'folders are'}` : ' is'} gone. Its database and bucket are set aside, out of reach, and dropped with a later AUGUR release. Backup ${file} was taken first.`,
     });
   };
 

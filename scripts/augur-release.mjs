@@ -32,7 +32,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import semver from 'semver';
-import { NOTES_FILE, stamp } from './upgrade-notes.mjs';
+import { parse as parseYaml } from 'yaml';
+import { NOTES_FILE, notesOf, stamp } from './upgrade-notes.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const RELEASE_FILE = 'release/augur-release.json';
@@ -41,6 +42,83 @@ const ENV_EXAMPLE = `${DEPLOY_DIR}/.env.example`;
 const VERSION_FILE = 'platform/services/registry/src/augur-version.ts';
 const NAMES_FILE = 'release/names.json';
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), 'utf8'));
+
+/**
+ * The stores: the images that keep AUGUR's data, and change it when they move (a Postgres major rewrites
+ * its files, Keycloak and OpenFGA migrate their tables as they start, Garage its metadata). An old image
+ * can't be started again on what a newer one changed, so a release that moves one is breaking: the
+ * updater then won't go back to the release before by itself, and docs/src/content/docs/release-notes/upgrade-notes.md says what to do.
+ * Postgres and Garage run as compose has them; Keycloak and OpenFGA are built on theirs (service.Dockerfile).
+ */
+const STORES = {
+  postgres: { label: 'Postgres', service: 'postgres' },
+  garage: { label: 'Garage', service: 'garage' },
+  keycloak: { label: 'Keycloak', stage: 'keycloak' },
+  openfga: { label: 'OpenFGA', stage: 'openfga-upstream' },
+};
+const COMPOSE_FILE = `${DEPLOY_DIR}/compose.yml`;
+const DOCKERFILE = 'infra/service.Dockerfile';
+
+/** Each store's image, from compose's text and the image build's. */
+export const storesFrom = ({ compose, dockerfile }) => {
+  const services = parseYaml(compose)?.services ?? {};
+  const stages = Object.fromEntries([...dockerfile.matchAll(/^FROM\s+(?:--\S+\s+)*(\S+)\s+AS\s+(\S+)\s*$/gim)].map((m) => [m[2], m[1]]));
+  return Object.fromEntries(
+    Object.entries(STORES).map(([store, { service, stage }]) => {
+      const image = service ? services[service]?.image : stages[stage];
+      const where = service ? `${COMPOSE_FILE} services.${service}.image` : `${DOCKERFILE} FROM … AS ${stage}`;
+      if (typeof image !== 'string' || !image) throw new Error(`Can't find ${store}'s image: ${where}`);
+      // A variable would hide each move from the release file: name the image as it is.
+      if (image.includes('$')) throw new Error(`${where} is ${image}: name ${store}'s image itself, not through a variable`);
+      return [store, image];
+    }),
+  );
+};
+
+/** The stores as this checkout has them. */
+export const readStores = () => storesFrom({ compose: readFileSync(join(root, COMPOSE_FILE), 'utf8'), dockerfile: readFileSync(join(root, DOCKERFILE), 'utf8') });
+
+/**
+ * The part of a store's image that changes its data: its name, and its version down to the minor (a Keycloak,
+ * OpenFGA or Garage minor can migrate what it keeps); for Postgres, the Postgres major in its tag (pg16), since
+ * pgvector's own version and Debian's don't touch the files. A patch or a new digest doesn't.
+ */
+export const storeLevel = (store, image) => {
+  const [name, tag = ''] = image.split('@')[0].split(/:(?=[^/]*$)/);
+  if (store === 'postgres') return `${name}:${/pg\d+/.exec(tag)?.[0] ?? tag}`;
+  const version = semver.coerce(tag);
+  return `${name}:${version ? `${version.major}.${version.minor}` : tag}`;
+};
+
+/** The stores whose image moved past a patch since `previous` recorded them: none when it recorded none. */
+const storesMoved = (previous, stores) =>
+  previous?.stores && stores ? Object.keys(STORES).filter((s) => previous.stores[s] && stores[s] && storeLevel(s, previous.stores[s]) !== storeLevel(s, stores[s])) : [];
+const storeBreaking = (previous, stores) =>
+  storesMoved(previous, stores).map((s) => `${STORES[s].label} ${previous.stores[s]} → ${stores[s]}: its data can’t go back to the old image`);
+/** The stores a release records: as they are now, or else as the release before had them. */
+const storesKept = (previous, stores) => {
+  const kept = stores ?? previous?.stores;
+  return kept ? { stores: kept } : {};
+};
+
+/**
+ * What's missing for the stores whose image moved since the last release. Each needs a note in
+ * docs/src/content/docs/release-notes/upgrade-notes.md
+ * that isn't released yet (**From** unreleased), whose heading names it and which says how to go back, and a
+ * changeset with a bump must be waiting, so the move goes out in a release of its own making.
+ */
+export const storeProblems = (previous, stores, markdown, changesets) => {
+  const moved = storesMoved(previous, stores);
+  if (!moved.length) return [];
+  const lines = markdown.split('\n');
+  const unreleased = (notesOf(markdown) ?? []).filter((n) => n.from === 'unreleased').map((n) => ({ heading: n.heading, text: lines.slice(n.line - 1, n.end).join('\n') }));
+  const problems = moved
+    .filter((s) => !unreleased.some((n) => new RegExp(`\\b${STORES[s].label}\\b`, 'i').test(n.heading) && /\bback\b/i.test(n.text)))
+    .map((s) => `${STORES[s].label}'s image moved (${previous.stores[s]} → ${stores[s]}), which makes the next release breaking: add a note to ${NOTES_FILE}, starting **From** unreleased, whose heading names ${STORES[s].label} and which says how to go back (restore the backup taken before the upgrade)`);
+  if (!changesets.some((c) => Object.keys(c.bumps).length))
+    problems.push(`${moved.map((s) => STORES[s].label).join(' and ')} moved, but no changeset waiting bumps a part, so no Version packages PR would release it: add one (pnpm changeset) for the part that runs on it`);
+  return problems;
+};
 
 /** Every part of the platform, by package name, with its version and where it lives. */
 export const readParts = () => {
@@ -113,7 +191,7 @@ export const releaseName = (previous, version, names) => {
 };
 
 /** The next release, from the last one and the parts as they are now. Returns the last one unchanged when nothing moved. */
-export const nextRelease = (previous, parts, settings, today, names = []) => {
+export const nextRelease = (previous, parts, settings, today, names = [], stores) => {
   const before = previous?.parts ?? {};
   const changed = [];
   const breaking = [];
@@ -127,10 +205,12 @@ export const nextRelease = (previous, parts, settings, today, names = []) => {
     else if (semver.minor(part.version) > semver.minor(was) || semver.major(part.version) !== semver.major(was)) feature = true;
   }
   for (const name of Object.keys(before)) if (!parts[name]) breaking.push(`${name} removed`);
+  breaking.push(...storeBreaking(previous, stores));
+  const kept = storesKept(previous, stores);
 
   const shape = Object.fromEntries(Object.entries(parts).map(([name, { version }]) => [name, { version }]));
   if (!previous) {
-    return { version: '0.1.0', ...(names[0] ? { name: names[0] } : {}), channel: 'beta', released: today, upgradeFrom: '>=0.1.0', changed: Object.keys(parts), breaking: [], settings: { ...settings, added: [], removed: [] }, parts: shape };
+    return { version: '0.1.0', ...(names[0] ? { name: names[0] } : {}), channel: 'beta', released: today, upgradeFrom: '>=0.1.0', changed: Object.keys(parts), breaking: [], settings: { ...settings, added: [], removed: [] }, parts: shape, ...kept };
   }
   const settingsAdded = toAdd(previous, settings);
   const settingsRemoved = previous.settings.all.filter((k) => !settings.all.includes(k));
@@ -151,6 +231,7 @@ export const nextRelease = (previous, parts, settings, today, names = []) => {
     breaking,
     settings: { ...settings, added: settingsAdded, removed: settingsRemoved },
     parts: shape,
+    ...kept,
   };
 };
 
@@ -189,13 +270,16 @@ const KIND_HEADINGS = { major: 'Major Changes', minor: 'Minor Changes', patch: '
  * Its parts keep the last release's versions (nothing is versioned yet), and what changed, what's
  * breaking and each part's changelog come from the changesets waiting, in Changesets' own format.
  */
-export const devBuild = (previous, parts, settings, changesets, run, today) => {
+export const devBuild = (previous, parts, settings, changesets, run, today, stores) => {
   if (!previous) throw new Error(`${RELEASE_FILE} is missing.`);
   if (!/^\d+$/.test(String(run))) throw new Error('The run is a number.');
   const base = semver.parse(previous.version);
   const next = base.prerelease.length ? `${base.major}.${base.minor}.${base.patch}` : semver.inc(previous.version, 'patch');
   const changed = [...new Set(changesets.flatMap((c) => Object.keys(c.bumps)))].filter((name) => parts[name]).sort();
-  const breaking = changesets.flatMap((c) => Object.entries(c.bumps).filter(([name, kind]) => kind === 'major' && parts[name]).map(([name]) => `${name}: ${c.summary.split('\n')[0]}`));
+  const breaking = [
+    ...changesets.flatMap((c) => Object.entries(c.bumps).filter(([name, kind]) => kind === 'major' && parts[name]).map(([name]) => `${name}: ${c.summary.split('\n')[0]}`)),
+    ...storeBreaking(previous, stores),
+  ];
   const changelogs = Object.fromEntries(
     changed.map((name) => [
       name,
@@ -217,6 +301,7 @@ export const devBuild = (previous, parts, settings, changesets, run, today) => {
     breaking,
     settings: { ...settings, added: toAdd(previous, settings), removed: previous.settings.all.filter((k) => !settings.all.includes(k)) },
     parts: Object.fromEntries(Object.entries(parts).map(([name, { version }]) => [name, { version }])),
+    ...storesKept(previous, stores),
     changelogs,
   };
 };
@@ -338,7 +423,7 @@ export const notes = (release, parts) => {
     const { version } = release.parts[name];
     lines.push(`#### ${name} ${version}`, '', changelogFor(parts[name]?.path ?? '', version) || '_No changelog entry._', '');
   }
-  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: unpack \`${bundleName(release.version)}\` from this release over the server's folder, set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, then pull and start: [docs/upgrade.md](../../blob/HEAD/docs/upgrade.md).`);
+  lines.push('### Running it', '', `Upgrade from Admin → Upgrade Centre, or by hand: unpack \`${bundleName(release.version)}\` from this release over the server's folder, set \`PLATFORM_VERSION=${release.version}\` in \`infra/deploy/.env\`, then pull and start: [Upgrade AUGUR](../../blob/HEAD/docs/src/content/docs/run/upgrade.md).`);
   return lines.join('\n');
 };
 
@@ -349,17 +434,17 @@ const main = () => {
 
   if (mode === 'version') {
     const names = readNames();
-    const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10), names);
+    const next = nextRelease(previous, parts, readSettings(), new Date().toISOString().slice(0, 10), names, readStores());
     if (next === previous) return console.log(`AUGUR stays at ${previous.version}: no part changed.`);
     write(next);
-    // Each upgrade note added since the last release says it came in this one (docs/upgrade.md).
+    // Each upgrade note added since the last release says it came in this one (docs/src/content/docs/release-notes/upgrade-notes.md).
     const notes = join(root, NOTES_FILE);
     writeFileSync(notes, stamp(readFileSync(notes, 'utf8'), next.version));
     console.log(`AUGUR ${previous?.version ?? '(none)'} → ${titleOf(next)}${next.breaking.length ? ' (breaking)' : ''}.`);
     if (!next.name && names.length) console.warn(`::warning::${NAMES_FILE} has no name left for AUGUR ${next.version}: add more at the end.`);
   } else if (mode === 'dev') {
     // In this checkout only: the images, the registry's own idea of its release and the release say the dev build's version.
-    const build = devBuild(previous, parts, readSettings(), pendingChangesets(), process.argv[3], new Date().toISOString().slice(0, 10));
+    const build = devBuild(previous, parts, readSettings(), pendingChangesets(), process.argv[3], new Date().toISOString().slice(0, 10), readStores());
     write(build);
     console.log(build.version);
   } else if (mode === 'devs-clean') {
@@ -383,8 +468,14 @@ const main = () => {
       const shipped = existsSync(join(root, VERSION_FILE)) ? readFileSync(join(root, VERSION_FILE), 'utf8') : '';
       if (shipped !== versionModule(previous)) problems.push(`${VERSION_FILE} doesn't match ${RELEASE_FILE}`);
     }
-    if (problems.length) {
-      console.error(problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`).join('\n'));
+    let notesNeeded = [];
+    try {
+      if (previous) notesNeeded = storeProblems(previous, readStores(), readFileSync(join(root, NOTES_FILE), 'utf8'), pendingChangesets());
+    } catch (err) {
+      notesNeeded = [err.message];
+    }
+    if (problems.length || notesNeeded.length) {
+      console.error([...problems.map((p) => `✗ ${p}. Versions only change in the Version packages PR, which runs: node scripts/augur-release.mjs version`), ...notesNeeded.map((p) => `✗ ${p}.`)].join('\n'));
       process.exit(1);
     }
     console.log(`AUGUR release ${previous.version} is in step.`);

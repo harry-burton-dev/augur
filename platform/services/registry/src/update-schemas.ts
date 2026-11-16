@@ -280,7 +280,7 @@ export const Reporting = Type.Object(
   {
     mode: Type.Enum(REPORTING_MODES),
     why: Type.String(),
-    deployment: Type.Optional(Type.String({ description: "DEPLOYMENT_ID, the deployment's name in Backstage's catalog" })),
+    deployment: Type.Optional(Type.String({ description: "DEPLOYMENT_ID, the deployment's name in Backstage's catalog of deployments" })),
     publicKey: Type.Optional(Type.String({ description: 'Base64 SPKI Ed25519 public key' })),
     last: Type.Optional(
       Type.Object({
@@ -338,6 +338,7 @@ export const Overview = Type.Object(
         name: Type.String(),
         running: Type.String(),
         available: Type.Optional(Type.String({ description: 'The newest release on its channel, when newer' })),
+        next: Type.Optional(Type.String({ description: 'AUGUR only: the release an upgrade goes to next, which may be older than available' })),
         halted: Type.Optional(ref(Halt)),
         desired: Type.Intersect([
           ref(DesiredState),
@@ -360,7 +361,7 @@ export const Overview = Type.Object(
     ),
     needsYou: Type.Array(
       Type.Object({
-        kind: Type.Enum(['halted', 'failed', 'went-back', 'first-upgrade', 'after-watch']),
+        kind: Type.Enum(['halted', 'failed', 'went-back', 'after-watch']),
         unit: Type.String(),
         message: Type.String(),
         result: Type.Optional(Type.Object({ kind: Type.Enum(RESULT_KINDS), id: Type.String() }, { description: 'The result to mark looked at' })),

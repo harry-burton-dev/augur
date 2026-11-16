@@ -2,13 +2,16 @@
 // and a bucket with a key that opens only it. Runs to the end and stops, on every `up`; running it
 // again changes nothing unless a secret in .env changed. See docs/app-storage.md.
 // With APP_STORAGE_DROP, it instead takes one pull request's preview's scratch storage away. The apps in
-// RETIRED_APPS lose their data, once on each server (ADR 0075). With APP_STORAGE_RETIRE, one app the app runner
-// removed loses its data, once its grace period ended.
+// RETIRED_APPS have their data set aside, once on each server (ADR 0075). With APP_STORAGE_RETIRE, one app the app
+// runner removed has its data set aside, once its grace period ended. What was set aside in an earlier AUGUR release
+// is dropped, behind a good backup taken since (ADR 0103, retirement.ts).
 import { startupLog } from '@augur/service-kit';
 import pg from 'pg';
 import { configFromEnv, envPrefix, FRONTENDS_BUCKET, FRONTENDS_KEY, type StorageConfig } from './config.ts';
+import { BACKUP_STATUS_DIR, backupProblem, readBackupMarker } from './backup-marker.ts';
 import { garageAdmin, GarageError, keyIdFor, keyNameFor } from './garage.ts';
-import { dropDatabase, markRetired, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, retiredApps, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { dropDatabase, prepareDatabase, provisionDatabase, provisionKeycloakDatabase, provisionServiceDatabase, roleFor, schemaFor, serviceRoleFor } from './postgres.ts';
+import { dropDue, markKept, prepareRetirements, retiredBucketFor, retirements, setAside, type Buckets } from './retirement.ts';
 import { emptyBucket } from './s3.ts';
 
 const log = startupLog('storage');
@@ -40,18 +43,53 @@ if (config.drop) {
   process.exit(0);
 }
 
-// An app removed from the server whose grace period ended: its data goes, after the runner's backup, and nothing else is done.
+/** The object store's part of setting an app's data aside and dropping it later, when there is object storage. */
+const bucketsOf = (options: StorageConfig['garage']): Buckets | undefined => {
+  if (!options) return undefined;
+  const garage = garageAdmin(options);
+  return {
+    has: (app) => garage.hasBucket(app),
+    setAside: (app) => garage.moveBucket(app, retiredBucketFor(app)),
+    drop: (app) =>
+      garage.removeBucket(retiredBucketFor(app), async (bucketId) => {
+        // Named so no app's own keys (app-<id>, and an id can't hold a colon) are ever mistaken for it.
+        const key = await garage.temporaryKey(bucketId, `${keyNameFor(app)}:retire`);
+        try {
+          const deleted = await emptyBucket({ endpoint: options.s3Url, bucket: retiredBucketFor(app), secret: key.secret });
+          log.info(`emptied bucket ${retiredBucketFor(app)} (${deleted} objects)`);
+        } finally {
+          // A key left behind opens nothing once the bucket is gone, so this never hides why emptying failed.
+          await garage.deleteKey(key.id).catch((err: Error) => log.warn(`the key that emptied bucket ${retiredBucketFor(app)} couldn't be deleted: ${err.message}`));
+        }
+      }),
+  };
+};
+const buckets = bucketsOf(config.garage);
+
+// An app removed from the server whose grace period ended: its data is set aside, after the runner's backup, and
+// nothing else is done. Only behind that backup (ADR 0103): the last noted, and a good one of the database and apps' files.
 if (config.retireNow) {
-  const app = config.retireNow;
+  const { app, backup } = config.retireNow;
+  const refused = backupProblem(await readBackupMarker(BACKUP_STATUS_DIR), { file: backup }, Boolean(config.garage));
+  if (refused) {
+    // On stderr as a plain line too: the app runner shows the last of it in Admin, Apps.
+    log.error(`${app}’s data stays for now: ${refused}`);
+    process.stderr.write(`${app}’s data stays for now: ${refused}\n`);
+    process.exit(1);
+  }
   const sql = new pg.Client({ connectionString: config.databaseUrl });
   await sql.connect();
   try {
-    await retiredApps(sql);
-    await retireApp(sql, app, true);
+    await prepareRetirements(sql);
+    await setAside({ sql, buckets, app, release: config.release, again: true });
+  } catch (err) {
+    log.error(`${app}’s data couldn’t be set aside: ${(err as Error).message}`);
+    process.stderr.write(`${app}’s data couldn’t be set aside: ${(err as Error).message}\n`);
+    process.exit(1);
   } finally {
     await sql.end();
   }
-  log.info(`${app} was removed from the server and its time to come back ended: its database login, schemas and bucket are gone.`);
+  log.info(`${app} was removed from the server and its time to come back ended: its database login, schemas and bucket are set aside, and go with a later AUGUR release.`);
   process.exit(0);
 }
 
@@ -142,51 +180,33 @@ async function ensureKeyOf(garage: ReturnType<typeof garageAdmin>, app: string, 
   }
 }
 
-/**
- * Takes an app's login, schemas and bucket away, with everything in them, and notes it. The bucket is emptied with
- * a key made for the moment and deleted after; the app's own keys stay (see removeBucket).
- */
-async function retireApp(sql: pg.Client, app: string, again = false) {
-  // Only reached once the settings were read without a problem.
-  const { garage: options } = config as StorageConfig;
-  await dropDatabase(sql, app);
-  if (options) {
-    const garage = garageAdmin(options);
-    await garage.removeBucket(app, async (bucketId) => {
-      // Named so no app's own keys (app-<id>, and an id can't hold a colon) are ever mistaken for it.
-      const key = await garage.temporaryKey(bucketId, `${keyNameFor(app)}:retire`);
-      try {
-        const deleted = await emptyBucket({ endpoint: options.s3Url, bucket: app, secret: key.secret });
-        log.info(`emptied bucket ${app} (${deleted} objects)`);
-      } finally {
-        // A key left behind opens nothing once the bucket is gone, so this never hides why emptying failed.
-        await garage.deleteKey(key.id).catch((err: Error) => log.warn(`the key that emptied bucket ${app} couldn't be deleted: ${err.message}`));
-      }
-    });
-  }
-  await markRetired(sql, app, 'removed', again);
-}
-
-// Apps AUGUR no longer runs (RETIRED_APPS): their login, schemas and bucket go, once, after the upgrade's backup.
-// One that fails is tried again next time and never stops AUGUR starting; one APP_STORAGE still names is kept.
-if (config.retire.length) {
+// Apps AUGUR no longer runs (RETIRED_APPS): their data is set aside, once, and noted. One that fails is tried again
+// next time and never stops AUGUR starting; one APP_STORAGE still names is kept. Then whatever was set aside in an
+// earlier release is dropped, behind a good backup taken since (ADR 0103).
+{
   const sql = new pg.Client({ connectionString: config.databaseUrl });
   await sql.connect();
   try {
-    const done = await retiredApps(sql);
+    await prepareRetirements(sql);
+    const done = new Set((await retirements(sql)).map((r) => r.app));
     for (const app of config.retire.filter((a) => !done.has(a))) {
       if (config.apps.some((a) => a.app === app) || config.skipped.some((a) => a.app === app)) {
-        await markRetired(sql, app, 'kept');
+        await markKept(sql, app);
         log.warn(`${app} no longer ships with AUGUR, but APP_STORAGE names it, so its data is kept.`);
         continue;
       }
       try {
-        await retireApp(sql, app);
-        log.info(`${app} no longer ships with AUGUR: its database login, schemas and bucket are gone.`);
+        const did = await setAside({ sql, buckets, app, release: config.release });
+        log.info(
+          did === 'set aside'
+            ? `${app} no longer ships with AUGUR: its database login, schemas and bucket are set aside, and go with a later AUGUR release.`
+            : `${app} no longer ships with AUGUR, and had no data here.`,
+        );
       } catch (err) {
-        log.error(`${app} no longer ships with AUGUR, but its data couldn’t all be taken away; it’s tried again next time: ${(err as Error).message}`);
+        log.error(`${app} no longer ships with AUGUR, but its data couldn’t all be set aside; it’s tried again next time: ${(err as Error).message}`);
       }
     }
+    await dropDue({ sql, buckets, release: config.release, marker: await readBackupMarker(BACKUP_STATUS_DIR), objects: Boolean(config.garage), log });
   } finally {
     await sql.end();
   }

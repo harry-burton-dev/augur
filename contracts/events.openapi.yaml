@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Events
-  version: 1.17.0
+  version: 1.18.0
   description: "Notifications for the Shell's stream, and AUGUR's audit log. People reach it through the gateway, which passes the caller in x-user-* headers. Services call it on the internal network (see @augur/service-kit: notify, recordAudit). An app's service signs in as itself (a bearer token for its Keycloak client app-<id>, audience platform-services), may send only for itself, and needs the scope (notifications:send, audit:write) that the registry grants it on the floor named by x-workspace-id; otherwise 403, or 503 while that can't be checked. Platform services sign in the same way as their own clients (platform-<name>). A service call that names a floor (x-workspace-id) records it, with the floor's path from the root as it stands then (asked of identity), on each notification and audit entry: 400 for a floor that doesn't exist, 503 while identity can't be reached."
 components:
   schemas:
@@ -288,6 +288,11 @@ components:
           minLength: 1
           maxLength: 100
           description: The floor it happened on
+        version:
+          type: integer
+          minimum: 1
+          maximum: 999
+          description: The version of its type the payload follows, of those the app's manifest declares; the newest without it (ADR 0104)
         payload: {}
       additionalProperties: false
     DomainEvent:
@@ -313,6 +318,9 @@ components:
           format: date-time
         workspace:
           $ref: "#/components/schemas/EventFloor"
+        version:
+          type: integer
+          description: The version of its type the payload follows, when its publisher declares its types (ADR 0104)
         payload: {}
     InboxRef:
       type: object
@@ -625,6 +633,8 @@ components:
         - deliveredAt
         - dropped
         - droppedAt
+        - retrying
+        - setAside
         - state
         - words
       properties:
@@ -662,13 +672,19 @@ components:
           description: When the part last took an event
         dropped:
           type: integer
-          description: Events passed over after a day of failures, each recorded in Activity as delivery.dropped
+          description: Events passed over after a day of failures, each recorded in Activity as delivery.dropped, before such events were set aside instead (setAside)
         droppedAt:
           anyOf:
             - type: string
               format: date-time
             - type: "null"
           description: When the last was passed over
+        retrying:
+          type: integer
+          description: Events its part couldn’t take that are being tried again, and those on their topics waiting behind them. Since 1.18
+        setAside:
+          type: integer
+          description: Events set aside, each recorded in Activity as delivery.set-aside and listed by GET /deliveries/set-aside. Since 1.18
         state:
           enum:
             - ok
@@ -679,6 +695,47 @@ components:
           type: string
           description: The state in words, with the reason, as Admin shows it; Admin adds since when from failingSince
       description: How one app’s part is taking the events pushed to it (contract 3, spec 8.6)
+    SetAsideEvent:
+      type: object
+      required:
+        - app
+        - seq
+        - id
+        - topic
+        - attempts
+        - lastError
+        - firstFailedAt
+        - setAsideAt
+      properties:
+        app:
+          type: string
+          description: The app whose part couldn’t take it
+        seq:
+          type: string
+          description: The event’s place in the order
+        id:
+          type: string
+          description: The publisher's own id for it
+        topic:
+          type: string
+        attempts:
+          type: integer
+          description: How many times it was tried
+        lastError:
+          anyOf:
+            - type: string
+            - type: "null"
+          description: What the last try said
+        firstFailedAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: When it first failed
+        setAsideAt:
+          type: string
+          format: date-time
+      description: An event an app’s part couldn’t take, set aside after its tries so the events behind it could go (PER-462)
     Pushing:
       anyOf:
         - type: object
@@ -1539,9 +1596,12 @@ paths:
                     type: integer
                   repeated:
                     type: integer
+                  warning:
+                    type: string
+                    description: "For an app on contract 3 that declares no types it publishes: refused from the next release"
                 description: Kept
         "400":
-          description: A topic outside the publisher's, an unknown floor, a floor the app isn't on, or a payload over 16 KB
+          description: A topic outside the publisher's, an unknown floor, a floor the app isn't on, a payload over 16 KB, or (for an app that declares its types) a type or version it doesn't declare, or a payload its schema refuses
           content:
             application/problem+json:
               schema:
@@ -1560,7 +1620,7 @@ paths:
                 $ref: "#/components/schemas/Refusal"
     get:
       summary: Read domain events in order (services only, events:subscribe)
-      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`, or `next`, which is as far as this read went, past events on other topics: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS)."
+      description: "Events on the topics asked for, in the one order every follower reads in. Keep the last `seq` handled and pass it as `after`, or `next`, which is as far as this read went, past events on other topics: delivery is at least once, never with a gap. Events are kept 30 days (DOMAIN_EVENTS_KEEP_DAYS); a cursor behind what was pruned answers 410 with how far events were pruned, so the follower rebuilds. An app sees only events on floors where it holds events:subscribe, and the deployment’s own (ADR 0104)."
       parameters:
         - schema:
             type: string
@@ -1602,6 +1662,9 @@ paths:
                       $ref: "#/components/schemas/DomainEvent"
                   next:
                     type: string
+                  warning:
+                    type: string
+                    description: "For an app on contract 3 that doesn’t declare what it reads: refused from the next release"
                 description: The next events, and the cursor to read on from
         "400":
           description: A topic that is not a topic, nor a family such as folio.*
@@ -1610,11 +1673,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/Refusal"
         "403":
-          description: Not a service nor an app acting for a person, no events:subscribe scope, or a scope the delegation doesn’t carry
+          description: Not a service nor an app acting for a person, no events:subscribe scope, a scope the delegation doesn’t carry, or only topics the app’s manifest doesn’t say it reads
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/Refusal"
+        "410":
+          description: "Events after `after` were pruned: the follower has missed some"
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - error
+                  - message
+                  - after
+                properties:
+                  error:
+                    type: string
+                    enum:
+                      - gone
+                  message:
+                    type: string
+                  after:
+                    type: string
+                    description: "How far events were pruned: rebuild, then read on with this as `after`"
+                description: "Events after `after` were pruned: the follower has missed some"
         "503":
           description: Grants can't be checked right now
           content:
@@ -1798,6 +1882,54 @@ paths:
                   pushing:
                     $ref: "#/components/schemas/Pushing"
                 description: Each subscribing app’s deliveries, and whether pushing is on
+        "401":
+          description: No signed-in caller
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+        "403":
+          description: Not an admin
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Refusal"
+  /deliveries/set-aside:
+    get:
+      summary: The events apps’ parts couldn’t take, set aside so the ones behind them could go (admins)
+      description: "An event a part answers but can’t take is tried again a few times (DOMAIN_EVENTS_DELIVERY_ATTEMPTS), with the later events on its topic waiting behind it; one a part that is down holds for a day is too. Then it is set aside: kept here, newest first, with how often it was tried and what the last try said, and recorded in Activity as delivery.set-aside. Kept as long as domain events are (DOMAIN_EVENTS_KEEP_DAYS). Since 1.18."
+      parameters:
+        - schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+          in: query
+          name: app
+          required: false
+          description: Only this app’s
+        - schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+          in: query
+          name: limit
+          required: false
+      responses:
+        "200":
+          description: What was set aside, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - events
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/SetAsideEvent"
+                description: What was set aside, newest first
         "401":
           description: No signed-in caller
           content:

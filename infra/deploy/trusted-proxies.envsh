@@ -1,0 +1,44 @@
+#!/bin/sh
+# Who the front door believes about a caller's address (AUGUR's docs, Limits and health). The proxy in front,
+# Tailscale's container or the organisation's load balancer, passes on the address it saw in X-Forwarded-For;
+# nginx believes that header only from TRUSTED_PROXIES: addresses or ranges, separated by spaces or commas,
+# or none, for a front door with no proxy in front. Unset, it is the private ranges and loopback.
+# nginx's entrypoint sources this before it fills in default.conf.template, so ${REAL_IP_FROM} is set here.
+
+# An IPv4 address (each part up to 255) or an IPv6 one, with or without a prefix length that fits it: nothing
+# else reaches nginx's config, which won't start on what it can't read.
+trusted_proxy_ok() {
+  case "$1" in
+    *:*)
+      printf '%s' "$1" | grep -qE '^[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}(/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))?$' || return 1
+      # At most one ::, and no ::: anywhere.
+      case "$1" in *:::*) return 1 ;; esac
+      [ "$(printf '%s' "${1%%/*}" | grep -o '::' | wc -l)" -le 1 ]
+      ;;
+    *)
+      printf '%s' "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}(/([0-9]|[12][0-9]|3[0-2]))?$' || return 1
+      for part in $(printf '%s' "${1%%/*}" | tr '.' ' '); do [ "$part" -le 255 ] || return 1; done
+      ;;
+  esac
+}
+
+REAL_IP_FROM=""
+trusted_proxies=$(printf '%s' "${TRUSTED_PROXIES:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1}" | tr ',' ' ')
+if [ "$trusted_proxies" != none ]; then
+  # Each entry as written: never a file name, whatever it holds.
+  set -f
+  for proxy in $trusted_proxies; do
+    if trusted_proxy_ok "$proxy"; then
+      REAL_IP_FROM="${REAL_IP_FROM}set_real_ip_from ${proxy}; "
+    else
+      echo "trusted-proxies: TRUSTED_PROXIES has ${proxy}, which isn't an address or a range such as 10.0.0.0/8, so it is left out." >&2
+    fi
+  done
+  set +f
+  if [ -z "$REAL_IP_FROM" ]; then
+    echo "trusted-proxies: TRUSTED_PROXIES names no usable address, so X-Forwarded-For is believed from no one: every caller counts as the proxy's address in the front door's limits. Set it to none if that is what you want." >&2
+  fi
+fi
+unset trusted_proxies proxy part
+unset -f trusted_proxy_ok
+export REAL_IP_FROM

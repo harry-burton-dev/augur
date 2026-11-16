@@ -15,7 +15,7 @@ export const appStatus = (app: CatalogueApp, sdkVersion = SDK_VERSION): { status
 };
 
 /**
- * The kind of app it is (ADR 0032), as the registry says it's in force. A registry from before kinds
+ * The kind of app it is (ADR 0077), as the registry says it's in force. A registry from before kinds
  * sends none, so its built-in apps are still platform apps; a kind this Admin doesn't know is no kind.
  */
 export const kindOf = (app: Pick<CatalogueApp, 'category' | 'platform'>): AppCategory | undefined => {
@@ -26,7 +26,7 @@ export const kindOf = (app: Pick<CatalogueApp, 'category' | 'platform'>): AppCat
 /** Whether it ships with AUGUR: `ships`, or `pillar` from a registry that doesn't send `ships` yet. */
 export const shipsWithAugur = (app: Pick<CatalogueApp, 'ships' | 'pillar'>) => app.ships ?? app.pillar ?? false;
 
-/** Each kind's name in the Kind column, and the sentence the app's dialog says it in (ADR 0032's words). */
+/** Each kind's name in the Kind column, and the sentence the app's dialog says it in (the two kinds ADR 0077 names). */
 export const KIND_WORDS: Record<AppCategory | 'app', { label: string; fact: string; a: string }> = {
   platform: { label: 'Platform app', fact: 'Platform app: for using and managing AUGUR', a: 'a platform app' },
   pillar: { label: 'Pillar app', fact: 'Pillar app: the foundation of what AUGUR produces', a: 'a pillar app' },

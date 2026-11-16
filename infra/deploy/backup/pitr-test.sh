@@ -108,6 +108,10 @@ echo "local all all trust" > "$scratch/data/pg_hba.conf"
 touch "$scratch/data/recovery.signal"
 chown -R postgres "$scratch"
 chmod 700 "$scratch/data"
+# Replaying needs at least the connections the live server had when the backup was taken (its control file says),
+# which start.sh sets on the command line, where the backup's own files don't carry it.
+connections=$(su postgres -c "PATH='$PATH' pg_controldata $scratch/data" 2>/dev/null | sed -n 's/^max_connections setting: *//p' || true)
+echo "max_connections = ${connections:-200}" >> "$scratch/data/postgresql.auto.conf"
 if ! su postgres -c "PATH='$PATH' pg_ctl -D $scratch/data -l $scratch/log -t $PITR_TEST_SECONDS -w start" >/dev/null 2>&1; then
   result false "$(basename "$base") could not be started with its changes replayed: $(tail -n 1 "$scratch/log" 2>/dev/null | cut -c1-200)"
   exit 1

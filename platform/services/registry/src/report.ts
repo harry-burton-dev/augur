@@ -15,7 +15,7 @@ import type { Overview } from './overview.ts';
 import type { AppStore, DeploymentKey } from './store.ts';
 
 export const REPORT_FORMAT = 'augur.deployment-report/1';
-/** A deployment's name in Backstage's catalog (org/deployments.yaml), as DEPLOYMENT_ID gives it. */
+/** A deployment's name in Backstage's catalog of deployments, as DEPLOYMENT_ID gives it. */
 const DEPLOYMENT_NAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 /**
  * How often a record goes even when nothing changed (ADR 0059). Backstage raises the alarm when one is
@@ -49,9 +49,9 @@ export function reportingFrom(env: { DEPLOYMENT_ID?: string; DEPLOYMENT_REPORTIN
   const setting = env.DEPLOYMENT_REPORTING || 'on';
   if (setting !== 'on' && setting !== 'off') throw new Error(`DEPLOYMENT_REPORTING is on or off, not "${setting}".`);
   const deployment = env.DEPLOYMENT_ID || undefined;
-  if (deployment && !DEPLOYMENT_NAME.test(deployment)) throw new Error(`DEPLOYMENT_ID is this deployment's name in Backstage's catalog, such as augur-workbench: lower case letters, digits and dashes, not "${deployment}".`);
+  if (deployment && !DEPLOYMENT_NAME.test(deployment)) throw new Error(`DEPLOYMENT_ID is this deployment's name in Backstage's catalog of deployments, such as augur-workbench: lower case letters, digits and dashes, not "${deployment}".`);
   if (setting === 'off') return { mode: 'off', why: 'Reporting is off: DEPLOYMENT_REPORTING=off in .env. Backstage doesn’t see what this server runs.' };
-  if (!deployment) return { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage (org/deployments.yaml).' };
+  if (!deployment) return { mode: 'off', why: 'Reporting isn’t set up: set DEPLOYMENT_ID in .env to this server’s name in Backstage’s catalog of deployments.' };
   const portal = env.PORTAL_URL?.replace(/\/+$/, '');
   if (!portal) return { mode: 'file', deployment, why: 'No PORTAL_URL in .env, so nothing is sent: export the record and carry it to Backstage.' };
   return { mode: 'send', deployment, url: `${portal}/api/augur/reports`, why: `Sent to Backstage after each change and every 15 minutes.` };

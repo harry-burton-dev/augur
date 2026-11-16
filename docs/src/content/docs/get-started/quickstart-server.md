@@ -10,9 +10,9 @@ sidebar:
 By the end of this page AUGUR is running on a server of yours, and you're signed in as its first admin.
 
 :::caution[Reaching it]
-Today a deployment is reached through a private [Tailscale](https://tailscale.com) network (a **tailnet**):
-only your own devices can open it, and Tailscale gives it an HTTPS address. Running AUGUR on your own network
-or on the internet, without Tailscale, is planned.
+This page reaches a deployment through a private [Tailscale](https://tailscale.com) network (a **tailnet**):
+only your own devices can open it, and Tailscale gives it an HTTPS address. To put it behind your
+organisation's own proxy instead, follow [Install AUGUR, Behind your own proxy](../../run/install/#behind-your-own-proxy).
 :::
 
 ## Before you start

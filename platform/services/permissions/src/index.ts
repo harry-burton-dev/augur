@@ -87,6 +87,8 @@ if (credentials) {
     handle: async (event) => {
       if (event.at >= since) copy.request();
     },
+    // Changes it missed were pruned: the whole copy brings everything back.
+    onGap: async () => copy.request(),
     onError: (err) => log.warn(`identity’s changes couldn’t be heard, so they wait for the next whole copy: ${(err as Error).message}`),
   });
   following.start();

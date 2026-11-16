@@ -2,7 +2,7 @@
 title: Run AUGUR
 description: Install, configure, back up, monitor and upgrade AUGUR on your own servers.
 status: beta
-checkedAgainst: 0.24.0
+checkedAgainst: 0.26.0
 sidebar:
   order: 0
   label: Overview
@@ -23,6 +23,12 @@ containers with Docker Compose. [What runs on a server](whats-running/) says wha
 - [Backups](backups/): nightly, tested every week, and copied off the server.
 - [Restore to a point in time](restore-to-a-point-in-time/) and [restore a lost server](restore-a-lost-server/).
 
+## Upgrade, and install apps
+
+- [Upgrade AUGUR](upgrade/), by hand or from Deployment, and go back if you need to.
+- [The updater](updater/), which upgrades for you, and [the app runner](app-runner/), which installs apps.
+- [Where releases come from](releases/), and [report to Backstage](reporting/) what a server runs.
+
 ## Run it
 
 - [Day to day](day-to-day/): starting, stopping, trying a build, and managing apps.
@@ -35,7 +41,7 @@ containers with Docker Compose. [What runs on a server](whats-running/) says wha
 
 These move into this section next:
 
-- [Upgrading AUGUR](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade.md) and [When an upgrade goes back by itself](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade-went-back.md)
+- [When an upgrade goes back by itself](https://github.com/harry-burton-dev/augur/blob/main/docs/upgrade-went-back.md)
 - [Mirroring AUGUR releases](https://github.com/harry-burton-dev/augur/blob/main/docs/mirror.md)
 - [Observability](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md)
 - [Sample data](https://github.com/harry-burton-dev/augur/blob/main/docs/seed.md)

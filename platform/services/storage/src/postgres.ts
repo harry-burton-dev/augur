@@ -54,35 +54,34 @@ export async function provisionDatabase(sql: Sql, { app, password, connections =
   await sql.query(`alter role ${role} set search_path = ${schema}, public`);
 }
 
-/** The apps whose data is already gone (or was kept, being in APP_STORAGE too), from the storage job's own note of them. */
-export async function retiredApps(sql: Sql): Promise<Set<string>> {
-  await sql.query('create table if not exists public.storage_retired_apps (app text primary key, outcome text not null, at timestamptz not null default now())');
-  const { rows } = await sql.query<{ app: string }>('select app from public.storage_retired_apps');
-  return new Set(rows.map((r) => r.app));
-}
-
-/**
- * Notes that a retired app's data was taken away, or kept, so it isn't done again. An app removed from the server
- * (`again`) is noted each time, as one id can be installed and removed more than once.
- */
-export async function markRetired(sql: Sql, app: string, outcome: 'removed' | 'kept', again = false): Promise<void> {
-  await sql.query(
-    `insert into public.storage_retired_apps (app, outcome) values ($1, $2) on conflict (app) do ${again ? 'update set outcome = excluded.outcome, at = now()' : 'nothing'}`,
-    [app, outcome],
-  );
-}
-
 /** Takes an app's (or a preview's) login and schemas away, with everything in them. Nothing happens when there's none. */
 export async function dropDatabase(sql: Sql, app: string): Promise<void> {
   const reserved = reservedIdProblem(app);
   if (reserved) throw new Error(`Nothing was dropped: ${reserved}`);
-  const role = pg.escapeIdentifier(roleFor(app));
-  await sql.query(`drop schema if exists ${pg.escapeIdentifier(schemaFor(app))} cascade`);
-  await sql.query(`drop schema if exists ${pg.escapeIdentifier(jobsSchemaFor(app))} cascade`);
-  const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
+  await dropSchemasAndRole(sql, [schemaFor(app), jobsSchemaFor(app)], roleFor(app));
+}
+
+/** Drops these schemas, with everything in them, and this login with whatever else it owns. Nothing happens for what isn't there. */
+export async function dropSchemasAndRole(sql: Sql, schemas: string[], role: string): Promise<void> {
+  for (const schema of schemas) await sql.query(`drop schema if exists ${pg.escapeIdentifier(schema)} cascade`);
+  const exists = await sql.query('select 1 from pg_roles where rolname = $1', [role]);
   if (!exists.rowCount) return;
-  await sql.query(`drop owned by ${role}`);
-  await sql.query(`drop role ${role}`);
+  await sql.query(`drop owned by ${pg.escapeIdentifier(role)}`);
+  await sql.query(`drop role ${pg.escapeIdentifier(role)}`);
+}
+
+/**
+ * Lets one of AUGUR's own logins use the connections Postgres keeps back from everyone else (`reserved_connections`),
+ * so apps holding every ordinary connection can't lock AUGUR out of its own database. An app's login never gets this.
+ * The login is NOINHERIT, so the grant says to inherit. Postgres before 16 has no such role, and nothing is done.
+ */
+export async function mayUseReservedConnections(sql: Sql, role: string, warn: (message: string) => void = (m) => console.warn(m)): Promise<void> {
+  const { rows } = await sql.query<{ has: boolean }>(`select to_regrole('pg_use_reserved_connections') is not null as has`);
+  if (!rows[0]?.has) return;
+  // An admin login that may not grant it (a managed Postgres's, say) leaves the reserve to the superuser alone, and says so.
+  await sql.query(`grant pg_use_reserved_connections to ${pg.escapeIdentifier(role)} with inherit true`).catch((err: Error) =>
+    warn(`${role} can't use the connections Postgres keeps back for AUGUR (${err.message}): apps holding every other connection could lock it out.`),
+  );
 }
 
 /** A platform service's database login: "identity" → platform_identity. Its schema is named after the service. */
@@ -147,6 +146,7 @@ export async function provisionServiceDatabase(sql: Sql, { service, password }: 
   await sql.query(`create schema if not exists ${jobs} authorization ${quoted}`);
   await sql.query(`alter schema ${jobs} owner to ${quoted}`);
   await sql.query(`alter role ${quoted} set search_path = ${schema}, public`);
+  await mayUseReservedConnections(sql, role);
   return handOverSchema(sql, service, role);
 }
 
@@ -162,5 +162,6 @@ export async function provisionKeycloakDatabase(sql: Sql, { role, password }: { 
   const { rows } = await sql.query<{ db: string }>('select current_database() as db');
   await sql.query(`alter database ${pg.escapeIdentifier(rows[0].db)} owner to ${quoted}`);
   await sql.query(`alter schema public owner to ${quoted}`);
+  await mayUseReservedConnections(sql, role);
   return handOverSchema(sql, 'public', role);
 }

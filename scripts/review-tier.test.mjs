@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { needsDeployTest, needsHarry, problems, sectionsOf, tierOf } from './review-tier.mjs';
+import { autoOkComment, logged, needsDeployTest, needsHarry, problems, rowsOf, sectionsOf, sizeOf, sizedTiers, tierOf, verdict } from './review-tier.mjs';
 
 const tiers = JSON.parse(readFileSync(new URL('../.github/review-tiers.json', import.meta.url), 'utf8'));
 
@@ -14,9 +14,10 @@ test('a change to docs, tests and changesets is Low', () => {
   assert.equal(tierOf(['docs/seed.md', '.changeset/x.md', 'platform/services/models/src/a.test.ts'], tiers).tier, 'Low');
 });
 
-test('AGENTS.md and the upgrade guide are never Low', () => {
+test('AGENTS.md and the upgrade notes are never Low', () => {
   assert.equal(tierOf(['AGENTS.md'], tiers).tier, 'Medium');
-  assert.equal(tierOf(['docs/upgrade.md'], tiers).tier, 'Medium');
+  assert.equal(tierOf(['docs/src/content/docs/run/app-runner.md'], tiers).tier, 'Medium');
+  assert.equal(tierOf(['docs/src/content/docs/release-notes/upgrade-notes.md'], tiers).tier, 'Medium');
 });
 
 test('ordinary product code is Medium', () => {
@@ -44,7 +45,7 @@ test('names that start with a dot match like any other', () => {
   assert.equal(tierOf(['infra/deploy/.env.example'], tiers).tier, 'High');
   assert.equal(needsDeployTest(['infra/deploy/.env.example'], tiers), true);
   assert.equal(tierOf(['.changeset/a.md'], tiers).tier, 'Low');
-  assert.equal(needsHarry(['.github/workflows/ci.yml'], tiers), true);
+  assert.equal(needsHarry(['infra/deploy/backup/.keep'], tiers), true);
 });
 
 test('tests of High code alone are Low', () => {
@@ -77,29 +78,38 @@ test('Medium needs every section and a named review', () => {
   assert.match(problems({ tier: 'Medium', body: body({ Review: 'Looked fine.' }) })[0], /code-review/);
 });
 
-test("High on Harry's paths needs his ok; other High doesn't", () => {
-  assert.match(problems({ tier: 'High', body: body(), harry: true }).join(), /harry-ok/);
-  assert.deepEqual(problems({ tier: 'High', body: body(), harry: true, labels: ['harry-ok'], lines: 120 }), []);
-  assert.deepEqual(problems({ tier: 'High', body: body(), lines: 120 }), []);
+test("High on Harry's paths needs a deep code review, never his ok; other High needs any /code-review", () => {
+  const medium = body({ Review: '/code-review medium: 2 findings, both fixed.' });
+  assert.match(problems({ tier: 'High', body: medium, harry: true }).join(), /high effort or more/);
+  assert.deepEqual(problems({ tier: 'High', body: body(), harry: true, lines: 120 }), []);
+  assert.deepEqual(problems({ tier: 'High', body: body({ Review: '/code-review max: none found.' }), harry: true }), []);
+  assert.deepEqual(problems({ tier: 'High', body: medium, lines: 120 }), []);
+  assert.doesNotMatch(problems({ tier: 'High', body: '', harry: true }).join(), /harry-ok/);
 });
 
-test("Harry's paths are the release path, the updater, sign-in, permissions, backups and workflows", () => {
-  assert.equal(needsHarry(['platform/services/updater/src/upgrade.ts'], tiers), true);
-  assert.equal(needsHarry(['.github/workflows/release.yml'], tiers), true);
+test("Harry's paths are what can't be undone: migrations, backups, Promote to stable and Halt", () => {
+  assert.equal(needsHarry(['platform/services/events/src/migrations/014_a.sql'], tiers), true);
   assert.equal(needsHarry(['infra/deploy/backup/backup.sh'], tiers), true);
+  assert.equal(needsHarry(['.github/workflows/promote.yml'], tiers), true);
+  assert.equal(needsHarry(['platform/services/updater/src/upgrade.ts'], tiers), false);
+  assert.equal(needsHarry(['.github/workflows/release.yml'], tiers), false);
   assert.equal(needsHarry(['platform/services/events/src/store.ts'], tiers), false);
-  assert.equal(needsHarry(['platform/services/identity/src/two-step.test.ts'], tiers), false);
 });
 
 test('the dev stack and upgrade notes are not High', () => {
   assert.equal(tierOf(['infra/docker-compose.yml'], tiers).tier, 'Medium');
-  assert.equal(tierOf(['docs/upgrade.md'], tiers).tier, 'Medium');
+  assert.equal(tierOf(['docs/src/content/docs/release-notes/upgrade-notes.md'], tiers).tier, 'Medium');
 });
 
-test("a bot's pull request needs only Harry's ok, on his paths", () => {
+test("a bot's pull request merges on CI, unless it touches what needs a deep review", () => {
   assert.deepEqual(problems({ tier: 'High', bot: true }), []);
-  assert.match(problems({ tier: 'High', bot: true, harry: true }).join(), /harry-ok/);
-  assert.deepEqual(problems({ tier: 'High', bot: true, harry: true, labels: ['harry-ok'] }), []);
+  assert.match(problems({ tier: 'High', bot: true, harry: true }).join(), /takes this bot pull request over/);
+});
+
+test('the deep review can be written the ways REVIEW.md words it', () => {
+  for (const review of ['/code-review high: 2 findings.', '`/code-review` at high effort: none.', '/code-review (xhigh), 3 findings.', '/code-review max']) {
+    assert.deepEqual(problems({ tier: 'High', body: body({ Review: review }), harry: true }), [], review);
+  }
 });
 
 test('a change to a package a service runs gets the deploy test', () => {
@@ -111,4 +121,194 @@ test('High over 400 lines needs a reason', () => {
   assert.match(problems({ tier: 'High', body: body(), lines: 975 }).join(), /400/);
   const reasoned = body({ Risk: 'Over 400 lines because the migration and its store move together.' });
   assert.deepEqual(problems({ tier: 'High', body: reasoned, lines: 975 }), []);
+});
+
+test('Medium is held to the limit only where the tiers file says so', () => {
+  assert.deepEqual(problems({ tier: 'Medium', body: body(), lines: 975 }), []);
+  assert.deepEqual(sizedTiers({}), ['High']);
+  const sized = sizedTiers(tiers);
+  assert.match(problems({ tier: 'Medium', body: body(), lines: 975, sized }).join(), /400/);
+  const reasoned = body({ Risk: 'Over 400 lines because the rename moves every import.' });
+  assert.deepEqual(problems({ tier: 'Medium', body: reasoned, lines: 975, sized }), []);
+  assert.deepEqual(problems({ tier: 'Medium', body: body(), lines: 400, sized }), []);
+  assert.deepEqual(problems({ tier: 'Low', lines: 975, sized }), []);
+});
+
+test('High is always held to the limit, whatever the tiers file says', () => {
+  for (const file of [{}, { sizeMedium: false }, { sizeMedium: 'true' }, { sized: [] }, tiers]) assert.ok(sizedTiers(file).includes('High'));
+  assert.deepEqual(sizedTiers({ sizeMedium: 'true' }), ['High']);
+  assert.deepEqual(sizedTiers(tiers), ['Medium', 'High']);
+});
+
+test('changed lines are read per file, a renamed file under its new name', () => {
+  const numstat = ['3\t1\tREVIEW.md', '10\t2\t', 'scripts/old.mjs', 'scripts/new.test.mjs', '-\t-\tdocs/logo.png', '7\t0\tscripts/a b.mjs', '500\t0\t\tlead.ts', '5\t0\tmid\ttab.test.ts', ''].join('\0');
+  assert.deepEqual(rowsOf(numstat), [
+    { path: 'REVIEW.md', lines: 4 },
+    { path: 'scripts/new.test.mjs', lines: 12 },
+    { path: 'docs/logo.png', lines: 0 },
+    { path: 'scripts/a b.mjs', lines: 7 },
+    { path: '\tlead.ts', lines: 500 },
+    { path: 'mid\ttab.test.ts', lines: 5 },
+  ]);
+  assert.deepEqual(rowsOf(''), []);
+});
+
+test("tests, fixtures and generated files don't count towards the limit", () => {
+  const rows = [
+    { path: 'platform/services/registry/src/app.ts', lines: 120 },
+    { path: 'platform/services/registry/src/app.test.ts', lines: 800 },
+    { path: 'platform/services/knowledge/src/fixtures/heldout/replies.json', lines: 9000 },
+    { path: 'platform/packages/app-tools/fixtures/invalid/no-id.json', lines: 40 },
+    { path: 'pnpm-lock.yaml', lines: 3000 },
+    { path: 'release/migrations.lock.json', lines: 4 },
+    { path: 'platform/contract/tests/inbox.spec.ts', lines: 300 },
+    { path: 'REVIEW.md', lines: 12 },
+  ];
+  assert.equal(sizeOf(rows, tiers), 132);
+  // A repository whose tiers file names neither list counts every line.
+  assert.equal(sizeOf(rows, {}), 13276);
+  // On a deep-review path a name doesn't take a file out of the count.
+  const deep = [
+    { path: 'infra/deploy/backup/fixtures/restore.sh', lines: 900 },
+    { path: 'platform/services/events/src/migrations/002_big.spec.ts', lines: 900 },
+  ];
+  assert.equal(sizeOf(deep, tiers), 1800);
+});
+
+// What asks Harry, what doesn't count, and the auto-ok log (REVIEW.md).
+const changes = (lines = {}, gone = {}) => ({ added: (path) => lines[path] ?? [], removed: (path) => gone[path] ?? [], knownActions: new Set(['actions/checkout', 'pnpm/action-setup']) });
+
+test('the rules ask Harry only about what is hard to undo or widens access', () => {
+  for (const path of [
+    'platform/services/events/src/migrations/014_floors.sql',
+    'infra/deploy/backup/backup.sh',
+    'infra/deploy/postgres/init.sql',
+    'scripts/promote.mjs',
+    'scripts/halt.mjs',
+  ]) {
+    assert.ok(verdict([path], tiers, changes()).harry.length, path);
+  }
+});
+
+test('busy areas, the updater, sign-in and the review rules stay High without asking Harry', () => {
+  for (const path of [
+    'platform/services/identity/src/two-step.ts',
+    'platform/services/updater/src/upgrade.ts',
+    '.github/workflows/release.yml',
+    'REVIEW.md',
+    'platform/services/registry/src/app-entry.ts',
+    'platform/services/gateway/src/routes.ts',
+    'platform/packages/service-kit/src/jobs.ts',
+    'infra/deploy/compose.yml',
+    'platform/services/events/src/store.ts',
+  ]) {
+    const result = verdict([path], tiers, changes());
+    assert.equal(result.tier, 'High', path);
+    assert.deepEqual(result.harry, [], path);
+  }
+});
+
+test('generated files and the deploy test harness no longer make a change High', () => {
+  assert.equal(verdict(['release/migrations.lock.json', 'docs/seed.md'], tiers, changes()).tier, 'Low');
+  assert.equal(verdict(['infra/deploy-test.sh'], tiers, changes()).tier, 'Medium');
+  assert.equal(verdict(['.github/pull_request_template.md'], tiers, changes()).tier, 'Low');
+  assert.equal(verdict(['docs/release-channels.md'], tiers, changes()).tier, 'Medium');
+});
+
+test('a file only renamed does not count towards the tier', () => {
+  const paths = ['platform/services/registry/src/old.ts', 'platform/services/registry/src/new.ts', 'docs/seed.md'];
+  assert.equal(verdict(paths, tiers, { ...changes(), renamed: paths.slice(0, 2) }).tier, 'Low');
+});
+
+test("a rename still counts for Harry's ok, and a file moved into a workflow is read in full", () => {
+  const moved = ['platform/services/events/src/migrations/014_a.sql', 'platform/services/events/src/migrations/013_a.sql'];
+  assert.ok(verdict(moved, tiers, { ...changes(), renamed: moved }).harry.length);
+  const wf = '.github/workflows/deploy.yml';
+  const verdictOf = verdict(['docs/example.yml', wf], tiers, { ...changes({ [wf]: ['on: pull_request_target'] }), renamed: ['docs/example.yml', wf] });
+  assert.equal(verdictOf.tier, 'High');
+  assert.equal(verdictOf.harry.length, 1);
+});
+
+test('a workflow asks Harry only when it gains privilege or a new action', () => {
+  const wf = '.github/workflows/ci.yml';
+  assert.deepEqual(verdict([wf], tiers, changes({ [wf]: ['      - uses: actions/checkout@abc123 # v4.5.0'] })).harry, []);
+  assert.equal(verdict([wf], tiers, changes({ [wf]: ['      contents: write'] })).harry.length, 1);
+  assert.equal(verdict([wf], tiers, changes({ [wf]: ['        run: echo ${{ secrets.TOKEN }}'] })).harry.length, 1);
+  assert.equal(verdict([wf], tiers, changes({ [wf]: ['      - uses: someone/new-action@def456'] })).harry.length, 1);
+  assert.deepEqual(verdict([wf], tiers, changes({ [wf]: ['      - uses: ./.github/workflows/review.yml'] })).harry, []);
+  assert.deepEqual(verdict([wf], tiers, changes({ [wf]: ['      # The job needs packages: write to push.'] })).harry, []);
+  assert.equal(verdict([wf], tiers, changes({ [wf]: ['    secrets: inherit'] })).harry.length, 1);
+  assert.equal(verdict([wf], tiers, changes({ [wf]: ["        run: echo '${{ toJSON(secrets) }}'"] })).harry.length, 1);
+  assert.equal(verdict([wf], tiers, changes({}, { [wf]: ['permissions:', '  contents: read'] })).harry.length, 1);
+  assert.equal(verdict(['.github/actions/build/action.yml'], tiers, changes({ '.github/actions/build/action.yml': ['    - uses: someone/else@abc'] })).harry.length, 1);
+});
+
+test('a content rule makes a change High even off the High paths', () => {
+  const local = { ...tiers, harryOkWhen: [{ paths: ['manifest.json'], added: '"[a-z-]+:(write|publish)"', why: 'asks for a new permission' }] };
+  const result = verdict(['manifest.json'], local, changes({ 'manifest.json': ['    "inbox:write"'] }));
+  assert.equal(result.tier, 'High');
+  assert.match(result.harry[0], /new permission/);
+  assert.deepEqual(verdict(['manifest.json'], local, changes({ 'manifest.json': ['  "sdk": "^2.1.0",'] })).harry, []);
+});
+
+test('the auto-ok log takes each High merge, deep-reviewed ones too, and what rules on trial would have spared him', () => {
+  const v = (harry, tier = 'High') => ({ tier, because: [], harry });
+  // autoOk: a High change that merged without his ok, whether or not rules are on trial.
+  assert.equal(logged({ now: v([]), autoOk: true }), true);
+  assert.equal(logged({ now: v([]), next: v([]), autoOk: true }), true);
+  assert.equal(logged({ now: v([], 'Medium'), autoOk: true }), false);
+  assert.equal(logged({ now: v(['infra/deploy/backup/b.sh']), autoOk: true }), true);
+  // next: it waited for him, and the rules on trial wouldn't have asked.
+  assert.equal(logged({ now: v(['REVIEW.md']), next: v([]) }), true);
+  assert.equal(logged({ now: v(['REVIEW.md']), next: v(['REVIEW.md']) }), false);
+  assert.equal(logged({ now: v([]), next: v([]) }), false);
+  // A repository with neither logs nothing.
+  assert.equal(logged({ now: v([]) }), false);
+});
+
+test('a new or changed migration asks Harry through its lock entry, wherever its code lives', () => {
+  const lock = 'release/migrations.lock.json';
+  const added = { [lock]: ['    "016_drop_x": "62fdade734f4be4c",'] };
+  assert.ok(verdict(['platform/services/events/src/store.ts', lock], tiers, changes(added)).harry.length);
+  assert.deepEqual(verdict(['platform/services/events/src/store.ts'], tiers, changes()).harry, []);
+});
+
+test("Harry's paths under a dot-directory match, and their tests don't ask him", () => {
+  assert.ok(verdict(['.github/workflows/promote.yml'], tiers, changes()).harry.length);
+  assert.ok(verdict(['.github/review-tiers.json'], tiers, changes()).harry.length);
+  assert.deepEqual(verdict(['platform/services/knowledge/src/migrations/x.test.ts'], tiers, changes()).harry, []);
+});
+
+test('the deploy test harness is not High, but a change to it still gets the deploy test', () => {
+  assert.equal(tierOf(['infra/deploy-test.sh'], tiers).tier, 'Medium');
+  assert.equal(needsDeployTest(['infra/deploy-test.sh'], tiers), true);
+  assert.equal(needsDeployTest(['platform/services/events/src/store.test.ts'], tiers), false);
+});
+
+test('a workflow that gains a container, a service or an image asks Harry', () => {
+  const wf = '.github/workflows/ci.yml';
+  for (const line of ['    container:', '    services:', '        image: someone/img:1']) {
+    assert.equal(verdict([wf], tiers, changes({ [wf]: [line] })).harry.length, 1, line);
+  }
+});
+
+test("the auto-ok comment can't be ended early by what a pull request says", () => {
+  const comment = autoOkComment({ phase: 'shadow', tier: 'High', nextTier: 'High', because: ['infra/deploy/compose.yml'], files: 2, lines: 30, deployTest: true, checks: [{ name: 'CI', conclusion: 'success' }], notRun: 'a --> b', howToUndo: 'Revert.', risk: '' });
+  const [, data] = /^<!-- auto-ok: (.*) -->$/m.exec(comment);
+  assert.equal(JSON.parse(data).notRun, 'a --> b');
+  assert.equal(comment.split('\n')[0].match(/-->/g).length, 1);
+  assert.match(comment, /harry-would-not/);
+});
+
+test("an auto-ok record whose checks couldn't be read says so", () => {
+  const comment = autoOkComment({ phase: 'shadow', tier: 'High', nextTier: 'High', because: [], files: 1, lines: 3, deployTest: false, checks: [], checksRead: false });
+  assert.match(comment, /Checks: couldn't be read/);
+  assert.equal(JSON.parse(/^<!-- auto-ok: (.*) -->$/m.exec(comment)[1]).checksRead, false);
+});
+
+test('a live auto-ok record names the files that needed a deep review, and the review', () => {
+  const comment = autoOkComment({ phase: 'live', tier: 'High', nextTier: 'High', because: ['infra/deploy/backup/backup.sh'], deep: ['infra/deploy/backup/backup.sh'], review: '/code-review high: 3 findings, all fixed.', files: 1, lines: 12, deployTest: true, checks: [] });
+  assert.match(comment, /without Harry/);
+  assert.match(comment, /Deep review for: `infra\/deploy\/backup\/backup\.sh`/);
+  assert.match(comment, /Review: \/code-review high/);
 });

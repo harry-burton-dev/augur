@@ -101,7 +101,8 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   sed -e '/^#/d' -e '/^$/d' | awk -F= '!seen[$1]++' | while IFS='=' read -r key value; do
   case "$key" in
     PLATFORM_URL) value="http://localhost:$port" ;;
-    TS_AUTHKEY) value=unused ;;
+    # Behind its own proxy (compose.proxy.yml, below) no key is needed; a release from before that wanted one all the same.
+    TS_AUTHKEY) value=$(grep -qs 'TS_AUTHKEY:?' "$deploy/compose.yml" "$old_deploy/compose.yml" && echo unused || true) ;;
     PLATFORM_ADMIN_USER) value=deploy-test-admin ;;
     PLATFORM_ADMIN_EMAIL) value=deploy-test@example.org ;;
     PLATFORM_ADMIN_FIRST_NAME) value=Deploy ;;
@@ -112,11 +113,15 @@ cat "$deploy/.env.example" $( [ -e "$old_deploy/.env.example" ] && echo "$old_de
   echo "$key=$value"
 done > "$deploy/.env"
 
+# The test reaches AUGUR as an organisation's own proxy would (compose.proxy.yml): Tailscale doesn't run, and
+# the front door listens on localhost:$port. Named in .env, as on a server, so the updater runs the same files.
+if [ -e "$deploy/compose.proxy.yml" ]; then printf 'COMPOSE_FILE=compose.yml:compose.proxy.yml\nPROXY_LISTEN=127.0.0.1:%s\n' "$port" >> "$deploy/.env"; fi
+
 # A command run against a fresh install (the run suite's dry run) seeds it first, so the install allows sample data.
 if [ -n "${THEN:-}" ]; then echo 'SEED_ALLOWED=true' >> "$deploy/.env"; fi
 
 # Broken mode runs the updater too (its profile), which reads the deploy folder at its path here and
-# signs in with its own secret, as on a server that turned it on (docs/upgrade.md, "The updater").
+# signs in with its own secret, as on a server that turned it on (docs/src/content/docs/run/updater.md).
 # The updater runs Compose on the deploy folder itself, so .env names this test's project, as `-p` does here.
 if [ "$mode" = broken ]; then
   export COMPOSE_PROFILES=updater
@@ -211,9 +216,12 @@ EOF
 pc() {
   local files=(-f "$dir/compose.yml")
   # Only a build from this checkout uses the build file: a release under test runs its published
-  # images, as a server does, including the apps that ship with it (ADR 0049).
+  # images, as a server does; no app ships inside a release (ADR 0075).
   if [ "${BUILD:-}" = 1 ] && [ "$dir" = "$deploy" ] && [ -e "$dir/compose.build.yml" ]; then files+=(-f "$dir/compose.build.yml"); fi
-  docker compose -p "$project" "${files[@]}" -f "$work/compose.test.yml" --env-file "$dir/.env" "$@"
+  # Behind its own proxy, as .env names it from this checkout on; a release from before compose.proxy.yml (its folder has
+  # none) publishes the front door the test's way.
+  if [ -e "$dir/compose.proxy.yml" ]; then files+=(-f "$dir/compose.proxy.yml"); else files+=(-f "$work/compose.test.yml"); fi
+  docker compose -p "$project" "${files[@]}" --env-file "$dir/.env" "$@"
 }
 # Which release's deploy files and images to run: this checkout's, or the one it upgrades from.
 use() {
@@ -295,7 +303,7 @@ no_restarts() {
 }
 
 # The Keycloak version the deploy files in use run. Moving Keycloak to a new minor migrates its database,
-# which can't be undone, so going back across one is a restore of Keycloak's database (docs/upgrade.md).
+# which can't be undone, so going back across one is a restore of Keycloak's database (docs/src/content/docs/run/upgrade.md).
 # AUGUR's Keycloak image is tagged with AUGUR's version, so the version is Keycloak's own image label,
 # which AUGUR's image keeps; an image without it is told apart by its name.
 keycloak_image() { pc config --format json | jq -r '.services.keycloak.image'; }
@@ -320,7 +328,7 @@ retired_in() (
 )
 
 # The apps this upgrade retires: named in this checkout's RETIRED_APPS and not in the release before's. Their
-# data goes on this upgrade, as docs/upgrade.md says: the storage job drops their schemas (`<app>` and `<app>_jobs`,
+# data goes on this upgrade, as docs/src/content/docs/release-notes/upgrade-notes.md says: the storage job drops their schemas (`<app>` and `<app>_jobs`,
 # dashes as underscores) and the registry forgets them (migration 023). Once a release before also names them,
 # nothing is excused, so an app installed later under one of those ids is guarded like any other.
 retired_by_upgrade() {
@@ -385,6 +393,36 @@ up() {
   return 1
 }
 
+# The front door believes X-Forwarded-For from the proxy in front only (TRUSTED_PROXIES): nginx's config, as the
+# image wrote it at start, says set_real_ip_from for each entry the deployment sets (the private ranges and
+# loopback when it sets none, as here and on a server upgraded from before the setting), and nothing was left out.
+trusts_the_proxy() {
+  local said want got
+  want=$({ grep -m1 '^TRUSTED_PROXIES=' "$dir/.env" || true; } | cut -d= -f2- | tr ',' ' ')
+  want=$(printf '%s' "${want:-10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1}" | xargs -n1 | sort | xargs)
+  got=$({ pc exec -T web sh -c "grep -o 'set_real_ip_from [^;]*;' /etc/nginx/conf.d/default.conf" || true; } | sed 's/set_real_ip_from //; s/;$//' | sort | xargs)
+  said=$(pc logs web 2>&1 | grep 'trusted-proxies:' || true)
+  if [ -n "$said" ] || [ "$got" != "$want" ]; then
+    echo "The front door doesn't believe the proxy in front as TRUSTED_PROXIES says (infra/deploy/trusted-proxies.envsh): it believes '$got', not '$want'."$'\n'"$said" >&2
+    return 1
+  fi
+}
+
+# Both ways in, as Compose reads them: with Tailscale (compose.yml alone) the tailscale container runs and needs no
+# key once it has joined; behind your own proxy (compose.proxy.yml) it doesn't run, and the front door is published.
+# The test runs the second; the first only as config, since it can't join a tailnet.
+both_ways_in() {
+  local alone proxied
+  [ -e "$deploy/compose.proxy.yml" ] || return 0
+  alone=$(docker compose -p "$project" -f "$deploy/compose.yml" --env-file "$deploy/.env" config --format json)
+  proxied=$(pc config --format json)
+  if ! jq -e '.services.tailscale and (.services.web.ports // [] | length == 0)' <<<"$alone" >/dev/null ||
+    ! jq -e --arg port "$port" '(.services.tailscale | not) and any(.services.web.ports[]; .published == $port and .host_ip == "127.0.0.1")' <<<"$proxied" >/dev/null; then
+    echo "compose.yml should run Tailscale and publish nothing, and compose.proxy.yml turn Tailscale off and publish the front door at PROXY_LISTEN." >&2
+    return 1
+  fi
+}
+
 # The first admin signs in in a real browser, and Home and each app that ships with AUGUR render with
 # the kit from KIT_URL (infra/deploy-browser-check.mjs, in Playwright's own image). BROWSER_CHECK=0 skips it;
 # BROWSER_CHECK_OUT keeps its screenshots.
@@ -432,6 +470,56 @@ app_secret() {
     process.stdout.write(secrets.signIn);'
 }
 
+# The parts of AUGUR the app runner joins to an app's network (runner.ts, PlatformPart): everything else of AUGUR's
+# must be out of an app's reach.
+APP_REACHES='gateway db-relay bucket-relay otel-lgtm'
+
+# What app-reach-check.mjs looks at from inside $1 (one of the app's containers), as JSON, from the running
+# deployment: the gateway by the name apps are given; every other running container of AUGUR's, by each of its
+# addresses and each port it exposes or is told to listen on (PORT); and, when db-relay is on one of the app's
+# networks, Postgres through it as each login AUGUR's own parts use (their database URLs and KC_DB_USERNAME).
+app_reach_targets() {
+  local app=$1 config inspected app_networks relay_networks
+  config=$(pc config --format json)
+  inspected=$(pc ps -q | xargs -r docker inspect)
+  app_networks=$(docker inspect "$app" | jq -c '[.[0].NetworkSettings.Networks[].NetworkID]')
+  relay_networks=$(jq -c '[.[] | select(.Config.Labels["com.docker.compose.service"] == "db-relay") | .NetworkSettings.Networks[].NetworkID]' <<<"$inspected")
+  jq -n --argjson config "$config" --argjson inspected "$inspected" --argjson app "$app_networks" --argjson relay "$relay_networks" \
+    --arg allowed "$APP_REACHES" --argjson gateway "$(jq -er '.services.gateway.environment.PORT // "8080" | tonumber' <<<"$config")" '
+    ($allowed | split(" ")) as $allowed
+    | {
+        mustReach: [{ name: "the gateway", host: "gateway", port: $gateway }],
+        mustNotReach: [
+          $inspected[]
+          | .Config.Labels["com.docker.compose.service"] as $s
+          | select($allowed | index($s) | not)
+          | ([(.Config.ExposedPorts // {}) | keys[] | select(endswith("/tcp")) | rtrimstr("/tcp") | tonumber]
+             + [$config.services[$s].environment.PORT // empty | tonumber]) as $ports
+          | .NetworkSettings.Networks[].IPAddress as $ip
+          | select($ip != "")
+          | $ports | unique[]
+          | { name: $s, host: $ip, port: . }
+        ],
+      }
+    + if ($app - ($app - $relay) | length) > 0 then
+        { database: { host: "postgres", port: 5432, logins: (
+            [$config.services[].environment // {} | to_entries[] | .value | tostring | (capture("^(jdbc:)?postgres(ql)?://(?<u>[^:/@]+)(:[^@/]*)?@") // empty).u]
+            + [$config.services[].environment.KC_DB_USERNAME // empty] | unique) } }
+      else {} end'
+}
+
+# What one of the app's containers can reach (infra/app-reach-check.mjs, the targets above), looked at from inside
+# its own network (`--network container:`). It runs in the storage image, which has node, so nothing goes into the
+# app's own container. 0: as it should be; 1: the app reaches what it mustn't (or not the gateway); else: the check
+# itself couldn't run.
+app_reach_check() {
+  local container=$1 image targets
+  image=$(pc config --format json | jq -er '.services.storage.image') || return 3
+  targets=$(app_reach_targets "$container") || return 3
+  docker run --rm --network "container:$container" --entrypoint node -e REACH_TARGETS="$targets" \
+    -v "$here/app-reach-check.mjs:/reach/check.mjs:ro" "$image" /reach/check.mjs >&2
+}
+
 # Broken mode's app (STARTER_RELEASE, above): the browser check installs it as the first admin and asks for its parts
 # to be stopped by writing <id>.stop; they are stopped here, which writes <id>.stopped ("ok", or why not).
 through_the_runner() {
@@ -443,7 +531,13 @@ through_the_runner() {
     notice "The app runner's part of the deploy test was skipped: $starter_skip"
     return 0
   fi
-  local id=$starter_id name secret issuer shots="${BROWSER_CHECK_OUT:-$work/browser-check}" check status=0 containers=()
+  local reach_skip=''
+  # A release from before the apps' relays (db-relay, bucket-relay) joins Postgres and Garage themselves to an app's
+  # network, so what an app can reach is checked only from the release that took them off.
+  if ! pc exec -T updater node -e 'process.exit(require("fs").readFileSync("dist/runner.js", "utf8").includes("db-relay") ? 0 : 3)' >/dev/null 2>&1; then
+    reach_skip="this release's app runner joins the stores themselves to an app's network, from before the relays"
+  fi
+  local id=$starter_id name secret issuer shots="${BROWSER_CHECK_OUT:-$work/browser-check}" check status=0 containers=() reach=
   name=$(jq -r '.manifest.name // .id' "$STARTER_RELEASE")
   secret=$(app_secret "$id")
   issuer=$(pc config --format json | jq -er '.services.updater.environment.OIDC_ISSUER')
@@ -457,18 +551,30 @@ through_the_runner() {
       mapfile -t containers < <(app_containers "$id")
       if [ "${#containers[@]}" = 0 ]; then
         echo "no running container of $id's service or worker parts" > "$shots/$id.stopped"
-      elif docker stop "${containers[@]}" >&2; then
-        echo "Stopped $name's ${#containers[@]} running part(s), as a crash would." >&2
-        echo ok > "$shots/$id.stopped"
       else
-        echo "docker stop failed" > "$shots/$id.stopped"
+        # While it runs, before it's stopped: what the app can reach from its own network.
+        echo "What $name's ${containers[0]} can reach, from its own network:" >&2
+        reach=0
+        if [ -n "$reach_skip" ]; then notice "What $name can reach wasn't checked: $reach_skip."
+        else app_reach_check "${containers[0]}" || reach=$?; fi
+        if docker stop "${containers[@]}" >&2; then
+          echo "Stopped $name's ${#containers[@]} running part(s), as a crash would." >&2
+          echo ok > "$shots/$id.stopped"
+        else
+          echo "docker stop failed" > "$shots/$id.stopped"
+        fi
       fi
     fi
     sleep 2
   done
   wait "$check" || status=$?
   if [ "$status" != 0 ]; then echo "$name through the app runner: the browser check failed." >&2; return 1; fi
-  echo "$name was installed, opened, stopped (its pane said so) and removed through the app runner, and its sign-in went with it." >&2
+  case $reach in
+    0) ;;
+    1) echo "$name's container reached what an app must never reach, or didn't reach the gateway (above)." >&2; return 1 ;;
+    *) echo "What $name's container can reach couldn't be checked (app_reach_check ended $reach, above)." >&2; return 1 ;;
+  esac
+  echo "$name was installed, opened, kept from AUGUR's own services and logins, stopped (its pane said so) and removed through the app runner, and its sign-in went with it." >&2
 }
 
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
@@ -513,6 +619,33 @@ counted_apart() {
   echo "The gateway counted $calls calls to /api/$app under apps, not platform." >&2
 }
 
+# A secret compose.yml hands a service as a file (its top-level secrets, from .env) is in neither that service's
+# environment, which `docker inspect` and a crash report show, nor its log, and is in its file.
+secrets_kept_out() {
+  local triples service path key value id env logs bad=""
+  triples=$(pc config --format json | jq -r '.secrets as $s | .services | to_entries[] | .key as $svc | (.value.secrets // [])[] | "\($svc) \(.target // ("/run/secrets/" + .source)) \($s[.source].environment // "")"')
+  while read -r service path key; do
+    [ -n "$key" ] || continue
+    # As Compose reads .env: the last line for the key wins, and quotes around the value aren't part of it.
+    value=$(grep "^$key=" "$deploy/.env" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\\(.*\\)'$/\\1/" || true)
+    [ -n "$value" ] || continue
+    [ "${path#/}" != "$path" ] || path=/run/secrets/$path
+    for id in $(pc ps -q "$service"); do
+      # Read whole, not piped into grep -q: under pipefail a writer cut off early would hide a match.
+      env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id")
+      logs=$(docker logs "$id" 2>&1)
+      if grep -F -- "$value" <<< "$env" >/dev/null; then bad="$bad $service:environment($key)"; fi
+      if grep -F -- "$value" <<< "$logs" >/dev/null; then bad="$bad $service:log($key)"; fi
+      if [ "$(docker exec "$id" cat "$path" 2>/dev/null)" != "$value" ]; then bad="$bad $service:file($path)"; fi
+    done
+  done <<< "$triples"
+  if [ -n "$bad" ]; then
+    echo "Secrets meant for files only were found where they shouldn't be, or missing from their file:$bad" >&2
+    return 1
+  fi
+  echo "Each secret compose.yml gives as a file is in its file, and in no environment or log of the service that reads it." >&2
+}
+
 # The updater's safety backup before an upgrade, and the restore test it must pass, on this release's data:
 # a release whose own backup doesn't restore would turn back every upgrade after it. An app's data that
 # doesn't come back is reported, not failed, as on a server (ADR 0073).
@@ -539,12 +672,16 @@ fi
 case "$mode" in
   fresh)
     use "$local_tag"
+    both_ways_in
     # IMAGES_OUT gets every image the release's compose file runs, third-party ones too, for the
     # vulnerability scan (Tailscale among them, though the test never starts it).
-    if [ -n "${IMAGES_OUT:-}" ]; then pc config --images | sort -u > "$IMAGES_OUT"; fi
+    # compose.yml alone, as on Tailscale: behind a proxy (pc here) Tailscale's image isn't run, but servers on Tailscale run it.
+    if [ -n "${IMAGES_OUT:-}" ]; then docker compose -p "$project" -f "$deploy/compose.yml" --env-file "$deploy/.env" config --images | sort -u > "$IMAGES_OUT"; fi
     up
     wait_ready "Fresh install of this checkout"
     no_restarts
+    secrets_kept_out
+    trusts_the_proxy
     on_version "$local_tag"
     backup_restores "Fresh install of this checkout"
     browser_check
@@ -585,6 +722,7 @@ case "$mode" in
     tables "$retired" > "$work/after"
     kept "$work/before" "$work/after"
     on_version "$local_tag"
+    trusts_the_proxy
     backup_restores "Upgrade from augur@$from to this checkout"
     echo "Versions before: $old" >&2
     echo "Versions after:  $new" >&2

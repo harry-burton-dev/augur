@@ -53,6 +53,19 @@ test('reads a compose service’s environment through its anchors, and whether i
   assert.equal(services.storage.envFile, true);
 });
 
+test('takes a secret file from .env (top-level secrets with environment) as reaching its service', () => {
+  const gateway = 'services:\n  gateway:\n    environment:\n      SIGNING_KEY_FILE: /run/secrets/signing_key\n    secrets: [signing_key, { source: other }]\n';
+  const secrets = '\nsecrets:\n  signing_key: { environment: SIGNING_KEY }\n  other: { file: ./other }\n';
+  assert.deepEqual(composeServices(gateway + secrets).gateway.secretKeys, ['SIGNING_KEY']);
+  // A secret the service never names in a <NAME>_FILE doesn't reach it.
+  assert.deepEqual(composeServices(gateway.replace('SIGNING_KEY_FILE: /run/secrets/signing_key', 'OTHER: x') + secrets).gateway.secretKeys, []);
+  const s = structuredClone(schema);
+  s.properties.SIGNING_KEY = { writeOnly: true, 'x-services': ['gateway'] };
+  const withGateway = (extra) => settingsProblems({ schema: s, code, files: { ...files, 'infra/deploy/compose.yml': compose.replace(/^services:\n/m, gateway) + extra } });
+  assert.ok(!withGateway(secrets).some((p) => p.startsWith('SIGNING_KEY: gateway reads it')));
+  assert.ok(withGateway('').some((p) => p.startsWith('SIGNING_KEY: gateway reads it')));
+});
+
 test('passes settings that reach their services, are listed and documented', () => {
   assert.deepEqual(check(), []);
 });
@@ -147,4 +160,13 @@ test('the install guide’s settings list is made from the schema', () => {
   const guide = 'Before\n<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->\nold\n<!-- /settings -->\nAfter\n';
   assert.equal(withInstallList(guide, 'new'), guide.replace('old', 'new'));
   assert.equal(withInstallList('no markers', 'new'), undefined);
+});
+
+test('takes a setting Compose reads in one of the deploy folder’s other compose files, such as compose.proxy.yml', () => {
+  const s = structuredClone(schema);
+  s.properties.PROXY_LISTEN = { 'x-services': ['compose'], 'x-docs': 'docs/upgrade.md#the-updates-page' };
+  const more = { ...files, 'infra/deploy/.env.example': `${files['infra/deploy/.env.example']}# PROXY_LISTEN=\n`, 'docs/upgrade.md': `${files['docs/upgrade.md']}\`PROXY_LISTEN\` too.\n` };
+  assert.ok(check({ schema: s, files: more }).includes('PROXY_LISTEN: compose.yml never uses it, though the schema says Compose reads it.'));
+  const overlay = { ...more, 'infra/deploy/compose.proxy.yml': 'services:\n  web:\n    ports: ["${PROXY_LISTEN:-127.0.0.1:8080}:8080"]\n' };
+  assert.deepEqual(check({ schema: s, files: overlay }), []);
 });

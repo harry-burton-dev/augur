@@ -80,7 +80,7 @@ export const whyNot = (target, updates) =>
     : target.problem
       ? target.problem
       : target.breakingAfter
-        ? `${target.breakingAfter} is breaking in between, so going back needs the backup (docs/upgrade.md, Going back).`
+        ? `${target.breakingAfter} is breaking in between, so going back needs the backup (AUGUR’s docs, Upgrade AUGUR).`
         : busy(updates)
           ? 'Wait for the upgrade under way to finish.'
           : undefined;
@@ -125,7 +125,7 @@ export const draw = (doc, root, view, on) => {
   }
   const running = `${u.running.version}${u.running.build === 'source' ? ', built from source' : ''}, on the ${u.running.channel} channel`;
   root.append(el(doc, 'h2', { text: 'What it runs' }), el(doc, 'p', { class: 'running', text: running }));
-  if (u.updaterSeenAt === undefined) root.append(el(doc, 'p', { class: 'note', text: 'The server’s updater hasn’t been heard from, so a go-back asked for here waits until it is. Without one, go back by hand (docs/upgrade.md, Going back).' }));
+  if (u.updaterSeenAt === undefined) root.append(el(doc, 'p', { class: 'note', text: 'The server’s updater hasn’t been heard from, so a go-back asked for here waits until it is. Without one, go back by hand (AUGUR’s docs, Upgrade AUGUR).' }));
 
   const up = u.upgrade;
   if (up) {
@@ -138,7 +138,7 @@ export const draw = (doc, root, view, on) => {
   const targets = u.goBack ?? [];
   root.append(el(doc, 'h2', { text: 'Go back' }));
   if (targets.length === 0) {
-    root.append(el(doc, 'p', { text: 'There is no earlier release this server can go back to from here. The manual way is in docs/upgrade.md, Going back.' }));
+    root.append(el(doc, 'p', { text: 'There is no earlier release this server can go back to from here. The manual way is in AUGUR’s docs, Upgrade AUGUR.' }));
     return;
   }
   const list = el(doc, 'ul', { class: 'targets' });

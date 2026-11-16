@@ -98,7 +98,7 @@ jobs:
             git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
             git checkout -q "augur@$TO"
             # The test scripts and Trivy's exceptions are this workflow's, so an older release is tested the same way.
-            git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-bundle.sh infra/deploy-browser-check.mjs .trivyignore
+            git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-bundle.sh infra/deploy-browser-check.mjs infra/app-reach-check.mjs .trivyignore
           else
             exit "$status"
           fi
@@ -263,7 +263,7 @@ jobs:
             git fetch -q --depth=1 origin "refs/tags/augur@$TO:refs/tags/augur@$TO"
             git checkout -q "augur@$TO"
             # The test scripts and Trivy's exceptions are this workflow's, so an older release is tested the same way.
-            git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-bundle.sh infra/deploy-browser-check.mjs .trivyignore
+            git checkout -q "$GITHUB_SHA" -- infra/deploy-test.sh infra/deploy-bundle.sh infra/deploy-browser-check.mjs infra/app-reach-check.mjs .trivyignore
           else
             exit "$status"
           fi

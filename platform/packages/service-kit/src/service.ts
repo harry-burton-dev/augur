@@ -24,7 +24,15 @@ export const serviceHeaders = async (credentials: ServiceCredentials): Promise<R
 export const identifyService = async (headers: Record<string, string | string[] | undefined>, verify: ServiceVerifier | undefined): Promise<ServiceIdentity | undefined> =>
   verify ? verify(headers) : undefined;
 
-export class ServiceCallError extends Error {}
+export class ServiceCallError extends Error {
+  /** The status the service answered, when it answered at all. */
+  declare readonly status?: number;
+  constructor(message: string, status?: number) {
+    super(message);
+    // Not enumerable, so an error compared by its fields, as tests do, is the same as before it carried one.
+    if (status !== undefined) Object.defineProperty(this, 'status', { value: status, enumerable: false });
+  }
+}
 
 export interface CallOptions {
   method: 'PUT' | 'POST' | 'PATCH' | 'GET';
@@ -52,6 +60,7 @@ export interface CallOptions {
  */
 export async function callService({ method, url, credentials, body, what, workspace, headers, attempts = 1, retryMs = 500, fetchImpl = fetch, timeoutMs = serviceTimeoutMs() }: CallOptions): Promise<unknown> {
   let lastError = '';
+  let lastStatus: number | undefined;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const res = await withDeadline(fetchImpl, timeoutMs)(url, {
@@ -61,12 +70,14 @@ export async function callService({ method, url, credentials, body, what, worksp
       });
       const reply = (await res.json().catch(() => ({}))) as { message?: string };
       if (res.ok) return reply;
+      lastStatus = res.status;
       lastError = `it answered ${res.status}${reply.message ? `: ${reply.message.replace(/\.$/, '')}` : ''}`;
       if (res.status < 500) break;
     } catch (err) {
+      lastStatus = undefined;
       lastError = `it could not be reached (${(err as Error).message})`;
     }
     if (attempt < attempts) await new Promise((r) => setTimeout(r, retryMs * 2 ** (attempt - 1)));
   }
-  throw new ServiceCallError(`Could not ${what}: ${lastError}.`);
+  throw new ServiceCallError(`Could not ${what}: ${lastError}.`, lastStatus);
 }

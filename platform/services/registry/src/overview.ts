@@ -12,7 +12,6 @@ import { newestOn, type AppFeedRelease, type AppUpdateChecker } from './app-upda
 import {
   AUGUR_UNIT,
   automaticProblem,
-  firstUpgradeProblem,
   desiredStateProblems,
   policySentence,
   resolvedState,
@@ -23,6 +22,7 @@ import {
 import { PRODUCTION_ONLY, takesPreview, type Ring } from './ring.ts';
 import { CHANGE_SIGN_IN_MS, DEPLOYMENT_ADMIN, needsDeploymentAdmin, roleChecks, type RoleChecks } from './roles.ts';
 import type { AppJob, AppStore, InstalledApp, Upgrade } from './store.ts';
+import { actorOf, isFleetCaller, requesterOf } from './fleet.ts';
 import { updatesView, type Halt, type UpdateChecker, type UpdatesView } from './updates.ts';
 
 /** A finished upgrade (AUGUR) or install (an app), as the overview shows the last one. */
@@ -44,6 +44,8 @@ export interface UnitOverview {
   running: string;
   /** The newest release on its channel, when newer. */
   available?: string;
+  /** AUGUR only: the release an upgrade goes to next, which may be older than `available` (one step at a time). */
+  next?: string;
   /** Its publisher halted the release it runs. */
   halted?: Halt;
   desired: DesiredState & { isDefault: boolean };
@@ -58,7 +60,7 @@ export interface UnitOverview {
 }
 
 export interface OverviewNeed {
-  kind: 'halted' | 'failed' | 'went-back' | 'first-upgrade' | 'after-watch';
+  kind: 'halted' | 'failed' | 'went-back' | 'after-watch';
   unit: string;
   message: string;
   /** The result to mark looked at, for failed and went-back. */
@@ -125,8 +127,6 @@ export const overviewOf = (input: OverviewInput): Overview => {
   };
 
   const augurState = stateOf(AUGUR_UNIT, augur.channel);
-  // Automatic waits for one upgrade by hand on each server (ADR 0020, amended 2 Nov).
-  const firstUpgrade = augurState.policy === 'automatic' ? firstUpgradeProblem(input.upgrades) : undefined;
   const openUpgrade = input.upgrades.find((u) => isOpen(u.state));
   const lastUpgrade = input.upgrades.map(upgradeResult).find(Boolean);
   const halt = augur.needsYou.find((n) => n.kind === 'halted');
@@ -136,11 +136,12 @@ export const overviewOf = (input: OverviewInput): Overview => {
       name: 'AUGUR',
       running: augur.running.version,
       ...(augur.available ? { available: augur.available.version } : {}),
+      ...(augur.next ? { next: augur.next } : {}),
       ...(input.augurHalt ? { halted: input.augurHalt } : {}),
       desired: augurState,
       policy: policySentence(augurState),
       window: windowAt(augurState, now),
-      ...(augur.next ? { automatic: firstUpgrade ? { waits: firstUpgrade } : automaticFor(augurState, augur.running.version, augur.next) } : {}),
+      ...(augur.next ? { automatic: automaticFor(augurState, augur.running.version, augur.next) } : {}),
       ...(openUpgrade ? { open: { id: openUpgrade.id, version: openUpgrade.version, state: openUpgrade.state as 'requested' | 'running' } } : {}),
       ...(lastUpgrade ? { lastResult: lastUpgrade } : {}),
     },
@@ -178,8 +179,7 @@ export const overviewOf = (input: OverviewInput): Overview => {
     if (late?.state === 'done' && late.afterWatch?.state === 'failed' && !late.seenBy) {
       needsYou.push({ kind: 'after-watch', unit: u.unit, message: late.afterWatch.message ?? `AUGUR ${late.version} stopped working well after its watch.`, result: { kind: 'upgrade', id: late.id } });
     }
-    if (u.unit === AUGUR_UNIT && firstUpgrade && augur.next && !u.open) needsYou.push({ kind: 'first-upgrade', unit: u.unit, message: `AUGUR ${augur.next} is ready. ${firstUpgrade}` });
-    else if (u.halted) needsYou.push({ kind: 'halted', unit: u.unit, message: `${u.name} ${u.running}, which this server runs, was halted by its publisher: ${u.halted.reason}` });
+    if (u.halted) needsYou.push({ kind: 'halted', unit: u.unit, message: `${u.name} ${u.running}, which this server runs, was halted by its publisher: ${u.halted.reason}` });
     const need = resultNeed(u);
     if (need) needsYou.push(need);
   }
@@ -255,8 +255,8 @@ export const overviewRoutes =
             'AUGUR first, then each app the app runner installed. Each unit has its desired state (ADR 0020):',
             'channel, policy, how far Automatic goes, a semver pin and the weekly windows an automatic upgrade',
             'may start in, with whether a window is open now. Needs you lists a halted release being run, and',
-            "a failed or went-back result until an admin marks it looked at, and AUGUR's first upgrade on a",
-            'server, which Automatic leaves to an admin.',
+            'and a failed or went-back result until an admin marks it looked at. The fleet\'s client',
+            '(platform-fleet, ADR 0100) reads it too, to follow what it asked for.',
           ].join(' '),
           response: {
             200: { ...ref(OverviewSchema), description: 'The overview' },
@@ -265,7 +265,8 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
-        if (!(await adminOf(req, 'registry.overview'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
+        // The fleet's client reads it too, to follow what it asked for (ADR 0100).
+        if (!isFleetCaller(callerFromHeaders(req.headers)) && !(await adminOf(req, 'registry.overview'))) return reply.code(403).send({ error: 'forbidden', message: 'Only an admin can see what this server runs and how it updates.' });
         return forCaller(req);
       },
     );
@@ -285,7 +286,8 @@ export const overviewRoutes =
             "RELEASE_CHANNEL, so a different one is refused with 409; a production server's apps follow stable",
             "only (409 production_server). Without timeZone the record takes the deployment's",
             "(DEPLOYMENT_TIME_ZONE). Kept in the unit's history and audited as platform.desired-state-set,",
-            'with the record before.',
+            'with the record before. The fleet\'s client (platform-fleet, ADR 0100) may set it with nobody signed in,',
+            'and is recorded under its name.',
           ].join(' '),
           params: Type.Object({ unit: Type.String() }),
           body: ref(DesiredStateInputSchema),
@@ -300,18 +302,20 @@ export const overviewRoutes =
         },
       },
       async (req, reply) => {
+        // The fleet's client may set it with nobody signed in (ADR 0100): channels are held to the ring below as for anyone.
         const caller = callerFromHeaders(req.headers);
+        const fleet = isFleetCaller(caller);
         // Policies, pins and windows decide what the server runs, so they need the deployment's own role (ADR 0022).
-        if (!caller || !(await roles.deploymentAdmin('registry.update-policy', caller, 'can_upgrade'))) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
-        // And a password entered just now, as for an upgrade (ADR 0022).
-        if (!signedInRecently(caller, CHANGE_SIGN_IN_MS)) {
+        if (!caller || (!fleet && !(await roles.deploymentAdmin('registry.update-policy', caller, 'can_upgrade')))) return reply.code(403).send(needsDeploymentAdmin('change how updates are taken'));
+        // And a password entered just now, as for an upgrade (ADR 0022). The fleet's client has no password: its limits stand in.
+        if (!fleet && !signedInRecently(caller, CHANGE_SIGN_IN_MS)) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how updates are taken. It’s asked for anything this drastic.' });
         }
         const { unit } = req.params;
         if (!(await knownUnit(unit))) return reply.code(404).send({ error: 'not_found', message: `This server runs no ${unit}.` });
         const body = req.body;
         if (unit === AUGUR_UNIT && body.channel !== updates.channel) {
-          return reply.code(409).send({ error: 'conflict', message: `AUGUR follows ${updates.channel} releases, set by RELEASE_CHANNEL in .env (docs/upgrade.md). Change it there.` });
+          return reply.code(409).send({ error: 'conflict', message: `AUGUR follows ${updates.channel} releases, set by RELEASE_CHANNEL in .env (AUGUR’s docs, Where releases come from). Change it there.` });
         }
         if (unit !== AUGUR_UNIT && body.channel !== 'stable' && !takesPreview(ring)) return reply.code(409).send({ error: 'production_server', message: PRODUCTION_ONLY });
         const problems = desiredStateProblems({ ...body, timeZone: body.timeZone ?? timeZone });
@@ -325,10 +329,10 @@ export const overviewRoutes =
           ...(body.pin ? { pin: body.pin } : {}),
           windows: body.windows,
           ...(body.timeZone ? { timeZone: body.timeZone } : {}),
-          setBy: caller.id,
+          setBy: requesterOf(caller),
         });
-        req.log.info({ unit, by: caller.id, policy: set.policy }, 'desired state set');
-        await record(req, { actor: { id: caller.id, kind: 'user' }, app: 'registry', action: 'platform.desired-state-set', target: unit, detail: { record: set, ...(before ? { before } : {}) } });
+        req.log.info({ unit, by: requesterOf(caller), policy: set.policy }, 'desired state set');
+        await record(req, { actor: actorOf(caller), app: 'registry', action: 'platform.desired-state-set', target: unit, detail: { record: set, ...(before ? { before } : {}) } });
         return forCaller(req);
       },
     );

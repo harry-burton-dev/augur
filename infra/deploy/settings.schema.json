@@ -8,7 +8,6 @@
   "required": [
     "PLATFORM_VERSION",
     "PLATFORM_URL",
-    "TS_AUTHKEY",
     "POSTGRES_PASSWORD",
     "KEYCLOAK_ADMIN_PASSWORD",
     "IDENTITY_DATABASE_PASSWORD",
@@ -68,7 +67,8 @@
       "type": "string",
       "description": "The AUGUR release this server runs, such as 0.1.1.",
       "x-services": [
-        "compose"
+        "compose",
+        "storage"
       ],
       "x-via": {
         "updater": ".env"
@@ -116,11 +116,34 @@
       "type": "string",
       "writeOnly": true,
       "pattern": "^tskey-",
-      "description": "A Tailscale auth key.",
+      "description": "A Tailscale auth key, for a machine joining the tailnet; not needed behind your own proxy.",
       "x-services": [
         "tailscale"
       ],
       "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
+    },
+    "COMPOSE_FILE": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]+\\.ya?ml(:[A-Za-z0-9._-]+\\.ya?ml)*$",
+      "description": "The compose files this deployment runs: compose.yml:compose.proxy.yml puts it behind your own proxy instead of Tailscale.",
+      "default": "compose.yml",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#behind-your-own-proxy",
+      "x-via": {
+        "updater": ".env"
+      }
+    },
+    "PROXY_LISTEN": {
+      "type": "string",
+      "pattern": "^([0-9.]+|\\[[0-9A-Fa-f:]+\\]):[0-9]+$",
+      "description": "Behind your own proxy, where the front door listens on this server: an address and port.",
+      "default": "127.0.0.1:8080",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/install.md#behind-your-own-proxy"
     },
     "POSTGRES_PASSWORD": {
       "type": "string",
@@ -274,7 +297,7 @@
         "registry",
         "storage"
       ],
-      "x-docs": "docs/upgrade.md#apps-frontends-by-version"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#turn-it-on"
     },
     "APP_SECRETS_KEY": {
       "type": "string",
@@ -294,7 +317,7 @@
       "x-via": {
         "updater": ".env"
       },
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#who-it-trusts"
     },
     "APPS_NETWORK": {
       "type": "string",
@@ -302,7 +325,7 @@
       "x-via": {
         "updater": ".env"
       },
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#each-apps-network"
     },
     "APP_PART_MEMORY_CEILING": {
       "type": "string",
@@ -489,7 +512,16 @@
         "keycloak-config",
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
+    },
+    "FLEET_CLIENT_SECRET": {
+      "type": "string",
+      "writeOnly": true,
+      "description": "The fleet's machine client's sign-in (platform-fleet, ADR 0100). With it, augurctl may change what this server runs within its ring, with nobody signed in. Unset, there is no such client.",
+      "x-services": [
+        "keycloak-config"
+      ],
+      "x-docs": "docs/src/content/docs/run/from-files.md#the-fleets-client"
     },
     "PLATFORM_ADMIN_USER": {
       "type": "string",
@@ -773,6 +805,46 @@
       ],
       "x-docs": "docs/src/content/docs/run/restore-to-a-point-in-time.md#how-it-works"
     },
+    "POSTGRES_MAX_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The most connections Postgres takes at once, from every service and app together.",
+      "default": "200",
+      "x-services": [
+        "postgres"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
+    "POSTGRES_RESERVED_CONNECTIONS": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "Of those, how many only AUGUR's own logins may use, so apps holding the rest can't lock AUGUR out of its database.",
+      "default": "40",
+      "x-services": [
+        "postgres"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
+    "KEYCLOAK_DB_POOL_MAX": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The most database connections Keycloak holds at once.",
+      "default": "20",
+      "x-services": [
+        "keycloak"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
+    "OPENFGA_DB_POOL_MAX": {
+      "type": "string",
+      "pattern": "^[0-9]+$",
+      "description": "The most database connections OpenFGA holds at once.",
+      "default": "20",
+      "x-services": [
+        "openfga"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#database-connections"
+    },
     "MODEL_API_URL": {
       "type": "string",
       "description": "An OpenAI-style API for the model behind Agents, or stand-in; without it models stay off.",
@@ -891,6 +963,16 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
     },
+    "TRUSTED_PROXIES": {
+      "type": "string",
+      "pattern": "^(none|[ ,]*((((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])(/([0-9]|[12][0-9]|3[0-2]))?|[0-9A-Fa-f]{0,4}(:[0-9A-Fa-f]{0,4}){2,7}(/([0-9]|[1-9][0-9]|1[01][0-9]|12[0-8]))?)([ ,]+|$))*)$",
+      "description": "Where the proxy in front of the front door is: addresses or ranges, separated by spaces or commas, believed about a caller's address; none believes no one.",
+      "default": "10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 127.0.0.1",
+      "x-services": [
+        "web"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#limits-at-the-front-door"
+    },
     "KEYCLOAK_CONSOLE": {
       "type": "string",
       "description": "open serves Keycloak's own admin console at PLATFORM_URL/sso/admin; it's closed otherwise.",
@@ -948,7 +1030,7 @@
         "registry",
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-read-key"
+      "x-docs": "docs/src/content/docs/run/releases.md#the-read-key"
     },
     "RELEASE_FEED_URL": {
       "type": "string",
@@ -956,7 +1038,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-updates-page"
+      "x-docs": "docs/src/content/docs/run/releases.md#the-release-feed"
     },
     "APP_FEEDS": {
       "type": "string",
@@ -964,7 +1046,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#where-apps-come-from"
     },
     "APP_FEED_URL": {
       "type": "string",
@@ -973,7 +1055,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#where-apps-come-from"
     },
     "FEED_SIGNER": {
       "type": "string",
@@ -981,7 +1063,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-signed-feed"
+      "x-docs": "docs/src/content/docs/run/releases.md#the-signed-feed"
     },
     "SERVER_RING": {
       "type": "string",
@@ -1016,7 +1098,7 @@
         "web",
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#upgrades-follow-each-units-policy-and-window"
+      "x-docs": "docs/src/content/docs/run/upgrade.md#upgrades-that-start-by-themselves"
     },
     "PIPELINE_FEED_URL": {
       "type": "string",
@@ -1032,15 +1114,15 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#reporting-to-backstage"
+      "x-docs": "docs/src/content/docs/run/reporting.md#set-it-up"
     },
     "DEPLOYMENT_ID": {
       "type": "string",
-      "description": "This server's name in Backstage's catalog.",
+      "description": "This server's name in Backstage's catalog of deployments.",
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#reporting-to-backstage"
+      "x-docs": "docs/src/content/docs/run/reporting.md#set-it-up"
     },
     "DEPLOYMENT_REPORTING": {
       "type": "string",
@@ -1048,7 +1130,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#reporting-to-backstage"
+      "x-docs": "docs/src/content/docs/run/reporting.md#a-server-with-no-way-out"
     },
     "ALLOW_PR_PREVIEWS": {
       "type": "string",
@@ -1072,7 +1154,7 @@
       "x-services": [
         "compose"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
     },
     "PLATFORM_DIR": {
       "type": "string",
@@ -1081,7 +1163,7 @@
         "compose",
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
     },
     "IMAGE_PULL_USER": {
       "type": "string",
@@ -1089,7 +1171,7 @@
       "x-services": [
         "updater"
       ],
-      "x-docs": "docs/upgrade.md#the-updater"
+      "x-docs": "docs/src/content/docs/run/updater.md#turn-it-on"
     },
     "IMAGE_SIGNER": {
       "type": "string",
@@ -1123,6 +1205,24 @@
         "events"
       ],
       "x-docs": "docs/domain-events.md#following"
+    },
+    "DOMAIN_EVENTS_DELIVERY_ATTEMPTS": {
+      "type": "string",
+      "description": "How many times an event an app's part answers but can't take is tried before it is set aside, so the events behind it go.",
+      "default": "5",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
+    },
+    "DOMAIN_EVENTS_RETRY_SECONDS": {
+      "type": "string",
+      "description": "The wait in seconds before such an event is tried again, doubling each time, up to ten minutes.",
+      "default": "30",
+      "x-services": [
+        "events"
+      ],
+      "x-docs": "docs/domain-events.md#pushed-to-your-part"
     },
     "INBOX_KEEP_DAYS": {
       "type": "string",
@@ -1291,6 +1391,50 @@
       ],
       "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
     },
+    "DATABASE_CONNECT_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service waits for a database connection, a free one or a new one, before it answers that the database can't be reached right now (0 for no limit).",
+      "default": "10",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "knowledge",
+        "permissions",
+        "updater"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a service's migration waits for a lock another session holds before it gives up, rolls back and stops the service, saying who holds it (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS": {
+      "type": "string",
+      "description": "How long a migration's transaction may sit idle before Postgres ends it and frees its locks, as when its service hung (0 for no limit).",
+      "default": "60",
+      "x-services": [
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "permissions",
+        "knowledge-migrate"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
     "SEED_ALLOWED": {
       "type": "string",
       "enum": [
@@ -1324,6 +1468,28 @@
       "x-services": [
         "registry",
         "otel-lgtm"
+      ],
+      "x-docs": "docs/observability.md#alerts"
+    },
+    "ALERT_OUTSIDE_URL": {
+      "type": "string",
+      "pattern": "^https?://",
+      "writeOnly": true,
+      "description": "A webhook outside AUGUR that gets every alert and its all-clear too, in Grafana's webhook body, such as an on-call or chat service's Grafana or Alertmanager integration, so an alert about AUGUR itself still reaches someone. Set it on a production server: until it's set, its admins are told weekly.",
+      "x-services": [
+        "otel-lgtm",
+        "registry"
+      ],
+      "x-docs": "docs/observability.md#alerts"
+    },
+    "ALERT_HEARTBEAT_URL": {
+      "type": "string",
+      "pattern": "^https?://",
+      "writeOnly": true,
+      "description": "A heartbeat service outside AUGUR that Grafana tells every minute, and that raises the alarm when the beats stop: the dead-man switch for the whole server. Set it on a production server: until it's set, its admins are told weekly.",
+      "x-services": [
+        "otel-lgtm",
+        "registry"
       ],
       "x-docs": "docs/observability.md#alerts"
     },
@@ -1788,7 +1954,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#the-app-runner"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#default-apps"
     },
     "IN_PAGE_APPS": {
       "type": "string",
@@ -1797,7 +1963,7 @@
       "x-services": [
         "registry"
       ],
-      "x-docs": "docs/upgrade.md#only-augurs-own-apps-load-into-the-shells-page"
+      "x-docs": "docs/src/content/docs/run/app-runner.md#apps-made-before-the-app-contract"
     },
     "APP_DATA_GRACE_DAYS": {
       "type": "string",
@@ -1811,6 +1977,14 @@
     "APP_STORAGE_RETIRE": {
       "type": "string",
       "description": "An app the app runner removed whose time to come back (APP_DATA_GRACE_DAYS) ended: the storage job takes its data away, set by the app runner for one run.",
+      "x-internal": "updater",
+      "x-via": {
+        "storage": "default"
+      }
+    },
+    "APP_STORAGE_BACKUP": {
+      "type": "string",
+      "description": "The dump the app runner just took before taking a removed app's data away: the storage job drops it only when that backup is the last noted in backups/status and worked, apps' files included (ADR 0103). Set by the app runner beside APP_STORAGE_RETIRE.",
       "x-internal": "updater",
       "x-via": {
         "storage": "default"
@@ -2036,6 +2210,36 @@
       "type": "string",
       "description": "The memory limit of the observability stack.",
       "default": "2g",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "SERVICE_MEM_LIMIT": {
+      "type": "string",
+      "description": "The memory limit of each container AUGUR builds (its services, the front door, OpenFGA and its jobs), the updater apart.",
+      "default": "1g",
+      "pattern": "^[0-9]+[bkmg]?$",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "UPDATER_MEM_LIMIT": {
+      "type": "string",
+      "description": "The updater's memory limit: more than the other services', since it pulls, checks and unpacks releases.",
+      "default": "2g",
+      "pattern": "^[0-9]+[bkmg]?$",
+      "x-services": [
+        "compose"
+      ],
+      "x-docs": "docs/src/content/docs/run/limits.md#logs-memory-and-health"
+    },
+    "SERVICE_PIDS_LIMIT": {
+      "type": "string",
+      "description": "The most processes each container AUGUR builds may run.",
+      "default": "512",
+      "pattern": "^[0-9]+$",
       "x-services": [
         "compose"
       ],

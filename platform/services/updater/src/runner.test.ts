@@ -37,6 +37,9 @@ describe('running Score parts (spec 4, 10)', () => {
         cap_drop: ['ALL'],
         security_opt: ['no-new-privileges:true'],
         networks: ['app-notes'],
+        // A fork bomb stops at its ceiling, and when the server runs short of memory an app's part goes before AUGUR's own.
+        pids_limit: 256,
+        oom_score_adj: 500,
       });
       expect(s).not.toHaveProperty('ports');
       expect(s).not.toHaveProperty('privileged');
@@ -720,7 +723,8 @@ describe('the app runner', () => {
     t.did.length = 0;
     t.calls.did.length = 0;
     expect(await t.run(purge)).toBe('done');
-    expect(t.did.filter((d) => /^(backup|retire|remove volumes)/.test(d))).toEqual(['backup', 'retire notes', 'remove volumes app-notes-web-scratch']);
+    // The storage job drops only behind the backup just taken (ADR 0103), so it's told which that is.
+    expect(t.did.filter((d) => /^(backup|retire|remove volumes)/.test(d))).toEqual(['backup', 'retire notes behind platform-20261030-0100.sql.gz', 'remove volumes app-notes-web-scratch']);
     expect(t.calls.did).toEqual(['no credential notes']);
   });
 

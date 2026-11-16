@@ -2,7 +2,7 @@
 
 AUGUR is proprietary; see `LICENSE`. Open-source parts are listed in `THIRD_PARTY_NOTICES.md`.
 
-AUGUR is an app platform for the organisation's cloud. A **shell** in the browser loads independently built **apps** as micro frontends. Behind one **gateway** sit a few **core services** (who people are, which apps exist, notifications and audit). Apps live in their own repositories (ADR 0012) and only reach AUGUR through its published `@augur/*` packages and APIs.
+AUGUR is an app platform for the organisation's cloud. A **shell** in the browser loads independently built **apps** as micro frontends. Behind one **gateway** sit a few **core services** (who people are, which apps exist, notifications and audit). Apps live in their own repositories (ADR 0077) and only reach AUGUR through its published `@augur/*` packages and APIs.
 
 ## How a request flows
 
@@ -88,7 +88,7 @@ Home and Admin are built like any app: one ES module the shell imports.
 | `events` | 8084 | Notifications (streamed live to the shell) and the append-only audit log, on Postgres. Only services can write; people read their own notifications. |
 | `models` | 8085 | The model gateway. Holds the AI provider's key (any OpenAI-style API: OpenRouter, LiteLLM, or the stand-in model), records every call in the audit log before making it, and gives each app a number of calls a day. Off until an admin turns it on. |
 | `storage` | none | Runs on every `up` and stops: gives each service, Keycloak and each app in `APP_STORAGE` a database login of its own, and each app its bucket ([App storage](docs/app-storage.md)). |
-| `updater` | none | Applies an upgrade the Upgrade Centre asked for on a Compose server: backup, pull, roll forward, watch, and back by itself if it falls over ([Upgrade](docs/upgrade.md)). Runs with the `updater` profile. |
+| `updater` | none | Applies an upgrade the Upgrade Centre asked for on a Compose server: backup, pull, roll forward, watch, and back by itself if it falls over ([The updater](docs/src/content/docs/run/updater.md)). Runs with the `updater` profile. |
 
 Keycloak handles sign-in. The gateway passes each service the person calling, signed for that service alone ([Signed caller](docs/signed-caller.md)). Postgres holds data (a schema per service), and Garage is the object store for apps' files ([App storage](docs/app-storage.md)). Each API is described in `contracts/<service>.openapi.yaml`, and its major version is its path prefix (`/v1`).
 
@@ -97,7 +97,7 @@ Keycloak handles sign-in. The gateway passes each service the person calling, si
 AUGUR was codenamed "platform" until October 2026. Packages, page titles and everything people see now say AUGUR. A few names keep the old word on purpose:
 
 - **`platform/` vs `apps/`** is the architecture, not the brand: what AUGUR itself owns against the apps that run on it. The boundary check and the build depend on it.
-- **Running servers' identifiers** stay as they are, because changing them would sign everyone out or lose data: the Keycloak realm `platform` (it is in every token's issuer) and its clients (`platform-api`, `platform-identity`, …), the Postgres database and user `platform`, the Compose project `name: platform` (Docker names the data volumes after it), the `PLATFORM_*` keys in `.env`, and the default Tailscale name `platform`. See [upgrade.md](docs/upgrade.md#renamed-to-augur).
+- **Running servers' identifiers** stay as they are, because changing them would sign everyone out or lose data: the Keycloak realm `platform` (it is in every token's issuer) and its clients (`platform-api`, `platform-identity`, …), the Postgres database and user `platform`, the Compose project `name: platform` (Docker names the data volumes after it), the `PLATFORM_*` keys in `.env`, and the default Tailscale name `platform`. See [Upgrade notes](docs/src/content/docs/release-notes/upgrade-notes.md#renamed-to-augur).
 
 ## Rules between parts
 
@@ -130,7 +130,7 @@ pnpm check:boundaries
 | [Ship an app](docs/ship-an-app.md) | From a pull request's preview to servers updating the app by themselves |
 | [App previews](docs/app-previews.md) | Trying a pull request's build of an app on a real server |
 | [Run AUGUR](docs/src/content/docs/run/index.md) | Installing, backing up and running AUGUR on a server |
-| [Upgrade](docs/upgrade.md) | Updating a running server, backups and rollback |
+| [Upgrade AUGUR](docs/src/content/docs/run/upgrade.md) | Updating a running server, and going back |
 | [Mirror](docs/mirror.md) | Releases and apps for servers that can't reach GitHub |
 | [Agents and models](docs/agents.md) | Setting up the model behind Agents, and an app's service asking it |
 | [Versioning](docs/versioning.md) | Changesets, releases, API and SDK versions |

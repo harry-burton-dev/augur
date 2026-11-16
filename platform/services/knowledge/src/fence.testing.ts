@@ -21,7 +21,8 @@ export const fenceFindings = async (admin: pg.Pool): Promise<string[]> => {
     if (r.rolbypassrls) found.push(`${r.rolname} has BYPASSRLS.`);
     if (r.rolname === 'kg_owner' && r.rolcanlogin) found.push('kg_owner can sign in: only kg_app should.');
   }
-  for (const r of await q<{ role: string }>(`select b.rolname as role from pg_auth_members m join pg_roles a on a.oid = m.member join pg_roles b on b.oid = m.roleid where a.rolname = 'kg_app'`))
+  // pg_use_reserved_connections is the one role kg_app may hold: it gives connection slots that apps can't take, and no rights on any data.
+  for (const r of await q<{ role: string }>(`select b.rolname as role from pg_auth_members m join pg_roles a on a.oid = m.member join pg_roles b on b.oid = m.roleid where a.rolname = 'kg_app' and b.rolname <> 'pg_use_reserved_connections'`))
     found.push(`kg_app is a member of ${r.role}, and has its rights.`);
 
   for (const r of await q<{ name: string; owner: string; kind: string; rls: boolean; invoker: boolean; reads: boolean; writes: boolean; policies: number }>(`

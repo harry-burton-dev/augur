@@ -1,5 +1,6 @@
 # The whole platform on one server, reached privately over Tailscale at
-# https://<TS_HOSTNAME>.<your tailnet>.ts.net. See AUGUR's docs, Install AUGUR.
+# https://<TS_HOSTNAME>.<your tailnet>.ts.net, or through your organisation's own proxy with
+# COMPOSE_FILE=compose.yml:compose.proxy.yml in .env (compose.proxy.yml). See AUGUR's docs, Install AUGUR.
 #   cp infra/deploy/.env.example infra/deploy/.env   # then fill it in
 #   docker compose -f infra/deploy/compose.yml --env-file infra/deploy/.env up -d
 # Runs the images CI built for the platform release PLATFORM_VERSION. To build them from this
@@ -16,6 +17,10 @@ x-hardened: &hardened
   init: true
   security_opt: [no-new-privileges:true]
   cap_drop: [ALL]
+  # Each one's share of the server (docs: Limits): a leak or a fork bomb in one is restarted on its own instead of
+  # taking memory or the process table from the rest. SERVICE_MEM_LIMIT and SERVICE_PIDS_LIMIT in .env change them.
+  mem_limit: ${SERVICE_MEM_LIMIT:-1g}
+  pids_limit: ${SERVICE_PIDS_LIMIT:-512}
 
 # Every container's log, kept by Docker: at most three files of 10 MB each, so logs can't fill the disk.
 # `pc logs` reads them as before. LOG_MAX_SIZE and LOG_MAX_FILES in .env change the limits.
@@ -44,8 +49,25 @@ x-telemetry: &telemetry
   SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
   # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
   DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
+  # How long a service waits for a database connection (10 seconds unless set), and how long its migration waits for
+  # a lock (60) or sits idle in its transaction (60) before it gives up. 0 for no limit.
+  DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
+  DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
+  DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS:-}
   # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
   SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
+
+# The secrets that reach a service only as a file (secrets, at the end) are required: Compose stops without one,
+# here, as it does for a value in a service's environment.
+x-required-secrets:
+  - ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
+  - ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+  - ${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env}
+  - ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+  - ${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env}
+  - ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
+  - ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+  - ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
 
 x-service: &service
   <<: *hardened
@@ -90,7 +112,8 @@ services:
     entrypoint: ["/bin/sh", "/config/start.sh"]
     hostname: ${TS_HOSTNAME:-platform}
     environment:
-      TS_AUTHKEY: ${TS_AUTHKEY:?set TS_AUTHKEY in .env}
+      # Needed to join the tailnet the first time (tailscale/start.sh says so when it's missing).
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
       TS_HOSTNAME: ${TS_HOSTNAME:-platform}
       TS_STATE_DIR: /var/lib/tailscale
       TS_USERSPACE: "true"
@@ -128,6 +151,8 @@ services:
       SSO_RATE_PER_SECOND: ${SSO_RATE_PER_SECOND:-10}
       SSO_RATE_BURST: ${SSO_RATE_BURST:-50}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+      # Who the front door believes about a caller's address: the proxy in front (AUGUR's docs, Limits and health).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       # Keycloak's own admin console, at PLATFORM_URL/sso/admin: open serves it; it's closed otherwise.
       KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
       # On the workbench (dev) only, the shell may load an app from a developer's machine on the tailnet.
@@ -155,6 +180,9 @@ services:
       POSTGRES_DB: platform
       # At most this many seconds of changes wait before they're archived (when there are any).
       PITR_ARCHIVE_SECONDS: ${PITR_ARCHIVE_SECONDS:-900}
+      # The connections it takes at once, and how many of them only AUGUR's own logins may use (start.sh).
+      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS:-200}
+      POSTGRES_RESERVED_CONNECTIONS: ${POSTGRES_RESERVED_CONNECTIONS:-40}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
@@ -268,14 +296,18 @@ services:
       GARAGE_ADMIN_URL: http://garage:3903
       # The apps named in .env that keep data outside the app runner (the runner sets up its own apps' storage).
       APP_STORAGE: ${APP_STORAGE:-}
-      # The apps that shipped with AUGUR until ADR 0075: their database logins, schemas and buckets go, once on each
-      # server (after the upgrade's backup), and are remembered as gone so an app installed later under one of these ids keeps its own.
+      # The apps that shipped with AUGUR until ADR 0075: their database logins, schemas and buckets are set aside, once
+      # on each server, and dropped with a later release behind a fresh backup (ADR 0103). Each is remembered, so an
+      # app installed later under one of these ids keeps its own.
       RETIRED_APPS: folio atlas mandate auspex
       # The platform's services that get a login owning only their own schema, each with its
       # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
       PLATFORM_DATABASE_LOGINS: identity registry events models permissions
       # The most connections each app's login may hold at once (30 when empty), so one app can't take AUGUR's (ADR 0073).
       APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
+    volumes:
+      # Only the backup container's results, never the backups: an app's data is dropped only behind a fresh one (ADR 0103).
+      - ./backups/status:/backup-status:ro
     depends_on:
       postgres: { condition: service_healthy }
       garage: { condition: service_healthy }
@@ -313,7 +345,7 @@ services:
 
   # Sign-in. Served under /sso on the platform's own address, so tokens are issued for it. Moving to a
   # new minor migrates Keycloak's database on its first start, which can't be undone: take a backup
-  # first (docs/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
+  # first (docs/src/content/docs/run/upgrade.md). The realm itself is kept as code and applied by keycloak-config below.
   keycloak:
     logging: *logging
     # AUGUR's Keycloak: Keycloak with AUGUR's sign-in and email theme (ADR 0041, infra/service.Dockerfile).
@@ -326,6 +358,8 @@ services:
       # Its own login, owning only its own database; the storage job makes it.
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: ${KEYCLOAK_DATABASE_PASSWORD:?set KEYCLOAK_DATABASE_PASSWORD in .env}
+      # Its share of Postgres's connections (Keycloak's own default is 100).
+      KC_DB_POOL_MAX_SIZE: ${KEYCLOAK_DB_POOL_MAX:-20}
       KC_HOSTNAME: ${PLATFORM_URL:?set PLATFORM_URL in .env}/sso
       KC_HTTP_RELATIVE_PATH: /sso
       KC_HTTP_ENABLED: "true"
@@ -383,7 +417,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
       IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       # Each platform service's sign-in in Keycloak, made or set to these secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-permissions=${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-}
+      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-permissions=${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-},platform-fleet=${FLEET_CLIENT_SECRET:-}
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # Stricter than AUGUR's floors if you like, never looser (AUGUR's docs, Settings and secrets, The realm job).
@@ -470,8 +504,9 @@ services:
       GATEWAY_STREAM_CONNECTIONS: ${GATEWAY_STREAM_CONNECTIONS:-}
       APP_DELEGATION_SECONDS: ${APP_DELEGATION_SECONDS:-}
       # The key it signs callers with, and the one that comes next while it is being changed (docs/signed-caller.md).
-      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
+      CALLER_SIGNING_KEY_FILE: /run/secrets/caller_signing_key
       CALLER_SIGNING_KEY_NEXT: ${CALLER_SIGNING_KEY_NEXT:-}
+    secrets: [caller_signing_key]
     volumes:
       # Only the results the backup container writes for Status, never the backups themselves.
       - ./backups/status:/backups:ro
@@ -505,7 +540,8 @@ services:
       ORG_NAME: ${ORG_NAME:-Organisation}
       # The languages people may choose in Account, the same ones keycloak-config offers at sign-in.
       REALM_LANGUAGES: ${REALM_LANGUAGES:-}
-      SERVICE_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/identity_client_secret
+    secrets: [identity_client_secret]
     depends_on:
       <<: *own-login
       keycloak: { condition: service_healthy }
@@ -528,13 +564,13 @@ services:
       PERMISSIONS_URL: http://permissions:8087
       # The checks it decides instead, once moved over: empty, every check is only compared.
       PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
-      SERVICE_CLIENT_SECRET: "${REGISTRY_CLIENT_SECRET}"
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/registry_client_secret
       # Its own login, owning only the registry schema.
       DATABASE_URL: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # Asked at install what the knowledge graph offers apps.
       KNOWLEDGE_URL: http://knowledge:8086
       # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
-      # for new AUGUR and app releases with it, and the updater pulls with it (docs/upgrade.md).
+      # for new AUGUR and app releases with it, and the updater pulls with it (docs/src/content/docs/run/releases.md).
       GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
       # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
       RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
@@ -545,7 +581,11 @@ services:
       DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
       # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
-      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/alert_webhook_token
+      # Only whether Grafana's routes outside AUGUR are set, never their addresses: a production server's
+      # admins are told while one isn't.
+      ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:+set}
+      ALERT_HEARTBEAT_URL: ${ALERT_HEARTBEAT_URL:+set}
       SERVER_RING: ${SERVER_RING:-}
       # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
       DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
@@ -557,16 +597,17 @@ services:
       # The apps this deployment installs from the feed by default (none when unset).
       DEFAULT_APPS: ${DEFAULT_APPS:-}
       IN_PAGE_APPS: ${IN_PAGE_APPS:-}
-      # Admin → Apps: where apps' own releases are listed, for the app runner (docs/upgrade.md, The app runner).
+      # Admin → Apps: where apps' own releases are listed, for the app runner (docs/src/content/docs/run/app-runner.md).
       APP_FEEDS: ${APP_FEEDS:-}
       APP_FEED_URL: ${APP_FEED_URL:-}
-      # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/upgrade.md).
+      # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/src/content/docs/run/app-runner.md).
       FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
       FRONTENDS_S3_URL: http://garage:3900
-      # Who must sign the release feed, for AUGUR published from a fork (docs/upgrade.md, The signed feed).
+      # Who must sign the release feed, for AUGUR published from a fork (docs/src/content/docs/run/releases.md).
       FEED_SIGNER: ${FEED_SIGNER:-}
+    secrets: [registry_client_secret, alert_webhook_token]
     volumes:
-      # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/upgrade.md).
+      # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/src/content/docs/run/releases.md).
       - ./secrets:/run/secrets/augur:ro
       # A mirror's feed kept on this server, for RELEASE_FEED_URL=file:///run/augur/releases/releases.json (docs/mirror.md).
       - ./releases:/run/augur/releases:ro
@@ -585,13 +626,16 @@ services:
     environment:
       <<: *env
       PORT: 8084
-      SERVICE_CLIENT_SECRET: "${EVENTS_CLIENT_SECRET}"
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/events_client_secret
       # Asked beside each admin and lead check, to compare answers before checks move there (shadow mode, docs/permissions.md).
       PERMISSIONS_URL: http://permissions:8087
       # Its own login, owning only the events schema: the audit log, notifications and domain events.
       DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
+      # How often an event an app's part can't take is tried, and the first wait between tries, before it is set aside (5 and 30 when empty; docs/domain-events.md).
+      DOMAIN_EVENTS_DELIVERY_ATTEMPTS: ${DOMAIN_EVENTS_DELIVERY_ATTEMPTS:-}
+      DOMAIN_EVENTS_RETRY_SECONDS: ${DOMAIN_EVENTS_RETRY_SECONDS:-}
       INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
       # How many days back the Inbox's Done tab looks (30 when empty; docs/inbox.md).
       INBOX_DONE_DAYS: ${INBOX_DONE_DAYS:-}
@@ -604,6 +648,7 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    secrets: [events_client_secret]
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
@@ -650,6 +695,9 @@ services:
       DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
       KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
+      DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
+      DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
+      DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS:-}
     # After a restore, it forgets again what the forget ledger names (AUGUR's docs, Backups).
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
@@ -678,12 +726,13 @@ services:
       KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS: ${KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS:-600}
       KNOWLEDGE_REFLECT_DAILY_BUDGET: ${KNOWLEDGE_REFLECT_DAILY_BUDGET:-400}
       KNOWLEDGE_REFLECT_FLOOR_BUDGET: ${KNOWLEDGE_REFLECT_FLOOR_BUDGET:-100}
-      SERVICE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/knowledge_client_secret
       DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
       # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
       # knowledge asks on each request. While it can't answer, nobody settles or raises.
       PERMISSIONS_URL: http://permissions:8087
+    secrets: [knowledge_client_secret]
     # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
@@ -710,6 +759,8 @@ services:
     environment:
       OPENFGA_DATASTORE_ENGINE: postgres
       OPENFGA_DATASTORE_URI: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # Its share of Postgres's connections (OpenFGA's own default is 30).
+      OPENFGA_DATASTORE_MAX_OPEN_CONNS: ${OPENFGA_DB_POOL_MAX:-20}
       OPENFGA_AUTHN_METHOD: preshared
       OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
       OPENFGA_PLAYGROUND_ENABLED: "false"
@@ -739,23 +790,26 @@ services:
       DATABASE_URL: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       PERSONA_DEPLOYMENT_ADMIN_MINUTES: ${PERSONA_DEPLOYMENT_ADMIN_MINUTES:-60}
       PERSONA_ORG_ADMIN_MINUTES: ${PERSONA_ORG_ADMIN_MINUTES:-480}
-      OPENFGA_TOKEN: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
+      OPENFGA_TOKEN_FILE: /run/secrets/openfga_token
       # Its own sign-in, to copy floors, positions and who holds them from identity (ADR 0089), at once
       # when identity announces a change (platform.position.*, .team.*, .person.*) and whole every few minutes.
-      SERVICE_CLIENT_SECRET: ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
+      SERVICE_CLIENT_SECRET_FILE: /run/secrets/permissions_client_secret
       PERMISSIONS_COPY_SECONDS: ${PERMISSIONS_COPY_SECONDS:-300}
+    secrets: [openfga_token, permissions_client_secret]
     depends_on:
       openfga: { condition: service_healthy }
       identity: { condition: service_healthy }
 
   # Applies the upgrades an admin asks for on Admin → Upgrade Centre: backup, pull, restart each part, and back
-  # by itself if one doesn't come up (docs/upgrade.md, The updater). Optional: only with
+  # by itself if one doesn't come up (docs/src/content/docs/run/updater.md). Optional: only with
   # COMPOSE_PROFILES=updater in .env. It drives Docker, which can start anything, so it has the run of
   # the server: only it can reach docker-proxy, on a network of their own.
   updater:
     logging: *logging
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/updater:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
+    # More than the others: it pulls, checks and unpacks releases, and dying half way through a switch leaves it to redo.
+    mem_limit: ${UPDATER_MEM_LIMIT:-2g}
     profiles: [updater]
     restart: unless-stopped
     environment:
@@ -810,6 +864,10 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
       # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
       ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      # Read by contact-points.yaml: the routes that leave the server without AUGUR. Unset, each points at the
+      # registry, which drops what it gets, so Grafana always has an address.
+      ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:-http://registry:8082/v1/platform/alerts/unrouted}
+      ALERT_HEARTBEAT_URL: ${ALERT_HEARTBEAT_URL:-http://registry:8082/v1/platform/alerts/unrouted}
       # Prometheus and Pyroscope answer inside the container only, as Loki and Tempo do (lgtm/*.yaml): Grafana
       # reads them at 127.0.0.1, and nothing on the networks can query what the services logged.
       PROMETHEUS_EXTRA_ARGS: --storage.tsdb.retention.time=72h --web.listen-address=127.0.0.1:9090
@@ -827,6 +885,19 @@ services:
       - ./observability/grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
       - ./observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/augur.yaml:ro
       - ./observability/grafana/dashboards:/otel-lgtm/augur-dashboards:ro
+
+# Secrets AUGUR's own services read as files (<NAME>_FILE, the service kit's loadConfig), never from their
+# environment, where `docker inspect` and a crash report would show them. Each still comes from .env. Compose
+# doesn't recreate a service when only its secret's value changes: after changing one, pc up -d --force-recreate <service>.
+secrets:
+  caller_signing_key: { environment: CALLER_SIGNING_KEY }
+  identity_client_secret: { environment: IDENTITY_CLIENT_SECRET }
+  registry_client_secret: { environment: REGISTRY_CLIENT_SECRET }
+  alert_webhook_token: { environment: ALERT_WEBHOOK_TOKEN }
+  events_client_secret: { environment: EVENTS_CLIENT_SECRET }
+  knowledge_client_secret: { environment: KNOWLEDGE_CLIENT_SECRET }
+  openfga_token: { environment: OPENFGA_TOKEN }
+  permissions_client_secret: { environment: PERMISSIONS_CLIENT_SECRET }
 
 networks:
   default:

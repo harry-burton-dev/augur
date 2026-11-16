@@ -15,9 +15,9 @@
 // memory and disk. --fill-secrets first writes a random value into each blank secret the schema marks
 // `x-generate` (mount the checkout read-write for it: drop the `:ro`). It never changes a value that's set.
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, statSync, statfsSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, statfsSync, writeFileSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, normalize } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -41,6 +41,16 @@ export const readEnv = (text) =>
       .map(([, key, value]) => [key, value.replace(/^(['"])(.*)\1$/, '$2')]),
   );
 
+/** The compose files .env's COMPOSE_FILE names (compose.yml when none), as the updater reads them, and whether that puts AUGUR behind the organisation's own proxy. */
+const PROXY_FILE = 'compose.proxy.yml';
+export const composeFilesOf = (env) => {
+  const files = (env.COMPOSE_FILE ?? '').split(':').map((f) => f.trim()).filter(Boolean).map((f) => (isAbsolute(f) || normalize(f).split('/').includes('..') ? f : normalize(f)));
+  return files.length ? files : ['compose.yml'];
+};
+const behindProxy = (env) => composeFilesOf(env).includes(PROXY_FILE);
+/** Tailscale's key: wanted unless AUGUR is behind the organisation's own proxy, where Tailscale doesn't run. */
+const withTailscaleKey = (env, required) => (behindProxy(env) ? required.filter((key) => key !== 'TS_AUTHKEY') : [...new Set([...required, 'TS_AUTHKEY'])]);
+
 /** What stands between a server with this .env and the release. `errors` stop the upgrade; `notes` are for reading. */
 export const preflight = (release, env) => {
   const errors = [];
@@ -49,16 +59,17 @@ export const preflight = (release, env) => {
   const min = release.upgradeFrom?.replace(/^>=\s*/, '');
 
   if (!from || !isVersion(from)) {
-    notes.push(from ? `PLATFORM_VERSION is "${from}", not a release, so the upgrade path isn't checked.` : "PLATFORM_VERSION isn't set yet: this server built its own images before. See \"Images from releases\" in docs/upgrade.md.");
+    notes.push(from ? `PLATFORM_VERSION is "${from}", not a release, so the upgrade path isn't checked.` : "PLATFORM_VERSION isn't set yet: this server built its own images before. See \"Images from releases\" in AUGUR’s docs, Upgrade notes.");
   } else if (compare(from, release.version) === 0) {
     notes.push(`Already on ${release.version}.`);
   } else if (compare(from, release.version) > 0) {
-    notes.push(`${release.version} is older than ${from}: this is going back. Follow "Going back" in docs/upgrade.md.`);
+    notes.push(`${release.version} is older than ${from}: this is going back. Follow "Going back" in AUGUR’s docs, Upgrade AUGUR.`);
   } else if (min && compare(from, min) < 0) {
     errors.push(`${release.version} upgrades from ${min} or later, and this server is on ${from}. Upgrade to ${min} first (augur@${min}), then to ${release.version}.`);
   }
 
-  const missing = (release.settings?.required ?? []).filter((key) => key !== 'PLATFORM_VERSION' && !env[key]);
+  // An upgraded server on Tailscale has joined the tailnet, so needs no key: only one behind its own proxy is spared asking.
+  const missing = (release.settings?.required ?? []).filter((key) => key !== 'PLATFORM_VERSION' && !env[key] && !(key === 'TS_AUTHKEY' && behindProxy(env)));
   if (missing.length) errors.push(`Set ${missing.join(', ')} in .env first (see infra/deploy/.env.example).`);
   const stale = (release.settings?.removed ?? []).filter((key) => key in env);
   if (stale.length) notes.push(`${stale.join(', ')} ${stale.length === 1 ? 'is' : 'are'} no longer read; you can remove ${stale.length === 1 ? 'it' : 'them'} from .env.`);
@@ -121,7 +132,7 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   else pass(`Release: augur@${release.version} (${release.channel}) is the one here, and PLATFORM_VERSION names it.`);
 
   // Every required setting, and every value set, fits the schema.
-  const required = [...new Set([...(schema.required ?? []), ...(release.settings?.required ?? [])])];
+  const required = withTailscaleKey(env, [...new Set([...(schema.required ?? []), ...(release.settings?.required ?? [])])]);
   const missing = required.filter((key) => !env[key]);
   const generated = missing.filter((key) => props[key]?.['x-generate']);
   const byHand = missing.filter((key) => !props[key]?.['x-generate']);
@@ -143,13 +154,23 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   for (const keys of shared) stop(`${keys.join(' and ')} are the same: give each its own (blank them and use --fill-secrets).`);
   if (!shared.length && !misfits.length) pass('Secrets: each is its own, and each fits.');
 
-  // The address: this machine on the tailnet.
-  const hostName = env.TS_HOSTNAME || props.TS_HOSTNAME?.default || 'platform';
-  const url = /^https:\/\/([^/:]+)$/.exec(env.PLATFORM_URL ?? '');
-  if (url) {
-    const [machine, ...rest] = url[1].split('.');
-    if (rest.join('.').endsWith('ts.net') && machine !== hostName) stop(`PLATFORM_URL names the machine ${machine}, but TS_HOSTNAME is ${hostName}: make them the same.`);
-    else pass(`Address: ${env.PLATFORM_URL}, the machine ${hostName} on your tailnet.`);
+  // The compose files: each one there, as Compose will want them.
+  for (const f of composeFilesOf(env)) {
+    if (isAbsolute(f) || f.split('/').includes('..')) stop(`COMPOSE_FILE names ${f}: name only files in infra/deploy, which the updater checks and writes, such as compose.yml:${PROXY_FILE}.`);
+    else if (host.composeFiles && !host.composeFiles.includes(f)) stop(`COMPOSE_FILE names ${f}, which isn’t in infra/deploy: compose.yml:${PROXY_FILE} puts AUGUR behind your own proxy (AUGUR’s docs, Install AUGUR).`);
+  }
+
+  // The address: behind the organisation's own proxy, whatever it serves; otherwise this machine on the tailnet.
+  if (behindProxy(env)) {
+    if (env.PLATFORM_URL) pass(`Address: ${env.PLATFORM_URL}, served by your proxy in front, which passes it on to the front door at PROXY_LISTEN (${env.PROXY_LISTEN || props.PROXY_LISTEN?.default || '127.0.0.1:8080'}). Tailscale doesn’t run.`);
+  } else {
+    const hostName = env.TS_HOSTNAME || props.TS_HOSTNAME?.default || 'platform';
+    const url = /^https:\/\/([^/:]+)$/.exec(env.PLATFORM_URL ?? '');
+    if (url) {
+      const [machine, ...rest] = url[1].split('.');
+      if (rest.join('.').endsWith('ts.net') && machine !== hostName) stop(`PLATFORM_URL names the machine ${machine}, but TS_HOSTNAME is ${hostName}: make them the same.`);
+      else pass(`Address: ${env.PLATFORM_URL}, the machine ${hostName} on your tailnet.`);
+    }
   }
 
   // The ring, and what follows from it.
@@ -158,10 +179,10 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   if (env.SEED_ALLOWED === 'true') note(`SEED_ALLOWED=true: sample data can be added here. Only where nobody real works${ring === 'production' ? ', and this is a production server' : ''}.`);
 
   // The read key: both halves or neither.
-  if (env.GITHUB_READ_USER && !host.readKey) stop('GITHUB_READ_USER is set, but infra/deploy/secrets/github-read-key isn\u2019t there (docs/upgrade.md, The read key).');
+  if (env.GITHUB_READ_USER && !host.readKey) stop('GITHUB_READ_USER is set, but infra/deploy/secrets/github-read-key isn\u2019t there (AUGUR’s docs, Where releases come from).');
   else if (!env.GITHUB_READ_USER && host.readKey) stop('infra/deploy/secrets/github-read-key is there, but GITHUB_READ_USER isn\u2019t set: set it to the account the key belongs to.');
   else if (env.GITHUB_READ_USER) pass(`Read key: ${env.GITHUB_READ_USER}'s, in infra/deploy/secrets/github-read-key.`);
-  else note('No read key (GITHUB_READ_USER): fine while the release\u2019s packages are public; the Upgrade Centre can\u2019t see private ones without it (docs/upgrade.md, The read key).');
+  else note('No read key (GITHUB_READ_USER): fine while the release\u2019s packages are public; the Upgrade Centre can\u2019t see private ones without it (AUGUR’s docs, Where releases come from).');
 
   // Later, but worth knowing now.
   if (!env.DEPLOYMENT_ID) note(`Not reporting to Backstage yet (DEPLOYMENT_ID${env.PORTAL_URL ? '' : ', PORTAL_URL'}): set it up after the first start (AUGUR’s docs, Install AUGUR, step 6).`);
@@ -184,7 +205,7 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
 };
 
 const fileHost = (envFile) => {
-  const host = { readKey: existsSync(join(root, 'infra/deploy/secrets/github-read-key')), memoryBytes: totalmem() };
+  const host = { readKey: existsSync(join(root, 'infra/deploy/secrets/github-read-key')), memoryBytes: totalmem(), composeFiles: readdirSync(join(root, 'infra/deploy')).filter((f) => /\.ya?ml$/.test(f)) };
   try {
     const fs = statfsSync(root);
     host.freeDiskBytes = fs.bavail * fs.bsize;

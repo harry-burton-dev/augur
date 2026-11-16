@@ -240,6 +240,13 @@ export interface InternetAllowed {
   allowedAt: string;
 }
 
+/** The publisher an app id is bound to: the repository whose signed release first installed under it (D9). */
+export interface AppPublisher {
+  app: string;
+  repository: string;
+  boundAt: string;
+}
+
 /** An app the runner installed, and the release it's on. */
 export interface InstalledApp {
   app: string;
@@ -403,6 +410,8 @@ export interface AppStore {
   deferDataDeletion(app: string, after: (failures: number) => Date, problem: string): Promise<{ failures: number; dueAt: Date } | undefined>;
   /** Forgets everything the registry kept of an app whose data went: its settings' values, developers, follow, deletion and its catalogue entry with its floors' grants. */
   forgetApp(app: string, by: string): Promise<void>;
+  /** The publisher each app id is bound to, from its first install's release (D9). Never forgotten, so an id isn't taken over once its app is removed. */
+  appPublishers(): Promise<AppPublisher[]>;
   /** Forgets values removed before `before`; how many it forgot. */
   dropRemovedSettings(before: Date): Promise<number>;
   /** Marks a finished upgrade or app job as looked at; false when there's no such finished one. */
@@ -806,6 +815,40 @@ export const migrations: Migration[] = [
         problem text
       );`,
   },
+  {
+    id: '028_audit_outbox',
+    sql: `
+      -- Audit entries on their way to the events service (ADR 0104): kept here first, so an admin's change is
+      -- audited, and its domain event published, even while the events service is down. auditOutbox sends them.
+      create table registry.audit_outbox (
+        id bigint generated always as identity primary key,
+        key text not null unique,
+        workspace_id text,
+        entry jsonb not null,
+        created_at timestamptz not null default now(),
+        sent_at timestamptz,
+        refused_at timestamptz,
+        refused_why text
+      );
+      create index audit_outbox_unsent on registry.audit_outbox (id) where sent_at is null;`,
+  },
+  {
+    id: '029_app_publishers',
+    sql: `
+      -- Each app id's publisher (D9): the repository whose signed release first installed under it. Another
+      -- repository's release under the id is refused, and the row outlives the app's removal (forgetApp keeps it).
+      create table registry.app_publishers (
+        app_id text primary key,
+        repository text not null,
+        bound_at timestamptz not null default now()
+      );
+      -- An app installed before this: bound to the repository of the release it runs now, so its own updates still install.
+      insert into registry.app_publishers (app_id, repository, bound_at)
+        select distinct on (app_id) app_id, release->'signer'->>'repository', coalesce(finished_at, requested_at)
+        from registry.app_jobs
+        where action = 'install' and state = 'done' and pr is null and release->'signer'->>'repository' is not null
+        order by app_id, finished_at desc nulls last, requested_at desc;`,
+  },
 ];
 
 type FrontendRow = { app_id: string; version: string; digest: string; folder: string | null; files: string[]; bytes: string; published_by: string; published_at: Date };
@@ -850,7 +893,8 @@ const fromAppRow = (r: AppRow): AppRecord => ({
 });
 
 export class PgAppStore implements AppStore {
-  constructor(private readonly pool: pg.Pool) {}
+  /** The registry's database, for what keeps its own rows there (the audit outbox). */
+  constructor(readonly pool: pg.Pool) {}
 
   static async connect(connectionString: string) {
     const store = new PgAppStore(steadyPool(new pg.Pool({ connectionString })));
@@ -1163,7 +1207,11 @@ export class PgAppStore implements AppStore {
          where id = $1 returning *`,
         [id, JSON.stringify(steps), outcome?.state ?? 'running', outcome?.message ?? null, Boolean(outcome), outcome?.upstream ?? null],
       );
-      return fromAppJobRow(updated[0]);
+      const job = fromAppJobRow(updated[0]);
+      // Its first install binds the id to the release's publisher for good (D9), in the same transaction as the job ending.
+      if (outcome?.state === 'done' && job.action === 'install' && job.pr === undefined && job.release)
+        await client.query('insert into registry.app_publishers (app_id, repository) values ($1, $2) on conflict do nothing', [job.app, job.release.signer.repository]);
+      return job;
     });
   }
 
@@ -1395,6 +1443,11 @@ export class PgAppStore implements AppStore {
     });
     // Its catalogue entry goes too, with its versions, frontends and floors' grants, as an admin's removal from the catalogue does.
     await this.remove(app, by);
+  }
+
+  async appPublishers() {
+    const { rows } = await this.pool.query<{ app_id: string; repository: string; bound_at: Date }>('select * from registry.app_publishers order by app_id');
+    return rows.map((r) => ({ app: r.app_id, repository: r.repository, boundAt: r.bound_at.toISOString() }));
   }
 
   async dropRemovedSettings(before: Date) {

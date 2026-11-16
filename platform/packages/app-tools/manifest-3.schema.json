@@ -22,11 +22,11 @@
     "contract": {
       "type": "integer",
       "const": 3,
-      "description": "The one contract major the app speaks (decision 8, option A). It fixes the gateway API, SDK, Quill and resource-type majors the shell and runner serve. Under option B this field is replaced by `majors` (see the spec, section 11)."
+      "description": "The one contract major the app speaks. It fixes the gateway API, SDK, Quill and resource-type majors the shell and runner serve, which move together (decision D8: one contract major, not one per surface)."
     },
     "description": { "type": "string", "maxLength": 140, "description": "One line shown under the app's name." },
     "icon": { "type": "string", "maxLength": 40, "description": "A kit icon name (Lucide, through Common's Icon)." },
-    "requiredRole": { "type": "string", "maxLength": 60, "description": "Only people with this role can open it." },
+    "requiredRole": { "type": "string", "maxLength": 60, "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
     "floors": {
       "type": "array",
       "items": { "enum": ["personal", "team", "org"] },
@@ -170,6 +170,26 @@
           "properties": { "kinds": { "type": "array", "minItems": 1, "maxItems": 10, "items": { "$ref": "#/$defs/kind" } } },
           "description": "The kinds of work the app puts in people's inboxes (ADR 0026). Needs inbox:write."
         },
+        "events": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "reads": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*\\.([a-z][a-z0-9-]*|\\*)$", "maxLength": 120 },
+              "uniqueItems": true,
+              "maxItems": 50,
+              "description": "The topics the app reads, or families such as folio.*; it is given only those (ADR 0104). Needs events:subscribe."
+            },
+            "publishes": {
+              "type": "array",
+              "maxItems": 50,
+              "items": { "$ref": "#/$defs/eventType" },
+              "description": "Each type of event the app publishes, with its version and its payload's JSON Schema, which each event is checked against when it is published (ADR 0104). Needs events:publish."
+            }
+          },
+          "description": "The domain events the app reads and publishes (ADR 0104). Within a version an event type only gains optional fields; anything else is a new version."
+        },
         "search": { "type": "boolean", "description": "The app's inbound part answers GET /v1/search?q= and the shell's Find asks it." },
         "card": { "type": "boolean", "description": "Home draws a card for the app, which the app fills through ctx.frame.card." },
         "canvas": { "type": "boolean", "description": "The app uses the full-canvas sandboxed frame for free drawing (ADR 0076). Shown to the admin before install." },
@@ -203,23 +223,39 @@
         }
       }
     },
+    "links": { "$ref": "#/$defs/links", "description": "Deprecated: put it under `provisional`. Read here for one more release, with a warning." },
+    "bindings": { "type": "array", "items": { "type": "string" }, "description": "Retired (D6): the binding events are gone, so this is accepted and ignored, with a warning. It goes in a later release." },
+    "provisional": {
+      "type": "object",
+      "description": "Fields contract 3 hasn't frozen: each may change or go in a minor release. A registry ignores a field here that it doesn't know, so a manifest that sets a newer one still installs on an older AUGUR, without it. Anywhere else an unknown field is refused.",
+      "properties": {
+        "requiredRole": { "type": "string", "minLength": 1, "maxLength": 60, "description": "Only people with this role can open it. Provisional until permissions decide who opens an app (ctx.can())." },
+        "links": {
+          "type": "object",
+          "properties": { "entities": { "type": "boolean" } },
+          "description": "As the top-level links, open to fields a later release adds, which a registry that doesn't know them ignores."
+        }
+      }
+    }
+  },
+  "$defs": {
     "links": {
       "type": "object",
       "additionalProperties": false,
       "properties": { "entities": { "type": "boolean" } },
-      "description": "The app binds its things to entities and publishes the binding events (ADR 0025, 0066). Stands until the floor graphs specification decides otherwise (ADR 0077 point 7)."
+      "description": "The app links its things to entities in Data Atlas (ADR 0025). Stands until the floor graphs specification decides otherwise (ADR 0077 point 7)."
     },
-    "bindings": {
-      "type": "array",
-      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]{0,39}$" },
-      "minItems": 1,
-      "maxItems": 10,
-      "uniqueItems": true,
-      "description": "With links.entities, the types of thing the app binds, each published on <app>.<type>.entity-bound and -unbound."
-    }
-  },
-  "dependentRequired": { "bindings": ["links"] },
-  "$defs": {
+    "eventType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topic", "version", "schema"],
+      "properties": {
+        "topic": { "type": "string", "pattern": "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)+$", "maxLength": 120, "description": "<app id>.<thing>.<what happened>, such as notes.note.added. The registry refuses a topic outside the app's own id." },
+        "version": { "type": "integer", "minimum": 1, "maximum": 999, "description": "The payload's version: within it the type only gains optional fields." },
+        "description": { "type": "string", "maxLength": 300, "description": "What the event says happened." },
+        "schema": { "type": "object", "required": ["type"], "properties": { "type": { "const": "object" } }, "description": "The payload's JSON Schema (2020-12), for an object. The registry refuses one it can't compile, or one over 16 KB." }
+      }
+    },
     "kind": {
       "type": "object",
       "additionalProperties": false,

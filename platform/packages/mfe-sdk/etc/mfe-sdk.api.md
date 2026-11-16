@@ -23,6 +23,7 @@ export type AppCategory = (typeof APP_CATEGORIES)[number];
 export interface AppManifestEntry {
     ai?: boolean;
     areas?: AppArea[];
+    // @deprecated
     bindings?: string[];
     category?: AppCategory;
     description?: string;
@@ -88,8 +89,8 @@ export interface AppMenuItem {
     path: string;
 }
 
-// @public (undocumented)
-export const createEventBus: () => EventBus;
+// @public
+export const createEventBus: (input?: EventBusOptions) => EventBus;
 
 // @public
 export const defineMicroFrontend: (mfe: MicroFrontend) => MicroFrontend;
@@ -187,6 +188,11 @@ export interface EventBus {
     emit<T>(type: string, payload: T): void;
     // (undocumented)
     on<T>(type: string, handler: (payload: T) => void): Unsubscribe;
+}
+
+// @public
+export interface EventBusOptions {
+    onError?: (err: unknown, type: string) => void;
 }
 
 // @public

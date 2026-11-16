@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import pg from 'pg';
-import { deliveriesMigration, PgDeliveryStore, type DeliveryStore } from './deliveries.ts';
+import { deliveriesMigration, heldMigration, PgDeliveryStore, type DeliveryStore } from './deliveries.ts';
 import { digestMigration, PgDigestStore, type DigestStore } from './digests.ts';
 import { emailMigration, PgEmailOutbox, type EmailOutbox } from './email-outbox.ts';
 import { INBOX_CHANNEL, inboxMigration, PgInboxStore, type InboxStore } from './inbox.ts';
@@ -122,6 +122,8 @@ export interface DomainEvent {
   publisher: string;
   at: string;
   workspace?: EventFloor;
+  /** The version of its type the payload follows, when its publisher declares its types (ADR 0104). */
+  version?: number;
   payload: unknown;
 }
 
@@ -130,6 +132,8 @@ export interface NewDomainEvent {
   id: string;
   payload: unknown;
   floor?: EventFloor;
+  /** The version of its type, checked against what the publisher declares (ADR 0104). */
+  version?: number;
 }
 
 export interface EventsQuery {
@@ -145,6 +149,17 @@ export interface EventsQuery {
 /** Whether a topic is one of those asked for: an exact name, or under a "family.*". */
 export const topicMatches = (topic: string, wanted: string[]) =>
   wanted.some((w) => (w.endsWith('.*') ? topic.startsWith(w.slice(0, -1)) : topic === w));
+
+/** Whether a topic or family asked for shares any topic with those an app reads (exact topics or families). */
+export const topicsOverlap = (asked: string, reads: string[]) =>
+  reads.some((read) => {
+    const a = asked.endsWith('.*') ? asked.slice(0, -1) : undefined;
+    const r = read.endsWith('.*') ? read.slice(0, -1) : undefined;
+    if (a && r) return a.startsWith(r) || r.startsWith(a);
+    if (a) return read.startsWith(a);
+    if (r) return asked.startsWith(r);
+    return asked === read;
+  });
 
 /** A leaver's team items still to give back: those of one team, or of every team when `team` is left out. */
 export interface InboxRelease {
@@ -207,8 +222,10 @@ export interface EventStore {
   readEvents(query: EventsQuery): Promise<DomainEvent[]>;
   /** The highest seq committed, of any topic; undefined with no events kept. */
   lastSeq(): Promise<string | undefined>;
-  /** Forgets events older than this many days; returns how many went. */
+  /** Forgets events older than this many days, and remembers the highest seq it forgot; returns how many went. */
   pruneEvents(keepDays: number): Promise<number>;
+  /** The highest seq ever pruned: a follower whose cursor is below it has missed events (ADR 0104). */
+  prunedUpTo(): Promise<string | undefined>;
   /** Removes Activity entries older than this many days (the retention period, ADR 0040); returns how many went. */
   pruneAudit(keepDays: number): Promise<number>;
   /**
@@ -360,6 +377,22 @@ export const migrations: Migration[] = [
       where exists (select 1 from events.audit r where r.action = 'audit.redacted' and starts_with(n.key, 'leave:' || (r.detail->>'person') || ':'));`,
   },
   deliveriesMigration,
+  {
+    id: '016_pruned_up_to',
+    sql: `
+      -- How far pruning has gone: a follower behind it is told so (410), never left to skip events silently (ADR 0104).
+      create table events.domain_events_pruned (
+        one boolean primary key default true check (one),
+        up_to bigint not null
+      );`,
+  },
+  {
+    id: '017_event_version',
+    sql: `
+      -- The version of its type an event's payload follows, when its publisher declares its types (ADR 0104).
+      alter table events.domain_events add column version integer;`,
+  },
+  heldMigration,
 ];
 
 /** Each new notification, by id. The channels carry ids only: see `refIn`. */
@@ -385,7 +418,7 @@ type NotificationRow = {
   workspace_path: string[] | null;
 };
 
-type DomainEventRow = { seq: string; topic: string; id: string; publisher: string; at: Date; workspace_id: string | null; workspace_path: string[] | null; payload: unknown };
+type DomainEventRow = { seq: string; topic: string; id: string; publisher: string; at: Date; workspace_id: string | null; workspace_path: string[] | null; version: number | null; payload: unknown };
 
 const fromEventRow = (r: DomainEventRow): DomainEvent => ({
   seq: r.seq,
@@ -394,6 +427,7 @@ const fromEventRow = (r: DomainEventRow): DomainEvent => ({
   publisher: r.publisher,
   at: r.at.toISOString(),
   ...floorFrom(r.workspace_id, r.workspace_path),
+  ...(r.version ? { version: r.version } : {}),
   payload: r.payload,
 });
 
@@ -495,7 +529,7 @@ export class PgEventStore implements EventStore {
     const ref = refIn(payload, SEQ);
     if (!ref || !this.emitter.listenerCount('domain-event')) return;
     this.readBack(async () => {
-      const { rows } = await this.pool.query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events where seq = $1', [ref]);
+      const { rows } = await this.pool.query<DomainEventRow>('select seq, topic, id, publisher, at, workspace_id, workspace_path, version, payload from events.domain_events where seq = $1', [ref]);
       if (rows[0]) this.emitter.emit('domain-event', fromEventRow(rows[0]));
     });
   }
@@ -696,7 +730,7 @@ export class PgEventStore implements EventStore {
     // Seq order is commit order (`insertEvents`), so a seq not visible yet can only ever land above these. Waiting
     // on the transactions still running isn't needed, and would let any login on the database stall every follower.
     const { rows } = await this.pool.query<DomainEventRow>(
-      `select seq, topic, id, publisher, at, workspace_id, workspace_path, payload from events.domain_events
+      `select seq, topic, id, publisher, at, workspace_id, workspace_path, version, payload from events.domain_events
        where seq > $1 and ($5::bigint is null or seq <= $5) and ($6 or topic = any($2::text[]) or topic like any($3::text[]))
        order by seq limit $4`,
       [after ?? '0', exact, families, limit, upTo ?? null, every],
@@ -705,8 +739,24 @@ export class PgEventStore implements EventStore {
   }
 
   async pruneEvents(keepDays: number) {
-    const { rowCount } = await this.pool.query(`delete from events.domain_events where at < now() - make_interval(days => $1)`, [keepDays]);
-    return rowCount ?? 0;
+    // The high-water mark moves in the same statement as the delete, so a follower is never told less than went.
+    const { rows } = await this.pool.query<{ n: number }>(
+      `with gone as (delete from events.domain_events where at < now() - make_interval(days => $1) returning seq),
+       mark as (
+         insert into events.domain_events_pruned (up_to) select seq from gone order by seq desc limit 1
+         on conflict (one) do update set up_to = greatest(events.domain_events_pruned.up_to, excluded.up_to)
+       )
+       select count(*)::int as n from gone`,
+      [keepDays],
+    );
+    // What was set aside goes with the events it stood for.
+    await this.pool.query('delete from events.delivery_held where set_aside_at < now() - make_interval(days => $1)', [keepDays]);
+    return rows[0]?.n ?? 0;
+  }
+
+  async prunedUpTo() {
+    const { rows } = await this.pool.query<{ up_to: string }>('select up_to from events.domain_events_pruned');
+    return rows[0]?.up_to ?? undefined;
   }
 
   /** Resolves once the database answers: the service's readiness check. */
