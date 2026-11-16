@@ -27,6 +27,9 @@ describe('what an app’s call needs', () => {
     expect(scopeFor('DELETE', '/api/registry/v1/apps/notes', 'notes', platform)).toBe('deployment:apps');
     expect(scopeFor('POST', '/api/registry/v1/apps/notes/anything', 'notes', platform)).toBeUndefined();
     expect(scopeFor('PUT', '/api/registry/v1/apps/notes-2/scopes', 'notes', platform)).toBe('apps:manage');
+    expect(scopeFor('HEAD', '/api/registry/v1/apps/notes/settings', 'notes', platform)).toBeNull();
+    expect(scopeFor('PUT', '/api/registry/v1/apps/notes/upstream', 'notes', platform)).toBeUndefined();
+    expect(scopeFor('GET', '/api/registry/v1/apps/notes-2/floors', 'notes', platform)).toBe('apps:manage');
     expect(scopeFor('GET', '/api/registry/v1/manifest', 'notes', platform)).toBeUndefined();
   });
 

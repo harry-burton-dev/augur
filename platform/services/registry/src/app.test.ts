@@ -803,6 +803,8 @@ describe.runIf(DATABASE_URL)('registry', () => {
         { method: 'PATCH', url: '/v1/apps/library', payload: { enabled: false } },
         { method: 'PUT', url: '/v1/apps/library/pin', payload: { version: '0.1.0' } },
         { method: 'PUT', url: '/v1/apps/library/upload-limit', payload: { mb: 1 } },
+        { method: 'PUT', url: '/v1/apps/library/upstream', payload: { url: 'http://elsewhere:3000' } },
+        { method: 'PUT', url: '/v1/apps/library', payload: { ...library, scopes: ['notifications:send', 'audit:write'] } },
         { method: 'DELETE', url: '/v1/apps/library' },
         { method: 'GET', url: '/v1/apps' },
       ] as const;
