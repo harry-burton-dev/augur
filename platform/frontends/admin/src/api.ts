@@ -62,6 +62,8 @@ export interface Department {
 
 /** The organisation's settings (ADR 0042). */
 export interface Organisation {
+  /** The organisation's floor's id. */
+  id: string;
   name: string;
   /** An IANA time zone, e.g. Europe/London. */
   timeZone: string;

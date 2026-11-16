@@ -44,6 +44,10 @@ app.addHook('onRequest', signedCallers(callerCheckFromEnv('app-expenses')));
 
 An app's own token, with no delegation, is admitted only for an app the registry knows and has on ("Notes isn’t installed here", "Notes is turned off"), and only for the routes its grant covers, its own routes and, on its own registry entry, reading its settings, grants and events, registering itself and giving it a version's frontend (anything else there, such as its scopes, floors or pin, needs an admin's platform scope); the caller the gateway signs then names the app (`app:<id>`, with `app` and `scopes`) and the app's own token goes on with the call, so a service still reads which app is calling the way it did before.
 
+### The organisation
+
+A caller can carry the claim `org`: the organisation's floor's id, which identity gives as `id` on `GET /v1/organisation`. `callerFromHeaders` gives it as `caller.org` (`x-user-org` for AUGUR's own services). It is what a call names in `X-Workspace-Id` for the whole organisation. A deployment has one organisation today, so the principal `org` means this one. The gateway doesn't sign it yet; until it does, `org` is absent.
+
 ### Acting as an admin persona
 
 While someone acts as an admin persona (ADR 0086, PDR-024 "Act as"), the shell sends `x-augur-persona: <id>` on their calls. On every call the gateway asks the permissions service whether that person has a live session for that persona (`POST /access/v1/persona-session`). If they do, the caller it signs carries the claim `persona` beside the person, whose id stays in `sub`, so both are recorded; `callerFromHeaders` gives it as `caller.persona` (`x-user-persona`). A session that has ended is refused with `persona_ended`, and the call is refused with 503 when the permissions service can't say. Only AUGUR's own frontends (the apps with platform scopes, ADR 0083: Admin and Deployment) carry the persona, and only to AUGUR's services; a call for any other app, or to an app's part, is refused while acting as one. A client can't claim a persona itself: like every caller header, `x-user-persona` and `x-augur-persona` are stripped before forwarding.
