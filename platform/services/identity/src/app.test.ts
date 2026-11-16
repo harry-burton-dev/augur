@@ -49,6 +49,10 @@ describe.runIf(DATABASE_URL)('identity', () => {
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { theme: 'pink' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { density: 'tiny' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { muted: ['board', 'board'] } })).statusCode).toBe(400);
+    // Which app opens an intent several handle (PER-468): kept as chosen, and nothing else in an entry.
+    expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { intentApps: [{ intent: 'document.open', app: 'library' }] } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/v1/me/preferences', headers: alex })).json().intentApps).toEqual([{ intent: 'document.open', app: 'library' }]);
+    expect((await app.inject({ method: 'PUT', url: '/v1/me/preferences', headers: alex, payload: { intentApps: [{ intent: 'document.open', app: 'library', why: 'x' }] } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'GET', url: '/v1/me/preferences' })).statusCode).toBe(401);
   });
 
