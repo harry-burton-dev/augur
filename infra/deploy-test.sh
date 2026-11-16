@@ -320,6 +320,22 @@ restore_keycloak() {
   pc exec -T postgres pg_restore -U platform -d keycloak --no-owner --role=keycloak < "$work/keycloak.dump"
 }
 
+# Going back when the older release can't run on the newer tables: the backup taken before the upgrade, put
+# back as Restore the database from a backup says (docs/src/content/docs/run/backups.md), with everything but
+# Postgres stopped. $1 is the dump, as the backup container names it. What it leaves must be the data from
+# before the upgrade: nothing lost (kept) and none of the newer release's tables left.
+restore_before() {
+  local dump=$1 errors
+  echo "Going back by restoring $dump, the backup from before the upgrade." >&2
+  pc stop >&2
+  pc up -d --no-deps postgres >&2
+  for _ in $(seq 60); do pc exec -T postgres pg_isready -U platform -d postgres >/dev/null 2>&1 && break; sleep 2; done
+  # Without ON_ERROR_STOP, as the page runs it: dropping what isn't there and the signed-in role give errors
+  # that mean nothing. Whether the data came back is judged on the tables after.
+  errors=$(pc run --rm --no-deps -T --entrypoint gunzip backup -c "$dump" | pc exec -T postgres psql -U platform -d postgres -q 2>&1 >/dev/null | grep -cE '(^|: )(ERROR|FATAL):' || true)
+  echo "The restore printed $errors errors; the tables decide." >&2
+}
+
 # The app ids a compose file's storage job retires (RETIRED_APPS, ADR 0075), one line. $1 is the deploy
 # folder to read; run in a subshell so `pc` reads that folder's compose file and .env.
 retired_in() (
@@ -713,6 +729,9 @@ case "$mode" in
     tables "$retired" > "$work/before"
     keycloak_from=$(keycloak_version)
     save_keycloak
+    # The backup the upgrade page says to take first, and the updater takes: it's what going back by restore uses.
+    before_dump=$(pc exec -T backup /bin/sh /backup/backup.sh --now | sed -n 's/^backup: wrote \(.*\/platform-[^ ]*\.sql\.gz\) .*/\1/p' | tail -n 1)
+    [ -n "$before_dump" ] || { echo "augur@$from: the backup before the upgrade wasn't taken (backup.sh --now)." >&2; exit 1; }
 
     use "$local_tag"
     up
@@ -738,6 +757,18 @@ case "$mode" in
     on_version "$from"
     tables "$retired" > "$work/back"
     kept "$work/after" "$work/back"
+
+    # And when its migrations can't run back: the same release on the backup from before the upgrade.
+    restore_before "$before_dump"
+    up
+    wait_ready "Back to augur@$from by restore" >/dev/null
+    # shellcheck disable=SC2086 # one service name per word
+    no_restarts $broken_before
+    on_version "$from"
+    tables "$retired" > "$work/restored"
+    kept "$work/before" "$work/restored"
+    newer=$(join -v1 <(cut -d' ' -f1 "$work/restored") <(cut -d' ' -f1 "$work/before") || true)
+    if [ -n "$newer" ]; then echo "The restore left tables augur@$from didn't have:"$'\n'"$newer" >&2; exit 1; fi
     ;;
   broken)
     use "$local_tag"

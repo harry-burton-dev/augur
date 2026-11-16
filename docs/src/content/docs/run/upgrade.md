@@ -118,7 +118,8 @@ migrated data:
    are still on the server, so nothing is downloaded.
 2. **Data**, only if the older services fail on the newer tables: restore the backup you took before upgrading,
    as in [Backups](../backups/#restore-the-database-from-a-backup). Anything changed since that backup is lost,
-   so check Admin → Activity first for what that is.
+   so check Admin → Activity first for what that is. Every release's deploy test goes back from it to the
+   release before both ways: on the newer tables, and by this restore of the backup taken before the upgrade.
 
 For one app rather than the whole of AUGUR, Deployment can go back to an earlier version of just that app
 ([The app runner](../app-runner/)).
