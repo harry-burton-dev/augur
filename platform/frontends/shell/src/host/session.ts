@@ -22,6 +22,12 @@ export const ACTION_STATUS = 'kc_action_status';
 export const CALLBACK_PATH = '/auth/callback';
 
 /**
+ * Where the sign-in service answers a hidden frame that asks, without showing anything, whether the person is still
+ * signed in there. The shell keeps tokens only in memory, so a reload or a new tab starts by asking this.
+ */
+export const SILENT_CALLBACK_PATH = '/auth/silent';
+
+/**
  * Asks the person for their password again, then returns to `?return=` (a path on this site).
  * For what an app wants a fresh sign-in for, such as Admin starting an upgrade.
  */
@@ -34,7 +40,7 @@ export interface Authenticator {
   getUser(): Promise<SignedIn | null>;
   signinRedirect(args?: { state?: unknown; prompt?: string; max_age?: number; extraQueryParams?: Record<string, string> }): Promise<void>;
   signinRedirectCallback(url?: string): Promise<SignedIn>;
-  signinSilent(): Promise<SignedIn | null>;
+  signinSilent(args?: { forceIframeAuth?: boolean }): Promise<SignedIn | null>;
   signoutRedirect(): Promise<void>;
 }
 
@@ -65,12 +71,19 @@ const withParam = (path: string, key: string, value: string) => {
   return `${url.pathname}${url.search}${url.hash}`;
 };
 
-/** A usable sign-in, renewed with the refresh token when it has expired. */
+/**
+ * A usable sign-in. When it has expired it is renewed with the refresh token, which the sign-in service replaces at
+ * each use. With none in memory (a reload, a new tab) or a refresh turned down, the sign-in service is asked in a
+ * hidden frame, which answers from its own session. Null when neither works and the person has to sign in.
+ */
 const current = async (auth: Authenticator): Promise<SignedIn | null> => {
   const user = await auth.getUser();
   if (user && !user.expired) return user;
-  if (!user?.refresh_token) return null;
-  return auth.signinSilent().catch(() => null);
+  if (user?.refresh_token) {
+    const renewed = await auth.signinSilent().catch(() => null);
+    if (renewed) return renewed;
+  }
+  return auth.signinSilent({ forceIframeAuth: true }).catch(() => null);
 };
 
 async function loadMe(fetchImpl: typeof fetch, url: string, token: string): Promise<User> {

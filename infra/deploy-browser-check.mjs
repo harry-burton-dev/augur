@@ -1,6 +1,7 @@
 // Opens a running AUGUR in a real browser, as its first admin would, and checks what unit and
 // contract tests can't see on a release's own images: sign-in works, the shell and the apps that
-// ship with it render, and the UI kit comes from KIT_URL, held to its hashes (ADR 0048).
+// ship with it render, the UI kit comes from KIT_URL, held to its hashes (ADR 0048), and the shell keeps no token in
+// the page's storage while a reload and a second tab stay signed in, in Chromium, Firefox and WebKit (PER-453).
 // infra/deploy-test.sh runs it in Playwright's container after a fresh install. See The deploy test in the AUGUR handbook, 03 Architecture/Engineering.
 //
 //   node deploy-browser-check.mjs <front door> <admin user> <admin password> <app id>...
@@ -16,7 +17,7 @@
 import { createHmac } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium } from 'playwright';
+import { chromium, firefox, webkit } from 'playwright';
 
 const [base, user, password, ...apps] = process.argv.slice(2);
 if (!base || !user || !password || apps.length === 0) {
@@ -140,6 +141,8 @@ try {
   for (const name of ['react', 'react-dom']) if (!map.imports[name]?.startsWith(kitBase)) fail(`${name} doesn't come from the kit (${map.imports[name] ?? 'not in the import map'})`);
   if (kitImports.length > 0 && unhashed.length === 0) pass(`the import map takes ${kitImports.length} kit entries from ${kitBase}, each with its hash`);
 
+  await keptInMemory(page, 'Chromium');
+
   for (const app of apps) {
     await page.goto(new URL(`/@me/${app}`, base).href);
     const frame = page.locator(`[data-app="${app}"]`).first();
@@ -164,6 +167,21 @@ try {
   }
 
   if (release) await throughTheRunner(release);
+
+  // The same in the other engines people use: Firefox's, and Safari's (WebKit).
+  for (const [name, engine] of [['Firefox', firefox], ['WebKit', webkit]]) {
+    const other = await engine.launch();
+    const otherPage = await other.newPage({ viewport: { width: 1440, height: 900 } });
+    try {
+      await signInAgain(otherPage);
+      await keptInMemory(otherPage, name);
+    } catch (err) {
+      fail(`${name}: stopped: ${err.message.split('\n')[0]}`);
+      await otherPage.screenshot({ path: join(out, `${name.toLowerCase()}-stopped.png`) }).catch(() => {});
+    } finally {
+      await other.close();
+    }
+  }
 } catch (err) {
   fail(`stopped: ${err.message.split('\n')[0]}`);
   // What was on screen, so a failure in CI can be read from its log alone.
@@ -172,6 +190,58 @@ try {
   await shot('stopped').catch(() => {});
 } finally {
   await browser.close();
+}
+
+/** Is this the shell, signed in, rather than the sign-in service's pages? */
+function isSignedIn(url) {
+  return url.origin === new URL(base).origin && !url.pathname.startsWith('/sso/');
+}
+
+/** Signs the first admin in on `p`, a page in another browser, with the password and one-time code set above. */
+async function signInAgain(p) {
+  await p.goto(base);
+  await p.locator('#username').fill(user);
+  await p.locator('#password').fill(account.password);
+  await p.locator('#kc-login').click();
+  // A deployment admin is asked for a one-time code; anyone else goes straight to the shell.
+  await Promise.race([p.locator('#otp').waitFor({ state: 'visible', timeout: 30_000 }), p.waitForURL(isSignedIn, { timeout: 30_000 })]);
+  if (await p.locator('#otp').count()) {
+    if (!account.totp) throw new Error('the sign-in asks for a one-time code the check doesn’t have');
+    await p.locator('#otp').fill(await freshTotp(account.totp));
+    await p.locator('[type=submit]').first().click();
+  }
+  await p.waitForURL(isSignedIn, { timeout: 30_000 });
+}
+
+/**
+ * The shell keeps its tokens in the page's memory, never in the page's storage, where any script on its origin could
+ * read them (PER-453): nothing in local or session storage holds one. Yet a reload and a second tab stay signed in,
+ * without the sign-in page: the shell asks the sign-in service in a hidden frame.
+ */
+async function keptInMemory(p, name) {
+  const home = new URL('/@me/home', base).href;
+  const opensSignedIn = async (q, what) => {
+    try {
+      await q.locator('[data-app="home"]').first().waitFor({ state: 'visible', timeout: 30_000 });
+      if (!isSignedIn(new URL(q.url()))) throw new Error(`it is at ${q.url()}`);
+      pass(`${name}: ${what} stays signed in, without the sign-in page`);
+    } catch (err) {
+      fail(`${name}: ${what} isn't signed in (${err.message.split('\n')[0]})`);
+    }
+  };
+  await p.goto(home);
+  await opensSignedIn(p, 'the shell');
+  const kept = await p.evaluate(() => [localStorage, sessionStorage].flatMap((store) => Object.keys(store).map((key) => [key, store.getItem(key) ?? ''])));
+  // oidc-client-ts's own key for a sign-in, or anything shaped like a JWT.
+  const tokens = kept.filter(([key, value]) => key.startsWith('oidc.user:') || /eyJ[\w-]+\.eyJ[\w-]+\./.test(value)).map(([key]) => key);
+  if (tokens.length > 0) fail(`${name}: the shell's page keeps a token in its storage (${tokens.join(', ')})`);
+  else pass(`${name}: no token in the shell page's storage (${kept.length} entries looked at)`);
+  await p.reload();
+  await opensSignedIn(p, 'a reload');
+  const tab = await p.context().newPage();
+  await tab.goto(home);
+  await opensSignedIn(tab, 'a second tab');
+  await tab.close();
 }
 
 /** The realm's OpenID Connect endpoints, under ISSUER. */

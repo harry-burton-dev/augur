@@ -6,6 +6,8 @@
   "loginWithEmailAllowed": true,
   "accessTokenLifespan": 300,
   "ssoSessionIdleTimeout": 28800,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
   "bruteForceProtected": true,
   "permanentLockout": false,
   "failureFactor": 10,

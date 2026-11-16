@@ -21,10 +21,18 @@ const at = (pathname: string, search = '') => ({ pathname, search, href: `http:/
 
 describe('startSession', () => {
   it('sends someone who is not signed in to sign in, remembering where they were', async () => {
-    const auth = fakeAuth(null);
+    const auth = fakeAuth(null, { signinSilent: vi.fn(async () => Promise.reject(new Error('login_required'))) });
     const result = await startSession(auth, { location: at('/library', '?q=1'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
     expect(result).toBe('redirecting');
     expect(auth.signinRedirect).toHaveBeenCalledWith({ state: '/library?q=1' });
+  });
+
+  it('stays signed in after a reload or in a new tab, asking the sign-in service in a hidden frame', async () => {
+    const auth = fakeAuth(null);
+    const session = await startSession(auth, { location: at('/library'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
+    expect(session).not.toBe('redirecting');
+    expect(auth.signinSilent).toHaveBeenCalledWith({ forceIframeAuth: true });
+    expect(auth.signinRedirect).not.toHaveBeenCalled();
   });
 
   it('asks for the password again when an app wants a fresh sign-in, then goes back', async () => {
@@ -82,7 +90,16 @@ describe('startSession', () => {
     const auth = fakeAuth({ access_token: 'old', refresh_token: 'r', expired: true });
     const session = await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
     expect(session).not.toBe('redirecting');
-    expect(auth.signinSilent).toHaveBeenCalled();
+    expect(auth.signinSilent).toHaveBeenCalledWith();
+  });
+
+  it('asks in the hidden frame when the sign-in service turns a refresh token down', async () => {
+    const signinSilent = vi.fn(async (args?: { forceIframeAuth?: boolean }) => (args?.forceIframeAuth ? { access_token: 'framed' } : Promise.reject(new Error('invalid_grant'))));
+    const auth = fakeAuth({ access_token: 'old', refresh_token: 'used', expired: true }, { signinSilent });
+    const fetchImpl = vi.fn(okFetch);
+    await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl });
+    expect(signinSilent.mock.calls.slice(0, 2)).toEqual([[], [{ forceIframeAuth: true }]]);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/identity/v1/me', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer framed' }) }));
   });
 
   it('says so plainly when the platform turns the sign-in down', async () => {
