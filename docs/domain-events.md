@@ -6,7 +6,7 @@ Services tell each other what happened through **domain events**: "folio.documen
 
 A topic is the publisher's id, then what happened, dotted and lowercase: `folio.document.published`. An app publishes only on its own topics (`<its id>.*`); `platform.*` belongs to the platform. Followers ask for exact topics or families: `folio.*`.
 
-An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. An app reads only the events on floors where it holds `events:subscribe`, and those on no floor (the organisation's); AUGUR's own services read every floor's (ADR 0104). A follower that needs more than the ids doesn't call the owning app: the gateway refuses one app calling another. It shows the person the thing through an intent (`ctx.raise`), and the owning app checks who may see it.
+An event carries **ids and a little context, never content**: `{ "document": "d7", "version": 3 }`, at most 16 KB. An app reads only the events on floors where it holds `events:subscribe`, and those on no floor (the organisation's); AUGUR's own services read every floor's (ADR 0104). An app's part can't call another app's (the gateway refuses it), so a follower works from the ids it is sent: where a person needs to see the thing, its frontend raises an intent (`ctx.raise`) and the owning app shows it, checking who may see it. AUGUR's own services may call an app's part.
 
 ## Declaring them
 
@@ -66,7 +66,7 @@ followEvents({
 }).start();
 ```
 
-Events come in the order they were committed, never with a gap: publishers take turns, so nothing gets a `seq` until the one before it has committed, and a follower can't pass a `seq` that is still to appear. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` in `.env` changes it). A follower that's been off for longer is told, never left to skip them silently: a read whose `after` is behind what was pruned answers **410** with `after`, how far events were pruned (ADR 0104). It must rebuild what it keeps from events (from its owner's API, as at the start), then read on with that `after`; `followEvents` calls its `onGap(after)` to do that, and without one each read fails saying so. A read with no `after` at all starts afresh from the oldest kept.
+Events come in the order they were committed, never with a gap: publishers take turns, so nothing gets a `seq` until the one before it has committed, and a follower can't pass a `seq` that is still to appear. They're kept for 30 days (`DOMAIN_EVENTS_KEEP_DAYS` in `.env` changes it). A follower that's been off for longer is told, never left to skip them silently: a read whose `after` is behind what was pruned answers **410** with `after`, how far events were pruned (ADR 0104). It must rebuild what it keeps from the events still kept (starting afresh, as at the start), then read on with that `after`; `followEvents` calls its `onGap(after)` to do that, and without one each read fails saying so. A read with no `after` at all starts afresh from the oldest kept.
 
 ### When someone leaves
 

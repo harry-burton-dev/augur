@@ -112,20 +112,10 @@ export interface Intent<T = unknown> {
 }
 
 // @public
-export class IntentCancelled extends Error {
-    constructor(message?: string);
-    // (undocumented)
-    name: string;
-}
-
-// @public (undocumented)
-export class IntentError extends Error {
-    // (undocumented)
-    name: string;
-}
+export const isIntentCancelled: (err: unknown) => boolean;
 
 // @public
-export const isIntentCancelled: (err: unknown) => boolean;
+export const isIntentError: (err: unknown) => boolean;
 
 // @public
 export const isMarkingOrNone: (v: unknown) => v is Marking | undefined;

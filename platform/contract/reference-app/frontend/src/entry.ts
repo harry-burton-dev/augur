@@ -4,7 +4,7 @@
  * every contribution the shell draws for it. Each check is a notice whose heading names it and whose
  * text is what it found, for the specs in tests/ to read; each button is something a test presses.
  */
-import { defineApp, type AppContext, type RemoteNode } from '@augur/mfe-sdk/sdk3';
+import { defineApp, isIntentCancelled, type AppContext, type RemoteNode } from '@augur/mfe-sdk/sdk3';
 
 const check = (name: string, found: string): RemoteNode => ({ type: 'quill-notice', props: { heading: `check ${name}` }, children: found });
 const button = (label: string, onPress: () => void): RemoteNode => ({ type: 'quill-button', props: { label, onPress } });
@@ -51,7 +51,7 @@ export default defineApp((ctx: AppContext) => {
         draw();
       },
       (err: Error) => {
-        answer = err.name === 'IntentCancelled' ? 'cancelled' : `failed: ${err.message}`;
+        answer = isIntentCancelled(err) ? 'cancelled' : `failed: ${err.message}`;
         draw();
       },
     );
