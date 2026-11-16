@@ -33,8 +33,8 @@ balancer or reverse proxy serves its HTTPS address and passes requests on to it,
 Have these ready. The preflight (step 3) checks what it can of them before anything starts.
 
 1. **A server**: Linux, with 4 CPUs, 16 GB of memory and 200 GB of disk for a staging or small production
-   server (AUGUR's memory limits are sized for 16 GB). It needs Docker with the Compose plugin
-   (`docker compose version` prints a version), curl and tar, and nothing else: no Node, no Tailscale.
+   server (AUGUR's memory limits are sized for 16 GB). It needs Docker with the Compose plugin, 2.24 or newer
+   (`docker compose version` prints it), curl and tar, and nothing else: no Node, no Tailscale.
 2. **Your tailnet.** In the [Tailscale admin console](https://login.tailscale.com/admin):
    - **DNS**: turn on MagicDNS and **HTTPS Certificates**. Note your tailnet name, for example
      `tail1234.ts.net`.
