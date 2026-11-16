@@ -81,7 +81,7 @@ test('augur-app migrations: sync writes the lock, and check holds what origin’
   mkdirSync(join(dir, 'node_modules/.bin'), { recursive: true });
   // pnpm's .bin entry finds Squawk from where it sits, so the app's runs the repository's by its own path.
   writeFileSync(join(dir, 'node_modules/.bin/squawk'), `#!/bin/sh\nexec "${squawk}" "$@"\n`, { mode: 0o755 });
-  writeFileSync(join(dir, 'service/package.json'), JSON.stringify({ name: '@apps/notes' }));
+  writeFileSync(join(dir, 'service/package.json'), JSON.stringify({ name: '@acme/notes' }));
   writeFileSync(join(dir, 'service/src/migrations.ts'), '');
   manifestAt('0.1.0');
   built(migrations.slice(0, 1));
