@@ -55,7 +55,7 @@ describe('the realm’s settings', () => {
     const changes: string[] = [];
     await applyRealmSettings(kc, REALM_FLOORS, changes);
     const put = calls.find((c) => c.method === 'PUT')!.body as Record<string, unknown>;
-    expect(put).toMatchObject({ ssoSessionIdleTimeout: 8 * 3600, ssoSessionMaxLifespan: 10 * 3600, eventsEnabled: true, adminEventsEnabled: true, webAuthnPolicyPasswordlessPasskeysEnabled: true, webAuthnPolicyRpEntityName: 'AUGUR' });
+    expect(put).toMatchObject({ ssoSessionIdleTimeout: 8 * 3600, ssoSessionMaxLifespan: 10 * 3600, revokeRefreshToken: true, refreshTokenMaxReuse: 0, eventsEnabled: true, adminEventsEnabled: true, webAuthnPolicyPasswordlessPasskeysEnabled: true, webAuthnPolicyRpEntityName: 'AUGUR' });
     expect(put.attributes).toEqual({ other: 'kept', adminEventsExpiration: String(365 * 86400) });
     expect(changes).toHaveLength(1);
     await applyRealmSettings(kc, REALM_FLOORS, changes);

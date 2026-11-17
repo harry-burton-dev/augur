@@ -4,13 +4,13 @@ import { check, failOnPageErrors, pane, reference } from './reference';
 
 /**
  * The policy the front door sends with every file under /apps/ (PER-453), read from where it is set
- * (infra/deploy/not-a-page.conf) so this can't drift from it. The front door sends it report-only for now;
- * here it is sent enforced. A browser takes a policy only from a document's or a worker's own script, and an
- * app's worker is /sandbox/'s bootstrap, so on the app's modules it changes nothing (the first test keeps it
- * that way); on a page or an SVG opened from /apps/ it stops every script (the rest).
+ * (infra/deploy/not-a-page.conf) so this can't drift from it, and enforced, as the front door sends it. A
+ * browser takes a policy only from a document's or a worker's own script, and an app's worker is /sandbox/'s
+ * bootstrap, so on the app's modules it changes nothing (the first test keeps it that way); on a page or an SVG
+ * opened from /apps/ it stops every script (the rest).
  */
 const conf = readFileSync(new URL('../../../infra/deploy/not-a-page.conf', import.meta.url), 'utf8');
-const policy = /^add_header Content-Security-Policy(?:-Report-Only)? "([^"]+)" always;$/m.exec(conf)?.[1];
+const policy = /^add_header Content-Security-Policy "([^"]+)" always;$/m.exec(conf)?.[1];
 if (!policy) throw new Error('infra/deploy/not-a-page.conf has no Content-Security-Policy line.');
 const enforced = { 'content-security-policy': policy, 'x-content-type-options': 'nosniff' };
 
@@ -62,12 +62,3 @@ for (const { file, type, body } of probes) {
     await page.waitForURL(/\/ran\?\d+$/);
   });
 }
-
-test('as the front door sends it today, report-only, the policy reports the script it would stop', async ({ page }) => {
-  const lines = consoleOf(page);
-  const { file, type, body } = probes[0];
-  await serve(page, file, type, body, { 'content-security-policy-report-only': policy, 'x-content-type-options': 'nosniff' });
-  await page.route(`**/apps/${reference.id}/1.0.0_probe/ran*`, (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: 'ran' }));
-  await page.goto(at(file));
-  await expect.poll(() => lines.join('\n')).toMatch(/\[Report Only\].*script/);
-});

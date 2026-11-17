@@ -9,6 +9,7 @@ const fakeAuth = (user: SignedIn | null, over: Partial<Authenticator> = {}): Aut
   signinRedirectCallback: vi.fn(async () => ({ access_token: 'fresh', state: '/library/doc/1?x=1' })),
   signinSilent: vi.fn(async () => ({ access_token: 'renewed' })),
   signoutRedirect: vi.fn(async () => {}),
+  removeUser: vi.fn(async () => {}),
   ...over,
 });
 
@@ -21,10 +22,18 @@ const at = (pathname: string, search = '') => ({ pathname, search, href: `http:/
 
 describe('startSession', () => {
   it('sends someone who is not signed in to sign in, remembering where they were', async () => {
-    const auth = fakeAuth(null);
+    const auth = fakeAuth(null, { signinSilent: vi.fn(async () => Promise.reject(new Error('login_required'))) });
     const result = await startSession(auth, { location: at('/library', '?q=1'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
     expect(result).toBe('redirecting');
     expect(auth.signinRedirect).toHaveBeenCalledWith({ state: '/library?q=1' });
+  });
+
+  it('stays signed in after a reload or in a new tab, asking the sign-in service in a hidden frame', async () => {
+    const auth = fakeAuth(null);
+    const session = await startSession(auth, { location: at('/library'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
+    expect(session).not.toBe('redirecting');
+    expect(auth.signinSilent).toHaveBeenCalledWith({ forceIframeAuth: true });
+    expect(auth.signinRedirect).not.toHaveBeenCalled();
   });
 
   it('asks for the password again when an app wants a fresh sign-in, then goes back', async () => {
@@ -82,7 +91,65 @@ describe('startSession', () => {
     const auth = fakeAuth({ access_token: 'old', refresh_token: 'r', expired: true });
     const session = await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
     expect(session).not.toBe('redirecting');
-    expect(auth.signinSilent).toHaveBeenCalled();
+    expect(auth.signinSilent).toHaveBeenCalledWith();
+  });
+
+  it('asks in the hidden frame when the sign-in service turns a refresh token down, and never sends that one again', async () => {
+    let user: SignedIn | null = { access_token: 'old', refresh_token: 'used', expired: true };
+    const signinSilent = vi.fn(async (args?: { forceIframeAuth?: boolean }) =>
+      args?.forceIframeAuth ? (user = { access_token: 'framed' }) : Promise.reject(new Error('invalid_grant')),
+    );
+    const removeUser = vi.fn(async () => {
+      user = null;
+    });
+    const auth = fakeAuth(null, { getUser: vi.fn(async () => user), signinSilent, removeUser });
+    const fetchImpl = vi.fn(okFetch);
+    await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl });
+    expect(signinSilent.mock.calls).toEqual([[], [{ forceIframeAuth: true }]]);
+    expect(removeUser).toHaveBeenCalledTimes(1);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/identity/v1/me', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer framed' }) }));
+  });
+
+  it('renews a sign-in about to run out before using it, once, with its refresh token', async () => {
+    let user: SignedIn = { access_token: 'old', refresh_token: 'r', expires_in: 10 };
+    const signinSilent = vi.fn(async () => (user = { access_token: 'renewed', refresh_token: 'r2', expires_in: 300 }));
+    const auth = fakeAuth(null, { getUser: vi.fn(async () => user), signinSilent });
+    const fetchImpl = vi.fn(okFetch);
+    await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl });
+    expect(signinSilent.mock.calls).toEqual([[]]);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/identity/v1/me', expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer renewed' }) }));
+  });
+
+  it('renews an open tab in the background when the sign-in client says its token is about to run out', async () => {
+    let user: SignedIn = { access_token: 'first', refresh_token: 'r1', expires_in: 300 };
+    let expiring = () => {};
+    const signinSilent = vi.fn(async () => (user = { access_token: 'second', refresh_token: 'r2', expires_in: 300 }));
+    const auth = fakeAuth(null, { getUser: vi.fn(async () => user), signinSilent, events: { addAccessTokenExpiring: (callback) => (expiring = callback) } });
+    await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
+    expect(signinSilent).not.toHaveBeenCalled();
+    user = { ...user, expires_in: 50 };
+    expiring();
+    await vi.waitFor(() => expect(signinSilent).toHaveBeenCalledTimes(1));
+  });
+
+  it('runs one renewal at a time, shared by every call waiting for a token, since a refresh token works once', async () => {
+    let user: SignedIn = { access_token: 'first', refresh_token: 'r1' };
+    let finish = () => {};
+    const signinSilent = vi.fn(
+      () =>
+        new Promise<SignedIn>((resolve) => {
+          finish = () => resolve((user = { access_token: 'second', refresh_token: 'r2' }));
+        }),
+    );
+    const auth = fakeAuth(null, { getUser: vi.fn(async () => user), signinSilent });
+    const session = await startSession(auth, { location: at('/'), history: { replaceState: vi.fn() }, fetchImpl: okFetch });
+    if (session === 'redirecting') throw new Error('expected a session');
+    user = { ...user, expired: true };
+    const tokens = Promise.all([session.getToken(), session.getToken(), session.getToken()]);
+    await vi.waitFor(() => expect(signinSilent).toHaveBeenCalled());
+    finish();
+    expect(await tokens).toEqual(['second', 'second', 'second']);
+    expect(signinSilent).toHaveBeenCalledTimes(1);
   });
 
   it('says so plainly when the platform turns the sign-in down', async () => {

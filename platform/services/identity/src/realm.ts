@@ -143,6 +143,10 @@ export const realmSettings = (s: RealmSettings, displayName?: string) => ({
   passwordPolicy: passwordPolicy(s),
   ssoSessionIdleTimeout: s.sessionIdleHours * HOUR,
   ssoSessionMaxLifespan: s.sessionMaxHours * HOUR,
+  // Each refresh token works once: the sign-in service hands a new one with every refresh and refuses a used one,
+  // so a refresh token taken from a page is worth nothing after the page's next refresh (PER-453).
+  revokeRefreshToken: true,
+  refreshTokenMaxReuse: 0,
   eventsEnabled: true,
   eventsExpiration: s.signInEventDays * DAY,
   adminEventsEnabled: true,

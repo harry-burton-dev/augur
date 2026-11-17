@@ -1,10 +1,10 @@
 // The kit's own CSS (tokens, Common, Quill) is linked from the kit bundle, before this (vite.config.ts).
 import '@augur/shell-kit/kit.css';
 import './shell.css';
-import { UserManager } from 'oidc-client-ts';
+import { InMemoryWebStorage, UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import { createRoot } from 'react-dom/client';
 import { Host, SignInProblem } from './App.js';
-import { CALLBACK_PATH, startSession } from './host/index.js';
+import { CALLBACK_PATH, RENEW_WITHIN_SECONDS, SILENT_CALLBACK_PATH, startSession } from './host/index.js';
 import { Contained } from './host/contained.js';
 import { startTelemetry } from './host/telemetry.js';
 
@@ -14,25 +14,41 @@ const auth = new UserManager({
   authority: new URL(import.meta.env.VITE_OIDC_AUTHORITY ?? 'http://localhost:8180/realms/platform', window.location.origin).href.replace(/\/$/, ''),
   client_id: import.meta.env.VITE_OIDC_CLIENT_ID ?? 'shell',
   redirect_uri: `${window.location.origin}${CALLBACK_PATH}`,
+  silent_redirect_uri: `${window.location.origin}${SILENT_CALLBACK_PATH}`,
   post_logout_redirect_uri: `${window.location.origin}/`,
   scope: 'openid profile email',
-  automaticSilentRenew: true,
+  // Renewed only by session.ts, one renewal at a time (the sign-in service takes each refresh token once, so the
+  // client's own timer renewing beside it would race it), when a call needs a token or this says one is about to run out.
+  automaticSilentRenew: false,
+  accessTokenExpiringNotificationTimeInSeconds: RENEW_WITHIN_SECONDS,
+  // Tokens are kept in this page's memory only, never in its storage, where any script on this origin could read
+  // them (PER-453). A reload or a new tab asks the sign-in service again (session.ts). Only a sign-in's passing
+  // state (its PKCE verifier) is kept in storage, to survive the trip to the sign-in page.
+  userStore: new WebStorageStateStore({ store: new InMemoryWebStorage() }),
 });
 
-const root = createRoot(document.getElementById('root')!);
+// Releases before PER-453 kept the sign-in in session storage (oidc-client-ts's `oidc.user:` keys): take it out.
+for (const key of Object.keys(window.sessionStorage)) if (key.startsWith('oidc.user:')) window.sessionStorage.removeItem(key);
 
-startSession(auth, { location: window.location, history: window.history })
-  .then((session) => {
-    if (session === 'redirecting') return;
-    // A throw the shell's own parts don't hold stops only this, and says so (FE-3), rather than leaving a blank page.
-    root.render(
-      <Contained part="The screen" page again={{ label: 'Reload', onPress: () => window.location.reload() }}>
-        <Host session={session} />
-      </Contained>,
-    );
-    // Browser errors and traces, when this deployment collects them (ADR 0059). Never in the way of the first screen.
-    void startTelemetry({ getToken: () => session.getToken(), version: __SHELL_VERSION__ });
-  })
-  .catch((err: Error) => {
-    root.render(<SignInProblem message={err.message} onSignIn={() => void auth.signinRedirect({ state: '/' })} />);
-  });
+if (window.location.pathname === SILENT_CALLBACK_PATH) {
+  // This page in the hidden frame: hand the sign-in service's answer to the page that asked, and draw nothing.
+  void auth.signinSilentCallback().catch(() => undefined);
+} else {
+  const root = createRoot(document.getElementById('root')!);
+
+  startSession(auth, { location: window.location, history: window.history })
+    .then((session) => {
+      if (session === 'redirecting') return;
+      // A throw the shell's own parts don't hold stops only this, and says so (FE-3), rather than leaving a blank page.
+      root.render(
+        <Contained part="The screen" page again={{ label: 'Reload', onPress: () => window.location.reload() }}>
+          <Host session={session} />
+        </Contained>,
+      );
+      // Browser errors and traces, when this deployment collects them (ADR 0059). Never in the way of the first screen.
+      void startTelemetry({ getToken: () => session.getToken(), version: __SHELL_VERSION__ });
+    })
+    .catch((err: Error) => {
+      root.render(<SignInProblem message={err.message} onSignIn={() => void auth.signinRedirect({ state: '/' })} />);
+    });
+}

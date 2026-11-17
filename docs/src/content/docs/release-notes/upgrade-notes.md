@@ -9,6 +9,14 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## Sign-ins are kept in the page's memory, and refresh tokens work once
+
+**From** unreleased
+
+The shell no longer keeps anyone's tokens in the browser's session storage, where any script running on AUGUR's address could read them: it holds them in the page's memory only. A reload or a new tab now gets a sign-in from the sign-in service in a hidden frame, so people stay signed in without seeing the sign-in page. An open tab renews its sign-in shortly before it runs out, as before, so it stays signed in up to the realm's maximum session length. The realm job also turns on refresh token rotation (`revokeRefreshToken`): each refresh token works once, and a used one is refused. A sign-in an earlier release left in a tab's session storage is removed the first time that tab opens AUGUR again. Nothing to do on the server.
+
+The Content-Security-Policy on files under `/apps/`, `/assets/` and `/shared/` is now enforced, where it was report-only, so a page or an SVG opened from there runs no script. No app AUGUR knows of serves one, so nothing changes for them.
+
 ## An app's calls for a person are checked on the floor they stand on
 
 **From** unreleased
