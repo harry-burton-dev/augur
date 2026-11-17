@@ -16,9 +16,10 @@ const specFile = '/etc/augur/made-secrets.json';
 const madeDir = '/secrets/made';
 const forDir = '/secrets/for';
 
-const made = madeNames(JSON.parse(readFileSync(schemaFile, 'utf8')));
+const schema = JSON.parse(readFileSync(schemaFile, 'utf8'));
+const made = madeNames(schema);
 const spec = JSON.parse(readFileSync(specFile, 'utf8')) as SecretsSpec;
-const problems = specProblems(spec, made, env);
+const problems = specProblems(spec, made, Object.keys(schema.properties ?? {}));
 if (problems.length) {
   for (const problem of problems) log.error(`${specFile}: ${problem}`);
   process.exit(1);

@@ -54,6 +54,9 @@ const refers = (value, key) => new RegExp(`\\$\\{${key}(?=[}:?-])`).test(value);
 const reaches = (service, key, internal, made = false) =>
   made || (internal ? key in service.environment || `${key}_FILE` in service.environment : service.envFile || Object.values(service.environment).some((v) => refers(v, key)));
 
+/** Each key a settings file sets, with its value. */
+export const defaultsIn = (text) => Object.fromEntries([...text.matchAll(new RegExp(`^(${keyPattern})=(.*)$`, 'gm'))].map((m) => [m[1], m[2]]));
+
 /** The keys .env.example lists, set or commented out. */
 export const envExampleKeys = (text) => [...text.matchAll(new RegExp(`^#?\\s*(${keyPattern})=`, 'gm'))].map((m) => m[1]);
 
@@ -227,6 +230,7 @@ export const settingsProblems = ({ schema, files, code }) => {
       if (!setting) problems.push(`${key}: in ${CONFIG_DEFAULTS}, but not in settings.schema.json.`);
       else if (setting.writeOnly || setting['x-generate']) problems.push(`${key}: a secret, so it can't have a default in ${CONFIG_DEFAULTS}.`);
       else if (setting['x-internal']) problems.push(`${key}: in ${CONFIG_DEFAULTS}, but the schema says nobody sets it (x-internal).`);
+      else if ('default' in setting && String(setting.default) !== defaultsIn(files[CONFIG_DEFAULTS])[key]) problems.push(`${key}: ${CONFIG_DEFAULTS} sets ${defaultsIn(files[CONFIG_DEFAULTS])[key]}, but its default in the schema is ${setting.default}.`);
       else for (const name of setting['x-services'] ?? []) if (services[name] && !reaches(services[name], key, false)) problems.push(`${key}: ${name} reads it, but reads neither ${CONFIG_DEFAULTS} nor its value from compose.yml.`);
     }
 

@@ -179,6 +179,8 @@ test('takes a setting Compose reads in one of the deploy folder’s other compos
 test('holds config.env to the schema: known, not a secret, not internal', () => {
   const withDefaults = (text) => check({ files: { ...files, 'infra/deploy/config.env': text } });
   assert.deepEqual(withDefaults('# The feed.\nRELEASE_FEED_URL=https://feed.example.org\n'), []);
+  const s = { ...schema, properties: { ...schema.properties, RELEASE_FEED_URL: { ...schema.properties.RELEASE_FEED_URL, default: 'https://other.example.org' } } };
+  assert.deepEqual(check({ schema: s, files: { ...files, 'infra/deploy/config.env': 'RELEASE_FEED_URL=https://feed.example.org\n' } }), ['RELEASE_FEED_URL: infra/deploy/config.env sets https://feed.example.org, but its default in the schema is https://other.example.org.']);
   assert.deepEqual(withDefaults('POSTGRES_PASSWORD=x\nPORT=1\nUNKNOWN=1\n'), [
     "POSTGRES_PASSWORD: a secret, so it can't have a default in infra/deploy/config.env.",
     'PORT: in infra/deploy/config.env, but the schema says nobody sets it (x-internal).',

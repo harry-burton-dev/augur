@@ -70,6 +70,9 @@ x-service: &service
     OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
     # Its own secrets, which the make-secrets job writes into its own volume (made-secrets.json; ADR 0107).
     SECRETS_DIR: /run/augur/secrets
+    # Only the registry and models let the permissions service decide (they set it again from .env): .env reaches every
+    # service, and the others read the same name through the service kit.
+    PERMISSIONS_DECIDES: ""
   depends_on:
     postgres: { condition: service_healthy }
 
@@ -478,6 +481,8 @@ services:
       # The key it signs callers with, and the one that comes next while it is being changed (docs/signed-caller.md).
       # CALLER_SIGNING_KEY itself is in its own secrets (make-secrets writes it).
       SECRETS_DIR: /run/augur/secrets
+      # Only the registry and models let the permissions service decide (.env reaches every service).
+      PERMISSIONS_DECIDES: ""
     volumes:
       # Only the results the backup container writes for Status, never the backups themselves.
       - ./backups/status:/backups:ro
@@ -529,6 +534,8 @@ services:
       PORT: 8082
       # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
       PERMISSIONS_URL: http://permissions:8087
+      # The checks it decides instead, once moved over: empty, every check is only compared.
+      PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
       # Its sign-in secret, its own login (owning only the registry schema), Grafana's key to tell admins of an
       # alert (ALERT_WEBHOOK_TOKEN, ADR 0059) and the frontends bucket's key come from its own secrets.
       # Asked at install what the knowledge graph offers apps.
@@ -584,6 +591,8 @@ services:
       PORT: 8085
       # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
       PERMISSIONS_URL: http://permissions:8087
+      # The checks it decides instead, once moved over: empty, every check is only compared.
+      PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
     volumes:
       - secrets-models:/run/augur/secrets:ro
     depends_on: *own-login
