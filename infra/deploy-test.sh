@@ -668,7 +668,8 @@ secrets_kept_out() {
       for file in $(jq -r '.value | keys[]' <<< "$entry"); do
         # The template with each {NAME} filled in from what was made (the test's .env sets no others).
         want=$(jq -r --arg f "$file" --argjson made "$made" '.value[$f] | gsub("\\{(?<n>[A-Z][A-Z0-9_]*)\\}"; $made[.n] // "")' <<< "$entry")
-        got=$(docker exec "$id" cat "/run/augur/secrets/$file" 2>/dev/null || echo "<none>")
+        # Copied out rather than cat inside: Garage's image has no shell or cat.
+        got=$(docker cp "$id:/run/augur/secrets/$file" - 2>/dev/null | tar -xO 2>/dev/null || echo "<none>")
         if [ "$got" != "$want" ]; then bad="$bad $service:file($file)"; fi
       done
     done
