@@ -42,7 +42,7 @@ describe('an item’s row', () => {
     expect(openProblem(item('a'), where)).toBeUndefined();
     expect(openProblem(item('a', { app: 'gone' }), where)).toBe('gone is turned off on Finance, or was removed. An admin can turn it on in Admin, Apps.');
     expect(openProblem(item('a'), { ...where, manifest: [app('mandate', { sdk: '^9.0.0' })] })).toContain('newer version');
-    expect(openProblem(item('a'), { ...where, manifest: [app('mandate', { inPage: undefined })] })).toContain('IN_PAGE_APPS');
+    expect(openProblem(item('a'), { ...where, manifest: [app('mandate', { inPage: undefined })] })).toContain('app contract');
     expect(openProblem(item('a', { workspace: { id: 'me', path: ['me'] } }), where)).toBeUndefined();
     expect(openProblem(item('a', { workspace: { id: 'old', path: ['old'] } }), where)).toContain('no longer on');
     expect(openProblem(item('a', { redacted: true }), where)).toContain('leads');

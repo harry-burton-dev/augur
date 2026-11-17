@@ -109,7 +109,7 @@ export const ServedEntry = Type.Intersect([
   ref(AppManifestEntry),
   Type.Object({
     previewsOn: Type.Optional(Type.Array(Type.String(), { description: "In the catalogue the registry serves: the ids of the app's previews on for the caller (SDK 1.7)" })),
-    inPage: Type.Optional(Type.Literal(true, { description: "An app on contract 2 the shell may load into its own page: one of AUGUR's own, or one the deployment names in IN_PAGE_APPS. The shell opens no other contract 2 app (ADR 0076)" })),
+    inPage: Type.Optional(Type.Literal(true, { description: "One of AUGUR's own frontends on contract 2, which the shell loads into its own page. The shell opens no other contract 2 app (ADR 0076)" })),
   }),
 ]);
 

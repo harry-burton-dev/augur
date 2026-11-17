@@ -2,6 +2,8 @@
 
 This takes you from nothing to an app running in AUGUR's shell. An app is three things in `apps/<id>/`: a **frontend** the shell mounts, a **service** with the app's own API, and a **manifest** that tells the registry about both. The app reaches the platform only through `@augur/mfe-sdk` (in the browser), `@augur/service-kit` (in its service) and the gateway. It never imports another app, and the platform never imports it.
 
+**Contract 2 is retired.** The registry refuses every contract 2 manifest (error `contract_2`), so the parts of this guide where an app's service, or `pnpm register-app`, registers the app itself no longer work: on the app contract the app runner installs a release and registers it. Those parts are being rewritten for the app contract.
+
 ## 1. Start it
 
 Every app starts from [augur-app-template](https://github.com/harry-burton-dev/augur-app-template), in a repository of its own (ADR 0077). On GitHub, **Use this template** to make `augur-expenses`, clone it next to your AUGUR checkout, and name it:
@@ -79,7 +81,7 @@ Everything you need from outside your app comes through `ctx`:
 | `ctx.intent`, `ctx.reply` | Present when your app was opened to handle an intent, or to answer a request (`reply.respond(result)`) |
 | `ctx.bus` | Events within the page. The shell also puts every domain event on your floor from the apps the person has there, and the platform's, on it under its topic: `ctx.bus.on('folio.document.published', …)`, or `useData(…, { refreshOn: [topic] })` in the app kit ([domain-events.md](domain-events.md#in-the-browser)). A handler that throws, or whose promise rejects, is logged with its topic and never stops the others |
 
-**What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only AUGUR's own apps load this way now (ADR 0076): the registry refuses a contract 2 manifest for any other app, and the shell won't open one, unless the deployment names it in `IN_PAGE_APPS` while it moves to the app contract ([The app runner](src/content/docs/run/app-runner.md#apps-made-before-the-app-contract)). Every other app runs sandboxed on the app contract, with a token limited to its own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
+**What your app can reach.** Your app runs in the shell's own window with the signed-in person's session, so it can call anything that person can, admin routes included. That's why only AUGUR's own apps load this way now (ADR 0076): the registry refuses every contract 2 manifest, and the shell won't open one that isn't AUGUR's own ([The app runner](src/content/docs/run/app-runner.md#apps-made-before-the-app-contract)). Every other app runs sandboxed on the app contract, with a token limited to its own upstreams. Your service still only gets the scopes the registry granted it, and the gateway still applies floor rules on every call.
 
 Build screens from Quill's parts (`@augur/app-kit`, which also carries all of Common; see them in the `augur-kit` repository's Storybook) and AUGUR's tokens (`var(--space-6)`, `var(--ink)`). Don't bundle your own copy of React or the kit: the shell serves one copy to every app, and `vite.config.ts` keeps them out of your bundle (`isSharedModule`). Anything else you import, you bundle. Lit and the Lit kit (`@augur/ui-kit`) went with SDK 2: an app that still imports them doesn't load.
 

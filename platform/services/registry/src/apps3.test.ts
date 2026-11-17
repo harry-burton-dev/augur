@@ -77,7 +77,7 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
     const v2 = { id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/x/evil.js', version: '1.2.1', sdk: '^2.0.0' };
     const res = await t.register(v2);
     expect(res.statusCode).toBe(403);
-    expect(res.json().message).toBe('Notes is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.');
+    expect(res.json()).toMatchObject({ error: 'contract_2', message: 'Notes is installed on the app contract: it registers only as the release the app runner installs, never as a contract 2 manifest.' });
     expect((await t.register(v2, fresh())).statusCode).toBe(403);
   });
 
@@ -88,6 +88,35 @@ describe.runIf(DATABASE_URL)('an app on contract 3 in the catalogue', () => {
     await t.register(release.manifest);
     expect((await t.server.inject({ method: 'DELETE', url: '/v1/apps/notes', headers: fresh() })).statusCode).toBeLessThan(300);
     expect((await t.register(release.manifest)).json().message).toBe('An admin removed Notes, so it can’t register itself again. An admin has to install it again.');
+  });
+
+  it('comes back when an admin installs it again after removing it', async () => {
+    const t = await setup();
+    const release = releaseOf('notes', '1.2.0');
+    await t.install(release, 'done');
+    await t.register(release.manifest);
+    await t.server.inject({ method: 'DELETE', url: '/v1/apps/notes', headers: fresh() });
+    await t.install(release);
+    expect((await t.register(release.manifest)).statusCode).toBe(201);
+    expect(await db.store.removed('notes')).toBe(false);
+  });
+
+  it('can’t take a route another app already has', async () => {
+    const t = await setup();
+    // One registered on contract 2 before it was retired, at the route Notes would have.
+    await db.seed({ id: 'papers', name: 'Papers', route: '/notes', entry: '/apps/papers/entry.js', version: '0.1.0', sdk: '^2.0.0' });
+    const release = releaseOf('notes', '1.2.0');
+    await t.install(release);
+    const res = await t.register(release.manifest);
+    expect(res.statusCode).toBe(409);
+    expect(res.json().message).toBe('Papers already lives at /notes.');
+  });
+
+  it('still registers when the audit log can’t be reached', async () => {
+    const t = await setup({ audit: async () => Promise.reject(new Error('events is down')) });
+    const release = releaseOf('notes', '1.2.0');
+    await t.install(release);
+    expect((await t.register(release.manifest)).statusCode).toBe(201);
   });
 
   it('is granted the scopes a later version adds once an admin has had it installed', async () => {

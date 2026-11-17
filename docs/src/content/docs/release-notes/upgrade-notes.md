@@ -181,7 +181,7 @@ Connections an app's parts already held open to Postgres or the object store end
 
 **From** unreleased
 
-If you run an app on contract 2 that AUGUR didn't make (today, Mandate or Explorer), it stops opening after this upgrade: it stays in the app bar and says why. Code loaded into the shell's page runs as the shell, with the person's sign-in, so only AUGUR's own apps load there now; every other app runs in the sandbox on the app contract. The registry also refuses a new contract 2 manifest for any other app. While an app's team moves it to the app contract, you can let it load in the page on this server: name it in `IN_PAGE_APPS` (ids split by commas or spaces) in `.env`, then `pc up -d registry`. Take it out again once the app is released on the app contract.
+If you run an app on contract 2 that AUGUR didn't make (today, Mandate or Explorer), it stops opening after this upgrade: it stays in the app bar and says why. Code loaded into the shell's page runs as the shell, with the person's sign-in, so only AUGUR's own apps load there now; every other app runs in the sandbox on the app contract. The registry also refuses every contract 2 manifest (error `contract_2`), so such an app can't register again either: it opens once its team releases it on the app contract, or remove it in Admin → Apps.
 
 ## Services wait for their database, and stop cleanly
 

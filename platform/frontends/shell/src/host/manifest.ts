@@ -44,7 +44,7 @@ export const keepSame = (was: readonly AppManifestEntry[], now: AppManifestEntry
   return kept.length === was.length && kept.every((a, i) => a === was[i]) ? (was as AppManifestEntry[]) : kept;
 };
 
-/** A catalogue entry the registry allows into the shell's own page: AUGUR's own frontends, and IN_PAGE_APPS. */
+/** A catalogue entry the registry allows into the shell's own page: only AUGUR's own frontends. */
 export type InPageApp = AppManifestEntry & { inPage?: boolean };
 
 /**
@@ -55,7 +55,7 @@ export type InPageApp = AppManifestEntry & { inPage?: boolean };
 export const inPageRefusal = (app: InPageApp): string | undefined =>
   isWorkerApp(app) || app.inPage === true
     ? undefined
-    : `${app.name} loads into AUGUR's own page, which only AUGUR's own apps may. Its team needs to release it on the app contract; until then an admin can allow it on this deployment with IN_PAGE_APPS.`;
+    : `${app.name} loads into AUGUR's own page, which only AUGUR's own apps may. Its team needs to release it on the app contract.`;
 
 /**
  * Why this shell can't open an app, or undefined when it can: one it may not load into its page (inPageRefusal),

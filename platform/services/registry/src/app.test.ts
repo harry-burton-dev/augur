@@ -53,28 +53,30 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(res.statusCode).toBe(200);
   });
 
-  it("refuses a contract 2 app it wasn't told may load into the shell's page, and marks the ones that may", async () => {
-    const app = await db.app({ verifyService, inPageApps: [] });
-    const refused = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
-    expect(refused.statusCode).toBe(403);
-    expect(refused.json().message).toMatch(/Library loads into AUGUR.s own page.*app contract.*IN_PAGE_APPS/);
+  it('refuses every contract 2 manifest, with a reason, and never marks one kept from before as loading into the shell’s page', async () => {
+    const app = await db.app({ verifyService });
+    for (const headers of [service, admin, as('platform-updater')]) {
+      const refused = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers, payload: library });
+      expect(refused.statusCode).toBe(403);
+      expect(refused.json()).toMatchObject({ error: 'contract_2', reason: 'contract_2', message: 'Library 0.1.0 speaks contract 2, and this AUGUR serves 3; the app needs a release on contract 3.' });
+    }
+    // Who may register is checked first: no one else learns anything about the app.
+    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: editor, payload: library })).json().error).toBe('forbidden');
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('library');
 
-    const allowed = await db.app({ verifyService, inPageApps: ['library'] });
-    expect((await allowed.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
-    const served = (await allowed.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json() as { id: string; inPage?: boolean; contract?: number }[];
-    expect(served.find((a) => a.id === 'library')?.inPage).toBe(true);
+    // One registered before: still listed, so the shell can say why it won't open it.
+    await db.seed(library);
+    const served = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json() as { id: string; inPage?: boolean; contract?: number }[];
+    expect(served.find((a) => a.id === 'library')).toMatchObject({ id: 'library' });
+    expect(served.find((a) => a.id === 'library')?.inPage).toBeUndefined();
     expect(served.find((a) => a.id === 'home')?.inPage).toBe(true);
     expect(served.find((a) => a.id === 'admin')).toMatchObject({ contract: 3 });
     expect(served.find((a) => a.id === 'admin')?.inPage).toBeUndefined();
-    // One registered before, and no longer allowed: still listed, so the shell can say why it won't open it.
-    const later = await db.app({ verifyService, inPageApps: [] });
-    expect((await later.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json().find((a: { id: string }) => a.id === 'library')?.inPage).toBeUndefined();
   });
 
   it('hides apps that need a role the caller lacks', async () => {
     const app = await db.app({ verifyService });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, requiredRole: 'admin' } });
+    await db.seed({ ...library, requiredRole: 'admin' });
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toEqual(['home']);
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toEqual(['home', 'admin', 'upgrades', 'library']);
   });
@@ -92,13 +94,13 @@ describe.runIf(DATABASE_URL)('registry', () => {
   it('shows admins the whole catalogue, and lets them turn an app off and on', async () => {
     const entries: { action: string }[] = [];
     const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await db.seed(library);
     const patch = (enabled: boolean, headers = admin, id = 'library') => app.inject({ method: 'PATCH', url: `/v1/apps/${id}`, headers, payload: { enabled } });
     expect((await patch(false, editor)).statusCode).toBe(403);
     expect((await patch(false)).json()).toMatchObject({ id: 'library', enabled: false, registeredBy: 'library' });
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('library');
-    // Registering again (as the app's service does on every start) leaves it off.
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
+    // A new version leaves it off.
+    await db.seed({ ...library, version: '0.2.0' });
     const catalogue = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
     expect(catalogue).toContainEqual(expect.objectContaining({ id: 'library', version: '0.2.0', enabled: false, platform: false }));
     expect(catalogue).toContainEqual(expect.objectContaining({ id: 'admin', platform: true, enabled: true }));
@@ -107,16 +109,16 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json())).toContain('library');
     expect((await patch(false, admin, 'admin')).statusCode).toBe(409);
     expect((await patch(false, admin, 'nothing')).statusCode).toBe(404);
-    expect(entries.map((e) => e.action)).toEqual(['app.registered', 'app.disabled', 'app.updated', 'app.enabled']);
+    expect(entries.map((e) => e.action)).toEqual(['app.disabled', 'app.enabled']);
   });
 
   it('tells the gateway how much an app may be sent, which only an admin can lower', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
     const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
     const served = async () => (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library');
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await db.seed(library);
     expect((await served()).maxUpload).toBe(10);
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, maxUpload: 200 } });
+    await db.seed({ ...library, maxUpload: 200 });
     expect((await served()).maxUpload).toBe(200);
     const limit = (mb: number | null, headers = admin) => app.inject({ method: 'PUT', url: '/v1/apps/library/upload-limit', headers, payload: { mb } });
     expect((await limit(50, editor)).statusCode).toBe(403);
@@ -124,29 +126,11 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect((await limit(50)).json()).toMatchObject({ id: 'library', maxUpload: 200, uploadLimit: 50, uploadLimitLowered: true });
     expect((await served()).maxUpload).toBe(50);
     // A new version keeps the admin's limit.
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', maxUpload: 200 } });
+    await db.seed({ ...library, version: '0.2.0', maxUpload: 200 });
     expect((await served()).maxUpload).toBe(50);
     expect((await limit(null)).json().uploadLimit).toBe(200);
     expect((await app.inject({ method: 'PUT', url: '/v1/apps/nothing/upload-limit', headers: admin, payload: { mb: 5 } })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, maxUpload: 5000 } })).statusCode).toBe(400);
     expect(entries.filter((e) => e.action === 'app.upload-limit-set').map((e) => e.detail)).toEqual([{ mb: 50 }, { mb: null }]);
-  });
-
-  it('lets an app’s service register it, signed in as itself', async () => {
-    const app = await db.app({ verifyService });
-    const first = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
-    const again = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
-    expect([first.statusCode, again.statusCode]).toEqual([201, 200]);
-    const manifest = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json();
-    expect(manifest).toContainEqual({ ...library, version: '0.2.0', maxUpload: 10, inPage: true });
-  });
-
-  it('lets an admin register an app, but no one else', async () => {
-    const app = await db.app({ verifyService });
-    const byAdmin = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: admin, payload: library });
-    const byEditor = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: editor, payload: library });
-    const notAToken = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: { authorization: 'Bearer guess' }, payload: library });
-    expect([byAdmin.statusCode, byEditor.statusCode, notAToken.statusCode]).toEqual([201, 403, 403]);
   });
 
   it('trusts no service token when it has no way to check one', async () => {
@@ -160,18 +144,6 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const put = (url: string, payload: object) => app.inject({ method: 'PUT', url, headers: service, payload });
     expect((await put('/v1/apps/library', { ...library, route: 'library' })).statusCode).toBe(400);
     expect((await put('/v1/apps/library', { ...library, extra: true })).statusCode).toBe(400);
-    const mismatched = await app.inject({ method: 'PUT', url: '/v1/apps/other', headers: admin, payload: library });
-    expect(mismatched.statusCode).toBe(400);
-  });
-
-  it('needs a semver version and the SDK range the app works with', async () => {
-    const app = await db.app({ verifyService });
-    const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
-    const { sdk: _, ...noSdk } = library;
-    expect((await put(noSdk)).statusCode).toBe(400);
-    expect((await put({ ...library, version: 'latest' })).json().message).toMatch(/not a semver version/);
-    expect((await put({ ...library, sdk: 'whatever' })).json().message).toMatch(/not a semver range/);
-    expect((await put({ ...library, version: '1.4.0-rc.1', sdk: '>=1.2.0 <3' })).statusCode).toBe(201);
   });
 
   it('serves its API under /v1 only', async () => {
@@ -180,67 +152,18 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect((await app.inject({ method: 'GET', url: '/manifest' })).statusCode).toBe(404);
   });
 
-  it('keeps an app’s menu, and turns away items that would open its root', async () => {
-    const app = await db.app({ verifyService });
-    const menu = [{ label: 'Documents', icon: 'folder', items: [{ label: 'Reports', path: '/reports', detail: 'Updated today' }] }];
-    const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
-    expect((await put({ ...library, ai: false, menu, orbit: false })).statusCode).toBe(201);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, ai: false, menu, orbit: false, maxUpload: 10, inPage: true });
-    expect((await put({ ...library, menu, orbit: 'no' })).statusCode).toBe(400);
-    expect((await put({ ...library, sameOnEveryFloor: true })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, sameOnEveryFloor: true, maxUpload: 10, inPage: true });
-    expect((await put({ ...library, sameOnEveryFloor: 'yes' })).statusCode).toBe(400);
-    expect((await put({ ...library, followsAddress: true })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, followsAddress: true, maxUpload: 10, inPage: true });
-    expect((await put({ ...library, followsAddress: 'yes' })).statusCode).toBe(400);
-    expect((await put({ ...library, focus: true })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json()).toContainEqual({ ...library, focus: true, maxUpload: 10, inPage: true });
-    expect((await put({ ...library, focus: 'yes' })).statusCode).toBe(400);
-    expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'All', path: '/' }] }] })).statusCode).toBe(400);
-    expect((await put({ ...library, menu: [{ label: 'Empty', items: [] }] })).statusCode).toBe(400);
-    expect((await put({ ...library, menu: [{ label: 'Documents', items: [{ label: 'Reports', path: '/r', colour: 'red' }] }] })).statusCode).toBe(400);
-  });
-
-  it('keeps platform apps and taken routes for their owners', async () => {
-    const app = await db.app({ verifyService });
-    const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: as(`app-${(payload as { id: string }).id}`), payload });
-    const home = await put({ ...library, id: 'home', route: '/home' });
-    const slash = await put({ ...library, route: '/admin' });
-    await put(library);
-    const clash = await put({ ...library, id: 'papers' });
-    expect([home.statusCode, slash.statusCode, clash.statusCode]).toEqual([409, 409, 409]);
-    expect(clash.json().message).toBe('Library already lives at /library.');
-  });
-
-  it('keeps an app out of another app’s pages, the platform’s included', async () => {
-    const app = await db.app({ verifyService });
-    const put = (payload: object) => app.inject({ method: 'PUT', url: `/v1/apps/${(payload as { id: string }).id}`, headers: as(`app-${(payload as { id: string }).id}`), payload });
-    await put(library);
-    const underAdmin = await put({ ...library, id: 'people', route: '/admin/people' });
-    const underLibrary = await put({ ...library, id: 'papers', route: '/library/papers' });
-    const aroundLibrary = await put({ ...library, id: 'lib', route: '/lib' });
-    const trailing = await put({ ...library, id: 'copy', route: '/library/' });
-    expect([underAdmin.statusCode, underLibrary.statusCode, trailing.statusCode]).toEqual([409, 409, 409]);
-    expect(underAdmin.json().message).toBe("/admin/people is inside Admin's pages at /admin. Choose a route of its own.");
-    // Only whole segments count: /lib is beside /library, not around it.
-    expect(aroundLibrary.statusCode).toBe(201);
-  });
-
   it('records who changed the catalogue in the audit log', async () => {
     const entries: unknown[] = [];
     const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await db.seed(library);
     await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
-    expect(entries).toEqual([
-      { actor: { id: 'library', kind: 'service' }, app: 'registry', action: 'app.registered', target: 'library', detail: { version: '0.1.0' } },
-      { actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.removed', target: 'library' },
-    ]);
+    expect(entries).toEqual([{ actor: { id: 'u-1', kind: 'user' }, app: 'registry', action: 'app.removed', target: 'library' }]);
   });
 
   it('lets admins see an app’s versions, roll it back and hold it there, then let it go', async () => {
     const entries: { action: string; detail?: unknown }[] = [];
     const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
-    const register = (version: string) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version } });
+    const register = (version: string) => db.seed({ ...library, version });
     await register('0.1.0');
     await register('0.2.0');
     const versions = await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: admin });
@@ -256,17 +179,14 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect(free.json()).toMatchObject({ version: '0.3.0' });
     expect(free.json().pinnedVersion).toBeUndefined();
     expect(entries.map((e) => [e.action, e.detail])).toEqual([
-      ['app.registered', { version: '0.1.0' }],
-      ['app.updated', { version: '0.2.0' }],
       ['app.pinned', { version: '0.1.0' }],
-      ['app.updated', { version: '0.3.0', heldAt: '0.1.0' }],
       ['app.unpinned', { version: '0.3.0' }],
     ]);
   });
 
   it('keeps versions to admins, and platform apps out of it', async () => {
     const app = await db.app({ verifyService });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await db.seed(library);
     expect((await app.inject({ method: 'GET', url: '/v1/apps/library/versions', headers: editor })).statusCode).toBe(403);
     expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: editor, payload: { version: '0.1.0' } })).statusCode).toBe(403);
     expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/pin', headers: deployAdmin, payload: { version: '7.0.0' } })).statusCode).toBe(404);
@@ -274,15 +194,9 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect((await app.inject({ method: 'GET', url: '/v1/apps/nothing/versions', headers: admin })).statusCode).toBe(404);
   });
 
-  it('still registers the app when the audit log cannot be reached', async () => {
-    const app = await db.app({ verifyService, audit: async () => Promise.reject(new Error('events is down')) });
-    const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
-    expect(res.statusCode).toBe(201);
-  });
-
   it('keeps removing apps, pinning and choosing origins to deployment admins, and says so to a plain admin (ADR 0084)', async () => {
     const app = await db.app({ verifyService });
-    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
+    await db.seed(library);
     const origin = encodeURIComponent('https://apps.example.org');
     for (const call of [
       { method: 'DELETE', url: '/v1/apps/library' },
@@ -299,27 +213,12 @@ describe.runIf(DATABASE_URL)('registry', () => {
 
   it('refuses a frontend from an app an admin removed, whose sign-in outlives it', async () => {
     const app = await db.app({ verifyService, frontendFiles: new MemoryFrontendFiles() });
-    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
+    await db.seed(library);
     expect((await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin })).statusCode).toBe(204);
     const body = packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]);
     const res = await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.2.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: body });
     expect(res.statusCode).toBe(403);
     expect(res.json().message).toMatch(/An admin removed library/);
-  });
-
-  it('lets a reinstall an admin asked for register the app and publish its frontend, with its own sign-in', async () => {
-    const app = await db.app({ verifyService, frontendFiles: new MemoryFrontendFiles() });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
-    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
-    const release = { id: 'library', version: '0.1.0', image: 'ghcr.io/x/library@sha256:aa', manifest: library };
-    expect(await db.store.requestAppJob({ id: 'j1', app: 'library', action: 'install', release: release as never, requestedBy: 'u-1' })).toBe(true);
-    // The container comes up and publishes first; the runner registers once it's healthy.
-    const body = packFrontend([{ path: 'entry.js', data: Buffer.from('x') }]);
-    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library/versions/0.1.0/frontend', headers: { ...service, 'content-type': 'application/gzip' }, payload: body })).statusCode).toBe(201);
-    expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library })).statusCode).toBe(201);
-    const served = (await app.inject({ method: 'GET', url: '/v1/manifest', headers: editor })).json().find((a: { id: string }) => a.id === 'library');
-    expect(served.entry).not.toBe(library.entry);
-    expect(await db.store.removed('library')).toBe(false);
   });
 
   it('tells only identity what it keeps about a person', async () => {
@@ -346,7 +245,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const one = `/apps/library/${first.json().folder}/`;
     expect(one).toMatch(/^\/apps\/library\/0\.1\.0_[0-9a-f]{12}\/$/);
     expect(frontendFiles.objects.get(`${one.slice(1)}entry.js`)?.toString()).toBe('one');
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await db.seed(library);
     expect((await served()).entry).toBe(`${one}entry.js`);
 
     // The same files again (every restart) change nothing. A new build of the same version (a dev
@@ -365,7 +264,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect((await give('0.3.0', Buffer.from('not a tarball'))).statusCode).toBe(400);
 
     // A version without a kept frontend is served from its manifest's entry as before.
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
+    await db.seed({ ...library, version: '0.2.0' });
     expect((await served()).entry).toBe('/apps/library/entry.js');
     const two = `/apps/library/${(await give('0.2.0', tarball('two'))).json().folder}/`;
     expect((await served()).entry).toBe(`${two}entry.js`);
@@ -378,7 +277,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
 
     // An entry that isn't in the frontend it gave is served as registered.
     await app.inject({ method: 'DELETE', url: '/v1/apps/library/pin', headers: deployAdmin });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', entry: '/apps/library/main.js' } });
+    await db.seed({ ...library, version: '0.2.0', entry: '/apps/library/main.js' });
     expect((await served()).entry).toBe('/apps/library/main.js');
     expect(entries.filter((e) => e.action === 'app.frontend-published')).toHaveLength(3);
   });
@@ -410,7 +309,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
   it('tells the gateway where each app’s service is, as set by what runs it or an admin', async () => {
     const entries: { action: string; actor: { id: string } }[] = [];
     const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await db.seed(library);
     const set = (url: string | null, headers: Record<string, string> = as('platform-updater'), id = 'library') =>
       app.inject({ method: 'PUT', url: `/v1/apps/${id}/upstream`, headers, payload: { url } });
     const upstreams = (headers: Record<string, string> = callerHeaders(GATEWAY_CALLER)) => app.inject({ method: 'GET', url: '/v1/upstreams', headers });
@@ -428,8 +327,8 @@ describe.runIf(DATABASE_URL)('registry', () => {
     expect((await set('http://app-x:1', admin, 'home')).statusCode).toBe(409);
     expect((await set('http://app-x:1', admin, 'nothing')).statusCode).toBe(404);
 
-    // Registering a new version keeps it; null forgets it.
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0' } });
+    // A new version keeps it; null forgets it.
+    await db.seed({ ...library, version: '0.2.0' });
     expect((await upstreams()).json()).toEqual({ apps: { library: 'http://app-library:8090' }, previews: {} });
     await set(null, admin);
     expect((await upstreams()).json()).toEqual({ apps: {}, previews: {} });
@@ -441,46 +340,18 @@ describe.runIf(DATABASE_URL)('registry', () => {
 
   it('lets an admin remove an app', async () => {
     const app = await db.app({ verifyService });
-    await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: library });
+    await db.seed(library);
     const byService = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: service });
     const byAdmin = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
     const gone = await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
     expect([byService.statusCode, byAdmin.statusCode, gone.statusCode]).toEqual([403, 204, 404]);
   });
 
-  it('keeps a removed app from registering itself again, until an admin or the runner does', async () => {
-    const app = await db.app({ verifyService });
-    const register = (headers: Record<string, string>) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers, payload: library });
-    expect((await register(service)).statusCode).toBe(201);
-    await app.inject({ method: 'DELETE', url: '/v1/apps/library', headers: deployAdmin });
-    const refused = await register(service);
-    expect(refused.statusCode).toBe(403);
-    expect(refused.json().message).toMatch(/An admin removed Library/);
-    expect((await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).body).not.toContain('"library"');
-    expect((await register(as('platform-updater'))).statusCode).toBe(201);
-    expect((await register(service)).statusCode).toBe(200);
-  });
-
   describe('where apps may load from', () => {
     const elsewhere = { ...library, entry: 'https://apps.example.org/library/entry.js' };
-    const register = (app: Awaited<ReturnType<typeof buildApp>>, payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
     const allow = (app: Awaited<ReturnType<typeof buildApp>>, origin: string, headers = deployAdmin) => app.inject({ method: 'POST', url: '/v1/origins', headers, payload: { origin } });
 
-    it('takes an entry on the platform itself, and refuses one from an origin nobody allowed', async () => {
-      const app = await db.app({ verifyService });
-      expect((await register(app, library)).statusCode).toBe(201);
-      const refused = await register(app, elsewhere);
-      expect(refused.statusCode).toBe(400);
-      expect(refused.json().message).toMatch(/loads from https:\/\/apps\.example\.org, which isn't a place apps are allowed/);
-      expect((await register(app, { ...library, entry: '//apps.example.org/x.js' })).statusCode).toBe(400);
-      expect((await register(app, { ...library, entry: 'javascript:alert(1)' })).statusCode).toBe(400);
-      // Browsers read a backslash as a slash, and drop tabs and newlines: each of these is another site.
-      for (const entry of ['/\\evil.example/x.js', '/\\/evil.example/x.js', '\\\\evil.example/x.js', '/\t/evil.example/x.js', '/\n/evil.example/x.js', 'entry.js']) {
-        expect((await register(app, { ...library, entry })).statusCode, entry).toBe(400);
-      }
-    });
-
-    it('takes an entry from an origin an admin allowed, and audits the choice', async () => {
+    it('lets a deployment admin allow an origin, and audits the choice', async () => {
       const entries: { action: string; target?: string }[] = [];
       const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
       expect((await allow(app, 'https://apps.example.org', editor)).statusCode).toBe(403);
@@ -490,14 +361,14 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect(added.statusCode).toBe(201);
       expect(added.json()).toMatchObject({ origin: 'https://apps.example.org', addedBy: 'u-1' });
       expect((await app.inject({ method: 'GET', url: '/v1/origins', headers: admin })).json().map((o: { origin: string }) => o.origin)).toEqual(['https://apps.example.org']);
-      expect((await register(app, elsewhere)).statusCode).toBe(201);
       expect(entries.filter((e) => e.action.startsWith('origin.'))).toEqual([expect.objectContaining({ action: 'origin.allowed', target: 'https://apps.example.org' })]);
     });
 
     it('stops offering apps from an origin that is no longer allowed', async () => {
       const app = await db.app({ verifyService });
       await allow(app, 'https://apps.example.org');
-      await register(app, elsewhere);
+      await db.seed(elsewhere);
+      expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).toContain('library');
       const removed = await app.inject({ method: 'DELETE', url: `/v1/origins/${encodeURIComponent('https://apps.example.org')}`, headers: deployAdmin });
       expect(removed.statusCode).toBe(204);
       expect(ids((await app.inject({ method: 'GET', url: '/v1/manifest', headers: admin })).json())).not.toContain('library');
@@ -508,57 +379,37 @@ describe.runIf(DATABASE_URL)('registry', () => {
   });
 
   describe('apps signed in as themselves', () => {
-    it('lets an app register itself, recorded as itself, and nothing else', async () => {
-      const entries: { actor: { id: string } }[] = [];
-      const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
-      expect((await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: library })).statusCode).toBe(201);
-      expect(entries.at(-1)?.actor).toEqual({ id: 'library', kind: 'service' });
+    it('lets an app register only itself', async () => {
+      const app = await db.app({ verifyService });
       const other = await app.inject({ method: 'PUT', url: '/v1/apps/board', headers: as('app-library'), payload: { ...library, id: 'board', route: '/board' } });
       expect(other.statusCode).toBe(403);
       expect(other.json().message).toMatch(/library can only register itself/);
     });
 
-    it('takes the scopes an app asks for, and refuses ones that don’t exist', async () => {
-      const app = await db.app({ verifyService });
-      const bad = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['people:delete'] } });
-      expect(bad.statusCode).toBe(400);
-      const res = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
-      expect(res.statusCode).toBe(201);
-    });
-
-    it('takes the inbox kinds an app declares, refuses a kind twice, and tells platform services which', async () => {
+    it('tells platform services which inbox kinds an app declares', async () => {
       const app = await db.app({ verifyService, floors });
-      const put = (inbox: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['inbox:write'], inbox } });
-      expect((await put({ kinds: [] })).statusCode).toBe(400);
-      expect((await put({ kinds: [{ id: 'Review', label: 'To review' }] })).statusCode).toBe(400);
-      expect((await put({ kinds: [{ id: 'review', label: 'To review' }, { id: 'review', label: 'Again' }] })).json().message).toContain('"review" twice');
-      expect((await put({ kinds: [{ id: 'review', label: 'To review', icon: 'document' }] })).statusCode).toBe(201);
+      await db.seed({ ...library, scopes: ['inbox:write'], inbox: { kinds: [{ id: 'review', label: 'To review', icon: 'document' }] } });
       const grants = await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers: as('platform-events') });
       expect(grants.json().inboxKinds).toEqual(['review']);
     });
 
-    it('takes the notification kinds an app declares, refuses a kind twice, and tells platform services which', async () => {
+    it('tells platform services which notification kinds an app declares', async () => {
       const app = await db.app({ verifyService, floors });
-      const put = (notifications: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'], notifications } });
-      expect((await put({ kinds: [] })).statusCode).toBe(400);
-      expect((await put({ kinds: [{ id: 'comment', label: 'Comments' }, { id: 'comment', label: 'Again' }] })).json().message).toContain('"comment" twice');
-      expect((await put({ kinds: [{ id: 'comment', label: 'Comments on your documents', detail: 'When someone comments on one you own' }] })).statusCode).toBe(201);
+      await db.seed({ ...library, scopes: ['notifications:send'], notifications: { kinds: [{ id: 'comment', label: 'Comments on your documents', detail: 'When someone comments on one you own' }] } });
       const grants = await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers: as('platform-events') });
       expect(grants.json().notificationKinds).toEqual(['comment']);
     });
 
-    it('ignores the binding types an app names and lists no entity links, now the binding events are gone (D6)', async () => {
+    it('lists no entity links, now the binding events are gone (D6)', async () => {
       const app = await db.app({ verifyService });
-      const put = (extra: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, ...extra } });
-      // Accepted for a release, so an app that still sets it registers, but nothing reads it.
-      expect((await put({ links: { entities: true }, bindings: ['record'] })).statusCode).toBe(201);
+      await db.seed({ ...library, links: { entities: true }, bindings: ['record'] });
       expect((await app.inject({ method: 'GET', url: '/v1/entity-links', headers: as('app-atlas') })).statusCode).toBe(404);
     });
 
     it('tells platform services which apps are granted a scope', async () => {
       const app = await db.app({ verifyService, floors });
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['events:subscribe'] } });
-      await app.inject({ method: 'PUT', url: '/v1/apps/atlas', headers: as('app-atlas'), payload: { ...library, id: 'atlas', name: 'Atlas', route: '/atlas', entry: '/apps/atlas/entry.js', scopes: ['notifications:send'] } });
+      await db.seed({ ...library, scopes: ['events:subscribe'] });
+      await db.seed({ ...library, id: 'atlas', name: 'Atlas', route: '/atlas', entry: '/apps/atlas/entry.js', scopes: ['notifications:send'] });
       const listed = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/scopes/events:subscribe/apps', headers });
       expect((await listed(as('platform-events'))).json()).toEqual([{ app: 'library', name: library.name, enabled: true }]);
       expect((await listed(as('app-library'))).statusCode).toBe(403);
@@ -573,7 +424,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
 
     it('tells platform services what an app is granted, and nothing once it is off', async () => {
       const app = await db.app({ verifyService, floors });
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
+      await db.seed({ ...library, scopes: ['notifications:send'] });
       const grants = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers });
       expect((await grants(as('platform-events'))).json()).toEqual({ app: 'library', name: library.name, workspace: 'w1', on: true, floorKind: 'team', scopes: ['notifications:send'], inboxKinds: [], notificationKinds: [], requiredRole: null });
       // The gateway asks as itself, to admit the app's own token (contract 3).
@@ -590,16 +441,13 @@ describe.runIf(DATABASE_URL)('registry', () => {
       const grants = async (id: string) => (await app.inject({ method: 'GET', url: `/v1/apps/${id}/grants?workspace=w1`, headers: callerHeaders(GATEWAY_CALLER) })).json();
       expect(await grants('upgrades')).toMatchObject({ app: 'upgrades', on: true, scopes: ['people:read'], platformScopes: ['deployment:upgrade', 'deployment:apps', 'deployment:health', 'deployment:settings'] });
       expect((await grants('admin')).platformScopes).toEqual(['people:manage', 'apps:manage', 'org:manage', 'audit:read']);
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['notifications:send'] } });
+      await db.seed({ ...library, scopes: ['notifications:send'] });
       expect(await grants('library')).not.toHaveProperty('platformScopes');
-      // An app can't even ask for one: it isn't a scope AUGUR offers apps.
-      const asked = await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, scopes: ['deployment:upgrade'] } });
-      expect(asked.statusCode).toBe(400);
     });
 
     it('tells platform services the role an app needs, for the services a person reaches it through', async () => {
       const app = await db.app({ verifyService, floors });
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: as('app-library'), payload: { ...library, requiredRole: 'analyst' } });
+      await db.seed({ ...library, requiredRole: 'analyst' });
       expect((await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=w1', headers: as('platform-models') })).json().requiredRole).toBe('analyst');
     });
   });
@@ -608,19 +456,10 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const retention = { id: 'retentionDays', label: 'Keep deleted documents for', type: 'integer', unit: 'days', min: 1, max: 365, default: 30 };
     const withSettings = { ...library, settings: [retention] };
 
-    it('turns away settings that can’t work', async () => {
-      const app = await db.app({ verifyService });
-      const put = (settings: object[]) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, settings } });
-      expect((await put([{ ...retention, default: 400 }])).json().message).toMatch(/defaults to 400, outside 1 to 365/);
-      expect((await put([retention, retention])).json().message).toMatch(/twice/);
-      expect((await put([{ ...retention, type: 'text' }])).statusCode).toBe(400);
-      expect((await put([retention])).statusCode).toBe(201);
-    });
-
     it('lets admins set them and the app read them, with defaults until then, all on the record', async () => {
       const entries: { action: string; detail?: unknown }[] = [];
       const app = await db.app({ verifyService, audit: async (e) => void entries.push(e) });
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: withSettings });
+      await db.seed(withSettings);
       const read = (headers: Record<string, string>) => app.inject({ method: 'GET', url: '/v1/apps/library/settings', headers });
       const set = (value: number | null, headers = admin, setting = 'retentionDays') => app.inject({ method: 'PUT', url: `/v1/apps/library/settings/${setting}`, headers, payload: { value } });
 
@@ -632,9 +471,9 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect((await set(5, admin, 'nothing')).statusCode).toBe(404);
       expect((await set(90)).json().settings[0]).toMatchObject({ id: 'retentionDays', value: 90, setBy: 'u-1' });
       // A new version keeps it; one that narrows the range past it falls back to its default.
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...withSettings, version: '0.2.0' } });
+      await db.seed({ ...withSettings, version: '0.2.0' });
       expect((await read(service)).json().settings[0].value).toBe(90);
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...withSettings, version: '0.3.0', settings: [{ ...retention, max: 60 }] } });
+      await db.seed({ ...withSettings, version: '0.3.0', settings: [{ ...retention, max: 60 }] });
       expect((await read(admin)).json().settings[0]).toEqual({ ...retention, max: 60, value: 30 });
       expect((await set(null)).json().settings[0].value).toBe(30);
       expect(entries.filter((e) => e.action === 'app.setting-changed').map((e) => e.detail)).toEqual([
@@ -654,10 +493,8 @@ describe.runIf(DATABASE_URL)('registry', () => {
       await store.requestAppJob({ id: 'j1', app: 'mandate', action: 'install', release, requestedBy: 'u-1' });
       await store.progressAppJob('j1', { step: 'switch', state: 'done' }, { state: 'done' });
       const app = await db.app({ verifyService, floors, store });
-      const reg = (id: string, name: string, category?: string) => app.inject({ method: 'PUT', url: `/v1/apps/${id}`, headers: as(`app-${id}`), payload: manifestFor(id, name, category) });
-      expect((await reg('mandate', 'Mandate', 'pillar')).statusCode).toBe(201);
-      expect((await reg('rogue', 'Rogue', 'platform')).statusCode).toBe(201);
-      expect((await reg('odd', 'Odd', 'tool')).statusCode).toBe(400);
+      await db.seed(manifestFor('mandate', 'Mandate', 'pillar'));
+      await db.seed(manifestFor('rogue', 'Rogue', 'platform'));
 
       type Row = { id: string; category?: string; ships?: boolean; pillar?: boolean; categoryRefused?: { asked: string } };
       const kinds = (rows: Row[]) => Object.fromEntries(rows.map((a) => [a.id, a.category]));
@@ -678,7 +515,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
     const setup = async (payload: object = library) => {
       const entries: { action: string; detail?: unknown }[] = [];
       const app = await db.app({ verifyService, floors, audit: async (e) => void entries.push(e) });
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload });
+      await db.seed(payload);
       const set = (workspace: string, state: string, headers = admin, carriesOn?: boolean) =>
         app.inject({ method: 'PUT', url: `/v1/apps/library/floors/${workspace}`, headers, payload: { state, ...(carriesOn === undefined ? {} : { carriesOn }) } });
       const offered = async (workspace: string) => ids((await app.inject({ method: 'GET', url: `/v1/manifest?workspace=${workspace}`, headers: on(workspace) })).json()).includes('library');
@@ -737,8 +574,8 @@ describe.runIf(DATABASE_URL)('registry', () => {
 
     it('tells someone every app and why it is or isn’t theirs on their floor', async () => {
       const { app, set } = await setup();
-      await app.inject({ method: 'PUT', url: '/v1/apps/notes', headers: as('app-notes'), payload: { ...library, id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', floors: ['personal'] } });
-      await app.inject({ method: 'PUT', url: '/v1/apps/ledger', headers: as('app-ledger'), payload: { ...library, id: 'ledger', name: 'Ledger', route: '/ledger', entry: '/apps/ledger/entry.js', requiredRole: 'finance' } });
+      await db.seed({ ...library, id: 'notes', name: 'Notes', route: '/notes', entry: '/apps/notes/entry.js', floors: ['personal'] });
+      await db.seed({ ...library, id: 'ledger', name: 'Ledger', route: '/ledger', entry: '/apps/ledger/entry.js', requiredRole: 'finance' });
       await set('f', 'blocked');
       const explain = async (workspace: string) => (await app.inject({ method: 'GET', url: `/v1/me/apps?workspace=${workspace}`, headers: on(workspace) })).json();
       const onP = await explain('p');
@@ -782,7 +619,7 @@ describe.runIf(DATABASE_URL)('registry', () => {
 
     it('holds back scopes a new version asks for until an admin grants them', async () => {
       const { app, entries } = await setup({ ...library, scopes: ['notifications:send'] });
-      await app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, version: '0.2.0', scopes: ['notifications:send', 'audit:write'] } });
+      await db.seed({ ...library, version: '0.2.0', scopes: ['notifications:send', 'audit:write'] });
       const grants = async () => (await app.inject({ method: 'GET', url: '/v1/apps/library/grants?workspace=f', headers: as('platform-events') })).json().scopes;
       expect(await grants()).toEqual(['notifications:send']);
       const catalogue = (await app.inject({ method: 'GET', url: '/v1/apps', headers: admin })).json();
@@ -821,22 +658,6 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect((await grant(deployAdmin)).statusCode).toBe(403);
       const forged = await grant({ ...(await signedCallerHeaders(gateway, { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], app: 'library', scopes: [] }, 'registry')), 'x-augur-acting-scopes': 'apps:manage' });
       expect(forged.statusCode).toBe(403);
-    });
-
-    it('checks that each surface is for a floor the app works on', async () => {
-      const app = await db.app({ verifyService });
-      const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, ...payload } });
-      expect((await put({ floors: ['team'], surfaces: [{ floor: 'org', slot: 'card', module: './Card' }] })).statusCode).toBe(400);
-      expect((await put({ surfaces: [{ floor: 'team', slot: 'shelf', module: './Card' }] })).statusCode).toBe(400);
-      const ok = await put({ floors: ['team', 'org'], surfaces: [{ floor: 'team', slot: 'card', module: './Card', rollup: true }, { floor: 'org', slot: 'page', module: './Page', role: 'lead' }] });
-      expect(ok.statusCode).toBe(201);
-    });
-
-    it('takes the storage an app keeps, and nothing else under it', async () => {
-      const app = await db.app({ verifyService });
-      const put = (payload: object) => app.inject({ method: 'PUT', url: '/v1/apps/library', headers: service, payload: { ...library, ...payload } });
-      expect((await put({ storage: { database: true, bucket: true } })).statusCode).toBe(201);
-      expect((await put({ storage: { disk: true } })).statusCode).toBe(400);
     });
   });
 });
