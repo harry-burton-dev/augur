@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: Identity
-  version: 1.35.0
+  version: 1.36.0
   description: Who people are. Reached through the gateway, which verifies the caller's sign-in token and passes the caller on in x-user-* headers. The /admin paths manage people and roles, kept in the sign-in provider (Keycloak), and departments, which are identity's own teams (copied in once from the provider's groups). Every /admin path answers 403 to a caller without the admin role, and 503 when identity isn't connected to the provider. Changes are audited, never a password. /organisation is the organisation's name, time zone and email sender (ADR 0042), for anyone signed in and any service; only an admin changes them.
 components:
   schemas:
@@ -1708,6 +1708,7 @@ paths:
               schema:
                 type: object
                 required:
+                  - id
                   - name
                   - timeZone
                   - sender
@@ -1717,6 +1718,9 @@ paths:
                   - defaultLanguage
                   - security
                 properties:
+                  id:
+                    type: string
+                    description: "The organisation's floor's id: what a call names in X-Workspace-Id for the whole organisation, and the `org` every signed caller carries"
                   name:
                     type: string
                     description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"
@@ -2082,6 +2086,7 @@ paths:
               schema:
                 type: object
                 required:
+                  - id
                   - name
                   - timeZone
                   - sender
@@ -2091,6 +2096,9 @@ paths:
                   - defaultLanguage
                   - security
                 properties:
+                  id:
+                    type: string
+                    description: "The organisation's floor's id: what a call names in X-Workspace-Id for the whole organisation, and the `org` every signed caller carries"
                   name:
                     type: string
                     description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start"

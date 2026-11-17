@@ -392,6 +392,19 @@ describe('gateway', () => {
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 
+    it('never gives a person’s catalogue to the same person signed with other roles', async () => {
+      const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => Response.json((init?.headers as Record<string, string>)['x-user-roles']?.includes('admin') ? [{ id: 'admin' }] : []));
+      const lookup = registryAppAccess({ registryUrl: 'http://registry', fetchImpl: fetchImpl as unknown as typeof fetch });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
+      expect((await lookup({ ...alex, roles: ['admin'] }, 'admin')).has('admin')).toBe(true);
+      expect((await lookup(alex, 'admin')).has('admin')).toBe(false);
+      // The same roles in another order are the same answer.
+      await lookup({ ...alex, roles: ['b', 'a'] });
+      await lookup({ ...alex, roles: ['a', 'b'] });
+      await lookup({ ...alex, persona: 'p' });
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+    });
+
     it('keeps using the person’s catalogue while asking again, and keeps it when the registry can’t answer', async () => {
       let now = 0;
       let up = true;

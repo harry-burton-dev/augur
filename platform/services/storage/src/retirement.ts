@@ -1,10 +1,11 @@
-// A retired or removed app's data, in two steps (ADR 0103). First it is set aside: its schemas renamed retired_<app>,
+// A retired or removed app's data, in two steps (ADR 0103). First it is set aside: its database renamed retired_app_<app>
+// (or, installed before apps had their own, its schemas renamed retired_<app>),
 // its login renamed and unable to sign in, its bucket moved to the name retired-<app> with no key let in. Nothing reads
 // it, and an app installed later under the same id starts afresh. It stays through the AUGUR release that set it aside,
 // and is dropped on a later one, only behind a good backup (apps' files included) taken since it was set aside.
 import pg from 'pg';
 import { backupProblem } from './backup-marker.ts';
-import { dropSchemasAndRole, jobsSchemaFor, roleFor, schemaFor, type Sql } from './postgres.ts';
+import { databaseFor, dropSchemasAndRole, jobsSchemaFor, roleFor, schemaFor, type Sql } from './postgres.ts';
 
 /** Where a set-aside app's tables wait: "team-notes" → retired_team_notes. No app may take an id retired or retired-… (service kit). */
 export const retiredSchemaFor = (app: string) => `retired_${schemaFor(app)}`;
@@ -12,6 +13,8 @@ export const retiredSchemaFor = (app: string) => `retired_${schemaFor(app)}`;
 export const retiredJobsSchemaFor = (app: string) => `retired_${jobsSchemaFor(app)}`;
 /** Its login, renamed: retired_app_team_notes. */
 export const retiredRoleFor = (app: string) => `retired_${roleFor(app)}`;
+/** Its own database, renamed: retired_app_team_notes. */
+export const retiredDatabaseFor = (app: string) => `retired_${databaseFor(app)}`;
 /** Its bucket's name while it waits: retired-team-notes. */
 export const retiredBucketFor = (app: string) => `retired-${app}`;
 
@@ -63,8 +66,8 @@ export async function markKept(sql: Sql, app: string): Promise<void> {
   await sql.query("insert into public.storage_retired_apps (app, outcome) values ($1, 'kept') on conflict (app) do nothing", [app]);
 }
 
-const exists = async (sql: Sql, kind: 'schema' | 'role', name: string) =>
-  (await sql.query(kind === 'schema' ? 'select 1 from pg_namespace where nspname = $1' : 'select 1 from pg_roles where rolname = $1', [name])).rowCount === 1;
+const FIND = { schema: 'select 1 from pg_namespace where nspname = $1', role: 'select 1 from pg_roles where rolname = $1', database: 'select 1 from pg_database where datname = $1' };
+const exists = async (sql: Sql, kind: keyof typeof FIND, name: string) => (await sql.query(FIND[kind], [name])).rowCount === 1;
 
 /**
  * Sets an app's data aside, noted with the release that did it; data that isn't there is noted as gone. Each step is
@@ -79,7 +82,11 @@ export async function setAside({ sql, buckets, app, release, again = false }: { 
   const [waiting] = (await retirements(sql, app)).filter((r) => r.outcome === 'renamed');
   if (waiting && again) {
     const more =
-      (await exists(sql, 'schema', schemaFor(app))) || (await exists(sql, 'schema', jobsSchemaFor(app))) || (await exists(sql, 'role', roleFor(app))) || Boolean(await buckets?.has(app));
+      (await exists(sql, 'schema', schemaFor(app))) ||
+      (await exists(sql, 'schema', jobsSchemaFor(app))) ||
+      (await exists(sql, 'database', databaseFor(app))) ||
+      (await exists(sql, 'role', roleFor(app))) ||
+      Boolean(await buckets?.has(app));
     if (more) throw new Error(`an earlier copy of ${app}’s data, set aside in ${waiting.renamed_in ?? 'an earlier release'}, waits to be dropped with a later AUGUR release; this one is set aside after that.`);
     // Nothing new to set aside: the earlier copy keeps its own release and time.
     return 'nothing there';
@@ -91,6 +98,15 @@ export async function setAside({ sql, buckets, app, release, again = false }: { 
     await sql.query(`alter schema ${pg.escapeIdentifier(from)} rename to ${pg.escapeIdentifier(to)}`);
     found = true;
   }
+  if (await exists(sql, 'database', databaseFor(app))) {
+    if (await exists(sql, 'database', retiredDatabaseFor(app))) throw new Error(`database ${retiredDatabaseFor(app)} is there already, so ${databaseFor(app)} can’t be set aside.`);
+    // Its app is stopped by now. Its login stops signing in first, then whatever it left connected is let go, since a
+    // database in use can't be renamed.
+    if (await exists(sql, 'role', roleFor(app))) await sql.query(`alter role ${pg.escapeIdentifier(roleFor(app))} with nologin`);
+    await sql.query('select pg_terminate_backend(pid) from pg_stat_activity where datname = $1 and pid <> pg_backend_pid()', [databaseFor(app)]);
+    await sql.query(`alter database ${pg.escapeIdentifier(databaseFor(app))} rename to ${pg.escapeIdentifier(retiredDatabaseFor(app))}`);
+    found = true;
+  }
   if (await exists(sql, 'role', roleFor(app))) {
     if (await exists(sql, 'role', retiredRoleFor(app))) throw new Error(`login ${retiredRoleFor(app)} is there already, so ${roleFor(app)} can’t be set aside.`);
     await sql.query(`alter role ${pg.escapeIdentifier(roleFor(app))} with nologin`);
@@ -99,7 +115,7 @@ export async function setAside({ sql, buckets, app, release, again = false }: { 
   }
   if (await buckets?.setAside(app)) found = true;
   // A try that stopped after renaming finds nothing left to move, but its set-aside copies are there.
-  if (!found) found = (await exists(sql, 'schema', retiredSchemaFor(app))) || (await exists(sql, 'role', retiredRoleFor(app)));
+  if (!found) found = (await exists(sql, 'schema', retiredSchemaFor(app))) || (await exists(sql, 'database', retiredDatabaseFor(app))) || (await exists(sql, 'role', retiredRoleFor(app)));
   const outcome = found ? 'renamed' : 'removed';
   await sql.query(
     `insert into public.storage_retired_apps (app, outcome, renamed_in) values ($1, $2, $3)
@@ -122,10 +138,11 @@ export async function dropDue({ sql, buckets, release, marker, objects, log }: {
       continue;
     }
     try {
+      await sql.query(`drop database if exists ${pg.escapeIdentifier(retiredDatabaseFor(r.app))} with (force)`);
       await dropSchemasAndRole(sql, [retiredSchemaFor(r.app), retiredJobsSchemaFor(r.app)], retiredRoleFor(r.app));
       await buckets?.drop(r.app);
       await sql.query("update public.storage_retired_apps set outcome = 'removed', at = now() where app = $1 and outcome = 'renamed'", [r.app]);
-      log.info(`${r.app}’s data, set aside in ${r.renamed_in}, is gone: its schemas, login and bucket.`);
+      log.info(`${r.app}’s data, set aside in ${r.renamed_in}, is gone: its database, schemas, login and bucket.`);
     } catch (err) {
       log.warn(`${r.app}’s data, set aside in ${r.renamed_in}, couldn’t all be dropped; it’s tried again next time: ${(err as Error).message}`);
     }

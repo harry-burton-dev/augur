@@ -8,7 +8,7 @@
 # Each service runs its migrations at start, all in one transaction under an advisory lock, before it serves
 # (runMigrations in the service kit), so the rules about taking locks on a live table are left out.
 #
-# What Squawk has no rule for (truncate, deleting rows, updating every row) check-migrations.mjs checks itself,
+# What Squawk has no rule for (truncate, deleting rows, updating every row) @augur/app-tools' src/migrations.mjs checks itself,
 # under rule names of its own (augur-*) that the same ignore comment takes.
 
 pg_version = "16"

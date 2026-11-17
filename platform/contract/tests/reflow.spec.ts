@@ -21,7 +21,8 @@ const cutOff = (page: Page) =>
     const shell = document.querySelector('.aerie-shell');
     if (!shell) return { past: ['no .aerie-shell'], sideways: [] };
     const shown = (el: Element) => el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-    const name = (el: Element) => `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') ?? '').split(' ')[0]} (${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)})`;
+    const tag = (el: Element) => `${el.tagName.toLowerCase()}.${String(el.getAttribute('class') ?? '').split(' ')[0]}`;
+    const name = (el: Element) => `${tag(el)} (${(el.getAttribute('aria-label') ?? el.textContent ?? '').trim().slice(0, 30)})`;
     const clippedBy = (el: Element) => {
       for (let up = el.parentElement; up && up !== shell; up = up.parentElement) if (getComputedStyle(up).overflowX !== 'visible') return true;
       return false;
@@ -39,17 +40,52 @@ const cutOff = (page: Page) =>
       const style = getComputedStyle(el);
       return !screenReaderOnly(el) && style.overflowX !== 'visible' && style.textOverflow !== 'ellipsis' && el.scrollWidth > el.clientWidth + 1;
     });
-    return { past: past.map(name), sideways: sideways.map(name) };
+    // For a box that scrolls sideways, what in it runs past its inner edge: the outermost part, so a failure names the cause.
+    const runsPast = (box: Element) => {
+      const edge = box.getBoundingClientRect().left + box.clientLeft + box.clientWidth + 1;
+      const found = [...box.querySelectorAll('*')].filter(shown).filter((el) => el.getBoundingClientRect().right > edge);
+      const inFound = new Set(found);
+      const outermost = found
+        .filter((el) => {
+          for (let up = el.parentElement; up && up !== box; up = up.parentElement) if (inFound.has(up)) return false;
+          return true;
+        })
+        .slice(0, 3);
+      // The first one's parents, each with its width, so the part that won't shrink shows.
+      const chain: string[] = [];
+      for (let up = outermost[0]?.parentElement; up && up !== box; up = up.parentElement) {
+        const style = getComputedStyle(up);
+        chain.push(`${tag(up)} ${Math.round(up.getBoundingClientRect().width)}/${up.scrollWidth}px min ${style.minWidth}`);
+      }
+      return [...outermost.map((el) => `${name(el)} by ${Math.round(el.getBoundingClientRect().right - edge)}px`), ...(chain.length ? [`in ${chain.join(' < ')}`] : [])];
+    };
+    return { past: past.map(name), sideways: sideways.map((el) => [name(el), ...runsPast(el)].join(' ← ')) };
   });
 
+/**
+ * The animations under `selector` that end, less the ones named in `except`, have ended. Every match counts, and
+ * none is fine, so a card that leaves (or a second one arriving) doesn't stall or break the wait.
+ */
+const settled = (page: Page, selector: string, except: string[] = []) =>
+  page.evaluate(
+    async ({ selector, except }) => {
+      await document.fonts.ready;
+      const ending = [...document.querySelectorAll(selector)]
+        .flatMap((el) => el.getAnimations({ subtree: true }))
+        .filter((a) => a.effect?.getComputedTiming().endTime !== Infinity && !(a instanceof CSSAnimation && except.includes(a.animationName)));
+      await Promise.all(ending.map((a) => a.finished.catch(() => undefined)));
+    },
+    { selector, except },
+  );
+
 /** Everything in the shell that moves and then stops has stopped, and the web font is in (the title card fits its name again when it arrives). */
-const atRest = (page: Page) =>
-  page.evaluate(async () => {
-    await document.fonts.ready;
-    const shell = document.querySelector('.aerie-shell');
-    const finite = (shell?.getAnimations({ subtree: true }) ?? []).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity);
-    await Promise.all(finite.map((a) => a.finished.catch(() => undefined)));
-  });
+const atRest = (page: Page) => settled(page, '.aerie-shell');
+
+/**
+ * The title card brings its name in at twice its tracking and clips that entrance on purpose: the name is fitted to
+ * the window at rest. This waits until the name has settled, while the card still shows (it fades after that).
+ */
+const cardSettled = (page: Page) => settled(page, '.aerie-card', ['aerie-card-life']);
 
 failOnPageErrors();
 
@@ -59,6 +95,12 @@ test('at 320 px the desktop and its bar cut nothing off', async ({ page }) => {
   await page.goto('/');
   const bar = page.getByRole('navigation', { name: 'App bar', exact: true });
   await expect(bar.locator('.aerie-bar-tile').first()).toBeVisible();
+  // The desktop names its floor on the title card too: checked once the name has settled, and again once it has gone.
+  if (await page.locator('.aerie-card').count()) {
+    await cardSettled(page);
+    expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
+    await expect(page.locator('.aerie-card')).toHaveCount(0);
+  }
   await atRest(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
 });
@@ -67,12 +109,11 @@ test('at 320 px an open app, its rail, head and screen cut nothing off', async (
   await page.goto(`/${reference.id}`);
   await expect(check(page, 'person')).toBeVisible();
   await expect(rail(page)).toBeVisible();
-  // Opening the app names it on the title card, which brings the name in at twice its tracking and clips that
-  // entrance on purpose: the name is fitted to the window at rest. So the card is checked once its name has settled,
-  // while it still shows (it fades after that, so on a slow runner this check may see less of it)...
+  // Opening the app names it on the title card, checked once its name has settled (on a slow runner this may see
+  // less of it, since it fades after that)...
   const card = page.locator('.aerie-card');
   await expect(card).toBeAttached();
-  await card.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).filter((a) => a.effect?.getComputedTiming().endTime !== Infinity && !(a instanceof CSSAnimation && a.animationName === 'aerie-card-life')).map((a) => a.finished.catch(() => undefined))));
+  await cardSettled(page);
   expect(await cutOff(page)).toEqual({ past: [], sideways: [] });
   // ...and the app's screen once the card has gone, since the shell holds the screen out of sight behind it.
   await expect(card).toHaveCount(0);

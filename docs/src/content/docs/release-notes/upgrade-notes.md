@@ -9,6 +9,28 @@ sidebar:
 
 Each note starts with the release it came in (**From**). If your server already runs that release or a later one, it's done. Before you upgrade, read every note from a release after yours; **From** unreleased means the next release.
 
+## An app's calls for a person are checked on the floor they stand on
+
+**From** unreleased
+
+When an app's part calls AUGUR for a person, the gateway now checks the app's grant on the floor that person was on, not the organisation's. An app that is on for the organisation but turned off on a team is refused there for those calls, as it already was for the person's own. An app on only for some teams now works there. Nothing to do on the server. If an app is refused where you expect it to work, check its floors in Admin → Apps.
+
+## `PERMISSIONS_DECIDES=all` now moves the registry's checks too
+
+**From** unreleased
+
+The registry now reads `PERMISSIONS_DECIDES`, as the model gateway does. Its sites start `registry.` (docs/observability.md lists them). If your `.env` sets it to `all`, every registry check (upgrades, going back, installs, pins, the catalogue) is decided by the permissions service as soon as you upgrade, without the 7 days of comparison first. Before you upgrade, name only the model gateway's sites instead, such as `PERMISSIONS_DECIDES=models.settings.read,models.usage`, and add registry sites once Status has shown no disagreement there for 7 days. If it's empty or names only `models.` sites, there is nothing to do.
+
+## Each app has a database of its own: remove apps before upgrading
+
+**From** unreleased
+
+Each app now gets its own database (`app_<id>`) on AUGUR's Postgres, owned by its login, instead of a schema in AUGUR's. Its login, through the apps' relay, reaches only that database, not AUGUR's, Keycloak's or another app's. So no app can read another's tables or hold the locks AUGUR's migrations take. Backups take every database as before.
+
+Apps installed before aren't moved. **Before you upgrade, remove every app in Admin → Apps** (and any named in `APP_STORAGE` in `.env`), after copying out anything you want to keep. Each one's data is set aside when its grace period ends, and dropped with a later release, as ever. Then upgrade, and install the apps again: each starts empty, in its own database.
+
+If an app installed before is still there, this release doesn't start. The storage step stops and names it (`pc logs storage`), before anything of AUGUR migrates, and an upgrade through Deployment goes back to the release before by itself. Remove the app there, then upgrade again.
+
 ## Apps' parts get only the signed caller
 
 **From** unreleased

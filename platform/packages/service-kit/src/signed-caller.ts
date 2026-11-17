@@ -119,6 +119,7 @@ export const callerSigner = (seed?: string, { next }: SignerOptions = {}): Calle
         ...(caller.signedInAt ? { signedInAt: caller.signedInAt } : {}),
         ...(caller.app ? { app: caller.app, scopes: caller.scopes ?? [] } : {}),
         ...(caller.persona ? { persona: caller.persona } : {}),
+        ...(caller.org ? { org: caller.org } : {}),
       })
         .setProtectedHeader({ alg: 'EdDSA', kid })
         .setSubject(caller.id)
@@ -164,6 +165,7 @@ export const callerFromClaims = (claims: JWTPayload): Caller => {
   const email = typeof claims.email === 'string' ? claims.email : undefined;
   const signedInAt = typeof claims.signedInAt === 'string' && !Number.isNaN(Date.parse(claims.signedInAt)) ? claims.signedInAt : undefined;
   const persona = typeof claims.persona === 'string' ? claims.persona : undefined;
+  const org = typeof claims.org === 'string' ? claims.org : undefined;
   return {
     id: String(claims.sub),
     name: typeof claims.name === 'string' ? claims.name : String(claims.sub),
@@ -176,6 +178,7 @@ export const callerFromClaims = (claims: JWTPayload): Caller => {
       : {}),
     ...(app ? { app, scopes: strings(claims.scopes) } : {}),
     ...(persona ? { persona } : {}),
+    ...(org ? { org } : {}),
   };
 };
 
