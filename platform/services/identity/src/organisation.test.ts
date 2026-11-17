@@ -37,6 +37,8 @@ describe.runIf(DATABASE_URL)('organisation settings', () => {
     const res = await read();
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
+      // The organisation's floor's id, which a call names for the whole organisation.
+      id: expect.stringMatching(/\S/),
       name: 'Seeded Org',
       timeZone: 'UTC',
       sender: { name: 'Seeded Org' },
