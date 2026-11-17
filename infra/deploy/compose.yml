@@ -908,13 +908,14 @@ services:
     networks: [default, docker, telemetry]
     depends_on: [docker-proxy, registry, db-relay, bucket-relay]
 
-  # The Docker API, for the updater only, without the parts it doesn't need (swarm, secrets, builds, plugins).
+  # The Docker API, for the updater only, without the parts it doesn't need (swarm, secrets, builds, plugins, and
+  # exec into a running container: the updater runs backups in a container of their own, PER-455).
   docker-proxy:
     logging: *logging
     image: tecnativa/docker-socket-proxy:v0.5.0
     profiles: [updater]
     restart: unless-stopped
-    environment: { CONTAINERS: 1, IMAGES: 1, NETWORKS: 1, VOLUMES: 1, EXEC: 1, POST: 1, INFO: 1, DISTRIBUTION: 1, AUTH: 1, DISABLE_IPV6: 1 }
+    environment: { CONTAINERS: 1, IMAGES: 1, NETWORKS: 1, VOLUMES: 1, EXEC: 0, POST: 1, INFO: 1, DISTRIBUTION: 1, AUTH: 1, DISABLE_IPV6: 1 }
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker]

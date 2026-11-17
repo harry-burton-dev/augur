@@ -606,6 +606,37 @@ through_the_runner() {
   echo "$name was installed, opened, kept from AUGUR's own services and logins, stopped (its pane said so) and removed through the app runner, and its sign-in went with it." >&2
 }
 
+# The updater's backup and restore test, as an upgrade takes them: in a container of their own (compose run), since
+# the Docker proxy refuses it exec into a running one.
+backs_up_without_exec() {
+  backup_id=$(pc ps -q backup)
+  [ -n "$backup_id" ] || { echo "The backup container isn't running, so the updater's backups weren't tested." >&2; exit 1; }
+  if refused=$(pc exec -T -e ID="$backup_id" updater sh -c 'DOCKER_CONFIG=/tmp/docker docker exec "$ID" true' 2>&1); then
+    echo "The Docker proxy let the updater exec into the backup container." >&2
+    exit 1
+  fi
+  # The proxy's own refusal, not some other failure.
+  if ! printf '%s\n' "$refused" | grep -qi 'forbidden'; then
+    echo "The updater's docker exec failed, but not because the Docker proxy refused it: $refused" >&2
+    exit 1
+  fi
+  echo "The Docker proxy refuses the updater exec." >&2
+  if ! said=$(pc exec -T updater node --input-type=module -e '
+    const { composeServer } = await import(`${process.cwd()}/dist/server.js`);
+    const server = composeServer({ dir: process.env.PLATFORM_DIR, dockerHost: process.env.DOCKER_HOST, dockerConfig: "/tmp/docker", signer: { identity: "", issuer: "" } });
+    const file = await server.backup();
+    await server.restoreTest();
+    console.log(file);
+  ' 2>&1); then
+    echo "The updater couldn't take a backup and a restore test: $said" >&2
+    exit 1
+  fi
+  said=$(printf '%s\n' "$said" | tail -n 1)
+  case "$said" in platform-*.sql.gz) echo "The updater took a backup ($said) and a restore test, with no exec." >&2 ;;
+    *) echo "The updater's backup didn't say where it wrote the backup: $said" >&2; exit 1 ;;
+  esac
+}
+
 # One look of the updater's watch after an upgrade (node dist/index.js check), again until it says what's
 # wanted: `pass`, or `fail <part>`, which must be named among the problems. Its exit code must agree.
 check_until() {
@@ -818,6 +849,7 @@ case "$mode" in
       exit 0
     fi
     check_until "As installed" pass
+    backs_up_without_exec
     # What an upgrade can leave behind: a part that doesn't come back.
     pc stop identity >&2
     check_until "With identity stopped" fail identity

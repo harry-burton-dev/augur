@@ -553,6 +553,24 @@ jobs:
             "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --restore-test
           cat /tmp/backups/status/restore-test.json
           grep -q '"ok":true' /tmp/backups/status/restore-test.json
+      - name: A backup run waits for another to finish, and says so
+        run: |
+          # Another run (the long-running container's nightly work, say) holds the lock for a few seconds.
+          docker run -d --name holder -v /tmp/backups:/backups --entrypoint flock "$BACKUP_IMAGE" /backups/.lock sleep 8
+          sleep 2
+          start=$(date +%s)
+          docker run --rm --link pg -e PGHOST=pg -e PGUSER=platform -e PGPASSWORD=ci \
+            -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups -v /tmp/objects:/objects:ro \
+            "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --now 2>&1 | tee /tmp/waited.log
+          grep -q "backup: waiting for another backup run to finish" /tmp/waited.log && grep -q "backup: wrote /backups/platform-" /tmp/waited.log
+          test $(( $(date +%s) - start )) -ge 4
+          # With no more time to wait, it fails and takes nothing.
+          docker rm -f holder >/dev/null
+          docker run -d --name holder -v /tmp/backups:/backups --entrypoint flock "$BACKUP_IMAGE" /backups/.lock sleep 30
+          sleep 2
+          if docker run --rm -e LOCK_WAIT_SECONDS=1 -v "$PWD/infra/deploy/backup:/backup:ro" -v /tmp/backups:/backups "$BACKUP_IMAGE" /bin/sh /backup/backup.sh --now 2>/tmp/gave-up.log; then exit 1; fi
+          grep -q "held the lock for over 1 s" /tmp/gave-up.log
+          docker rm -f holder >/dev/null
       - name: The off-server copy is made with restic, and the restore test restores from it
         run: |
           # restic, as the backup-tools container hands it over; a local folder stands in for the bucket.

@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, open, readdir, readFile, rename, rm, stat, write
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { composeAppHost, runToEnd, verifyArgs, writeSettings } from './server.ts';
+import { BACKUP_WAIT_SECONDS, composeAppHost, runBackup, runToEnd, verifyArgs, writeSettings } from './server.ts';
 
 describe('signature checks', () => {
   it('check against Sigstore online, or offline against a mirrored trust root', () => {
@@ -211,5 +211,37 @@ esac
     expect(await runToEnd('sh', ['-c', 'echo migrated; exit 0'], env, 5_000)).toEqual({ code: 0, logs: 'migrated\n' });
     expect(await runToEnd('sh', ['-c', 'echo half; echo broke >&2; exit 3'], env, 5_000)).toEqual({ code: 3, logs: 'half\nbroke\n' });
     expect((await runToEnd('sh', ['-c', 'sleep 5'], env, 100)).code).toBe('timeout');
+  });
+});
+
+describe('a backup run', () => {
+  const project = ['compose', '-f', '/srv/augur/compose.yml', '--env-file', '/srv/augur/.env'];
+
+  it('runs backup.sh in a container of its own from the backup service, never exec into the running one', async () => {
+    const ran: string[][] = [];
+    const said = await runBackup(project, {}, '--now', { run: async (_file, args) => (ran.push(args), { code: 0, logs: 'backup: wrote /backups/platform-x.sql.gz\n' }) });
+    expect(said).toMatch(/platform-x/);
+    const [args] = ran;
+    expect(args).not.toContain('exec');
+    expect(args.slice(0, project.length)).toEqual(project);
+    const rest = args.slice(project.length);
+    expect(rest.slice(0, 5)).toEqual(['run', '--rm', '--no-deps', '-T', '--name']);
+    expect(rest[5]).toMatch(/^augur-backup-[0-9a-f]{8}$/);
+    // It waits for the long-running container's own work as long as the updater does, then backup.sh's own flag.
+    expect(rest.slice(6)).toEqual(['-e', `LOCK_WAIT_SECONDS=${BACKUP_WAIT_SECONDS}`, 'backup', '--now']);
+  });
+
+  it('takes away a run that failed or ran out of time, and says which', async () => {
+    const removed: string[] = [];
+    const remove = async (name: string) => void removed.push(name);
+    await expect(runBackup(project, {}, '--restore-test', { remove, run: async () => ({ code: 1, logs: 'restore-test: restoring\nrestore-test: sign-in came back with nobody in it\n' }) })).rejects.toThrow(
+      'restore-test: restoring restore-test: sign-in came back with nobody in it',
+    );
+    await expect(runBackup(project, {}, '--now', { remove, ms: 60_000, run: async () => ({ code: 'timeout', logs: '' }) })).rejects.toThrow(/didn’t finish within 1 minutes/);
+    await expect(runBackup(project, {}, '--now', { remove, ms: 60_000, run: async () => ({ code: 'timeout', logs: 'backup: waiting for another backup run to finish\n' }) })).rejects.toThrow(
+      /within 1 minutes\. It said: backup: waiting for another backup run to finish/,
+    );
+    expect(removed).toHaveLength(3);
+    expect(removed.every((name) => /^augur-backup-/.test(name))).toBe(true);
   });
 });
