@@ -57,18 +57,6 @@ x-telemetry: &telemetry
   # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
   SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
 
-# The secrets that reach a service only as a file (secrets, at the end) are required: Compose stops without one,
-# here, as it does for a value in a service's environment.
-x-required-secrets:
-  - ${CALLER_SIGNING_KEY:?set CALLER_SIGNING_KEY in .env (openssl rand -hex 32)}
-  - ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
-  - ${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env}
-  - ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
-  - ${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env}
-  - ${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env}
-  - ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
-  - ${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env}
-
 x-service: &service
   <<: *hardened
   restart: unless-stopped
@@ -91,7 +79,8 @@ x-service: &service
     # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
     OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
-    DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/platform
+    # Its own secrets, which the make-secrets job writes into its own volume (made-secrets.json; ADR 0107).
+    SECRETS_DIR: /run/augur/secrets
   depends_on:
     postgres: { condition: service_healthy }
 
@@ -101,7 +90,74 @@ x-own-login: &own-login
   postgres: { condition: service_healthy }
   storage: { condition: service_completed_successfully }
 
+# A service whose secrets the make-secrets job writes waits for it.
+x-made-secrets: &made-secrets
+  make-secrets: { condition: service_completed_successfully }
+
 services:
+  # Makes the deployment's secrets on first start, then hands each service only its own, then stops (ADR 0107).
+  # A secret set in .env (or in a platform host's settings) wins; otherwise the one it made before is kept, in the
+  # secrets volume, which the backup copies off the server; otherwise it makes one. made-secrets.json says which
+  # service gets which, each in a volume only that service mounts. Runs on every `up`. After changing a secret in
+  # .env, pc up -d --force-recreate the services that read it: Compose doesn't restart them for that by itself.
+  make-secrets:
+    logging: *logging
+    image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/storage:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
+    <<: *hardened
+    # Root, with no capabilities: it owns the fresh volumes it writes into, and nothing else.
+    user: "0:0"
+    restart: on-failure:3
+    command: ["node", "dist/secrets-job.js"]
+    environment:
+      NODE_ENV: production
+      # The secrets it makes: set one here to keep your own (AUGUR's docs, Settings and secrets, Secrets AUGUR makes).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
+      IDENTITY_DATABASE_PASSWORD: ${IDENTITY_DATABASE_PASSWORD:-}
+      REGISTRY_DATABASE_PASSWORD: ${REGISTRY_DATABASE_PASSWORD:-}
+      EVENTS_DATABASE_PASSWORD: ${EVENTS_DATABASE_PASSWORD:-}
+      MODELS_DATABASE_PASSWORD: ${MODELS_DATABASE_PASSWORD:-}
+      PERMISSIONS_DATABASE_PASSWORD: ${PERMISSIONS_DATABASE_PASSWORD:-}
+      KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:-}
+      KEYCLOAK_DATABASE_PASSWORD: ${KEYCLOAK_DATABASE_PASSWORD:-}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-}
+      FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
+      IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:-}
+      REGISTRY_CLIENT_SECRET: ${REGISTRY_CLIENT_SECRET:-}
+      EVENTS_CLIENT_SECRET: ${EVENTS_CLIENT_SECRET:-}
+      MODELS_CLIENT_SECRET: ${MODELS_CLIENT_SECRET:-}
+      KNOWLEDGE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:-}
+      PERMISSIONS_CLIENT_SECRET: ${PERMISSIONS_CLIENT_SECRET:-}
+      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
+      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
+      OPENFGA_TOKEN: ${OPENFGA_TOKEN:-}
+      # Not made: passed on to the realm job when set (AUGUR's docs, Updater; Run many AUGURs from files).
+      UPDATER_CLIENT_SECRET: ${UPDATER_CLIENT_SECRET:-}
+      FLEET_CLIENT_SECRET: ${FLEET_CLIENT_SECRET:-}
+    volumes:
+      - ./settings.schema.json:/etc/augur/settings.schema.json:ro
+      - ./made-secrets.json:/etc/augur/made-secrets.json:ro
+      - secrets:/secrets/made
+      - secrets-postgres:/secrets/for/postgres
+      - secrets-backup:/secrets/for/backup
+      - secrets-garage:/secrets/for/garage
+      - secrets-storage:/secrets/for/storage
+      - secrets-keycloak:/secrets/for/keycloak
+      - secrets-keycloak-config:/secrets/for/keycloak-config
+      - secrets-identity:/secrets/for/identity
+      - secrets-gateway:/secrets/for/gateway
+      - secrets-registry:/secrets/for/registry
+      - secrets-events:/secrets/for/events
+      - secrets-models:/secrets/for/models
+      - secrets-knowledge-migrate:/secrets/for/knowledge-migrate
+      - secrets-knowledge:/secrets/for/knowledge
+      - secrets-openfga:/secrets/for/openfga
+      - secrets-permissions:/secrets/for/permissions
+      - secrets-updater:/secrets/for/updater
+      - secrets-otel-lgtm:/secrets/for/otel-lgtm
+
   # Puts the platform on your tailnet and serves it over HTTPS with a Tailscale certificate. While
   # infra/deploy/public.sh has it open, Tailscale Funnel serves the same address to the internet too
   # (tailscale/start.sh; AUGUR's docs, Open AUGUR to the internet for a while).
@@ -176,7 +232,8 @@ services:
     entrypoint: ["/bin/sh", "/etc/augur/start.sh"]
     environment:
       POSTGRES_USER: platform
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Read by the image's entrypoint when it first makes the database (make-secrets writes it).
+      POSTGRES_PASSWORD_FILE: /run/augur/secrets/POSTGRES_PASSWORD
       POSTGRES_DB: platform
       # At most this many seconds of changes wait before they're archived (when there are any).
       PITR_ARCHIVE_SECONDS: ${PITR_ARCHIVE_SECONDS:-900}
@@ -188,6 +245,7 @@ services:
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
       - ./postgres:/etc/augur:ro
       - wal-archive:/wal-archive
+      - secrets-postgres:/run/augur/secrets:ro
     # And the rendition worker's network, which reaches only Postgres and Garage.
     # A second name, only on the compose network, for the apps' relays (above) to reach it by.
     networks:
@@ -198,6 +256,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    depends_on: *made-secrets
 
   # A dump of the whole database every night into infra/deploy/backups, keeping 14 days, with a base backup
   # for the archived WAL to be replayed onto (the newest PITR_KEEP_DAYS kept; ADR 0064), and once a week a
@@ -214,7 +273,8 @@ services:
     environment:
       PGHOST: postgres
       PGUSER: platform
-      PGPASSWORD: ${POSTGRES_PASSWORD}
+      # PGPASSWORD, which backup.sh reads from its own secrets (make-secrets writes it).
+      SECRETS_DIR: /run/augur/secrets
       BACKUP_HOUR_UTC: ${BACKUP_HOUR_UTC:-2}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
       RESTORE_TEST_WEEKDAY: ${RESTORE_TEST_WEEKDAY:-0}
@@ -241,6 +301,9 @@ services:
       - ./:/deploy:ro
       # The knowledge graph's forget ledger, read only: copied off the server with apps' files.
       - knowledge-ledger:/knowledge-ledger:ro
+      # The secrets AUGUR made, read only: copied off the server with .env, so a lost server can be set up again.
+      - secrets:/made-secrets:ro
+      - secrets-backup:/run/augur/secrets:ro
     depends_on:
       postgres: { condition: service_healthy }
       backup-tools: { condition: service_completed_successfully }
@@ -263,8 +326,11 @@ services:
     image: dxflrs/garage:v2.4.1
     restart: unless-stopped
     environment:
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in .env}
-      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in .env}
+      # Garage reads both from files itself (make-secrets writes them). Only Garage mounts the folder, so the
+      # files being readable by any user in it is safe, which Garage otherwise refuses.
+      GARAGE_RPC_SECRET_FILE: /run/augur/secrets/GARAGE_RPC_SECRET
+      GARAGE_ADMIN_TOKEN_FILE: /run/augur/secrets/GARAGE_ADMIN_TOKEN
+      GARAGE_ALLOW_WORLD_READABLE_SECRETS: "true"
     # Ready once the node answers its own status (the image has only Garage's binary).
     healthcheck:
       test: ["CMD", "/garage", "status"]
@@ -276,6 +342,8 @@ services:
       - ./garage/garage.toml:/etc/garage.toml:ro
       - garage-meta:/var/lib/garage/meta
       - garage-data:/var/lib/garage/data
+      - secrets-garage:/run/augur/secrets:ro
+    depends_on: *made-secrets
     # A second name, only on the compose network, for the apps' relays (above) to reach it by.
     networks:
       default:
@@ -292,7 +360,8 @@ services:
     # Each app's secrets are named after it (<APP>_DATABASE_PASSWORD, ...), so it reads them all from .env.
     env_file: [{ path: .env, required: false }]
     environment:
-      DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
+      # DATABASE_URL, the services' and Keycloak's login passwords and Garage's key (make-secrets writes them).
+      SECRETS_DIR: /run/augur/secrets
       GARAGE_ADMIN_URL: http://garage:3903
       # The apps named in .env that keep data outside the app runner (the runner sets up its own apps' storage).
       APP_STORAGE: ${APP_STORAGE:-}
@@ -301,13 +370,14 @@ services:
       # app installed later under one of these ids keeps its own.
       RETIRED_APPS: folio atlas mandate auspex
       # The platform's services that get a login owning only their own schema, each with its
-      # <SERVICE>_DATABASE_PASSWORD from .env. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
+      # <SERVICE>_DATABASE_PASSWORD. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
       PLATFORM_DATABASE_LOGINS: identity registry events models permissions
       # The most connections each app's login may hold at once (30 when empty), so one app can't take AUGUR's (ADR 0073).
       APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
     volumes:
       # Only the backup container's results, never the backups: an app's data is dropped only behind a fresh one (ADR 0103).
       - ./backups/status:/backup-status:ro
+      - secrets-storage:/run/augur/secrets:ro
     depends_on:
       postgres: { condition: service_healthy }
       garage: { condition: service_healthy }
@@ -351,13 +421,15 @@ services:
     # AUGUR's Keycloak: Keycloak with AUGUR's sign-in and email theme (ADR 0041, infra/service.Dockerfile).
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/keycloak:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     restart: unless-stopped
+    # Its database and bootstrap admin passwords and identity's secret from its own secrets (secrets-env.sh).
+    entrypoint: ["/bin/sh", "/augur/secrets-env.sh", "/opt/keycloak/bin/kc.sh"]
     command: ["start", "--import-realm"]
     environment:
+      SECRETS_DIR: /run/augur/secrets
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       # Its own login, owning only its own database; the storage job makes it.
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${KEYCLOAK_DATABASE_PASSWORD:?set KEYCLOAK_DATABASE_PASSWORD in .env}
       # Its share of Postgres's connections (Keycloak's own default is 100).
       KC_DB_POOL_MAX_SIZE: ${KEYCLOAK_DB_POOL_MAX:-20}
       KC_HOSTNAME: ${PLATFORM_URL:?set PLATFORM_URL in .env}/sso
@@ -368,11 +440,9 @@ services:
       # One instance: no cluster to find.
       KC_CACHE: local
       KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
-      # Read by the realm file on first start: who you sign in as.
+      # Read by the realm file on first start: who you sign in as (and identity's own sign-in, from its secrets,
+      # so identity never needs Keycloak's admin).
       PLATFORM_URL: ${PLATFORM_URL}
-      # And identity's own sign-in, so identity never needs Keycloak's admin.
-      IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:?set PLATFORM_ADMIN_USER in .env}
       PLATFORM_ADMIN_PASSWORD: ${PLATFORM_ADMIN_PASSWORD:?set PLATFORM_ADMIN_PASSWORD in .env}
       PLATFORM_ADMIN_EMAIL: ${PLATFORM_ADMIN_EMAIL:?set PLATFORM_ADMIN_EMAIL in .env}
@@ -398,6 +468,8 @@ services:
       - ./keycloak/platform-realm.json:/opt/keycloak/data/import/platform-realm.json:ro
       # The breached-password list the realm's password policy checks against (ADR 0038).
       - ./keycloak/password-blacklists:/opt/keycloak/data/password-blacklists:ro
+      - secrets-keycloak:/run/augur/secrets:ro
+      - ./secrets-env.sh:/augur/secrets-env.sh:ro
     depends_on: *own-login
 
   # The realm as code (ADR 0057): brings Keycloak's realm to what this release declares (password
@@ -414,10 +486,9 @@ services:
       NODE_ENV: production
       KEYCLOAK_URL: http://keycloak:8080/sso
       KEYCLOAK_ADMIN_USER: ${KEYCLOAK_ADMIN_USER:-keycloak-admin}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD in .env}
-      IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:?set IDENTITY_CLIENT_SECRET in .env}
-      # Each platform service's sign-in in Keycloak, made or set to these secrets.
-      SERVICE_CLIENT_SECRETS: platform-registry=${REGISTRY_CLIENT_SECRET:?set REGISTRY_CLIENT_SECRET in .env},platform-events=${EVENTS_CLIENT_SECRET:?set EVENTS_CLIENT_SECRET in .env},platform-models=${MODELS_CLIENT_SECRET:-},platform-knowledge=${KNOWLEDGE_CLIENT_SECRET:?set KNOWLEDGE_CLIENT_SECRET in .env},platform-permissions=${PERMISSIONS_CLIENT_SECRET:?set PERMISSIONS_CLIENT_SECRET in .env},platform-updater=${UPDATER_CLIENT_SECRET:-},platform-fleet=${FLEET_CLIENT_SECRET:-}
+      # Keycloak's admin password, identity's secret, each platform service's sign-in (SERVICE_CLIENT_SECRETS, made or
+      # set to these) and identity's DATABASE_URL, from its own secrets (make-secrets writes them).
+      SECRETS_DIR: /run/augur/secrets
       # Given the deployment-admin role if nobody has it yet.
       PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
       # Stricter than AUGUR's floors if you like, never looser (AUGUR's docs, Settings and secrets, The realm job).
@@ -443,8 +514,8 @@ services:
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
-      # Identity's database, read for the organisation's email sender (Admin → Organisation), which replaces SMTP_FROM.
-      DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+    volumes:
+      - secrets-keycloak-config:/run/augur/secrets:ro
     depends_on:
       keycloak: { condition: service_healthy }
       postgres: { condition: service_healthy }
@@ -504,12 +575,13 @@ services:
       GATEWAY_STREAM_CONNECTIONS: ${GATEWAY_STREAM_CONNECTIONS:-}
       APP_DELEGATION_SECONDS: ${APP_DELEGATION_SECONDS:-}
       # The key it signs callers with, and the one that comes next while it is being changed (docs/signed-caller.md).
-      CALLER_SIGNING_KEY_FILE: /run/secrets/caller_signing_key
+      # CALLER_SIGNING_KEY itself is in its own secrets (make-secrets writes it).
+      SECRETS_DIR: /run/augur/secrets
       CALLER_SIGNING_KEY_NEXT: ${CALLER_SIGNING_KEY_NEXT:-}
-    secrets: [caller_signing_key]
     volumes:
       # Only the results the backup container writes for Status, never the backups themselves.
       - ./backups/status:/backups:ro
+      - secrets-gateway:/run/augur/secrets:ro
       - ./tailscale:/run/augur/tailscale:ro
     networks: [default, telemetry]
     depends_on: [identity, registry, events, models]
@@ -529,8 +601,7 @@ services:
       PORT: 8081
       # Asked beside each admin check, to compare answers before checks move there (shadow mode, docs/observability.md).
       PERMISSIONS_URL: http://permissions:8087
-      # Its own login, owning only the identity schema.
-      DATABASE_URL: postgres://platform_identity:${IDENTITY_DATABASE_PASSWORD:?set IDENTITY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # Its sign-in secret and its own login (DATABASE_URL), owning only the identity schema, come from its own secrets.
       # Admin's People screen: identity manages people in Keycloak as its own client, whose rights in
       # the realm (people, departments and apps' sign-ins, not the realm's settings) are given by
       # keycloak-config. Keycloak's master admin is never in identity's settings. Departments are
@@ -540,8 +611,8 @@ services:
       ORG_NAME: ${ORG_NAME:-Organisation}
       # The languages people may choose in Account, the same ones keycloak-config offers at sign-in.
       REALM_LANGUAGES: ${REALM_LANGUAGES:-}
-      SERVICE_CLIENT_SECRET_FILE: /run/secrets/identity_client_secret
-    secrets: [identity_client_secret]
+    volumes:
+      - secrets-identity:/run/augur/secrets:ro
     depends_on:
       <<: *own-login
       keycloak: { condition: service_healthy }
@@ -564,9 +635,8 @@ services:
       PERMISSIONS_URL: http://permissions:8087
       # The checks it decides instead, once moved over: empty, every check is only compared.
       PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
-      SERVICE_CLIENT_SECRET_FILE: /run/secrets/registry_client_secret
-      # Its own login, owning only the registry schema.
-      DATABASE_URL: postgres://platform_registry:${REGISTRY_DATABASE_PASSWORD:?set REGISTRY_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # Its sign-in secret, its own login (owning only the registry schema), Grafana's key to tell admins of an
+      # alert (ALERT_WEBHOOK_TOKEN, ADR 0059) and the frontends bucket's key come from its own secrets.
       # Asked at install what the knowledge graph offers apps.
       KNOWLEDGE_URL: http://knowledge:8086
       # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
@@ -580,8 +650,6 @@ services:
       # What this server runs, signed and reported to that Backstage under this name (ADR 0019).
       DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
       DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
-      # Grafana's key to tell deployment admins of an alert (POST /v1/platform/alerts, ADR 0059).
-      ALERT_WEBHOOK_TOKEN_FILE: /run/secrets/alert_webhook_token
       # Only whether Grafana's routes outside AUGUR are set, never their addresses: a production server's
       # admins are told while one isn't.
       ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:+set}
@@ -600,15 +668,15 @@ services:
       # Admin → Apps: where apps' own releases are listed, for the app runner (docs/src/content/docs/run/app-runner.md).
       APP_FEEDS: ${APP_FEEDS:-}
       APP_FEED_URL: ${APP_FEED_URL:-}
-      # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/src/content/docs/run/app-runner.md).
-      FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
+      # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/src/content/docs/run/app-runner.md),
+      # opened with FRONTENDS_BUCKET_SECRET from its own secrets.
       FRONTENDS_S3_URL: http://garage:3900
       # Who must sign the release feed, for AUGUR published from a fork (docs/src/content/docs/run/releases.md).
       FEED_SIGNER: ${FEED_SIGNER:-}
-    secrets: [registry_client_secret, alert_webhook_token]
     volumes:
       # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/src/content/docs/run/releases.md).
       - ./secrets:/run/secrets/augur:ro
+      - secrets-registry:/run/augur/secrets:ro
       # A mirror's feed kept on this server, for RELEASE_FEED_URL=file:///run/augur/releases/releases.json (docs/mirror.md).
       - ./releases:/run/augur/releases:ro
     depends_on: *own-login
@@ -626,11 +694,9 @@ services:
     environment:
       <<: *env
       PORT: 8084
-      SERVICE_CLIENT_SECRET_FILE: /run/secrets/events_client_secret
       # Asked beside each admin and lead check, to compare answers before checks move there (shadow mode, docs/permissions.md).
       PERMISSIONS_URL: http://permissions:8087
-      # Its own login, owning only the events schema: the audit log, notifications and domain events.
-      DATABASE_URL: postgres://platform_events:${EVENTS_DATABASE_PASSWORD:?set EVENTS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # Its own login (DATABASE_URL, from its own secrets) owns only the events schema: the audit log, notifications and domain events.
       # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
       DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
       # How often an event an app's part can't take is tried, and the first wait between tries, before it is set aside (5 and 30 when empty; docs/domain-events.md).
@@ -648,7 +714,8 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-    secrets: [events_client_secret]
+    volumes:
+      - secrets-events:/run/augur/secrets:ro
     depends_on: *own-login
 
   # The model gateway: the only place a model provider's key is kept. Without MODEL_API_URL there is
@@ -670,15 +737,15 @@ services:
       PERMISSIONS_URL: http://permissions:8087
       # The checks it decides instead, once moved over: empty, every check is only compared.
       PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
-      SERVICE_CLIENT_SECRET: "${MODELS_CLIENT_SECRET:-}"
-      # Its own login, owning only the models schema.
-      DATABASE_URL: postgres://platform_models:${MODELS_DATABASE_PASSWORD:?set MODELS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # Its sign-in secret and its own login, owning only the models schema, come from its own secrets.
       MODEL_API_URL: "${MODEL_API_URL:-}"
       MODEL_API_KEY: "${MODEL_API_KEY:-}"
       MODEL_NAME: "${MODEL_NAME:-}"
       MODEL_EMBEDDING_NAME: "${MODEL_EMBEDDING_NAME:-}"
       # How long to wait for the model, in seconds (60 when empty).
       MODEL_TIMEOUT_SECONDS: "${MODEL_TIMEOUT_SECONDS:-}"
+    volumes:
+      - secrets-models:/run/augur/secrets:ro
     depends_on: *own-login
 
   # Brings the knowledge graph's schema up to date as Postgres's admin login, then stops (ADR 0079). It makes
@@ -692,8 +759,8 @@ services:
     command: ["node", "dist/migrate-job.js"]
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgres://platform:${POSTGRES_PASSWORD}@postgres:5432/platform
-      KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}
+      # Postgres's admin login (DATABASE_URL) and kg_app's password (KNOWLEDGE_DATABASE_PASSWORD), from its own secrets.
+      SECRETS_DIR: /run/augur/secrets
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
       DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
       DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
@@ -701,6 +768,7 @@ services:
     # After a restore, it forgets again what the forget ledger names (AUGUR's docs, Backups).
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
+      - secrets-knowledge-migrate:/run/augur/secrets:ro
     depends_on: *own-login
 
   # The knowledge graph of each floor (ADR 0079): what AUGUR knows of the entities in people's work, and
@@ -726,16 +794,14 @@ services:
       KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS: ${KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS:-600}
       KNOWLEDGE_REFLECT_DAILY_BUDGET: ${KNOWLEDGE_REFLECT_DAILY_BUDGET:-400}
       KNOWLEDGE_REFLECT_FLOOR_BUDGET: ${KNOWLEDGE_REFLECT_FLOOR_BUDGET:-100}
-      SERVICE_CLIENT_SECRET_FILE: /run/secrets/knowledge_client_secret
-      DATABASE_URL: postgres://kg_app:${KNOWLEDGE_DATABASE_PASSWORD:?set KNOWLEDGE_DATABASE_PASSWORD in .env}@postgres:5432/platform
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
       # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
       # knowledge asks on each request. While it can't answer, nobody settles or raises.
       PERMISSIONS_URL: http://permissions:8087
-    secrets: [knowledge_client_secret]
     # The forget ledger: which observations people forgot, ids only, outside Postgres so a restore can't undo it.
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
+      - secrets-knowledge:/run/augur/secrets:ro
     depends_on:
       knowledge-migrate: { condition: service_completed_successfully }
       identity: { condition: service_healthy }
@@ -750,6 +816,8 @@ services:
     image: ${PLATFORM_IMAGES:-ghcr.io/harry-burton-dev/im-platform}/openfga:${PLATFORM_VERSION:?set PLATFORM_VERSION in .env}
     <<: *hardened
     restart: unless-stopped
+    # Its database address and the permissions service's key from its own secrets (secrets-env.sh), then the image's own start.
+    entrypoint: ["/bin/sh", "/augur/secrets-env.sh", "/bin/sh", "-c", "openfga migrate && exec openfga run"]
     healthcheck:
       test: ["CMD", "/usr/local/bin/grpc_health_probe", "-addr=127.0.0.1:8081"]
       interval: 30s
@@ -757,16 +825,18 @@ services:
       retries: 3
       start_period: 30s
     environment:
+      SECRETS_DIR: /run/augur/secrets
       OPENFGA_DATASTORE_ENGINE: postgres
-      OPENFGA_DATASTORE_URI: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
       # Its share of Postgres's connections (OpenFGA's own default is 30).
       OPENFGA_DATASTORE_MAX_OPEN_CONNS: ${OPENFGA_DB_POOL_MAX:-20}
       OPENFGA_AUTHN_METHOD: preshared
-      OPENFGA_AUTHN_PRESHARED_KEYS: ${OPENFGA_TOKEN:?set OPENFGA_TOKEN in .env}
       OPENFGA_PLAYGROUND_ENABLED: "false"
       OPENFGA_LOG_FORMAT: json
       OPENFGA_CHECK_QUERY_CACHE_ENABLED: "true"
       OPENFGA_CHECK_QUERY_CACHE_TTL: 10s
+    volumes:
+      - secrets-openfga:/run/augur/secrets:ro
+      - ./secrets-env.sh:/augur/secrets-env.sh:ro
     depends_on: *own-login
 
   # The permissions service (ADR 0085): it answers whether a person, through the positions they hold, or an
@@ -786,16 +856,15 @@ services:
       <<: *env
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
-      # Its own login, the one OpenFGA keeps its tables under: persona sessions sit beside them (ADR 0086).
-      DATABASE_URL: postgres://platform_permissions:${PERMISSIONS_DATABASE_PASSWORD:?set PERMISSIONS_DATABASE_PASSWORD in .env}@postgres:5432/platform
+      # Its own login (DATABASE_URL), the one OpenFGA keeps its tables under: persona sessions sit beside them (ADR 0086).
+      # It and OPENFGA_TOKEN come from its own secrets, with its own sign-in: to copy floors, positions and who holds
+      # them from identity (ADR 0089), at once when identity announces a change (platform.position.*, .team.*,
+      # .person.*) and whole every few minutes.
       PERSONA_DEPLOYMENT_ADMIN_MINUTES: ${PERSONA_DEPLOYMENT_ADMIN_MINUTES:-60}
       PERSONA_ORG_ADMIN_MINUTES: ${PERSONA_ORG_ADMIN_MINUTES:-480}
-      OPENFGA_TOKEN_FILE: /run/secrets/openfga_token
-      # Its own sign-in, to copy floors, positions and who holds them from identity (ADR 0089), at once
-      # when identity announces a change (platform.position.*, .team.*, .person.*) and whole every few minutes.
-      SERVICE_CLIENT_SECRET_FILE: /run/secrets/permissions_client_secret
       PERMISSIONS_COPY_SECONDS: ${PERMISSIONS_COPY_SECONDS:-300}
-    secrets: [openfga_token, permissions_client_secret]
+    volumes:
+      - secrets-permissions:/run/augur/secrets:ro
     depends_on:
       openfga: { condition: service_healthy }
       identity: { condition: service_healthy }
@@ -818,7 +887,8 @@ services:
       REGISTRY_URL: http://registry:8082
       OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
       OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
-      SERVICE_CLIENT_SECRET: "${UPDATER_CLIENT_SECRET:-}"
+      # Its sign-in secret (UPDATER_CLIENT_SECRET in .env), from its own secrets.
+      SECRETS_DIR: /run/augur/secrets
       DOCKER_HOST: tcp://docker-proxy:2375
       # This folder's full path on the host, mounted at the same path so Compose's ./ paths still name the host's files.
       PLATFORM_DIR: "${PLATFORM_DIR:-}"
@@ -834,6 +904,7 @@ services:
     volumes:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro
+      - secrets-updater:/run/augur/secrets:ro
     networks: [default, docker, telemetry]
     depends_on: [docker-proxy, registry, db-relay, bucket-relay]
 
@@ -856,14 +927,16 @@ services:
     logging: *logging
     image: grafana/otel-lgtm:0.39.0
     restart: unless-stopped
+    # Grafana's admin password and its key to the registry's alert webhook from its own secrets (secrets-env.sh),
+    # then the image's own start.
+    entrypoint: ["/bin/sh", "/augur/secrets-env.sh", "/otel-lgtm/run-all.sh"]
     deploy:
       replicas: ${OTEL_LGTM_REPLICAS:-1}
     mem_limit: ${OTEL_LGTM_MEM_LIMIT:-2g}
     environment:
-      # Required: with none, Grafana would take admin/admin. An upgrade from the Upgrade Centre makes it up.
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
-      # Read by contact-points.yaml: Grafana's key to the registry's alert webhook.
-      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:?set ALERT_WEBHOOK_TOKEN in .env}
+      # GF_SECURITY_ADMIN_PASSWORD (never empty: with none, Grafana would take admin/admin) and ALERT_WEBHOOK_TOKEN,
+      # read by contact-points.yaml, come from here.
+      SECRETS_DIR: /run/augur/secrets
       # Read by contact-points.yaml: the routes that leave the server without AUGUR. Unset, each points at the
       # registry, which drops what it gets, so Grafana always has an address.
       ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:-http://registry:8082/v1/platform/alerts/unrouted}
@@ -885,19 +958,9 @@ services:
       - ./observability/grafana/alerting:/otel-lgtm/grafana/conf/provisioning/alerting:ro
       - ./observability/grafana/dashboards.yaml:/otel-lgtm/grafana/conf/provisioning/dashboards/augur.yaml:ro
       - ./observability/grafana/dashboards:/otel-lgtm/augur-dashboards:ro
-
-# Secrets AUGUR's own services read as files (<NAME>_FILE, the service kit's loadConfig), never from their
-# environment, where `docker inspect` and a crash report would show them. Each still comes from .env. Compose
-# doesn't recreate a service when only its secret's value changes: after changing one, pc up -d --force-recreate <service>.
-secrets:
-  caller_signing_key: { environment: CALLER_SIGNING_KEY }
-  identity_client_secret: { environment: IDENTITY_CLIENT_SECRET }
-  registry_client_secret: { environment: REGISTRY_CLIENT_SECRET }
-  alert_webhook_token: { environment: ALERT_WEBHOOK_TOKEN }
-  events_client_secret: { environment: EVENTS_CLIENT_SECRET }
-  knowledge_client_secret: { environment: KNOWLEDGE_CLIENT_SECRET }
-  openfga_token: { environment: OPENFGA_TOKEN }
-  permissions_client_secret: { environment: PERMISSIONS_CLIENT_SECRET }
+      - secrets-otel-lgtm:/run/augur/secrets:ro
+      - ./secrets-env.sh:/augur/secrets-env.sh:ro
+    depends_on: *made-secrets
 
 networks:
   default:
@@ -924,3 +987,23 @@ volumes:
   # The knowledge graph's forget ledger (ids only): the knowledge service writes it, its migrate job reads it.
   knowledge-ledger:
   otel-lgtm:
+  # The secrets AUGUR made (make-secrets): every one, for the job itself and the backup, which copies them off the server.
+  secrets:
+  # Each service's own secrets, which only it mounts (made-secrets.json).
+  secrets-postgres:
+  secrets-backup:
+  secrets-garage:
+  secrets-storage:
+  secrets-keycloak:
+  secrets-keycloak-config:
+  secrets-identity:
+  secrets-gateway:
+  secrets-registry:
+  secrets-events:
+  secrets-models:
+  secrets-knowledge-migrate:
+  secrets-knowledge:
+  secrets-openfga:
+  secrets-permissions:
+  secrets-updater:
+  secrets-otel-lgtm:
