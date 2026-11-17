@@ -11,7 +11,7 @@ Each note starts with the release it came in (**From**). If your server already 
 
 ## Sign-ins are kept in the page's memory, and refresh tokens work once
 
-**From** unreleased
+**From** augur@0.27.0
 
 The shell no longer keeps anyone's tokens in the browser's session storage, where any script running on AUGUR's address could read them: it holds them in the page's memory only. A reload or a new tab now gets a sign-in from the sign-in service in a hidden frame, so people stay signed in without seeing the sign-in page. An open tab renews its sign-in shortly before it runs out, as before, so it stays signed in up to the realm's maximum session length. The realm job also turns on refresh token rotation (`revokeRefreshToken`): each refresh token works once, and a used one is refused. A sign-in an earlier release left in a tab's session storage is removed the first time that tab opens AUGUR again. Nothing to do on the server.
 
@@ -19,19 +19,19 @@ The Content-Security-Policy on files under `/apps/`, `/assets/` and `/shared/` i
 
 ## An app's calls for a person are checked on the floor they stand on
 
-**From** unreleased
+**From** augur@0.27.0
 
 When an app's part calls AUGUR for a person, the gateway now checks the app's grant on the floor that person was on, not the organisation's. An app that is on for the organisation but turned off on a team is refused there for those calls, as it already was for the person's own. An app on only for some teams now works there. Nothing to do on the server. If an app is refused where you expect it to work, check its floors in Admin → Apps.
 
 ## `PERMISSIONS_DECIDES=all` now moves the registry's checks too
 
-**From** unreleased
+**From** augur@0.27.0
 
 The registry now reads `PERMISSIONS_DECIDES`, as the model gateway does. Its sites start `registry.` (docs/observability.md lists them). If your `.env` sets it to `all`, every registry check (upgrades, going back, installs, pins, the catalogue) is decided by the permissions service as soon as you upgrade, without the 7 days of comparison first. Before you upgrade, name only the model gateway's sites instead, such as `PERMISSIONS_DECIDES=models.settings.read,models.usage`, and add registry sites once Status has shown no disagreement there for 7 days. If it's empty or names only `models.` sites, there is nothing to do.
 
 ## Each app has a database of its own: remove apps before upgrading
 
-**From** unreleased
+**From** augur@0.27.0
 
 Each app now gets its own database (`app_<id>`) on AUGUR's Postgres, owned by its login, instead of a schema in AUGUR's. Its login, through the apps' relay, reaches only that database, not AUGUR's, Keycloak's or another app's. So no app can read another's tables or hold the locks AUGUR's migrations take. Backups take every database as before.
 
@@ -41,13 +41,13 @@ If an app installed before is still there, this release doesn't start. The stora
 
 ## Apps' parts get only the signed caller
 
-**From** unreleased
+**From** augur@0.27.0
 
 The gateway no longer sends an app's part the plain `x-user-*`, `x-workspace-*` and acting-app headers, only the caller it signs. Apps made from the app template check that already. An app whose part still reads the plain headers without the service kit's `signedCallers` hook answers as if nobody were signed in: update it before you upgrade, or remove it.
 
 ## AUGUR makes its own secrets, and hands each service only its own
 
-**From** unreleased
+**From** augur@0.27.0
 
 A new `make-secrets` job runs first on every `up`. For each of the 22 secrets a deployment used to fill in
 (the database passwords, the sign-in secrets, `CALLER_SIGNING_KEY`, Garage's keys, `OPENFGA_TOKEN`,
@@ -67,97 +67,97 @@ can take them out of `.env`, as long as the off-server copy has run since. A new
 
 ## Alerts can leave the server without AUGUR
 
-**From** unreleased
+**From** augur@0.27.0
 
 Grafana now has two routes that don't go through AUGUR: `ALERT_OUTSIDE_URL` gets every alert and its all-clear, and `ALERT_HEARTBEAT_URL` gets a heartbeat every minute, so a service there raises the alarm when the server stops. Both are optional, and alerts still reach deployment admins as notices. On a production server, set both in `.env` and run `pc up -d otel-lgtm registry`: until you do, the registry tells its deployment admins once a week that alerts reach no one outside AUGUR ([Observability, Alerts](https://github.com/harry-burton-dev/augur/blob/main/docs/observability.md#alerts)).
 
 ## The binding events are gone
 
-**From** unreleased
+**From** augur@0.27.0
 
 AUGUR no longer has entity binding events (`<app>.<type>.entity-bound` and `-unbound`): the registry's `GET /v1/entity-links` answers 404, and a manifest's `bindings` is accepted but no longer read (a contract 3 release that sets it installs with a warning saying so). Nothing in AUGUR or the apps it installs used them. Nothing to do on the server.
 
 ## An app on contract 3 must declare its domain events
 
-**From** unreleased
+**From** augur@0.27.0
 
 An app on contract 3 whose manifest doesn't say what it reads (`contributes.events.reads`), or declares no types it publishes (`contributes.events.publishes`), still publishes and reads events in this release, but the events service logs a warning (`undeclared domain events` in `pc logs events`, at most once every 10 minutes for each app and side, pushed deliveries included) and answers the app's own calls with a `warning`. From the next release it is refused. Nothing to do on the server. If the log names an app you rely on, ask its publisher for a release that declares its events before you upgrade again.
 
 ## An app's id stays with the repository that first installed it
 
-**From** unreleased
+**From** augur@0.27.0
 
 The registry now refuses a release under an app's id when another repository signed it, and keeps that rule after the app is removed. Apps already installed are bound to the repository of the release they run now. Nothing to do, unless you meant to swap an app for another publisher's under the same id: that one now needs an id of its own.
 
 ## An event an app's part can't take no longer holds the rest
 
-**From** unreleased
+**From** augur@0.27.0
 
 When an app's part answers but can't take an event, the events service now tries it up to 5 times over about 7½ minutes (`DOMAIN_EVENTS_DELIVERY_ATTEMPTS`, `DOMAIN_EVENTS_RETRY_SECONDS`) while events on other topics go on, then sets it aside: kept, recorded in Activity as `delivery.set-aside`, and listed for admins by `GET /v1/deliveries/set-aside`. Before, it held every event behind it for a day and was then passed over. A part that is down (no answer; 401, 403, 404, 408, 429, 502, 503 or 504; or server errors on two different events) still holds everything for up to a day, as before, and the event then is set aside rather than passed over. An app that relied on events arriving strictly in `seq` order across topics now gets them in order within each topic only. Nothing to do on the server; the two settings are optional.
 
 ## A migration stuck behind a lock stops its service and says who holds it
 
-**From** unreleased
+**From** augur@0.27.0
 
 A service's migration now waits at most a minute for a lock another session holds (`DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS`), where it used to wait for ever. It then rolls back, the service stops and Docker starts it again, and `pc logs <service>` names the migration, the lock and the session holding it. The knowledge graph's migration job is restarted three times, then stays stopped, and the knowledge service with it, until you run `pc up -d` again. A service also waits at most 10 seconds for a database connection (`DATABASE_CONNECT_TIMEOUT_SECONDS`) before it answers that the database can't be reached. Nothing to do on most servers. A backup running while you upgrade holds every table until it ends, so start an upgrade once the night's backup has finished. If a service keeps restarting after the upgrade and its log says a migration gave up, end the session it names (or the app holding it), or raise the setting in `.env` and run `pc up -d`; it reaches AUGUR's own services, and an app's migrations keep the default ([Limits and health](../../run/limits/#logs-memory-and-health)).
 
 ## Apps' frontends hold no pages or SVGs
 
-**From** unreleased
+**From** augur@0.27.0
 
 Under `/apps/` the front door now serves only the file types an app's frontend needs (scripts, styles, JSON, source maps, images other than SVG, fonts, WebAssembly) and answers 404 for anything else, such as an `.html` or `.svg` file, because one opened at its address would run as AUGUR's own page. The registry refuses a frontend bundle that holds one, so an app release with one fails to install; its developer rebuilds it without (`augur-app bundle` now says which file). Every file under `/apps/`, `/assets/` and `/shared/` also carries `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy. No app AUGUR knows of ships such a file, so there is nothing to do on the server. An installed app that does hold a file of another type keeps working, but that file is answered 404, so anything its pages draw from it goes missing until its developer releases the app again without it.
 
 ## Postgres keeps connections back for AUGUR
 
-**From** unreleased
+**From** augur@0.27.0
 
 Postgres now takes at most 200 connections (`POSTGRES_MAX_CONNECTIONS`, Postgres's own default was 100) and keeps 40 of them for AUGUR's own logins (`POSTGRES_RESERVED_CONNECTIONS`), so apps can't take every connection. Keycloak's pool is now at most 20 (it was 100) and OpenFGA's 20. Postgres takes the new limits when it next starts, and an upgrade through Deployment doesn't restart it: run `pc up -d postgres` after the upgrade, which takes it down for a few seconds.
 
 ## Each container has a share of the server
 
-**From** unreleased
+**From** augur@0.27.0
 
 Every container AUGUR builds (its services, the front door, OpenFGA and its jobs) now has a memory limit of 1g (the updater 2g) and may run at most 512 processes. Each app's part runs with at most 256 processes and goes first when the server runs out of memory, from its next install, update or settings change. Nothing to do on most servers. If `pc ps` shows one of AUGUR's services restarting after the upgrade, or a job exited with 137, set `SERVICE_MEM_LIMIT` (or `UPDATER_MEM_LIMIT`) higher in `.env` and run `pc up -d`; `docker stats --no-stream` shows what each uses now.
 
 ## An app that declares its domain events is held to them
 
-**From** unreleased
+**From** augur@0.27.0
 
 An app whose manifest says which events it reads (`contributes.events.reads`) is given only those, and one that declares the types it publishes can publish only those, each payload checked against its version's schema (ADR 0104). Events now carry the `version` of their type. Apps that declare nothing work as before. Nothing to do on the server.
 
 ## An app reads only the domain events on its floors, and hears when it fell behind
 
-**From** unreleased
+**From** augur@0.27.0
 
 `GET /v1/domain-events` now gives an app only the events on floors where it holds `events:subscribe`, and those on no floor; AUGUR's own services still read every floor's (ADR 0104). A follower whose place is behind what was pruned (`DOMAIN_EVENTS_KEEP_DAYS`, 30 days) gets **410** with how far events were pruned, where it used to skip the missing ones silently. The service kit's `followEvents` takes an `onGap(after)` to rebuild and read on; an app on an older kit sees each read fail until it is rebuilt. Nothing to do on the server. An app that reads events across floors should check its floors' grants in Admin → Apps.
 
 ## A retired or removed app's data waits one release before it's dropped
 
-**From** unreleased
+**From** augur@0.27.0
 
 An app taken out of AUGUR (`RETIRED_APPS`), or removed from the server once its grace period ends, no longer loses its data at once. Its schemas are renamed `retired_<app>`, its login can't sign in, and its bucket moves to `retired-<app>`. It is dropped on the next AUGUR release, and only when a backup taken since it was set aside worked and holds apps' files (ADR 0103). So the disk holds that data for one release longer. A server upgrading from before 0.24.0 sets the four apps that used to ship with AUGUR aside this way instead of dropping them. No app may now take an id starting `retired-`. To bring set-aside data back first, see [app-storage.md](app-storage.md). Nothing to do.
 
 ## The backup before an upgrade always copies apps' files
 
-**From** unreleased
+**From** augur@0.27.0
 
 The backup the updater takes before an upgrade, or before it takes a removed app's data away, now copies apps' files every time, as `objects-<date>T<time>Z.tar.gz`, where it used to keep the one from earlier that day. So an upgrade takes a little longer and `infra/deploy/backups/` holds one more tarball per upgrade, kept `BACKUP_KEEP_DAYS` days like the rest. A removed app's data is dropped only when that backup worked and holds apps' files: if it didn't, the app stays under **Removed, data kept** in Admin → Apps with the reason, and is tried again later. Nothing to do.
 
 ## AUGUR can run behind your own proxy instead of Tailscale
 
-**From** unreleased
+**From** augur@0.27.0
 
 `compose.proxy.yml` puts AUGUR behind your organisation's own proxy or load balancer: Tailscale doesn't run, and the front door listens at `PROXY_LISTEN` ([Install AUGUR, Behind your own proxy](../../run/install/#behind-your-own-proxy)). Nothing changes for a server on Tailscale, and `TS_AUTHKEY` is now needed only for a machine joining the tailnet. To move a server to its own proxy, first upgrade it to this release, since the updater before it runs `compose.yml` alone. Then stop Tailscale with the alias you have (`pc rm -sf tailscale`), set `COMPOSE_FILE=compose.yml:compose.proxy.yml`, `PROXY_LISTEN`, `TRUSTED_PROXIES` and the new `PLATFORM_URL` in `.env`, add `-f infra/deploy/compose.proxy.yml` to your `pc` alias, and run `pc up -d`. Remove the old machine in the Tailscale admin console. A new `PLATFORM_URL` changes the address people sign in at, so tell them first.
 
 ## Say where the proxy in front is: TRUSTED_PROXIES
 
-**From** unreleased
+**From** augur@0.27.0
 
 The front door believes the caller's address that the proxy in front passes on (X-Forwarded-For) only from `TRUSTED_PROXIES`. Unset, that is the private ranges and loopback, as before, so nothing changes. Behind a load balancer, set it to the load balancer's addresses, so that nothing else on your network can pass for another caller in the front door's limits ([Limits and health](../../run/limits/)).
 
 ## A server's first upgrade starts by itself, and a fleet can run a server
 
-**From** unreleased
+**From** augur@0.27.0
 
 Automatic no longer waits for one upgrade by hand on each server: a new server takes its first upgrade under its desired state, like any later one, and **Needs you** stops asking for it. The watch, going back by itself and the rule that a 0.x minor waits for an admin all stay. To keep a server from upgrading by itself, set its policy to **Ask first** or **On hold** on the Deployment page.
 
@@ -165,7 +165,7 @@ Automatic no longer waits for one upgrade by hand on each server: a new server t
 
 ## The gateway's caller signing key is required
 
-**From** unreleased
+**From** augur@0.27.0
 
 The gateway now won't start without `CALLER_SIGNING_KEY`, the key it signs callers with. If `.env` hasn't got one, add it before you upgrade: `echo "CALLER_SIGNING_KEY=$(openssl rand -hex 32)" >> .env` in the server's folder. The updater that carries this upgrade is the one you run now, which can't make the key up, so Deployment's Updates page asks you to set it and the upgrade waits until you have; from this release on, the updater makes it up when an upgrade needs it. Everyone stays signed in; services fetch the new key the first time they see it. `CALLER_SIGNING_KEY_NEXT` is new and optional, for changing the key without refusing a call ([Signed caller, Changing the key](https://github.com/harry-burton-dev/augur/blob/main/docs/signed-caller.md#changing-the-key)).
 
@@ -173,13 +173,13 @@ A call from inside a service's own container is no longer believed as it comes. 
 
 ## Deploy bundles, and the Compose project's name from .env
 
-**From** unreleased
+**From** augur@0.27.0
 
 Each release now carries `augur-deploy-<version>.tar.gz`, signed like its images: unpack it over the server's folder in place of `git checkout augur@<version>` ([Install AUGUR, step 1](../../run/install/#1-get-the-release)). A git checkout keeps working. Compose's project name now comes from `COMPOSE_PROJECT_NAME` in `.env` and is still `platform` without it. Nothing to do: don't set it on a server that has data, since Docker names the volumes after it.
 
 ## Apps reach the stores only through relays
 
-**From** unreleased
+**From** augur@0.27.0
 
 Two new containers, `db-relay` and `bucket-relay`, now stand in for Postgres and the object store on each app's network. `db-relay` lets only the app's own login on to Postgres, never the platform's superuser or a service's; `bucket-relay` passes on only the object store's S3 API, never its admin API. An app gets only the relay for what it asks for. On its first turn after the upgrade the app runner joins each relay to the apps' networks under the store's own name (`postgres`, `garage`), then takes Postgres and Garage themselves off them, so the apps' parts keep the same addresses.
 
@@ -187,13 +187,13 @@ Connections an app's parts already held open to Postgres or the object store end
 
 ## Only AUGUR's own apps load into the shell's page
 
-**From** unreleased
+**From** augur@0.27.0
 
 If you run an app on contract 2 that AUGUR didn't make (today, Mandate or Explorer), it stops opening after this upgrade: it stays in the app bar and says why. Code loaded into the shell's page runs as the shell, with the person's sign-in, so only AUGUR's own apps load there now; every other app runs in the sandbox on the app contract. The registry also refuses every contract 2 manifest (error `contract_2`), so such an app can't register again either: it opens once its team releases it on the app contract, or remove it in Admin → Apps.
 
 ## Services wait for their database, and stop cleanly
 
-**From** unreleased
+**From** augur@0.27.0
 
 Nothing to do unless you changed the services' healthchecks in your own compose override. Each AUGUR service's healthcheck now asks `/readyz`, which answers only while its database answers, so `pc ps` shows a service as `unhealthy` while it can't reach Postgres. A stopping service now finishes its calls in flight, for up to `SHUTDOWN_GRACE_SECONDS` (20, at most 23), and Docker waits up to 30 seconds for it, so `pc down` and an upgrade can take a few seconds longer ([Limits and health](../../run/limits/#logs-memory-and-health)).
 

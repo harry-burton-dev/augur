@@ -1,5 +1,21 @@
 # @augur/contract-tests
 
+## 0.5.0
+
+### Minor Changes
+
+- c22408f: Kit 0.6.5 (shell-kit 0.16.1): at 320 px the desktop bar folds what doesn't fit, open apps included, into More, a split pane's columns stay inside the pane, and the title card fits an app's name to the window (WCAG 2.2 reflow). Muted text is drawn in ink-muted, not faded, so it keeps 4.5:1 contrast. A new contract test, `reflow.spec.ts`, holds the desktop and an open app at 320 px: nothing cut off past either edge, and nothing scrolling sideways.
+
+### Patch Changes
+
+- 3e926e8: An app's frontend holds only the file types it needs (the service kit's new `FRONTEND_TYPES`: scripts, styles, JSON, source maps, images, fonts, WebAssembly), never a page or an SVG, which opened at its `/apps/` address would run as the shell's origin (PER-453). `packFrontend` and `unpackFrontend` refuse any other file, saying which and why, so `augur-app bundle` stops before it pushes anything and the registry refuses the bundle; the registry never writes one to the frontends bucket. The front door answers 404 for any other file under `/apps/`, and sends `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy (`sandbox; default-src 'none'; frame-ancestors 'none'`) with everything under `/apps/`, `/assets/` and `/shared/` (`infra/deploy/not-a-page.conf`). The contract tests run the reference app with that policy enforced.
+- d912990: Kit 0.6.6: in a small window (under 720 px), the open app has the width. The floor picker sits in the top band, and the app pane is a toggle there that opens over the page. At 320 px an app now gets 236 px instead of 88 px, so the reflow contract test passes again. The reflow contract test now names what runs past the edge.
+- e3bb87e: The shell keeps tokens in the page's memory only, never in the browser's storage, where any script on AUGUR's origin could read them (PER-453). A reload or a new tab gets a sign-in from the sign-in service in a hidden frame (`/auth/silent`), and one about to run out is renewed through one path, one renewal at a time (when a call needs it, or in the background a minute before), with the refresh token or, when that is turned down, the same way. A refresh token that failed is dropped, never sent again. A sign-in an earlier release left in session storage is removed. The realm job turns on refresh token rotation (`revokeRefreshToken`, no reuse), so each refresh token works once. The front door now enforces the Content-Security-Policy on `/apps/`, `/assets/` and `/shared/` (`infra/deploy/not-a-page.conf`), which was report-only. The deploy test checks that no token is in the shell page's storage and that a reload and a second tab stay signed in, in Chromium and Firefox, and in WebKit where the front door is https (WebKit keeps no Secure cookie from plain-http localhost, so the deploy test can't sign it in).
+- Updated dependencies [f01dbb8]
+- Updated dependencies [e11f22e]
+- Updated dependencies [e672f41]
+  - @augur/mfe-sdk@3.2.0
+
 ## 0.4.1
 
 ### Patch Changes

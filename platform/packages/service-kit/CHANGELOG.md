@@ -1,5 +1,42 @@
 # @augur/service-kit
 
+## 0.21.0
+
+### Minor Changes
+
+- 3e926e8: An app's frontend holds only the file types it needs (the service kit's new `FRONTEND_TYPES`: scripts, styles, JSON, source maps, images, fonts, WebAssembly), never a page or an SVG, which opened at its `/apps/` address would run as the shell's origin (PER-453). `packFrontend` and `unpackFrontend` refuse any other file, saying which and why, so `augur-app bundle` stops before it pushes anything and the registry refuses the bundle; the registry never writes one to the frontends bucket. The front door answers 404 for any other file under `/apps/`, and sends `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy (`sandbox; default-src 'none'; frame-ancestors 'none'`) with everything under `/apps/`, `/assets/` and `/shared/` (`infra/deploy/not-a-page.conf`). The contract tests run the reference app with that policy enforced.
+- cde9587: Identity and the registry keep each audit entry in their own database first and send it to the events service from there (ADR 0104, PER-414), so an admin's change is audited, and its domain event published, even while the events service is down. The service kit adds `auditOutbox`, `AUDIT_OUTBOX_COLUMNS` and `postAudit`, and `ServiceCallError` carries the `status` the service answered.
+
+  Not breaking: everything is added; `ServiceCallError` gains an optional `status` and an optional second constructor argument.
+
+- f8b4e26: The gateway needs CALLER_SIGNING_KEY in production, and publishes CALLER_SIGNING_KEY_NEXT beside it so the key can be changed without refusing a call. A call from inside a service's own container is checked like any other unless CALLER_BREAK_GLASS=on, and each one break-glass lets through is logged. The updater makes up the signing key when an upgrade needs it.
+
+  Not breaking: the new parameters are optional, and only the gateway calls callerSignerFromEnv. A part that believed headers on calls from its own container now checks them, which nothing an app ships depends on.
+
+- 64802b1: A caller can name its organisation: `caller.org`, the organisation's floor's id, which the signed caller carries as the claim `org` and AUGUR's own services read from `x-user-org`. Identity's `GET /v1/organisation` now gives that id as `id`. The gateway starts signing it in the next change; until then `org` is absent. Part of PER-463.
+- 6ae9705: Warn an app on contract 3 that doesn't declare the domain events it reads or publishes: the registry says each app's contract, the service kit's `registryDeclaredEvents` passes it on, and the events service answers each publish and read with a `warning`. The next release refuses such an app.
+- d4efc5a: Domain events are read by floor: an app sees only those on floors where it holds events:subscribe, and the deployment's own. A cursor behind what was pruned answers 410 with how far events were pruned, and followEvents takes onGap to rebuild. A pushed app whose place was pruned meanwhile gets what is left and the gap is audited (delivery.gap) (ADR 0104).
+- 324934b: The gateway lets the fleet's machine client (platform-fleet, ADR 0100) through to the registry's routes that read and change what the server runs, as the caller client:platform-fleet, and nowhere else. The registry still refuses its changes until it holds them to the server's ring.
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+- 67c373b: The events service holds an app to the events its manifest declares (ADR 0104): only the topics it reads, pulled or pushed, and only the types it publishes, each payload checked against its version's schema. Events carry their type's version. The service kit adds registryDeclaredEvents.
+
+  Not breaking: everything is added; `addToOutbox` leaves out only `version`, which is new here, so no caller passes it.
+
+- 7c85129: A migration waits at most `DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS` (60) for a lock, then rolls back and throws `MigrationLockTimeout`, naming the migration, the lock and the session holding it where the login may see it; its transaction is ended if left idle for `DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS` (60). A pool from `steadyPool` waits at most `DATABASE_CONNECT_TIMEOUT_SECONDS` (10) for a connection and then throws `DatabaseUnavailable`, answered 503. Migrations and the audit outbox take their advisory locks in a namespace of their own (`LOCK_NAMESPACE`), so no other lock user can collide with them (PER-456).
+
+  Not breaking: everything is added; `runMigrations` takes two optional limits. A client whose rollback failed is thrown away rather than lent again.
+
+- e11f22e: The binding events are gone (decision D6, ADR 0066). The registry no longer serves `GET /v1/entity-links`, and a manifest's `bindings` is accepted but ignored, for one release: contract 3 says so in a warning. The service kit drops `bindingTopics`, `bindingEvent`, `outboxBinding`, `readBinding`, `registryBindingApps` and their types. `AppManifestEntry.bindings` in the SDK is deprecated.
+
+  Not breaking: nothing in AUGUR or in any app repository imports the removed service kit helpers or calls the route removed from contracts/registry.openapi.yaml.
+
+- 3eebea4: The code for AUGUR making its own secrets (ADR 0107), not yet switched on. The service kit takes each file in the folder `SECRETS_DIR` names as the setting it is named after. The storage image gains the `make-secrets` job (`node dist/secrets-job.js`): for each `x-generate` secret, a value in the environment wins, then the one it made before, then a new one, and it writes each service its own folder as `infra/deploy/made-secrets.json` will say. The updater runs that job before every other part when a release has it. Nothing changes on a server until the next pull request adds the job to `compose.yml`. Part of PER-507.
+- 747c5c4: A retired or removed app's data is set aside (schemas renamed retired_<app>, login unable to sign in, bucket moved to retired-<app>) and dropped on a later AUGUR release behind a fresh backup (ADR 0103). App ids starting retired- are kept.
+
+### Patch Changes
+
+- 4bd767a: An app can no longer take the id `recover` or `legal`: the front door serves the way back at /recover/ and AUGUR's licence and notices at /legal/ itself. A test now reads infra/deploy/nginx.conf and fails when a path it serves isn't kept from apps.
+
 ## 0.20.0
 
 ### Minor Changes

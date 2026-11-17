@@ -1,5 +1,14 @@
 # @augur/admin
 
+## 0.21.1
+
+### Patch Changes
+
+- Updated dependencies [f01dbb8]
+- Updated dependencies [e11f22e]
+- Updated dependencies [e672f41]
+  - @augur/mfe-sdk@3.2.0
+
 ## 0.21.0
 
 ### Minor Changes

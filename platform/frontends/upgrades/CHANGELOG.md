@@ -1,5 +1,16 @@
 # @augur/upgrades
 
+## 0.3.1
+
+### Patch Changes
+
+- de987d0: The upgrade guide moves into the docs site: Upgrade AUGUR, The updater, The app runner, Where releases come from and Report to Backstage under Run AUGUR, and the upgrade notes on a page of their own under Release notes. Messages that pointed at `docs/upgrade.md` now name the page in AUGUR's docs, so the registry's reply when Deployment tries to change AUGUR's release channel reads differently.
+- 9ee05b0: The fleet's machine client (platform-fleet, ADR 0100) may upgrade AUGUR, set a unit's desired state and ask for app installs with nobody signed in, within the server's ring (production: only stable releases nobody halted), recorded under its name. FLEET_CLIENT_SECRET makes the client. A server's first upgrade no longer has to be run by hand.
+- Updated dependencies [f01dbb8]
+- Updated dependencies [e11f22e]
+- Updated dependencies [e672f41]
+  - @augur/mfe-sdk@3.2.0
+
 ## 0.3.0
 
 ### Minor Changes

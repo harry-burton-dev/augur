@@ -1,5 +1,41 @@
 # @augur/gateway
 
+## 0.16.0
+
+### Minor Changes
+
+- 9233a2d: A call the host makes for an app (`x-augur-app`) must name the floor the person stands on; one that names none gets 400 instead of being checked on the organisation's. The host always names it. A part's onward call for a person (`x-augur-delegation`) is now checked on the floor that person stood on, which the delegation carries, rather than on the organisation's when the part names none; a part that names a different floor gets 400. Part of PER-463.
+- 2718d2b: An app's part now gets only the signed caller (`x-augur-caller`), never the plain `x-user-*`, `x-workspace-*` and acting-app headers beside it. A part made from the app template already checks the signed caller (the service kit's `appServer`); one that read the plain headers without the `signedCallers` hook sees nobody signed in until it adds the hook. No app on the app contract is affected. AUGUR's own services still get both.
+- f8b4e26: The gateway needs CALLER_SIGNING_KEY in production, and publishes CALLER_SIGNING_KEY_NEXT beside it so the key can be changed without refusing a call. A call from inside a service's own container is checked like any other unless CALLER_BREAK_GLASS=on, and each one break-glass lets through is logged. The updater makes up the signing key when an upgrade needs it.
+
+  Not breaking: the new parameters are optional, and only the gateway calls callerSignerFromEnv. A part that believed headers on calls from its own container now checks them, which nothing an app ships depends on.
+
+- 324934b: The gateway lets the fleet's machine client (platform-fleet, ADR 0100) through to the registry's routes that read and change what the server runs, as the caller client:platform-fleet, and nowhere else. The registry still refuses its changes until it holds them to the server's ring.
+- c22c40c: The gateway now signs the organisation on the callers it passes on: the claim `org` (`caller.org`, and `x-user-org` for AUGUR's own services), the organisation's floor's id. It reads the id from identity in the background, so no call waits for it. A call made before identity first answers, or while an identity older than this release is running, goes without it. Part of PER-463.
+- da177c4: AUGUR's services' open streams (any GET /v1/<resource>/stream) get a pool of their own at the gateway, so open tabs never hold up their other calls, and a service that has stopped answering is named in a 504 or 502 (GATEWAY_SERVICE_CONNECT_TIMEOUT_MS, GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS, GATEWAY_SERVICE_CONNECTIONS, GATEWAY_STREAM_CONNECTIONS).
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+
+### Patch Changes
+
+- f306d63: An app can no longer act as the admin who opened it on the registry's admin routes. A call made for an app passes no admin or deployment-admin check unless the app is one of AUGUR's own frontends (it carries a platform scope), and the gateway lets an app call its own registry entry without a scope only to read it, register itself and give it a version's frontend. Changing its own scopes, floors, upload limit, pin or entry, or removing it, needs the admin scope as for any other app.
+- 6888d13: The gateway serves a just-installed app within moments instead of up to 30 seconds later. It keeps three answers from the registry for 30 seconds: where apps' services are, each person's apps on a floor, and each app's grants. When the answer it has doesn't have the app someone is opening, it now asks the registry again, at most once every 2 seconds, and keeps "not installed" for only those 2 seconds, rather than saying "Nothing is served" or "That app isn't available to you" until the 30 seconds run out. Apps it already knows still use the kept answer, and a registry outage still keeps the last one.
+- f53a4ca: A part's onward call for a person is now refused when the person has left the floor the delegation names, or the app is no longer on for them there (turned off or blocked for them), as the person's own call already was. Before, the part could keep acting for them until its delegation ran out, up to `APP_DELEGATION_SECONDS`. The person's roles are still the ones the delegation was signed with. The gateway now remembers each catalogue by the caller's roles, departments and persona as well as the person and floor, so callers signed with different roles never share one. Fixes PER-521.
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/service-kit@0.21.0
+
 ## 0.15.0
 
 ### Minor Changes

@@ -1,5 +1,38 @@
 # @augur/events
 
+## 0.13.0
+
+### Minor Changes
+
+- 6ae9705: Warn an app on contract 3 that doesn't declare the domain events it reads or publishes: the registry says each app's contract, the service kit's `registryDeclaredEvents` passes it on, and the events service answers each publish and read with a `warning`. The next release refuses such an app.
+- d4efc5a: Domain events are read by floor: an app sees only those on floors where it holds events:subscribe, and the deployment's own. A cursor behind what was pruned answers 410 with how far events were pruned, and followEvents takes onGap to rebuild. A pushed app whose place was pruned meanwhile gets what is left and the gap is audited (delivery.gap) (ADR 0104).
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+- 67c373b: The events service holds an app to the events its manifest declares (ADR 0104): only the topics it reads, pulled or pushed, and only the types it publishes, each payload checked against its version's schema. Events carry their type's version. The service kit adds registryDeclaredEvents.
+
+  Not breaking: everything is added; `addToOutbox` leaves out only `version`, which is new here, so no caller passes it.
+
+- 2ac0d64: An event an app's part answers but can't take no longer holds every event behind it: it is tried up to DOMAIN_EVENTS_DELIVERY_ATTEMPTS times (5), DOMAIN_EVENTS_RETRY_SECONDS apart (30) and doubling, with later events on its topic waiting behind it while events on other topics go on, then set aside. What is set aside is kept, recorded in Activity as delivery.set-aside, and listed for admins by GET /v1/deliveries/set-aside; GET /v1/deliveries counts it (retrying, setAside). A part that is down (no answer, 401, 403, 404, 408, 429, 502 to 504, or server errors on two different events) still holds everything for up to a day, and the event then is set aside rather than passed over.
+
+  Not breaking: the route and fields are added; nothing is removed or renamed.
+
+### Patch Changes
+
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/service-kit@0.21.0
+
 ## 0.12.1
 
 ### Patch Changes
