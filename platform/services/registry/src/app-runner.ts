@@ -480,7 +480,7 @@ export const appRunnerRoutes =
       },
       async (req, reply) => {
         // The same record as the desired state (ADR 0020), so the same gate (ADR 0022): a deployment admin who signed in just now.
-        const caller = deploymentAdmin(req, reply, 'change how an app takes new releases', 'registry.app-developers', 'can_install_apps');
+        const caller = await deploymentAdmin(req, reply, 'change how an app takes new releases', 'registry.app-developers', 'can_install_apps');
         if (!caller) return reply;
         if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how an app takes new releases. It’s asked for anything this drastic.' });
@@ -642,7 +642,7 @@ export const appRunnerRoutes =
       },
       async (req, reply) => {
         // The fleet's client reads it too, to follow what it asked for (ADR 0100).
-        if (!isFleetCaller(callerFromHeaders(req.headers)) && !admin(req, reply, 'registry.app-runner.apps')) return reply;
+        if (!isFleetCaller(callerFromHeaders(req.headers)) && !(await admin(req, reply, 'registry.app-runner.apps'))) return reply;
         return appsView();
       },
     );
@@ -657,7 +657,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        if (!admin(req, reply, 'registry.app-runner.check')) return reply;
+        if (!(await admin(req, reply, 'registry.app-runner.check'))) return reply;
         await updates.check();
         return appsView();
       },
@@ -690,7 +690,7 @@ export const appRunnerRoutes =
       },
       async (req, reply) => {
         // The same record as the desired state (ADR 0020), so the same gate (ADR 0022): a deployment admin who signed in just now.
-        const caller = deploymentAdmin(req, reply, 'change how an app takes new releases', 'registry.app-follow', 'can_pin_versions');
+        const caller = await deploymentAdmin(req, reply, 'change how an app takes new releases', 'registry.app-follow', 'can_pin_versions');
         if (!caller) return reply;
         if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change how an app takes new releases. It’s asked for anything this drastic.' });
@@ -704,17 +704,17 @@ export const appRunnerRoutes =
       },
     );
 
-    const admin = (req: FastifyRequest, reply: FastifyReply, site: string) => {
+    const admin = async (req: FastifyRequest, reply: FastifyReply, site: string) => {
       const caller = callerFromHeaders(req.headers);
-      if (roles.admin(site, caller)) return caller;
+      if (caller && (await roles.admin(site, caller))) return caller;
       void reply.code(403).send({ error: 'forbidden', message: 'Only an admin can install or remove apps.' });
       return undefined;
     };
 
     /** Changing what runs (a version, or how new ones are taken) is the deployment admin's (ADR 0022). */
-    const deploymentAdmin = (req: FastifyRequest, reply: FastifyReply, doing: string, site: string, action: DeploymentAction) => {
+    const deploymentAdmin = async (req: FastifyRequest, reply: FastifyReply, doing: string, site: string, action: DeploymentAction) => {
       const caller = callerFromHeaders(req.headers);
-      if (roles.deploymentAdmin(site, caller, action)) return caller;
+      if (caller && (await roles.deploymentAdmin(site, caller, action))) return caller;
       void reply.code(403).send(needsDeploymentAdmin(doing));
       return undefined;
     };
@@ -744,7 +744,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        const caller = deploymentAdmin(req, reply, 'let an app reach the internet', 'registry.app-internet', 'can_allow_sites');
+        const caller = await deploymentAdmin(req, reply, 'let an app reach the internet', 'registry.app-internet', 'can_allow_sites');
         if (!caller) return reply;
         if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to change what an app can reach. It’s asked for anything this drastic.' });
@@ -801,7 +801,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        const caller = deploymentAdmin(req, reply, 'change an app’s settings', 'registry.app-runner.settings', 'can_set_app_secrets');
+        const caller = await deploymentAdmin(req, reply, 'change an app’s settings', 'registry.app-runner.settings', 'can_set_app_secrets');
         if (!caller) return reply;
         const { id, setting: settingId } = req.params;
         const { known, name, declared, live, inUse } = await declaredFor(id);
@@ -924,7 +924,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        if (!isFleetCaller(callerFromHeaders(req.headers)) && !admin(req, reply, 'registry.app-runner.jobs')) return reply;
+        if (!isFleetCaller(callerFromHeaders(req.headers)) && !(await admin(req, reply, 'registry.app-runner.jobs'))) return reply;
         return { jobs: await store.appJobs(req.query.app), ...(runnerSeenAt ? { runnerSeenAt } : {}) };
       },
     );
@@ -966,7 +966,7 @@ export const appRunnerRoutes =
         const fleet = isFleetCaller(asked);
         const caller = fleet
           ? asked
-          : deploymentAdmin(req, reply, req.body.action === 'remove' ? 'remove an app from the server' : 'install an app or change its version', 'registry.app-runner.job', req.body.action === 'remove' ? 'can_remove_apps' : 'can_install_apps');
+          : await deploymentAdmin(req, reply, req.body.action === 'remove' ? 'remove an app from the server' : 'install an app or change its version', 'registry.app-runner.job', req.body.action === 'remove' ? 'can_remove_apps' : 'can_install_apps');
         if (!caller) return reply;
         if (fleet && 'release' in req.body) return reply.code(400).send({ error: 'bad_request', message: 'The fleet’s client installs only a release the app feed lists: name the app and its version.' });
         // A default app stays while the deployment names it (ADR 0075 "pillar").
@@ -1085,7 +1085,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        const caller = deploymentAdmin(req, reply, 'read a release file to install', 'registry.app-runner.release-file', 'can_install_apps');
+        const caller = await deploymentAdmin(req, reply, 'read a release file to install', 'registry.app-runner.release-file', 'can_install_apps');
         if (!caller) return reply;
         if (!signedInRecently(caller, INSTALL_SIGN_IN_MS, now().getTime())) {
           return reply.code(401).send({ error: 'sign_in_again', message: 'Enter your password again to install an app. It’s asked for anything this drastic.' });
@@ -1150,7 +1150,7 @@ export const appRunnerRoutes =
         },
       },
       async (req, reply) => {
-        const caller = admin(req, reply, 'registry.app-runner.cancel-job');
+        const caller = await admin(req, reply, 'registry.app-runner.cancel-job');
         if (!caller) return reply;
         const job = (await store.appJobs()).find((j) => j.id === req.params.id);
         if (job?.state === 'running') return reply.code(409).send({ error: 'conflict', message: 'It has started, so it finishes by itself.' });

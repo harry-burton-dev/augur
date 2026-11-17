@@ -19,6 +19,8 @@ export interface Preferences {
   quietKinds?: string[];
   /** App ids kept first on Home and in the list of apps, in their order. */
   pinned?: string[];
+  /** Which app opens an intent several apps handle, as they chose it the first time (PER-468). */
+  intentApps?: { intent: string; app: string }[];
   /** The floor id the shell opens on when an address names none; their own without it. */
   startFloor?: string;
   /** What their away status says, and when away ends by itself (ISO date-time). */

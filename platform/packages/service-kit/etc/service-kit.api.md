@@ -239,6 +239,7 @@ export interface Caller {
     id: string;
     // (undocumented)
     name: string;
+    org?: string;
     persona?: string;
     // (undocumented)
     roles: string[];
@@ -256,6 +257,7 @@ export const CALLER_HEADERS: {
     readonly roles: "x-user-roles";
     readonly signedInAt: "x-user-signed-in-at";
     readonly persona: "x-user-persona";
+    readonly org: "x-user-org";
 };
 
 // @public
@@ -1618,6 +1620,9 @@ export const readPersonDeleted: (event: Pick<DomainEvent, "topic" | "payload">) 
 export const readPersonLeft: (event: Pick<DomainEvent, "topic" | "payload">) => PersonLeft | undefined;
 
 // @public
+export const readSecretsFolder: (dir: string) => Record<string, string>;
+
+// @public
 export const READY_CHECK_TIMEOUT_MS = 2000;
 
 // @public
@@ -1715,6 +1720,9 @@ export const SCOPES: readonly ["notifications:send", "audit:write", "models:use"
 
 // @public
 export const scopeWords: (scope: string) => string;
+
+// @public
+export const secretsFromDir: (env?: NodeJS.ProcessEnv) => string[];
 
 // @public
 export function sendProblem(reply: FastifyReply, problem: Problem): FastifyReply;

@@ -188,6 +188,15 @@ describe('an upgrade', () => {
     expect(fake.env()).toContain('PLATFORM_URL=https://augur.example.org');
   });
 
+  it('runs the secrets job to the end before anything else starts, so each part finds its own secrets', async () => {
+    const fake = fakeServer();
+    const services = fake.server.services;
+    fake.server.services = async () => ['make-secrets', ...(await services())];
+    const { outcome } = await run(target(), fake.server);
+    expect(outcome).toBe('done');
+    expect(fake.did.filter((d) => d.startsWith('up')).slice(0, 2)).toEqual(['up make-secrets', 'up postgres keycloak']);
+  });
+
   it('stops the parts a release doesn’t have, such as one added after it when going back, and starts them again if it goes back', async () => {
     const withAtlas = (breaks = {}) => {
       const fake = fakeServer(breaks);

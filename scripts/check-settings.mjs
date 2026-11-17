@@ -26,37 +26,33 @@ const OS_KEYS = new Set(['PATH', 'HOME', 'HOSTNAME', 'VITEST']);
 
 const keyPattern = '[A-Z][A-Z0-9_]*';
 
-/**
- * A compose file's services, each with its environment (merges resolved), whether it has an env_file, and
- * the .env keys it is given as secret files (top-level `secrets:` with `environment:`, read through a `<NAME>_FILE`).
- */
+/** A compose file's services, each with its environment (merges resolved), whether it has an env_file, and the volumes it mounts. */
 export const composeServices = (text) => {
   const doc = parse(text, { merge: true }) ?? {};
   const services = {};
-  // A secret's .env key, when the service also names the file it is mounted at in one of its <NAME>_FILE settings.
-  const secretKey = (ref, env) => {
-    const source = typeof ref === 'string' ? ref : ref?.source;
-    const target = (typeof ref === 'object' && ref?.target) || source;
-    const path = target?.startsWith('/') ? target : `/run/secrets/${target}`;
-    const named = Object.entries(env).some(([k, v]) => k.endsWith('_FILE') && String(v) === path);
-    return named ? doc.secrets?.[source]?.environment : undefined;
-  };
+  const volume = (v) => (typeof v === 'string' ? v.split(':')[0] : v?.source);
   for (const [name, service] of Object.entries(doc.services ?? {})) {
     let env = service?.environment ?? {};
     if (Array.isArray(env)) env = Object.fromEntries(env.map((line) => [String(line).split('=')[0], String(line).split('=').slice(1).join('=')]));
-    services[name] = { image: service?.image, environment: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, v == null ? '' : String(v)])), envFile: Boolean(service?.env_file), secretKeys: (service?.secrets ?? []).map((ref) => secretKey(ref, env)).filter(Boolean) };
+    services[name] = { image: service?.image, environment: Object.fromEntries(Object.entries(env).map(([k, v]) => [k, v == null ? '' : String(v)])), envFile: Boolean(service?.env_file), volumes: (service?.volumes ?? []).map(volume).filter(Boolean) };
   }
   return services;
 };
 
+/** The made-secrets spec (infra/deploy/made-secrets.json): each service's files, its `$comment` left out. */
+export const madeSecretsSpec = (text) => Object.fromEntries(Object.entries(text ? JSON.parse(text) : {}).filter(([name]) => !name.startsWith('$')));
+
+/** Whether the make-secrets job hands `key` to service `name`: a file named after it, or one made from it ({key}). */
+const madeFor = (spec, name, key) => Object.entries(spec[name] ?? {}).some(([file, template]) => file === key || String(template).includes(`{${key}}`));
+
 const refers = (value, key) => new RegExp(`\\$\\{${key}(?=[}:?-])`).test(value);
 
 /**
- * Whether `key` reaches `service`: by name (or as `<key>_FILE`) for an internal setting, from .env (or an env_file,
- * or as a secret file) otherwise.
+ * Whether `key` reaches `service`: by name (or as `<key>_FILE`) for an internal setting, from .env (or an env_file)
+ * otherwise; or, either way, in the service's own secrets, which the make-secrets job writes (`made`).
  */
-const reaches = (service, key, internal) =>
-  internal ? key in service.environment || `${key}_FILE` in service.environment : service.envFile || (service.secretKeys ?? []).includes(key) || Object.values(service.environment).some((v) => refers(v, key));
+const reaches = (service, key, internal, made = false) =>
+  made || (internal ? key in service.environment || `${key}_FILE` in service.environment : service.envFile || Object.values(service.environment).some((v) => refers(v, key)));
 
 /** The keys .env.example lists, set or commented out. */
 export const envExampleKeys = (text) => [...text.matchAll(new RegExp(`^#?\\s*(${keyPattern})=`, 'gm'))].map((m) => m[1]);
@@ -121,6 +117,9 @@ export const deploymentLiterals = (value) => {
   return found;
 };
 
+/** Which service the make-secrets job hands which secret (ADR 0107). */
+export const MADE_SECRETS = 'infra/deploy/made-secrets.json';
+
 /** The install guide's settings list, made from the schema (docs/src/content/docs/run/install.md). */
 export const INSTALL_GUIDE = 'docs/src/content/docs/run/install.md';
 const START = '<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->';
@@ -137,7 +136,7 @@ export const installList = (schema) => {
     '| --- | --- |',
     ...byHand.map((key) => `| \`${key}\` | ${cell(props[key]?.description ?? '')}${props[key]?.writeOnly ? ' A secret.' : ''} |`),
     '',
-    `The preflight (step 3) fills in these ${made.length} secrets, each with 64 random hex characters: ${made.map((k) => `\`${k}\``).join(', ')}.`,
+    `AUGUR makes these ${made.length} secrets itself on first start, each 64 random hex characters, so leave them out of \`.env\`: ${made.map((k) => `\`${k}\``).join(', ')}. Set one only to keep a value of your own; it wins ([Settings and secrets](../settings/#secrets-augur-makes)).`,
   ].join('\n');
 };
 
@@ -167,6 +166,10 @@ export const settingsProblems = ({ schema, files, code }) => {
   const lookup = (key) => properties[key] ?? patterns.find(([re]) => re.test(key))?.[1];
   const composeText = files['infra/deploy/compose.yml'];
   const services = composeServices(composeText);
+  const spec = madeSecretsSpec(files[MADE_SECRETS]);
+  // A service gets its own secrets when it mounts its folder, which the job writes.
+  const mounts = (name) => services[name]?.volumes.includes(`secrets-${name}`) && services['make-secrets']?.volumes.includes(`secrets-${name}`);
+  const madeTo = (name, key) => madeFor(spec, name, key) && mounts(name);
   const otherCompose = {};
   const servicesIn = (file) => (otherCompose[file] ??= files[file] === undefined ? undefined : composeServices(files[file]));
 
@@ -181,7 +184,7 @@ export const settingsProblems = ({ schema, files, code }) => {
       }
       const service = services[name];
       if (!service) problems.push(`${key}: compose.yml has no service ${name}.`);
-      else if (!reaches(service, key, internal)) problems.push(`${key}: ${name} reads it, but compose.yml doesn't pass it to ${name}.`);
+      else if (!reaches(service, key, internal, madeTo(name, key))) problems.push(`${key}: ${name} reads it, but compose.yml doesn't pass it to ${name}.`);
     }
     for (const [name, via] of Object.entries(setting['x-via'] ?? {})) {
       if (via === '.env' || via === 'default') continue;
@@ -196,6 +199,16 @@ export const settingsProblems = ({ schema, files, code }) => {
     }
   }
   for (const key of required) if (!properties[key]) problems.push(`${key}: required, but not described.`);
+
+  // The secrets the make-secrets job hands out: each service there mounts its own, and each secret named is one it
+  // makes or is passed.
+  for (const [name, entries] of Object.entries(spec)) {
+    if (!services[name]) problems.push(`${MADE_SECRETS}: compose.yml has no service ${name}.`);
+    else if (!mounts(name)) problems.push(`${MADE_SECRETS}: ${name} and make-secrets must both mount the volume secrets-${name}.`);
+    for (const template of Object.values(entries))
+      for (const [, key] of String(template).matchAll(new RegExp(`\\{(${keyPattern})\\}`, 'g')))
+        if (!properties[key]?.['x-generate'] && !(services['make-secrets'] && reaches(services['make-secrets'], key, false))) problems.push(`${MADE_SECRETS}: ${name} is given {${key}}, which make-secrets neither makes nor is passed.`);
+  }
 
   // .env.example: every deployment setting, and nothing the schema doesn't know.
   const listed = new Set(envExampleKeys(files['infra/deploy/.env.example']));
@@ -267,7 +280,7 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const schema = JSON.parse(read('infra/deploy/settings.schema.json'));
   const files = {};
-  const want = ['infra/deploy/compose.yml', 'infra/deploy/compose.proxy.yml', 'infra/deploy/.env.example'];
+  const want = ['infra/deploy/compose.yml', 'infra/deploy/compose.proxy.yml', 'infra/deploy/.env.example', MADE_SECRETS];
   for (const s of [...Object.values(schema.properties), ...Object.values(schema.patternProperties ?? {})]) {
     if (s['x-docs']) want.push(s['x-docs'].split('#')[0]);
     for (const via of Object.values(s['x-via'] ?? {})) if (via !== '.env' && via !== 'default') want.push(via);

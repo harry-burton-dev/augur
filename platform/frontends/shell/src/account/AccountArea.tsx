@@ -216,6 +216,7 @@ function partsOf(props: SectionProps): FitPart[] {
       return [
         { id: 'start', label: 'Start on', content: <StartOn {...props} /> },
         { id: 'pinned', label: 'Pinned apps', content: <Pinned {...props} /> },
+        { id: 'opening', label: 'Which app opens what', content: <OpensWith {...props} /> },
         { id: 'own', label: 'Each app’s own settings', content: <OwnSettings {...props} /> },
       ];
     case 'privacy':
@@ -878,6 +879,31 @@ function Pinned({ prefs, onPreference, apps, rows }: SectionProps) {
         render={(a) => <Toggle label={a.name} onWord="Pinned" offWord="Not pinned" checked={pinnedHere.has(a.id)} onChange={(on) => onPreference('pinned', on ? [...pinned, a.id] : pinned.filter((id) => id !== a.id))} />}
       />
       {elsewhere ? <Note>{elsewhere === 1 ? 'One pinned app isn’t' : `${elsewhere} pinned apps aren’t`} on this floor. Pins stay for the floors that have them.</Note> : null}
+    </>
+  );
+}
+
+/** The app each intent opens in when more than one app handles it, as they chose it (PER-468). Removing one asks again next time. */
+function OpensWith({ prefs, onPreference, apps, rows }: SectionProps) {
+  const chosen = prefs.intentApps ?? [];
+  const nameOf = (id: string) => apps.find((a) => a.id === id)?.name;
+  return (
+    <>
+      <Note>When more than one app can open something, AUGUR asks you which the first time and keeps to your choice. Forget one to be asked again.</Note>
+      <PagedList
+        label="Which app opens what"
+        items={chosen}
+        pageSize={rows.short ? 3 : 4}
+        keyOf={(c) => c.intent}
+        empty={<Note>You haven’t had to choose yet.</Note>}
+        render={(c) => (
+          <Line title={nameOf(c.app) ?? 'An app that isn’t on this floor'} detail={`Chosen to open ${c.intent}`}>
+            <Button kind="tertiary" size="sm" onPress={() => onPreference('intentApps', chosen.filter((x) => x.intent !== c.intent))}>
+              Forget
+            </Button>
+          </Line>
+        )}
+      />
     </>
   );
 }

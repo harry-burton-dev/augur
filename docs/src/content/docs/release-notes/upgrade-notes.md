@@ -17,14 +17,53 @@ The shell no longer keeps anyone's tokens in the browser's session storage, wher
 
 The Content-Security-Policy on files under `/apps/`, `/assets/` and `/shared/` is now enforced, where it was report-only, so a page or an SVG opened from there runs no script. No app AUGUR knows of serves one, so nothing changes for them.
 
-## Some secrets reach their services as files, which needs Docker Compose 2.24
+## An app's calls for a person are checked on the floor they stand on
 
 **From** unreleased
 
-The gateway's `CALLER_SIGNING_KEY`, the sign-in secrets of identity, the registry, events, the knowledge graph and permissions, `ALERT_WEBHOOK_TOKEN` and `OPENFGA_TOKEN` now reach the services that read them as files under `/run/secrets/`, not in their environment, so `docker inspect` on those services no longer shows them. Keycloak, its setup job, OpenFGA and Grafana still get some of them in their environment ([Settings and secrets](../../run/settings/#secrets-as-files)). They stay in `.env` as before: nothing in `.env` changes. Two things to know:
+When an app's part calls AUGUR for a person, the gateway now checks the app's grant on the floor that person was on, not the organisation's. An app that is on for the organisation but turned off on a team is refused there for those calls, as it already was for the person's own. An app on only for some teams now works there. Nothing to do on the server. If an app is refused where you expect it to work, check its floors in Admin → Apps.
 
-- Compose's `secrets:` with `environment:` needs Docker Compose 2.24 or newer. Before you upgrade, run `docker compose version` on the server. An upgrade through Deployment uses the updater's own Compose, but `pc up` by hand uses the server's, and on an older one it stops on the `secrets:` section of `compose.yml`: update the Docker Compose plugin.
-- Compose doesn't start a service again when only one of these secrets changes in `.env`. After changing one, run `pc up -d --force-recreate <service>`. Changing the gateway's key ([Signed caller](https://github.com/harry-burton-dev/augur/blob/main/docs/signed-caller.md)) now says so.
+## `PERMISSIONS_DECIDES=all` now moves the registry's checks too
+
+**From** unreleased
+
+The registry now reads `PERMISSIONS_DECIDES`, as the model gateway does. Its sites start `registry.` (docs/observability.md lists them). If your `.env` sets it to `all`, every registry check (upgrades, going back, installs, pins, the catalogue) is decided by the permissions service as soon as you upgrade, without the 7 days of comparison first. Before you upgrade, name only the model gateway's sites instead, such as `PERMISSIONS_DECIDES=models.settings.read,models.usage`, and add registry sites once Status has shown no disagreement there for 7 days. If it's empty or names only `models.` sites, there is nothing to do.
+
+## Each app has a database of its own: remove apps before upgrading
+
+**From** unreleased
+
+Each app now gets its own database (`app_<id>`) on AUGUR's Postgres, owned by its login, instead of a schema in AUGUR's. Its login, through the apps' relay, reaches only that database, not AUGUR's, Keycloak's or another app's. So no app can read another's tables or hold the locks AUGUR's migrations take. Backups take every database as before.
+
+Apps installed before aren't moved. **Before you upgrade, remove every app in Admin → Apps** (and any named in `APP_STORAGE` in `.env`), after copying out anything you want to keep. Each one's data is set aside when its grace period ends, and dropped with a later release, as ever. Then upgrade, and install the apps again: each starts empty, in its own database.
+
+If an app installed before is still there, this release doesn't start. The storage step stops and names it (`pc logs storage`), before anything of AUGUR migrates, and an upgrade through Deployment goes back to the release before by itself. Remove the app there, then upgrade again.
+
+## Apps' parts get only the signed caller
+
+**From** unreleased
+
+The gateway no longer sends an app's part the plain `x-user-*`, `x-workspace-*` and acting-app headers, only the caller it signs. Apps made from the app template check that already. An app whose part still reads the plain headers without the service kit's `signedCallers` hook answers as if nobody were signed in: update it before you upgrade, or remove it.
+
+## AUGUR makes its own secrets, and hands each service only its own
+
+**From** unreleased
+
+A new `make-secrets` job runs first on every `up`. For each of the 22 secrets a deployment used to fill in
+(the database passwords, the sign-in secrets, `CALLER_SIGNING_KEY`, Garage's keys, `OPENFGA_TOKEN`,
+`GRAFANA_ADMIN_PASSWORD`, `ALERT_WEBHOOK_TOKEN`), a value in `.env` wins, so **your server keeps every secret it
+has and nothing in `.env` changes**. Then it writes each service only the secrets it reads, into a volume of its
+own mounted at `/run/augur/secrets`, so the services no longer have them in their environment, where `docker inspect`
+showed them ([Settings and secrets](../../run/settings/#secrets-augur-makes)). While `.env` still sets them, the
+`make-secrets` and `storage` containers still have them in theirs; once AUGUR keeps them (after the first `up`) you
+can take them out of `.env`, as long as the off-server copy has run since. A new deployment can leave them out of
+`.env` altogether: AUGUR makes them on first start and keeps them in the `secrets` volume.
+
+- The backup's off-server copy now also carries the `secrets` volume, beside `.env`. On a server whose secrets
+  are all in `.env` it holds the same values.
+- After changing one of these secrets in `.env`, run `pc up -d`, then `pc up -d --force-recreate` the services
+  that read it (`infra/deploy/made-secrets.json` lists them): Compose doesn't start a service again for a
+  changed file on its own.
 
 ## Alerts can leave the server without AUGUR
 
