@@ -111,6 +111,7 @@ export type Security = Static<typeof Security>;
 
 export const Organisation = Type.Object(
   {
+    id: Type.String({ description: "The organisation's floor's id: what a call names in X-Workspace-Id for the whole organisation, and the `org` every signed caller carries" }),
     name: Type.String({ description: "The organisation's name: its floor's name, seeded from ORG_NAME at first start" }),
     timeZone: Type.String({ description: `An IANA time zone, e.g. Europe/London. ${DEFAULT_TIME_ZONE} until an admin chooses one` }),
     sender: Sender,
@@ -379,6 +380,7 @@ export const organisationSettings = async (workspaces: WorkspaceStore, store: Pi
   const languages = kept.languages?.length ? kept.languages : deploymentLanguages.length ? deploymentLanguages : ['en'];
   const defaultLanguage = kept.defaultLanguage && languages.includes(kept.defaultLanguage) ? kept.defaultLanguage : languages[0]!;
   return {
+    id: org.id,
     name: org.name,
     timeZone: kept.timeZone && knownZone(kept.timeZone) ? kept.timeZone : DEFAULT_TIME_ZONE,
     sender: { name: kept.senderName ?? org.name, ...(kept.senderAddress ? { address: kept.senderAddress } : {}) },

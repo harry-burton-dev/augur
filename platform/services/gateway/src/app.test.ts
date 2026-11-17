@@ -392,6 +392,19 @@ describe('gateway', () => {
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     });
 
+    it('never gives a person’s catalogue to the same person signed with other roles', async () => {
+      const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => Response.json((init?.headers as Record<string, string>)['x-user-roles']?.includes('admin') ? [{ id: 'admin' }] : []));
+      const lookup = registryAppAccess({ registryUrl: 'http://registry', fetchImpl: fetchImpl as unknown as typeof fetch });
+      const alex = { id: 'u-1', name: 'Alex', departments: [], roles: [] };
+      expect((await lookup({ ...alex, roles: ['admin'] }, 'admin')).has('admin')).toBe(true);
+      expect((await lookup(alex, 'admin')).has('admin')).toBe(false);
+      // The same roles in another order are the same answer.
+      await lookup({ ...alex, roles: ['b', 'a'] });
+      await lookup({ ...alex, roles: ['a', 'b'] });
+      await lookup({ ...alex, persona: 'p' });
+      expect(fetchImpl).toHaveBeenCalledTimes(4);
+    });
+
     it('keeps using the person’s catalogue while asking again, and keeps it when the registry can’t answer', async () => {
       let now = 0;
       let up = true;
@@ -485,9 +498,9 @@ describe('gateway', () => {
     const headers = { authorization: `Bearer ${await sign(ada)}` };
     const res = await app.inject({ method: 'GET', url: '/api/notes/echo?x=1', headers });
     expect(res.statusCode).toBe(200);
-    // Signed for the app it goes to, the token kept back, as for any other upstream.
-    expect(res.json()['x-user-id']).toBe('u-1');
+    // Signed for the app it goes to, the token kept back. The part gets only the signed caller, no plain x-user-* headers.
     expect(res.json()['x-augur-caller']).toBeTruthy();
+    expect(Object.keys(res.json()).filter((k) => k.startsWith('x-user-'))).toEqual([]);
     expect(res.json().authorization).toBeUndefined();
     // Bodies stream through and are held to what the app may be sent.
     const big = await app.inject({ method: 'POST', url: '/api/notes/upload', headers: { ...headers, 'content-type': 'application/octet-stream' }, payload: Buffer.alloc(2 * 1024 * 1024) });
@@ -508,7 +521,9 @@ describe('gateway', () => {
     const app = await buildApp({ upstreams: {}, auth, apps, access: async () => new Map([['notes', {}]]) });
     const res = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign(ada)}` } });
     expect(res.statusCode).toBe(200);
-    expect(res.json()['x-user-id']).toBe('u-1');
+    // The preview is called as the developer who chose it.
+    expect(JSON.parse(Buffer.from(String(res.json()['x-augur-caller']).split('.')[1]!, 'base64url').toString()).sub).toBe('u-1');
+    expect(Object.keys(res.json()).filter((k) => k.startsWith('x-user-'))).toEqual([]);
     const other = await app.inject({ method: 'GET', url: '/api/notes/echo', headers: { authorization: `Bearer ${await sign({ ...ada, sub: 'u-2' })}` } });
     expect(other.statusCode).toBeGreaterThanOrEqual(500);
   });

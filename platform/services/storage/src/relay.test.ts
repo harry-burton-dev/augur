@@ -14,8 +14,8 @@ const upstream = async () => {
   return { server, port: (server.address() as AddressInfo).port, got: () => Buffer.concat(got), connections: () => connections };
 };
 
-const startup = (user: string) => {
-  const pairs = Buffer.from(`user\0${user}\0database\0platform\0\0`);
+const startup = (user: string, database: string | null = user) => {
+  const pairs = Buffer.from(`user\0${user}\0${database === null ? '' : `database\0${database}\0`}\0`);
   const head = Buffer.alloc(8);
   head.writeInt32BE(8 + pairs.length, 0);
   head.writeInt32BE(196608, 4);
@@ -76,6 +76,21 @@ describe('the apps’ relays to Postgres and the object store', () => {
     }
     expect(db.connections()).toBe(0);
     expect(APP_LOGIN.test('app_team_notes_pr12')).toBe(true);
+  });
+
+  it('lets it through only to its own database, as Postgres’s default or named, never AUGUR’s, Keycloak’s or another app’s', async () => {
+    const { db, relay } = await relayTo();
+    expect((await talk(relay.ports.database, [startup('app_notes', null)])).toString()).toBe('ok');
+    for (const database of ['platform', 'postgres', 'keycloak', 'app_other', 'template1']) {
+      const back = await talk(relay.ports.database, [startup('app_notes', database)]);
+      expect(back.toString()).toMatch(/28000.*reaches only its own database, app_notes/s);
+    }
+    const twice = Buffer.from('user\0app_notes\0database\0app_notes\0database\0platform\0\0');
+    const head = Buffer.alloc(8);
+    head.writeInt32BE(8 + twice.length, 0);
+    head.writeInt32BE(196608, 4);
+    expect((await talk(relay.ports.database, [Buffer.concat([head, twice])]))[0]).toBe('E'.charCodeAt(0));
+    expect(db.connections()).toBe(1);
   });
 
   it('turns away a start that names its user twice, as Postgres would take the last', async () => {

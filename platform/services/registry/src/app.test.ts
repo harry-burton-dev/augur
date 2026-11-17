@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { callerHeaders, GATEWAY_CALLER, packFrontend, type FloorPlace } from '@augur/service-kit';
+import { callerCheckFor, callerHeaders, callerSigner, GATEWAY_CALLER, packFrontend, signedCallerHeaders, type FloorPlace } from '@augur/service-kit';
 import { MemoryFrontendFiles, servedEntry } from './frontends.ts';
 import type { AppEntry } from './manifest.ts';
 import { DATABASE_URL, registryDb } from './db.testing.ts';
@@ -629,6 +629,35 @@ describe.runIf(DATABASE_URL)('registry', () => {
       expect((await grant(admin)).json()).not.toHaveProperty('awaitingScopes');
       expect(await grants()).toEqual(['notifications:send', 'audit:write']);
       expect(entries.at(-1)).toMatchObject({ action: 'app.scopes-granted', detail: { scopes: ['notifications:send', 'audit:write'] } });
+    });
+
+    it('refuses an admin’s call made for an app on what only an admin may do, unless it is one of AUGUR’s own frontends', async () => {
+      const { app, set } = await setup({ ...library, scopes: ['notifications:send'] });
+      const forApp = (app: string, scopes: string[]) => callerHeaders({ id: 'u-1', name: 'Alex', departments: [], roles: ['admin', 'deployment-admin'], app, scopes });
+      const asLibrary = forApp('library', ['notifications:send']);
+      const tries = [
+        { method: 'PUT', url: '/v1/apps/library/scopes', payload: { scopes: ['notifications:send', 'audit:write'] } },
+        { method: 'PATCH', url: '/v1/apps/library', payload: { enabled: false } },
+        { method: 'PUT', url: '/v1/apps/library/pin', payload: { version: '0.1.0' } },
+        { method: 'PUT', url: '/v1/apps/library/upload-limit', payload: { mb: 1 } },
+        { method: 'PUT', url: '/v1/apps/library/upstream', payload: { url: 'http://elsewhere:3000' } },
+        { method: 'PUT', url: '/v1/apps/library', payload: { ...library, scopes: ['notifications:send', 'audit:write'] } },
+        { method: 'DELETE', url: '/v1/apps/library' },
+        { method: 'GET', url: '/v1/apps' },
+      ] as const;
+      for (const t of tries) expect((await app.inject({ ...t, headers: asLibrary })).statusCode, `${t.method} ${t.url}`).toBe(403);
+      expect((await set('f', 'on', asLibrary)).statusCode).toBe(403);
+      const ownFrontend = await app.inject({ method: 'PUT', url: '/v1/apps/library/scopes', headers: forApp('admin', ['apps:manage']), payload: { scopes: ['notifications:send'] } });
+      expect(ownFrontend.statusCode).toBe(200);
+    });
+
+    it('believes no caller headers but the gateway’s signed caller, once it checks callers', async () => {
+      const gateway = callerSigner();
+      const app = await db.app({ verifyService, callers: callerCheckFor(gateway, 'registry') });
+      const grant = (headers: Record<string, string>) => app.inject({ remoteAddress: '172.18.0.9', method: 'PUT', url: '/v1/apps/library/scopes', headers, payload: { scopes: [] } });
+      expect((await grant(deployAdmin)).statusCode).toBe(403);
+      const forged = await grant({ ...(await signedCallerHeaders(gateway, { id: 'u-1', name: 'Alex', departments: [], roles: ['admin'], app: 'library', scopes: [] }, 'registry')), 'x-augur-acting-scopes': 'apps:manage' });
+      expect(forged.statusCode).toBe(403);
     });
   });
 });

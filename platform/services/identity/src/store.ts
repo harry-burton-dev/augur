@@ -27,6 +27,8 @@ export interface Preferences {
   quietKinds?: string[];
   /** App ids kept first on Home and in the list of apps. */
   pinned?: string[];
+  /** Which app opens an intent several apps handle, as they chose it the first time. */
+  intentApps?: { intent: string; app: string }[];
   /** The floor id AUGUR opens on when an address names none. */
   startFloor?: string;
   /** What their away status says, and when it ends (ISO date-time); away ends then by itself. */

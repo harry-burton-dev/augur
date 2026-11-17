@@ -62,6 +62,13 @@ test('an install is ready when every setting is set and fits', () => {
   assert.deepEqual(stops(ready(), { memoryBytes: 16 * 1024 ** 3, freeDiskBytes: 200 * 1024 ** 3 }), []);
 });
 
+test('an install goes ahead with the secrets AUGUR makes left blank, and says so', () => {
+  const optional = { ...schema, required: schema.required.filter((k) => !schema.properties[k]['x-generate']) };
+  const checks = installChecks({ release: fresh, schema: optional, env: ready({ POSTGRES_PASSWORD: '', GARAGE_RPC_SECRET: '' }) });
+  assert.deepEqual(checks.filter((c) => c.stop), []);
+  assert.ok(checks.some((c) => c.ok && c.text === 'Secrets: AUGUR makes 2 on first start and keeps them (POSTGRES_PASSWORD, GARAGE_RPC_SECRET).'));
+});
+
 test('an install stops on the wrong release, a blank secret, and settings that don’t fit', () => {
   const found = stops(ready({ PLATFORM_VERSION: '0.18.0', POSTGRES_PASSWORD: '', GARAGE_RPC_SECRET: 'short', PLATFORM_URL: 'https://platform.tail1.ts.net/', SERVER_RING: 'staging', PLATFORM_ADMIN_EMAIL: 'me' }));
   assert.ok(found.some((t) => /deploy files here are augur@0\.19\.0/.test(t)));

@@ -37,7 +37,7 @@ const MAX_REMEMBERED = 5000;
  * limit (`maxUpload`, lowered by an admin) comes with it. Remembered for a short while, so turning an
  * app off reaches the gateway within `ttlMs`. A call for an app the remembered catalogue doesn't have
  * asks again, at most once each `missMs`, since that app may have just been installed (PER-424); the
- * remembered one is kept, and used, until the new one comes.
+ * remembered one is kept, and used, until the new one comes. Remembered by person, floor, roles, departments and persona.
  */
 export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, missMs = 2_000, fetchImpl = fetch, now = Date.now }: RegistryAppAccessOptions): AppAccess => {
   type Remembered = { apps: Promise<Map<string, AppAllowed>>; at: number; again?: Promise<Map<string, AppAllowed>>; missedAt?: number };
@@ -63,7 +63,9 @@ export const registryAppAccess = ({ registryUrl, signer, ttlMs = 30_000, missMs 
     return apps;
   };
   return async (caller, app) => {
-    const key = `${caller.id} ${caller.workspace?.id ?? ''}`;
+    // What the catalogue is worked out from, so callers signed with other roles (a delegation's, older than a fresh
+    // sign-in's) never share one answer.
+    const key = JSON.stringify([caller.id, caller.workspace?.id ?? '', [...caller.roles].sort(), [...caller.departments].sort(), caller.persona ?? '']);
     const hit = remembered.get(key);
     if (!hit || now() - hit.at >= ttlMs) return remember(key, catalogue(caller));
     const apps = await hit.apps;

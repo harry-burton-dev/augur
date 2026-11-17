@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { jobsSchemaFor, roleFor, schemaFor } from './postgres.ts';
-import { dropDue, laterRelease, markKept, prepareRetirements, retiredBucketFor, retiredJobsSchemaFor, retiredRoleFor, retiredSchemaFor, retirements, setAside, type Buckets } from './retirement.ts';
+import { databaseFor, dropDatabase, jobsSchemaFor, opener, provisionDatabase, roleFor, schemaFor } from './postgres.ts';
+import { dropDue, laterRelease, markKept, prepareRetirements, retiredBucketFor, retiredDatabaseFor, retiredJobsSchemaFor, retiredRoleFor, retiredSchemaFor, retirements, setAside, type Buckets } from './retirement.ts';
 
 describe('laterRelease', () => {
   it('counts only a later AUGUR release, never a beta or dev build of the same one, or a name it can’t read', () => {
@@ -128,5 +128,46 @@ describe.runIf(process.env.DATABASE_URL)('a retired or removed app’s data (ADR
     } finally {
       await admin.query('delete from public.storage_retired_apps where app = $1', [other]);
     }
+  });
+});
+
+describe.runIf(process.env.DATABASE_URL)('a retired or removed app’s own database (PER-456)', () => {
+  const app = `owned-${process.pid}`;
+  let admin: pg.Client;
+  const has = async (name: string) => (await admin.query('select 1 from pg_database where datname = $1', [name])).rowCount === 1;
+  const open = opener(process.env.DATABASE_URL ?? '');
+  const log = { info: (_: string) => {}, warn: (_: string) => {} };
+
+  beforeAll(async () => {
+    admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    await admin.connect();
+    await prepareRetirements(admin);
+  });
+  afterAll(async () => {
+    await admin.query(`drop database if exists ${retiredDatabaseFor(app)} with (force)`);
+    await dropDatabase(admin, app);
+    await admin.query(`drop role if exists ${retiredRoleFor(app)}`);
+    await admin.query('delete from public.storage_retired_apps where app = $1', [app]).catch(() => {});
+    await admin.end();
+  });
+
+  it('is renamed with its data in it, even while something is still connected, then dropped behind a backup on a later release', async () => {
+    await provisionDatabase(admin, { app, password: 'owned-password-123', open });
+    const own = await open(databaseFor(app));
+    (own as pg.Client).on('error', () => {});
+    await own.query(`create table ${schemaFor(app)}.notes (text text); insert into ${schemaFor(app)}.notes values ('kept')`);
+    expect(await setAside({ sql: admin, app, release: '0.26.0', again: true })).toBe('set aside');
+    await own.end().catch(() => {});
+    expect(await has(databaseFor(app))).toBe(false);
+    const kept = await open(retiredDatabaseFor(app));
+    try {
+      expect((await kept.query(`select text from ${schemaFor(app)}.notes`)).rows).toEqual([{ text: 'kept' }]);
+    } finally {
+      await kept.end();
+    }
+    expect((await admin.query('select rolcanlogin from pg_roles where rolname = $1', [retiredRoleFor(app)])).rows).toEqual([{ rolcanlogin: false }]);
+    await dropDue({ sql: admin, release: '0.27.0', marker: { at: '2099-01-01T00:00:00Z', ok: true, file: 'platform-x.sql.gz' }, objects: false, log });
+    expect(await has(retiredDatabaseFor(app))).toBe(false);
+    expect((await admin.query('select 1 from pg_roles where rolname = $1', [retiredRoleFor(app)])).rowCount).toBe(0);
   });
 });

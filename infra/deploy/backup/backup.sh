@@ -18,7 +18,7 @@
 # copied with restic to that repository (an S3-compatible bucket), encrypted here before they leave, and
 # OFFSITE_KEEP_DAILY days of them are kept there. The weekly restore test then restores from that copy.
 # The knowledge graph's forget ledger ($LEDGER_DIR) goes with each dump. The deployment's settings and
-# secrets (.env and secrets/, mounted read only at $CONFIG_DIR) go with them, encrypted the same way, so a lost server can be set up again from the bucket and the password alone.
+# secrets (.env and secrets/, mounted read only at $CONFIG_DIR, and the secrets AUGUR made, at $MADE_SECRETS_DIR) go with them, encrypted the same way, so a lost server can be set up again from the bucket and the password alone.
 # It never copies a database that has no AUGUR in it, and never into a repository that already holds
 # another server's backups until told this server is that deployment (--adopt-offsite), so a new server
 # can't push the real backups out of retention. The result goes in $STATUS_DIR/offsite.json. Without
@@ -40,6 +40,12 @@ set -eu
 set -o pipefail
 # Dumps hold every person's data and every login's password hash: root alone may read what this writes.
 umask 077
+# Postgres's admin password, which the make-secrets job writes into its own secrets (ADR 0107), read here so a run
+# through `pc exec` (the updater's backup before an upgrade) has it as well as the container's own. One set wins.
+if [ -z "${PGPASSWORD:-}" ] && [ -n "${SECRETS_DIR:-}" ] && [ -r "$SECRETS_DIR/PGPASSWORD" ]; then
+  IFS= read -r PGPASSWORD < "$SECRETS_DIR/PGPASSWORD" || true
+  export PGPASSWORD
+fi
 : "${BACKUP_HOUR_UTC:=2}"
 : "${BACKUP_KEEP_DAYS:=14}"
 : "${BACKUP_DIR:=/backups}"
@@ -54,6 +60,8 @@ export WAL_DIR
 export STATUS_DIR
 # The deploy folder, read only: .env and secrets/ are copied off the server from here.
 : "${CONFIG_DIR:=/deploy}"
+# The secrets AUGUR made (the make-secrets job), read only: they go off the server with .env.
+: "${MADE_SECRETS_DIR:=/made-secrets}"
 # The knowledge graph's forget ledger, read only: it goes off the server with each day's dump.
 : "${LEDGER_DIR:=/knowledge-ledger}"
 # What restic files the snapshots under, so retention counts days: one repository per deployment.
@@ -204,13 +212,13 @@ offsite() {
   fi
   # The settings and secrets: without them a dump can't be loaded on a new server (the logins' passwords are
   # in it) and apps' secrets can't be made again (APP_SECRETS_KEY).
-  if [ -e "$CONFIG_DIR/.env" ]; then
+  if [ -e "$CONFIG_DIR/.env" ] || [ -d "$MADE_SECRETS_DIR" ]; then
     config=""
-    for path in "$CONFIG_DIR/.env" "$CONFIG_DIR/secrets"; do [ ! -e "$path" ] || config="$config $path"; done
-    # shellcheck disable=SC2086 # Two paths at most, neither with a space.
+    for path in "$CONFIG_DIR/.env" "$CONFIG_DIR/secrets" "$MADE_SECRETS_DIR"; do [ ! -e "$path" ] || config="$config $path"; done
+    # shellcheck disable=SC2086 # Three paths at most, none with a space.
     if ! restic backup --host "$OFFSITE_HOST" --tag augur-config $config >/dev/null 2>"$errors"; then
       echo "backup: off-server copy of the settings FAILED: $(said "$errors")" >&2
-      offnoted false "$snapshot" "The database was copied off this server, but .env and secrets/ could not be: $(said "$errors")."
+      offnoted false "$snapshot" "The database was copied off this server, but .env, secrets/ and the secrets AUGUR made could not be: $(said "$errors")."
       rm -f "$errors"
       return 1
     fi

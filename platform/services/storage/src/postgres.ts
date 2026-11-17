@@ -28,36 +28,94 @@ export async function prepareDatabase(sql: Sql): Promise<void> {
   await sql.query('revoke create on schema public from public');
 }
 
+/** The database an app owns (D2, PER-456): "folio" → app_folio, a preview's "folio-pr12" → app_folio_pr12. Its login's name. */
+export const databaseFor = (app: string) => roleFor(app);
+
+/** A connection to another database on the same server, as the same admin login, and closing it. */
+export type OpenDatabase = (database: string) => Promise<Sql & { end(): Promise<void> }>;
+
+/** Opens other databases on the server `databaseUrl` reaches, as its login. */
+export const opener =
+  (databaseUrl: string): OpenDatabase =>
+  async (database) => {
+    const url = new URL(databaseUrl);
+    url.pathname = `/${database}`;
+    const client = new pg.Client({ connectionString: url.toString() });
+    await client.connect();
+    return client;
+  };
+
 /**
- * An app's own login and the one schema it owns, made or brought up to date: the
- * password is set every time, so changing it in .env and starting again changes it.
- * The login can't read any other schema: the platform's belong to the admin login.
+ * An app's own login and the database it owns, with its two schemas in it, made or brought up to date: the
+ * password is set every time, so changing it in .env and starting again changes it. Nobody else may connect
+ * to that database, and the login may connect to no other, so no app reads another's tables or holds the
+ * locks AUGUR's own migrations take (advisory locks are per database). `open` reaches the new database as the
+ * admin login, for the extensions an app may use, which its own login can't create.
  */
-export async function provisionDatabase(sql: Sql, { app, password, connections = 30 }: { app: string; password: string; connections?: number }): Promise<void> {
+export async function provisionDatabase(sql: Sql, { app, password, connections = 30, open }: { app: string; password: string; connections?: number; open: OpenDatabase }): Promise<void> {
   // A schema named for a part of AUGUR (identity, registry, public…) would sit among the platform's own.
   const reserved = reservedIdProblem(app);
   if (reserved) throw new Error(`No schema was made for it: ${reserved}`);
   const role = pg.escapeIdentifier(roleFor(app));
-  const schema = pg.escapeIdentifier(schemaFor(app));
+  const database = pg.escapeIdentifier(databaseFor(app));
   const exists = await sql.query('select 1 from pg_roles where rolname = $1', [roleFor(app)]);
   // At most `connections` at once, so an app that leaks them can't take the ones AUGUR's services need (ADR 0073).
   const options = `login nosuperuser nocreatedb nocreaterole noinherit connection limit ${Math.trunc(connections)} password ${pg.escapeLiteral(password)}`;
   await sql.query(exists.rowCount ? `alter role ${role} with ${options}` : `create role ${role} with ${options}`);
+  const made = await sql.query('select 1 from pg_database where datname = $1', [databaseFor(app)]);
+  // From template0, so nothing added to template1 on this server comes with it.
+  if (!made.rowCount) await sql.query(`create database ${database} owner ${role} template template0 encoding 'UTF8'`);
+  await sql.query(`alter database ${database} owner to ${role}`);
+  await sql.query(`revoke all on database ${database} from public`);
+  await sql.query(`grant connect on database ${database} to ${role}`);
+  // AUGUR's own database is out of its reach: an earlier release granted it connect, and going back to one grants it again.
   const { rows } = await sql.query<{ db: string }>('select current_database() as db');
-  await sql.query(`grant connect on database ${pg.escapeIdentifier(rows[0].db)} to ${role}`);
-  await sql.query(`create schema if not exists ${schema} authorization ${role}`);
-  await sql.query(`alter schema ${schema} owner to ${role}`);
-  // Its jobs' runs and schedules, kept apart from its own tables (the kit's jobs on DBOS).
-  const jobs = pg.escapeIdentifier(jobsSchemaFor(app));
-  await sql.query(`create schema if not exists ${jobs} authorization ${role}`);
-  await sql.query(`alter schema ${jobs} owner to ${role}`);
-  await sql.query(`alter role ${role} set search_path = ${schema}, public`);
+  await sql.query(`revoke all on database ${pg.escapeIdentifier(rows[0].db)} from ${role}`);
+  const own = await open(databaseFor(app));
+  try {
+    // Its own database's public schema would be its login's (pg_database_owner): kept the admin login's, as in
+    // AUGUR's, so its tables go in its own schema and the extensions there stay as made.
+    await own.query('alter schema public owner to current_user');
+    await own.query('revoke create on schema public from public');
+    await own.query('create extension if not exists vector');
+    await own.query('create extension if not exists pg_trgm');
+    // Its tables, and apart from them its jobs' runs and schedules (the kit's jobs on DBOS).
+    for (const name of [schemaFor(app), jobsSchemaFor(app)]) {
+      const schema = pg.escapeIdentifier(name);
+      await own.query(`create schema if not exists ${schema} authorization ${role}`);
+      await own.query(`alter schema ${schema} owner to ${role}`);
+    }
+  } finally {
+    await own.end();
+  }
+  await sql.query(`alter role ${role} set search_path = ${pg.escapeIdentifier(schemaFor(app))}, public`);
 }
 
-/** Takes an app's (or a preview's) login and schemas away, with everything in them. Nothing happens when there's none. */
+/**
+ * Whether `app` was installed before apps had databases of their own: its schema is in AUGUR's database (`sql`'s) and
+ * it has no database yet. A release before this one, gone back to, makes an empty schema for an app that has one; that
+ * isn't counted.
+ */
+export async function inSharedDatabase(sql: Sql, app: string): Promise<boolean> {
+  const { rows } = await sql.query<{ shared: boolean }>(
+    'select exists (select 1 from pg_namespace where nspname = $1) and not exists (select 1 from pg_database where datname = $2) as shared',
+    [schemaFor(app), databaseFor(app)],
+  );
+  return rows[0]?.shared === true;
+}
+
+/** The apps the registry has installed, read as the admin login; none on a server whose registry hasn't started yet. */
+export async function installedApps(sql: Sql): Promise<string[]> {
+  const { rows } = await sql.query<{ there: boolean }>(`select to_regclass('registry.apps') is not null as there`);
+  if (!rows[0]?.there) return [];
+  return (await sql.query<{ id: string }>('select id from registry.apps order by id')).rows.map((r) => r.id);
+}
+
+/** Takes an app's (or a preview's) login and database away, with everything in them. Nothing happens when there's none. */
 export async function dropDatabase(sql: Sql, app: string): Promise<void> {
   const reserved = reservedIdProblem(app);
   if (reserved) throw new Error(`Nothing was dropped: ${reserved}`);
+  await sql.query(`drop database if exists ${pg.escapeIdentifier(databaseFor(app))} with (force)`);
   await dropSchemasAndRole(sql, [schemaFor(app), jobsSchemaFor(app)], roleFor(app));
 }
 
@@ -161,6 +219,8 @@ export async function provisionKeycloakDatabase(sql: Sql, { role, password }: { 
   await sql.query(exists.rowCount ? `alter role ${quoted} with ${options}` : `create role ${quoted} with ${options}`);
   const { rows } = await sql.query<{ db: string }>('select current_database() as db');
   await sql.query(`alter database ${pg.escapeIdentifier(rows[0].db)} owner to ${quoted}`);
+  // Its owner connects; nobody else's login does, apps' among them.
+  await sql.query(`revoke all on database ${pg.escapeIdentifier(rows[0].db)} from public`);
   await sql.query(`alter schema public owner to ${quoted}`);
   await mayUseReservedConnections(sql, role);
   return handOverSchema(sql, 'public', role);

@@ -35,6 +35,12 @@ describe('caller headers', () => {
     expect(withoutCallerHeaders({ 'x-user-persona': 'admin.u1', 'X-Augur-Persona': 'admin.u1', accept: '*/*' })).toEqual({ accept: '*/*' });
   });
 
+  it('carries the organisation the call is in, which a client can never claim itself', () => {
+    const inOrg: Caller = { ...caller, org: 'o1' };
+    expect(callerFromHeaders(callerHeaders(inOrg))).toEqual(inOrg);
+    expect(withoutCallerHeaders({ 'x-user-org': 'o1', accept: '*/*' })).toEqual({ accept: '*/*' });
+  });
+
   it('reads no caller from a request without one', () => {
     expect(callerFromHeaders({ accept: 'application/json' })).toBeUndefined();
   });

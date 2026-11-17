@@ -343,7 +343,7 @@ export class IntentCancelled extends Error {
     name: string;
 }
 
-// @public (undocumented)
+// @public
 export class IntentError extends Error {
     // (undocumented)
     name: string;
@@ -365,6 +365,9 @@ export const isEntityRef: (v: unknown) => v is EntityRef;
 
 // @public
 export const isIntentCancelled: (err: unknown) => boolean;
+
+// @public
+export const isIntentError: (err: unknown) => boolean;
 
 // @public
 export const isLibraryRef: (v: unknown) => v is LibraryRef;
