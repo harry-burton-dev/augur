@@ -31,6 +31,23 @@ Apps installed before aren't moved. **Before you upgrade, remove every app in Ad
 
 If an app installed before is still there, this release doesn't start. The storage step stops and names it (`pc logs storage`), before anything of AUGUR migrates, and an upgrade through Deployment goes back to the release before by itself. Remove the app there, then upgrade again.
 
+## Each AUGUR service reads config.env and then .env
+
+**From** unreleased
+
+AUGUR's own services now read `infra/deploy/config.env` (AUGUR's defaults, which come with each release) and then
+`.env` over it, as a platform host such as Coolify already did, rather than Compose passing about a hundred
+settings to them one by one ([Settings and secrets](../../run/settings/#how-settings-are-checked)). What your
+`.env` sets still wins, so nothing changes for a setting you set. Two things to check:
+
+- **A bare desktop is now `DESKTOP_APP=none`.** An empty `DESKTOP_APP` now means Home, like any other empty
+  setting. If your `.env` has `DESKTOP_APP=` to keep the desktop bare, change it to `DESKTOP_APP=none`.
+- **Secrets still in `.env` are in every AUGUR service's environment.** AUGUR keeps its own secrets now (the note
+  below), so once the backup's off-server copy has run since you upgraded, take them out of `.env`. The preflight
+  and `pc logs make-secrets` name the ones still there.
+
+On Coolify, the variables for these settings no longer appear in its list; any you had set still reach the services.
+
 ## Apps' parts get only the signed caller
 
 **From** unreleased

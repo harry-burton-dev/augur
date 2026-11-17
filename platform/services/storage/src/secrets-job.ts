@@ -34,3 +34,6 @@ for (const [service, files] of services) {
 }
 log.info(fresh.length ? `Made ${fresh.length} new secret${fresh.length === 1 ? '' : 's'} (${fresh.join(', ')}); ${made.length - fresh.length} kept.` : `All ${made.length} secrets kept; none made.`);
 log.info(`Handed ${services.length} services their own: ${services.map(([service]) => service).join(', ')}.`);
+// Every AUGUR service reads .env (config.env, then .env; ADR 0107), so a secret still set there is in each one's environment.
+const inEnv = made.filter((name) => env[name]);
+if (inEnv.length) log.warn(`${inEnv.join(', ')} ${inEnv.length === 1 ? 'is' : 'are'} still set in .env, where every AUGUR service can see ${inEnv.length === 1 ? 'it' : 'them'}. AUGUR keeps ${inEnv.length === 1 ? 'it' : 'them'} now: once the backup's off-server copy has run, take ${inEnv.length === 1 ? 'it' : 'them'} out of .env.`);

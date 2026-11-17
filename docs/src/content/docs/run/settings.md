@@ -27,9 +27,13 @@ identity can't start until its settings are fixed:
 Every setting is described once, in `infra/deploy/settings.schema.json`: which services read it, whether it's
 required, its default, whether it's a secret, and the page that explains it. `.env.example` lists them all,
 and AUGUR's own checks hold `compose.yml`, `.env.example`, these pages and the services' code to it, so a
-setting this site tells you to put in `.env` always reaches the service that reads it. Compose passes each one
-by name to the services that read it; only the storage job, which reads every app's secrets by the app's
-name, reads the whole `.env`.
+setting this site tells you to put in `.env` always reaches the service that reads it.
+
+AUGUR's own services read two files of settings: `config.env`, AUGUR's defaults, which comes with each release
+(don't edit it), and then `.env` over it, so what `.env` sets wins. A platform host such as Coolify does the same
+with its own variables. Compose still reads `.env` itself for what `compose.yml` fills in (the release, the
+address, the first admin, ports), and passes each of those by name. Keycloak, Postgres, Garage, OpenFGA and Grafana
+read only what `compose.yml` hands them.
 
 ## Secrets as files
 
@@ -55,8 +59,9 @@ Then it writes each service only the secrets that service reads, into a volume o
 mounted at `/run/augur/secrets`), as `infra/deploy/made-secrets.json` says: the gateway gets its key, the
 registry its sign-in secret and its `DATABASE_URL`, and so on. No service sees another's, none of them is in a
 service's environment where `docker inspect` would show it, and only the job and the backup see the whole set.
-A secret `.env` still sets is in the environment of the job and of the storage job, which reads all of `.env`:
-once AUGUR keeps it, it can come out of `.env`.
+A secret `.env` still sets is in the environment of every AUGUR service, since each reads `.env`: AUGUR keeps it
+itself after its first start, so once the backup's off-server copy has run since, take it out of `.env`. The
+preflight and `pc logs make-secrets` say which are still there.
 AUGUR's own services and the backup read the folder through `SECRETS_DIR`; Postgres and Garage read their files
 themselves; and Keycloak, OpenFGA and Grafana are started through `secrets-env.sh`, which hands them theirs as
 environment variables inside the container only.

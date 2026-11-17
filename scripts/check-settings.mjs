@@ -119,6 +119,8 @@ export const deploymentLiterals = (value) => {
 
 /** Which service the make-secrets job hands which secret (ADR 0107). */
 export const MADE_SECRETS = 'infra/deploy/made-secrets.json';
+/** AUGUR's committed defaults, which its services read before the deployment's .env (ADR 0107). */
+export const CONFIG_DEFAULTS = 'infra/deploy/config.env';
 
 /** The install guide's settings list, made from the schema (docs/src/content/docs/run/install.md). */
 export const INSTALL_GUIDE = 'docs/src/content/docs/run/install.md';
@@ -218,6 +220,16 @@ export const settingsProblems = ({ schema, files, code }) => {
   }
   for (const key of listed) if (!lookup(key)) problems.push(`${key}: in .env.example, but not in settings.schema.json.`);
 
+  // config.env: AUGUR's committed defaults, which every one of its services reads before .env (ADR 0107).
+  if (files[CONFIG_DEFAULTS] !== undefined)
+    for (const key of envExampleKeys(files[CONFIG_DEFAULTS])) {
+      const setting = lookup(key);
+      if (!setting) problems.push(`${key}: in ${CONFIG_DEFAULTS}, but not in settings.schema.json.`);
+      else if (setting.writeOnly || setting['x-generate']) problems.push(`${key}: a secret, so it can't have a default in ${CONFIG_DEFAULTS}.`);
+      else if (setting['x-internal']) problems.push(`${key}: in ${CONFIG_DEFAULTS}, but the schema says nobody sets it (x-internal).`);
+      else for (const name of setting['x-services'] ?? []) if (services[name] && !reaches(services[name], key, false)) problems.push(`${key}: ${name} reads it, but reads neither ${CONFIG_DEFAULTS} nor its value from compose.yml.`);
+    }
+
   // The guides: each deployment setting is named in the section that explains it.
   for (const [key, setting] of [...Object.entries(properties), ...patterns.map(([re, s]) => [re.source, s])]) {
     const docs = setting['x-docs'];
@@ -280,7 +292,7 @@ const read = (path) => readFileSync(join(root, path), 'utf8');
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const schema = JSON.parse(read('infra/deploy/settings.schema.json'));
   const files = {};
-  const want = ['infra/deploy/compose.yml', 'infra/deploy/compose.proxy.yml', 'infra/deploy/.env.example', MADE_SECRETS];
+  const want = ['infra/deploy/compose.yml', 'infra/deploy/compose.proxy.yml', 'infra/deploy/.env.example', MADE_SECRETS, CONFIG_DEFAULTS];
   for (const s of [...Object.values(schema.properties), ...Object.values(schema.patternProperties ?? {})]) {
     if (s['x-docs']) want.push(s['x-docs'].split('#')[0]);
     for (const via of Object.values(s['x-via'] ?? {})) if (via !== '.env' && via !== 'default') want.push(via);

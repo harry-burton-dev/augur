@@ -141,6 +141,8 @@ export const installChecks = ({ release, schema, env, host = {} }) => {
   if (!missing.length) pass(`Settings: all ${required.length} required settings are set.`);
   const made = Object.keys(props).filter((key) => props[key]['x-generate'] && !env[key]);
   if (made.length) pass(`Secrets: AUGUR makes ${made.length} on first start and keeps them (${made.join(', ')}).`);
+  const inEnv = Object.keys(props).filter((key) => props[key]['x-generate'] && env[key]);
+  if (inEnv.length) note(`${inEnv.join(', ')} ${inEnv.length === 1 ? 'is' : 'are'} set in .env, which every AUGUR service reads, so each of them can see ${inEnv.length === 1 ? 'it' : 'them'}. AUGUR keeps ${inEnv.length === 1 ? 'it' : 'them'} itself after its first start: once the backup’s off-server copy has run since, take ${inEnv.length === 1 ? 'it' : 'them'} out of .env (AUGUR’s docs, Settings and secrets).`);
   const misfits = Object.entries(env)
     .filter(([, value]) => value !== '')
     .map(([key, value]) => (lookup(key) ? misfit(key, value, lookup(key)) : undefined))

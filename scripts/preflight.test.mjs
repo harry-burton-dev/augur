@@ -69,6 +69,11 @@ test('an install goes ahead with the secrets AUGUR makes left blank, and says so
   assert.ok(checks.some((c) => c.ok && c.text === 'Secrets: AUGUR makes 2 on first start and keeps them (POSTGRES_PASSWORD, GARAGE_RPC_SECRET).'));
 });
 
+test('says a secret AUGUR makes that .env still sets can come out of it, since every service reads .env', () => {
+  const checks = installChecks({ release: fresh, schema, env: ready() });
+  assert.ok(checks.some((c) => c.note && /^POSTGRES_PASSWORD, GARAGE_RPC_SECRET are set in \.env, which every AUGUR service reads/.test(c.text)));
+});
+
 test('an install stops on the wrong release, a blank secret, and settings that don’t fit', () => {
   const found = stops(ready({ PLATFORM_VERSION: '0.18.0', POSTGRES_PASSWORD: '', GARAGE_RPC_SECRET: 'short', PLATFORM_URL: 'https://platform.tail1.ts.net/', SERVER_RING: 'staging', PLATFORM_ADMIN_EMAIL: 'me' }));
   assert.ok(found.some((t) => /deploy files here are augur@0\.19\.0/.test(t)));

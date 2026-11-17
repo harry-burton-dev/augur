@@ -175,3 +175,13 @@ test('takes a setting Compose reads in one of the deploy folder’s other compos
   const overlay = { ...more, 'infra/deploy/compose.proxy.yml': 'services:\n  web:\n    ports: ["${PROXY_LISTEN:-127.0.0.1:8080}:8080"]\n' };
   assert.deepEqual(check({ schema: s, files: overlay }), []);
 });
+
+test('holds config.env to the schema: known, not a secret, not internal', () => {
+  const withDefaults = (text) => check({ files: { ...files, 'infra/deploy/config.env': text } });
+  assert.deepEqual(withDefaults('# The feed.\nRELEASE_FEED_URL=https://feed.example.org\n'), []);
+  assert.deepEqual(withDefaults('POSTGRES_PASSWORD=x\nPORT=1\nUNKNOWN=1\n'), [
+    "POSTGRES_PASSWORD: a secret, so it can't have a default in infra/deploy/config.env.",
+    'PORT: in infra/deploy/config.env, but the schema says nobody sets it (x-internal).',
+    'UNKNOWN: in infra/deploy/config.env, but not in settings.schema.json.',
+  ]);
+});
