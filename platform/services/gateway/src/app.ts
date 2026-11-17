@@ -9,6 +9,7 @@ import {
   APP_HEADER,
   PERSONA_HEADER,
   appCallerId,
+  isAppItself,
   appClientId,
   CALLER_KEYS_PATH,
   CALLER_TOKEN_HEADER,
@@ -42,6 +43,7 @@ import { appFailure, appLimitsFromEnv, InFlight, platformFailure, platformLimits
 import { describeApi } from './contract.ts';
 import { BrowserTelemetry, CallerKeys, OtlpExport, ref, refused, Status } from './schemas.ts';
 import { FloorLookupError, identityFloors, type FloorLookup } from './floors.ts';
+import { identityOrganisationFloor, type OrganisationFloor } from './organisation.ts';
 import { PERSONA_ID, permissionsPersonaSessions, PersonaSessionsUnavailable, type PersonaSessionCheck } from './personas.ts';
 import { backupStatus, HealthMonitor, probesFor, publicAccess } from './status.ts';
 import { Traffic, TRAFFIC_PATH, type TrafficPart } from './traffic.ts';
@@ -180,6 +182,8 @@ export interface GatewayOptions {
   delegationSeconds?: number;
   /** Whether a person is acting as an admin persona now (ADR 0086). Defaults to asking the permissions upstream. */
   personaSessions?: PersonaSessionCheck;
+  /** The organisation's floor's id, signed on every caller as `org`. Defaults to asking the identity upstream. */
+  organisationFloor?: OrganisationFloor;
 }
 
 /**
@@ -190,14 +194,16 @@ export interface GatewayOptions {
  * An app names the floor a request is for with `X-Workspace-Id`. The gateway
  * checks the caller is on it and passes it on with its kind and their role,
  * or refuses the request; services never see a floor the gateway didn't check.
- * A call to an app is refused unless the app is on for the caller on that floor
- * (or on the organisation's, when the call names none).
+ * A call to an app is refused unless the app is on for the caller on that floor.
+ * A person's call made for an app names its floor, and a part's onward call for them is
+ * checked on the floor they stood on. Only a person's direct call to an app's part, or an
+ * app's own call, may name none, and is then checked on the organisation's.
  *
  * The caller also goes in one signed header (`x-augur-caller`) that only the
  * service it is sent to accepts, so a service can tell the gateway's word from
  * headers anyone on the network could send. See docs/signed-caller.md.
  */
-export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), platformLimits = platformLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions }: GatewayOptions = {}) => {
+export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFromEnv(), monitor, floors, backupDir = process.env.BACKUP_DIR, publicAccessFile = process.env.PUBLIC_ACCESS_FILE, seedAllowed = process.env.SEED_ALLOWED === 'true', signer = callerSignerFromEnv(), access, apps, traffic = new Traffic(), browserTelemetry = browserTelemetryFrom(), metrics = new GatewayMetrics(), fetchImpl = fetch, mailer, appGrants, limits = appLimitsFromEnv(), platformLimits = platformLimitsFromEnv(), delegationSeconds = delegationSecondsFromEnv(), personaSessions, organisationFloor }: GatewayOptions = {}) => {
   // Mail comes from the organisation's sender (Admin → Organisation), read from identity as the gateway.
   const sender = upstreams.identity
     ? organisationSender({
@@ -219,6 +225,7 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   const appAccess = access ?? (upstreams.registry ? registryAppAccess({ registryUrl: upstreams.registry, signer }) : undefined);
   const floorsOf = floors ?? (upstreams.identity ? identityFloors({ identityUrl: upstreams.identity, signer }) : undefined);
   const grantsOf = appGrants ?? (upstreams.registry ? registryGrantsFor({ registryUrl: upstreams.registry, signer }) : undefined);
+  const orgFloor = organisationFloor ?? (upstreams.identity ? identityOrganisationFloor({ identityUrl: upstreams.identity, signer, fetchImpl }) : undefined);
   const actingAs = personaSessions ?? (upstreams.permissions ? permissionsPersonaSessions({ permissionsUrl: upstreams.permissions, signer, fetchImpl }) : undefined);
   const inFlight = new InFlight(limits.concurrentCalls);
   // A part sends back the delegated caller the gateway signed; it is checked against the gateway's own key.
@@ -346,9 +353,42 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       const { app: id } = req.identity;
       if (asked !== undefined && !FLOOR_ID.test(asked)) return reply.code(400).send({ error: 'bad_request', message: `${WORKSPACE_HEADERS.id} must be a floor’s id.` });
       if (!grantsOf) return reply.code(503).send({ error: 'unavailable', message: 'What apps may do can’t be checked right now.' });
+      const sentBack = req.headers[DELEGATION_HEADER];
+      const delegation = Array.isArray(sentBack) ? sentBack[0] : sentBack;
+      let delegated: Caller | undefined;
+      if (delegation) {
+        // The part is calling onward for a person (spec 8.5): the caller is the one the gateway delegated to it.
+        try {
+          delegated = await checkDelegation(delegation, id);
+        } catch (err) {
+          if (err instanceof CallerTokenError) {
+            reply.header('www-authenticate', 'Bearer');
+            return reply.code(401).send({ error: 'unauthenticated', message: err.message });
+          }
+          if (err instanceof CallerKeysUnavailable) return reply.code(503).send({ error: 'unavailable', message: 'The delegation can’t be checked right now.' });
+          throw err;
+        }
+      }
+      // The floor the call is for: for a person, the one the gateway checked they stood on; else the one the app names.
+      const floor = delegated ? delegated.workspace?.id : asked;
+      if (delegated && !floor) return reply.code(400).send({ error: 'bad_request', message: 'This delegation names no floor, so there is none to check the app on. Ask the person to open the app again.' });
+      if (delegated && asked !== undefined && asked !== floor) return reply.code(400).send({ error: 'bad_request', message: `This call is for someone on another floor than the ${WORKSPACE_HEADERS.id} it names.` });
+      if (delegated) {
+        // The person must still be on that floor, as for their own call: leaving it ends what the app may do for them there.
+        if (!floorsOf) return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now.' });
+        try {
+          const stood = (await floorsOf(delegated)).find((f) => f.id === floor);
+          if (!stood) return reply.code(403).send({ error: 'forbidden', message: 'The person this app is acting for is no longer on that floor, or it no longer exists.' });
+          delegated = { ...delegated, workspace: stood };
+        } catch (err) {
+          if (!(err instanceof FloorLookupError)) throw err;
+          req.log.error({ err: err.message }, 'floor check failed');
+          return reply.code(503).send({ error: 'unavailable', message: 'Floors can’t be checked right now. Try again in a moment.' });
+        }
+      }
       let grant: AppGrant | undefined;
       try {
-        grant = await grantsOf(id, asked);
+        grant = await grantsOf(id, floor);
       } catch (err) {
         if (!(err instanceof AppGrantsUnavailable)) throw err;
         req.log.error({ err: err.message, app: id }, 'app grants unavailable');
@@ -358,25 +398,12 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
         reply.header('www-authenticate', 'Bearer');
         return reply.code(401).send({ error: 'unauthenticated', message: `${id} isn’t installed here.` });
       }
-      if (!grant.on) return reply.code(403).send({ error: 'forbidden', message: `${appName(id, grant)} is turned off${asked ? ' on that floor' : ''}.` });
+      if (!grant.on) return reply.code(403).send({ error: 'forbidden', message: `${appName(id, grant)} is turned off${floor ? ' on that floor' : ''}.` });
       req.grant = grant;
       // The floor the call is for, as the registry checked it, so the services see the same floor the grant was read on.
       const workspace = asked && grant.floorKind ? { id: asked, kind: grant.floorKind, role: 'member' as const } : undefined;
-      const sentBack = req.headers[DELEGATION_HEADER];
-      const delegation = Array.isArray(sentBack) ? sentBack[0] : sentBack;
-      if (delegation) {
-        // The part is calling onward for a person (spec 8.5): the caller is the one the gateway delegated to it.
-        try {
-          req.caller = await checkDelegation(delegation, id);
-        } catch (err) {
-          if (err instanceof CallerTokenError) {
-            reply.header('www-authenticate', 'Bearer');
-            return reply.code(401).send({ error: 'unauthenticated', message: err.message });
-          }
-          if (err instanceof CallerKeysUnavailable) return reply.code(503).send({ error: 'unavailable', message: 'The delegation can’t be checked right now.' });
-          throw err;
-        }
-      } else {
+      if (delegated) req.caller = delegated;
+      else {
         // The app itself: a caller named after it, so every service it reaches sees the app and its scopes.
         req.caller = { id: appCallerId(id), name: appName(id, grant), departments: [], roles: [], app: id, scopes: [...grant.scopes], ...(workspace ? { workspace } : {}) };
       }
@@ -561,8 +588,8 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
   }
 
   /**
-   * The floor an app call is checked on: the one the caller named, or else the organisation's, so a
-   * call without X-Workspace-Id can't reach an app that is off where everyone stands.
+   * The floor a person's direct call to an app's part is checked on: the one they named, or else the
+   * organisation's, so a call without X-Workspace-Id can't reach an app that is off where everyone stands.
    */
   const checkedOn = async (caller: Caller): Promise<Caller> => {
     if (caller.workspace || !floorsOf) return caller;
@@ -583,13 +610,36 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       drop();
       return reply.code(status).send({ error, message });
     };
+    // Whether the app is on for this person where they stand, as the registry gives their shell; undefined when that can't be found out.
+    const onFor = async (caller: Caller, id: string): Promise<boolean | undefined> => {
+      if (!appAccess) return true;
+      try {
+        return (await appAccess(caller, id)).has(id);
+      } catch (err) {
+        if (!(err instanceof AppAccessUnavailable)) throw err;
+        req.log.error({ err: err.message }, 'app access check failed');
+        return undefined;
+      }
+    };
     const toPlatform = PLATFORM_SERVICES.includes(name);
+    // Every caller passed on names the organisation the call is in, as identity says it now (this never waits); a
+    // delegation keeps the one it was signed with only while the gateway knows none.
+    const org = req.caller ? orgFloor?.() : undefined;
+    if (org && req.caller!.org !== org) req.caller = { ...req.caller!, org };
 
     // An admin persona is for AUGUR's own services, never an app's part.
     if (req.caller?.persona && !toPlatform) return refuse(403, 'forbidden', 'An app never acts as your admin persona. Stop “Act as” to use it.');
     // An app's own token, or a part calling onward for a person (spec 8.3): within the grant, or refused naming the scope.
     if (req.identity?.kind === 'app' && req.caller && req.grant) {
       const { app: id } = req.identity;
+      // A part calling onward for a person: the app must still be on for them where they stood, as for their own call
+      // (turned off or blocked for them there is not on), however long ago the delegation was signed. Their roles are
+      // the ones the delegation was signed with, as their own sign-in's are until it refreshes.
+      if (!isAppItself(req.caller)) {
+        const on = await onFor(req.caller, id);
+        if (on === undefined) return refuse(503, 'unavailable', 'Whether this app may still act for this person can’t be checked right now. Try again in a moment.');
+        if (!on) return refuse(403, 'forbidden', `${appName(id, req.grant)} isn’t available to the person it is acting for on their floor, so it can’t act for them there.`);
+      }
       const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
       const granted = scope === null || (scope !== undefined && req.grant.scopes.includes(scope) && (req.caller.scopes?.includes(scope) ?? true));
       if (!granted) return refuse(403, 'forbidden', notAllowed(appName(id, req.grant), scope, req.url));
@@ -600,17 +650,19 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       // A person's call made for an app (spec 8.5): the app must be on for them here, and an AUGUR route within its grant.
       const id = req.actingApp;
       if (!toPlatform && name !== id) return refuse(400, 'bad_request', `This call is for ${id} but goes to /api/${name}.`);
+      // On the floor the person stands on, which the host always names: never the organisation's for want of one.
+      if (!req.caller.workspace) return refuse(400, 'bad_request', `Say which floor this call is for (${WORKSPACE_HEADERS.id}): an app is turned on floor by floor.`);
       let grant: AppGrant | undefined;
       try {
         if (!grantsOf) throw new AppGrantsUnavailable('the gateway has no registry to ask');
-        grant = await grantsOf(id, req.caller.workspace?.id);
+        grant = await grantsOf(id, req.caller.workspace.id);
       } catch (err) {
         if (!(err instanceof AppGrantsUnavailable)) throw err;
         req.log.error({ err: err.message, app: id }, 'app grants unavailable');
         return refuse(503, 'unavailable', 'What this app may do can’t be checked right now. Try again in a moment.');
       }
       if (!grant) return refuse(403, 'forbidden', `${id} isn’t installed here.`);
-      if (!grant.on) return refuse(403, 'forbidden', `${appName(id, grant)} is turned off${req.caller.workspace ? ' on this floor' : ''}.`);
+      if (!grant.on) return refuse(403, 'forbidden', `${appName(id, grant)} is turned off on this floor.`);
       // Acting as an admin persona reaches AUGUR only through its own frontends (those with platform scopes, ADR 0083),
       // never through an app installed from a feed, and never to an app's own part.
       if (req.caller.persona && !(toPlatform && grant.platformScopes?.length)) {
@@ -618,14 +670,9 @@ export const buildApp = async ({ upstreams = defaultUpstreams(), auth = authFrom
       }
       if (toPlatform) {
         // The app must be on for this person here, as for a call to its own routes: blocked or needing a role they lack is not on.
-        try {
-          const apps = appAccess ? await appAccess(await checkedOn(req.caller), id) : undefined;
-          if (apps && !apps.has(id)) return refuse(403, 'forbidden', `That app isn’t available to you${req.caller.workspace ? ' on this floor' : ''}.`);
-        } catch (err) {
-          if (!(err instanceof AppAccessUnavailable) && !(err instanceof FloorLookupError)) throw err;
-          req.log.error({ err: err.message }, 'app access check failed');
-          return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
-        }
+        const on = await onFor(req.caller, id);
+        if (on === undefined) return refuse(503, 'unavailable', 'Whether you can use this app can’t be checked right now. Try again in a moment.');
+        if (!on) return refuse(403, 'forbidden', 'That app isn’t available to you on this floor.');
         const scope = scopeFor(req.method, req.url, id, PLATFORM_SERVICES);
         if (scope === undefined || (scope !== null && !holds(grant, scope))) return refuse(403, 'forbidden', notAllowed(appName(id, grant), scope, req.url));
         // The service sees the person with the app and its scopes beside them, and applies the smaller access.

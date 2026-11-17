@@ -239,6 +239,7 @@ export interface Caller {
     id: string;
     // (undocumented)
     name: string;
+    org?: string;
     persona?: string;
     // (undocumented)
     roles: string[];
@@ -256,6 +257,7 @@ export const CALLER_HEADERS: {
     readonly roles: "x-user-roles";
     readonly signedInAt: "x-user-signed-in-at";
     readonly persona: "x-user-persona";
+    readonly org: "x-user-org";
 };
 
 // @public

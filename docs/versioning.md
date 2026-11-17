@@ -120,6 +120,8 @@ update registry.apps set granted_scopes = '{}';
 
 `-- squawk-ignore a, b` names several rules; `-- squawk-ignore-file <rule>` covers the whole migration. Use them for what is safe, not to skip a major changeset.
 
+An app in its own repository is held to the same rules by `augur-app migrations check`, from `@augur/app-tools`, after its service is built. Its migrations are the `MIGRATIONS` export of `service/src/migrations.ts`, and its lock is `service/migrations.lock.json`, written by `augur-app migrations sync`. What shipped is the lock in the app's newest stable release (its `app/<id>@<x.y.z>` tag), plus the lock on the branch named by `MIGRATIONS_FROZEN_AT` when it's set; an app's CI sets it to `origin/main`. Where the two differ, the release's wins: servers ran it. A new migration may break the release before only when the app is going up a major: its version is a major past that release, or a waiting changeset takes its service up a major, as `pnpm changeset status` plans the release (so a fixed group with the frontend counts; it needs the history back to `main`, `fetch-depth: 0` in CI). The check reads origin's tags and fails when it can't, rather than pass on nothing. Squawk uses AUGUR's own rules, which come with the package; the app needs `squawk-cli` in its devDependencies.
+
 ## HTTP APIs
 
 Each service serves its API under its major version: the registry's manifest is `GET /v1/manifest`, or `GET /api/registry/v1/manifest` through the gateway. The contract in `contracts/` says the same in `servers: [{ url: /v1 }]` and `info.version: 1.x.y`, and the service's `API_VERSION` constant is `'v1'`. `pnpm check:versions` fails if the three disagree.

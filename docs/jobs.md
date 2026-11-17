@@ -45,7 +45,7 @@ await jobs.cancel(runId);
 ## Where jobs are kept
 
 In the schema `<app's schema>_jobs` (`team-notes` → `team_notes_jobs`), apart from the app's own
-tables. On a server the storage service makes it for the app's login along with its own schema
+tables. On a server the storage service makes it in the app's own database, along with the app's schema
 ([app-storage.md](app-storage.md)). Without a database, as under `pnpm dev:app`, started jobs run at
 once in memory and scheduled ones don't run (the log says so); tests use `memoryJobs()`, whose
 `runScheduled(name)` runs a scheduled job by hand.

@@ -1,4 +1,4 @@
-/** augur-database: a login `app_<id>` owning schema `<id>`, its search_path set to it, its connections capped (spec 4.6, 7.3). */
+/** augur-database: a login `app_<id>` owning database `app_<id>` with schema `<id>` in it, its search_path set to it, its connections capped (spec 4.6, 7.3). */
 import { envValue } from '../env-file.ts';
 import type { Provisioner } from './types.ts';
 
@@ -21,11 +21,11 @@ export const database: Provisioner = {
   // The storage container makes the login and schema, and changes nothing when they're there.
   needs: ['storage'],
   outputs: ({ storageId, env, secrets, params }) => ({
-    // The platform's one database, where each app has its own login and schema, through db-relay: on an
-    // app's network it answers as postgres, and lets only the app's own login on (compose.yml).
+    // The app's own database on AUGUR's Postgres (PER-456), reached through db-relay: on an app's network it
+    // answers as postgres, and lets only the app's own login on (compose.yml). The login connects to no other.
     host: { value: 'postgres' },
     port: { value: '5432' },
-    name: { value: 'platform' },
+    name: { value: roleFor(storageId) },
     user: { value: roleFor(storageId) },
     schema: { value: schemaFor(storageId) },
     password: { value: secrets.database, secret: true },
