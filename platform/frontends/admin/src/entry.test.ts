@@ -24,6 +24,7 @@ const catalogue: CatalogueApp[] = [
   { id: 'upgrades', name: 'Deployment', route: '/upgrades', entry: '/apps/upgrades/0.2.0/sandbox.js', version: '0.2.0', sdk: '^3.0.0', platform: true, enabled: true, icon: 'download' },
 ];
 const org = {
+  id: 'org-1',
   name: 'Northwind',
   timeZone: 'UTC',
   sender: { name: 'Northwind' },

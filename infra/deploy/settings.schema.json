@@ -2,37 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://augur.invalid/infra/deploy/settings.schema.json",
   "title": "AUGUR deployment settings",
-  "$comment": "Every setting a deployment can set in infra/deploy/.env, and every one AUGUR's services read, described once. As a JSON Schema it describes .env as an object of strings: `required`, `default`, and `writeOnly` for a secret. AUGUR's own keywords: `x-services`, the compose services that read it (`compose` for Docker Compose itself); `x-via`, for a service that gets it another way (a compose file of its own such as identity-repair.yml, `.env` when it reads the deployment's .env itself, or `default` when it keeps its own default in a deployment); `x-docs`, the guide section that explains it; `x-internal`, for one compose or the code sets and nobody puts in .env; `x-generate`, for a secret nobody needs to know, which `node scripts/preflight.mjs --install --fill-secrets` makes (64 random hex characters). `pattern`, `minLength`, `enum` and `format` are checked by the install preflight. `pnpm check:settings` (scripts/check-settings.mjs) holds compose.yml, .env.example, the guides and the services' code to it.",
+  "$comment": "Every setting a deployment can set in infra/deploy/.env, and every one AUGUR's services read, described once. As a JSON Schema it describes .env as an object of strings: `required`, `default`, and `writeOnly` for a secret. AUGUR's own keywords: `x-services`, the compose services that read it (`compose` for Docker Compose itself); `x-via`, for a service that gets it another way (a compose file of its own such as identity-repair.yml, `.env` when it reads the deployment's .env itself, or `default` when it keeps its own default in a deployment); `x-docs`, the guide section that explains it; `x-internal`, for one compose or the code sets and nobody puts in .env; `x-generate`, for a secret nobody needs to know, which the make-secrets job makes on first start (64 random hex characters) and hands each service that reads it through infra/deploy/made-secrets.json (ADR 0107); one set in .env wins. `pattern`, `minLength`, `enum` and `format` are checked by the install preflight. `pnpm check:settings` (scripts/check-settings.mjs) holds compose.yml, .env.example, the guides and the services' code to it.",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "PLATFORM_VERSION",
     "PLATFORM_URL",
-    "POSTGRES_PASSWORD",
-    "KEYCLOAK_ADMIN_PASSWORD",
-    "IDENTITY_DATABASE_PASSWORD",
-    "REGISTRY_DATABASE_PASSWORD",
-    "EVENTS_DATABASE_PASSWORD",
-    "MODELS_DATABASE_PASSWORD",
-    "PERMISSIONS_DATABASE_PASSWORD",
-    "KNOWLEDGE_DATABASE_PASSWORD",
-    "KEYCLOAK_DATABASE_PASSWORD",
-    "GARAGE_RPC_SECRET",
-    "GARAGE_ADMIN_TOKEN",
-    "IDENTITY_CLIENT_SECRET",
-    "REGISTRY_CLIENT_SECRET",
-    "EVENTS_CLIENT_SECRET",
-    "OPENFGA_TOKEN",
-    "KNOWLEDGE_CLIENT_SECRET",
-    "PERMISSIONS_CLIENT_SECRET",
     "PLATFORM_ADMIN_USER",
     "PLATFORM_ADMIN_PASSWORD",
     "PLATFORM_ADMIN_EMAIL",
     "PLATFORM_ADMIN_FIRST_NAME",
-    "PLATFORM_ADMIN_LAST_NAME",
-    "ALERT_WEBHOOK_TOKEN",
-    "GRAFANA_ADMIN_PASSWORD",
-    "CALLER_SIGNING_KEY"
+    "PLATFORM_ADMIN_LAST_NAME"
   ],
   "patternProperties": {
     "^[A-Z][A-Z0-9_]*_DATABASE_PASSWORD$": {
@@ -152,6 +132,7 @@
       "x-generate": true,
       "description": "Postgres's admin login, used only by the storage job and backups.",
       "x-services": [
+        "make-secrets",
         "postgres",
         "backup",
         "storage"
@@ -165,6 +146,7 @@
       "x-generate": true,
       "description": "Keycloak's own admin's password, read by Keycloak on its first start and by identity's realm job (keycloak-config) on every up.",
       "x-services": [
+        "make-secrets",
         "keycloak",
         "keycloak-config"
       ],
@@ -187,6 +169,7 @@
       "x-generate": true,
       "description": "Identity's own database login.",
       "x-services": [
+        "make-secrets",
         "identity",
         "storage"
       ],
@@ -199,6 +182,7 @@
       "x-generate": true,
       "description": "The registry's own database login.",
       "x-services": [
+        "make-secrets",
         "registry",
         "storage"
       ],
@@ -211,6 +195,7 @@
       "x-generate": true,
       "description": "The events service's own database login.",
       "x-services": [
+        "make-secrets",
         "events",
         "storage"
       ],
@@ -223,6 +208,7 @@
       "x-generate": true,
       "description": "The model gateway's own database login.",
       "x-services": [
+        "make-secrets",
         "models",
         "storage"
       ],
@@ -235,6 +221,7 @@
       "x-generate": true,
       "description": "The permissions service's own database login (platform_permissions), which the storage job makes and OpenFGA keeps its tables under.",
       "x-services": [
+        "make-secrets",
         "storage",
         "openfga"
       ],
@@ -247,6 +234,7 @@
       "x-generate": true,
       "description": "The knowledge graph service's own database login (kg_app), which its migration job makes.",
       "x-services": [
+        "make-secrets",
         "knowledge",
         "knowledge-migrate"
       ],
@@ -259,6 +247,7 @@
       "x-generate": true,
       "description": "Keycloak's own database login.",
       "x-services": [
+        "make-secrets",
         "keycloak",
         "storage"
       ],
@@ -271,6 +260,7 @@
       "x-generate": true,
       "description": "Garage's nodes' shared secret.",
       "x-services": [
+        "make-secrets",
         "garage"
       ],
       "x-docs": "docs/src/content/docs/run/install.md#2-fill-in-the-settings"
@@ -282,6 +272,7 @@
       "x-generate": true,
       "description": "Garage's admin API token, which the storage job makes buckets with.",
       "x-services": [
+        "make-secrets",
         "garage",
         "storage"
       ],
@@ -294,6 +285,7 @@
       "x-generate": true,
       "description": "The registry's key to the bucket apps' frontends are kept in by version (64 hex).",
       "x-services": [
+        "make-secrets",
         "registry",
         "storage"
       ],
@@ -394,6 +386,7 @@
       "x-generate": true,
       "description": "Identity's own sign-in.",
       "x-services": [
+        "make-secrets",
         "keycloak",
         "identity"
       ],
@@ -406,6 +399,7 @@
       "x-generate": true,
       "description": "The registry's own sign-in.",
       "x-services": [
+        "make-secrets",
         "keycloak-config",
         "registry"
       ],
@@ -418,6 +412,7 @@
       "x-generate": true,
       "description": "The events service's own sign-in.",
       "x-services": [
+        "make-secrets",
         "keycloak-config",
         "events"
       ],
@@ -430,6 +425,7 @@
       "x-generate": true,
       "description": "The model gateway's own sign-in; needed before models can be used.",
       "x-services": [
+        "make-secrets",
         "keycloak-config",
         "models"
       ],
@@ -442,6 +438,7 @@
       "x-generate": true,
       "description": "The knowledge graph service's own sign-in, to ask identity where people stand and to send its events.",
       "x-services": [
+        "make-secrets",
         "keycloak-config",
         "knowledge"
       ],
@@ -454,6 +451,7 @@
       "x-generate": true,
       "description": "The permissions service's own sign-in, to copy floors, positions and who holds them from identity.",
       "x-services": [
+        "make-secrets",
         "keycloak-config",
         "permissions"
       ],
@@ -883,7 +881,8 @@
       "description": "The checks the permissions service decides instead of the service's own (ADR 0085), comma-separated by site, such as models.settings.read,models.usage, or all. Move a site only once shadow mode has shown no disagreement there for 7 days. Empty: every check is only compared.",
       "default": "",
       "x-services": [
-        "models"
+        "models",
+        "registry"
       ],
       "x-docs": "docs/observability.md#what-the-alert-rules-read"
     },
@@ -1249,6 +1248,7 @@
       "x-generate": true,
       "description": "The key the gateway signs callers with (64 hex). The gateway won't start without it, and every gateway of a deployment shares it.",
       "x-services": [
+        "make-secrets",
         "gateway"
       ],
       "x-docs": "docs/signed-caller.md#where-the-key-comes-from"
@@ -1454,6 +1454,7 @@
       "x-generate": true,
       "description": "Grafana's admin password (otel-lgtm), at least 16 characters. Required, as Grafana would otherwise take admin/admin. The updater makes it up on upgrade.",
       "x-services": [
+        "make-secrets",
         "otel-lgtm"
       ],
       "x-docs": "docs/observability.md#turn-it-on"
@@ -1465,6 +1466,7 @@
       "x-generate": true,
       "description": "Grafana's key to tell deployment admins of an alert through the registry. The updater makes it up on upgrade.",
       "x-services": [
+        "make-secrets",
         "registry",
         "otel-lgtm"
       ],
@@ -1533,7 +1535,7 @@
     "DATABASE_URL": {
       "type": "string",
       "writeOnly": true,
-      "description": "A service's Postgres address and login, made from its *_DATABASE_PASSWORD.",
+      "description": "A service's Postgres address and login, which the make-secrets job writes into its own secrets from its *_DATABASE_PASSWORD (infra/deploy/made-secrets.json).",
       "x-internal": "compose",
       "x-services": [
         "identity",
@@ -1544,6 +1546,28 @@
         "knowledge",
         "knowledge-migrate",
         "permissions"
+      ]
+    },
+    "SECRETS_DIR": {
+      "type": "string",
+      "description": "The folder of a service's own secrets, each file the setting it is named after, which the make-secrets job writes (infra/deploy/made-secrets.json; ADR 0107).",
+      "x-internal": "compose",
+      "x-services": [
+        "gateway",
+        "identity",
+        "registry",
+        "events",
+        "models",
+        "storage",
+        "keycloak",
+        "keycloak-config",
+        "knowledge",
+        "knowledge-migrate",
+        "openfga",
+        "permissions",
+        "updater",
+        "otel-lgtm",
+        "backup"
       ]
     },
     "IDENTITY_URL": {
@@ -1684,6 +1708,14 @@
       "x-internal": "default",
       "x-via": {
         "gateway": "default"
+      }
+    },
+    "SECRETS_DIR": {
+      "type": "string",
+      "description": "The folder of a service's own secrets, each file the setting it is named after, which the make-secrets job writes (infra/deploy/made-secrets.json; ADR 0107). Unset, a service takes none from a folder.",
+      "x-internal": "default",
+      "x-via": {
+        "storage": "default"
       }
     },
     "APP_MANIFEST": {
@@ -2275,6 +2307,7 @@
       "x-generate": true,
       "description": "The key the permissions service sends OpenFGA, which OpenFGA needs on every call (ADR 0085).",
       "x-services": [
+        "make-secrets",
         "openfga",
         "permissions"
       ],

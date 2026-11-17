@@ -356,33 +356,45 @@ retired_by_upgrade() {
   done
 }
 
-# What's in the database: every table with its exact row count. Keycloak's own database isn't AUGUR's, so it's
-# left out, and so is what the upgrade takes away on purpose ($1, app ids from retired_by_upgrade): those apps'
-# schemas, and their rows in any table that names apps (a text app_id column, or the registry's apps table),
+# What's in the database: every table with its exact row count, in AUGUR's database and in each app's own
+# (app_<id>, its tables named app_<id>:<schema>.<table>). Keycloak's own database isn't AUGUR's, so it's left out, and so is what the upgrade takes away on purpose ($1, app ids from retired_by_upgrade): those apps'
+# schemas or databases, and their rows in any table that names apps (a text app_id column, or the registry's apps table),
 # mirroring what migration 023 deletes, so that what is counted before the upgrade is what must still be there
 # after it. The same list is used for every snapshot, so they are like for like.
 tables() {
-  local id schemas='' ids=''
+  local id db schemas='' ids='' dbs=''
   for id in $1; do
     ids+="$id,"
     schemas+="${id//-/_},${id//-/_}_jobs,"
+    dbs+="app_${id//-/_},"
   done
+  dbs="{${dbs%,}}"
   ids="{${ids%,}}"
   schemas="{${schemas%,}}"
-  pc exec -T postgres psql -U platform -d platform -At -F' ' -v ON_ERROR_STOP=1 -c "
+  {
+    count_tables platform "$ids" "$schemas"
+    for db in $(pc exec -T postgres psql -U platform -d platform -At -v ON_ERROR_STOP=1 -c "select datname from pg_database where datname like 'app\\_%' and datname <> all ('$dbs'::text[]) order by 1"); do
+      count_tables "$db" '{}' '{}' | sed "s/^/$db:/"
+    done
+  } | sort
+}
+
+# count_tables DB IDS SCHEMAS: each table in DB with its row count, leaving out SCHEMAS, and rows naming IDS.
+count_tables() {
+  pc exec -T postgres psql -U platform -d "$1" -At -F' ' -v ON_ERROR_STOP=1 -c "
     select t.table_schema || '.' || t.table_name,
       (xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I where %s', t.table_schema, t.table_name,
         case
           when exists (select 1 from information_schema.columns c
                        where c.table_schema = t.table_schema and c.table_name = t.table_name
                          and c.column_name = 'app_id' and c.data_type in ('text', 'character varying'))
-            then format('coalesce(app_id <> all (%L::text[]), true)', '$ids')
-          when t.table_schema = 'registry' and t.table_name = 'apps' then format('coalesce(id <> all (%L::text[]), true)', '$ids')
+            then format('coalesce(app_id <> all (%L::text[]), true)', '$2')
+          when t.table_schema = 'registry' and t.table_name = 'apps' then format('coalesce(id <> all (%L::text[]), true)', '$2')
           else 'true'
         end), false, true, '')))[1]::text
     from information_schema.tables t
     where t.table_type = 'BASE TABLE' and t.table_schema not in ('pg_catalog', 'information_schema')
-      and t.table_schema <> all ('$schemas'::text[])" | sort
+      and t.table_schema <> all ('$3'::text[])"
 }
 
 # Nothing that was there before may be gone or emptied.
@@ -667,31 +679,49 @@ counted_apart() {
   echo "The gateway counted $calls calls to /api/$app under apps, not platform." >&2
 }
 
-# A secret compose.yml hands a service as a file (its top-level secrets, from .env) is in neither that service's
-# environment, which `docker inspect` and a crash report show, nor its log, and is in its file.
+# The secrets AUGUR made itself (ADR 0107; .env sets none of them on a fresh install): each service's own folder
+# holds exactly what infra/deploy/made-secrets.json gives it, and no container's environment or log holds any of
+# them. The services started through secrets-env.sh have theirs only in their process, never in their config.
 secrets_kept_out() {
-  local triples service path key value id env logs bad=""
-  triples=$(pc config --format json | jq -r '.secrets as $s | .services | to_entries[] | .key as $svc | (.value.secrets // [])[] | "\($svc) \(.target // ("/run/secrets/" + .source)) \($s[.source].environment // "")"')
-  while read -r service path key; do
-    [ -n "$key" ] || continue
-    # As Compose reads .env: the last line for the key wins, and quotes around the value aren't part of it.
-    value=$(grep "^$key=" "$deploy/.env" | tail -n 1 | cut -d= -f2- | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\\(.*\\)'$/\\1/" || true)
-    [ -n "$value" ] || continue
-    [ "${path#/}" != "$path" ] || path=/run/secrets/$path
+  local names name value made='{}' spec service file want got id env logs bad=""
+  names=$(jq -r '.properties | to_entries[] | select(.value["x-generate"]) | .key' "$deploy/settings.schema.json")
+  for name in $names; do
+    value=$(pc exec -T backup cat "/made-secrets/$name" 2>/dev/null || true)
+    if [ -z "$value" ]; then bad="$bad made($name)"; continue; fi
+    made=$(jq --arg k "$name" --arg v "$value" '.[$k] = $v' <<< "$made")
+  done
+  # Every one made, and no two the same.
+  if [ "$(jq '[.[]] | unique | length' <<< "$made")" != "$(wc -w <<< "$names")" ]; then bad="$bad made(some-alike)"; fi
+  spec=$(jq -c 'to_entries | map(select(.key | startswith("$") | not)) | .[]' "$deploy/made-secrets.json")
+  while read -r entry; do
+    service=$(jq -r .key <<< "$entry")
     for id in $(pc ps -q "$service"); do
-      # Read whole, not piped into grep -q: under pipefail a writer cut off early would hide a match.
-      env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id")
-      logs=$(docker logs "$id" 2>&1)
-      if grep -F -- "$value" <<< "$env" >/dev/null; then bad="$bad $service:environment($key)"; fi
-      if grep -F -- "$value" <<< "$logs" >/dev/null; then bad="$bad $service:log($key)"; fi
-      if [ "$(docker exec "$id" cat "$path" 2>/dev/null)" != "$value" ]; then bad="$bad $service:file($path)"; fi
+      for file in $(jq -r '.value | keys[]' <<< "$entry"); do
+        # The template with each {NAME} filled in from what was made (the test's .env sets no others).
+        want=$(jq -r --arg f "$file" --argjson made "$made" '.value[$f] | gsub("\\{(?<n>[A-Z][A-Z0-9_]*)\\}"; $made[.n] // "")' <<< "$entry")
+        # Copied out rather than cat inside: Garage's image has no shell or cat.
+        got=$(docker cp "$id:/run/augur/secrets/$file" - 2>/dev/null | tar -xO 2>/dev/null || echo "<none>")
+        if [ "$got" != "$want" ]; then bad="$bad $service:file($file)"; fi
+      done
     done
-  done <<< "$triples"
+  done <<< "$spec"
+  for id in $(pc ps -q); do
+    service=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$id")
+    # Read whole, not piped into grep -q: under pipefail a writer cut off early would hide a match.
+    env=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$id")
+    logs=$(docker logs "$id" 2>&1)
+    for name in $names; do
+      value=$(jq -r --arg k "$name" '.[$k] // empty' <<< "$made")
+      [ -n "$value" ] || continue
+      if grep -F -- "$value" <<< "$env" >/dev/null; then bad="$bad $service:environment($name)"; fi
+      if grep -F -- "$value" <<< "$logs" >/dev/null; then bad="$bad $service:log($name)"; fi
+    done
+  done
   if [ -n "$bad" ]; then
-    echo "Secrets meant for files only were found where they shouldn't be, or missing from their file:$bad" >&2
+    echo "The secrets AUGUR made aren't where they should be, or are where they shouldn't be:$bad" >&2
     return 1
   fi
-  echo "Each secret compose.yml gives as a file is in its file, and in no environment or log of the service that reads it." >&2
+  echo "AUGUR made each of its $(wc -w <<< "$names") secrets, handed each service only its own as files, and none is in a container's environment or log." >&2
 }
 
 # The updater's safety backup before an upgrade, and the restore test it must pass, on this release's data:

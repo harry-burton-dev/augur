@@ -53,17 +53,22 @@ test('reads a compose service’s environment through its anchors, and whether i
   assert.equal(services.storage.envFile, true);
 });
 
-test('takes a secret file from .env (top-level secrets with environment) as reaching its service', () => {
-  const gateway = 'services:\n  gateway:\n    environment:\n      SIGNING_KEY_FILE: /run/secrets/signing_key\n    secrets: [signing_key, { source: other }]\n';
-  const secrets = '\nsecrets:\n  signing_key: { environment: SIGNING_KEY }\n  other: { file: ./other }\n';
-  assert.deepEqual(composeServices(gateway + secrets).gateway.secretKeys, ['SIGNING_KEY']);
-  // A secret the service never names in a <NAME>_FILE doesn't reach it.
-  assert.deepEqual(composeServices(gateway.replace('SIGNING_KEY_FILE: /run/secrets/signing_key', 'OTHER: x') + secrets).gateway.secretKeys, []);
+test('takes a secret the make-secrets job hands a service as reaching it, when both mount its folder', () => {
+  const made = (volumes) => `services:\n  make-secrets:\n    environment:\n      KEPT_TOKEN: \${KEPT_TOKEN:-}\n    volumes: [${volumes.join(', ')}]\n  gateway:\n    environment:\n      SECRETS_DIR: /run/augur/secrets\n    volumes: ['secrets-gateway:/run/augur/secrets:ro']\n`;
   const s = structuredClone(schema);
-  s.properties.SIGNING_KEY = { writeOnly: true, 'x-services': ['gateway'] };
-  const withGateway = (extra) => settingsProblems({ schema: s, code, files: { ...files, 'infra/deploy/compose.yml': compose.replace(/^services:\n/m, gateway) + extra } });
-  assert.ok(!withGateway(secrets).some((p) => p.startsWith('SIGNING_KEY: gateway reads it')));
-  assert.ok(withGateway('').some((p) => p.startsWith('SIGNING_KEY: gateway reads it')));
+  s.properties.SIGNING_KEY = { writeOnly: true, 'x-generate': true, 'x-services': ['gateway'] };
+  const withSpec = (volumes, spec) =>
+    settingsProblems({ schema: s, code, files: { ...files, 'infra/deploy/made-secrets.json': JSON.stringify(spec), 'infra/deploy/compose.yml': compose.replace(/^services:\n/m, made(volumes)) } });
+  const spec = { $comment: 'x', gateway: { SIGNING_KEY: '{SIGNING_KEY}', URL: 'x://{KEPT_TOKEN}' } };
+  assert.deepEqual(composeServices(made(['secrets-gateway:/secrets/for/gateway'])).gateway.volumes, ['secrets-gateway']);
+  assert.ok(!withSpec(['secrets-gateway:/secrets/for/gateway'], spec).some((p) => /SIGNING_KEY: gateway reads|made-secrets/.test(p)));
+  // Without the job writing its folder, the secret doesn't reach it.
+  const unmounted = withSpec([], spec);
+  assert.ok(unmounted.some((p) => p.startsWith('SIGNING_KEY: gateway reads it')));
+  assert.ok(unmounted.includes('infra/deploy/made-secrets.json: gateway and make-secrets must both mount the volume secrets-gateway.'));
+  // A secret the job neither makes nor is passed.
+  assert.ok(withSpec(['secrets-gateway:/secrets/for/gateway'], { gateway: { X: '{NOWHERE}' } }).includes('infra/deploy/made-secrets.json: gateway is given {NOWHERE}, which make-secrets neither makes nor is passed.'));
+  assert.ok(withSpec(['secrets-gateway:/secrets/for/gateway'], { nobody: {} }).includes('infra/deploy/made-secrets.json: compose.yml has no service nobody.'));
 });
 
 test('passes settings that reach their services, are listed and documented', () => {
@@ -156,7 +161,7 @@ test('the install guide’s settings list is made from the schema', () => {
   const s = { required: ['PLATFORM_URL', 'POSTGRES_PASSWORD'], properties: { PLATFORM_URL: { description: 'https://<host> | the address' }, POSTGRES_PASSWORD: { writeOnly: true, 'x-generate': true } } };
   const list = installList(s);
   assert.match(list, /\| `PLATFORM_URL` \| https:\/\/&lt;host> \\\| the address \|/);
-  assert.match(list, /fills in these 1 secrets, each with 64 random hex characters: `POSTGRES_PASSWORD`\./);
+  assert.match(list, /AUGUR makes these 1 secrets itself on first start, each 64 random hex characters, so leave them out of `\.env`: `POSTGRES_PASSWORD`\./);
   const guide = 'Before\n<!-- settings: made from infra/deploy/settings.schema.json by `pnpm check:settings --write` -->\nold\n<!-- /settings -->\nAfter\n';
   assert.equal(withInstallList(guide, 'new'), guide.replace('old', 'new'));
   assert.equal(withInstallList('no markers', 'new'), undefined);

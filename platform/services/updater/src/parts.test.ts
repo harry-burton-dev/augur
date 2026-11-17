@@ -12,6 +12,8 @@ describe('the parts the updater restarts', () => {
     expect(parts.health).toMatchObject({ registry: 'http://registry:8082/healthz', web: 'http://web:8080/' });
     // AUGUR's Keycloak may migrate its database on its first start, so it's given longer.
     expect(parts.readyMs).toEqual({ keycloak: 300_000 });
+    // The secrets job, before what the parts stand on (Postgres, Garage) and the parts themselves.
+    expect(parts.first).toEqual(['make-secrets']);
   });
 
   it('knows every platform service', () => {

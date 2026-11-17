@@ -582,7 +582,14 @@ export const runUpgrade = async (target: Target, server: Server, report: Reporte
         restarted = false;
         throw err;
       });
-      if (others.length) await server.up(others);
+      // Jobs the rest read from first (the secrets job): run to the end before anything else starts.
+      const first = others.filter((service) => parts.first.includes(service));
+      if (first.length) {
+        await server.up(first);
+        for (const service of first) await finished(server, service);
+      }
+      const rest = others.filter((service) => !first.includes(service));
+      if (rest.length) await server.up(rest);
       if (remount.length) await server.recreate(remount);
       for (const service of services) {
         await server.up([service]);
