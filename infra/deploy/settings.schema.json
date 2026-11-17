@@ -1014,7 +1014,7 @@
     "DESKTOP_APP": {
       "type": "string",
       "pattern": "^[a-z0-9-]*$",
-      "description": "The app drawn on the desktop, under the bar and over the background, by its id. Empty for a bare desktop.",
+      "description": "The app drawn on the desktop, under the bar and over the background, by its id: home when unset or empty, none for a bare desktop.",
       "default": "home",
       "x-services": [
         "web"
@@ -1708,14 +1708,6 @@
       "x-internal": "default",
       "x-via": {
         "gateway": "default"
-      }
-    },
-    "SECRETS_DIR": {
-      "type": "string",
-      "description": "The folder of a service's own secrets, each file the setting it is named after, which the make-secrets job writes (infra/deploy/made-secrets.json; ADR 0107). Unset, a service takes none from a folder.",
-      "x-internal": "default",
-      "x-via": {
-        "storage": "default"
       }
     },
     "APP_MANIFEST": {

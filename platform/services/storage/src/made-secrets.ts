@@ -22,15 +22,18 @@ export const madeNames = (schema: { properties?: Record<string, { 'x-generate'?:
 /** The spec's services, each with its files: its `$comment` left out. */
 export const servicesOf = (spec: SecretsSpec) => Object.entries(spec).filter(([service]) => !service.startsWith('$'));
 
-/** What is wrong with a spec, every problem at once. */
-export const specProblems = (spec: SecretsSpec, made: string[], env: Record<string, string | undefined>) => {
+/**
+ * What is wrong with a spec, every problem at once. A placeholder names a made secret or another setting the schema
+ * describes, which the job reads from .env (or a platform host's variables) and leaves empty when unset.
+ */
+export const specProblems = (spec: SecretsSpec, made: string[], known: string[]) => {
   const problems: string[] = [];
   for (const [service, files] of servicesOf(spec)) {
     if (!SERVICE.test(service)) problems.push(`"${service}" isn't a service name (lowercase letters, digits and dashes).`);
     for (const [file, template] of Object.entries(files)) {
       if (!NAME.test(file)) problems.push(`${service}: "${file}" isn't a setting's name (capitals, digits and underscores).`);
       for (const [, name] of template.matchAll(PLACE))
-        if (!made.includes(name) && !(name in env)) problems.push(`${service}: ${file} uses {${name}}, which AUGUR doesn't make and isn't passed to this job.`);
+        if (!made.includes(name) && !known.includes(name)) problems.push(`${service}: ${file} uses {${name}}, which AUGUR doesn't make and settings.schema.json doesn't describe.`);
     }
   }
   return problems;

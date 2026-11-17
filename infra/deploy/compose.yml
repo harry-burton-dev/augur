@@ -35,27 +35,17 @@ x-logging: &logging
 # names. OTEL_SDK_DISABLED=true turns it off (and OTEL_LGTM_REPLICAS=0 stops otel-lgtm).
 x-otel: &otel
   OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-lgtm:4318}
-  OTEL_SDK_DISABLED: ${OTEL_SDK_DISABLED:-}
-  # A collector's key, and which traces to keep (the SDK's defaults when empty).
-  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
-  OTEL_TRACES_SAMPLER: ${OTEL_TRACES_SAMPLER:-}
-  OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-}
   # Which deployment it came from: its ring, and the name it reports to Backstage under.
   OTEL_RESOURCE_ATTRIBUTES: deployment.environment.name=${SERVER_RING:-production},deployment.name=${DEPLOYMENT_ID:-${SERVER_RING:-production}}
 x-telemetry: &telemetry
   <<: *otel
   NODE_OPTIONS: --import @augur/service-kit/telemetry
-  # How long one service waits for another before it says that one can't be reached (5 seconds unless set).
-  SERVICE_CALL_TIMEOUT_SECONDS: ${SERVICE_CALL_TIMEOUT_SECONDS:-}
-  # How long one database query may run before Postgres cancels it (a minute unless set; 0 for no limit).
-  DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-}
-  # How long a service waits for a database connection (10 seconds unless set), and how long its migration waits for
-  # a lock (60) or sits idle in its transaction (60) before it gives up. 0 for no limit.
-  DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
-  DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
-  DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS:-}
-  # How long a stopping service lets its calls in flight finish (20 seconds unless set, at most 23).
-  SHUTDOWN_GRACE_SECONDS: ${SHUTDOWN_GRACE_SECONDS:-}
+
+# AUGUR's own services read its committed defaults (config.env), then the deployment's .env over them, as a
+# platform host such as Coolify does on its own (ADR 0107). Compose still reads .env for what this file fills in.
+x-config: &config
+  - config.env
+  - { path: .env, required: false }
 
 x-service: &service
   <<: *hardened
@@ -64,6 +54,7 @@ x-service: &service
   stop_grace_period: 30s
   # The compose network, and the telemetry network its traces, metrics and logs go out on (networks, below).
   networks: [default, telemetry]
+  env_file: *config
   environment: &env
     <<: *telemetry
     NODE_ENV: production
@@ -73,14 +64,15 @@ x-service: &service
     MODELS_URL: http://models:8085
     # Services believe a person is calling only when the gateway signed it; they fetch its key here.
     GATEWAY_URL: http://gateway:8080
-    # on lets a server admin act as someone from inside the service's own container (docs/signed-caller.md, Break-glass).
-    CALLER_BREAK_GLASS: ${CALLER_BREAK_GLASS:-}
     # Every service signs in as itself (its own Keycloak client and SERVICE_CLIENT_SECRET); tokens name the
     # public address and are fetched and checked over the compose network.
     OIDC_ISSUER: ${PLATFORM_URL}/sso/realms/platform
     OIDC_INTERNAL_URL: http://keycloak:8080/sso/realms/platform
     # Its own secrets, which the make-secrets job writes into its own volume (made-secrets.json; ADR 0107).
     SECRETS_DIR: /run/augur/secrets
+    # Only the registry and models let the permissions service decide (they set it again from .env): .env reaches every
+    # service, and the others read the same name through the service kit.
+    PERMISSIONS_DECIDES: ""
   depends_on:
     postgres: { condition: service_healthy }
 
@@ -108,34 +100,9 @@ services:
     user: "0:0"
     restart: on-failure:3
     command: ["node", "dist/secrets-job.js"]
+    env_file: *config
     environment:
       NODE_ENV: production
-      # The secrets it makes: set one here to keep your own (AUGUR's docs, Settings and secrets, Secrets AUGUR makes).
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-}
-      IDENTITY_DATABASE_PASSWORD: ${IDENTITY_DATABASE_PASSWORD:-}
-      REGISTRY_DATABASE_PASSWORD: ${REGISTRY_DATABASE_PASSWORD:-}
-      EVENTS_DATABASE_PASSWORD: ${EVENTS_DATABASE_PASSWORD:-}
-      MODELS_DATABASE_PASSWORD: ${MODELS_DATABASE_PASSWORD:-}
-      PERMISSIONS_DATABASE_PASSWORD: ${PERMISSIONS_DATABASE_PASSWORD:-}
-      KNOWLEDGE_DATABASE_PASSWORD: ${KNOWLEDGE_DATABASE_PASSWORD:-}
-      KEYCLOAK_DATABASE_PASSWORD: ${KEYCLOAK_DATABASE_PASSWORD:-}
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-}
-      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-}
-      FRONTENDS_BUCKET_SECRET: ${FRONTENDS_BUCKET_SECRET:-}
-      IDENTITY_CLIENT_SECRET: ${IDENTITY_CLIENT_SECRET:-}
-      REGISTRY_CLIENT_SECRET: ${REGISTRY_CLIENT_SECRET:-}
-      EVENTS_CLIENT_SECRET: ${EVENTS_CLIENT_SECRET:-}
-      MODELS_CLIENT_SECRET: ${MODELS_CLIENT_SECRET:-}
-      KNOWLEDGE_CLIENT_SECRET: ${KNOWLEDGE_CLIENT_SECRET:-}
-      PERMISSIONS_CLIENT_SECRET: ${PERMISSIONS_CLIENT_SECRET:-}
-      CALLER_SIGNING_KEY: ${CALLER_SIGNING_KEY:-}
-      GRAFANA_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
-      ALERT_WEBHOOK_TOKEN: ${ALERT_WEBHOOK_TOKEN:-}
-      OPENFGA_TOKEN: ${OPENFGA_TOKEN:-}
-      # Not made: passed on to the realm job when set (AUGUR's docs, Updater; Run many AUGURs from files).
-      UPDATER_CLIENT_SECRET: ${UPDATER_CLIENT_SECRET:-}
-      FLEET_CLIENT_SECRET: ${FLEET_CLIENT_SECRET:-}
     volumes:
       - ./settings.schema.json:/etc/augur/settings.schema.json:ro
       - ./made-secrets.json:/etc/augur/made-secrets.json:ro
@@ -189,34 +156,16 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    env_file: *config
     environment:
-      # Other sites apps may load from, space separated (also allow each in Admin, Apps).
-      APP_ORIGINS: ${APP_ORIGINS:-}
-      # Where the UI kit is loaded from: this server's /kit/ unless set (AUGUR's docs, What browsers load).
-      KIT_URL: ${KIT_URL:-/kit/}
-      # The product's name in the browser tab (AUGUR's docs, Install AUGUR); AUGUR unless set.
-      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
-      # How focus is drawn: scrim for desktops without a GPU (AUGUR's docs, What browsers load); each app's choice unless set.
-      FOCUS_DEPTH: ${FOCUS_DEPTH:-}
-      # The mark on the logo button and the app drawn on the desktop (AUGUR's docs, Install AUGUR).
-      ORG_LOGO_URL: ${ORG_LOGO_URL:-}
-      DESKTOP_APP: ${DESKTOP_APP-home}
       # The front door's limits (AUGUR's docs, Limits and health); the image's defaults when unset.
       API_RATE_PER_SECOND: ${API_RATE_PER_SECOND:-30}
       API_RATE_BURST: ${API_RATE_BURST:-200}
       SSO_RATE_PER_SECOND: ${SSO_RATE_PER_SECOND:-10}
       SSO_RATE_BURST: ${SSO_RATE_BURST:-50}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
-      # Who the front door believes about a caller's address: the proxy in front (AUGUR's docs, Limits and health).
-      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
       # Keycloak's own admin console, at PLATFORM_URL/sso/admin: open serves it; it's closed otherwise.
       KEYCLOAK_CONSOLE: ${KEYCLOAK_CONSOLE:-closed}
-      # On the workbench (dev) only, the shell may load an app from a developer's machine on the tailnet.
-      SERVER_RING: ${SERVER_RING:-}
-      # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
-      DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
-      # Its tailnet is the only one it loads apps from then (infra/deploy/live-origins.envsh).
-      PLATFORM_URL: ${PLATFORM_URL}
     depends_on:
       gateway: { condition: service_started }
       keycloak: { condition: service_healthy }
@@ -358,13 +307,11 @@ services:
     <<: *hardened
     restart: on-failure
     # Each app's secrets are named after it (<APP>_DATABASE_PASSWORD, ...), so it reads them all from .env.
-    env_file: [{ path: .env, required: false }]
+    env_file: *config
     environment:
       # DATABASE_URL, the services' and Keycloak's login passwords and Garage's key (make-secrets writes them).
       SECRETS_DIR: /run/augur/secrets
       GARAGE_ADMIN_URL: http://garage:3903
-      # The apps named in .env that keep data outside the app runner (the runner sets up its own apps' storage).
-      APP_STORAGE: ${APP_STORAGE:-}
       # The apps that shipped with AUGUR until ADR 0075: their database logins, schemas and buckets are set aside, once
       # on each server, and dropped with a later release behind a fresh backup (ADR 0103). Each is remembered, so an
       # app installed later under one of these ids keeps its own.
@@ -372,8 +319,6 @@ services:
       # The platform's services that get a login owning only their own schema, each with its
       # <SERVICE>_DATABASE_PASSWORD. Keycloak gets one too, from KEYCLOAK_DATABASE_PASSWORD.
       PLATFORM_DATABASE_LOGINS: identity registry events models permissions
-      # The most connections each app's login may hold at once (30 when empty), so one app can't take AUGUR's (ADR 0073).
-      APP_DATABASE_CONNECTIONS: ${APP_DATABASE_CONNECTIONS:-}
     volumes:
       # Only the backup container's results, never the backups: an app's data is dropped only behind a fresh one (ADR 0103).
       - ./backups/status:/backup-status:ro
@@ -482,6 +427,7 @@ services:
     <<: *hardened
     restart: on-failure:3
     command: ["node", "dist/realm-job.js"]
+    env_file: *config
     environment:
       NODE_ENV: production
       KEYCLOAK_URL: http://keycloak:8080/sso
@@ -489,31 +435,6 @@ services:
       # Keycloak's admin password, identity's secret, each platform service's sign-in (SERVICE_CLIENT_SECRETS, made or
       # set to these) and identity's DATABASE_URL, from its own secrets (make-secrets writes them).
       SECRETS_DIR: /run/augur/secrets
-      # Given the deployment-admin role if nobody has it yet.
-      PLATFORM_ADMIN_USER: ${PLATFORM_ADMIN_USER:-}
-      # Stricter than AUGUR's floors if you like, never looser (AUGUR's docs, Settings and secrets, The realm job).
-      REALM_PASSWORD_MIN_LENGTH: ${REALM_PASSWORD_MIN_LENGTH:-}
-      REALM_PASSWORD_DENYLIST: ${REALM_PASSWORD_DENYLIST:-}
-      REALM_SESSION_IDLE_HOURS: ${REALM_SESSION_IDLE_HOURS:-}
-      REALM_SESSION_MAX_HOURS: ${REALM_SESSION_MAX_HOURS:-}
-      REALM_SIGN_IN_EVENT_DAYS: ${REALM_SIGN_IN_EVENT_DAYS:-}
-      REALM_ADMIN_EVENT_DAYS: ${REALM_ADMIN_EVENT_DAYS:-}
-      # The languages offered at sign-in, comma separated, the first the default (default en).
-      REALM_LANGUAGES: ${REALM_LANGUAGES:-}
-      # The product's name, as the realm's display name: the sign-in pages, emails and passkeys show it.
-      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
-      # The organisation's SMTP relay (ADR 0035). Without SMTP_HOST AUGUR sends no email and says so.
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-}
-      SMTP_SECURITY: ${SMTP_SECURITY:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      SMTP_REPLY_TO: ${SMTP_REPLY_TO:-}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      # The organisation's Entra, to sign in with the organisation's account (AUGUR's docs, Sign in with Entra). All three or none.
-      ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
-      ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
-      ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
     volumes:
       - secrets-keycloak-config:/run/augur/secrets:ro
     depends_on:
@@ -532,6 +453,7 @@ services:
       retries: 3
       start_period: 30s
     restart: unless-stopped
+    env_file: *config
     environment:
       <<: *telemetry
       NODE_ENV: production
@@ -554,30 +476,13 @@ services:
       BACKUP_DIR: /backups
       # And whether AUGUR is open to the internet, and until when, from what infra/deploy/public.sh wrote.
       PUBLIC_ACCESS_FILE: /run/augur/tailscale/public-until
-      # Whether an admin may fill this deployment with synthetic sample data (pnpm seed, ADR 0056). Off unless set.
-      SEED_ALLOWED: ${SEED_ALLOWED:-false}
-      # The organisation's SMTP relay (ADR 0035), only so Admin → Status can say whether email can be sent (ADR 0065).
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-}
-      SMTP_SECURITY: ${SMTP_SECURITY:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       # Apps' services run beside AUGUR outside the app runner, name=url: none (ADR 0075).
       APP_UPSTREAMS: ""
-      # The brakes on calls to apps' parts, and how long a delegated caller lasts (AUGUR's docs, Limits and health).
-      APP_CONNECT_TIMEOUT_MS: ${APP_CONNECT_TIMEOUT_MS:-}
-      APP_RESPONSE_TIMEOUT_MS: ${APP_RESPONSE_TIMEOUT_MS:-}
-      APP_CONCURRENT_CALLS: ${APP_CONCURRENT_CALLS:-}
-      GATEWAY_SERVICE_CONNECT_TIMEOUT_MS: ${GATEWAY_SERVICE_CONNECT_TIMEOUT_MS:-}
-      GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS: ${GATEWAY_SERVICE_RESPONSE_TIMEOUT_MS:-}
-      GATEWAY_SERVICE_CONNECTIONS: ${GATEWAY_SERVICE_CONNECTIONS:-}
-      GATEWAY_STREAM_CONNECTIONS: ${GATEWAY_STREAM_CONNECTIONS:-}
-      APP_DELEGATION_SECONDS: ${APP_DELEGATION_SECONDS:-}
       # The key it signs callers with, and the one that comes next while it is being changed (docs/signed-caller.md).
       # CALLER_SIGNING_KEY itself is in its own secrets (make-secrets writes it).
       SECRETS_DIR: /run/augur/secrets
-      CALLER_SIGNING_KEY_NEXT: ${CALLER_SIGNING_KEY_NEXT:-}
+      # Only the registry and models let the permissions service decide (.env reaches every service).
+      PERMISSIONS_DECIDES: ""
     volumes:
       # Only the results the backup container writes for Status, never the backups themselves.
       - ./backups/status:/backups:ro
@@ -607,10 +512,6 @@ services:
       # keycloak-config. Keycloak's master admin is never in identity's settings. Departments are
       # identity's own teams, copied in once from Keycloak's groups.
       KEYCLOAK_URL: http://keycloak:8080/sso
-      # What the top floor, the whole organisation, is called.
-      ORG_NAME: ${ORG_NAME:-Organisation}
-      # The languages people may choose in Account, the same ones keycloak-config offers at sign-in.
-      REALM_LANGUAGES: ${REALM_LANGUAGES:-}
     volumes:
       - secrets-identity:/run/augur/secrets:ro
     depends_on:
@@ -639,40 +540,13 @@ services:
       # alert (ALERT_WEBHOOK_TOKEN, ADR 0059) and the frontends bucket's key come from its own secrets.
       # Asked at install what the knowledge graph offers apps.
       KNOWLEDGE_URL: http://knowledge:8086
-      # The deployment's read key (secrets/github-read-key) and whose it is: the registry checks GitHub
-      # for new AUGUR and app releases with it, and the updater pulls with it (docs/src/content/docs/run/releases.md).
-      GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
-      # Admin's Updates page: where new AUGUR releases are listed, and which ones to follow.
-      RELEASE_FEED_URL: ${RELEASE_FEED_URL:-}
-      RELEASE_CHANNEL: ${RELEASE_CHANNEL:-}
-      PIPELINE_FEED_URL: ${PIPELINE_FEED_URL:-}
-      PORTAL_URL: ${PORTAL_URL:-}
-      # What this server runs, signed and reported to that Backstage under this name (ADR 0019).
-      DEPLOYMENT_ID: ${DEPLOYMENT_ID:-}
-      DEPLOYMENT_REPORTING: ${DEPLOYMENT_REPORTING:-}
       # Only whether Grafana's routes outside AUGUR are set, never their addresses: a production server's
       # admins are told while one isn't.
       ALERT_OUTSIDE_URL: ${ALERT_OUTSIDE_URL:+set}
       ALERT_HEARTBEAT_URL: ${ALERT_HEARTBEAT_URL:+set}
-      SERVER_RING: ${SERVER_RING:-}
-      # Upgrade windows are in this time zone (Admin → Upgrade Centre), such as Europe/London; UTC when unset.
-      DEPLOYMENT_TIME_ZONE: ${DEPLOYMENT_TIME_ZONE:-}
-      # On the workbench, Live on the workbench loads apps only from machines on this address's tailnet.
-      PLATFORM_URL: ${PLATFORM_URL}
-      ALLOW_PR_PREVIEWS: ${ALLOW_PR_PREVIEWS:-}
-      # How long an app removed from the server keeps its data, in days (30 when unset).
-      APP_DATA_GRACE_DAYS: ${APP_DATA_GRACE_DAYS:-}
-      # The apps this deployment installs from the feed by default (none when unset).
-      DEFAULT_APPS: ${DEFAULT_APPS:-}
-      IN_PAGE_APPS: ${IN_PAGE_APPS:-}
-      # Admin → Apps: where apps' own releases are listed, for the app runner (docs/src/content/docs/run/app-runner.md).
-      APP_FEEDS: ${APP_FEEDS:-}
-      APP_FEED_URL: ${APP_FEED_URL:-}
       # Apps' frontends, kept by version in the bucket the storage container makes for them (docs/src/content/docs/run/app-runner.md),
       # opened with FRONTENDS_BUCKET_SECRET from its own secrets.
       FRONTENDS_S3_URL: http://garage:3900
-      # Who must sign the release feed, for AUGUR published from a fork (docs/src/content/docs/run/releases.md).
-      FEED_SIGNER: ${FEED_SIGNER:-}
     volumes:
       # The read key, as secrets/github-read-key (or the older secrets/release-feed-token; docs/src/content/docs/run/releases.md).
       - ./secrets:/run/secrets/augur:ro
@@ -696,24 +570,6 @@ services:
       PORT: 8084
       # Asked beside each admin and lead check, to compare answers before checks move there (shadow mode, docs/permissions.md).
       PERMISSIONS_URL: http://permissions:8087
-      # Its own login (DATABASE_URL, from its own secrets) owns only the events schema: the audit log, notifications and domain events.
-      # How many days apps' domain events are kept (30 when empty; docs/domain-events.md).
-      DOMAIN_EVENTS_KEEP_DAYS: ${DOMAIN_EVENTS_KEEP_DAYS:-}
-      # How often an event an app's part can't take is tried, and the first wait between tries, before it is set aside (5 and 30 when empty; docs/domain-events.md).
-      DOMAIN_EVENTS_DELIVERY_ATTEMPTS: ${DOMAIN_EVENTS_DELIVERY_ATTEMPTS:-}
-      DOMAIN_EVENTS_RETRY_SECONDS: ${DOMAIN_EVENTS_RETRY_SECONDS:-}
-      INBOX_KEEP_DAYS: ${INBOX_KEEP_DAYS:-}
-      # How many days back the Inbox's Done tab looks (30 when empty; docs/inbox.md).
-      INBOX_DONE_DAYS: ${INBOX_DONE_DAYS:-}
-      # Notices that need someone are emailed through the organisation's relay, linking back here (docs/notifications.md).
-      PLATFORM_URL: ${PLATFORM_URL}
-      ORG_PRODUCT_NAME: ${ORG_PRODUCT_NAME:-AUGUR}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-}
-      SMTP_SECURITY: ${SMTP_SECURITY:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
     volumes:
       - secrets-events:/run/augur/secrets:ro
     depends_on: *own-login
@@ -737,13 +593,6 @@ services:
       PERMISSIONS_URL: http://permissions:8087
       # The checks it decides instead, once moved over: empty, every check is only compared.
       PERMISSIONS_DECIDES: "${PERMISSIONS_DECIDES:-}"
-      # Its sign-in secret and its own login, owning only the models schema, come from its own secrets.
-      MODEL_API_URL: "${MODEL_API_URL:-}"
-      MODEL_API_KEY: "${MODEL_API_KEY:-}"
-      MODEL_NAME: "${MODEL_NAME:-}"
-      MODEL_EMBEDDING_NAME: "${MODEL_EMBEDDING_NAME:-}"
-      # How long to wait for the model, in seconds (60 when empty).
-      MODEL_TIMEOUT_SECONDS: "${MODEL_TIMEOUT_SECONDS:-}"
     volumes:
       - secrets-models:/run/augur/secrets:ro
     depends_on: *own-login
@@ -757,14 +606,12 @@ services:
     <<: *hardened
     restart: on-failure:3
     command: ["node", "dist/migrate-job.js"]
+    env_file: *config
     environment:
       NODE_ENV: production
       # Postgres's admin login (DATABASE_URL) and kg_app's password (KNOWLEDGE_DATABASE_PASSWORD), from its own secrets.
       SECRETS_DIR: /run/augur/secrets
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
-      DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-}
-      DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_LOCK_TIMEOUT_SECONDS:-}
-      DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS: ${DATABASE_MIGRATION_IDLE_TIMEOUT_SECONDS:-}
     # After a restore, it forgets again what the forget ledger names (AUGUR's docs, Backups).
     volumes:
       - knowledge-ledger:/var/lib/augur/knowledge
@@ -789,11 +636,6 @@ services:
       # Not connected to the models service in this phase of design: with no MODELS_URL, retain takes no raw text
       # and reflect writes no summaries. Both stay in the code, ready, until this line goes.
       MODELS_URL: ""
-      KNOWLEDGE_PAGE_LIMIT: ${KNOWLEDGE_PAGE_LIMIT:-100}
-      KNOWLEDGE_SUBGRAPH_DEPTH: ${KNOWLEDGE_SUBGRAPH_DEPTH:-3}
-      KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS: ${KNOWLEDGE_REFLECT_DEBOUNCE_SECONDS:-600}
-      KNOWLEDGE_REFLECT_DAILY_BUDGET: ${KNOWLEDGE_REFLECT_DAILY_BUDGET:-400}
-      KNOWLEDGE_REFLECT_FLOOR_BUDGET: ${KNOWLEDGE_REFLECT_FLOOR_BUDGET:-100}
       KNOWLEDGE_LEDGER_DIR: /var/lib/augur/knowledge
       # Who settles and raises on each floor is set in Admin and kept by the permissions service, which
       # knowledge asks on each request. While it can't answer, nobody settles or raises.
@@ -856,13 +698,6 @@ services:
       <<: *env
       PORT: 8087
       OPENFGA_URL: http://openfga:8080
-      # Its own login (DATABASE_URL), the one OpenFGA keeps its tables under: persona sessions sit beside them (ADR 0086).
-      # It and OPENFGA_TOKEN come from its own secrets, with its own sign-in: to copy floors, positions and who holds
-      # them from identity (ADR 0089), at once when identity announces a change (platform.position.*, .team.*,
-      # .person.*) and whole every few minutes.
-      PERSONA_DEPLOYMENT_ADMIN_MINUTES: ${PERSONA_DEPLOYMENT_ADMIN_MINUTES:-60}
-      PERSONA_ORG_ADMIN_MINUTES: ${PERSONA_ORG_ADMIN_MINUTES:-480}
-      PERMISSIONS_COPY_SECONDS: ${PERMISSIONS_COPY_SECONDS:-300}
     volumes:
       - secrets-permissions:/run/augur/secrets:ro
     depends_on:
@@ -881,6 +716,7 @@ services:
     mem_limit: ${UPDATER_MEM_LIMIT:-2g}
     profiles: [updater]
     restart: unless-stopped
+    env_file: *config
     environment:
       <<: *telemetry
       NODE_ENV: production
@@ -890,17 +726,6 @@ services:
       # Its sign-in secret (UPDATER_CLIENT_SECRET in .env), from its own secrets.
       SECRETS_DIR: /run/augur/secrets
       DOCKER_HOST: tcp://docker-proxy:2375
-      # This folder's full path on the host, mounted at the same path so Compose's ./ paths still name the host's files.
-      PLATFORM_DIR: "${PLATFORM_DIR:-}"
-      # The read key's account: the updater signs Docker in with secrets/github-read-key to pull.
-      GITHUB_READ_USER: "${GITHUB_READ_USER:-}"
-      # Before read keys: who the pull token in secrets/image-pull-token belongs to.
-      IMAGE_PULL_USER: "${IMAGE_PULL_USER:-}"
-      # Who must sign AUGUR's images and its dev builds, for AUGUR published from a fork; the publisher's
-      # workflows when empty (docs/release-channels.md, Signatures).
-      IMAGE_SIGNER: "${IMAGE_SIGNER:-}"
-      IMAGE_SIGNER_ISSUER: "${IMAGE_SIGNER_ISSUER:-}"
-      AUGUR_DEV_SIGNER: "${AUGUR_DEV_SIGNER:-}"
     volumes:
       - ${PLATFORM_DIR:-./}:${PLATFORM_DIR:-/augur-deploy}
       - ./secrets:/run/secrets/augur:ro

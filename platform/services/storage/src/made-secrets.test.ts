@@ -26,10 +26,10 @@ describe('made secrets', () => {
   });
 
   it('refuses a template that names a secret it can never have', () => {
-    expect(specProblems({ gateway: { KEY: '{MADE}', OTHER: '{PASSED}' } }, ['MADE'], { PASSED: '' })).toEqual([]);
-    expect(specProblems({ gateway: { KEY: '{TYPO}' } }, ['MADE'], {})).toEqual(["gateway: KEY uses {TYPO}, which AUGUR doesn't make and isn't passed to this job."]);
-    expect(specProblems({ Gateway: { 'bad name': 'x' } }, [], {})).toHaveLength(2);
-    expect(specProblems({ $comment: { x: 'y' } } as never, [], {})).toEqual([]);
+    expect(specProblems({ gateway: { KEY: '{MADE}', OTHER: '{DESCRIBED}' } }, ['MADE'], ['DESCRIBED'])).toEqual([]);
+    expect(specProblems({ gateway: { KEY: '{TYPO}' } }, ['MADE'], [])).toEqual(["gateway: KEY uses {TYPO}, which AUGUR doesn't make and settings.schema.json doesn't describe."]);
+    expect(specProblems({ Gateway: { 'bad name': 'x' } }, [], [])).toHaveLength(2);
+    expect(specProblems({ $comment: { x: 'y' } } as never, [], [])).toEqual([]);
   });
 
   it('writes whole files and removes ones no longer given', () => {
