@@ -514,7 +514,6 @@ services:
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-}
       ENTRA_CLIENT_ID: ${ENTRA_CLIENT_ID:-}
       ENTRA_CLIENT_SECRET: ${ENTRA_CLIENT_SECRET:-}
-    # Identity's database (DATABASE_URL), read for the organisation's email sender (Admin → Organisation), which replaces SMTP_FROM.
     volumes:
       - secrets-keycloak-config:/run/augur/secrets:ro
     depends_on:
