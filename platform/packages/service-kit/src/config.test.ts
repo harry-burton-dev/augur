@@ -2,7 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { ConfigError, describeConfig, loadConfig, type Setting } from './config.js';
+import { ConfigError, describeConfig, loadConfig, secretsFromDir, type Setting } from './config.js';
 
 const settings: Setting[] = [
   { name: 'REGISTRY_URL', about: 'where the registry is.', required: true },
@@ -45,6 +45,23 @@ describe('loadConfig', () => {
     expect(() => loadConfig('events', settings, both)).toThrow(/both set/);
     const missing = { SERVICE_CLIENT_SECRET_FILE: '/nowhere/secret' };
     expect(() => loadConfig('events', settings, missing)).toThrow(/can't be read \(ENOENT\)/);
+  });
+
+  it('takes each file in SECRETS_DIR as its setting, over the environment', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'secrets-'));
+    writeFileSync(join(dir, 'SERVICE_CLIENT_SECRET'), 's3cret\n');
+    writeFileSync(join(dir, 'DATABASE_URL'), 'postgres://u:p@db/x');
+    writeFileSync(join(dir, '.SERVICE_CLIENT_SECRET.new'), 'half written');
+    const env: NodeJS.ProcessEnv = { NODE_ENV: 'production', REGISTRY_URL: 'http://registry', SECRETS_DIR: dir, SERVICE_CLIENT_SECRET: '' };
+    const state = loadConfig('registry', settings, env);
+    expect(env.SERVICE_CLIENT_SECRET).toBe('s3cret');
+    expect(env.DATABASE_URL).toBe('postgres://u:p@db/x');
+    expect(state.find((s) => s.name === 'SERVICE_CLIENT_SECRET')).toMatchObject({ source: 'file' });
+    expect(secretsFromDir({ SECRETS_DIR: dir, DATABASE_URL: 'from-env' }).sort()).toEqual(['DATABASE_URL', 'SERVICE_CLIENT_SECRET']);
+  });
+
+  it('says so when SECRETS_DIR can’t be read', () => {
+    expect(() => loadConfig('registry', settings, { SECRETS_DIR: '/nowhere/at/all' })).toThrow(/SECRETS_DIR names \/nowhere\/at\/all, which can't be read \(ENOENT\)/);
   });
 
   it('never reads <NAME>_FILE for a setting that isn’t a secret', () => {

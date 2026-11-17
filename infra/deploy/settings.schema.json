@@ -1687,6 +1687,14 @@
         "gateway": "default"
       }
     },
+    "SECRETS_DIR": {
+      "type": "string",
+      "description": "The folder of a service's own secrets, each file the setting it is named after, which the make-secrets job writes (infra/deploy/made-secrets.json; ADR 0107). Unset, a service takes none from a folder.",
+      "x-internal": "default",
+      "x-via": {
+        "storage": "default"
+      }
+    },
     "APP_MANIFEST": {
       "type": "string",
       "description": "An app service's manifest file (default: the manifest.json its build put beside the code).",

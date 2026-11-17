@@ -1620,6 +1620,9 @@ export const readPersonDeleted: (event: Pick<DomainEvent, "topic" | "payload">) 
 export const readPersonLeft: (event: Pick<DomainEvent, "topic" | "payload">) => PersonLeft | undefined;
 
 // @public
+export const readSecretsFolder: (dir: string) => Record<string, string>;
+
+// @public
 export const READY_CHECK_TIMEOUT_MS = 2000;
 
 // @public
@@ -1717,6 +1720,9 @@ export const SCOPES: readonly ["notifications:send", "audit:write", "models:use"
 
 // @public
 export const scopeWords: (scope: string) => string;
+
+// @public
+export const secretsFromDir: (env?: NodeJS.ProcessEnv) => string[];
 
 // @public
 export function sendProblem(reply: FastifyReply, problem: Problem): FastifyReply;

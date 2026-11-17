@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /** One setting a service reads from its environment. */
 export interface Setting {
@@ -36,8 +37,37 @@ export class ConfigError extends Error {
 /** Settings read from a file, by environment. */
 const fromFiles = new WeakMap<NodeJS.ProcessEnv, Set<string>>();
 
+const SETTING_NAME = /^[A-Z][A-Z0-9_]*$/;
+
+/** A folder of secrets, each file named after its setting, by name, each without its final newline (ADR 0107). */
+export const readSecretsFolder = (dir: string): Record<string, string> =>
+  Object.fromEntries(
+    readdirSync(dir)
+      .filter((name) => SETTING_NAME.test(name))
+      .map((name) => [name, readFileSync(join(dir, name), 'utf8').replace(/\r?\n$/, '')]),
+  );
+
 /**
- * Reads a service's settings before it starts. A secret may come from a file named in `<NAME>_FILE`
+ * Takes each file in the folder `SECRETS_DIR` names as the setting it is named after, its contents less a
+ * final newline (ADR 0107: the secrets job writes each service its own there). A file wins over the environment:
+ * the job already let a value set in .env win when it wrote it. Returns the names it took.
+ */
+export const secretsFromDir = (env: NodeJS.ProcessEnv = process.env): string[] => {
+  const dir = env.SECRETS_DIR;
+  if (!dir) return [];
+  const files = fromFiles.get(env) ?? new Set<string>();
+  fromFiles.set(env, files);
+  const taken = readSecretsFolder(dir);
+  for (const [name, value] of Object.entries(taken)) {
+    env[name] = value;
+    files.add(name);
+  }
+  return Object.keys(taken);
+};
+
+/**
+ * Reads a service's settings before it starts. Every secret in `SECRETS_DIR` is taken first (`secretsFromDir`).
+ * A secret may also come from a file named in `<NAME>_FILE`
  * (a Docker or Compose secret, or a file decrypted at deploy): its contents, less the final newline,
  * become `<NAME>`. In production a required setting that is missing or empty stops the service, with
  * every problem listed at once so one edit of the deployment's settings fixes them all. Elsewhere
@@ -45,6 +75,11 @@ const fromFiles = new WeakMap<NodeJS.ProcessEnv, Set<string>>();
  */
 export const loadConfig = (service: string, settings: Setting[], env: NodeJS.ProcessEnv = process.env): SettingState[] => {
   const problems: string[] = [];
+  try {
+    secretsFromDir(env);
+  } catch (err) {
+    problems.push(`SECRETS_DIR names ${env.SECRETS_DIR}, which can't be read (${(err as NodeJS.ErrnoException).code ?? (err as Error).message}).`);
+  }
   const files = fromFiles.get(env) ?? new Set<string>();
   fromFiles.set(env, files);
   for (const { name, secret } of settings) {

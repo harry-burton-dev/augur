@@ -5,7 +5,7 @@
 // RETIRED_APPS have their data set aside, once on each server (ADR 0075). With APP_STORAGE_RETIRE, one app the app
 // runner removed has its data set aside, once its grace period ended. What was set aside in an earlier AUGUR release
 // is dropped, behind a good backup taken since (ADR 0103, retirement.ts).
-import { startupLog } from '@augur/service-kit';
+import { secretsFromDir, startupLog } from '@augur/service-kit';
 import pg from 'pg';
 import { configFromEnv, envPrefix, FRONTENDS_BUCKET, FRONTENDS_KEY, type StorageConfig } from './config.ts';
 import { BACKUP_STATUS_DIR, backupProblem, readBackupMarker } from './backup-marker.ts';
@@ -16,6 +16,13 @@ import { emptyBucket } from './s3.ts';
 
 const log = startupLog('storage');
 
+// Its logins' passwords and Garage's key, as the secrets job wrote them for it (ADR 0107).
+try {
+  secretsFromDir();
+} catch (err) {
+  log.error(`SECRETS_DIR names ${process.env.SECRETS_DIR}, which can't be read (${(err as NodeJS.ErrnoException).code ?? (err as Error).message}).`);
+  process.exit(1);
+}
 const config = configFromEnv();
 if ('problems' in config) {
   for (const problem of config.problems) log.error(`${problem}`);
