@@ -1,5 +1,35 @@
 # @augur/storage
 
+## 0.7.0
+
+### Minor Changes
+
+- 9787fd9: Apps reach Postgres and the object store only through relays: db-relay lets only an app's own login on to Postgres, never the platform's superuser or a service's, and bucket-relay passes on only the object store's S3 API, never its admin API. The app runner joins each relay to the networks of the apps that ask for its store, under the store's name, then takes Postgres and Garage themselves off them.
+- 21ee8c4: AUGUR makes its own secrets (ADR 0107), switched on. `compose.yml` runs the `make-secrets` job first on every `up`: for each `x-generate` secret a value in `.env` wins, then the one it made before (kept in the `secrets` volume), then a new one. It writes each service only the secrets it reads into a volume of its own (`infra/deploy/made-secrets.json`), so no service has them in its environment any more (only the job and storage, for a value `.env` still sets) and a new deployment needs none of them in `.env`. Keycloak, OpenFGA and Grafana start through `secrets-env.sh`, Postgres and Garage read their files themselves, and the backup reads its own and carries the `secrets` volume in its off-server copy. This replaces the Compose `secrets:` from the earlier change, so Docker Compose 2.24 is no longer needed. Part of PER-507.
+- f5bc8af: The storage job and the knowledge migration let AUGUR's own database logins (its services, the knowledge graph's and Keycloak's) use the connections Postgres keeps back (`pg_use_reserved_connections`), and apps' logins never; Postgres keeps 40 of 200 for them (PER-414). Keycloak's and OpenFGA's pools are capped at 20.
+- abd83fa: Each app gets a database of its own (`app_<id>`), owned by its login and the only one it reaches through the apps’ relay, instead of a schema in AUGUR’s. Setting an app aside renames its database and dropping it drops the database. While an app installed the old way is still installed, the storage step stops and names it, so the release doesn't start until it is removed. Part of PER-456.
+- 1686169: A removed app's data is dropped only behind a fresh backup that worked and holds apps' files (ADR 0103), and the updater's backup always copies apps' files afresh.
+- 3eebea4: The code for AUGUR making its own secrets (ADR 0107), not yet switched on. The service kit takes each file in the folder `SECRETS_DIR` names as the setting it is named after. The storage image gains the `make-secrets` job (`node dist/secrets-job.js`): for each `x-generate` secret, a value in the environment wins, then the one it made before, then a new one, and it writes each service its own folder as `infra/deploy/made-secrets.json` will say. The updater runs that job before every other part when a release has it. Nothing changes on a server until the next pull request adds the job to `compose.yml`. Part of PER-507.
+- 747c5c4: A retired or removed app's data is set aside (schemas renamed retired_<app>, login unable to sign in, bucket moved to retired-<app>) and dropped on a later AUGUR release behind a fresh backup (ADR 0103). App ids starting retired- are kept.
+
+### Patch Changes
+
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/service-kit@0.21.0
+
 ## 0.6.2
 
 ### Patch Changes

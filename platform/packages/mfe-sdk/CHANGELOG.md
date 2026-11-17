@@ -1,5 +1,19 @@
 # @augur/mfe-sdk
 
+## 3.2.0
+
+### Minor Changes
+
+- f01dbb8: A bus handler that throws, or whose promise rejects, no longer stops the handlers after it: each one runs, then `createEventBus`'s new `onError` option hears of it with the type (by default it's reported as an uncaught error is). The shell logs it with the topic. `fakeContext`'s bus throws it from `emit`, so a failing check in a handler still fails an app's test. As with the DOM's events, a handler added during an emit waits for the next one, and one removed before its turn isn't called.
+
+  Not breaking: `createEventBus` gains an optional argument, and `EventBus` is unchanged.
+
+- e11f22e: The binding events are gone (decision D6, ADR 0066). The registry no longer serves `GET /v1/entity-links`, and a manifest's `bindings` is accepted but ignored, for one release: contract 3 says so in a warning. The service kit drops `bindingTopics`, `bindingEvent`, `outboxBinding`, `readBinding`, `registryBindingApps` and their types. `AppManifestEntry.bindings` in the SDK is deprecated.
+
+  Not breaking: nothing in AUGUR or in any app repository imports the removed service kit helpers or calls the route removed from contracts/registry.openapi.yaml.
+
+- e672f41: `@augur/mfe-sdk/sdk3` now exports `Ref`, `Marking`, `isRef`, `isMarkingOrNone`, `isIntentCancelled` and the new `isIntentError`, so an app on contract 3 needs nothing from the package root to pass a reference or tell a closed request from a failed one. The checks match by name, as errors cross from the shell. The package root gains `isIntentError` too.
+
 ## 3.1.0
 
 ### Minor Changes

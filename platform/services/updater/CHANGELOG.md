@@ -1,5 +1,45 @@
 # @augur/updater
 
+## 0.12.0
+
+### Minor Changes
+
+- 9787fd9: Apps reach Postgres and the object store only through relays: db-relay lets only an app's own login on to Postgres, never the platform's superuser or a service's, and bucket-relay passes on only the object store's S3 API, never its admin API. The app runner joins each relay to the networks of the apps that ask for its store, under the store's name, then takes Postgres and Garage themselves off them.
+- abd83fa: Each app gets a database of its own (`app_<id>`), owned by its login and the only one it reaches through the apps’ relay, instead of a schema in AUGUR’s. Setting an app aside renames its database and dropping it drops the database. While an app installed the old way is still installed, the storage step stops and names it, so the release doesn't start until it is removed. Part of PER-456.
+- 4ff8da7: Each AUGUR release attaches a signed deploy bundle, `augur-deploy-<version>.tar.gz`: the deploy files, the preflight and the release file, laid out as a checkout, with a SHA256SUMS of them. A server installs and upgrades from it with no git checkout, and the deploy test now installs from it too. Compose's project name comes from `COMPOSE_PROJECT_NAME` in `.env`, and stays `platform` by default.
+- 1686169: A removed app's data is dropped only behind a fresh backup that worked and holds apps' files (ADR 0103), and the updater's backup always copies apps' files afresh.
+- ceec188: The updater runs the compose files a deployment names in `COMPOSE_FILE` (in `.env`), not only `compose.yml`, so a deployment behind its organisation's own proxy (`COMPOSE_FILE=compose.yml:compose.proxy.yml`) upgrades and runs apps with the same files it was started with.
+- dc4abd9: Each app's part runs with at most 256 processes and is the first the kernel stops when the server runs out of memory (`oom_score_adj` 500), before AUGUR's own services and Postgres (PER-414); a part gets them when it's next started. Every container AUGUR builds gets a memory limit (`SERVICE_MEM_LIMIT`, 1g; the updater's `UPDATER_MEM_LIMIT`, 2g) and a process limit (`SERVICE_PIDS_LIMIT`, 512).
+
+### Patch Changes
+
+- f8b4e26: The gateway needs CALLER_SIGNING_KEY in production, and publishes CALLER_SIGNING_KEY_NEXT beside it so the key can be changed without refusing a call. A call from inside a service's own container is checked like any other unless CALLER_BREAK_GLASS=on, and each one break-glass lets through is logged. The updater makes up the signing key when an upgrade needs it.
+
+  Not breaking: the new parameters are optional, and only the gateway calls callerSignerFromEnv. A part that believed headers on calls from its own container now checks them, which nothing an app ships depends on.
+
+- de987d0: The upgrade guide moves into the docs site: Upgrade AUGUR, The updater, The app runner, Where releases come from and Report to Backstage under Run AUGUR, and the upgrade notes on a page of their own under Release notes. Messages that pointed at `docs/upgrade.md` now name the page in AUGUR's docs, so the registry's reply when Deployment tries to change AUGUR's release channel reads differently.
+- 3eebea4: The code for AUGUR making its own secrets (ADR 0107), not yet switched on. The service kit takes each file in the folder `SECRETS_DIR` names as the setting it is named after. The storage image gains the `make-secrets` job (`node dist/secrets-job.js`): for each `x-generate` secret, a value in the environment wins, then the one it made before, then a new one, and it writes each service its own folder as `infra/deploy/made-secrets.json` will say. The updater runs that job before every other part when a release has it. Nothing changes on a server until the next pull request adds the job to `compose.yml`. Part of PER-507.
+- 747c5c4: A retired or removed app's data is set aside (schemas renamed retired_<app>, login unable to sign in, bucket moved to retired-<app>) and dropped on a later AUGUR release behind a fresh backup (ADR 0103). App ids starting retired- are kept.
+- Updated dependencies [91037a5]
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [e01ea93]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [f04bcd5]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/app-tools@0.7.0
+  - @augur/service-kit@0.21.0
+
 ## 0.11.1
 
 ### Patch Changes

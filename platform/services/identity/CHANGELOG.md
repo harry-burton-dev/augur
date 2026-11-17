@@ -1,5 +1,38 @@
 # @augur/identity
 
+## 1.8.0
+
+### Minor Changes
+
+- cde9587: Identity and the registry keep each audit entry in their own database first and send it to the events service from there (ADR 0104, PER-414), so an admin's change is audited, and its domain event published, even while the events service is down. The service kit adds `auditOutbox`, `AUDIT_OUTBOX_COLUMNS` and `postAudit`, and `ServiceCallError` carries the `status` the service answered.
+
+  Not breaking: everything is added; `ServiceCallError` gains an optional `status` and an optional second constructor argument.
+
+- 64802b1: A caller can name its organisation: `caller.org`, the organisation's floor's id, which the signed caller carries as the claim `org` and AUGUR's own services read from `x-user-org`. Identity's `GET /v1/organisation` now gives that id as `id`. The gateway starts signing it in the next change; until then `org` is absent. Part of PER-463.
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+- 9bcf5f2: When more than one app handles an intent, the person chooses which opens it, the first time, and the shell keeps the choice with their preferences (`intentApps`, identity's contract 1.35.0). Account lists each choice under Home and apps, to forget. Before, the app first by id won. Closing "Open with" opens nothing: `ctx.raise` resolves and `ctx.request` rejects as cancelled.
+- d8c812e: The one-key shortcut that opens the shell (`) can be turned off, and the choice follows the person to any browser (WCAG 2.2, 2.1.4 Character Key Shortcuts). Account, About, Keys has an "Open with `" switch beside the keys list, and so does the Shell's own Settings; Ctrl or ⌘ K always opens it. Identity keeps `summonKey` in a person's preferences. The shell takes shell-kit 0.15.0, where a text field keeps a ` typed in it.
+- e3bb87e: The shell keeps tokens in the page's memory only, never in the browser's storage, where any script on AUGUR's origin could read them (PER-453). A reload or a new tab gets a sign-in from the sign-in service in a hidden frame (`/auth/silent`), and one about to run out is renewed through one path, one renewal at a time (when a call needs it, or in the background a minute before), with the refresh token or, when that is turned down, the same way. A refresh token that failed is dropped, never sent again. A sign-in an earlier release left in session storage is removed. The realm job turns on refresh token rotation (`revokeRefreshToken`, no reuse), so each refresh token works once. The front door now enforces the Content-Security-Policy on `/apps/`, `/assets/` and `/shared/` (`infra/deploy/not-a-page.conf`), which was report-only. The deploy test checks that no token is in the shell page's storage and that a reload and a second tab stay signed in, in Chromium and Firefox, and in WebKit where the front door is https (WebKit keeps no Secure cookie from plain-http localhost, so the deploy test can't sign it in).
+
+### Patch Changes
+
+- 22ab7d3: The knowledge service, its migration job and identity's preference store log a lost database connection instead of ending the process when Postgres restarts. The knowledge service's queries now also have the platform's statement timeout (DATABASE_STATEMENT_TIMEOUT_SECONDS, a minute by default), as every other service's do.
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/service-kit@0.21.0
+
 ## 1.7.1
 
 ### Patch Changes

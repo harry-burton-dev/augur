@@ -1,5 +1,60 @@
 # @augur/registry
 
+## 0.23.0
+
+### Minor Changes
+
+- d237855: Alerts can leave the server without AUGUR: Grafana sends every alert to `ALERT_OUTSIDE_URL` too, and a watchdog to `ALERT_HEARTBEAT_URL` every minute, a dead-man switch for the whole server. Unset, each points at the registry's new `POST /v1/platform/alerts/unrouted`, which drops what it gets, and a production server's deployment admins are told weekly until both are set.
+- 749013c: Bind an app's id to the repository whose release first installed under it: a release under that id from another publisher is refused, even after the app was removed.
+- 3e926e8: An app's frontend holds only the file types it needs (the service kit's new `FRONTEND_TYPES`: scripts, styles, JSON, source maps, images, fonts, WebAssembly), never a page or an SVG, which opened at its `/apps/` address would run as the shell's origin (PER-453). `packFrontend` and `unpackFrontend` refuse any other file, saying which and why, so `augur-app bundle` stops before it pushes anything and the registry refuses the bundle; the registry never writes one to the frontends bucket. The front door answers 404 for any other file under `/apps/`, and sends `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy (`sandbox; default-src 'none'; frame-ancestors 'none'`) with everything under `/apps/`, `/assets/` and `/shared/` (`infra/deploy/not-a-page.conf`). The contract tests run the reference app with that policy enforced.
+- cde9587: Identity and the registry keep each audit entry in their own database first and send it to the events service from there (ADR 0104, PER-414), so an admin's change is audited, and its domain event published, even while the events service is down. The service kit adds `auditOutbox`, `AUDIT_OUTBOX_COLUMNS` and `postAudit`, and `ServiceCallError` carries the `status` the service answered.
+
+  Not breaking: everything is added; `ServiceCallError` gains an optional `status` and an optional second constructor argument.
+
+- 6ae9705: Warn an app on contract 3 that doesn't declare the domain events it reads or publishes: the registry says each app's contract, the service kit's `registryDeclaredEvents` passes it on, and the events service answers each publish and read with a `warning`. The next release refuses such an app.
+- e01ea93: An app's manifest can declare the domain events it reads and each type it publishes, with a version and its payload's JSON Schema (contributes.events, ADR 0104). The registry checks them on a release, holds each type to its version across releases, and tells AUGUR's services what an app declares (GET /v1/apps/:id/events).
+- 9ee05b0: The fleet's machine client (platform-fleet, ADR 0100) may upgrade AUGUR, set a unit's desired state and ask for app installs with nobody signed in, within the server's ring (production: only stable releases nobody halted), recorded under its name. FLEET_CLIENT_SECRET makes the client. A server's first upgrade no longer has to be run by hand.
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+- 59fdbe9: Only AUGUR's own apps load into the shell's page. The registry refuses every contract 2 manifest, with error contract_2, and marks AUGUR's own frontends as the apps that may. The shell opens no other app in its page, and says why. A contract 2 app registered before stays listed and says why it doesn't open.
+- f04bcd5: Manifest 3 keeps the fields it hasn't frozen (`requiredRole` and `links`) under `provisional`, where a registry ignores a field it doesn't know. The top-level ones are still read for one release, with a warning.
+- bb9bcd3: The registry's admin checks can now be decided by the permissions service, site by site, when a deployment names them in `PERMISSIONS_DECIDES`. Until then today's roles decide, as before, except on a server that sets it to `all` (see the upgrade note).
+- e11f22e: The binding events are gone (decision D6, ADR 0066). The registry no longer serves `GET /v1/entity-links`, and a manifest's `bindings` is accepted but ignored, for one release: contract 3 says so in a warning. The service kit drops `bindingTopics`, `bindingEvent`, `outboxBinding`, `readBinding`, `registryBindingApps` and their types. `AppManifestEntry.bindings` in the SDK is deprecated.
+
+  Not breaking: nothing in AUGUR or in any app repository imports the removed service kit helpers or calls the route removed from contracts/registry.openapi.yaml.
+
+### Patch Changes
+
+- f306d63: An app can no longer act as the admin who opened it on the registry's admin routes. A call made for an app passes no admin or deployment-admin check unless the app is one of AUGUR's own frontends (it carries a platform scope), and the gateway lets an app call its own registry entry without a scope only to read it, register itself and give it a version's frontend. Changing its own scopes, floors, upload limit, pin or entry, or removing it, needs the admin scope as for any other app.
+- edb9fd8: Reporting's help text calls the place a deployment is named Backstage's catalog of deployments, and no longer names a file the portal used to have.
+- f8b4e26: The gateway needs CALLER_SIGNING_KEY in production, and publishes CALLER_SIGNING_KEY_NEXT beside it so the key can be changed without refusing a call. A call from inside a service's own container is checked like any other unless CALLER_BREAK_GLASS=on, and each one break-glass lets through is logged. The updater makes up the signing key when an upgrade needs it.
+
+  Not breaking: the new parameters are optional, and only the gateway calls callerSignerFromEnv. A part that believed headers on calls from its own container now checks them, which nothing an app ships depends on.
+
+- de987d0: The upgrade guide moves into the docs site: Upgrade AUGUR, The updater, The app runner, Where releases come from and Report to Backstage under Run AUGUR, and the upgrade notes on a page of their own under Release notes. Messages that pointed at `docs/upgrade.md` now name the page in AUGUR's docs, so the registry's reply when Deployment tries to change AUGUR's release channel reads differently.
+- d4efc5a: Domain events are read by floor: an app sees only those on floors where it holds events:subscribe, and the deployment's own. A cursor behind what was pruned answers 410 with how far events were pruned, and followEvents takes onGap to rebuild. A pushed app whose place was pruned meanwhile gets what is left and the gap is audited (delivery.gap) (ADR 0104).
+- Updated dependencies [91037a5]
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f01dbb8]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [e01ea93]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [f04bcd5]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [e672f41]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/app-tools@0.7.0
+  - @augur/service-kit@0.21.0
+  - @augur/mfe-sdk@3.2.0
+
 ## 0.22.0
 
 ### Minor Changes

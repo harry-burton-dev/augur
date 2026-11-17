@@ -1,5 +1,35 @@
 # @augur/app-tools
 
+## 0.7.0
+
+### Minor Changes
+
+- 91037a5: `augur-app migrations sync|check` holds an app's own database migrations to AUGUR's rules: one that shipped in a stable release never changes or goes, and within a major a new one only adds, linted with Squawk and AUGUR's rules. The rules now live in the package, and AUGUR's `pnpm check:migrations` uses the same ones. Both checks now fail when they can't read what shipped from origin, instead of passing with nothing to compare, and where a release and the frozen branch disagree on a migration, the release's fingerprint wins.
+- 3e926e8: An app's frontend holds only the file types it needs (the service kit's new `FRONTEND_TYPES`: scripts, styles, JSON, source maps, images, fonts, WebAssembly), never a page or an SVG, which opened at its `/apps/` address would run as the shell's origin (PER-453). `packFrontend` and `unpackFrontend` refuse any other file, saying which and why, so `augur-app bundle` stops before it pushes anything and the registry refuses the bundle; the registry never writes one to the frontends bucket. The front door answers 404 for any other file under `/apps/`, and sends `X-Content-Type-Options: nosniff` and a report-only Content-Security-Policy (`sandbox; default-src 'none'; frame-ancestors 'none'`) with everything under `/apps/`, `/assets/` and `/shared/` (`infra/deploy/not-a-page.conf`). The contract tests run the reference app with that policy enforced.
+- e01ea93: An app's manifest can declare the domain events it reads and each type it publishes, with a version and its payload's JSON Schema (contributes.events, ADR 0104). The registry checks them on a release, holds each type to its version across releases, and tells AUGUR's services what an app declares (GET /v1/apps/:id/events).
+- f04bcd5: Manifest 3 keeps the fields it hasn't frozen (`requiredRole` and `links`) under `provisional`, where a registry ignores a field it doesn't know. The top-level ones are still read for one release, with a warning.
+- e11f22e: The binding events are gone (decision D6, ADR 0066). The registry no longer serves `GET /v1/entity-links`, and a manifest's `bindings` is accepted but ignored, for one release: contract 3 says so in a warning. The service kit drops `bindingTopics`, `bindingEvent`, `outboxBinding`, `readBinding`, `registryBindingApps` and their types. `AppManifestEntry.bindings` in the SDK is deprecated.
+
+  Not breaking: nothing in AUGUR or in any app repository imports the removed service kit helpers or calls the route removed from contracts/registry.openapi.yaml.
+
+### Patch Changes
+
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/service-kit@0.21.0
+
 ## 0.6.1
 
 ### Patch Changes

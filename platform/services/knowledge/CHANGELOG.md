@@ -1,5 +1,32 @@
 # @augur/knowledge
 
+## 0.3.0
+
+### Minor Changes
+
+- f5bc8af: The storage job and the knowledge migration let AUGUR's own database logins (its services, the knowledge graph's and Keycloak's) use the connections Postgres keeps back (`pg_use_reserved_connections`), and apps' logins never; Postgres keeps 40 of 200 for them (PER-414). Keycloak's and OpenFGA's pools are capped at 20.
+- 3f93b58: AUGUR's services stop cleanly and say when they are ready. The service kit's `serve()` runs each one: `GET /readyz` answers only once its database (and, for permissions, OpenFGA) answers, and on SIGTERM a service stops taking new calls, ends its open event streams, lets the calls in flight finish for up to `SHUTDOWN_GRACE_SECONDS` (20), closes its pools, then sends its telemetry. Compose's healthchecks ask `/readyz`, and Docker waits 30 seconds for a service to stop.
+
+### Patch Changes
+
+- f1d7d34: The knowledge graph refuses an app that reads or changes a floor with its own token and no person: it was treated as a person in the org, could read the org's floor, and could make itself the owner of someone's own floor before they first used it. An app acting for a person now reads only the floor it was opened on, not another floor named in the address.
+- 22ab7d3: The knowledge service, its migration job and identity's preference store log a lost database connection instead of ending the process when Postgres restarts. The knowledge service's queries now also have the platform's statement timeout (DATABASE_STATEMENT_TIMEOUT_SECONDS, a minute by default), as every other service's do.
+- Updated dependencies [3e926e8]
+- Updated dependencies [cde9587]
+- Updated dependencies [f8b4e26]
+- Updated dependencies [64802b1]
+- Updated dependencies [6ae9705]
+- Updated dependencies [d4efc5a]
+- Updated dependencies [324934b]
+- Updated dependencies [3f93b58]
+- Updated dependencies [67c373b]
+- Updated dependencies [7c85129]
+- Updated dependencies [e11f22e]
+- Updated dependencies [4bd767a]
+- Updated dependencies [3eebea4]
+- Updated dependencies [747c5c4]
+  - @augur/service-kit@0.21.0
+
 ## 0.2.1
 
 ### Patch Changes
